@@ -74,5 +74,5 @@ jobs:
         Write-Host "========================================="
         Write-Host "Build Type: ${{ matrix.build_type }}"
         Write-Host "Generator: Visual Studio 17 2022"
-        cl 2>&1 | Select-Object -First 2
-        Write-Host "========================================="
+        Write-Host "Runner: windows-latest"
+        Write-Host "=========================================" 

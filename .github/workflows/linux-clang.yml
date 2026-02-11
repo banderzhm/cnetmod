@@ -114,6 +114,6 @@ jobs:
         echo "Build Summary for Clang ${{ matrix.clang_version }}"
         echo "========================================="
         echo "Build Type: ${{ matrix.build_type }}"
-        echo "Compiler: clang++-${{ matrix.clang_version }}"
-        clang++-${{ matrix.clang_version }} --version
-        echo "========================================="
+        echo "Compiler: /usr/bin/clang++-${{ matrix.clang_version }}"
+        /usr/bin/clang++-${{ matrix.clang_version }} --version 2>&1 || echo "clang++ not found"
+        echo "=========================================" 

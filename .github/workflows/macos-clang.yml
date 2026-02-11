@@ -159,13 +159,14 @@ jobs:
     - name: Display build summary
       if: always()
       run: |
+        LLVM_PREFIX="${{ steps.llvm-paths.outputs.LLVM_PREFIX }}"
         echo "========================================="
         echo "Build Summary for macOS"
         echo "========================================="
         echo "OS: ${{ matrix.os }}"
         echo "Build Type: ${{ matrix.build_type }}"
         echo "Architecture: $(uname -m)"
-        echo "Compiler: ${{ steps.llvm-paths.outputs.LLVM_PREFIX }}/bin/clang++"
-        ${{ steps.llvm-paths.outputs.LLVM_PREFIX }}/bin/clang++ --version
+        echo "Compiler: ${LLVM_PREFIX}/bin/clang++"
+        "${LLVM_PREFIX}/bin/clang++" --version 2>&1 || echo "clang++ not found"
         echo "macOS SDK: ${{ steps.sdk-path.outputs.SDKROOT }}"
         echo "========================================="
