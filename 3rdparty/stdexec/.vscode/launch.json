@@ -1,0 +1,139 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "C++ Current Target (lldb-dap)",
+            "type": "lldb-dap",
+            "request": "launch",
+            "stopOnEntry": false,
+            "internalConsoleOptions": "openOnFirstSessionStart",
+            "cwd": "${command:cmake.launchTargetDirectory}",
+            "program": "${command:cmake.launchTargetPath}",
+            "initCommands": [
+                "settings set target.disable-aslr false"
+            ],
+            "args": ["${input:CXX_PROGRAM_ARGS}"],
+        },
+        {
+            "name": "Standard C++ Tests (lldb-dap)",
+            "type": "lldb-dap",
+            "request": "launch",
+            "stopOnEntry": false,
+            "internalConsoleOptions": "openOnFirstSessionStart",
+            "cwd": "${command:cmake.buildDirectory}",
+            "program": "${command:cmake.buildDirectory}/test/test.stdexec",
+            "initCommands": [
+                "settings set target.disable-aslr false"
+            ],
+            "args": [
+                "-v",
+                "normal",
+                "${input:CXX_TEST_TAGS_STDEXEC}"
+            ],
+        },
+        {
+            "name": "Non-standard C++ Tests (lldb-dap)",
+            "type": "lldb-dap",
+            "request": "launch",
+            "stopOnEntry": false,
+            "internalConsoleOptions": "openOnFirstSessionStart",
+            "cwd": "${command:cmake.buildDirectory}",
+            "program": "${command:cmake.buildDirectory}/test/exec/test.exec",
+            "initCommands": [
+                "settings set target.disable-aslr false"
+            ],
+            "args": [
+                "-v",
+                "normal",
+                "${input:CXX_TEST_TAGS_EXEC}"
+            ],
+        },
+        {
+            "name": "CUDA Current Target (cuda-gdb)",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "stopAtEntry": false,
+            "breakOnLaunch": false,
+            "internalConsoleOptions": "openOnFirstSessionStart",
+            "program": "${command:cmake.launchTargetPath}",
+            "cwd": "${command:cmake.launchTargetDirectory}",
+            "args": "${input:CXX_PROGRAM_ARGS}",
+        },
+        {
+            "name": "CUDA Tests (cuda-gdb)",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "stopAtEntry": false,
+            "breakOnLaunch": false,
+            "internalConsoleOptions": "openOnSessionStart",
+            "program": "${command:cmake.buildDirectory}/${input:CUDA_TEST_SUITE}",
+            "cwd": "${command:cmake.buildDirectory}",
+            "args": "-v normal ${input:CUDA_TEST_TAGS}",
+        },
+        {
+            "name": "maxwell_cpu_st (cuda-gdb)",
+            "type": "cuda-gdb",
+            "request": "launch",
+            "stopAtEntry": false,
+            "breakOnLaunch": false,
+            "internalConsoleOptions": "openOnFirstSessionStart",
+            "program": "${command:cmake.buildDirectory}/examples/nvexec/maxwell_cpu_st",
+            "cwd": "${command:cmake.buildDirectory}",
+            "args": ["--iterations=1000", "--N=512", "--run-cpp", "--run-inline-scheduler"],
+        },
+    ],
+    "inputs": [
+        // These require the Tasks Shell Input extension:
+        // https://marketplace.visualstudio.com/items?itemName=augustocdias.tasks-shell-input
+        {
+            "id": "CXX_PROGRAM_ARGS",
+            "type": "promptString",
+            "default": "",
+            "description": "Arguments to pass to the program"
+        },
+        {
+            "type": "command",
+            "id": "CXX_TEST_TAGS_STDEXEC",
+            "command": "shellCommand.execute",
+            "args": {
+                "description": "Select test tags to filter",
+                "cwd": "${command:cmake.buildDirectory}",
+                "command": "./test/test.stdexec --list-tags | tail -n +2 | head -n -2 | tr -s ' '' ' | cut -d' ' -f3",
+            }
+        },
+        {
+            "type": "command",
+            "id": "CXX_TEST_TAGS_EXEC",
+            "command": "shellCommand.execute",
+            "args": {
+                "description": "Select test tags to filter",
+                "cwd": "${command:cmake.buildDirectory}",
+                "command": "./test/exec/test.exec --list-tags | tail -n +2 | head -n -2 | tr -s ' '' ' | cut -d' ' -f3",
+            }
+        },
+        {
+            "id": "CUDA_TEST_SUITE",
+            "type": "command",
+            "command": "shellCommand.execute",
+            "args": {
+                "useFirstResult": true,
+                "description": "Path to Test Suite",
+                "cwd": "${command:cmake.buildDirectory}",
+                "command": "find . -type f -name test.nvexec"
+            }
+        },
+        {
+            "type": "command",
+            "id": "CUDA_TEST_TAGS",
+            "command": "shellCommand.execute",
+            "args": {
+                "description": "Select test tags to filter",
+                "cwd": "${command:cmake.buildDirectory}",
+                "command": "./${input:CUDA_TEST_SUITE} --list-tags | tail -n +2 | head -n -2 | tr -s ' '' ' | cut -d' ' -f3",
+            }
+        },
+    ],
+}
