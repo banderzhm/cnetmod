@@ -138,7 +138,7 @@ auto demo_pipeline(redis_client& r) -> cn::task<void> {
 auto demo_sender(cn::io_context& ctx, redis_client& r) -> cn::task<void> {
     std::println("\n── stdexec Sender ──");
 
-    auto sched = cn::io_scheduler(ctx);
+    [[maybe_unused]] auto sched = cn::io_scheduler(ctx);
     std::println("  io_scheduler ready (schedule() -> sender)");
 
     auto square = [](int x) -> cn::task<int> { co_return x * x; };
@@ -164,6 +164,7 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
         .host     = "127.0.0.1",
         .port     = 6379,
         .password = "ydc888888",  // 按实际修改，留空则跳过 AUTH
+        .username = {},
         .db       = 9,
     });
 

@@ -230,6 +230,46 @@ auto async_file_flush(io_context& ctx, file& f)
 }
 
 // =============================================================================
+// 异步串口操作 — epoll (串口 fd 支持 epoll 事件)
+// =============================================================================
+
+auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_awaiter aw{epoll, static_cast<int>(port.native_handle()), EPOLLIN};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+
+    ssize_t n = ::read(static_cast<int>(port.native_handle()), buf.data, buf.size);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+    if (n == 0)
+        co_return std::unexpected(make_error_code(errc::end_of_file));
+
+    co_return static_cast<std::size_t>(n);
+}
+
+auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_awaiter aw{epoll, static_cast<int>(port.native_handle()), EPOLLOUT};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+
+    ssize_t n = ::write(static_cast<int>(port.native_handle()), buf.data, buf.size);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    co_return static_cast<std::size_t>(n);
+}
+
+// =============================================================================
 // 异步定时器 — epoll (timerfd)
 // =============================================================================
 

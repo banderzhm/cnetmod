@@ -259,6 +259,62 @@ auto async_file_flush(io_context& ctx, file& f)
 }
 
 // =============================================================================
+// 异步串口操作 — io_uring
+// =============================================================================
+
+auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.get_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_read(sqe, static_cast<int>(port.native_handle()),
+                         buf.data, static_cast<unsigned>(buf.size), 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.submit(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_suspend{ov};
+
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.get_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_write(sqe, static_cast<int>(port.native_handle()),
+                          buf.data, static_cast<unsigned>(buf.size), 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.submit(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_suspend{ov};
+
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+// =============================================================================
 // 异步定时器 — io_uring (IORING_OP_TIMEOUT)
 // =============================================================================
 
