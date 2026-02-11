@@ -12,6 +12,11 @@ set(EXAMPLE_TARGETS
     redis_client
 )
 
+# SSL 示例（仅在 OpenSSL 可用时构建）
+if(CNETMOD_HAS_SSL)
+    list(APPEND EXAMPLE_TARGETS ssl_echo_server)
+endif()
+
 foreach(example ${EXAMPLE_TARGETS})
     add_executable(example_${example} ${example}.cpp)
     target_link_libraries(example_${example} PRIVATE cnetmod_core)

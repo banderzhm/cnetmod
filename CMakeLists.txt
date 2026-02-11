@@ -204,6 +204,24 @@ endif()
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include)
 
 # ==============================================================================
+# SSL/TLS 支持（可选）
+# ==============================================================================
+option(CNETMOD_ENABLE_SSL "Enable SSL/TLS support (requires OpenSSL)" ON)
+if(CNETMOD_ENABLE_SSL)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        set(CNETMOD_HAS_SSL ON)
+        message(STATUS "SSL/TLS: 已启用 (OpenSSL ${OPENSSL_VERSION})")
+    else()
+        set(CNETMOD_HAS_SSL OFF)
+        message(STATUS "SSL/TLS: 未找到 OpenSSL，禁用 SSL 支持")
+    endif()
+else()
+    set(CNETMOD_HAS_SSL OFF)
+    message(STATUS "SSL/TLS: 用户禁用")
+endif()
+
+# ==============================================================================
 # 平台特定 I/O 后端检测
 # ==============================================================================
 if(WIN32)
@@ -251,6 +269,9 @@ endif()
 if(NOT CNETMOD_HAS_KQUEUE)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/kqueue")
 endif()
+if(NOT CNETMOD_HAS_SSL)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "core/ssl")
+endif()
 
 # ==============================================================================
 # 核心库目标: cnetmod_core
@@ -274,6 +295,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_IO_URING}>:CNETMOD_HAS_IO_URING>
     $<$<BOOL:${CNETMOD_HAS_EPOLL}>:CNETMOD_HAS_EPOLL>
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
+    $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
 )
 
 # 平台特定链接
@@ -281,6 +303,11 @@ if(WIN32)
     target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock)
 elseif(CNETMOD_HAS_IO_URING)
     target_link_libraries(cnetmod_core PUBLIC uring)
+endif()
+
+# SSL/TLS 链接
+if(CNETMOD_HAS_SSL)
+    target_link_libraries(cnetmod_core PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
 # ==============================================================================

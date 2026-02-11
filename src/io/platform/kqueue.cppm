@@ -91,11 +91,7 @@ public:
         while (::read(pipe_fds_[0], buf, sizeof(buf)) > 0) {}
     }
 
-protected:
-    void wake() override {
-        char c = 1;
-        ::write(pipe_fds_[1], &c, 1);
-    }
+    // kqueue 事件注册接口（供 async_op 层使用）
 
     [[nodiscard]] auto add_event(int ident, int16_t filter, uint16_t flags, void* udata)
         -> std::expected<void, std::error_code>
@@ -122,6 +118,12 @@ protected:
     /// 返回底层 kqueue fd，供 async_timer_wait 等需要扩展参数的操作使用
     [[nodiscard]] auto native_handle() const noexcept -> int {
         return kqueue_fd_;
+    }
+
+protected:
+    void wake() override {
+        char c = 1;
+        ::write(pipe_fds_[1], &c, 1);
     }
 
 private:

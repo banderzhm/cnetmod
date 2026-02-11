@@ -88,11 +88,7 @@ public:
         ::read(event_fd_, &val, sizeof(val));
     }
 
-protected:
-    void wake() override {
-        std::uint64_t val = 1;
-        ::write(event_fd_, &val, sizeof(val));
-    }
+    // epoll 事件注册接口（供 async_op 层使用）
 
     [[nodiscard]] auto add(int fd, uint32_t events, void* user_data)
         -> std::expected<void, std::error_code>
@@ -134,6 +130,12 @@ protected:
             return std::unexpected(
                 std::error_code(errno, std::generic_category()));
         return {};
+    }
+
+protected:
+    void wake() override {
+        std::uint64_t val = 1;
+        ::write(event_fd_, &val, sizeof(val));
     }
 
 private:

@@ -12,6 +12,9 @@ import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.core.ssl;
+#endif
 
 namespace cnetmod::redis {
 
@@ -87,11 +90,19 @@ export auto resp_encode(std::span<const std::string_view> args) -> std::string {
 // =============================================================================
 
 export struct connect_options {
-    std::string host     = "127.0.0.1";
+    std::string host     = "*********";
     std::uint16_t port   = 6379;
     std::string password;            // AUTH 密码（空 = 不认证）
     std::string username;            // Redis 6+ ACL 用户名（空 = default）
     std::uint32_t db     = 0;       // SELECT 数据库号（0 = 默认）
+
+    // TLS 配置
+    bool tls             = false;   // 是否启用 TLS
+    bool tls_verify      = true;    // 是否验证服务器证书
+    std::string tls_ca_file;         // CA 证书文件路径（空 = 系统默认）
+    std::string tls_cert_file;       // 客户端证书（mutual TLS）
+    std::string tls_key_file;        // 客户端密钥（mutual TLS）
+    std::string tls_sni;             // SNI 主机名（空 = 使用 host）
 };
 
 // =============================================================================
@@ -102,7 +113,7 @@ export class client {
 public:
     explicit client(io_context& ctx) noexcept : ctx_(ctx) {}
 
-    /// 连接 Redis，自动处理 AUTH 和 SELECT
+    /// 连接 Redis，自动处理 TLS、AUTH 和 SELECT
     auto connect(connect_options opts = {}) -> task<resp_value> {
         // 解析地址
         auto addr_r = ip_address::from_string(opts.host);
@@ -118,6 +129,70 @@ public:
             sock_.close();
             co_return resp_value{.type = resp_type::error, .str = cr.error().message()};
         }
+
+        // TLS 握手
+#ifdef CNETMOD_HAS_SSL
+        if (opts.tls) {
+            auto ssl_ctx_r = ssl_context::client();
+            if (!ssl_ctx_r) {
+                sock_.close();
+                co_return resp_value{.type = resp_type::error,
+                    .str = "ssl context: " + ssl_ctx_r.error().message()};
+            }
+            ssl_ctx_ = std::make_unique<ssl_context>(std::move(*ssl_ctx_r));
+            ssl_ctx_->set_verify_peer(opts.tls_verify);
+
+            // 加载 CA
+            if (!opts.tls_ca_file.empty()) {
+                auto r = ssl_ctx_->load_ca_file(opts.tls_ca_file);
+                if (!r) {
+                    sock_.close();
+                    co_return resp_value{.type = resp_type::error,
+                        .str = "ssl load ca: " + r.error().message()};
+                }
+            } else if (opts.tls_verify) {
+                (void)ssl_ctx_->set_default_ca();
+            }
+
+            // 客户端证书（mutual TLS）
+            if (!opts.tls_cert_file.empty()) {
+                auto r = ssl_ctx_->load_cert_file(opts.tls_cert_file);
+                if (!r) {
+                    sock_.close();
+                    co_return resp_value{.type = resp_type::error,
+                        .str = "ssl load cert: " + r.error().message()};
+                }
+            }
+            if (!opts.tls_key_file.empty()) {
+                auto r = ssl_ctx_->load_key_file(opts.tls_key_file);
+                if (!r) {
+                    sock_.close();
+                    co_return resp_value{.type = resp_type::error,
+                        .str = "ssl load key: " + r.error().message()};
+                }
+            }
+
+            ssl_ = std::make_unique<ssl_stream>(*ssl_ctx_, ctx_, sock_);
+            ssl_->set_connect_state();
+
+            // SNI
+            auto sni = opts.tls_sni.empty() ? opts.host : opts.tls_sni;
+            ssl_->set_hostname(sni);
+
+            auto hs = co_await ssl_->async_handshake();
+            if (!hs) {
+                sock_.close();
+                co_return resp_value{.type = resp_type::error,
+                    .str = "ssl handshake: " + hs.error().message()};
+            }
+        }
+#else
+        if (opts.tls) {
+            sock_.close();
+            co_return resp_value{.type = resp_type::error,
+                .str = "SSL not available (build without CNETMOD_HAS_SSL)"};
+        }
+#endif
 
         // AUTH
         if (!opts.password.empty()) {
@@ -163,13 +238,40 @@ public:
     }
 
     auto is_open() const noexcept -> bool { return sock_.is_open(); }
-    void close() noexcept { sock_.close(); }
+
+    void close() noexcept {
+#ifdef CNETMOD_HAS_SSL
+        ssl_.reset();
+        ssl_ctx_.reset();
+#endif
+        sock_.close();
+    }
 
 private:
-    // ── 发送 + 接收 ─────────────────────────────────────────────────────
+    // ── 传输层抽象 ─────────────────────────────────────────
+
+    auto do_write(const_buffer buf)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+#ifdef CNETMOD_HAS_SSL
+        if (ssl_) co_return co_await ssl_->async_write(buf);
+#endif
+        co_return co_await async_write(ctx_, sock_, buf);
+    }
+
+    auto do_read(mutable_buffer buf)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+#ifdef CNETMOD_HAS_SSL
+        if (ssl_) co_return co_await ssl_->async_read(buf);
+#endif
+        co_return co_await async_read(ctx_, sock_, buf);
+    }
+
+    // ── 发送 + 接收 ─────────────────────────────────────────────
 
     auto raw_send(std::string data) -> task<resp_value> {
-        auto w = co_await async_write(ctx_, sock_, buffer(std::string_view{data}));
+        auto w = co_await do_write(buffer(std::string_view{data}));
         if (!w) co_return resp_value{.type = resp_type::error, .str = w.error().message()};
         co_return co_await parse_one();
     }
@@ -177,7 +279,7 @@ private:
     auto raw_recv_batch(std::string batch, std::size_t count)
         -> task<std::vector<resp_value>>
     {
-        auto w = co_await async_write(ctx_, sock_, buffer(std::string_view{batch}));
+        auto w = co_await do_write(buffer(std::string_view{batch}));
         std::vector<resp_value> out;
         if (!w) co_return out;
         out.reserve(count);
@@ -254,7 +356,7 @@ private:
 
     auto fill() -> task<bool> {
         std::array<std::byte, 4096> tmp{};
-        auto r = co_await async_read(ctx_, sock_, buffer(tmp));
+        auto r = co_await do_read(buffer(tmp));
         if (!r || *r == 0) co_return false;
         rbuf_.append(reinterpret_cast<const char*>(tmp.data()), *r);
         co_return true;
@@ -264,6 +366,11 @@ private:
     socket      sock_;
     std::string rbuf_;
     std::size_t rpos_ = 0;
+
+#ifdef CNETMOD_HAS_SSL
+    std::unique_ptr<ssl_context> ssl_ctx_;
+    std::unique_ptr<ssl_stream>  ssl_;
+#endif
 };
 
 } // namespace cnetmod::redis
