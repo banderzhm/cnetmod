@@ -1,0 +1,78 @@
+name: Windows MSVC Build
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-msvc:
+    runs-on: windows-latest
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install CMake 4.0+
+      run: |
+        choco install cmake --version=4.1.2 -y --force
+        cmake --version
+
+    - name: Configure CMake
+      shell: pwsh
+      run: |
+        cmake -B "${{ github.workspace }}/build" `
+          -G "Visual Studio 17 2022" `
+          -A x64 `
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+          -DCNETMOD_BUILD_EXAMPLES=ON `
+          -S "${{ github.workspace }}"
+
+    - name: Build
+      run: cmake --build ${{ github.workspace }}/build --config ${{ matrix.build_type }} -j 2
+
+    - name: Run smoke tests
+      shell: pwsh
+      run: |
+        Write-Host "=== Running cnetmod_app ==="
+        & "${{ github.workspace }}/build/${{ matrix.build_type }}/cnetmod_app.exe"
+        
+        Write-Host "=== Running channel_demo ==="
+        & "${{ github.workspace }}/build/examples/${{ matrix.build_type }}/example_channel_demo.exe"
+        
+        Write-Host "=== Running stdexec_bridge ==="
+        & "${{ github.workspace }}/build/examples/${{ matrix.build_type }}/example_stdexec_bridge.exe"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: cnetmod-windows-msvc-${{ matrix.build_type }}
+        path: |
+          ${{ github.workspace }}/build/${{ matrix.build_type }}/*.lib
+          ${{ github.workspace }}/build/${{ matrix.build_type }}/*.exe
+          ${{ github.workspace }}/build/examples/${{ matrix.build_type }}/*.exe
+        retention-days: 7
+
+    - name: Display build summary
+      if: always()
+      shell: pwsh
+      run: |
+        Write-Host "========================================="
+        Write-Host "Build Summary for Windows MSVC"
+        Write-Host "========================================="
+        Write-Host "Build Type: ${{ matrix.build_type }}"
+        Write-Host "Generator: Visual Studio 17 2022"
+        cl 2>&1 | Select-Object -First 2
+        Write-Host "========================================="

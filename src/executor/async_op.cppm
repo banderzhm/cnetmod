@@ -1,0 +1,76 @@
+module;
+
+#include <cnetmod/config.hpp>
+
+export module cnetmod.executor.async_op;
+
+import std;
+import cnetmod.core.error;
+import cnetmod.core.buffer;
+import cnetmod.core.socket;
+import cnetmod.core.address;
+import cnetmod.core.file;
+import cnetmod.io.io_context;
+import cnetmod.coro.task;
+import cnetmod.coro.awaitable;
+
+namespace cnetmod {
+
+// =============================================================================
+// 异步 I/O 操作（协程版本）
+// =============================================================================
+// 返回 task<T>，使用 co_await 调用
+// 这些是底层协程接口，上层可通过 as_sender() 转换为 stdexec sender
+
+/// 异步 accept
+/// 用法: auto conn = co_await async_accept(ctx, listener);
+export auto async_accept(io_context& ctx, socket& listener)
+    -> task<std::expected<socket, std::error_code>>;
+
+/// 异步 connect
+/// 用法: co_await async_connect(ctx, sock, endpoint);
+export auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
+    -> task<std::expected<void, std::error_code>>;
+
+/// 异步 read
+/// 用法: auto n = co_await async_read(ctx, sock, buf);
+export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 异步 write
+/// 用法: auto n = co_await async_write(ctx, sock, buf);
+export auto async_write(io_context& ctx, socket& sock, const_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+// =============================================================================
+// 异步文件 I/O 操作（协程版本）
+// =============================================================================
+
+/// 异步文件读取
+/// 用法: auto n = co_await async_file_read(ctx, f, buf, offset);
+export auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
+                            std::uint64_t offset = 0)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 异步文件写入
+/// 用法: auto n = co_await async_file_write(ctx, f, buf, offset);
+export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
+                             std::uint64_t offset = 0)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 异步文件刷新
+/// 用法: co_await async_file_flush(ctx, f);
+export auto async_file_flush(io_context& ctx, file& f)
+    -> task<std::expected<void, std::error_code>>;
+
+// =============================================================================
+// 异步定时器操作
+// =============================================================================
+
+/// 异步等待指定时长
+/// 用法: co_await async_timer_wait(ctx, std::chrono::milliseconds(500));
+export auto async_timer_wait(io_context& ctx,
+                             std::chrono::steady_clock::duration duration)
+    -> task<std::expected<void, std::error_code>>;
+
+} // namespace cnetmod
