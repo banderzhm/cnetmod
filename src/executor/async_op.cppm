@@ -10,6 +10,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
 import cnetmod.core.file;
+import cnetmod.core.serial_port;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.awaitable;
@@ -62,6 +63,22 @@ export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 /// 用法: co_await async_file_flush(ctx, f);
 export auto async_file_flush(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>;
+
+// =============================================================================
+// 异步串口 I/O 操作（协程版本）
+// =============================================================================
+
+/// 异步串口读取
+/// 用法: auto n = co_await async_serial_read(ctx, port, buf);
+export auto async_serial_read(io_context& ctx, serial_port& port,
+                              mutable_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 异步串口写入
+/// 用法: auto n = co_await async_serial_write(ctx, port, buf);
+export auto async_serial_write(io_context& ctx, serial_port& port,
+                               const_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>;
 
 // =============================================================================
 // 异步定时器操作

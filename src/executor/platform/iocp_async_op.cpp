@@ -17,6 +17,7 @@ module cnetmod.executor.async_op;
 #ifdef CNETMOD_HAS_IOCP
 import cnetmod.io.platform.iocp;
 #endif
+import cnetmod.core.serial_port;
 
 namespace cnetmod {
 
@@ -350,6 +351,57 @@ auto async_timer_wait(io_context& ctx,
     ::DeleteTimerQueueTimer(nullptr, timer, INVALID_HANDLE_VALUE);
 
     co_return std::expected<void, std::error_code>{};
+}
+
+// =============================================================================
+// 异步串口操作 — IOCP
+// =============================================================================
+
+auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& iocp = static_cast<iocp_context&>(ctx);
+    if (auto r = ensure_associated(iocp, port.native_handle()); !r)
+        co_return std::unexpected(r.error());
+
+    iocp_overlapped ov;
+    // 串口无偏移概念，offset 保持 0
+
+    BOOL ok = ::ReadFile(port.native_handle(), buf.data,
+        static_cast<DWORD>(buf.size), nullptr, &ov);
+    if (!ok) {
+        DWORD err = ::GetLastError();
+        if (err != ERROR_IO_PENDING)
+            co_return std::unexpected(
+                std::error_code(static_cast<int>(err), std::system_category()));
+    }
+
+    co_await iocp_suspend{ov};
+    if (ov.error) co_return std::unexpected(ov.error);
+    co_return static_cast<std::size_t>(ov.bytes_transferred);
+}
+
+auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& iocp = static_cast<iocp_context&>(ctx);
+    if (auto r = ensure_associated(iocp, port.native_handle()); !r)
+        co_return std::unexpected(r.error());
+
+    iocp_overlapped ov;
+
+    BOOL ok = ::WriteFile(port.native_handle(), buf.data,
+        static_cast<DWORD>(buf.size), nullptr, &ov);
+    if (!ok) {
+        DWORD err = ::GetLastError();
+        if (err != ERROR_IO_PENDING)
+            co_return std::unexpected(
+                std::error_code(static_cast<int>(err), std::system_category()));
+    }
+
+    co_await iocp_suspend{ov};
+    if (ov.error) co_return std::unexpected(ov.error);
+    co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 #endif // CNETMOD_HAS_IOCP

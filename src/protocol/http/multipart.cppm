@@ -138,7 +138,7 @@ inline auto parse_quoted_string(std::string_view s)
 
 /// 解析 token (RFC 7230: 非分隔符可见 ASCII)
 inline auto parse_token(std::string_view s)
-    -> std::pair<std::string, std::string_view>
+    -> std::pair<std::string_view, std::string_view>
 {
     std::size_t i = 0;
     while (i < s.size()) {
@@ -154,11 +154,12 @@ inline auto parse_token(std::string_view s)
             break;
         }
     }
-    return {std::string(s.substr(0, i)), s.substr(i)};
+    return {s.substr(0, i), s.substr(i)};
 }
 
-/// 参数名转小写
-inline auto to_lower(std::string s) -> std::string {
+/// 从 string_view 构造小写 string
+inline auto to_lower(std::string_view sv) -> std::string {
+    std::string s(sv);
     for (auto& c : s) {
         if (c >= 'A' && c <= 'Z') c += 32;
     }
@@ -208,7 +209,7 @@ export auto parse_content_type(std::string_view header) -> content_type {
             rest = rest3;
         } else {
             auto [tval, rest3] = detail::parse_token(rest);
-            pval = std::move(tval);
+            pval = std::string(tval);
             rest = rest3;
         }
         ct.params[detail::to_lower(pname)] = std::move(pval);
@@ -309,7 +310,7 @@ export auto parse_content_disposition(std::string_view header)
             rest = rest3;
         } else {
             auto [tval, rest3] = detail::parse_token(rest);
-            pval = std::move(tval);
+            pval = std::string(tval);
             rest = rest3;
         }
 
@@ -735,20 +736,23 @@ private:
         if (block.empty()) return headers;
 
         // 支持 continuation lines (以 SP/HTAB 开始的行拼接到上一行)
-        std::string current_key;
-        std::string current_value;
+        std::string_view pending_key;
+        std::string pending_value;
+        bool has_pending = false;
 
         auto flush = [&]() {
-            if (!current_key.empty()) {
-                auto it = headers.find(current_key);
+            if (has_pending) {
+                std::string key_str(pending_key);
+                auto it = headers.find(key_str);
                 if (it != headers.end()) {
                     it->second += ", ";
-                    it->second += current_value;
+                    it->second += pending_value;
                 } else {
-                    headers.emplace(std::move(current_key), std::move(current_value));
+                    headers.emplace(std::move(key_str), std::move(pending_value));
                 }
-                current_key.clear();
-                current_value.clear();
+                pending_key = {};
+                pending_value.clear();
+                has_pending = false;
             }
         };
 
@@ -778,10 +782,9 @@ private:
 
             // continuation line?
             if (line[0] == ' ' || line[0] == '\t') {
-                if (!current_key.empty()) {
-                    current_value += ' ';
-                    auto trimmed = detail::skip_ows(line);
-                    current_value += trimmed;
+                if (has_pending) {
+                    pending_value += ' ';
+                    pending_value += detail::skip_ows(line);
                 }
                 continue;
             }
@@ -803,8 +806,9 @@ private:
             while (!val.empty() && (val.back() == ' ' || val.back() == '\t'))
                 val.remove_suffix(1);
 
-            current_key = std::string(key);
-            current_value = std::string(val);
+            pending_key = key;
+            pending_value = std::string(val);
+            has_pending = true;
         }
 
         flush();

@@ -15,6 +15,7 @@ set(EXAMPLE_TARGETS
     ws_demo
     hight_http
     hight_ws
+    serial_port
 )
 
 # SSL 示例（仅在 OpenSSL 可用时构建）
