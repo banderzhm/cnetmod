@@ -58,21 +58,6 @@ struct schedule_env {
 // schedule_sender — returned by io_scheduler::schedule()
 // =============================================================================
 
-// fire_and_forget — schedule_sender 内部使用的桥接协程类型
-namespace detail {
-
-struct fire_and_forget {
-    struct promise_type {
-        auto get_return_object() noexcept -> fire_and_forget { return {}; }
-        auto initial_suspend() noexcept -> std::suspend_never { return {}; }
-        void return_void() noexcept {}
-        void unhandled_exception() noexcept { std::terminate(); }
-        auto final_suspend() noexcept -> std::suspend_never { return {}; }
-    };
-};
-
-} // namespace detail
-
 class schedule_sender {
     template <typename Receiver>
     struct schedule_op {
@@ -81,11 +66,14 @@ class schedule_sender {
         Receiver rcvr_;
 
         void start() noexcept {
-            // 通过 fire_and_forget 桥接：post 到事件循环后投递 set_value
-            [](io_context* ctx, Receiver rcvr) -> detail::fire_and_forget {
-                co_await post_awaitable{*ctx};
-                stdexec::set_value(std::move(rcvr));
-            }(ctx_, std::move(rcvr_));
+            // 零协程开销：通过函数指针回调 post 到事件循环
+            ctx_->post(&deliver, static_cast<void*>(this));
+        }
+
+    private:
+        static void deliver(void* p) noexcept {
+            auto* self = static_cast<schedule_op*>(p);
+            stdexec::set_value(std::move(self->rcvr_));
         }
     };
 

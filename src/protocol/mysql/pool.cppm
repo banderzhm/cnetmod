@@ -60,6 +60,13 @@ struct conn_node {
     std::chrono::steady_clock::time_point last_used;
 };
 
+/// 等待者队列节点 — 用于异步等待空闲连接
+struct pool_waiter {
+    std::coroutine_handle<> handle{};   // 等待者的协程
+    std::size_t* result_idx = nullptr;  // 分配到的连接索引
+    pool_waiter* next = nullptr;
+};
+
 // =============================================================================
 // pooled_connection — RAII 借出连接（参考 Boost.MySQL pooled_connection）
 // =============================================================================
@@ -182,25 +189,41 @@ public:
             }
         }
 
-        // 所有连接都忙且已达最大 — 等待后重试
+        // 所有连接都忙且已达最大 — 挂起到 waiter 队列等待归还
         guard.release();
         mtx_.unlock();
 
-        for (int attempt = 0; attempt < 50; ++attempt) {
-            co_await async_sleep(ctx_, std::chrono::milliseconds(100));
+        std::size_t assigned_idx = nodes_.size(); // 无效初始值
+        pool_waiter waiter;
+        waiter.result_idx = &assigned_idx;
 
-            co_await mtx_.lock();
-            async_lock_guard retry_guard(mtx_, std::adopt_lock);
-            for (std::size_t i = 0; i < nodes_.size(); ++i) {
-                if (nodes_[i].state == conn_state::idle) {
-                    nodes_[i].state = conn_state::in_use;
-                    nodes_[i].last_used = std::chrono::steady_clock::now();
-                    co_return pooled_connection(this, i, nodes_[i].conn.get());
+        // 挂起当前协程，加入 waiter 队列
+        struct waiter_awaitable {
+            connection_pool& pool;
+            pool_waiter& w;
+
+            auto await_ready() const noexcept -> bool { return false; }
+            void await_suspend(std::coroutine_handle<> h) noexcept {
+                w.handle = h;
+                // 加入 waiter 队列尾部（已持有 mtx_ 之前 release 了，需重新获取）
+                // 简化：直接同步加入（单线程事件循环）
+                if (!pool.waiters_head_) {
+                    pool.waiters_head_ = pool.waiters_tail_ = &w;
+                } else {
+                    pool.waiters_tail_->next = &w;
+                    pool.waiters_tail_ = &w;
                 }
             }
-        }
+            void await_resume() noexcept {}
+        };
 
-        // 超时 — 返回无效 pooled_connection
+        co_await waiter_awaitable{*this, waiter};
+
+        // 被唤醒时 assigned_idx 已被 return_connection 设置
+        if (assigned_idx < nodes_.size()) {
+            co_return pooled_connection(this, assigned_idx, nodes_[assigned_idx].conn.get());
+        }
+        // 异常情况 — 返回无效
         co_return pooled_connection{};
     }
 
@@ -235,6 +258,8 @@ private:
     std::vector<conn_node> nodes_;
     async_mutex  mtx_;
     bool         running_ = false;
+    pool_waiter* waiters_head_ = nullptr;
+    pool_waiter* waiters_tail_ = nullptr;
 
     auto make_connect_options() const -> connect_options {
         connect_options opts;
@@ -324,13 +349,28 @@ private:
     }
 
     void return_connection(std::size_t idx, [[maybe_unused]] bool needs_reset) {
-        // 注意：此函数同步调用，不加锁（由调用者保证线程安全或在析构中调用）
-        if (idx < nodes_.size()) {
-            nodes_[idx].state = conn_state::idle;
+        if (idx >= nodes_.size())
+            return;
+
+        // 检查 waiter 队列：有等待者则直接把归还的连接分配给它
+        if (waiters_head_) {
+            auto* w = waiters_head_;
+            waiters_head_ = w->next;
+            if (!waiters_head_)
+                waiters_tail_ = nullptr;
+
+            // 连接保持 in_use 状态，直接交给等待者
+            nodes_[idx].state = conn_state::in_use;
             nodes_[idx].last_used = std::chrono::steady_clock::now();
-            // needs_reset: 实际生产中应异步调用 reset_connection
-            // 简化版直接标记为 idle
+            *w->result_idx = idx;
+            if (w->handle)
+                w->handle.resume();
+            return;
         }
+
+        // 无等待者，标记为空闲
+        nodes_[idx].state = conn_state::idle;
+        nodes_[idx].last_used = std::chrono::steady_clock::now();
     }
 };
 

@@ -14,6 +14,7 @@ import cnetmod.core.serial_port;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.awaitable;
+import cnetmod.coro.cancel;
 
 namespace cnetmod {
 
@@ -88,6 +89,58 @@ export auto async_serial_write(io_context& ctx, serial_port& port,
 /// 用法: co_await async_timer_wait(ctx, std::chrono::milliseconds(500));
 export auto async_timer_wait(io_context& ctx,
                              std::chrono::steady_clock::duration duration)
+    -> task<std::expected<void, std::error_code>>;
+
+// =============================================================================
+// 可取消版本 — 接受 cancel_token& 参数
+// =============================================================================
+// 与上述接口语义相同，但可通过 cancel_token::cancel() 取消挂起的操作。
+// 被取消的操作返回 errc::operation_aborted。
+
+/// 可取消的异步 accept
+export auto async_accept(io_context& ctx, socket& listener,
+                         cancel_token& token)
+    -> task<std::expected<socket, std::error_code>>;
+
+/// 可取消的异步 connect
+export auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
+                          cancel_token& token)
+    -> task<std::expected<void, std::error_code>>;
+
+/// 可取消的异步 read
+export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
+                       cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步 write
+export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+                        cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步文件读取
+export auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
+                            std::uint64_t offset, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步文件写入
+export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
+                             std::uint64_t offset, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步串口读取
+export auto async_serial_read(io_context& ctx, serial_port& port,
+                              mutable_buffer buf, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步串口写入
+export auto async_serial_write(io_context& ctx, serial_port& port,
+                               const_buffer buf, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步定时器
+export auto async_timer_wait(io_context& ctx,
+                             std::chrono::steady_clock::duration duration,
+                             cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
 } // namespace cnetmod

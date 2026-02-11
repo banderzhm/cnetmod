@@ -93,13 +93,35 @@ public:
         stopped_.store(false, std::memory_order_relaxed);
     }
 
-    /// 获取 io_uring 提交队列条目
+    /// 获取 SQE 并立即提交（兼容旧接口）
     [[nodiscard]] auto get_sqe() -> ::io_uring_sqe* {
         return ::io_uring_get_sqe(&ring_);
     }
 
-    /// 提交 I/O 请求
+    /// 获取 SQE 但不提交（延迟提交模式）
+    /// 调用者填充 SQE 后，run loop 会在下一轮自动 flush
+    [[nodiscard]] auto prepare_sqe() -> ::io_uring_sqe* {
+        auto* sqe = ::io_uring_get_sqe(&ring_);
+        if (sqe)
+            ++pending_sqes_;
+        return sqe;
+    }
+
+    /// 批量提交所有待提交的 SQE
+    [[nodiscard]] auto flush() -> std::expected<int, std::error_code> {
+        if (pending_sqes_ == 0)
+            return 0;
+        int ret = ::io_uring_submit(&ring_);
+        if (ret < 0)
+            return std::unexpected(
+                std::error_code(-ret, std::generic_category()));
+        pending_sqes_ = 0;
+        return ret;
+    }
+
+    /// 立即提交 I/O 请求（兼容旧接口）
     [[nodiscard]] auto submit() -> std::expected<int, std::error_code> {
+        pending_sqes_ = 0;
         int ret = ::io_uring_submit(&ring_);
         if (ret < 0)
             return std::unexpected(
@@ -114,43 +136,59 @@ protected:
     }
 
 private:
-    auto run_one_impl(bool blocking) -> std::size_t {
-        ::io_uring_cqe* cqe = nullptr;
+    static constexpr unsigned max_cqe_batch_ = 64;
 
-        int ret;
-        if (blocking) {
-            ret = ::io_uring_wait_cqe(&ring_, &cqe);
-        } else {
-            ret = ::io_uring_peek_cqe(&ring_, &cqe);
+    auto run_one_impl(bool blocking) -> std::size_t {
+        // 先刷新待提交的 SQE
+        if (pending_sqes_ > 0) {
+            ::io_uring_submit(&ring_);
+            pending_sqes_ = 0;
         }
 
-        if (ret < 0 || cqe == nullptr)
+        // 阻塞等待至少一个 CQE
+        if (blocking) {
+            ::io_uring_cqe* cqe = nullptr;
+            int ret = ::io_uring_wait_cqe(&ring_, &cqe);
+            if (ret < 0)
+                return 0;
+        }
+
+        // 批量收割所有就绪 CQE
+        ::io_uring_cqe* cqes[max_cqe_batch_];
+        unsigned n = ::io_uring_peek_batch_cqe(&ring_, cqes, max_cqe_batch_);
+        if (n == 0)
             return 0;
 
-        auto* ov = static_cast<uring_overlapped*>(
-            ::io_uring_cqe_get_data(cqe));
-        auto result = cqe->res;
-        ::io_uring_cqe_seen(&ring_, cqe);
+        std::size_t handled = 0;
+        for (unsigned i = 0; i < n; ++i) {
+            auto* cqe = cqes[i];
+            auto* ov = static_cast<uring_overlapped*>(
+                ::io_uring_cqe_get_data(cqe));
+            auto result = cqe->res;
 
-        if (ov == nullptr)
-            return 0;  // NOP (stop 唤醒信号)
+            if (ov == nullptr) {
+                // NOP (stop 唤醒信号)
+                continue;
+            }
 
-        // pipe 唤醒哨兵 — drain post 队列并重新注册 pipe 读
-        if (ov == &wake_ov_) {
-            // io_uring 已消费 1 字节，排空 pipe 中可能的剩余字节（多次 wake）
-            char buf[64];
-            while (::read(pipe_fds_[0], buf, sizeof(buf)) > 0) {}
-            submit_wake_read();
-            return drain_post_queue();
+            if (ov == &wake_ov_) {
+                // pipe 唤醒哨兵 — drain post 队列并重新注册 pipe 读
+                char buf[64];
+                while (::read(pipe_fds_[0], buf, sizeof(buf)) > 0) {}
+                submit_wake_read();
+                handled += drain_post_queue();
+                continue;
+            }
+
+            ov->result = result;
+            if (ov->coroutine)
+                ov->coroutine.resume();
+            ++handled;
         }
 
-        ov->result = result;
-
-        // 恢复等待此操作的协程
-        if (ov->coroutine)
-            ov->coroutine.resume();
-
-        return 1;
+        // 一次性推进 CQ head
+        ::io_uring_cq_advance(&ring_, n);
+        return handled;
     }
 
     void submit_wake_read() {
@@ -168,6 +206,7 @@ private:
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;
     uring_overlapped wake_ov_{};  // 哨兵，不存协程
+    unsigned pending_sqes_ = 0;   // 待提交 SQE 计数
 };
 
 } // namespace cnetmod

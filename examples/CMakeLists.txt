@@ -11,6 +11,7 @@ set(EXAMPLE_TARGETS
     stdexec_bridge
     redis_client
     mysql_crud
+    mysql_orm
     http_demo
     ws_demo
     hight_http

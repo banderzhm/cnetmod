@@ -11,6 +11,7 @@ module;
 #include <WinSock2.h>
 #include <MSWSock.h>
 
+
 export module cnetmod.io.platform.iocp;
 
 import std;
@@ -82,18 +83,18 @@ public:
     /// 运行事件循环直到 stop()
     void run() override {
         while (!stopped_.load(std::memory_order_relaxed)) {
-            run_one_impl(INFINITE);
+            run_batch_impl(INFINITE);
         }
     }
 
-    /// 处理一个完成事件（阻塞）
+    /// 处理一批完成事件（阻塞）
     auto run_one() -> std::size_t override {
-        return run_one_impl(INFINITE);
+        return run_batch_impl(INFINITE);
     }
 
     /// 非阻塞轮询
     auto poll() -> std::size_t override {
-        return run_one_impl(0);
+        return run_batch_impl(0);
     }
 
     void stop() override {
@@ -142,38 +143,65 @@ protected:
     }
 
 private:
-    /// 核心事件分发
-    auto run_one_impl(DWORD timeout_ms) -> std::size_t {
-        DWORD bytes = 0;
-        ULONG_PTR key = 0;
-        LPOVERLAPPED ov = nullptr;
+    static constexpr ULONG max_batch_ = 64;
 
-        BOOL ok = ::GetQueuedCompletionStatus(
-            iocp_handle_, &bytes, &key, &ov, timeout_ms);
+    /// 核心事件分发 — 批量版
+    auto run_batch_impl(DWORD timeout_ms) -> std::size_t {
+        OVERLAPPED_ENTRY entries[max_batch_];
+        ULONG removed = 0;
 
-        if (ov == nullptr) {
-            if (key == 1) {
-                // post 唤醒信号 — 排空并恢复已投递的协程
-                return drain_post_queue();
-            }
-            // 超时或 stop 信号
+        BOOL ok = ::GetQueuedCompletionStatusEx(
+            iocp_handle_, entries, max_batch_, &removed,
+            timeout_ms, FALSE);
+
+        if (!ok || removed == 0)
             return 0;
+
+        std::size_t handled = 0;
+        for (ULONG i = 0; i < removed; ++i) {
+            auto& entry = entries[i];
+
+            if (entry.lpOverlapped == nullptr) {
+                if (entry.lpCompletionKey == 1) {
+                    // post 唤醒信号
+                    handled += drain_post_queue();
+                }
+                // key==0: stop 信号，忽略
+                continue;
+            }
+
+            auto* iov = static_cast<iocp_overlapped*>(entry.lpOverlapped);
+
+            // 检查错误：Internal 字段存储 NTSTATUS
+            if (entry.lpOverlapped->Internal != 0) {
+                // NTSTATUS → Win32 error code (RtlNtStatusToDosError from ntdll)
+                iov->error = std::error_code(
+                    static_cast<int>(ntstatus_to_win32(
+                        static_cast<long>(entry.lpOverlapped->Internal))),
+                    std::system_category());
+            }
+            iov->bytes_transferred = entry.dwNumberOfBytesTransferred;
+
+            if (iov->coroutine)
+                iov->coroutine.resume();
+
+            ++handled;
         }
+        return handled;
+    }
 
-        auto* iov = static_cast<iocp_overlapped*>(ov);
-
-        if (!ok) {
-            iov->error = std::error_code(
-                static_cast<int>(::GetLastError()),
-                std::system_category());
-        }
-        iov->bytes_transferred = bytes;
-
-        // 恢复等待此操作的协程
-        if (iov->coroutine)
-            iov->coroutine.resume();
-
-        return 1;
+    /// 动态加载 ntdll.dll!RtlNtStatusToDosError
+    static auto ntstatus_to_win32(long ntstatus) noexcept -> unsigned long {
+        using fn_t = unsigned long (__stdcall*)(long);
+        static fn_t fn = []() -> fn_t {
+            auto* mod = ::GetModuleHandleW(L"ntdll.dll");
+            if (!mod) return nullptr;
+            return reinterpret_cast<fn_t>(
+                ::GetProcAddress(mod, "RtlNtStatusToDosError"));
+        }();
+        if (fn)
+            return fn(ntstatus);
+        return static_cast<unsigned long>(ntstatus); // fallback
     }
 
     HANDLE iocp_handle_ = INVALID_HANDLE_VALUE;

@@ -18,6 +18,7 @@ import cnetmod.core.net_init;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
 import cnetmod.io.io_context;
 import cnetmod.executor.async_op;
 import cnetmod.executor.scheduler;
@@ -41,7 +42,9 @@ auto handle_http_client(cn::io_context& ctx, cn::socket client)
     std::array<std::byte, 4096> buf{};
 
     while (!parser.ready()) {
-        auto rd = co_await cn::async_read(ctx, client, cn::buffer(buf));
+        cn::cancel_token rd_token;
+        auto rd = co_await cn::with_timeout(ctx, std::chrono::seconds{5},
+            cn::async_read(ctx, client, cn::buffer(buf), rd_token), rd_token);
         if (!rd || *rd == 0) { client.close(); co_return; }
 
         auto consumed = parser.consume(
@@ -85,9 +88,11 @@ auto http_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
     server_ready.store(true);
     std::println("  [HTTP Server] Listening on port {}", PORT);
 
-    auto r = co_await cn::async_accept(ctx, acc.native_socket());
+    cn::cancel_token accept_token;
+    auto r = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
+        cn::async_accept(ctx, acc.native_socket(), accept_token), accept_token);
     if (!r) {
-        std::println(stderr, "  [HTTP Server] accept error");
+        std::println(stderr, "  [HTTP Server] accept error/timeout");
         done.fetch_add(1);
         co_return;
     }
@@ -116,9 +121,11 @@ auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
     auto sock = std::move(*sock_r);
 
     auto ep = cn::endpoint{cn::ipv4_address::loopback(), PORT};
-    auto cr = co_await cn::async_connect(ctx, sock, ep);
+    cn::cancel_token conn_token;
+    auto cr = co_await cn::with_timeout(ctx, std::chrono::seconds{5},
+        cn::async_connect(ctx, sock, ep, conn_token), conn_token);
     if (!cr) {
-        std::println(stderr, "  [HTTP Client] connect failed: {}",
+        std::println(stderr, "  [HTTP Client] connect failed/timeout: {}",
                      cr.error().message());
         done.fetch_add(1);
         co_return;
@@ -142,7 +149,9 @@ auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
     std::array<std::byte, 4096> buf{};
 
     while (!resp_parser.ready()) {
-        auto rd = co_await cn::async_read(ctx, sock, cn::buffer(buf));
+        cn::cancel_token rd_token;
+        auto rd = co_await cn::with_timeout(ctx, std::chrono::seconds{5},
+            cn::async_read(ctx, sock, cn::buffer(buf), rd_token), rd_token);
         if (!rd || *rd == 0) break;
 
         auto consumed = resp_parser.consume(
@@ -169,7 +178,7 @@ auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
 auto run_http_demo(cn::io_context& ctx) -> cn::task<void> {
     cn::tcp::acceptor acc(ctx);
     auto ep = cn::endpoint{cn::ipv4_address::loopback(), PORT};
-    if (auto r = acc.open(ep); !r) {
+    if (auto r = acc.open(ep, {.reuse_address = true}); !r) {
         std::println(stderr, "  Acceptor open failed: {}", r.error().message());
         ctx.stop();
         co_return;

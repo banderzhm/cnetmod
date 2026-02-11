@@ -17,6 +17,7 @@ import cnetmod.core.net_init;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
 import cnetmod.io.io_context;
 import cnetmod.executor.async_op;
 import cnetmod.executor.scheduler;
@@ -45,11 +46,15 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
     }
     std::println("  [WS Server] Client connected (WebSocket handshake OK)");
 
-    // Echo 循环：收到消息后回传
+    // Echo 循环：收到消息后回传（10秒超时）
     for (int i = 0; i < 3; ++i) {
-        auto msg = co_await conn.async_recv();
+        cn::cancel_token recv_token;
+        conn.set_cancel_token(&recv_token);
+        auto msg = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
+            conn.async_recv(), recv_token);
+        conn.clear_cancel_token();
         if (!msg) {
-            std::println(stderr, "  [WS Server] recv error: {}",
+            std::println(stderr, "  [WS Server] recv error/timeout: {}",
                          msg.error().message());
             break;
         }
@@ -86,9 +91,11 @@ auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
     server_ready.store(true);
     std::println("  [WS Server] Listening on port {}", PORT);
 
-    auto r = co_await cn::async_accept(ctx, acc.native_socket());
+    cn::cancel_token accept_token;
+    auto r = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
+        cn::async_accept(ctx, acc.native_socket(), accept_token), accept_token);
     if (!r) {
-        std::println(stderr, "  [WS Server] accept error");
+        std::println(stderr, "  [WS Server] accept error/timeout");
         done.fetch_add(1);
         co_return;
     }
@@ -114,10 +121,14 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
 
     ws::connection conn(ctx);
 
-    auto url = std::format("ws://127.0.0.1:{}/chat", PORT);
-    auto cr = co_await conn.async_connect(url);
+    auto url = std::format("ws://*********:{}/chat", PORT);
+    cn::cancel_token conn_token;
+    conn.set_cancel_token(&conn_token);
+    auto cr = co_await cn::with_timeout(ctx, std::chrono::seconds{5},
+        conn.async_connect(url), conn_token);
+    conn.clear_cancel_token();
     if (!cr) {
-        std::println(stderr, "  [WS Client] connect failed: {}",
+        std::println(stderr, "  [WS Client] connect failed/timeout: {}",
                      cr.error().message());
         co_return;
     }
@@ -130,7 +141,11 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
         if (!sr) break;
         std::println("  [WS Client] sent: {}", text);
 
-        auto msg = co_await conn.async_recv();
+        cn::cancel_token recv_token;
+        conn.set_cancel_token(&recv_token);
+        auto msg = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
+            conn.async_recv(), recv_token);
+        conn.clear_cancel_token();
         if (!msg) break;
 
         if (msg->op == ws::opcode::close) break;
@@ -153,7 +168,7 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
 auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
     cn::tcp::acceptor acc(ctx);
     auto ep = cn::endpoint{cn::ipv4_address::loopback(), PORT};
-    if (auto r = acc.open(ep); !r) {
+    if (auto r = acc.open(ep, {.reuse_address = true}); !r) {
         std::println(stderr, "  Acceptor open failed: {}", r.error().message());
         ctx.stop();
         co_return;

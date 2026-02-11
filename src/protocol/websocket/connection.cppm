@@ -17,6 +17,7 @@ import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
+import cnetmod.coro.cancel;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -98,7 +99,13 @@ public:
         if (!sock_r) co_return std::unexpected(sock_r.error());
         sock_ = std::move(*sock_r);
 
-        auto cr = co_await cnetmod::async_connect(ctx_, sock_, endpoint{*addr_r, u.port});
+        std::expected<void, std::error_code> cr;
+        if (cancel_token_)
+            cr = co_await cnetmod::async_connect(ctx_, sock_,
+                endpoint{*addr_r, u.port}, *cancel_token_);
+        else
+            cr = co_await cnetmod::async_connect(ctx_, sock_,
+                endpoint{*addr_r, u.port});
         if (!cr) { close_socket(); co_return std::unexpected(cr.error()); }
 
         // SSL/TLS
@@ -463,6 +470,16 @@ public:
     }
 
     // =========================================================================
+    // 取消令牌支持（配合 with_timeout 使用）
+    // =========================================================================
+
+    /// 设置取消令牌，后续内部 I/O 操作将使用此令牌
+    void set_cancel_token(cancel_token* t) noexcept { cancel_token_ = t; }
+
+    /// 清除取消令牌
+    void clear_cancel_token() noexcept { cancel_token_ = nullptr; }
+
+    // =========================================================================
     // 状态查询
     // =========================================================================
 
@@ -477,7 +494,7 @@ private:
     // 内部辅助
     // =========================================================================
 
-    /// 读取（根据 secure_ 分发）
+    /// 读取（根据 secure_ / cancel_token_ 分发）
     auto async_read_some(char* buf, std::size_t len)
         -> task<std::expected<std::size_t, std::error_code>>
     {
@@ -487,6 +504,9 @@ private:
                 mutable_buffer{buf, len});
         }
 #endif
+        if (cancel_token_)
+            co_return co_await cnetmod::async_read(ctx_, sock_,
+                mutable_buffer{buf, len}, *cancel_token_);
         co_return co_await cnetmod::async_read(ctx_, sock_,
             mutable_buffer{buf, len});
     }
@@ -506,10 +526,17 @@ private:
                 continue;
             }
 #endif
-            auto w = co_await cnetmod::async_write(ctx_, sock_,
-                const_buffer{data + written, len - written});
-            if (!w) co_return std::unexpected(w.error());
-            written += *w;
+            if (cancel_token_) {
+                auto w = co_await cnetmod::async_write(ctx_, sock_,
+                    const_buffer{data + written, len - written}, *cancel_token_);
+                if (!w) co_return std::unexpected(w.error());
+                written += *w;
+            } else {
+                auto w = co_await cnetmod::async_write(ctx_, sock_,
+                    const_buffer{data + written, len - written});
+                if (!w) co_return std::unexpected(w.error());
+                written += *w;
+            }
         }
         co_return {};
     }
@@ -552,6 +579,7 @@ private:
     bool close_sent_ = false;
     bool close_received_ = false;
     dynamic_buffer recv_buf_{8192};
+    cancel_token* cancel_token_{nullptr};
 
 #ifdef CNETMOD_HAS_SSL
     std::unique_ptr<ssl_context> ssl_ctx_;

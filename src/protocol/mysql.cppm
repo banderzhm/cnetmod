@@ -7,6 +7,7 @@ export import :format_sql;
 export import :client;
 export import :pool;
 export import :pipeline;
+export import :orm;
 // 内部分区（不直接导出，但通过 :client / :types 间接可用）
 import :protocol;
 import :auth;

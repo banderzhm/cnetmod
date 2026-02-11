@@ -200,9 +200,7 @@ public:
     {
         request req;
         // 构建: 第一个是命令，后面是参数
-        auto it = args.begin();
-        if (it == args.end()) co_return std::unexpected(std::string("empty command"));
-        auto command = *it++;
+        if (args.size() == 0) co_return std::unexpected(std::string("empty command"));
 
         // 手动构造以支持 initializer_list
         std::string payload;

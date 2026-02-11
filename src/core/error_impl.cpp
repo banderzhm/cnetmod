@@ -28,7 +28,7 @@ auto from_native_error([[maybe_unused]] int native_error) noexcept -> errc {
         case WSAEADDRINUSE:        return errc::address_in_use;
         case WSAEADDRNOTAVAIL:     return errc::address_not_available;
         case WSAEAFNOSUPPORT:      return errc::address_family_not_supported;
-        case WSA_OPERATION_ABORTED:return errc::operation_aborted;
+        case WSA_OPERATION_ABORTED:return errc::operation_aborted;  // == ERROR_OPERATION_ABORTED (995)
         case WSAEINPROGRESS:       return errc::operation_in_progress;
         case WSAEOPNOTSUPP:        return errc::operation_not_supported;
         case WSAEWOULDBLOCK:       return errc::operation_would_block;
