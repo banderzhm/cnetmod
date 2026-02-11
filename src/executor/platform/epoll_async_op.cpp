@@ -77,13 +77,13 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
     if (ep.address().is_v4()) {
         auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
         sa.sin_family = AF_INET;
-        sa.sin_port = ::htons(ep.port());
+        sa.sin_port = htons(ep.port());
         sa.sin_addr = ep.address().to_v4().native();
         return sizeof(::sockaddr_in);
     } else {
         auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
         sa.sin6_family = AF_INET6;
-        sa.sin6_port = ::htons(ep.port());
+        sa.sin6_port = htons(ep.port());
         sa.sin6_addr = ep.address().to_v6().native();
         return sizeof(::sockaddr_in6);
     }

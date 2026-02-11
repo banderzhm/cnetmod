@@ -9,6 +9,7 @@ set(EXAMPLE_TARGETS
     channel_demo
     mutex_demo
     stdexec_bridge
+    redis_client
 )
 
 foreach(example ${EXAMPLE_TARGETS})
