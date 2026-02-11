@@ -1,5 +1,5 @@
-/// cnetmod example — Async Redis Client
-/// 演示 redis::client 的 AUTH / 基础命令 / pipeline / stdexec sender 桥接
+/// cnetmod example — Async Redis Client (RESP3)
+/// 演示 redis::client 的 HELLO 3 / AUTH / 基础命令 / pipeline / request builder / stdexec 桥接
 /// 需要本地 Redis 运行在 127.0.0.1:6379
 
 #include <cnetmod/config.hpp>
@@ -13,48 +13,103 @@ import cnetmod.executor.scheduler;
 import cnetmod.protocol.redis;
 
 namespace cn = cnetmod;
-using redis = cn::redis::client;
+using redis_client = cn::redis::client;
+using cn::redis::request;
+using cn::redis::resp3_node;
+using cn::redis::resp3_type;
+using cn::redis::first_value;
+using cn::redis::all_values;
+using cn::redis::is_ok;
+using cn::redis::has_error;
+using cn::redis::error_message;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Demo 1: 基础命令
-// ─────────────────────────────────────────────────────────────────────────────
-
-auto demo_basic(redis& r) -> cn::task<void> {
-    std::println("\n── Basic Commands ──");
-
-    auto pong = co_await r.cmd({"PING"});
-    std::println("  PING            -> {}", pong.to_string());
-
-    co_await r.cmd({"SET", "cn:k1", "hello"});
-    auto v1 = co_await r.cmd({"GET", "cn:k1"});
-    std::println("  SET+GET cn:k1   -> {}", v1.to_string());
-
-    co_await r.cmd({"SET", "cn:cnt", "0"});
-    for (int i = 0; i < 5; ++i)
-        co_await r.cmd({"INCR", "cn:cnt"});
-    auto cnt = co_await r.cmd({"GET", "cn:cnt"});
-    std::println("  INCR x5 cn:cnt  -> {}", cnt.to_string());
-
-    co_await r.cmd({"HSET", "cn:user", "name", "alice", "score", "100"});
-    auto hall = co_await r.cmd({"HGETALL", "cn:user"});
-    std::println("  HGETALL cn:user -> {}", hall.to_string());
-
-    co_await r.cmd({"RPUSH", "cn:list", "a", "b", "c"});
-    auto lr = co_await r.cmd({"LRANGE", "cn:list", "0", "-1"});
-    std::println("  LRANGE cn:list  -> {}", lr.to_string());
-
-    co_await r.cmd({"SET", "cn:ttl", "tmp", "EX", "30"});
-    auto ttl = co_await r.cmd({"TTL", "cn:ttl"});
-    std::println("  TTL cn:ttl      -> {}", ttl.to_string());
-
-    co_await r.cmd({"DEL", "cn:k1", "cn:cnt", "cn:user", "cn:list", "cn:ttl"});
+/// 打印响应节点列表
+void print_nodes(std::string_view label, const std::vector<resp3_node>& nodes) {
+    std::print("  {:<20} -> ", label);
+    if (nodes.empty()) { std::println("(empty)"); return; }
+    auto& first = nodes.front();
+    if (first.is_null()) { std::println("(nil)"); return; }
+    if (first.is_error()) { std::println("(error) {}", first.value); return; }
+    if (first.is_aggregate()) {
+        std::print("[{}] ", cn::redis::type_name(first.data_type));
+        auto vals = all_values(nodes);
+        for (std::size_t i = 0; i < vals.size(); ++i) {
+            if (i) std::print(", ");
+            std::print("\"{}\"", vals[i]);
+        }
+        std::println();
+    } else {
+        std::println("{}", first.value);
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 2: Pipeline — 多条命令单次往返
+// Demo 1: 基础命令 (使用 cmd initializer_list)
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto demo_pipeline(redis& r) -> cn::task<void> {
+auto demo_basic(redis_client& r) -> cn::task<void> {
+    std::println("\n── Basic Commands ──");
+
+    auto pong = co_await r.cmd({"PING"});
+    print_nodes("PING", *pong);
+
+    (void)co_await r.cmd({"SET", "cn:k1", "hello"});
+    auto v1 = co_await r.cmd({"GET", "cn:k1"});
+    print_nodes("SET+GET cn:k1", *v1);
+
+    (void)co_await r.cmd({"SET", "cn:cnt", "0"});
+    for (int i = 0; i < 5; ++i)
+        (void)co_await r.cmd({"INCR", "cn:cnt"});
+    auto cnt = co_await r.cmd({"GET", "cn:cnt"});
+    print_nodes("INCR x5 cn:cnt", *cnt);
+
+    (void)co_await r.cmd({"HSET", "cn:user", "name", "alice", "score", "100"});
+    auto hall = co_await r.cmd({"HGETALL", "cn:user"});
+    print_nodes("HGETALL cn:user", *hall);
+
+    (void)co_await r.cmd({"RPUSH", "cn:list", "a", "b", "c"});
+    auto lr = co_await r.cmd({"LRANGE", "cn:list", "0", "-1"});
+    print_nodes("LRANGE cn:list", *lr);
+
+    (void)co_await r.cmd({"SET", "cn:ttl", "tmp", "EX", "30"});
+    auto ttl = co_await r.cmd({"TTL", "cn:ttl"});
+    print_nodes("TTL cn:ttl", *ttl);
+
+    (void)co_await r.cmd({"DEL", "cn:k1", "cn:cnt", "cn:user", "cn:list", "cn:ttl"});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo 2: request builder + exec
+// ─────────────────────────────────────────────────────────────────────────────
+
+auto demo_request_builder(redis_client& r) -> cn::task<void> {
+    std::println("\n── Request Builder ──");
+
+    // 单条命令 via request
+    request req;
+    req.push("SET", "rb:key", "value123");
+    auto set_r = co_await r.exec(req);
+    std::println("  SET rb:key      -> {}", is_ok(*set_r) ? "OK" : "FAIL");
+
+    // 多命令 request (pipeline 风格)
+    request multi;
+    multi.push("SET", "rb:a", "alpha");
+    multi.push("SET", "rb:b", "beta");
+    multi.push("GET", "rb:a");
+    multi.push("GET", "rb:b");
+    multi.push("DEL", "rb:a", "rb:b", "rb:key");
+    auto multi_r = co_await r.exec(multi);
+    std::println("  Multi exec ({} commands, {} nodes)", multi.size(), multi_r->size());
+    auto vals = all_values(*multi_r);
+    for (auto v : vals)
+        std::println("    -> {}", v);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Demo 3: Pipeline — 多条命令单次往返
+// ─────────────────────────────────────────────────────────────────────────────
+
+auto demo_pipeline(redis_client& r) -> cn::task<void> {
     std::println("\n── Pipeline ──");
 
     auto t0 = std::chrono::steady_clock::now();
@@ -70,34 +125,31 @@ auto demo_pipeline(redis& r) -> cn::task<void> {
     auto us = std::chrono::duration_cast<std::chrono::microseconds>(
                   std::chrono::steady_clock::now() - t0).count();
 
-    for (std::size_t i = 0; i < replies.size(); ++i)
-        std::println("  [{}] {}", i, replies[i].to_string());
-    std::println("  {} commands in {} us", replies.size(), us);
+    auto vals = all_values(*replies);
+    for (std::size_t i = 0; i < vals.size(); ++i)
+        std::println("  [{}] {}", i, vals[i]);
+    std::println("  {} nodes in {} us", replies->size(), us);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 3: stdexec sender 桥接
+// Demo 4: stdexec sender 桥接
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto demo_sender(cn::io_context& ctx, redis& r) -> cn::task<void> {
+auto demo_sender(cn::io_context& ctx, redis_client& r) -> cn::task<void> {
     std::println("\n── stdexec Sender ──");
 
-    // io_scheduler: 绑定 io_context 的 stdexec scheduler
     auto sched = cn::io_scheduler(ctx);
     std::println("  io_scheduler ready (schedule() -> sender)");
 
-    // as_sender + sync_wait_sender: 纯计算 task
     auto square = [](int x) -> cn::task<int> { co_return x * x; };
     auto val = cn::sync_wait_sender(cn::as_sender(square(7)));
     std::println("  sync_wait_sender(square(7)) = {}", val);
 
-    // I/O task 在事件循环中 co_await（最自然的方式）
-    co_await r.cmd({"SET", "s:demo", "via_sender"});
+    (void)co_await r.cmd({"SET", "s:demo", "via_sender"});
     auto sv = co_await r.cmd({"GET", "s:demo"});
-    std::println("  GET s:demo = {}", sv.to_string());
+    std::println("  GET s:demo = {}", first_value(*sv));
 
-    // 高阶: as_sender 可组合 stdexec::when_all / let_value / on(sched, ...)
-    co_await r.cmd({"DEL", "s:demo"});
+    (void)co_await r.cmd({"DEL", "s:demo"});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -105,24 +157,25 @@ auto demo_sender(cn::io_context& ctx, redis& r) -> cn::task<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run(cn::io_context& ctx) -> cn::task<void> {
-    redis r(ctx);
+    redis_client r(ctx);
 
-    // 连接 Redis（带密码认证 + 选择数据库）
+    // 连接 Redis（HELLO 3 + AUTH + SELECT）
     auto result = co_await r.connect({
-        .host = "1.94.173.250",
+        .host     = "127.0.0.1",
         .port     = 6379,
         .password = "ydc888888",  // 按实际修改，留空则跳过 AUTH
-        .db       = 10,
+        .db       = 9,
     });
 
-    if (!result.ok()) {
-        std::println("Redis 连接失败: {}", result.to_string());
+    if (!result) {
+        std::println("Redis 连接失败: {}", result.error());
         ctx.stop();
         co_return;
     }
-    std::println("已连接 Redis");
+    std::println("已连接 Redis (RESP3={})", r.is_resp3());
 
     co_await demo_basic(r);
+    co_await demo_request_builder(r);
     co_await demo_pipeline(r);
     co_await demo_sender(ctx, r);
 
@@ -132,7 +185,7 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
 }
 
 auto main() -> int {
-    std::println("=== cnetmod: Async Redis Client ===");
+    std::println("=== cnetmod: Async Redis Client (RESP3) ===");
 
     cn::net_init net;
     auto ctx = cn::make_io_context();
