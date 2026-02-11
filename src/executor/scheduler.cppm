@@ -228,22 +228,35 @@ private:
 // task_sender<T> — wraps task<T> as stdexec sender
 // =============================================================================
 
+// Helper: avoid forming set_value_t(void) which is ill-formed on clang.
+// Class-template specialization ensures set_value_t(T) is never instantiated
+// when T = void.
+namespace detail {
+
+template <typename T>
+struct task_completion_sigs {
+    using type = stdexec::completion_signatures<
+        stdexec::set_value_t(T),
+        stdexec::set_error_t(std::exception_ptr)
+    >;
+};
+
+template <>
+struct task_completion_sigs<void> {
+    using type = stdexec::completion_signatures<
+        stdexec::set_value_t(),
+        stdexec::set_error_t(std::exception_ptr)
+    >;
+};
+
+} // namespace detail
+
 export template <typename T>
 class task_sender {
 public:
     using sender_concept = stdexec::sender_t;
 
-    using completion_signatures = std::conditional_t<
-        std::is_void_v<T>,
-        stdexec::completion_signatures<
-            stdexec::set_value_t(),
-            stdexec::set_error_t(std::exception_ptr)
-        >,
-        stdexec::completion_signatures<
-            stdexec::set_value_t(T),
-            stdexec::set_error_t(std::exception_ptr)
-        >
-    >;
+    using completion_signatures = typename detail::task_completion_sigs<T>::type;
 
     explicit task_sender(task<T> t) noexcept
         : task_(std::move(t)) {}

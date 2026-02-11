@@ -11,6 +11,10 @@ set(EXAMPLE_TARGETS
     stdexec_bridge
     redis_client
     mysql_crud
+    http_demo
+    ws_demo
+    hight_http
+    hight_ws
 )
 
 # SSL 示例（仅在 OpenSSL 可用时构建）
