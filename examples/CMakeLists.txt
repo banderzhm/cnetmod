@@ -10,6 +10,7 @@ set(EXAMPLE_TARGETS
     mutex_demo
     stdexec_bridge
     redis_client
+    mysql_crud
 )
 
 # SSL 示例（仅在 OpenSSL 可用时构建）

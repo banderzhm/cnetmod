@@ -34,6 +34,13 @@ export struct resp_value {
     auto is_err() const noexcept -> bool { return type == resp_type::error; }
     auto is_nil() const noexcept -> bool { return type == resp_type::nil; }
 
+    // 工厂方法（避免 clang -Wmissing-designated-field-initializers）
+    static auto make_error(std::string msg) -> resp_value { return {resp_type::error, std::move(msg), 0, {}}; }
+    static auto make_simple(std::string msg) -> resp_value { return {resp_type::simple, std::move(msg), 0, {}}; }
+    static auto make_integer(std::int64_t v) -> resp_value { return {resp_type::integer, {}, v, {}}; }
+    static auto make_bulk(std::string data) -> resp_value { return {resp_type::bulk, std::move(data), 0, {}}; }
+    static auto make_array() -> resp_value { return {resp_type::array, {}, 0, {}}; }
+
     auto to_string() const -> std::string {
         switch (type) {
         case resp_type::simple:  return std::format("\"{}\"", str);
@@ -117,17 +124,17 @@ public:
     auto connect(connect_options opts = {}) -> task<resp_value> {
         // 解析地址
         auto addr_r = ip_address::from_string(opts.host);
-        if (!addr_r) co_return resp_value{.type = resp_type::error, .str = "invalid host"};
+        if (!addr_r) co_return resp_value::make_error("invalid host");
 
         auto family = addr_r->is_v4() ? address_family::ipv4 : address_family::ipv6;
         auto sock_r = socket::create(family, socket_type::stream);
-        if (!sock_r) co_return resp_value{.type = resp_type::error, .str = "socket create failed"};
+        if (!sock_r) co_return resp_value::make_error("socket create failed");
         sock_ = std::move(*sock_r);
 
         auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, opts.port});
         if (!cr) {
             sock_.close();
-            co_return resp_value{.type = resp_type::error, .str = cr.error().message()};
+            co_return resp_value::make_error(cr.error().message());
         }
 
         // TLS 握手
@@ -136,8 +143,7 @@ public:
             auto ssl_ctx_r = ssl_context::client();
             if (!ssl_ctx_r) {
                 sock_.close();
-                co_return resp_value{.type = resp_type::error,
-                    .str = "ssl context: " + ssl_ctx_r.error().message()};
+                co_return resp_value::make_error("ssl context: " + ssl_ctx_r.error().message());
             }
             ssl_ctx_ = std::make_unique<ssl_context>(std::move(*ssl_ctx_r));
             ssl_ctx_->set_verify_peer(opts.tls_verify);
@@ -147,8 +153,7 @@ public:
                 auto r = ssl_ctx_->load_ca_file(opts.tls_ca_file);
                 if (!r) {
                     sock_.close();
-                    co_return resp_value{.type = resp_type::error,
-                        .str = "ssl load ca: " + r.error().message()};
+                    co_return resp_value::make_error("ssl load ca: " + r.error().message());
                 }
             } else if (opts.tls_verify) {
                 (void)ssl_ctx_->set_default_ca();
@@ -159,16 +164,14 @@ public:
                 auto r = ssl_ctx_->load_cert_file(opts.tls_cert_file);
                 if (!r) {
                     sock_.close();
-                    co_return resp_value{.type = resp_type::error,
-                        .str = "ssl load cert: " + r.error().message()};
+                    co_return resp_value::make_error("ssl load cert: " + r.error().message());
                 }
             }
             if (!opts.tls_key_file.empty()) {
                 auto r = ssl_ctx_->load_key_file(opts.tls_key_file);
                 if (!r) {
                     sock_.close();
-                    co_return resp_value{.type = resp_type::error,
-                        .str = "ssl load key: " + r.error().message()};
+                    co_return resp_value::make_error("ssl load key: " + r.error().message());
                 }
             }
 
@@ -182,15 +185,13 @@ public:
             auto hs = co_await ssl_->async_handshake();
             if (!hs) {
                 sock_.close();
-                co_return resp_value{.type = resp_type::error,
-                    .str = "ssl handshake: " + hs.error().message()};
+                co_return resp_value::make_error("ssl handshake: " + hs.error().message());
             }
         }
 #else
         if (opts.tls) {
             sock_.close();
-            co_return resp_value{.type = resp_type::error,
-                .str = "SSL not available (build without CNETMOD_HAS_SSL)"};
+            co_return resp_value::make_error("SSL not available (build without CNETMOD_HAS_SSL)");
         }
 #endif
 
@@ -218,7 +219,7 @@ public:
             }
         }
 
-        co_return resp_value{.type = resp_type::simple, .str = "OK"};
+        co_return resp_value::make_simple("OK");
     }
 
     /// 发送单条命令，等待回复
@@ -272,7 +273,7 @@ private:
 
     auto raw_send(std::string data) -> task<resp_value> {
         auto w = co_await do_write(buffer(std::string_view{data}));
-        if (!w) co_return resp_value{.type = resp_type::error, .str = w.error().message()};
+        if (!w) co_return resp_value::make_error(w.error().message());
         co_return co_await parse_one();
     }
 
@@ -293,42 +294,39 @@ private:
     auto parse_one() -> task<resp_value> {
         auto line = co_await read_line();
         if (line.empty())
-            co_return resp_value{.type = resp_type::error, .str = "connection closed"};
+            co_return resp_value::make_error("connection closed");
 
         auto body = std::string_view(line).substr(1);
 
         switch (line[0]) {
         case '+':
-            co_return resp_value{.type = resp_type::simple, .str = std::string(body)};
+            co_return resp_value::make_simple(std::string(body));
         case '-':
-            co_return resp_value{.type = resp_type::error, .str = std::string(body)};
+            co_return resp_value::make_error(std::string(body));
         case ':': {
             std::int64_t v{};
             std::from_chars(body.data(), body.data() + body.size(), v);
-            co_return resp_value{.type = resp_type::integer, .num = v};
+            co_return resp_value::make_integer(v);
         }
         case '$': {
             int len{};
             std::from_chars(body.data(), body.data() + body.size(), len);
             if (len < 0) co_return resp_value{};
             auto raw = co_await read_n(static_cast<std::size_t>(len) + 2);
-            co_return resp_value{
-                .type = resp_type::bulk,
-                .str  = raw.substr(0, static_cast<std::size_t>(len))
-            };
+            co_return resp_value::make_bulk(raw.substr(0, static_cast<std::size_t>(len)));
         }
         case '*': {
             int cnt{};
             std::from_chars(body.data(), body.data() + body.size(), cnt);
             if (cnt < 0) co_return resp_value{};
-            resp_value arr{.type = resp_type::array};
+            resp_value arr = resp_value::make_array();
             arr.elems.reserve(static_cast<std::size_t>(cnt));
             for (int i = 0; i < cnt; ++i)
                 arr.elems.push_back(co_await parse_one());
             co_return arr;
         }
         default:
-            co_return resp_value{.type = resp_type::error, .str = "unknown resp prefix"};
+            co_return resp_value::make_error("unknown resp prefix");
         }
     }
 

@@ -58,7 +58,7 @@ auto run_file_demo(io_context& ctx) -> task<void> {
         if (wr)
             std::println("  appended {} bytes at offset {}", *wr, offset);
 
-        co_await async_file_flush(ctx, *f);
+        (void)co_await async_file_flush(ctx, *f);
     }
 
     // ---- 读取全部 ----

@@ -14,12 +14,12 @@ auto run_timer(io_context& ctx) -> task<void> {
     high_resolution_timer high(ctx);
 
     std::println("  [low] waiting 300ms...");
-    co_await low.async_wait(std::chrono::milliseconds{300});
+    (void)co_await low.async_wait(std::chrono::milliseconds{300});
     std::println("  [low] done");
 
     auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds{150};
     std::println("  [high] waiting until now+150ms...");
-    co_await high.async_wait_until(deadline);
+    (void)co_await high.async_wait_until(deadline);
     std::println("  [high] done");
 
     ctx.stop();

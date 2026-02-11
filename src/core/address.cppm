@@ -1,6 +1,7 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include <cstring>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
 #include <WinSock2.h>
@@ -70,7 +71,12 @@ public:
         return {};
     }
 
-    auto operator<=>(const ipv4_address&) const = default;
+    auto operator==(const ipv4_address& rhs) const noexcept -> bool {
+        return std::memcmp(&addr_, &rhs.addr_, sizeof(addr_)) == 0;
+    }
+    auto operator!=(const ipv4_address& rhs) const noexcept -> bool {
+        return !(*this == rhs);
+    }
 
 private:
     union {
@@ -107,7 +113,12 @@ public:
         return {};
     }
 
-    auto operator<=>(const ipv6_address&) const = default;
+    auto operator==(const ipv6_address& rhs) const noexcept -> bool {
+        return std::memcmp(&addr_, &rhs.addr_, sizeof(addr_)) == 0;
+    }
+    auto operator!=(const ipv6_address& rhs) const noexcept -> bool {
+        return !(*this == rhs);
+    }
 
 private:
     ::in6_addr addr_;

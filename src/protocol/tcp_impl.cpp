@@ -47,8 +47,6 @@ namespace {
 auto sockaddr_to_endpoint(const ::sockaddr_storage& storage) -> endpoint {
     if (storage.ss_family == AF_INET) {
         auto& sa = reinterpret_cast<const ::sockaddr_in&>(storage);
-        ipv4_address addr;
-        // 通过 from_string 重建（简洁方式）
         char buf[INET_ADDRSTRLEN]{};
         ::inet_ntop(AF_INET, &sa.sin_addr, buf, sizeof(buf));
         auto a = ipv4_address::from_string(buf);
