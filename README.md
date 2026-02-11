@@ -2,9 +2,9 @@
 
 Cross-platform asynchronous network library using C++23 modules and native coroutines.
 
-[![Linux Build](https://github.com/yourusername/cnetmod/actions/workflows/linux-clang.yml/badge.svg)](https://github.com/yourusername/cnetmod/actions/workflows/linux-clang.yml)
-[![macOS Build](https://github.com/yourusername/cnetmod/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/yourusername/cnetmod/actions/workflows/macos-clang.yml)
-[![Windows Build](https://github.com/yourusername/cnetmod/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/yourusername/cnetmod/actions/workflows/windows-msvc.yml)
+[![Linux Build](https://github.com/banderzhm/cnetmod/actions/workflows/linux-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/linux-clang.yml)
+[![macOS Build](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml)
+[![Windows Build](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml)
 
 ## Platform Support
 
