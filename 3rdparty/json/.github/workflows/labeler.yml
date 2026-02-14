@@ -1,0 +1,26 @@
+name: "Pull Request Labeler"
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  label:
+    permissions:
+      contents: read
+      pull-requests: write
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@5ef0c079ce82195b2a36a210272d6b661572d83e # v2.14.2
+        with:
+          egress-policy: audit
+
+      - uses: srvaroa/labeler@b4493338d7929ddc4ffc95fadf6f28c73bae2e90 # master
+        env:
+          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

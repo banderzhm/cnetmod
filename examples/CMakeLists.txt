@@ -16,7 +16,10 @@ set(EXAMPLE_TARGETS
     ws_demo
     hight_http
     hight_ws
+    hight_plus_http
     serial_port
+    multicore_http
+    multicore_ws
 )
 
 # SSL 示例（仅在 OpenSSL 可用时构建）

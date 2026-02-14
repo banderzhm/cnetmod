@@ -19,6 +19,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
+import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 
 namespace cnetmod::http {
@@ -348,8 +349,13 @@ export auto save_upload(upload_options opts) -> handler_fn {
 
 export class server {
 public:
+    /// 单线程模式：所有连接在同一个 io_context 上处理
     explicit server(io_context& ctx)
         : ctx_(ctx) {}
+
+    /// 多核模式：accept 在 sctx.accept_io()，连接分发到 worker io_context
+    explicit server(server_context& sctx)
+        : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
     /// 监听指定地址和端口
     auto listen(std::string_view host, std::uint16_t port)
@@ -360,7 +366,7 @@ public:
 
         acc_ = std::make_unique<tcp::acceptor>(ctx_);
         auto ep = endpoint{*addr_r, port};
-        auto r = acc_->open(ep);
+        auto r = acc_->open(ep, {.reuse_address = true});
         if (!r) return std::unexpected(r.error());
 
         host_ = std::string(host);
@@ -383,8 +389,16 @@ public:
                 if (!running_) break;
                 continue;
             }
-            // 为每个连接 spawn 独立协程
-            spawn(ctx_, handle_connection(std::move(*r)));
+            if (sctx_) {
+                // 多核模式：round-robin 分发到 worker io_context
+                auto& worker = sctx_->next_worker_io();
+                spawn_on(worker, handle_connection(
+                    std::move(*r), worker));
+            } else {
+                // 单线程模式：在当前 io_context 处理
+                spawn(ctx_, handle_connection(
+                    std::move(*r), ctx_));
+            }
         }
     }
 
@@ -396,7 +410,8 @@ public:
 
 private:
     /// 处理单个连接（支持 keep-alive）
-    auto handle_connection(socket client) -> task<void> {
+    /// @param io 该连接绑定的 io_context（可能是 worker）
+    auto handle_connection(socket client, io_context& io) -> task<void> {
         bool keep_alive = true;
 
         while (keep_alive) {
@@ -405,7 +420,7 @@ private:
             std::array<std::byte, 8192> buf{};
 
             while (!parser.ready()) {
-                auto rd = co_await async_read(ctx_, client, mutable_buffer{buf.data(), buf.size()});
+                auto rd = co_await async_read(io, client, mutable_buffer{buf.data(), buf.size()});
                 if (!rd || *rd == 0) { client.close(); co_return; }
 
                 auto consumed = parser.consume(
@@ -439,7 +454,7 @@ private:
                 };
             }
 
-            request_context rctx(ctx_, client, parser, resp, std::move(rp));
+            request_context rctx(io, client, parser, resp, std::move(rp));
 
             // 执行中间件链 + handler
             co_await execute_chain(rctx, handler);
@@ -448,7 +463,7 @@ private:
             if (resp.get_header("X-Streamed") != "1") {
                 // 正常发送响应
                 auto data = resp.serialize();
-                auto wr = co_await async_write(ctx_, client,
+                auto wr = co_await async_write(io, client,
                     const_buffer{data.data(), data.size()});
                 if (!wr) { client.close(); co_return; }
             }
@@ -495,6 +510,7 @@ private:
     }
 
     io_context& ctx_;
+    server_context* sctx_ = nullptr;  // 非 null 时为多核模式
     std::unique_ptr<tcp::acceptor> acc_;
     router router_;
     std::vector<middleware_fn> middlewares_;

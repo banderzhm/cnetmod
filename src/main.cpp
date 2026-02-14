@@ -6,6 +6,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.io.io_context;
 import cnetmod.executor.scheduler;
+// import cnetmod.utils.log;  // TODO: 暂时禁用以检查编译问题
 
 // =============================================================================
 // Demo: coroutine chain + spawn + stdexec bridge (smoke test)
@@ -49,6 +50,6 @@ auto main() -> int {
     ctx->run();
     std::println("  io_context + spawn OK");
 
-    std::println("\nAll OK. See examples/ for full demos.");
+    std::println("All OK. See examples/ for full demos.");
     return 0;
 }

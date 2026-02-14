@@ -185,7 +185,7 @@ endif()
 # 编译器标志
 # ==============================================================================
 if(MSVC)
-    add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor)
+    add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
         -Wall -Wextra
@@ -202,6 +202,15 @@ endif()
 # stdexec: 纯头文件模式（不走 add_subdirectory，避免 CPM 依赖）
 # 用于上层 sender/receiver 组织，底层 I/O 使用原生协程
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include)
+
+# jwt-cpp: header-only JWT 库 (HS256/RS256 等)
+include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include)
+
+# nlohmann/json: C++ modules 支持 (json.cppm)
+include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include)
+set(NLOHMANN_JSON_MODULE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm)
+
+# 日志模块使用纯 C++23 std::format 实现，无需外部依赖
 
 # ==============================================================================
 # SSL/TLS 支持（可选）
@@ -326,6 +335,7 @@ if(UNIX AND LIBCXX_MODULE_DIRS AND LIBCXX_INCLUDE_DIRS)
             ${MODULE_INTERFACE_FILES}
             ${LIBCXX_MODULE_DIRS}/std.cppm
             ${LIBCXX_MODULE_DIRS}/std.compat.cppm
+            ${NLOHMANN_JSON_MODULE}
     )
 elseif(WIN32 AND LIBCXX_MODULE_DIRS)
     # Windows: MSVC 标准库模块
@@ -336,13 +346,14 @@ elseif(WIN32 AND LIBCXX_MODULE_DIRS)
             ${MODULE_INTERFACE_FILES}
             ${LIBCXX_MODULE_DIRS}/std.ixx
             ${LIBCXX_MODULE_DIRS}/std.compat.ixx
+            ${NLOHMANN_JSON_MODULE}
     )
 else()
     message(WARNING "标准库模块路径未检测到，请手动设置 LIBCXX_MODULE_DIRS")
     target_sources(cnetmod_core PUBLIC
         FILE_SET cxx_modules TYPE CXX_MODULES
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
-        FILES ${MODULE_INTERFACE_FILES}
+        FILES ${MODULE_INTERFACE_FILES} ${NLOHMANN_JSON_MODULE}
     )
 endif()
 
@@ -377,6 +388,14 @@ endif()
 option(CNETMOD_BUILD_EXAMPLES "Build examples" ON)
 if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)
+endif()
+
+# ==============================================================================
+# 文档示例
+# ==============================================================================
+
+if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/doc/CMakeLists.txt")
+    add_subdirectory(doc)
 endif()
 
 # ==============================================================================

@@ -18,6 +18,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
+import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 
 namespace cnetmod::ws {
@@ -183,7 +184,12 @@ export using ws_handler_fn = std::function<task<void>(ws_context&)>;
 
 export class server {
 public:
+    /// 单线程模式
     explicit server(io_context& ctx) : ctx_(ctx) {}
+
+    /// 多核模式：accept 在 sctx.accept_io()，连接分发到 worker io_context
+    explicit server(server_context& sctx)
+        : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
     auto listen(std::string_view host, std::uint16_t port)
         -> std::expected<void, std::error_code>
@@ -205,7 +211,16 @@ public:
         while (running_) {
             auto r = co_await async_accept(ctx_, acc_->native_socket());
             if (!r) { if (!running_) break; continue; }
-            spawn(ctx_, handle_connection(std::move(*r)));
+            if (sctx_) {
+                // 多核模式：round-robin 分发到 worker io_context
+                auto& worker = sctx_->next_worker_io();
+                spawn_on(worker, handle_connection(
+                    std::move(*r), worker));
+            } else {
+                // 单线程模式
+                spawn(ctx_, handle_connection(
+                    std::move(*r), ctx_));
+            }
         }
     }
 
@@ -217,12 +232,12 @@ private:
         ws_handler_fn            handler;
     };
 
-    auto handle_connection(socket client) -> task<void> {
+    auto handle_connection(socket client, io_context& io) -> task<void> {
         // 1. 读 HTTP 升级请求
         http::request_parser req_parser;
         std::array<std::byte, 4096> buf{};
         while (!req_parser.ready()) {
-            auto rd = co_await async_read(ctx_, client,
+            auto rd = co_await async_read(io, client,
                 mutable_buffer{buf.data(), buf.size()});
             if (!rd || *rd == 0) { client.close(); co_return; }
             auto consumed = req_parser.consume(
@@ -258,7 +273,7 @@ private:
             http::response resp(http::status::not_found);
             resp.set_body(std::string_view{"404 Not Found"});
             auto data = resp.serialize();
-            (void)co_await async_write(ctx_, client,
+            (void)co_await async_write(io, client,
                 const_buffer{data.data(), data.size()});
             client.close(); co_return;
         }
@@ -269,7 +284,7 @@ private:
             http::response resp(http::status::bad_request);
             resp.set_body(std::string_view{"Bad WebSocket handshake"});
             auto data = resp.serialize();
-            (void)co_await async_write(ctx_, client,
+            (void)co_await async_write(io, client,
                 const_buffer{data.data(), data.size()});
             client.close(); co_return;
         }
@@ -277,12 +292,12 @@ private:
         // 5. 发送升级响应
         auto upgrade_resp = build_upgrade_response(*accept_key);
         auto resp_data = upgrade_resp.serialize();
-        auto wr = co_await async_write(ctx_, client,
+        auto wr = co_await async_write(io, client,
             const_buffer{resp_data.data(), resp_data.size()});
         if (!wr) { client.close(); co_return; }
 
         // 6. attach 已握手的 socket 到 connection
-        connection conn(ctx_);
+        connection conn(io);
         conn.attach(std::move(client), /*as_server=*/true);
 
         // 7. 运行 handler
@@ -298,6 +313,7 @@ private:
     }
 
     io_context& ctx_;
+    server_context* sctx_ = nullptr;  // 非 null 时为多核模式
     std::unique_ptr<tcp::acceptor> acc_;
     std::vector<route_entry> routes_;
     bool running_ = false;
