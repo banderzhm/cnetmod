@@ -44,22 +44,6 @@ export struct ip_filter_options {
 
 namespace detail {
 
-/// 从请求头解析客户端真实 IP
-/// 优先级: X-Forwarded-For (最左) > X-Real-IP > "unknown"
-inline auto resolve_ip(const http::request_context& ctx) -> std::string {
-    if (auto xff = ctx.get_header("X-Forwarded-For"); !xff.empty()) {
-        auto comma = xff.find(',');
-        auto ip = (comma != std::string_view::npos)
-                  ? xff.substr(0, comma) : xff;
-        while (!ip.empty() && ip.front() == ' ') ip.remove_prefix(1);
-        while (!ip.empty() && ip.back() == ' ')  ip.remove_suffix(1);
-        if (!ip.empty()) return std::string(ip);
-    }
-    if (auto xri = ctx.get_header("X-Real-IP"); !xri.empty())
-        return std::string(xri);
-    return "unknown";
-}
-
 /// 简单 CIDR 匹配（仅支持 IPv4）
 /// 格式: "10.0.0.0/8" 或精确 IP "192.168.1.1"
 inline auto ip_matches(std::string_view client_ip,
@@ -133,7 +117,7 @@ export inline auto ip_filter(ip_filter_options opts = {}) -> http::middleware_fn
     return [opts = std::move(opts)]
            (http::request_context& ctx, http::next_fn next) -> task<void>
     {
-        auto client_ip = detail::resolve_ip(ctx);
+        auto client_ip = http::resolve_client_ip(ctx);
 
         bool denied = false;
 

@@ -73,16 +73,7 @@ export inline auto rate_limiter(rate_limiter_options opts = {})
     // 默认 key: 客户端 IP (X-Forwarded-For > X-Real-IP > "global")
     if (!opts.key_fn) {
         opts.key_fn = [](http::request_context& ctx) -> std::string {
-            if (auto xff = ctx.get_header("X-Forwarded-For"); !xff.empty()) {
-                auto comma = xff.find(',');
-                auto ip = (comma != std::string_view::npos)
-                           ? xff.substr(0, comma) : xff;
-                while (!ip.empty() && ip.front() == ' ') ip.remove_prefix(1);
-                return std::string(ip);
-            }
-            if (auto xri = ctx.get_header("X-Real-IP"); !xri.empty())
-                return std::string(xri);
-            return "global";
+            return http::resolve_client_ip(ctx, "global");
         };
     }
 

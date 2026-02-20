@@ -169,25 +169,6 @@ struct shared_state {
 /// 全局共享状态（server 和 handler 都通过指针引用它）
 static shared_state* g_state = nullptr;
 
-// =============================================================================
-// 工具函数
-// =============================================================================
-
-/// 解析客户端真实 IP（支持反向代理场景）
-/// 优先级：X-Forwarded-For（最左 = 原始客户端） > X-Real-IP > 回退 "unknown"
-auto resolve_client_ip(http::request_context& ctx) -> std::string {
-    // X-Forwarded-For: client, proxy1, proxy2
-    if (auto xff = ctx.get_header("X-Forwarded-For"); !xff.empty()) {
-        auto comma = xff.find(',');
-        auto ip = (comma != std::string_view::npos) ? xff.substr(0, comma) : xff;
-        while (!ip.empty() && ip.front() == ' ') ip.remove_prefix(1);
-        while (!ip.empty() && ip.back() == ' ')  ip.remove_suffix(1);
-        if (!ip.empty()) return std::string(ip);
-    }
-    if (auto xri = ctx.get_header("X-Real-IP"); !xri.empty())
-        return std::string(xri);
-    return "unknown";
-}
 
 // =============================================================================
 // 会话 GC — 定期扫描清理过期会话 + 限流条目
@@ -315,7 +296,7 @@ auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void
 // =============================================================================
 
 auto handle_login(http::request_context& ctx) -> cn::task<void> {
-    auto client_ip = resolve_client_ip(ctx);
+    auto client_ip = http::resolve_client_ip(ctx);
     auto user_agent = std::string(ctx.get_header("User-Agent"));
 
     std::string token;
@@ -488,22 +469,9 @@ auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
     }
 
     // 从 query string 解析任务类型：/api/task?type=generate_report&params=month=2026-01
-    auto qs = std::string(ctx.query_string());
-    std::string type_str, params_str;
-
-    // 简单解析 query string
-    auto parse_qs = [](std::string_view qs, std::string_view key) -> std::string {
-        auto search = std::string(key) + "=";
-        auto pos = qs.find(search);
-        if (pos == std::string_view::npos) return "";
-        auto start = pos + search.size();
-        auto end = qs.find('&', start);
-        return std::string(end != std::string_view::npos
-            ? qs.substr(start, end - start) : qs.substr(start));
-    };
-
-    type_str = parse_qs(qs, "type");
-    params_str = parse_qs(qs, "params");
+    auto qs = ctx.query_string();
+    auto type_str   = http::parse_query_param(qs, "type");
+    auto params_str = http::parse_query_param(qs, "params");
 
     auto tt = from_string<task_type>(type_str);
     if (!tt) {

@@ -106,7 +106,7 @@ public:
         return [this](http::request_context& ctx,
                       http::next_fn next) -> task<void>
         {
-            auto ip = resolve_ip(ctx);
+            auto ip = http::resolve_client_ip(ctx);
             auto banned = co_await is_banned(ip);
             if (banned) {
                 // 获取剩余封禁时间（尽力估算）
@@ -162,7 +162,7 @@ public:
                 }
             }
 
-            auto ip = resolve_ip(ctx);
+            auto ip = http::resolve_client_ip(ctx);
             co_await add_violation(ip, weight);
         };
     }
@@ -267,23 +267,6 @@ private:
         }
     }
 
-    // =========================================================================
-    // IP 解析 (复用 ip_filter 的逻辑)
-    // =========================================================================
-
-    static auto resolve_ip(const http::request_context& ctx) -> std::string {
-        if (auto xff = ctx.get_header("X-Forwarded-For"); !xff.empty()) {
-            auto comma = xff.find(',');
-            auto ip = (comma != std::string_view::npos)
-                      ? xff.substr(0, comma) : xff;
-            while (!ip.empty() && ip.front() == ' ') ip.remove_prefix(1);
-            while (!ip.empty() && ip.back() == ' ')  ip.remove_suffix(1);
-            if (!ip.empty()) return std::string(ip);
-        }
-        if (auto xri = ctx.get_header("X-Real-IP"); !xri.empty())
-            return std::string(xri);
-        return "unknown";
-    }
 };
 
 } // namespace cnetmod

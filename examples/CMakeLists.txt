@@ -33,6 +33,7 @@ set(EXAMPLE_TARGETS
     multicore_http
     multicore_ws
     blocking_bridge_demo
+        mqtt_demo
 )
 
 # SSL 示例（仅在 OpenSSL 可用时构建）
