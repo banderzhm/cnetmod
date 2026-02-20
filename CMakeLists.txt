@@ -186,6 +186,14 @@ endif()
 # ==============================================================================
 if(MSVC)
     add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
+
+    # 禁用过度内联（减少代码膨胀）
+    add_compile_options(/Ob1)
+    # 禁用全程序优化（避免目标文件合并膨胀）
+    add_compile_options(/GL-)
+    # 定义宏屏蔽 CRT 安全警告（消除无关警告）
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
         -Wall -Wextra

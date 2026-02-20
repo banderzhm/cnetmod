@@ -38,6 +38,25 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
+// generate_secure_token — CSPRNG 安全令牌（hex 编码）
+// =============================================================================
+
+/// 生成密码学安全的随机令牌（hex 编码）
+/// MSVC 底层使用 BCryptGenRandom，GCC/Clang 使用 /dev/urandom
+export inline auto generate_secure_token(std::size_t bytes = 32) -> std::string {
+    static thread_local std::random_device rd;
+    static constexpr char hex[] = "0123456789abcdef";
+    std::string token;
+    token.reserve(bytes * 2);
+    for (std::size_t i = 0; i < bytes; ++i) {
+        auto byte = static_cast<std::uint8_t>(rd() & 0xFF);
+        token.push_back(hex[(byte >> 4) & 0x0F]);
+        token.push_back(hex[byte & 0x0F]);
+    }
+    return token;
+}
+
+// =============================================================================
 // jwt_auth_options — JWT 认证配置
 // =============================================================================
 

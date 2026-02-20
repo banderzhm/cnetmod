@@ -24,6 +24,9 @@ import cnetmod.middleware.recover;
 import cnetmod.middleware.cors;
 import cnetmod.middleware.request_id;
 import cnetmod.middleware.body_limit;
+import cnetmod.middleware.metrics;
+import cnetmod.middleware.rate_limiter;
+import cnetmod.middleware.jwt_auth;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;
@@ -117,35 +120,10 @@ static cn::channel<task_job>* g_task_ch = nullptr;
 // =============================================================================
 
 struct server_config {
-    // 限流 — Token Bucket
-    double rate_limit_rate  = 10.0;    // 每秒补充令牌数
-    double rate_limit_burst = 20.0;    // 桶容量（最大突发请求数）
-
     // 会话
     std::chrono::seconds session_ttl{1800};          // 空闲超时（默认 30 分钟）
     std::chrono::seconds session_gc_interval{60};    // GC 扫描间隔
     std::size_t max_sessions_per_ip = 10;            // 同一 IP 最大并发会话数
-
-    // 限流条目过期清理（长时间无请求的 IP 桶回收）
-    std::chrono::seconds rate_limit_entry_ttl{300};  // 5 分钟无请求则回收
-};
-
-// =============================================================================
-// 请求统计
-// =============================================================================
-
-struct server_stats {
-    std::atomic<std::uint64_t> total_requests{0};
-    std::atomic<std::uint64_t> total_success{0};       // 2xx + 3xx
-    std::atomic<std::uint64_t> total_client_err{0};    // 4xx
-    std::atomic<std::uint64_t> total_server_err{0};    // 5xx
-    std::atomic<std::uint64_t> total_rejected{0};      // 被限流拒绝
-    std::atomic<std::uint64_t> total_kicked{0};
-    std::atomic<std::uint64_t> sessions_created{0};
-    std::atomic<std::uint64_t> sessions_expired{0};
-    std::atomic<std::uint64_t> active_sessions{0};     // 实时活跃会话数，login++ kick/expire--
-    std::atomic<std::uint64_t> rate_limit_buckets{0};  // 限流桶数量，try_emplace++ erase--
-    std::chrono::steady_clock::time_point start_time = std::chrono::steady_clock::now();
 };
 
 // =============================================================================
@@ -162,54 +140,25 @@ struct session_info {
 };
 
 // =============================================================================
-// Token Bucket 限流器（O(1) 判定，业界标准算法）
-// =============================================================================
-//
-// 相比滑动窗口的优势：
-//   - O(1) 时间和空间，不存储每个请求的时间戳
-//   - 自然支持突发流量（burst）
-//   - 平滑限速，不会出现窗口边界的突变
-
-struct token_bucket {
-    double tokens;
-    std::chrono::steady_clock::time_point last_refill;
-
-    /// 补充令牌并尝试消费 1 个。返回 true 表示放行。
-    auto try_consume(double rate, double burst,
-                     std::chrono::steady_clock::time_point now) -> bool {
-        auto elapsed = std::chrono::duration<double>(now - last_refill).count();
-        tokens = std::min(burst, tokens + elapsed * rate);
-        last_refill = now;
-        if (tokens >= 1.0) {
-            tokens -= 1.0;
-            return true;
-        }
-        return false;
-    }
-
-    /// 距下一个令牌可用的秒数（用于 Retry-After 响应头）
-    [[nodiscard]] auto retry_after(double rate) const -> double {
-        if (tokens >= 1.0) return 0.0;
-        return (1.0 - tokens) / rate;
-    }
-};
-
-// =============================================================================
 // 共享状态 — 跨路由共享，用 async_mutex 保护
 // =============================================================================
 
 struct shared_state {
     server_config config;
-    server_stats  stats;       // atomic 计数器，无锁读写
+
+    // --- HTTP 指标收集器（与此 server 实例绑定，由 metrics_middleware 自动更新）---
+    cn::metrics_collector metrics;
+
+    // --- 会话专属统计（atomic 计数器，无锁读写）---
+    std::atomic<std::uint64_t> total_kicked{0};
+    std::atomic<std::uint64_t> sessions_created{0};
+    std::atomic<std::uint64_t> sessions_expired{0};
+    std::atomic<std::uint64_t> active_sessions{0};  // 实时活跃会话数，login++ kick/expire--
 
     // --- 会话域（session_mtx 保护）---
     cn::async_mutex session_mtx;
     std::unordered_map<std::string, session_info> sessions;
     std::unordered_map<std::string, std::size_t>  sessions_per_ip;  // O(1) IP 会话计数
-
-    // --- 限流域（rate_limit_mtx 保护）---
-    cn::async_mutex rate_limit_mtx;
-    std::unordered_map<std::string, token_bucket> rate_limits;
 
     // --- 任务域（task_mtx 保护）---
     cn::async_mutex task_mtx;
@@ -223,22 +172,6 @@ static shared_state* g_state = nullptr;
 // =============================================================================
 // 工具函数
 // =============================================================================
-
-/// CSPRNG 安全令牌（hex 编码）
-/// MSVC 的 std::random_device 底层使用 BCryptGenRandom，密码学安全
-/// GCC/Clang 使用 /dev/urandom，同样安全
-auto generate_secure_token(std::size_t bytes = 32) -> std::string {
-    static thread_local std::random_device rd;
-    static constexpr char hex[] = "0123456789abcdef";
-    std::string token;
-    token.reserve(bytes * 2);
-    for (std::size_t i = 0; i < bytes; ++i) {
-        auto byte = static_cast<std::uint8_t>(rd() & 0xFF);
-        token.push_back(hex[(byte >> 4) & 0x0F]);
-        token.push_back(hex[byte & 0x0F]);
-    }
-    return token;
-}
 
 /// 解析客户端真实 IP（支持反向代理场景）
 /// 优先级：X-Forwarded-For（最左 = 原始客户端） > X-Real-IP > 回退 "unknown"
@@ -287,8 +220,8 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
                            (now - s.last_activity) > ttl) {
                     s.status = session_status::expired;
                     remove = true;
-                    g_state->stats.sessions_expired.fetch_add(1, std::memory_order_relaxed);
-                    g_state->stats.active_sessions.fetch_sub(1, std::memory_order_relaxed);
+                    g_state->sessions_expired.fetch_add(1, std::memory_order_relaxed);
+                    g_state->active_sessions.fetch_sub(1, std::memory_order_relaxed);
                 }
 
                 if (remove) {
@@ -314,28 +247,8 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
             }
         }
 
-        // 回收不活跃的限流桶（rate_limit_mtx）
-        {
-            co_await g_state->rate_limit_mtx.lock();
-            cn::async_lock_guard guard(g_state->rate_limit_mtx, std::adopt_lock);
-
-            auto rl_ttl = g_state->config.rate_limit_entry_ttl;
-            std::size_t erased = 0;
-            for (auto it = g_state->rate_limits.begin(); it != g_state->rate_limits.end(); ) {
-                if ((now - it->second.last_refill) > rl_ttl) {
-                    it = g_state->rate_limits.erase(it);
-                    ++erased;
-                } else {
-                    ++it;
-                }
-            }
-            if (erased > 0)
-                g_state->stats.rate_limit_buckets.fetch_sub(erased, std::memory_order_relaxed);
-        }
-
         if (swept > 0)
-            std::println("  [GC] swept {} sessions, {} rate-limit buckets active",
-                         swept, g_state->rate_limits.size());
+            logger::info("[GC] swept {} expired/kicked sessions", swept);
     }
 }
 
@@ -346,7 +259,7 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
 /// 从 channel 持续接收任务，模拟耗时处理，更新 shared_state 中的任务状态
 /// 典型生产者-消费者：HTTP handler 提交任务（生产），worker 异步执行（消费）
 auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void> {
-    std::println("  [task-worker] started, waiting for jobs...");
+    logger::info("[task-worker] started, waiting for jobs...");
     int count = 0;
 
     while (true) {
@@ -355,7 +268,7 @@ auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void
         if (!job) break;  // channel closed → 优雅退出
 
         ++count;
-        std::println("  [task-worker] #{} picked up task={} type={} params={}",
+        logger::info("[task-worker] #{} picked up task={} type={} params={}",
             count, job->task_id, to_string(job->type), job->params);
 
         // 2. 更新状态为 processing（task_mtx）
@@ -390,78 +303,12 @@ auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void
             }
         }
 
-        std::println("  [task-worker] #{} task={} done", count, job->task_id);
+        logger::info("[task-worker] #{} task={} done", count, job->task_id);
     }
 
-    std::println("  [task-worker] channel closed, total {} jobs processed", count);
+    logger::info("[task-worker] channel closed, total {} jobs processed", count);
 }
 
-// =============================================================================
-// 中间件 1：日志 + 分类统计
-// =============================================================================
-
-auto stats_middleware() -> http::middleware_fn {
-    return [](http::request_context& ctx, http::next_fn next) -> cn::task<void> {
-        // atomic — 无锁
-        g_state->stats.total_requests.fetch_add(1, std::memory_order_relaxed);
-
-        std::println("  [MW:stats] {} {}", ctx.method(), ctx.uri());
-        co_await next();
-
-        // 按状态码分类统计 — atomic 无锁
-        auto status = ctx.resp().status_code();
-        if (status >= 200 && status < 400)
-            g_state->stats.total_success.fetch_add(1, std::memory_order_relaxed);
-        else if (status >= 400 && status < 500)
-            g_state->stats.total_client_err.fetch_add(1, std::memory_order_relaxed);
-        else if (status >= 500)
-            g_state->stats.total_server_err.fetch_add(1, std::memory_order_relaxed);
-
-        std::println("  [MW:stats] → {}", status);
-    };
-}
-
-// =============================================================================
-// 中间件 2：IP 限流（Token Bucket）
-// =============================================================================
-
-auto rate_limit_middleware() -> http::middleware_fn {
-    return [](http::request_context& ctx, http::next_fn next) -> cn::task<void> {
-        auto client_ip = resolve_client_ip(ctx);
-
-        bool allowed = false;
-        double retry_after = 0;
-        {
-            co_await g_state->rate_limit_mtx.lock();
-            cn::async_lock_guard guard(g_state->rate_limit_mtx, std::adopt_lock);
-
-            auto now = std::chrono::steady_clock::now();
-            auto& cfg = g_state->config;
-            auto [it, inserted] = g_state->rate_limits.try_emplace(client_ip,
-                token_bucket{cfg.rate_limit_burst, now});
-            if (inserted)
-                g_state->stats.rate_limit_buckets.fetch_add(1, std::memory_order_relaxed);
-
-            allowed = it->second.try_consume(cfg.rate_limit_rate, cfg.rate_limit_burst, now);
-            if (!allowed) {
-                retry_after = it->second.retry_after(cfg.rate_limit_rate);
-                g_state->stats.total_rejected.fetch_add(1, std::memory_order_relaxed);
-            }
-        }
-
-        if (!allowed) {
-            auto ra = static_cast<int>(std::ceil(retry_after));
-            std::println("  [MW:rate] REJECTED {} (IP: {}, retry_after={}s)",
-                         ctx.uri(), client_ip, ra);
-            ctx.resp().set_header("Retry-After", std::format("{}", ra));
-            ctx.json(http::status::too_many_requests, std::format(
-                R"({{"error":"rate limit exceeded","retry_after_seconds":{}}})", ra));
-            co_return;
-        }
-
-        co_await next();
-    };
-}
 
 // =============================================================================
 // 路由 handler：POST /login — 模拟登录，创建会话
@@ -488,7 +335,7 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
         }
 
         auto now = std::chrono::steady_clock::now();
-        token = generate_secure_token();
+        token = cn::generate_secure_token();
         g_state->sessions[token] = session_info{
             .token         = token,
             .client_ip     = client_ip,
@@ -498,13 +345,13 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
             .status        = session_status::active,
         };
         g_state->sessions_per_ip[client_ip]++;
-        g_state->stats.sessions_created.fetch_add(1, std::memory_order_relaxed);
-        g_state->stats.active_sessions.fetch_add(1, std::memory_order_relaxed);
+        g_state->sessions_created.fetch_add(1, std::memory_order_relaxed);
+        g_state->active_sessions.fetch_add(1, std::memory_order_relaxed);
     }
 
     // 日志仅输出 token 前 16 字符（安全考量）
     auto short_tok = token.substr(0, 16) + "...";
-    std::println("  [handler] /login → token={} ip={}", short_tok, client_ip);
+    logger::info("[handler] /login → token={} ip={}", short_tok, client_ip);
     ctx.json(http::status::ok,
         std::format(R"({{"token":"{}","message":"login success"}})", token));
     co_return;
@@ -545,7 +392,7 @@ auto handle_data(http::request_context& ctx) -> cn::task<void> {
         if (sess.status == session_status::expired ||
             (now - sess.last_activity) > g_state->config.session_ttl) {
             sess.status = session_status::expired;
-            g_state->stats.active_sessions.fetch_sub(1, std::memory_order_relaxed);
+            g_state->active_sessions.fetch_sub(1, std::memory_order_relaxed);
             ctx.json(http::status::unauthorized,
                 R"({"error":"session expired, please login again"})");
             co_return;
@@ -578,15 +425,15 @@ auto handle_kick(http::request_context& ctx) -> cn::task<void> {
             it->second.status == session_status::active) {
             it->second.status = session_status::kicked;
             kicked_ip = it->second.client_ip;
-            g_state->stats.total_kicked.fetch_add(1, std::memory_order_relaxed);
-            g_state->stats.active_sessions.fetch_sub(1, std::memory_order_relaxed);
+            g_state->total_kicked.fetch_add(1, std::memory_order_relaxed);
+            g_state->active_sessions.fetch_sub(1, std::memory_order_relaxed);
             found = true;
         }
     }
 
     if (found) {
         auto short_tok = target_token.substr(0, 16) + "...";
-        std::println("  [handler] /admin/kick → kicked token={} ip={}",
+        logger::info("[handler] /admin/kick → kicked token={} ip={}",
                      short_tok, kicked_ip);
         ctx.json(http::status::ok,
             std::format(R"({{"kicked":"{}","message":"session terminated"}})",
@@ -604,24 +451,25 @@ auto handle_kick(http::request_context& ctx) -> cn::task<void> {
 // =============================================================================
 
 auto handle_stats(http::request_context& ctx) -> cn::task<void> {
-    // 全 atomic 读取 — 无锁
-    auto& s = g_state->stats;
-    auto uptime = std::chrono::duration_cast<std::chrono::seconds>(
-        std::chrono::steady_clock::now() - s.start_time).count();
+    // HTTP 统计读自 shared_state 内的 metrics_collector（全 atomic，无锁）
+    auto& mc     = g_state->metrics;
+    auto uptime  = mc.uptime_seconds();
+    auto req     = mc.requests_total.load(std::memory_order_relaxed);
+    auto r2xx    = mc.responses_2xx.load(std::memory_order_relaxed);
+    auto r3xx    = mc.responses_3xx.load(std::memory_order_relaxed);
+    auto r4xx    = mc.responses_4xx.load(std::memory_order_relaxed);
+    auto r5xx    = mc.responses_5xx.load(std::memory_order_relaxed);
+
+    // 会话专属统计读自 shared_state
+    auto kicked  = g_state->total_kicked.load(std::memory_order_relaxed);
+    auto created = g_state->sessions_created.load(std::memory_order_relaxed);
+    auto expired = g_state->sessions_expired.load(std::memory_order_relaxed);
+    auto active  = g_state->active_sessions.load(std::memory_order_relaxed);
 
     auto json = std::format(
-        R"({{"uptime_seconds":{},"total_requests":{},"total_success":{},"total_client_errors":{},"total_server_errors":{},"total_rejected":{},"total_kicked":{},"sessions_created":{},"sessions_expired":{},"active_sessions":{},"rate_limit_buckets":{}}})",
-        uptime,
-        s.total_requests.load(std::memory_order_relaxed),
-        s.total_success.load(std::memory_order_relaxed),
-        s.total_client_err.load(std::memory_order_relaxed),
-        s.total_server_err.load(std::memory_order_relaxed),
-        s.total_rejected.load(std::memory_order_relaxed),
-        s.total_kicked.load(std::memory_order_relaxed),
-        s.sessions_created.load(std::memory_order_relaxed),
-        s.sessions_expired.load(std::memory_order_relaxed),
-        s.active_sessions.load(std::memory_order_relaxed),
-        s.rate_limit_buckets.load(std::memory_order_relaxed));
+        R"({{"uptime_seconds":{:.1f},"total_requests":{},"responses_2xx":{},"responses_3xx":{},"responses_4xx":{},"responses_5xx":{},"total_kicked":{},"sessions_created":{},"sessions_expired":{},"active_sessions":{}}})",
+        uptime, req, r2xx, r3xx, r4xx, r5xx,
+        kicked, created, expired, active);
 
     ctx.json(http::status::ok, json);
     co_return;
@@ -688,7 +536,7 @@ auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
         .params  = params_str,
     });
 
-    std::println("  [handler] /api/task → submitted {} type={}", task_id, type_str);
+    logger::info("[handler] /api/task → submitted {} type={}", task_id, type_str);
     ctx.json(http::status::accepted, std::format(
         R"({{"task_id":"{}","type":"{}","status":"pending","message":"task submitted, poll GET /api/task/{}"}})",
         task_id, type_str, task_id));
@@ -776,7 +624,7 @@ auto send_request(cn::io_context& ctx, http::http_method method,
 
     auto ep = cn::endpoint{cn::ipv4_address::loopback(), PORT};
     auto cr = co_await cn::async_connect(ctx, sock, ep);
-    if (!cr) { std::println("    connect failed"); co_return ""; }
+    if (!cr) { logger::error("[client] connect failed"); co_return ""; }
 
     http::request req(method, path);
     req.set_header("Host", std::format("127.0.0.1:{}", PORT));
@@ -805,12 +653,12 @@ auto send_request(cn::io_context& ctx, http::http_method method,
 
     std::string resp_body;
     if (rp.ready()) {
-        std::println("    {} {} → {} {}",
+        logger::info("[client] {} {} → {} {}",
                      http::method_to_string(method), path,
                      rp.status_code(), rp.status_message());
         resp_body = rp.body();
         if (!resp_body.empty())
-            std::println("    Body: {}", resp_body);
+            logger::debug("[client] Body: {}", resp_body);
     }
     sock.close();
     co_return resp_body;
@@ -836,84 +684,84 @@ auto extract_token(const std::string& json) -> std::string {
 auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
 
-    std::println("\n========== Client: Testing All Features ==========\n");
+    logger::info("========== Client: Testing All Features ==========");
 
     // -------------------------------------------------------
     // 1. 登录获取 token
     // -------------------------------------------------------
-    std::println("  [1] POST /login (user A)");
+    logger::info("[1] POST /login (user A)");
     auto resp1 = co_await send_request(ctx, http::http_method::POST, "/login",
         {{"X-Forwarded-For", "192.168.1.100"}, {"User-Agent", "TestClient/1.0"}});
     auto token_a = extract_token(resp1);
-    std::println("    → token_a = {}...", token_a.substr(0, 16));
+    logger::info("  → token_a = {}...", token_a.substr(0, 16));
 
-    std::println("\n  [2] POST /login (user B)");
+    logger::info("[2] POST /login (user B)");
     auto resp2 = co_await send_request(ctx, http::http_method::POST, "/login",
         {{"X-Forwarded-For", "192.168.1.200"}, {"User-Agent", "TestClient/2.0"}});
     auto token_b = extract_token(resp2);
-    std::println("    → token_b = {}...", token_b.substr(0, 16));
+    logger::info("  → token_b = {}...", token_b.substr(0, 16));
 
     // -------------------------------------------------------
     // 2. 用 token 访问受保护数据
     // -------------------------------------------------------
-    std::println("\n  [3] GET /api/data (user A, valid token)");
+    logger::info("[3] GET /api/data (user A, valid token)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
         {{"Authorization", token_a}});
 
-    std::println("\n  [4] GET /api/data (no token → 401)");
+    logger::info("[4] GET /api/data (no token → 401)");
     co_await send_request(ctx, http::http_method::GET, "/api/data");
 
-    std::println("\n  [5] GET /api/data (invalid token → 401)");
+    logger::info("[5] GET /api/data (invalid token → 401)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
         {{"Authorization", "fake_token"}});
 
     // -------------------------------------------------------
     // 3. 查看当前会话列表
     // -------------------------------------------------------
-    std::println("\n  [6] GET /admin/sessions");
+    logger::info("[6] GET /admin/sessions");
     co_await send_request(ctx, http::http_method::GET, "/admin/sessions");
 
     // -------------------------------------------------------
     // 4. 踢人下线
     // -------------------------------------------------------
-    std::println("\n  [7] POST /admin/kick/{} (kick user A)", token_a);
+    logger::info("[7] POST /admin/kick/{} (kick user A)", token_a);
     co_await send_request(ctx, http::http_method::POST,
         std::format("/admin/kick/{}", token_a));
 
     // 被踢后访问受保护资源 → 403
-    std::println("\n  [8] GET /api/data (user A after kicked → 403)");
+    logger::info("[8] GET /api/data (user A after kicked → 403)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
         {{"Authorization", token_a}});
 
     // user B 仍可访问
-    std::println("\n  [9] GET /api/data (user B still valid)");
+    logger::info("[9] GET /api/data (user B still valid)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
         {{"Authorization", token_b}});
 
     // -------------------------------------------------------
     // 5. 限流测试：同一 IP 快速发 6 次请求
     // -------------------------------------------------------
-    std::println("\n  [10] Rate limit test: 6 rapid requests from same IP");
+    logger::info("[10] Rate limit test: 6 rapid requests from same IP");
     for (int i = 1; i <= 6; ++i) {
-        std::println("\n    --- request #{} ---", i);
+        logger::info("  --- request #{} ---", i);
         co_await send_request(ctx, http::http_method::GET, "/api/data",
-            {{"Authorization", token_b}, {"X-Forwarded-For", "10.0.0.99"}});
+            {{"Authorization", token_b}, {"X-Forwarded-For", "*********"}});
     }
 
     // -------------------------------------------------------
     // 6. 异步任务队列（channel 生产-消费）
     // -------------------------------------------------------
-    std::println("\n  [11] POST /api/task — submit report generation");
+    logger::info("[11] POST /api/task — submit report generation");
     auto task_resp1 = co_await send_request(ctx, http::http_method::POST,
         "/api/task?type=generate_report&params=month=2026-01",
         {{"Authorization", token_b}});
 
-    std::println("\n  [12] POST /api/task — submit data export");
+    logger::info("[12] POST /api/task — submit data export");
     auto task_resp2 = co_await send_request(ctx, http::http_method::POST,
         "/api/task?type=export_data&params=user_id=42",
         {{"Authorization", token_b}});
 
-    std::println("\n  [13] POST /api/task — submit email");
+    logger::info("[13] POST /api/task — submit email");
     co_await send_request(ctx, http::http_method::POST,
         "/api/task?type=send_email&params=to=test@example.com",
         {{"Authorization", token_b}});
@@ -932,30 +780,30 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     auto tid1 = extract_task_id(task_resp1);
     auto tid2 = extract_task_id(task_resp2);
 
-    std::println("\n  [14] GET /api/task/{} — poll immediately (should be pending/processing)", tid1);
+    logger::info("[14] GET /api/task/{} — poll immediately (should be pending/processing)", tid1);
     co_await send_request(ctx, http::http_method::GET,
         std::format("/api/task/{}", tid1));
 
     // 等待 worker 处理完成
-    std::println("\n  ... waiting 800ms for worker to finish ...");
+    logger::info("... waiting 800ms for worker to finish ...");
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{800});
 
     // 再次轮询 → 应该是 done
-    std::println("\n  [15] GET /api/task/{} — poll again (should be done)", tid1);
+    logger::info("[15] GET /api/task/{} — poll again (should be done)", tid1);
     co_await send_request(ctx, http::http_method::GET,
         std::format("/api/task/{}", tid1));
 
-    std::println("\n  [16] GET /api/task/{} — poll task 2 (should be done)", tid2);
+    logger::info("[16] GET /api/task/{} — poll task 2 (should be done)", tid2);
     co_await send_request(ctx, http::http_method::GET,
         std::format("/api/task/{}", tid2));
 
     // -------------------------------------------------------
     // 7. 查看统计信息
     // -------------------------------------------------------
-    std::println("\n  [17] GET /admin/stats");
+    logger::info("[17] GET /admin/stats");
     co_await send_request(ctx, http::http_method::GET, "/admin/stats");
 
-    std::println("\n========== Client: All Tests Done ==========\n");
+    logger::info("========== Client: All Tests Done ==========");
 
     // 关闭任务 channel，让 worker 优雅退出
     g_task_ch->close();
@@ -970,21 +818,19 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
 // =============================================================================
 
 int main() {
-    std::println("=== cnetmod: High-level HTTP Plus Demo ===");
-    std::println("  Features: kick-offline, stats, rate-limit, shared-state, "
-                 "async_mutex, channel task-queue\n");
+    logger::init("cnetmod-demo", logger::level::debug);
+    logger::info("=== cnetmod: High-level HTTP Plus Demo ===");
+    logger::info("Features: kick, stats(/admin/stats), metrics(/metrics), "
+                 "rate-limit, session, async_mutex, channel task-queue");
 
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 初始化共享状态（生产级配置）
+    // 初始化共享状态
     shared_state state;
-    state.config.rate_limit_rate  = 2.0;                       // 每秒 2 个令牌
-    state.config.rate_limit_burst = 5.0;                       // 突发容量 5
-    state.config.session_ttl = std::chrono::seconds{60};       // demo: 60s 空闲超时
-    state.config.session_gc_interval = std::chrono::seconds{5}; // demo: 5s GC 间隔
-    state.config.max_sessions_per_ip = 5;
-    state.config.rate_limit_entry_ttl = std::chrono::seconds{60};
+    state.config.session_ttl          = std::chrono::seconds{60};  // demo: 60s 空闲超时
+    state.config.session_gc_interval  = std::chrono::seconds{5};   // demo: 5s GC 间隔
+    state.config.max_sessions_per_ip  = 5;
     g_state = &state;
 
     // 初始化任务 channel（容量 16，带背压：满时提交方会挂起等待）
@@ -993,6 +839,9 @@ int main() {
 
     // 构建路由
     http::router router;
+
+    // GET /metrics — Prometheus 指标端点（与此 server 绑定）
+    router.get("/metrics", cn::metrics_handler(state.metrics));
 
     // GET / — 欢迎页
     router.get("/", [](http::request_context& ctx) -> cn::task<void> {
@@ -1036,24 +885,23 @@ int main() {
     http::server srv(*ctx);
     auto listen_r = srv.listen("127.0.0.1", PORT);
     if (!listen_r) {
-        std::println("Listen failed: {}", listen_r.error().message());
+        logger::error("Listen failed: {}", listen_r.error().message());
         return 1;
     }
 
-    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → 限流 → 统计 → handler）
+    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → rate_limiter → metrics → handler）
     srv.use(cn::recover());
     srv.use(cn::access_log());
     srv.use(cn::cors());
     srv.use(cn::request_id());
     srv.use(cn::body_limit(2 * 1024 * 1024));  // 2MB
-    srv.use(rate_limit_middleware());
-    srv.use(stats_middleware());
+    srv.use(cn::rate_limiter({.rate = 2.0, .burst = 5.0}));   // 2 req/s, 突发 5
+    srv.use(cn::metrics_middleware(state.metrics));
     srv.set_router(std::move(router));
 
-    std::println("  Server listening on *********:{}", PORT);
-    std::println("  Rate limit: {:.0f} req/s, burst={:.0f}",
-                 state.config.rate_limit_rate, state.config.rate_limit_burst);
-    std::println("  Session TTL: {}s, GC interval: {}s, max per IP: {}\n",
+    logger::info("Server listening on *********:{}", PORT);
+    logger::info("Rate limit: 2 req/s, burst=5");
+    logger::info("Session TTL: {}s, GC interval: {}s, max per IP: {}",
                  state.config.session_ttl.count(),
                  state.config.session_gc_interval.count(),
                  state.config.max_sessions_per_ip);
@@ -1067,6 +915,6 @@ int main() {
     cn::spawn(*ctx, run_client(*ctx, srv));
 
     ctx->run();
-    std::println("Done.");
+    logger::info("Done.");
     return 0;
 }
