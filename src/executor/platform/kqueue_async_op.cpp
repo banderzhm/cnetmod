@@ -95,7 +95,7 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
 /// cancel_fn_：从 kqueue 删除事件，然后 post 协程恢复
 static void kqueue_cancel_fn(cancel_token& token) noexcept {
     auto* kq = static_cast<kqueue_context*>(token.ctx_);
-    kq->delete_event(token.fd_, token.filter_);
+    (void)kq->delete_event(token.fd_, token.filter_);
     if (token.coroutine_)
         kq->post(token.coroutine_);
 }
@@ -134,8 +134,8 @@ struct kqueue_cancel_awaiter {
         token.pending_.store(true, std::memory_order_release);
 
         if (token.is_cancelled()) {
-            token.pending_.store(false, std::memory_order_relaxed);
-            ctx.delete_event(fd, filter);
+        token.pending_.store(false, std::memory_order_relaxed);
+            (void)ctx.delete_event(fd, filter);
             sync_error = make_error_code(errc::operation_aborted);
             return false;
         }
@@ -152,12 +152,12 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
     if (sa.ss_family == AF_INET6) {
         const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
         return endpoint{ipv6_address::from_native(sin6.sin6_addr),
-                        ::ntohs(sin6.sin6_port)};
+                        ntohs(sin6.sin6_port)};
     }
     const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
     const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
     return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
-                    ::ntohs(sin.sin_port)};
+                    ntohs(sin.sin_port)};
 }
 
 } // anonymous namespace
