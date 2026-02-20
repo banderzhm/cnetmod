@@ -7,19 +7,13 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import cnetmod.core.error;
-import cnetmod.core.buffer;
-import cnetmod.core.address;
-import cnetmod.core.socket;
-import cnetmod.core.net_init;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.coro.timer;
-import cnetmod.io.io_context;
-import cnetmod.executor.async_op;
-import cnetmod.executor.pool;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
 import cnetmod.protocol.tcp;
 import cnetmod.protocol.websocket;
+import cnetmod.middleware.access_log;
 
 namespace cn = cnetmod;
 namespace ws = cnetmod::ws;
@@ -174,9 +168,9 @@ int main() {
         return 1;
     }
 
-    // 注册端点
-    srv.on("/echo", echo_handler);
-    srv.on("/chat/:room", chat_handler);
+    // 注册端点（包裹访问日志）
+    srv.on("/echo", cn::ws_access_log(echo_handler));
+    srv.on("/chat/:room", cn::ws_access_log(chat_handler));
 
     std::println("  WS Server listening on 0.0.0.0:{}", PORT);
     std::println("  Accept thread: {}", std::this_thread::get_id());

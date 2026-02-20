@@ -54,6 +54,8 @@ export struct pool_post_awaitable {
     // op_state 存储在协程帧上（awaitable 嵌入协程帧，挂起期间存活）
     alignas(op_t) std::byte storage_[sizeof(op_t)];
 
+    explicit pool_post_awaitable(exec::static_thread_pool& p) noexcept : pool(p), storage_{} {}
+
     auto await_ready() const noexcept -> bool { return false; }
 
     void await_suspend(std::coroutine_handle<> h) noexcept {

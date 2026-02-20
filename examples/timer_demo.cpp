@@ -2,10 +2,8 @@
 /// 演示 steady_timer (低精度) 和 high_resolution_timer (高精度)
 
 import std;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.io.io_context;
-import cnetmod.coro.timer;
+import cnetmod.coro;
+import cnetmod.io;
 
 using namespace cnetmod;
 

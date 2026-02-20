@@ -44,6 +44,18 @@ export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
+/// 异步 recvfrom — 接收 UDP 数据报并获取发送方地址
+/// 用法: auto n = co_await async_recvfrom(ctx, sock, buf, peer);
+export auto async_recvfrom(io_context& ctx, socket& sock,
+                           mutable_buffer buf, endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 异步 sendto — 向指定地址发送 UDP 数据报
+/// 用法: auto n = co_await async_sendto(ctx, sock, buf, peer);
+export auto async_sendto(io_context& ctx, socket& sock,
+                         const_buffer buf, const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
 // =============================================================================
 // 异步文件 I/O 操作（协程版本）
 // =============================================================================
@@ -115,6 +127,18 @@ export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
 /// 可取消的异步 write
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
                         cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步 recvfrom
+export auto async_recvfrom(io_context& ctx, socket& sock,
+                           mutable_buffer buf, endpoint& peer,
+                           cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// 可取消的异步 sendto
+export auto async_sendto(io_context& ctx, socket& sock,
+                         const_buffer buf, const endpoint& peer,
+                         cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// 可取消的异步文件读取

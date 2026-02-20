@@ -13,20 +13,17 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import cnetmod.core.error;
-import cnetmod.core.buffer;
-import cnetmod.core.address;
-import cnetmod.core.socket;
-import cnetmod.core.net_init;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.coro.timer;
-import cnetmod.coro.mutex;
-import cnetmod.coro.channel;
-import cnetmod.io.io_context;
-import cnetmod.executor.async_op;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
 import cnetmod.protocol.tcp;
 import cnetmod.protocol.http;
+import cnetmod.middleware.access_log;
+import cnetmod.middleware.recover;
+import cnetmod.middleware.cors;
+import cnetmod.middleware.request_id;
+import cnetmod.middleware.body_limit;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;
@@ -1043,7 +1040,12 @@ int main() {
         return 1;
     }
 
-    // 注册中间件（洋葱模型：限流 → 统计 → handler）
+    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → 限流 → 统计 → handler）
+    srv.use(cn::recover());
+    srv.use(cn::access_log());
+    srv.use(cn::cors());
+    srv.use(cn::request_id());
+    srv.use(cn::body_limit(2 * 1024 * 1024));  // 2MB
     srv.use(rate_limit_middleware());
     srv.use(stats_middleware());
     srv.set_router(std::move(router));

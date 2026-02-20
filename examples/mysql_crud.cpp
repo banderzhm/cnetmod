@@ -6,10 +6,9 @@
 #include <cstdio>
 
 import std;
-import cnetmod.core.net_init;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.io.io_context;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
 import cnetmod.protocol.mysql;
 
 namespace cn = cnetmod;

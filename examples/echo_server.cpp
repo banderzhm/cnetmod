@@ -5,16 +5,10 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import cnetmod.core.error;
-import cnetmod.core.buffer;
-import cnetmod.core.address;
-import cnetmod.core.socket;
-import cnetmod.core.net_init;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.coro.timer;
-import cnetmod.io.io_context;
-import cnetmod.executor.async_op;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
 import cnetmod.protocol.tcp;
 
 namespace cn = cnetmod;

@@ -6,6 +6,7 @@ module;
 
 #include <liburing.h>
 #include <sys/socket.h>
+#include <sys/uio.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -97,6 +98,18 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
         sa.sin6_addr = ep.address().to_v6().native();
         return sizeof(::sockaddr_in6);
     }
+}
+
+auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
+    if (sa.ss_family == AF_INET6) {
+        const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
+        return endpoint{ipv6_address::from_native(sin6.sin6_addr),
+                        ::ntohs(sin6.sin6_port)};
+    }
+    const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
+    const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
+    return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
+                    ::ntohs(sin.sin_port)};
 }
 
 } // anonymous namespace
@@ -704,6 +717,174 @@ auto async_timer_wait(io_context& ctx,
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
     co_return std::expected<void, std::error_code>{};
+}
+
+// =============================================================================
+// 异步 UDP I/O — io_uring
+// =============================================================================
+
+auto async_recvfrom(io_context& ctx, socket& sock,
+                    mutable_buffer buf, endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    ::sockaddr_storage from_addr{};
+    struct ::iovec iov{};
+    iov.iov_base = buf.data;
+    iov.iov_len  = buf.size;
+    struct ::msghdr msg{};
+    msg.msg_name    = &from_addr;
+    msg.msg_namelen = sizeof(from_addr);
+    msg.msg_iov     = &iov;
+    msg.msg_iovlen  = 1;
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_recvmsg(sqe, static_cast<int>(sock.native_handle()), &msg, 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_suspend{ov};
+
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    peer = endpoint_from_sockaddr(from_addr);
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_sendto(io_context& ctx, socket& sock,
+                  const_buffer buf, const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(peer, dest);
+    struct ::iovec iov{};
+    iov.iov_base = const_cast<void*>(buf.data);
+    iov.iov_len  = buf.size;
+    struct ::msghdr msg{};
+    msg.msg_name    = &dest;
+    msg.msg_namelen = dest_len;
+    msg.msg_iov     = &iov;
+    msg.msg_iovlen  = 1;
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_suspend{ov};
+
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+// =============================================================================
+// 可取消版本 — 异步 UDP I/O
+// =============================================================================
+
+auto async_recvfrom(io_context& ctx, socket& sock,
+                    mutable_buffer buf, endpoint& peer,
+                    cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    ::sockaddr_storage from_addr{};
+    struct ::iovec iov{};
+    iov.iov_base = buf.data;
+    iov.iov_len  = buf.size;
+    struct ::msghdr msg{};
+    msg.msg_name    = &from_addr;
+    msg.msg_namelen = sizeof(from_addr);
+    msg.msg_iov     = &iov;
+    msg.msg_iovlen  = 1;
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_recvmsg(sqe, static_cast<int>(sock.native_handle()), &msg, 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    peer = endpoint_from_sockaddr(from_addr);
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_sendto(io_context& ctx, socket& sock,
+                  const_buffer buf, const endpoint& peer,
+                  cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(peer, dest);
+    struct ::iovec iov{};
+    iov.iov_base = const_cast<void*>(buf.data);
+    iov.iov_len  = buf.size;
+    struct ::msghdr msg{};
+    msg.msg_name    = &dest;
+    msg.msg_namelen = dest_len;
+    msg.msg_iov     = &iov;
+    msg.msg_iovlen  = 1;
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
 }
 
 #endif // CNETMOD_HAS_IO_URING

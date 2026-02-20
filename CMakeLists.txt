@@ -231,6 +231,18 @@ else()
 endif()
 
 # ==============================================================================
+# zlib 压缩支持（可选）
+# ==============================================================================
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+    set(CNETMOD_HAS_ZLIB ON)
+    message(STATUS "zlib: 已找到 (${ZLIB_VERSION_STRING})")
+else()
+    set(CNETMOD_HAS_ZLIB OFF)
+    message(STATUS "zlib: 未找到，禁用 gzip 压缩中间件")
+endif()
+
+# ==============================================================================
 # 平台特定 I/O 后端检测
 # ==============================================================================
 if(WIN32)
@@ -305,6 +317,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_EPOLL}>:CNETMOD_HAS_EPOLL>
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
+    $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
 )
 
 # 平台特定链接
@@ -317,6 +330,11 @@ endif()
 # SSL/TLS 链接
 if(CNETMOD_HAS_SSL)
     target_link_libraries(cnetmod_core PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+# zlib 链接
+if(CNETMOD_HAS_ZLIB)
+    target_link_libraries(cnetmod_core PUBLIC ZLIB::ZLIB)
 endif()
 
 # ==============================================================================
@@ -362,12 +380,14 @@ set_property(TARGET cnetmod_core PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE"
 )
 
+set(CNETMOD_LINK_TARGET cnetmod_core)
+
 # ==============================================================================
 # 主可执行文件
 # ==============================================================================
 
 add_executable(cnetmod_app src/main.cpp)
-target_link_libraries(cnetmod_app PRIVATE cnetmod_core)
+target_link_libraries(cnetmod_app PRIVATE ${CNETMOD_LINK_TARGET})
 set_property(TARGET cnetmod_app PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE"
 )

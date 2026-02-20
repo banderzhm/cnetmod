@@ -152,6 +152,18 @@ struct epoll_cancel_awaiter {
     }
 };
 
+auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
+    if (sa.ss_family == AF_INET6) {
+        const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
+        return endpoint{ipv6_address::from_native(sin6.sin6_addr),
+                        ::ntohs(sin6.sin6_port)};
+    }
+    const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
+    const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
+    return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
+                    ::ntohs(sin.sin_port)};
+}
+
 } // anonymous namespace
 
 // =============================================================================
@@ -621,6 +633,118 @@ auto async_timer_wait(io_context& ctx,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     co_return std::expected<void, std::error_code>{};
+}
+
+// =============================================================================
+// 异步 UDP I/O — epoll
+// =============================================================================
+
+auto async_recvfrom(io_context& ctx, socket& sock,
+                    mutable_buffer buf, endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLIN};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+
+    ::sockaddr_storage from_addr{};
+    ::socklen_t from_len = sizeof(from_addr);
+    ssize_t n = ::recvfrom(static_cast<int>(sock.native_handle()),
+                           buf.data, buf.size, 0,
+                           reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    peer = endpoint_from_sockaddr(from_addr);
+    co_return static_cast<std::size_t>(n);
+}
+
+auto async_sendto(io_context& ctx, socket& sock,
+                  const_buffer buf, const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(peer, dest);
+    ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+                         buf.data, buf.size, MSG_NOSIGNAL,
+                         reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    co_return static_cast<std::size_t>(n);
+}
+
+// =============================================================================
+// 可取消版本 — 异步 UDP I/O
+// =============================================================================
+
+auto async_recvfrom(io_context& ctx, socket& sock,
+                    mutable_buffer buf, endpoint& peer,
+                    cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
+                            EPOLLIN, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    ::sockaddr_storage from_addr{};
+    ::socklen_t from_len = sizeof(from_addr);
+    ssize_t n = ::recvfrom(static_cast<int>(sock.native_handle()),
+                           buf.data, buf.size, 0,
+                           reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    peer = endpoint_from_sockaddr(from_addr);
+    co_return static_cast<std::size_t>(n);
+}
+
+auto async_sendto(io_context& ctx, socket& sock,
+                  const_buffer buf, const endpoint& peer,
+                  cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
+                            EPOLLOUT, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(peer, dest);
+    ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+                         buf.data, buf.size, MSG_NOSIGNAL,
+                         reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    co_return static_cast<std::size_t>(n);
 }
 
 #endif // CNETMOD_HAS_EPOLL && !CNETMOD_HAS_IO_URING

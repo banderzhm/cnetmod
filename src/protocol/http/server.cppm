@@ -84,128 +84,123 @@ export struct static_file_options {
     std::string index_file = "index.html";
 };
 
-/// 创建静态文件服务 handler
-/// 路由应注册为 /prefix/*filepath 形式
-export auto serve_dir(static_file_options opts) -> handler_fn {
-    return [opts = std::move(opts)](request_context& ctx) -> task<void> {
-        auto rel_path = ctx.wildcard();
-        if (rel_path.empty()) rel_path = opts.index_file;
+/// serve_dir 协程实现（非导出）— 避免 MSVC 14.50 「导出函数内协程 lambda 序列化到 IFC」ICE
+namespace detail {
+auto serve_dir_body(const static_file_options& opts, request_context& ctx) -> task<void> {
+    auto rel_path = ctx.wildcard();
+    if (rel_path.empty()) rel_path = opts.index_file;
 
-        // 安全检查：禁止 .. 穿越
-        auto rel_str = std::string(rel_path);
-        if (rel_str.find("..") != std::string::npos) {
-            ctx.text(status::forbidden, "403 Forbidden");
-            co_return;
-        }
+    auto rel_str = std::string(rel_path);
+    if (rel_str.find("..") != std::string::npos) {
+        ctx.text(status::forbidden, "403 Forbidden");
+        co_return;
+    }
 
-        auto full_path = opts.root / rel_str;
+    auto full_path = opts.root / rel_str;
 
-        // 如果是目录，尝试 index 文件
-        std::error_code ec;
-        if (std::filesystem::is_directory(full_path, ec)) {
-            full_path /= opts.index_file;
-        }
+    std::error_code ec;
+    if (std::filesystem::is_directory(full_path, ec)) {
+        full_path /= opts.index_file;
+    }
 
-        if (!std::filesystem::exists(full_path, ec)) {
-            ctx.not_found();
-            co_return;
-        }
+    if (!std::filesystem::exists(full_path, ec)) {
+        ctx.not_found();
+        co_return;
+    }
 
-        // 打开文件
-        auto f = file::open(full_path, open_mode::read);
-        if (!f) {
-            ctx.text(status::internal_server_error, "500 Cannot open file");
-            co_return;
-        }
+    auto f = file::open(full_path, open_mode::read);
+    if (!f) {
+        ctx.text(status::internal_server_error, "500 Cannot open file");
+        co_return;
+    }
 
-        auto file_size_r = f->size();
-        if (!file_size_r) {
-            ctx.text(status::internal_server_error, "500 Cannot stat file");
-            co_return;
-        }
-        auto file_size = *file_size_r;
+    auto file_size_r = f->size();
+    if (!file_size_r) {
+        ctx.text(status::internal_server_error, "500 Cannot stat file");
+        co_return;
+    }
+    auto file_size = *file_size_r;
 
-        // MIME 类型
-        auto ext = full_path.extension().string();
-        auto mime = guess_mime_type(ext);
+    auto ext = full_path.extension().string();
+    auto mime = guess_mime_type(ext);
 
-        // 检查 Range 头
-        auto range_hdr = ctx.get_header("Range");
-        std::uint64_t range_start = 0;
-        std::uint64_t range_end = file_size - 1;
-        bool is_range = false;
+    auto range_hdr = ctx.get_header("Range");
+    std::uint64_t range_start = 0;
+    std::uint64_t range_end = file_size - 1;
+    bool is_range = false;
 
-        if (!range_hdr.empty() && range_hdr.starts_with("bytes=")) {
-            auto spec = range_hdr.substr(6);
-            auto dash = spec.find('-');
-            if (dash != std::string_view::npos) {
-                auto start_str = spec.substr(0, dash);
-                auto end_str = spec.substr(dash + 1);
-                if (!start_str.empty()) {
-                    std::from_chars(start_str.data(),
-                        start_str.data() + start_str.size(), range_start);
-                }
-                if (!end_str.empty()) {
-                    std::from_chars(end_str.data(),
-                        end_str.data() + end_str.size(), range_end);
-                }
-                if (range_start <= range_end && range_end < file_size) {
-                    is_range = true;
-                }
+    if (!range_hdr.empty() && range_hdr.starts_with("bytes=")) {
+        auto spec = range_hdr.substr(6);
+        auto dash = spec.find('-');
+        if (dash != std::string_view::npos) {
+            auto start_str = spec.substr(0, dash);
+            auto end_str = spec.substr(dash + 1);
+            if (!start_str.empty()) {
+                std::from_chars(start_str.data(),
+                    start_str.data() + start_str.size(), range_start);
+            }
+            if (!end_str.empty()) {
+                std::from_chars(end_str.data(),
+                    end_str.data() + end_str.size(), range_end);
+            }
+            if (range_start <= range_end && range_end < file_size) {
+                is_range = true;
             }
         }
+    }
 
-        // 构建响应头
-        auto& resp = ctx.resp();
-        if (is_range) {
-            resp.set_status(status::partial_content);
-            auto content_len = range_end - range_start + 1;
-            resp.set_header("Content-Range",
-                std::format("bytes {}-{}/{}", range_start, range_end, file_size));
-            resp.set_header("Content-Length", std::to_string(content_len));
-        } else {
-            resp.set_status(status::ok);
-            resp.set_header("Content-Length", std::to_string(file_size));
-            range_start = 0;
-            range_end = file_size - 1;
-        }
-        resp.set_header("Content-Type", mime);
-        resp.set_header("Accept-Ranges", "bytes");
+    auto& resp = ctx.resp();
+    if (is_range) {
+        resp.set_status(status::partial_content);
+        auto content_len = range_end - range_start + 1;
+        resp.set_header("Content-Range",
+            std::format("bytes {}-{}/{}", range_start, range_end, file_size));
+        resp.set_header("Content-Length", std::to_string(content_len));
+    } else {
+        resp.set_status(status::ok);
+        resp.set_header("Content-Length", std::to_string(file_size));
+        range_start = 0;
+        range_end = file_size - 1;
+    }
+    resp.set_header("Content-Type", mime);
+    resp.set_header("Accept-Ranges", "bytes");
 
-        // 先发送响应头（不含 body，body 流式发送）
-        // set_body 留空，server 发送头后我们自己流式写 body
-        // 用特殊标记让 server 知道我们要流式发送
-        // 方案：直接在 handler 里发送全部数据（头+body）
+    auto header_data = resp.serialize();
+    auto wr = co_await async_write(ctx.io_ctx(), ctx.raw_socket(),
+        const_buffer{header_data.data(), header_data.size()});
+    if (!wr) co_return;
 
-        auto header_data = resp.serialize();  // 无 body 的响应头
-        auto wr = co_await async_write(ctx.io_ctx(), ctx.raw_socket(),
-            const_buffer{header_data.data(), header_data.size()});
-        if (!wr) co_return;
+    constexpr std::size_t CHUNK_SIZE = 65536;
+    std::vector<std::byte> buf(CHUNK_SIZE);
+    std::uint64_t offset = range_start;
+    std::uint64_t remaining = range_end - range_start + 1;
 
-        // 流式发送文件内容
-        constexpr std::size_t CHUNK_SIZE = 65536;
-        std::vector<std::byte> buf(CHUNK_SIZE);
-        std::uint64_t offset = range_start;
-        std::uint64_t remaining = range_end - range_start + 1;
+    while (remaining > 0) {
+        auto to_read = static_cast<std::size_t>(
+            std::min<std::uint64_t>(remaining, CHUNK_SIZE));
+        auto rd = co_await async_file_read(ctx.io_ctx(), *f,
+            mutable_buffer{buf.data(), to_read}, offset);
+        if (!rd || *rd == 0) break;
 
-        while (remaining > 0) {
-            auto to_read = static_cast<std::size_t>(
-                std::min<std::uint64_t>(remaining, CHUNK_SIZE));
-            auto rd = co_await async_file_read(ctx.io_ctx(), *f,
-                mutable_buffer{buf.data(), to_read}, offset);
-            if (!rd || *rd == 0) break;
+        auto wf = co_await async_write(ctx.io_ctx(), ctx.raw_socket(),
+            const_buffer{buf.data(), *rd});
+        if (!wf) break;
 
-            auto wf = co_await async_write(ctx.io_ctx(), ctx.raw_socket(),
-                const_buffer{buf.data(), *rd});
-            if (!wf) break;
+        offset += *rd;
+        remaining -= *rd;
+    }
 
-            offset += *rd;
-            remaining -= *rd;
-        }
+    resp.set_header("X-Streamed", "1");
+    co_return;
+}
+} // namespace detail
 
-        // 标记响应已经发送（server 不再重复发送）
-        resp.set_header("X-Streamed", "1");
-        co_return;
+/// 创建静态文件服务 handler（非协程，委托给 detail::serve_dir_body）
+/// 路由应注册为 /prefix/*filepath 形式
+export auto serve_dir(static_file_options opts) -> handler_fn {
+    auto opts_ptr = std::make_shared<static_file_options>(std::move(opts));
+    return [opts_ptr](request_context& ctx) -> task<void> {
+        return detail::serve_dir_body(*opts_ptr, ctx);
     };
 }
 
@@ -219,127 +214,135 @@ export struct upload_options {
     std::size_t max_size = 32 * 1024 * 1024;  // 32MB
 };
 
-/// 创建文件上传处理 handler
+/// save_upload 协程实现（非导出）— 避免 MSVC 14.50 「导出函数内协程 lambda 序列化到 IFC」ICE
+namespace detail {
+auto save_upload_body(const upload_options& opts, request_context& ctx) -> task<void> {
+    auto body = ctx.body();
+    if (body.empty()) {
+        ctx.text(status::bad_request, "Empty body");
+        co_return;
+    }
+
+    if (body.size() > opts.max_size) {
+        ctx.text(status::payload_too_large, "File too large");
+        co_return;
+    }
+
+    std::error_code ec;
+    std::filesystem::create_directories(opts.save_dir, ec);
+
+    auto ct = ctx.get_header("Content-Type");
+    auto ct_parsed = parse_content_type(ct);
+
+    if (ct_parsed.mime == "multipart/form-data") {
+        auto form_r = ctx.parse_form();
+        if (!form_r) {
+            ctx.text(status::bad_request,
+                std::format("Multipart parse error: {}",
+                            form_r.error().message()));
+            co_return;
+        }
+        auto& form = **form_r;
+
+        std::string json_files = "[";
+        bool first = true;
+
+        for (auto& ff : form.all_files()) {
+            auto fname = ff.filename;
+            if (fname.empty()) fname = opts.default_filename;
+            if (fname.find("..") != std::string::npos ||
+                fname.find('/') != std::string::npos ||
+                fname.find('\\') != std::string::npos) {
+                fname = opts.default_filename;
+            }
+
+            auto full_path = opts.save_dir / fname;
+            auto f = file::open(full_path,
+                open_mode::write | open_mode::create | open_mode::truncate);
+            if (!f) continue;
+
+            auto wr = co_await async_file_write(ctx.io_ctx(), *f,
+                const_buffer{ff.data.data(), ff.data.size()});
+            if (!wr) continue;
+
+            if (!first) json_files += ",";
+            json_files += std::format(
+                R"({{"field":"{}","filename":"{}","size":{},"type":"{}"}})",
+                ff.field_name, fname, ff.data.size(), ff.content_type);
+            first = false;
+        }
+        json_files += "]";
+
+        std::string json_fields = "[";
+        first = true;
+        for (auto& field : form.all_fields()) {
+            if (!first) json_fields += ",";
+            json_fields += std::format(
+                R"({{"name":"{}","value":"{}"}})",
+                field.name, field.value);
+            first = false;
+        }
+        json_fields += "]";
+
+        ctx.json(status::ok, std::format(
+            R"({{"files":{},"fields":{},"file_count":{},"field_count":{}}})",
+            json_files, json_fields,
+            form.file_count(), form.field_count()));
+        co_return;
+    }
+
+    // === raw body 模式 ===
+    std::string filename = opts.default_filename;
+    auto qs = ctx.query_string();
+    auto name_pos = qs.find("name=");
+    if (name_pos != std::string_view::npos) {
+        auto start = name_pos + 5;
+        auto end = qs.find('&', start);
+        auto name = (end != std::string_view::npos)
+            ? qs.substr(start, end - start) : qs.substr(start);
+        if (!name.empty()) {
+            auto name_str = std::string(name);
+            if (name_str.find("..") == std::string::npos &&
+                name_str.find('/') == std::string::npos &&
+                name_str.find('\\') == std::string::npos) {
+                filename = std::move(name_str);
+            }
+        }
+    }
+
+    auto full_path = opts.save_dir / filename;
+    auto f = file::open(full_path,
+        open_mode::write | open_mode::create | open_mode::truncate);
+    if (!f) {
+        ctx.text(status::internal_server_error, "Cannot create file");
+        co_return;
+    }
+
+    auto wr = co_await async_file_write(ctx.io_ctx(), *f,
+        const_buffer{body.data(), body.size()});
+    if (!wr) {
+        ctx.text(status::internal_server_error, "Write failed");
+        co_return;
+    }
+
+    ctx.json(status::ok,
+        std::format(R"({{"filename":"{}","size":{}}})", filename, body.size()));
+    co_return;
+}
+
+/// 404 协程实现（非导出）— 避免 MSVC 14.50 「handle_connection 内协程 lambda」ICE
+auto not_found_handler(request_context& ctx) -> task<void> {
+    ctx.not_found();
+    co_return;
+}
+} // namespace detail
+
+/// 创建文件上传处理 handler（非协程，委托给 detail::save_upload_body）
 /// 支持 multipart/form-data 和 raw body 两种模式
 export auto save_upload(upload_options opts) -> handler_fn {
-    return [opts = std::move(opts)](request_context& ctx) -> task<void> {
-        auto body = ctx.body();
-        if (body.empty()) {
-            ctx.text(status::bad_request, "Empty body");
-            co_return;
-        }
-
-        if (body.size() > opts.max_size) {
-            ctx.text(status::payload_too_large, "File too large");
-            co_return;
-        }
-
-        // 确保目录存在
-        std::error_code ec;
-        std::filesystem::create_directories(opts.save_dir, ec);
-
-        // 检查是否为 multipart/form-data
-        auto ct = ctx.get_header("Content-Type");
-        auto ct_parsed = parse_content_type(ct);
-
-        if (ct_parsed.mime == "multipart/form-data") {
-            // === multipart 模式 ===
-            auto form_r = ctx.parse_form();
-            if (!form_r) {
-                ctx.text(status::bad_request,
-                    std::format("Multipart parse error: {}",
-                                form_r.error().message()));
-                co_return;
-            }
-            auto& form = **form_r;
-
-            // 保存所有上传文件
-            std::string json_files = "[";
-            bool first = true;
-
-            for (auto& ff : form.all_files()) {
-                auto fname = ff.filename;
-                // 安全检查
-                if (fname.empty()) fname = opts.default_filename;
-                if (fname.find("..") != std::string::npos ||
-                    fname.find('/') != std::string::npos ||
-                    fname.find('\\') != std::string::npos) {
-                    fname = opts.default_filename;
-                }
-
-                auto full_path = opts.save_dir / fname;
-                auto f = file::open(full_path,
-                    open_mode::write | open_mode::create | open_mode::truncate);
-                if (!f) continue;
-
-                auto wr = co_await async_file_write(ctx.io_ctx(), *f,
-                    const_buffer{ff.data.data(), ff.data.size()});
-                if (!wr) continue;
-
-                if (!first) json_files += ",";
-                json_files += std::format(
-                    R"({{"field":"{}","filename":"{}","size":{},"type":"{}"}})",
-                    ff.field_name, fname, ff.data.size(), ff.content_type);
-                first = false;
-            }
-            json_files += "]";
-
-            // 将表单字段也包含在响应中
-            std::string json_fields = "[";
-            first = true;
-            for (auto& field : form.all_fields()) {
-                if (!first) json_fields += ",";
-                json_fields += std::format(
-                    R"({{"name":"{}","value":"{}"}})",
-                    field.name, field.value);
-                first = false;
-            }
-            json_fields += "]";
-
-            ctx.json(status::ok, std::format(
-                R"({{"files":{},"fields":{},"file_count":{},"field_count":{}}})",
-                json_files, json_fields,
-                form.file_count(), form.field_count()));
-            co_return;
-        }
-
-        // === raw body 模式 ===
-        std::string filename = opts.default_filename;
-        auto qs = ctx.query_string();
-        auto name_pos = qs.find("name=");
-        if (name_pos != std::string_view::npos) {
-            auto start = name_pos + 5;
-            auto end = qs.find('&', start);
-            auto name = (end != std::string_view::npos)
-                ? qs.substr(start, end - start) : qs.substr(start);
-            if (!name.empty()) {
-                auto name_str = std::string(name);
-                if (name_str.find("..") == std::string::npos &&
-                    name_str.find('/') == std::string::npos &&
-                    name_str.find('\\') == std::string::npos) {
-                    filename = std::move(name_str);
-                }
-            }
-        }
-
-        auto full_path = opts.save_dir / filename;
-        auto f = file::open(full_path,
-            open_mode::write | open_mode::create | open_mode::truncate);
-        if (!f) {
-            ctx.text(status::internal_server_error, "Cannot create file");
-            co_return;
-        }
-
-        auto wr = co_await async_file_write(ctx.io_ctx(), *f,
-            const_buffer{body.data(), body.size()});
-        if (!wr) {
-            ctx.text(status::internal_server_error, "Write failed");
-            co_return;
-        }
-
-        ctx.json(status::ok,
-            std::format(R"({{"filename":"{}","size":{}}})", filename, body.size()));
-        co_return;
+    auto opts_ptr = std::make_shared<upload_options>(std::move(opts));
+    return [opts_ptr](request_context& ctx) -> task<void> {
+        return detail::save_upload_body(*opts_ptr, ctx);
     };
 }
 
@@ -447,10 +450,9 @@ private:
                 handler = std::move(mr->handler);
                 rp = std::move(mr->params);
             } else {
-                // 404
+                // 404 — 非协程 lambda，委托给 detail::not_found_handler
                 handler = [](request_context& ctx) -> task<void> {
-                    ctx.not_found();
-                    co_return;
+                    return detail::not_found_handler(ctx);
                 };
             }
 
@@ -481,32 +483,19 @@ private:
     }
 
     /// 执行中间件链，最后调用 handler
-    auto execute_chain(request_context& ctx, handler_fn& handler)
-        -> task<void>
+    /// 使用 index-based 递归协程，避免 MSVC 「泛型 lambda + 协程 + std::function」ICE
+    auto execute_chain(request_context& ctx, handler_fn& handler,
+                       std::size_t idx = 0) -> task<void>
     {
-        if (middlewares_.empty()) {
+        if (idx >= middlewares_.size()) {
             co_await handler(ctx);
             co_return;
         }
-
-        // 构建洋葱调用链
-        std::function<task<void>()> chain;
-
-        // 递归构建
-        auto build_chain = [&](auto& self, std::size_t i) -> std::function<task<void>()> {
-            if (i >= middlewares_.size()) {
-                // 最内层：调用 handler
-                return [&ctx, &handler]() -> task<void> {
-                    co_await handler(ctx);
-                };
-            }
-            return [&ctx, &mw = middlewares_[i], next_fn = self(self, i + 1)]() -> task<void> {
-                co_await mw(ctx, next_fn);
-            };
+        // next 是普通（非协程）闭包，直接返回下一层 task<void>
+        next_fn next = [this, &ctx, &handler, idx]() -> task<void> {
+            return execute_chain(ctx, handler, idx + 1);
         };
-
-        chain = build_chain(build_chain, 0);
-        co_await chain();
+        co_await middlewares_[idx](ctx, next);
     }
 
     io_context& ctx_;

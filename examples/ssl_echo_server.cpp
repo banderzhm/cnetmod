@@ -10,15 +10,10 @@
 #include <cstdio>
 
 import std;
-import cnetmod.core.socket;
-import cnetmod.core.address;
-import cnetmod.core.buffer;
-import cnetmod.core.net_init;
-import cnetmod.io.io_context;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.executor.async_op;
-import cnetmod.executor.scheduler;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;

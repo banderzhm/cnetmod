@@ -8,40 +8,25 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import cnetmod.core.error;
-import cnetmod.core.buffer;
-import cnetmod.core.address;
-import cnetmod.core.socket;
-import cnetmod.core.net_init;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.coro.timer;
-import cnetmod.io.io_context;
-import cnetmod.executor.async_op;
-import cnetmod.executor.pool;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
 import cnetmod.protocol.tcp;
 import cnetmod.protocol.http;
+import cnetmod.middleware.access_log;
+import cnetmod.middleware.recover;
+import cnetmod.middleware.cors;
+import cnetmod.middleware.request_id;
+import cnetmod.middleware.body_limit;
+import cnetmod.middleware.rate_limiter;
+import cnetmod.middleware.jwt_auth;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;
 
 constexpr std::uint16_t PORT = 19100;
 constexpr unsigned WORKER_THREADS = 4;
-
-// =============================================================================
-// 日志中间件 — 打印线程 ID 以验证多核分发
-// =============================================================================
-
-auto logger_middleware() -> http::middleware_fn {
-    return [](http::request_context& ctx, http::next_fn next) -> cn::task<void> {
-        auto tid = std::this_thread::get_id();
-        std::println("  [MW:log] {} {} (thread {})",
-                     ctx.method(), ctx.uri(), tid);
-        co_await next();
-        std::println("  [MW:log] -> {} (thread {})",
-                     ctx.resp().status_code(), tid);
-    };
-}
 
 // =============================================================================
 // CPU 密集型 handler — 通过 pool_post_awaitable 卸载到线程池
@@ -95,26 +80,32 @@ auto handle_compute(cn::server_context& sctx)
 // =============================================================================
 
 auto send_request(cn::io_context& ctx, http::http_method method,
-                  std::string_view path)
-    -> cn::task<void>
+                  std::string_view path,
+                  std::vector<std::pair<std::string, std::string>> extra_headers = {},
+                  std::string_view body = {})
+    -> cn::task<std::string>
 {
     auto sock_r = cn::socket::create(cn::address_family::ipv4,
                                      cn::socket_type::stream);
-    if (!sock_r) co_return;
+    if (!sock_r) co_return "";
     auto sock = std::move(*sock_r);
 
     auto ep = cn::endpoint{cn::ipv4_address::loopback(), PORT};
     auto cr = co_await cn::async_connect(ctx, sock, ep);
-    if (!cr) { std::println("    connect failed"); co_return; }
+    if (!cr) { std::println("    connect failed"); co_return ""; }
 
     http::request req(method, path);
-    req.set_header("Host", std::format("127.0.0.1:{}", PORT));
+    req.set_header("Host", std::format("*********:{}", PORT));
     req.set_header("Connection", "close");
+    for (auto& [k, v] : extra_headers)
+        req.set_header(k, v);
+    if (!body.empty())
+        req.set_body(std::string(body));
 
     auto req_data = req.serialize();
     auto wr = co_await cn::async_write(ctx, sock,
         cn::const_buffer{req_data.data(), req_data.size()});
-    if (!wr) { sock.close(); co_return; }
+    if (!wr) { sock.close(); co_return ""; }
 
     http::response_parser rp;
     std::array<std::byte, 8192> buf{};
@@ -125,14 +116,17 @@ auto send_request(cn::io_context& ctx, http::http_method method,
         if (!c) break;
     }
 
+    std::string resp_body;
     if (rp.ready()) {
         std::println("    {} {} -> {} {}",
                      http::method_to_string(method), path,
                      rp.status_code(), rp.status_message());
-        if (!rp.body().empty())
-            std::println("    Body: {}", rp.body());
+        resp_body = rp.body();
+        if (!resp_body.empty())
+            std::println("    Body: {}", resp_body);
     }
     sock.close();
+    co_return resp_body;
 }
 
 // =============================================================================
@@ -170,6 +164,18 @@ auto run_client(cn::server_context& sctx, http::server& srv) -> cn::task<void> {
         co_await send_request(ctx, http::http_method::GET,
             std::format("/api/users/{}", i + 100));
     }
+
+    // 4. JWT 认证测试
+    std::println("\n  [10] GET /api/secret (no auth → 401)");
+    co_await send_request(ctx, http::http_method::GET, "/api/secret");
+
+    std::println("\n  [11] GET /api/secret (valid token → 200)");
+    co_await send_request(ctx, http::http_method::GET, "/api/secret",
+        {{"Authorization", "Bearer demo-secret"}});
+
+    std::println("\n  [12] GET /api/secret (bad token → 401)");
+    co_await send_request(ctx, http::http_method::GET, "/api/secret",
+        {{"Authorization", "Bearer wrong-token"}});
 
     std::println("\n========== Client: All Tests Done ==========\n");
 
@@ -214,6 +220,13 @@ int main() {
     // GET /compute/:n — CPU 密集计算（卸载到 pool）
     router.get("/compute/:n", handle_compute(sctx));
 
+    // GET /api/secret — JWT 保护路由
+    router.get("/api/secret", [](http::request_context& ctx) -> cn::task<void> {
+        ctx.json(http::status::ok,
+            R"({"data":"top secret payload","access":"authorized"})");
+        co_return;
+    });
+
     // 构建多核 HTTP 服务器
     http::server srv(sctx);
     auto listen_r = srv.listen("0.0.0.0", PORT);
@@ -222,7 +235,17 @@ int main() {
         return 1;
     }
 
-    srv.use(logger_middleware());
+    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → rate_limiter → jwt_auth → handler）
+    srv.use(cn::recover());
+    srv.use(cn::access_log());
+    srv.use(cn::cors());
+    srv.use(cn::request_id());
+    srv.use(cn::body_limit(2 * 1024 * 1024));  // 2MB
+    srv.use(cn::rate_limiter({.rate = 100.0, .burst = 200.0}));  // 宽松限流
+    srv.use(cn::jwt_auth({
+        .verify = [](std::string_view token) { return token == "demo-secret"; },
+        .skip_paths = {"/", "/api/users", "/compute"},
+    }));
     srv.set_router(std::move(router));
 
     std::println("  Server listening on 0.0.0.0:{}", PORT);

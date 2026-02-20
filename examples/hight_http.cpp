@@ -5,36 +5,22 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import cnetmod.core.error;
-import cnetmod.core.buffer;
-import cnetmod.core.address;
-import cnetmod.core.socket;
-import cnetmod.core.net_init;
-import cnetmod.coro.task;
-import cnetmod.coro.spawn;
-import cnetmod.coro.timer;
-import cnetmod.io.io_context;
-import cnetmod.executor.async_op;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
 import cnetmod.protocol.tcp;
 import cnetmod.protocol.http;
+import cnetmod.middleware.access_log;
+import cnetmod.middleware.recover;
+import cnetmod.middleware.cors;
+import cnetmod.middleware.request_id;
+import cnetmod.middleware.body_limit;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;
 
 constexpr std::uint16_t PORT = 19080;
-
-// =============================================================================
-// 日志中间件
-// =============================================================================
-
-auto logger_middleware() -> http::middleware_fn {
-    return [](http::request_context& ctx, http::next_fn next) -> cn::task<void> {
-        std::println("  [MW] {} {}", ctx.method(), ctx.uri());
-        co_await next();
-        std::println("  [MW] → {} ({})", ctx.resp().status_code(),
-                     ctx.resp().get_header("Content-Type"));
-    };
-}
 
 // =============================================================================
 // 客户端：发送一个 HTTP 请求并打印响应
@@ -250,8 +236,12 @@ int main() {
         return 1;
     }
 
-    // 注册日志中间件
-    srv.use(logger_middleware());
+    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → handler）
+    srv.use(cn::recover());
+    srv.use(cn::access_log());
+    srv.use(cn::cors());
+    srv.use(cn::request_id());
+    srv.use(cn::body_limit(2 * 1024 * 1024));  // 2MB
     srv.set_router(std::move(router));
 
     std::println("  Server listening on 127.0.0.1:{}", PORT);

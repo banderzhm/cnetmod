@@ -105,6 +105,15 @@ public:
         return addr_;
     }
 
+    /// 从原生 in6_addr 构造
+    [[nodiscard]] static auto from_native(const ::in6_addr& native_addr) noexcept
+        -> ipv6_address
+    {
+        ipv6_address result;
+        result.addr_ = native_addr;
+        return result;
+    }
+
     /// 回环地址 ::1
     [[nodiscard]] static auto loopback() noexcept -> ipv6_address;
 
