@@ -10,23 +10,45 @@ Cross-platform asynchronous network library using C++23 modules and native corou
 
 | Platform | I/O Engine | Compiler | Status |
 |----------|-----------|----------|--------|
-| Windows | IOCP | MSVC 2022 | ✅ |
-| Linux | io_uring | clang-21 + libc++ | ✅ |
+| Windows | IOCP | MSVC 2022 17.12+ | ✅ |
+| Linux | io_uring + epoll | clang-21 + libc++ | ✅ |
 | macOS | kqueue | clang-21 + libc++ | ✅ |
 
 ## Features
 
-**Core async runtime**: Native coroutine integration with `task<T>` and `spawn()` for fire-and-forget tasks. Platform-specific I/O context (`io_context`) with thread-safe `post()` for cross-thread scheduling.
+### Core Runtime
+- **Coroutine engine**: `task<T>`, `spawn()` fire-and-forget, symmetric transfer for tail-call optimization
+- **I/O context**: Platform-native event loop (IOCP / io_uring / epoll / kqueue) with thread-safe `post()`
+- **Multi-core**: `server_context` with dedicated accept thread + N worker `io_context` threads + stdexec thread pool
+- **stdexec integration**: `schedule()` sender, `async_scope`, `blocking_invoke()` for offloading blocking calls
 
-**stdexec integration**: Built-in sender/receiver support. The scheduler exposes `schedule()` sender and can be used with `exec::async_scope` for structured concurrency.
+### Networking
+- **TCP**: Async accept / connect / read / write with RAII socket wrappers
+- **UDP**: Async sendto / recvfrom
+- **TLS/SSL**: OpenSSL-backed `ssl_context` / `ssl_stream` with async handshake, SNI, client certificate support
+- **Async DNS**: `async_resolve()` — non-blocking DNS via stdexec thread pool + `getaddrinfo`
+- **Serial port**: Cross-platform async serial I/O
 
-**Network I/O**: TCP sockets with async accept/connect/read/write. Cross-platform socket RAII wrappers with move semantics.
+### Protocols
+- **HTTP/1.1**: Full server with router, middleware pipeline, chunked transfer, multipart upload
+- **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
+- **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
+- **MySQL**: Async client with prepared statements, connection pool, pipeline, ORM (CRUD / migration / query builder)
+- **Redis**: Async client with RESP protocol
+- **OpenAI**: Async API client (chat completions, etc.)
 
-**Synchronization primitives**: Coroutine-aware `mutex`, `condition_variable`, and `channel<T>` for producer-consumer patterns.
+### Middleware (HTTP)
+CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log, metrics, timeout, graceful shutdown, IP firewall, cache, health check, file upload, panic recovery
 
-**Timers**: High-resolution timers with `async_sleep()` and `async_sleep_until()`. Platform backends: Windows multimedia timer, Linux/macOS steady_clock + heap.
+### Synchronization Primitives
+`mutex`, `shared_mutex`, `semaphore`, `condition_variable` (all coroutine-aware), `channel<T>`, `wait_group`, `cancel_token`
 
-**Buffer utilities**: Endianness-aware buffer readers/writers. Support for `hton`/`ntoh`, `htole`/`letoh`, and direct 16/32/64-bit integer serialization.
+### Utilities
+- **Timers**: `async_sleep()`, `async_sleep_until()`, `with_timeout()` for cancellable operations
+- **Buffer**: Endianness-aware readers/writers, buffer pool
+- **Logging**: `std::format`-based logger (no external dependency)
+- **Crash dump**: Platform-native minidump (Windows) / signal handler (Unix)
+- **Async file I/O**: IOCP-backed (Windows)
 
 ## Quick Start
 
@@ -101,6 +123,27 @@ int main() {
 }
 ```
 
+**MQTT Broker + Client**:
+```cpp
+import cnetmod.protocol.mqtt;
+
+// Start broker
+mqtt::broker brk(ctx);
+brk.set_options({.port = 1883});
+brk.listen();
+spawn(ctx, brk.run());
+
+// Async client
+mqtt::client cli(ctx);
+co_await cli.connect({.host = "127.0.0.1", .port = 1883, .version = mqtt::protocol_version::v5});
+co_await cli.subscribe("sensor/#", mqtt::qos::at_least_once);
+cli.on_message([](const mqtt::publish_message& msg) {
+    std::println("topic={} payload={}", msg.topic, msg.payload);
+});
+co_await cli.publish("sensor/temp", "22.5", mqtt::qos::exactly_once);
+co_await cli.disconnect();
+```
+
 **Timer**:
 ```cpp
 task<void> delayed_task(io_context& ctx) {
@@ -121,18 +164,27 @@ task<void> producer(channel<int>& ch) {
 }
 ```
 
-**Async File I/O** (Windows):
-```cpp
-async_file file("test.txt", file_mode::read);
-char buf[4096];
-int n = co_await file.async_read(buf, sizeof(buf), 0);
-```
-
-See `examples/` for complete demos: `echo_server.cpp`, `timer_demo.cpp`, `channel_demo.cpp`, `async_file.cpp`, `stdexec_bridge.cpp`.
+See `examples/` for complete demos including `http_demo`, `ws_demo`, `mqtt_demo`, `mysql_orm`, `redis_client`, `multicore_http`, `ssl_echo_server`, and more.
 
 ## Architecture
 
 **Module structure**: Pure C++23 module interfaces (`.cppm`) with no headers. Platform-specific implementations in `.cpp` files selected via CMake.
+
+```
+cnetmod.core          — socket, buffer, address, error, log, dns, ssl, serial_port
+cnetmod.coro          — task, spawn, channel, mutex, semaphore, timer, cancel
+cnetmod.io            — io_context + platform backends (iocp, io_uring, epoll, kqueue)
+cnetmod.executor      — async_op, server_context, scheduler, stdexec bridge
+cnetmod.protocol.tcp  — TCP acceptor/connector
+cnetmod.protocol.udp  — UDP async I/O
+cnetmod.protocol.http — HTTP/1.1 server, router, middleware pipeline
+cnetmod.protocol.websocket — WebSocket server
+cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
+cnetmod.protocol.mysql — MySQL async client + ORM
+cnetmod.protocol.redis — Redis async client
+cnetmod.protocol.openai — OpenAI API client
+cnetmod.middleware.*  — HTTP middleware components
+```
 
 **Scheduler/executor**: `io_context` provides `post(coroutine_handle<>)` for thread-safe task submission. Platform-specific `wake()` implementations:
 - Windows: `PostQueuedCompletionStatus` with sentinel key
@@ -143,6 +195,35 @@ See `examples/` for complete demos: `echo_server.cpp`, `timer_demo.cpp`, `channe
 
 **Async operations**: RAII-based async_op base class with platform-specific overlap/submission tracking. Completion callbacks resume awaiting coroutines via `post()`.
 
+## Known Issues
+
+### MSVC error C1605: object file size exceeds 4 GB limit
+
+When building with MSVC in Debug mode, the compiler may emit:
+
+> **fatal error C1605**: 编译器限制: 对象文件大小不能超过 4 GB
+
+This happens because C++23 modules with heavy template instantiation (especially `std` module + `std::format` + protocol codecs) produce extremely large `.obj` / `.ifc` files in Debug builds. MSVC's COFF object format has a hard 4 GB limit.
+
+**Workarounds already applied in CMakeLists.txt:**
+- `/bigobj` — raises section count limit from 65,536 to 4 billion
+- `/Ob1` — reduces inline expansion (less code duplication in each TU)
+- `/GL-` — disables whole-program optimization (prevents merged object inflation)
+
+**If you still hit C1605:**
+1. **Split large modules** — break monolithic `.cppm` files into smaller partitions. The protocol modules (`mqtt`, `http`, `mysql`) already use partition interfaces (`:types`, `:codec`, `:parser`, etc.) for this reason.
+2. **Use Release/RelWithDebInfo** — optimized builds produce significantly smaller object files.
+3. **Reduce template instantiation** — avoid `std::format` with many distinct argument types in a single TU.
+4. **Build with clang on WSL** — clang + libc++ uses ELF objects which have no 4 GB limit. This is the recommended development workflow for the full project.
+
+### clang module dependency visibility
+
+When adding new `import` dependencies between modules, clang may report errors like:
+
+> declaration of 'X' must be imported from module 'Y' before it is required
+
+Ensure the module that exports the needed symbol is explicitly imported. Unlike headers, modules have strict visibility — transitive imports are not automatically visible.
+
 ## Design Rationale
 
 **Why modules?** Zero-cost header-free build model. Reduced compile times and cleaner API surface. Aligns with C++23 standard library direction.
@@ -151,13 +232,11 @@ See `examples/` for complete demos: `echo_server.cpp`, `timer_demo.cpp`, `channe
 
 **Why io_uring/IOCP/kqueue?** Platform-native async I/O delivers best performance. io_uring avoids syscall overhead. IOCP is battle-tested for Windows servers. kqueue is the only option for macOS.
 
-**Why stdexec?** De facto standard for sender/receiver. Enables composition with other async libraries (libunifex, async++). Structured concurrency via `async_scope`.
+**Why stdexec?** De facto standard for sender/receiver. Enables composition with other async libraries. Structured concurrency via `async_scope`. Used for blocking operation offloading (`blocking_invoke`).
 
 ## Project Status
 
 This is a learning project exploring modern C++23 features. The API is unstable and not production-ready. Use at your own risk.
-
-Missing features: UDP sockets, TLS/SSL, async DNS resolution, signal handling, multi-threaded I/O contexts.
 
 ## License
 
