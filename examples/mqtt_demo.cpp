@@ -60,7 +60,7 @@ auto run_broker(cn::io_context& ctx, mqtt::broker& brk,
         co_return;
     }
 
-    logger::info("  [Broker] Listening on *********:{}", static_cast<unsigned>(MQTT_PORT));
+    logger::info("  [Broker] Listening on 127.0.0.1{}", static_cast<unsigned>(MQTT_PORT));
     broker_ready.store(true);
     co_await brk.run();
 }
@@ -344,7 +344,8 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     {
         mqtt::client c(ctx);
         mqtt::connect_options opts;
-        opts.host = "*********"; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1"
+                    ; opts.port = MQTT_PORT;
         opts.client_id = "bad-auth";
         opts.username = "alice"; opts.password = "wrong_password";
         opts.version = mqtt::protocol_version::v5;
@@ -360,7 +361,8 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     {
         mqtt::client bob(ctx);
         mqtt::connect_options opts;
-        opts.host = "*********"; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1"
+                    ; opts.port = MQTT_PORT;
         opts.client_id = "bob-acl-test";
         opts.username = "bob"; opts.password = "pass456";
         opts.version = mqtt::protocol_version::v5;
@@ -409,7 +411,8 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     });
 
     mqtt::connect_options opts;
-    opts.host = "*********"; opts.port = MQTT_PORT;
+    opts.host = "127.0.0.1"
+                ; opts.port = MQTT_PORT;
     opts.client_id = "unsub-client";
     opts.username = "alice"; opts.password = "pass123";
     opts.version = mqtt::protocol_version::v5;
@@ -422,7 +425,8 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     // 用另一个 client 发消息
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
-    pub_opts.host = "*********"; pub_opts.port = MQTT_PORT;
+    pub_opts.host = "127.0.0.1"
+                    ; pub_opts.port = MQTT_PORT;
     pub_opts.client_id = "unsub-publisher";
     pub_opts.username = "alice"; pub_opts.password = "pass123";
     pub_opts.version = mqtt::protocol_version::v5;
@@ -461,7 +465,8 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     // 先发布 retained 消息
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
-    pub_opts.host = "*********"; pub_opts.port = MQTT_PORT;
+    pub_opts.host = "127.0.0.1"
+                    ; pub_opts.port = MQTT_PORT;
     pub_opts.client_id = "retained-pub";
     pub_opts.username = "alice"; pub_opts.password = "pass123";
     pub_opts.version = mqtt::protocol_version::v5;
@@ -481,7 +486,8 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     });
 
     mqtt::connect_options sub_opts;
-    sub_opts.host = "*********"; sub_opts.port = MQTT_PORT;
+    sub_opts.host = "127.0.0.1"
+                    ; sub_opts.port = MQTT_PORT;
     sub_opts.client_id = "retained-sub";
     sub_opts.username = "alice"; sub_opts.password = "pass123";
     sub_opts.version = mqtt::protocol_version::v5;
@@ -494,7 +500,8 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     // 删除 retained 消息（空 payload）
     mqtt::client del(ctx);
     mqtt::connect_options del_opts;
-    del_opts.host = "*********"; del_opts.port = MQTT_PORT;
+    del_opts.host = "127.0.0.1"
+                    ; del_opts.port = MQTT_PORT;
     del_opts.client_id = "retained-del";
     del_opts.username = "alice"; del_opts.password = "pass123";
     del_opts.version = mqtt::protocol_version::v5;
@@ -522,7 +529,8 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
     {
         mqtt::client c(ctx);
         mqtt::connect_options opts;
-        opts.host = "*********"; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1"
+                    ; opts.port = MQTT_PORT;
         opts.client_id = "session-resume";
         opts.clean_session = false;
         opts.username = "alice"; opts.password = "pass123";
@@ -543,7 +551,8 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
     {
         mqtt::client pub(ctx);
         mqtt::connect_options opts;
-        opts.host = "*********"; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1"
+                    ; opts.port = MQTT_PORT;
         opts.client_id = "session-pub";
         opts.username = "alice"; opts.password = "pass123";
         opts.version = mqtt::protocol_version::v5;
@@ -566,7 +575,8 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
         });
 
         mqtt::connect_options opts;
-        opts.host = "*********"; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1"
+                    ; opts.port = MQTT_PORT;
         opts.client_id = "session-resume";
         opts.clean_session = false;
         opts.username = "alice"; opts.password = "pass123";
@@ -610,7 +620,8 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     auto make_opts = [](const char* cid) {
         mqtt::connect_options o;
-        o.host = "*********"; o.port = MQTT_PORT;
+        o.host = "127.0.0.1"
+                 ; o.port = MQTT_PORT;
         o.client_id = cid;
         o.username = "alice"; o.password = "pass123";
         o.version = mqtt::protocol_version::v5;
@@ -684,7 +695,8 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     auto make_opts = [](const char* cid) {
         mqtt::connect_options o;
-        o.host = "*********"; o.port = MQTT_PORT;
+        o.host = "127.0.0.1"
+                 ; o.port = MQTT_PORT;
         o.client_id = cid;
         o.username = "alice"; o.password = "pass123";
         o.version = mqtt::protocol_version::v5;
@@ -748,7 +760,7 @@ auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     // v3.1.1 连接
     mqtt::connect_options sub_opts;
-    sub_opts.host = "*********"; sub_opts.port = MQTT_PORT;
+    sub_opts.host = "127.0.0.1"; sub_opts.port = MQTT_PORT;
     sub_opts.client_id = "v311-sub";
     sub_opts.username = "alice"; sub_opts.password = "pass123";
     sub_opts.version = mqtt::protocol_version::v3_1_1;
@@ -762,7 +774,7 @@ auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     // v3.1.1 publisher
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
-    pub_opts.host = "*********"; pub_opts.port = MQTT_PORT;
+    pub_opts.host = "127.0.0.1"; pub_opts.port = MQTT_PORT;
     pub_opts.client_id = "v311-pub";
     pub_opts.username = "alice"; pub_opts.password = "pass123";
     pub_opts.version = mqtt::protocol_version::v3_1_1;

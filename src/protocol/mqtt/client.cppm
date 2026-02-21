@@ -17,6 +17,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.channel;
 import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.core.log;
 import cnetmod.core.dns;
@@ -99,10 +100,25 @@ public:
             co_return std::unexpected(std::string("socket create failed"));
         sock_ = std::move(*sock_r);
 
-        auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, opts.port});
-        if (!cr) {
-            sock_.close();
-            co_return std::unexpected(std::string("connect failed: ") + cr.error().message());
+        // TCP 连接超时
+        if (opts.connect_timeout.count() > 0) {
+            cancel_token conn_token;
+            auto cr = co_await with_timeout(ctx_, opts.connect_timeout,
+                async_connect(ctx_, sock_, endpoint{*addr_r, opts.port}, conn_token),
+                conn_token);
+            if (!cr) {
+                sock_.close();
+                auto ec = cr.error();
+                if (ec == std::errc::operation_canceled)
+                    co_return std::unexpected(std::string("connect timeout"));
+                co_return std::unexpected(std::string("connect failed: ") + ec.message());
+            }
+        } else {
+            auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, opts.port});
+            if (!cr) {
+                sock_.close();
+                co_return std::unexpected(std::string("connect failed: ") + cr.error().message());
+            }
         }
 
         // TLS
@@ -434,6 +450,9 @@ public:
         auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
         connected_ = false;
         close();
+        // 等待所有内部协程（read_loop/keep_alive_loop/retry_loop）退出
+        while (active_loops_ > 0)
+            co_await async_sleep(ctx_, std::chrono::milliseconds{10});
         if (!wr)
             co_return std::unexpected(wr.error().message());
         co_return std::expected<void, std::string>{};
@@ -510,9 +529,13 @@ private:
     // ── 内部读循环 ──
 
     auto read_loop() -> task<void> {
+        ++active_loops_;
         while (connected_) {
             auto frame_r = co_await read_frame();
             if (!frame_r) {
+                // 如果 connected_ 已经为 false，说明是主动断开（disconnect() 或 close()），
+                // 不需要触发自动重连，也不需要调用 disconnect_cb_
+                if (!connected_) break;
                 connected_ = false;
                 logger::warn("mqtt client read_loop error: {}", frame_r.error());
                 if (disconnect_cb_) disconnect_cb_(frame_r.error());
@@ -521,12 +544,13 @@ private:
                     reconnecting_ = true;
                     spawn(ctx_, auto_reconnect_loop());
                 }
-                co_return;
+                break;
             }
 
             auto& frame = *frame_r;
             co_await dispatch_frame(frame);
         }
+        --active_loops_;
     }
 
     // ── 帧分发 ──
@@ -783,10 +807,14 @@ private:
     /// 自动 keep-alive 定时器协程
     auto keep_alive_loop() -> task<void> {
         if (keep_alive_sec_ == 0) co_return;
+        ++active_loops_;
         auto interval = std::chrono::milliseconds(
             static_cast<int>(keep_alive_sec_ * 750)); // 0.75 * keep_alive
+        // PINGRESP 等待超时: keep_alive 的一半，确保比下次 PINGREQ 更早检测
+        auto ping_wait = std::chrono::milliseconds(
+            static_cast<int>(keep_alive_sec_ * 500)); // 0.5 * keep_alive
         while (connected_) {
-            co_await async_sleep(ctx_, interval);
+            co_await sleep_while_connected(interval);
             if (!connected_) break;
 
             if (ping_outstanding_) {
@@ -795,19 +823,32 @@ private:
                 connected_ = false;
                 if (disconnect_cb_) disconnect_cb_("keep-alive timeout");
                 close();
-                co_return;
+                break;
             }
 
             co_await send_ping();
+
+            // 发送 PINGREQ 后等待较短时间，提前检测 PINGRESP 超时
+            co_await sleep_while_connected(ping_wait);
+            if (!connected_) break;
+            if (ping_outstanding_) {
+                logger::warn("mqtt client PINGRESP timeout after {}ms", ping_wait.count());
+                connected_ = false;
+                if (disconnect_cb_) disconnect_cb_("PINGRESP timeout");
+                close();
+                break;
+            }
         }
+        --active_loops_;
     }
 
     // ── QoS 重传 ──
 
     /// QoS 消息重传定时器协程
     auto retry_loop() -> task<void> {
+        ++active_loops_;
         while (connected_) {
-            co_await async_sleep(ctx_, std::chrono::seconds(5));
+            co_await sleep_while_connected(std::chrono::milliseconds(5000));
             if (!connected_) break;
 
             auto now = std::chrono::steady_clock::now();
@@ -843,6 +884,7 @@ private:
                 ++it;
             }
         }
+        --active_loops_;
     }
 
     // ── 订阅记录 (供重连恢复) ──
@@ -928,6 +970,18 @@ private:
         }
     }
 
+    // ── 内部工具 ──
+
+    /// 可中断的睡眠：分段休眠，disconnect 后快速退出
+    auto sleep_while_connected(std::chrono::milliseconds duration) -> task<void> {
+        constexpr auto chunk = std::chrono::milliseconds(200);
+        while (duration.count() > 0 && connected_) {
+            auto d = std::min(duration, chunk);
+            co_await async_sleep(ctx_, d);
+            duration -= d;
+        }
+    }
+
     // ── 成员 ──
 
     io_context&      ctx_;
@@ -967,6 +1021,9 @@ private:
     connect_options     last_connect_opts_;
     std::vector<subscribe_entry> saved_subscriptions_;
     bool                reconnecting_ = false;
+
+    // 内部协程生命周期跟踪
+    int              active_loops_  = 0;
 
     // 等待 ACK 的映射
     std::map<std::uint16_t, pending_ack>          pending_acks_;

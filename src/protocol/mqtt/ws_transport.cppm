@@ -20,6 +20,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.channel;
+import cnetmod.coro.shared_mutex;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
@@ -112,9 +113,11 @@ public:
     /// 停止
     void stop() {
         ws_server_.stop();
-        std::lock_guard lock(channels_mtx_);
+        while (!channels_rw_.try_lock())
+            std::this_thread::yield();
         for (auto& [cid, ch] : online_channels_) ch->close();
         online_channels_.clear();
+        channels_rw_.unlock();
         logger::info("mqtt ws_broker stopped");
     }
 
@@ -186,11 +189,14 @@ private:
         if (existing && existing->online) {
             logger::info("mqtt ws session takeover client={}", cd.client_id);
             existing->go_offline();
-            std::lock_guard lock(channels_mtx_);
-            auto it = online_channels_.find(cd.client_id);
-            if (it != online_channels_.end()) {
-                it->second->close();
-                online_channels_.erase(it);
+            {
+                co_await channels_rw_.lock();
+                async_unique_lock_guard wg(channels_rw_, std::adopt_lock);
+                auto it = online_channels_.find(cd.client_id);
+                if (it != online_channels_.end()) {
+                    it->second->close();
+                    online_channels_.erase(it);
+                }
             }
         }
 
@@ -302,7 +308,8 @@ private:
 
         // 注册在线 channel
         {
-            std::lock_guard lock(channels_mtx_);
+            co_await channels_rw_.lock();
+            async_unique_lock_guard wg(channels_rw_, std::adopt_lock);
             online_channels_[cd.client_id] = &delivery_ch;
         }
 
@@ -383,7 +390,7 @@ private:
                             session->will_msg.reset();
                         }
                     }
-                    cleanup_session(session);
+                    co_await cleanup_session(session);
                 }
                 delivery_ch.close();
                 co_return;
@@ -391,10 +398,46 @@ private:
 
             auto& f = *fr;
             switch (f.type) {
+            case control_packet_type::connect:
+                // MQTT 规范: 同一连接上收到第二个 CONNECT 报文是协议错误
+                logger::warn("mqtt ws duplicate CONNECT from client={}",
+                    session ? session->client_id : "?");
+                if (version == protocol_version::v5) {
+                    co_await ws_write(wctx, encode_disconnect(version,
+                        static_cast<std::uint8_t>(v5::disconnect_reason_code::protocol_error)));
+                }
+                connected = false;
+                if (session) co_await cleanup_session(session);
+                delivery_ch.close();
+                co_return;
+
             case control_packet_type::publish: {
                 auto msg_r = decode_publish(f.payload, f.flags, version);
-                if (!msg_r) break;
+                if (!msg_r) {
+                    logger::warn("mqtt ws decode PUBLISH failed: {}", msg_r.error());
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::malformed_packet)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
+                }
                 auto& msg = *msg_r;
+
+                // Maximum QoS 强制检查
+                if (static_cast<std::uint8_t>(msg.qos_value) >
+                    static_cast<std::uint8_t>(opts_.maximum_qos)) {
+                    logger::warn("mqtt ws PUBLISH qos={} exceeds maximum_qos={}",
+                        to_string(msg.qos_value), to_string(opts_.maximum_qos));
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::qos_not_supported)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
+                }
 
                 // v5 Topic Alias
                 if (version == protocol_version::v5) {
@@ -448,7 +491,17 @@ private:
             case control_packet_type::puback:
             case control_packet_type::pubcomp: {
                 auto ack_r = decode_ack(f.payload, version);
-                if (ack_r && session) {
+                if (!ack_r) {
+                    logger::warn("mqtt ws decode ACK failed: {}", ack_r.error());
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::malformed_packet)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
+                }
+                if (session) {
                     std::erase_if(session->inflight_out, [&](const inflight_message& im) {
                         return im.packet_id == ack_r->packet_id;
                     });
@@ -458,35 +511,51 @@ private:
 
             case control_packet_type::pubrec: {
                 auto ack_r = decode_ack(f.payload, version);
-                if (ack_r) {
-                    co_await ws_write(wctx, encode_pubrel(ack_r->packet_id, version));
-                    if (session)
-                        for (auto& im : session->inflight_out)
-                            if (im.packet_id == ack_r->packet_id) {
-                                im.expected_ack = control_packet_type::pubcomp;
-                                break;
-                            }
+                if (!ack_r) {
+                    logger::warn("mqtt ws decode PUBREC failed: {}", ack_r.error());
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::malformed_packet)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
                 }
+                co_await ws_write(wctx, encode_pubrel(ack_r->packet_id, version));
+                if (session)
+                    for (auto& im : session->inflight_out)
+                        if (im.packet_id == ack_r->packet_id) {
+                            im.expected_ack = control_packet_type::pubcomp;
+                            break;
+                        }
                 break;
             }
 
             case control_packet_type::pubrel: {
                 auto ack_r = decode_ack(f.payload, version);
-                if (ack_r) {
-                    co_await ws_write(wctx, encode_pubcomp(ack_r->packet_id, version));
-                    if (session) {
-                        session->qos2_received.erase(ack_r->packet_id);
-                        // 取出暂存的 QoS 2 消息并转发
-                        auto it = session->qos2_pending_publish.find(ack_r->packet_id);
-                        if (it != session->qos2_pending_publish.end()) {
-                            auto pending_msg = std::move(it->second);
-                            session->qos2_pending_publish.erase(it);
-                            if (pending_msg.retain)
-                                retained_.store(pending_msg.topic, retained_message{
-                                    pending_msg.topic, pending_msg.payload,
-                                    pending_msg.qos_value, pending_msg.props});
-                            co_await route_publish(pending_msg, session->client_id);
-                        }
+                if (!ack_r) {
+                    logger::warn("mqtt ws decode PUBREL failed: {}", ack_r.error());
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::malformed_packet)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
+                }
+                co_await ws_write(wctx, encode_pubcomp(ack_r->packet_id, version));
+                if (session) {
+                    session->qos2_received.erase(ack_r->packet_id);
+                    // 取出暂存的 QoS 2 消息并转发
+                    auto it = session->qos2_pending_publish.find(ack_r->packet_id);
+                    if (it != session->qos2_pending_publish.end()) {
+                        auto pending_msg = std::move(it->second);
+                        session->qos2_pending_publish.erase(it);
+                        if (pending_msg.retain)
+                            retained_.store(pending_msg.topic, retained_message{
+                                pending_msg.topic, pending_msg.payload,
+                                pending_msg.qos_value, pending_msg.props});
+                        co_await route_publish(pending_msg, session->client_id);
                     }
                 }
                 break;
@@ -494,7 +563,17 @@ private:
 
             case control_packet_type::subscribe: {
                 auto sub_r = decode_subscribe(f.payload, version);
-                if (!sub_r || !session) break;
+                if (!sub_r) {
+                    logger::warn("mqtt ws decode SUBSCRIBE failed: {}", sub_r.error());
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::malformed_packet)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
+                }
+                if (!session) break;
 
                 std::vector<std::uint8_t> return_codes;
                 for (auto& entry : sub_r->entries) {
@@ -557,7 +636,17 @@ private:
 
             case control_packet_type::unsubscribe: {
                 auto unsub_r = decode_unsubscribe(f.payload, version);
-                if (!unsub_r || !session) break;
+                if (!unsub_r) {
+                    logger::warn("mqtt ws decode UNSUBSCRIBE failed: {}", unsub_r.error());
+                    if (version == protocol_version::v5)
+                        co_await ws_write(wctx, encode_disconnect(version,
+                            static_cast<std::uint8_t>(v5::disconnect_reason_code::malformed_packet)));
+                    connected = false;
+                    if (session) co_await cleanup_session(session);
+                    delivery_ch.close();
+                    co_return;
+                }
+                if (!session) break;
 
                 std::vector<std::uint8_t> reason_codes;
                 for (auto& tf : unsub_r->topic_filters) {
@@ -595,7 +684,7 @@ private:
                                 if (auto* val = std::get_if<std::uint32_t>(&p.value))
                                     session->session_expiry_interval = *val;
                     }
-                    cleanup_session(session);
+                    co_await cleanup_session(session);
                 }
                 delivery_ch.close();
                 break;
@@ -758,7 +847,8 @@ private:
             if (ss->online) {
                 channel<publish_message>* ch = nullptr;
                 {
-                    std::lock_guard lock(channels_mtx_);
+                    co_await channels_rw_.lock_shared();
+                    async_shared_lock_guard rg(channels_rw_, std::adopt_lock);
                     auto it = online_channels_.find(cid);
                     if (it != online_channels_.end()) ch = it->second;
                 }
@@ -796,12 +886,13 @@ private:
     // 连接清理
     // =========================================================================
 
-    void cleanup_session(session_state* session) {
-        if (!session) return;
+    auto cleanup_session(session_state* session) -> task<void> {
+        if (!session) co_return;
         auto& cid = session->client_id;
         session->go_offline();
         {
-            std::lock_guard lock(channels_mtx_);
+            co_await channels_rw_.lock();
+            async_unique_lock_guard wg(channels_rw_, std::adopt_lock);
             online_channels_.erase(cid);
         }
         if (session->clean_session && session->session_expiry_interval == 0) {
@@ -835,8 +926,11 @@ private:
     security_config      security_;
     broker_auth_handler  auth_handler_;
 
-    // 在线投递 channel 管理
-    std::mutex                                      channels_mtx_;
+    // async_shared_mutex: 读多写少
+    //   读 (route_publish): co_await lock_shared()
+    //   写 (connect/disconnect): co_await lock()
+    //   stop(): try_lock() 自旋获取写锁
+    async_shared_mutex channels_rw_;
     std::map<std::string, channel<publish_message>*> online_channels_;
 };
 

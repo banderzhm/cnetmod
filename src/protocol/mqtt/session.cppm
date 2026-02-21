@@ -67,6 +67,7 @@ export struct session_state {
 
     // --- 服务端 Packet ID 分配 ---
     std::uint16_t    next_packet_id = 1;
+    std::set<std::uint16_t> allocated_ids_;  // O(log n) 加速查找
 
     // --- Keep-alive ---
     std::uint16_t    keep_alive = 0;               // 秒
@@ -78,20 +79,24 @@ export struct session_state {
     // 方法
     // =========================================================================
 
-    /// 分配一个新的 packet_id（跳过仍在 inflight 使用中的 ID）
+    /// 分配一个新的 packet_id（跳过仍在使用中的 ID）
+    /// 使用 allocated_ids_ 集合实现 O(log n) 查找，替代线性扫描 inflight_out
     auto alloc_packet_id() -> std::uint16_t {
         for (std::uint32_t attempt = 0; attempt < 65535; ++attempt) {
             auto id = next_packet_id++;
             if (next_packet_id == 0) next_packet_id = 1;
-            // 检查是否在 inflight 中
-            bool in_use = false;
-            for (auto& im : inflight_out)
-                if (im.packet_id == id) { in_use = true; break; }
-            if (!in_use && qos2_received.find(id) == qos2_received.end())
+            if (!allocated_ids_.contains(id) && !qos2_received.contains(id)) {
+                allocated_ids_.insert(id);
                 return id;
+            }
         }
         // 极端情况：所有 ID 都在使用
         return next_packet_id++;
+    }
+
+    /// 释放 packet_id（从 inflight_out 移除时调用）
+    void release_packet_id(std::uint16_t id) {
+        allocated_ids_.erase(id);
     }
 
     /// 添加订阅，返回是否为新增（非更新）
@@ -152,6 +157,7 @@ export struct session_state {
     void clear() {
         subscriptions.clear();
         inflight_out.clear();
+        allocated_ids_.clear();
         qos2_received.clear();
         qos2_pending_publish.clear();
         offline_queue.clear();

@@ -159,6 +159,16 @@ public:
         return lock_awaitable{*this};
     }
 
+    /// 非协程上下文同步尝试获取写锁（非阻塞）
+    [[nodiscard]] auto try_lock() noexcept -> bool {
+        std::lock_guard lk(mtx_);
+        if (state_ == 0) {
+            state_ = -1;
+            return true;
+        }
+        return false;
+    }
+
     /// 释放写锁
     void unlock() noexcept {
         std::coroutine_handle<> writer_to_resume;

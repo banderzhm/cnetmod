@@ -424,6 +424,9 @@ export struct connect_options {
     protocol_version version       = protocol_version::v3_1_1;
     properties       props;        // v5 CONNECT properties
 
+    // 超时
+    std::chrono::milliseconds connect_timeout = std::chrono::seconds(30);
+
     // TLS
     bool        tls           = false;
     bool        tls_verify    = true;
