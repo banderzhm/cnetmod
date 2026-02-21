@@ -6,6 +6,8 @@ Cross-platform asynchronous network library using C++23 modules and native corou
 [![macOS Build](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml)
 [![Windows Build](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml)
 
+English | [简体中文](README_zh.md)
+
 ## Platform Support
 
 | Platform | I/O Engine | Compiler | Status |
