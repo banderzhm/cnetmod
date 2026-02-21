@@ -72,9 +72,17 @@ export PATH="/opt/homebrew/opt/llvm/bin:$PATH"  # Apple Silicon
 export PATH="/usr/local/opt/llvm/bin:$PATH"      # Intel Mac
 ```
 
-### Build
+### Clone and Build
 
 ```bash
+# Clone the repository
+git clone https://github.com/banderzhm/cnetmod.git
+cd cnetmod
+
+# Initialize submodules (required for third-party dependencies)
+git submodule update --init --recursive
+
+# Build
 cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
 ```
@@ -164,7 +172,85 @@ task<void> producer(channel<int>& ch) {
 }
 ```
 
-See `examples/` for complete demos including `http_demo`, `ws_demo`, `mqtt_demo`, `mysql_orm`, `redis_client`, `multicore_http`, `ssl_echo_server`, and more.
+**MySQL ORM** (model mapping + CRUD + migration):
+```cpp
+import cnetmod.protocol.mysql;
+#include <cnetmod/orm.hpp>
+
+// Define model
+struct User {
+    std::int64_t                id    = 0;
+    std::string                 name;
+    std::optional<std::string>  email;
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id,    "id",    bigint,  PK | AUTO_INC),
+    CNETMOD_FIELD(name,  "name",  varchar),
+    CNETMOD_FIELD(email, "email", varchar, NULLABLE)
+)
+
+task<void> demo(mysql::client& cli) {
+    orm::db_session db(cli);
+
+    // DDL — create / drop / sync_schema (auto-migration)
+    co_await db.create_table<User>();
+    co_await orm::sync_schema<User>(cli);  // detects diff and applies ALTER TABLE
+
+    // INSERT (auto_increment ID auto-filled)
+    User u; u.name = "Alice"; u.email = "a@b.com";
+    co_await db.insert(u);           // u.id is now set
+    co_await db.insert_many(batch);  // batch insert
+
+    // SELECT — find_all / find_by_id / query builder
+    auto all = co_await db.find_all<User>();
+    auto one = co_await db.find_by_id<User>(param_value::from_int(1));
+    auto top = co_await db.find(
+        orm::select<User>()
+            .where("`name` = {}", {param_value::from_string("Alice")})
+            .order_by("`id` DESC")
+            .limit(10).offset(0)
+    );
+
+    // UPDATE — by PK
+    u.name = "Bob";
+    co_await db.update(u);
+
+    // DELETE — by model / by ID / conditional
+    co_await db.remove(u);
+    co_await db.remove_by_id<User>(param_value::from_int(1));
+    co_await db.remove(orm::delete_of<User>()
+        .where("`name` = {}", {param_value::from_string("test")}));
+}
+```
+
+ID strategies — UUID v4 and Snowflake are built-in:
+```cpp
+struct Tag {
+    orm::uuid    id;
+    std::string  name;
+};
+CNETMOD_MODEL(Tag, "tags",
+    CNETMOD_FIELD(id,   "id",   char_, UUID_PK_FLAGS, UUID_PK_STRATEGY),
+    CNETMOD_FIELD(name, "name", varchar)
+)
+
+struct Event {
+    std::int64_t  id = 0;
+    std::string   title;
+};
+CNETMOD_MODEL(Event, "events",
+    CNETMOD_FIELD(id,    "id",    bigint, SNOWFLAKE_PK_FLAGS, SNOWFLAKE_PK_STRATEGY),
+    CNETMOD_FIELD(title, "title", varchar)
+)
+
+// Snowflake requires a generator
+orm::snowflake_generator sf(/*machine_id=*/1);
+orm::db_session db(cli, sf);
+co_await db.insert(event);  // event.id auto-generated
+```
+
+See `examples/` for complete demos including `http_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `multicore_http`, `ssl_echo_server`, and more.
 
 ## Architecture
 
