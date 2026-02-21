@@ -187,6 +187,10 @@ endif()
 if(MSVC)
     add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
+    # 使用 C7 兼容调试格式 (/Z7) 而非程序数据库 (/Zi)
+    # 将调试符号放入 .obj 文件而非单个巨大的 .pdb，绕过 4GB 限制
+    add_compile_options(/Z7)
+    
     # 禁用过度内联（减少代码膨胀）
     add_compile_options(/Ob1)
     # 禁用全程序优化（避免目标文件合并膨胀）

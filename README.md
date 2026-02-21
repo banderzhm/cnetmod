@@ -297,6 +297,7 @@ This happens because C++23 modules with heavy template instantiation (especially
 - `/bigobj` — raises section count limit from 65,536 to 4 billion
 - `/Ob1` — reduces inline expansion (less code duplication in each TU)
 - `/GL-` — disables whole-program optimization (prevents merged object inflation)
+- `/Z7` — uses C7-compatible debug format instead of program database (`/Zi`). This embeds debug symbols in `.obj` files rather than a single huge `.pdb`, bypassing the 4 GB limit.
 
 **If you still hit C1605:**
 1. **Split large modules** — break monolithic `.cppm` files into smaller partitions. The protocol modules (`mqtt`, `http`, `mysql`) already use partition interfaces (`:types`, `:codec`, `:parser`, etc.) for this reason.
