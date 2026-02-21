@@ -161,11 +161,10 @@ public:
     // ── async_get_connection — 借出一个空闲连接 ──────────────
 
     auto async_get_connection() -> task<pooled_connection> {
-        // 尝试获取空闲连接
         co_await mtx_.lock();
         async_lock_guard guard(mtx_, std::adopt_lock);
 
-        // 查找空闲节点
+        // 1) 查找空闲节点
         for (std::size_t i = 0; i < nodes_.size(); ++i) {
             if (nodes_[i].state == conn_state::idle) {
                 nodes_[i].state = conn_state::in_use;
@@ -174,7 +173,7 @@ public:
             }
         }
 
-        // 没有空闲连接 — 尝试创建新连接
+        // 2) 没有空闲连接 — 尝试创建新连接（释放锁，因为 connect 是异步 I/O）
         if (nodes_.size() < params_.max_size) {
             guard.release();
             mtx_.unlock();
@@ -187,43 +186,55 @@ public:
                 nodes_[idx].last_used = std::chrono::steady_clock::now();
                 co_return pooled_connection(this, idx, nodes_[idx].conn.get());
             }
+
+            // 创建失败，重新获取锁
+            co_await mtx_.lock();
+            guard = async_lock_guard(mtx_, std::adopt_lock);
+
+            // 二次检查: 创建期间可能有连接归还
+            for (std::size_t i = 0; i < nodes_.size(); ++i) {
+                if (nodes_[i].state == conn_state::idle) {
+                    nodes_[i].state = conn_state::in_use;
+                    nodes_[i].last_used = std::chrono::steady_clock::now();
+                    co_return pooled_connection(this, i, nodes_[i].conn.get());
+                }
+            }
         }
 
-        // 所有连接都忙且已达最大 — 挂起到 waiter 队列等待归还
-        guard.release();
-        mtx_.unlock();
-
-        std::size_t assigned_idx = nodes_.size(); // 无效初始值
+        // 3) 所有连接都忙 — 在持有锁的情况下加入 waiter 队列，然后挂起
+        //    await_suspend 中释放锁，保证 handle 设置与入队的原子性
+        std::size_t assigned_idx = nodes_.size();
         pool_waiter waiter;
         waiter.result_idx = &assigned_idx;
 
-        // 挂起当前协程，加入 waiter 队列
         struct waiter_awaitable {
             connection_pool& pool;
             pool_waiter& w;
+            async_lock_guard& guard;
 
             auto await_ready() const noexcept -> bool { return false; }
             void await_suspend(std::coroutine_handle<> h) noexcept {
                 w.handle = h;
-                // 加入 waiter 队列尾部（已持有 mtx_ 之前 release 了，需重新获取）
-                // 简化：直接同步加入（单线程事件循环）
+                // 持有协程锁 — 安全操作 waiter 队列
                 if (!pool.waiters_head_) {
                     pool.waiters_head_ = pool.waiters_tail_ = &w;
                 } else {
                     pool.waiters_tail_->next = &w;
                     pool.waiters_tail_ = &w;
                 }
+                // 入队完成，释放协程锁
+                guard.release();
+                pool.mtx_.unlock();
             }
             void await_resume() noexcept {}
         };
 
-        co_await waiter_awaitable{*this, waiter};
+        co_await waiter_awaitable{*this, waiter, guard};
 
         // 被唤醒时 assigned_idx 已被 return_connection 设置
         if (assigned_idx < nodes_.size()) {
             co_return pooled_connection(this, assigned_idx, nodes_[assigned_idx].conn.get());
         }
-        // 异常情况 — 返回无效
         co_return pooled_connection{};
     }
 
@@ -352,25 +363,33 @@ private:
         if (idx >= nodes_.size())
             return;
 
-        // 检查 waiter 队列：有等待者则直接把归还的连接分配给它
-        if (waiters_head_) {
-            auto* w = waiters_head_;
-            waiters_head_ = w->next;
-            if (!waiters_head_)
-                waiters_tail_ = nullptr;
+        // 从析构函数调用（非协程），用 try_lock 获取协程锁保护 waiter 队列
+        // 单线程事件循环中 try_lock 必定成功（归还时无协程持有锁）
+        if (mtx_.try_lock()) {
+            if (waiters_head_) {
+                auto* w = waiters_head_;
+                waiters_head_ = w->next;
+                if (!waiters_head_)
+                    waiters_tail_ = nullptr;
 
-            // 连接保持 in_use 状态，直接交给等待者
-            nodes_[idx].state = conn_state::in_use;
+                nodes_[idx].state = conn_state::in_use;
+                nodes_[idx].last_used = std::chrono::steady_clock::now();
+                *w->result_idx = idx;
+                mtx_.unlock();
+
+                // 通过 post 恢复等待者协程，避免在析构栈上直接 resume
+                if (w->handle)
+                    ctx_.post(w->handle);
+                return;
+            }
+            nodes_[idx].state = conn_state::idle;
             nodes_[idx].last_used = std::chrono::steady_clock::now();
-            *w->result_idx = idx;
-            if (w->handle)
-                w->handle.resume();
-            return;
+            mtx_.unlock();
+        } else {
+            // 极端边界: 其他协程持有锁，仅标记空闲
+            nodes_[idx].state = conn_state::idle;
+            nodes_[idx].last_used = std::chrono::steady_clock::now();
         }
-
-        // 无等待者，标记为空闲
-        nodes_[idx].state = conn_state::idle;
-        nodes_[idx].last_used = std::chrono::steady_clock::now();
     }
 };
 
