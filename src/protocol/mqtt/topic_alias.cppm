@@ -96,7 +96,7 @@ public:
     /// 为 topic 分配或复用 alias
     /// 返回 (alias, is_new) — is_new=true 时需要在 PUBLISH 中同时发送 topic 和 alias
     auto allocate(std::string_view topic) -> std::pair<std::uint16_t, bool> {
-        if (!enabled()) return {0, false};
+        if (!enabled()) return {std::uint16_t{0}, false};
 
         // 已有映射，直接复用
         auto existing = find_by_topic(topic);

@@ -45,7 +45,7 @@ namespace cnetmod::mqtt {
 
 export struct broker_options {
     std::uint16_t port                   = 1883;
-    std::string   host                   = "*******";
+    std::string   host                   = "127.0.0.1";
     std::uint16_t max_connections        = 10000;
     std::uint32_t default_session_expiry = 0;     // 秒, 0=clean session 立即过期
     std::uint16_t max_keep_alive         = 600;   // 最大 keep-alive 秒数

@@ -265,7 +265,7 @@ private:
     // 信号名称
     // =========================================================================
 
-    static auto signal_name(int sig) -> const char* {
+    static auto signal_name([[maybe_unused]] int sig) -> const char* {
 #ifdef CNETMOD_PLATFORM_WINDOWS
         return "EXCEPTION";
 #else

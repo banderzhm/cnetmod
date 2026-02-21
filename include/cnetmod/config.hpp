@@ -60,3 +60,13 @@
         #define NOMINMAX
     #endif
 #endif
+
+// =============================================================================
+// 第三方库警告抑制
+// =============================================================================
+
+#ifdef _MSC_VER
+    // C4324: structure was padded due to alignment specifier
+    // 来自 stdexec 内部的对齐填充，不影响正确性
+    #pragma warning(disable: 4324)
+#endif
