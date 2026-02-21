@@ -325,7 +325,9 @@ Ensure the module that exports the needed symbol is explicitly imported. Unlike 
 
 ## Project Status
 
-This is a learning project exploring modern C++23 features. The API is unstable and not production-ready. Use at your own risk.
+cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of MQTT, MySQL, HTTP/WebSocket, and more, all built with zero-overhead async/await.
+
+The library demonstrates that C++23 modules are ready for real-world use, with full cross-platform support on Linux, macOS, and Windows.
 
 ## License
 

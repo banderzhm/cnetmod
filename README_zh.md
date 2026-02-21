@@ -325,7 +325,9 @@ cnetmod.middleware.*  — HTTP 中间件组件
 
 ## 项目状态
 
-这是一个探索现代 C++23 特性的学习项目。API 不稳定，不适合生产环境。使用风险自负。
+cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 MQTT、MySQL、HTTP/WebSocket 等协议的生产级实现，全部基于零开销的 async/await 构建。
+
+该库证明了 C++23 模块已经可以用于实际项目，并在 Linux、macOS 和 Windows 上提供完整的跨平台支持。
 
 ## 许可证
 
