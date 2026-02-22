@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;

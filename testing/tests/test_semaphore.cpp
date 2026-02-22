@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.coro.task;
 import cnetmod.coro.semaphore;
 

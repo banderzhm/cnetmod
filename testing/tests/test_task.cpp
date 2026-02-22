@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.coro.task;
 
 using namespace cnetmod;
@@ -169,7 +170,8 @@ TEST(when_all_exception_propagation) {
 }
 
 TEST(when_all_single_task) {
-    auto [r] = sync_wait(when_all(return_42()));
+    // when_all requires >= 2 tasks; test single task via direct sync_wait
+    auto r = sync_wait(return_42());
     ASSERT_EQ(r, 42);
 }
 

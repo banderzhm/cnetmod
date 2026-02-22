@@ -2,6 +2,8 @@
 
 #include "test_framework.hpp"
 
+import std;
+import cnetmod.coro.task;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;

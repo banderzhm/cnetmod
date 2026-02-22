@@ -9,6 +9,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
@@ -40,7 +41,7 @@ TEST(tfb_json_response) {
     resp.set_header("Server", "cnetmod");
     resp.set_header("Date", "Sat, 22 Feb 2026 06:00:00 GMT");
     resp.set_header("Content-Type", "application/json");
-    resp.set_body(R"({"message":"Hello, World!"})");
+    resp.set_body(std::string_view(R"({"message":"Hello, World!"})"));
 
     auto p = build_and_parse(resp);
     ASSERT_TRUE(p.ready());
@@ -73,7 +74,7 @@ TEST(tfb_plaintext_response) {
     resp.set_header("Server", "cnetmod");
     resp.set_header("Date", "Sat, 22 Feb 2026 06:00:00 GMT");
     resp.set_header("Content-Type", "text/plain");
-    resp.set_body("Hello, World!");
+    resp.set_body(std::string_view("Hello, World!"));
 
     auto p = build_and_parse(resp);
     ASSERT_TRUE(p.ready());
@@ -100,7 +101,7 @@ TEST(tfb_db_response_format) {
     resp.set_header("Server", "cnetmod");
     resp.set_header("Date", "Sat, 22 Feb 2026 06:00:00 GMT");
     resp.set_header("Content-Type", "application/json");
-    resp.set_body(R"({"id":4174,"randomNumber":8340})");
+    resp.set_body(std::string_view(R"({"id":4174,"randomNumber":8340})"));
 
     auto p = build_and_parse(resp);
     ASSERT_TRUE(p.ready());
@@ -122,7 +123,7 @@ TEST(tfb_queries_response_format) {
     resp.set_header("Server", "cnetmod");
     resp.set_header("Date", "Sat, 22 Feb 2026 06:00:00 GMT");
     resp.set_header("Content-Type", "application/json");
-    resp.set_body(R"([{"id":1,"randomNumber":42},{"id":2,"randomNumber":99}])");
+    resp.set_body(std::string_view(R"([{"id":1,"randomNumber":42},{"id":2,"randomNumber":99}])"));
 
     auto p = build_and_parse(resp);
     ASSERT_TRUE(p.ready());
@@ -176,7 +177,7 @@ TEST(tfb_fortunes_response_format) {
 TEST(tfb_server_header) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
-    resp.set_body("ok");
+    resp.set_body(std::string_view("ok"));
 
     auto p = build_and_parse(resp);
     ASSERT_EQ(p.get_header("Server"), std::string_view("cnetmod"));
@@ -192,7 +193,7 @@ TEST(tfb_date_header_format) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
     resp.set_header("Date", date);
-    resp.set_body("ok");
+    resp.set_body(std::string_view("ok"));
 
     auto p = build_and_parse(resp);
     auto d = p.get_header("Date");
@@ -207,7 +208,7 @@ TEST(tfb_date_header_format) {
 TEST(tfb_content_length_present) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
-    resp.set_body("test");
+    resp.set_body(std::string_view("test"));
 
     auto p = build_and_parse(resp);
     ASSERT_EQ(p.get_header("Content-Length"), std::string_view("4"));

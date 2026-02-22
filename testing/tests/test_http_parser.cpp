@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
@@ -267,7 +268,7 @@ TEST(roundtrip_request_serialize_parse) {
     request req(http_method::POST, "/api/test");
     req.set_header("Host", "localhost");
     req.set_header("X-Custom", "value");
-    req.set_body("test body");
+    req.set_body(std::string_view("test body"));
 
     auto raw = req.serialize();
 
@@ -286,7 +287,7 @@ TEST(roundtrip_response_serialize_parse) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
     resp.set_header("Content-Type", "text/plain");
-    resp.set_body("OK");
+    resp.set_body(std::string_view("OK"));
 
     auto raw = resp.serialize();
 

@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.coro.task;
 import cnetmod.coro.channel;
 
@@ -210,7 +211,8 @@ TEST(channel_concurrent_producer_consumer) {
         co_return sum;
     };
 
-    auto [p, sum] = sync_wait(when_all(prod(), cons()));
+    // when_all(task<void>, task<int>) returns task<int>, not a tuple
+    auto sum = sync_wait(when_all(prod(), cons()));
     // Sum of 0..99 = 4950
     ASSERT_EQ(sum, 4950);
 }

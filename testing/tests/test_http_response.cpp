@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
@@ -86,7 +87,7 @@ TEST(response_serialize_200) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
     resp.set_header("Content-Type", "application/json");
-    resp.set_body(R"({"message":"Hello, World!"})");
+    resp.set_body(std::string_view(R"({"message":"Hello, World!"})"));
 
     auto s = resp.serialize();
     ASSERT_TRUE(s.starts_with("HTTP/1.1 200 OK\r\n"));
@@ -127,7 +128,7 @@ TEST(response_tfb_json_format) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
     resp.set_header("Content-Type", "application/json");
-    resp.set_body(R"({"message":"Hello, World!"})");
+    resp.set_body(std::string_view(R"({"message":"Hello, World!"})"));
 
     ASSERT_EQ(resp.status_code(), 200);
     ASSERT_EQ(resp.body(), std::string_view(R"({"message":"Hello, World!"})"));
@@ -138,7 +139,7 @@ TEST(response_tfb_plaintext_format) {
     response resp(200);
     resp.set_header("Server", "cnetmod");
     resp.set_header("Content-Type", "text/plain");
-    resp.set_body("Hello, World!");
+    resp.set_body(std::string_view("Hello, World!"));
 
     ASSERT_EQ(resp.body(), std::string_view("Hello, World!"));
     ASSERT_EQ(resp.body().size(), static_cast<std::size_t>(13));

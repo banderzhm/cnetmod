@@ -2,6 +2,7 @@
 
 #include "test_framework.hpp"
 
+import std;
 import cnetmod.protocol.http;
 
 using namespace cnetmod::http;
@@ -68,7 +69,7 @@ TEST(request_get_header_missing) {
 
 TEST(request_set_body_string_view) {
     request req;
-    req.set_body("hello");
+    req.set_body(std::string_view("hello"));
     ASSERT_EQ(req.body(), std::string_view("hello"));
     ASSERT_EQ(req.get_header("Content-Length"), std::string_view("5"));
 }
@@ -82,7 +83,7 @@ TEST(request_set_body_string) {
 
 TEST(request_set_body_empty) {
     request req;
-    req.set_body("");
+    req.set_body(std::string_view(""));
     ASSERT_TRUE(req.body().empty());
     ASSERT_EQ(req.get_header("Content-Length"), std::string_view("0"));
 }
@@ -109,7 +110,7 @@ TEST(request_serialize_get) {
 TEST(request_serialize_post_with_body) {
     request req(http_method::POST, "/api/echo");
     req.set_header("Host", "localhost");
-    req.set_body("payload");
+    req.set_body(std::string_view("payload"));
 
     auto s = req.serialize();
     ASSERT_TRUE(s.starts_with("POST /api/echo HTTP/1.1\r\n"));
