@@ -39,14 +39,16 @@ if(UNIX)
         message(STATUS "macOS detection: arch=${CMAKE_HOST_SYSTEM_PROCESSOR}, Homebrew LLVM path=${HOMEBREW_LLVM_PREFIX}")
     endif()
     
-    # Try to find libc++ module directory (LLVM 19-21)
+    # Try to find libc++ module directory (LLVM 19-22)
     find_path(LIBCXX_MODULE_DIRS
         NAMES std.cppm
         PATHS
             # Linux paths
+            /usr/lib/llvm-22/share/libc++/v1
             /usr/lib/llvm-21/share/libc++/v1
             /usr/lib/llvm-20/share/libc++/v1
             /usr/lib/llvm-19/share/libc++/v1
+            /usr/local/lib/llvm-22/share/libc++/v1
             /usr/local/lib/llvm-21/share/libc++/v1
             /usr/local/lib/llvm-20/share/libc++/v1
             /usr/local/lib/llvm-19/share/libc++/v1
@@ -57,14 +59,16 @@ if(UNIX)
         DOC "Path to libc++ standard library modules"
     )
     
-    # Try to find libc++ header directory (LLVM 19-21)
+    # Try to find libc++ header directory (LLVM 19-22)
     find_path(LIBCXX_INCLUDE_DIRS
         NAMES __config
         PATHS
             # Linux paths
+            /usr/lib/llvm-22/include/c++/v1
             /usr/lib/llvm-21/include/c++/v1
             /usr/lib/llvm-20/include/c++/v1
             /usr/lib/llvm-19/include/c++/v1
+            /usr/local/lib/llvm-22/include/c++/v1
             /usr/local/lib/llvm-21/include/c++/v1
             /usr/local/lib/llvm-20/include/c++/v1
             /usr/local/lib/llvm-19/include/c++/v1
