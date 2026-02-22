@@ -1,6 +1,6 @@
-/// cnetmod.protocol.openai:client — 异步 OpenAI Chat Completions 客户端
-/// 支持 SSL/TLS、流式 SSE、连接复用
-/// 复用 cnetmod 的 ssl_context / ssl_stream / http::request / http::response_parser
+/// cnetmod.protocol.openai:client — Async OpenAI Chat Completions client
+/// Supports SSL/TLS, streaming SSE, connection reuse
+/// Reuses cnetmod's ssl_context / ssl_stream / http::request / http::response_parser
 
 module;
 
@@ -27,7 +27,7 @@ import nlohmann.json;
 namespace cnetmod::openai {
 
 // =============================================================================
-// client — 异步 OpenAI 客户端
+// client — Async OpenAI client
 // =============================================================================
 
 export class client {
@@ -39,13 +39,13 @@ public:
     client(const client&) = delete;
     auto operator=(const client&) -> client& = delete;
 
-    // ── 连接 ──────────────────────────────────────────────────
+    // ── Connection ──────────────────────────────────────────────────
 
-    /// 连接到 OpenAI API endpoint (TCP + TLS 握手)
+    /// Connect to OpenAI API endpoint (TCP + TLS handshake)
     auto connect(connect_options opts) -> task<std::expected<void, std::string>> {
         opts_ = std::move(opts);
 
-        // 解析 API base URL
+        // Parse API base URL
         auto url_r = http::url::parse(opts_.api_base);
         if (!url_r)
             co_return std::unexpected("invalid api_base URL: " + url_r.error());
@@ -53,7 +53,7 @@ public:
         url_ = std::move(*url_r);
         bool use_tls = (url_.scheme == "https");
 
-        // DNS 解析 — 先尝试直接 IP，失败则异步 getaddrinfo
+        // DNS resolution — Try direct IP first, fallback to async getaddrinfo
         auto addr_r = ip_address::from_string(url_.host);
         if (!addr_r) {
             auto dns_r = co_await async_resolve(ctx_, url_.host);
@@ -76,7 +76,7 @@ public:
             co_return std::unexpected("connect failed: " + cr.error().message());
         }
 
-        // TLS 握手
+        // TLS handshake
 #ifdef CNETMOD_HAS_SSL
         if (use_tls) {
             auto ssl_ctx_r = ssl_context::client();
@@ -115,12 +115,12 @@ public:
         co_return std::expected<void, std::string>{};
     }
 
-    /// 是否已连接
+    /// Check if connected
     [[nodiscard]] auto is_connected() const noexcept -> bool {
         return connected_ && sock_.is_open();
     }
 
-    /// 关闭连接
+    /// Close connection
     void close() noexcept {
 #ifdef CNETMOD_HAS_SSL
         ssl_.reset();
@@ -130,9 +130,9 @@ public:
         connected_ = false;
     }
 
-    // ── 非流式对话 ────────────────────────────────────────────
+    // ── Non-streaming chat ────────────────────────────────────────────
 
-    /// 非流式 Chat Completions — 发送请求，等待完整响应
+    /// Non-streaming Chat Completions — Send request, wait for complete response
     auto chat(chat_request req)
         -> task<std::expected<chat_response, std::string>>
     {
@@ -149,7 +149,7 @@ public:
         if (!send_r)
             co_return std::unexpected(send_r.error());
 
-        // 读取完整响应
+        // Read complete response
         auto resp_r = co_await read_full_response();
         if (!resp_r)
             co_return std::unexpected(resp_r.error());
@@ -163,9 +163,9 @@ public:
         co_return chat_response::from_json(resp_body);
     }
 
-    // ── 流式对话 (SSE) ───────────────────────────────────────
+    // ── Streaming chat (SSE) ───────────────────────────────────────
 
-    /// 流式 Chat Completions — SSE 逐块回调，返回完整拼接结果
+    /// Streaming Chat Completions — SSE chunk-by-chunk callback, returns complete concatenated result
     auto chat_stream(chat_request req, on_chunk_fn on_chunk)
         -> task<std::expected<std::string, std::string>>
     {
@@ -182,7 +182,7 @@ public:
         if (!send_r)
             co_return std::unexpected(send_r.error());
 
-        // 读取 HTTP 响应头
+        // Read HTTP response header
         auto header_r = co_await read_response_header();
         if (!header_r)
             co_return std::unexpected(header_r.error());
@@ -194,7 +194,7 @@ public:
             co_return std::unexpected(std::format("HTTP {}: {}", status, err.message));
         }
 
-        // SSE 流处理: 增量读取 + 逐行解析
+        // SSE stream processing: incremental read + line-by-line parsing
         std::string full_content;
         std::string line_buf;
 
@@ -204,18 +204,18 @@ public:
 
             rbuf_.append(*read_r);
 
-            // 从 rbuf_ 中逐行提取 SSE 事件
+            // Extract SSE events line by line from rbuf_
             while (true) {
                 auto nl = rbuf_.find('\n');
                 if (nl == std::string::npos) break;
 
                 auto line = rbuf_.substr(0, nl);
-                // 去除 \r
+                // Remove \r
                 if (!line.empty() && line.back() == '\r')
                     line.pop_back();
                 rbuf_.erase(0, nl + 1);
 
-                if (line.empty()) continue;  // SSE 事件间的空行
+                if (line.empty()) continue;  // Empty lines between SSE events
 
                 if (line.starts_with("data: ")) {
                     auto data = line.substr(6);
@@ -242,12 +242,12 @@ public:
         co_return full_content;
     }
 
-    // ── 流式对话 (异步回调) ──────────────────────────
+    // ── Streaming chat (async callback) ──────────────────────────
 
-    /// 异步回调类型: (chunk) -> task<bool>, 返回 false 中止流
+    /// Async callback type: (chunk) -> task<bool>, return false to abort stream
     using async_chunk_fn = std::function<task<bool>(const chat_chunk&)>;
 
-    /// 流式 Chat Completions — 异步回调版本，支持在回调中 co_await
+    /// Streaming Chat Completions — Async callback version, supports co_await in callback
     auto chat_stream_async(chat_request req, async_chunk_fn on_chunk)
         -> task<std::expected<std::string, std::string>>
     {
@@ -324,7 +324,7 @@ public:
 
     // ── Models API ─────────────────────────────────────
 
-    /// 列出可用模型
+    /// List available models
     auto list_models()
         -> task<std::expected<std::vector<model_info>, std::string>>
     {
@@ -361,7 +361,7 @@ public:
 
     // ── Embeddings API ─────────────────────────────────────
 
-    /// 创建嵌入向量
+    /// Create embedding vectors
     auto embeddings(embedding_request req)
         -> task<std::expected<embedding_response, std::string>>
     {
@@ -390,7 +390,7 @@ public:
 
     // ── TTS (Text-to-Speech) API ────────────────────────────
 
-    /// 文本转语音 — 返回音频二进制数据
+    /// Text to speech — Returns audio binary data
     auto text_to_speech(tts_request req)
         -> task<std::expected<std::vector<std::byte>, std::string>>
     {
@@ -405,7 +405,7 @@ public:
         auto send_r = co_await send_http_request(http_req);
         if (!send_r) co_return std::unexpected(send_r.error());
 
-        // 读取二进制音频数据
+        // Read binary audio data
         auto resp_r = co_await read_binary_response();
         if (!resp_r) co_return std::unexpected(resp_r.error());
 
@@ -422,13 +422,13 @@ public:
 
     // ── STT (Speech-to-Text / Whisper) API ────────────────
 
-    /// 语音转文本 (Transcription)
+    /// Speech to text (Transcription)
     auto transcribe(transcription_request req)
         -> task<std::expected<transcription_response, std::string>>
     {
         if (auto r = co_await ensure_connected(); !r) co_return std::unexpected(r.error());
 
-        // 构建 multipart/form-data
+        // Build multipart/form-data
         auto [boundary, body] = build_multipart_form(req);
 
         http::request http_req(http::http_method::POST, build_path("/audio/transcriptions"));
@@ -453,7 +453,7 @@ public:
         co_return transcription_response::from_json(resp_body);
     }
 
-    /// 语音翻译为英文 (Translation)
+    /// Speech translation to English (Translation)
     auto translate(translation_request req)
         -> task<std::expected<transcription_response, std::string>>
     {
@@ -485,7 +485,7 @@ public:
 
     // ── DALL-E (Image Generation) API ─────────────────────
 
-    /// 生成图像 (DALL-E 2/3)
+    /// Generate image (DALL-E 2/3)
     auto create_image(image_generation_request req)
         -> task<std::expected<image_response, std::string>>
     {
@@ -512,7 +512,7 @@ public:
         co_return image_response::from_json(resp_body);
     }
 
-    /// 编辑图像 (DALL-E 2)
+    /// Edit image (DALL-E 2)
     auto edit_image(image_edit_request req)
         -> task<std::expected<image_response, std::string>>
     {
@@ -542,7 +542,7 @@ public:
         co_return image_response::from_json(resp_body);
     }
 
-    /// 图像变体 (DALL-E 2)
+    /// Image variation (DALL-E 2)
     auto create_image_variation(image_variation_request req)
         -> task<std::expected<image_response, std::string>>
     {
@@ -574,7 +574,7 @@ public:
 
     // ── Moderation API ───────────────────────────────────
 
-    /// 内容审核
+    /// Content moderation
     auto moderate(moderation_request req)
         -> task<std::expected<moderation_response, std::string>>
     {
@@ -602,7 +602,7 @@ public:
     }
 
 private:
-    // ── 传输层 ──
+    // ── Transport layer ──
 
     auto do_write(const_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>
@@ -629,7 +629,7 @@ private:
         co_return std::string(reinterpret_cast<const char*>(buf.data()), *r);
     }
 
-    // ── 路径 / 通用头部 ──
+    // ── Path / Common headers ──
 
     [[nodiscard]] auto build_path(std::string_view suffix) const -> std::string {
         auto base = url_.path;
@@ -647,7 +647,7 @@ private:
             req.set_header(k, v);
     }
 
-    // ── 自动重连 ──
+    // ── Auto reconnect ──
 
     auto ensure_connected() -> task<std::expected<void, std::string>> {
         if (is_connected())
@@ -656,7 +656,7 @@ private:
         co_return co_await connect(opts_);
     }
 
-    // ── HTTP 请求/响应辅助 ──
+    // ── HTTP request/response helpers ──
 
     auto send_http_request(const http::request& req)
         -> task<std::expected<void, std::string>>
@@ -667,7 +667,7 @@ private:
         co_return std::expected<void, std::string>{};
     }
 
-    /// 读取完整 HTTP 响应（非流式）
+    /// Read complete HTTP response (non-streaming)
     auto read_full_response()
         -> task<std::expected<std::pair<int, std::string>, std::string>>
     {
@@ -688,15 +688,15 @@ private:
         co_return std::pair{parser.status_code(), std::string(parser.body())};
     }
 
-    /// 读取 HTTP 响应头（流式用 — 只读到 header 结束）
+    /// Read HTTP response header (for streaming - only read until header ends)
     auto read_response_header()
         -> task<std::expected<std::pair<int, std::string>, std::string>>
     {
-        // 读取直到遇到 \r\n\r\n
+        // Read until encountering \r\n\r\n
         while (true) {
             auto header_end = rbuf_.find("\r\n\r\n");
             if (header_end != std::string::npos) {
-                // 解析 status line
+                // Parse status line
                 auto first_line_end = rbuf_.find("\r\n");
                 auto status_line = rbuf_.substr(0, first_line_end);
                 // "HTTP/1.1 200 OK"
@@ -709,7 +709,7 @@ private:
                     std::from_chars(code_str.data(), code_str.data() + code_str.size(), status);
                 }
 
-                // 提取 Content-Type
+                // Extract Content-Type
                 std::string ct;
                 auto ct_pos = rbuf_.find("Content-Type:");
                 if (ct_pos == std::string::npos)
@@ -721,7 +721,7 @@ private:
                     ct = rbuf_.substr(val_start, val_end - val_start);
                 }
 
-                // 移除已处理的头部（保留 body 部分在 rbuf_）
+                // Remove processed header (keep body part in rbuf_)
                 rbuf_.erase(0, header_end + 4);
                 co_return std::pair{status, ct};
             }
@@ -733,9 +733,9 @@ private:
         }
     }
 
-    /// 读取剩余 body（错误响应用）
+    /// Read remaining body (for error responses)
     auto read_remaining_body() -> task<std::string> {
-        // 尝试再读一些数据
+        // Try to read some more data
         for (int i = 0; i < 5; ++i) {
             auto chunk = co_await do_read_some();
             if (!chunk || chunk->empty()) break;
@@ -746,7 +746,7 @@ private:
         co_return result;
     }
 
-    /// 读取二进制响应 (TTS 用)
+    /// Read binary response (for TTS)
     auto read_binary_response()
         -> task<std::expected<std::pair<int, std::vector<std::byte>>, std::string>>
     {
@@ -770,7 +770,7 @@ private:
         co_return std::pair{parser.status_code(), std::move(data)};
     }
 
-    // ── Multipart form 构建辅助 ──
+    // ── Multipart form building helpers ──
 
     [[nodiscard]] static auto generate_boundary() -> std::string {
         static std::atomic<std::uint64_t> counter{0};
@@ -932,13 +932,13 @@ private:
         return {boundary, body};
     }
 
-    // ── 成员 ──
+    // ── Members ──
 
     io_context&     ctx_;
     socket          sock_;
     connect_options opts_;
     http::url       url_;
-    std::string     rbuf_;          // 读缓冲
+    std::string     rbuf_;          // Read buffer
     bool            connected_ = false;
 
 #ifdef CNETMOD_HAS_SSL

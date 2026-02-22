@@ -39,7 +39,7 @@ auto acceptor::open(const endpoint& ep, const socket_options& opts)
 }
 
 // =============================================================================
-// connection — 端点查询辅助
+// connection — Endpoint query helpers
 // =============================================================================
 
 namespace {

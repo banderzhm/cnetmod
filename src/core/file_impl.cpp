@@ -21,10 +21,6 @@ import cnetmod.core.error;
 
 namespace cnetmod {
 
-// =============================================================================
-// 生命周期
-// =============================================================================
-
 file::~file() {
     close();
 }
@@ -43,24 +39,24 @@ auto file::operator=(file&& other) noexcept -> file& {
 }
 
 // =============================================================================
-// 打开
+// Open
 // =============================================================================
 
 auto file::open(const std::filesystem::path& path, open_mode mode)
     -> std::expected<file, std::error_code>
 {
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    // --- 访问权限 ---
+    // --- Access permissions ---
     DWORD access = 0;
     if (has_flag(mode, open_mode::read))
         access |= GENERIC_READ;
     if (has_flag(mode, open_mode::write) || has_flag(mode, open_mode::append))
         access |= GENERIC_WRITE;
 
-    // --- 共享模式 ---
+    // --- Share mode ---
     DWORD share = FILE_SHARE_READ;
 
-    // --- 创建方式 ---
+    // --- Creation disposition ---
     DWORD disposition = OPEN_EXISTING;
     if (has_flag(mode, open_mode::create_new))
         disposition = CREATE_NEW;
@@ -71,7 +67,7 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
     else if (has_flag(mode, open_mode::truncate))
         disposition = TRUNCATE_EXISTING;
 
-    // FILE_FLAG_OVERLAPPED 使得句柄可关联 IOCP
+    // FILE_FLAG_OVERLAPPED allows handle to be associated with IOCP
     DWORD flags = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED;
 
     HANDLE h = ::CreateFileW(
@@ -92,7 +88,7 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
     return file{h};
 
 #else
-    // --- POSIX 实现 ---
+    // --- POSIX implementation ---
     int flags = 0;
     if (has_flag(mode, open_mode::read_write))
         flags |= O_RDWR;
@@ -116,7 +112,7 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
 }
 
 // =============================================================================
-// 关闭
+// Close
 // =============================================================================
 
 void file::close() noexcept {
@@ -130,7 +126,7 @@ void file::close() noexcept {
 }
 
 // =============================================================================
-// 文件大小
+// File size
 // =============================================================================
 
 auto file::size() const -> std::expected<std::uint64_t, std::error_code> {

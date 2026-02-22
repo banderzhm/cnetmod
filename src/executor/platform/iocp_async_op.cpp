@@ -25,12 +25,12 @@ namespace cnetmod {
 #ifdef CNETMOD_HAS_IOCP
 
 // =============================================================================
-// 辅助
+// Helper Functions
 // =============================================================================
 
 namespace {
 
-/// 关联句柄到 IOCP（重复关联静默忽略）
+/// Associate handle to IOCP (duplicate association silently ignored)
 auto ensure_associated(iocp_context& iocp, HANDLE handle)
     -> std::expected<void, std::error_code>
 {
@@ -104,7 +104,7 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
 } // anonymous namespace
 
 // =============================================================================
-// IOCP 挂起 awaiter
+// IOCP Suspend Awaiter
 // =============================================================================
 
 struct iocp_suspend {
@@ -115,21 +115,21 @@ struct iocp_suspend {
 };
 
 // =============================================================================
-// IOCP cancel 版挂起 awaiter
+// IOCP Cancel Version Suspend Awaiter
 // =============================================================================
 
-/// cancel_fn_：调用 CancelIoEx 取消指定的 OVERLAPPED 操作
+/// cancel_fn_: Call CancelIoEx to cancel specified OVERLAPPED operation
 static void iocp_cancel_fn(cancel_token& token) noexcept {
     ::CancelIoEx(static_cast<HANDLE>(token.io_handle_),
                  static_cast<LPOVERLAPPED>(token.overlapped_));
 }
 
-/// 带取消支持的 IOCP 挂起 awaiter
-/// await_suspend 时将取消信息写入 cancel_token
+/// IOCP suspend awaiter with cancel support
+/// Writes cancel info to cancel_token on await_suspend
 struct iocp_cancel_suspend {
     iocp_overlapped& ov;
     cancel_token& token;
-    void* io_handle;  // HANDLE（socket 转 HANDLE 或 file HANDLE）
+    void* io_handle;  // HANDLE (socket converted to HANDLE or file HANDLE)
 
     auto await_ready() const noexcept -> bool { return false; }
 
@@ -139,7 +139,7 @@ struct iocp_cancel_suspend {
         token.overlapped_ = static_cast<LPOVERLAPPED>(&ov);
         token.cancel_fn_ = &iocp_cancel_fn;
         token.pending_.store(true, std::memory_order_release);
-        // 如果在设置 pending 之前已被取消，立即触发取消
+        // If already cancelled before setting pending, trigger cancel immediately
         if (token.is_cancelled())
             iocp_cancel_fn(token);
     }
@@ -150,7 +150,7 @@ struct iocp_cancel_suspend {
 };
 
 // =============================================================================
-// 异步网络操作 — IOCP
+// Async Network Operations — IOCP
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener)
@@ -207,7 +207,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
             reinterpret_cast<HANDLE>(sock.native_handle())); !r)
         co_return std::unexpected(r.error());
 
-    // ConnectEx 要求 socket 已绑定
+    // ConnectEx requires socket to be already bound
     ::sockaddr_in bind_addr{};
     bind_addr.sin_family = AF_INET;
     bind_addr.sin_addr.s_addr = INADDR_ANY;
@@ -312,7 +312,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 }
 
 // =============================================================================
-// 异步文件操作 — IOCP
+// Async File Operations — IOCP
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -379,7 +379,7 @@ auto async_file_flush(io_context& ctx, file& f)
 }
 
 // =============================================================================
-// 异步定时器 — IOCP (CreateTimerQueueTimer + PostQueuedCompletionStatus)
+// Async Timer — IOCP (CreateTimerQueueTimer + PostQueuedCompletionStatus)
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -420,7 +420,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 异步串口操作 — IOCP
+// Async Serial Port Operations — IOCP
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
@@ -431,7 +431,7 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
         co_return std::unexpected(r.error());
 
     iocp_overlapped ov;
-    // 串口无偏移概念，offset 保持 0
+    // Serial port has no offset concept, keep offset at 0
 
     BOOL ok = ::ReadFile(port.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
@@ -471,7 +471,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 }
 
 // =============================================================================
-// 可取消版本 — 异步网络操作
+// Cancellable Version — Async Network Operations
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
@@ -663,7 +663,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步文件操作
+// Cancellable Version — Async File Operations
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -731,7 +731,7 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步串口操作
+// Cancellable Version — Async Serial Port Operations
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
@@ -797,7 +797,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步定时器
+// Cancellable Version — Async Timer
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -834,8 +834,8 @@ auto async_timer_wait(io_context& ctx,
                             std::system_category()));
     }
 
-    // 定时器通过 post_completion 完成，不能用 CancelIoEx
-    // 设置 cancel_fn_ 为 nullptr，cancel 只设标志位
+    // Timer completes via post_completion, cannot use CancelIoEx
+    // Set cancel_fn_ to nullptr, cancel only sets flag
     token.pending_.store(true, std::memory_order_release);
     co_await iocp_suspend{tc.ov};
     token.pending_.store(false, std::memory_order_relaxed);
@@ -849,7 +849,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 异步 UDP I/O — IOCP
+// Async UDP I/O — IOCP
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,
@@ -920,7 +920,7 @@ auto async_sendto(io_context& ctx, socket& sock,
 }
 
 // =============================================================================
-// 可取消版本 — 异步 UDP I/O
+// Cancellable Version — Async UDP I/O
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,

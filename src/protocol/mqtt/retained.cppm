@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:retained — MQTT 保留消息存储
-/// 管理 retained messages 的存储、匹配和删除
+/// cnetmod.protocol.mqtt:retained — MQTT Retained Message Storage
+/// Manages storage, matching, and deletion of retained messages
 
 module;
 
@@ -25,36 +25,36 @@ export struct retained_message {
 };
 
 // =============================================================================
-// Retained Store — Trie-based 保留消息管理
+// Retained Store — Trie-based Retained Message Management
 // =============================================================================
 
 export class retained_store {
 public:
     retained_store() = default;
 
-    // 不可复制
+    // Non-copyable
     retained_store(const retained_store&) = delete;
     auto operator=(const retained_store&) -> retained_store& = delete;
 
-    // 可移动
+    // Movable
     retained_store(retained_store&&) = default;
     auto operator=(retained_store&&) -> retained_store& = default;
 
-    /// 存储保留消息
-    /// 如果 payload 为空，则删除该 topic 的保留消息 (MQTT 规范)
+    /// Store retained message
+    /// If payload is empty, delete the retained message for that topic (MQTT spec)
     void store(const std::string& topic, retained_message msg) {
         if (msg.payload.empty()) {
-            // 空 payload 表示删除保留消息
+            // Empty payload means delete retained message
             remove(topic);
         } else {
-            // 同时存入 flat map（供持久化/遍历）和 trie（供匹配）
+            // Store in both flat map (for persistence/iteration) and trie (for matching)
             messages_.insert_or_assign(topic, msg);
             trie_insert(topic, std::move(msg));
         }
     }
 
-    /// 根据 topic filter 匹配保留消息（支持 +/# 通配符）
-    /// 使用 trie 加速匹配
+    /// Match retained messages by topic filter (supports +/# wildcards)
+    /// Uses trie to accelerate matching
     [[nodiscard]] auto match(std::string_view topic_filter_str) const
         -> std::vector<retained_message>
     {
@@ -64,7 +64,7 @@ public:
         return result;
     }
 
-    /// 删除指定 topic 的保留消息
+    /// Delete retained message for specified topic
     auto remove(const std::string& topic) -> bool {
         auto erased = messages_.erase(topic);
         if (erased > 0) {
@@ -74,7 +74,7 @@ public:
         return false;
     }
 
-    /// 获取指定 topic 的保留消息
+    /// Get retained message for specified topic
     [[nodiscard]] auto find(const std::string& topic) const
         -> const retained_message*
     {
@@ -83,19 +83,19 @@ public:
         return nullptr;
     }
 
-    /// 保留消息总数
+    /// Total retained message count
     [[nodiscard]] auto size() const noexcept -> std::size_t {
         return messages_.size();
     }
 
-    /// 清空所有保留消息
+    /// Clear all retained messages
     void clear() {
         messages_.clear();
         root_.children.clear();
         root_.message.reset();
     }
 
-    /// 遍历所有保留消息
+    /// Iterate over all retained messages
     template <typename Fn>
     void for_each(Fn&& fn) const {
         for (auto& [topic, msg] : messages_) {
@@ -103,7 +103,7 @@ public:
         }
     }
 
-    /// 获取底层 map 引用（供持久化使用）
+    /// Get underlying map reference (for persistence use)
     [[nodiscard]] auto messages() noexcept
         -> std::map<std::string, retained_message>& { return messages_; }
     [[nodiscard]] auto messages() const noexcept
@@ -158,7 +158,7 @@ private:
             node = it->second.get();
         }
         node->message.reset();
-        // 回溯清理空节点
+        // Backtrack to clean up empty nodes
         for (auto rit = path.rbegin(); rit != path.rend(); ++rit) {
             auto [parent, seg] = *rit;
             auto cit = parent->children.find(seg);
@@ -172,7 +172,7 @@ private:
         }
     }
 
-    /// trie 匹配: filter 中的 +/# 用来遍历 trie（存储的是 topic name）
+    /// Trie matching: +/# in filter used to traverse trie (which stores topic names)
     void trie_match(const trie_node* node,
                     const std::vector<std::string_view>& filter_segs,
                     std::size_t depth,
@@ -182,7 +182,7 @@ private:
         if (!node) return;
 
         if (depth >= filter_segs.size()) {
-            // 完全匹配
+            // Complete match
             if (node->message) {
                 result.push_back(*node->message);
             }
@@ -192,15 +192,15 @@ private:
         auto& seg = filter_segs[depth];
 
         if (seg == "#") {
-            // # 匹配当前节点及所有后代
+            // # matches current node and all descendants
             collect_all(node, result);
             return;
         }
 
         if (seg == "+") {
-            // + 匹配单层：遍历所有子节点
+            // + matches single level: iterate all child nodes
             for (auto& [child_seg, child] : node->children) {
-                // $ 前缀保护
+                // $ prefix protection
                 if (depth == 0 && !child_seg.empty() && child_seg[0] == '$')
                     continue;
                 trie_match(child.get(), filter_segs, depth + 1,
@@ -209,7 +209,7 @@ private:
             return;
         }
 
-        // 精确匹配
+        // Exact match
         auto it = node->children.find(std::string(seg));
         if (it != node->children.end()) {
             trie_match(it->second.get(), filter_segs, depth + 1,
@@ -217,7 +217,7 @@ private:
         }
     }
 
-    /// 收集节点及所有后代的消息
+    /// Collect messages from node and all descendants
     void collect_all(const trie_node* node,
                      std::vector<retained_message>& result) const
     {

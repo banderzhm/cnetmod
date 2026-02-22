@@ -11,10 +11,10 @@ import cnetmod.coro.task;
 namespace cnetmod {
 
 // =============================================================================
-// detached_task — fire-and-forget 协程类型
+// detached_task — Fire-and-forget coroutine type
 // =============================================================================
 
-/// 启动后立即执行，完成后自动销毁帧，无需外部管理生命周期
+/// Executes immediately after start, auto-destroys frame on completion, no external lifetime management needed
 struct detached_task {
     struct promise_type {
         auto get_return_object() noexcept -> detached_task { return {}; }
@@ -26,15 +26,15 @@ struct detached_task {
 };
 
 // =============================================================================
-// spawn — 在 io_context 上启动 fire-and-forget 协程
+// spawn — Start fire-and-forget coroutine on io_context
 // =============================================================================
 
-/// spawn(ctx, task) — 将 task 投递到 io_context 事件循环执行
-/// detached_task 拥有 task 的 co_await，task 完成后帧自动销毁
+/// spawn(ctx, task) — Post task to io_context event loop for execution
+/// detached_task owns task's co_await, frame auto-destroys after task completes
 export void spawn(io_context& ctx, task<void> t) {
     [](io_context& c, task<void> inner) -> detached_task {
-        co_await post_awaitable{c};     // 切换到事件循环线程
-        co_await std::move(inner);      // 驱动 task 执行
+        co_await post_awaitable{c};     // Switch to event loop thread
+        co_await std::move(inner);      // Drive task execution
     }(ctx, std::move(t));
 }
 

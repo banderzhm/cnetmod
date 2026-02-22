@@ -1,40 +1,40 @@
 /**
  * @file cache.cppm
- * @brief cnetmod 缓存框架 — Spring Cache 风格的声明式缓存
+ * @brief cnetmod cache framework — Spring Cache style declarative caching
  *
- * 提供统一的 cache_store 接口，支持本地内存 (memory_cache) 和 Redis (redis_cache)
- * 两种后端，并通过 handler 装饰器实现类似 Spring 的 @Cacheable / @CachePut / @CacheEvict
- * 切面效果。支持缓存分组（group）、条件缓存（condition/unless）、分组失效等高级特性。
+ * Provides unified cache_store interface, supports local memory (memory_cache) and Redis (redis_cache)
+ * backends, and implements Spring-like @Cacheable / @CachePut / @CacheEvict
+ * aspect effects through handler decorators. Supports advanced features like cache grouping (group), conditional caching (condition/unless), and group invalidation.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.cache;
  *
- *   // 创建缓存后端 + 分组注册表
+ *   // Create cache backend + group registry
  *   cnetmod::cache::memory_cache store({.max_entries = 5000});
  *   cnetmod::cache::cache_group_registry groups;
  *
- *   // @Cacheable: 命中缓存直接返回，未命中执行 handler 后缓存结果
+ *   // @Cacheable: return cached result if hit, execute handler and cache result if miss
  *   router.get("/api/users/:id",
  *       cache::cacheable(store, {.key_pattern = "user:{id}",
  *                                .ttl = 60s,
  *                                .group = "users"}, get_user_handler, &groups));
  *
- *   // @CachePut: 始终执行 handler，然后更新缓存
+ *   // @CachePut: always execute handler, then update cache
  *   router.put("/api/users/:id",
  *       cache::cache_put(store, {.key_pattern = "user:{id}",
  *                                .ttl = 60s,
  *                                .group = "users"}, update_user_handler, &groups));
  *
- *   // @CacheEvict: 执行 handler 后删除指定缓存
+ *   // @CacheEvict: delete specified cache after executing handler
  *   router.del("/api/users/:id",
  *       cache::cache_evict(store, {.key_pattern = "user:{id}",
  *                                  .group = "users"}, delete_user_handler, &groups));
  *
- *   // @CacheEvict(allEntries=true): 修改数据后使整组缓存失效
+ *   // @CacheEvict(allEntries=true): invalidate entire group cache after data modification
  *   router.post("/api/users/batch",
  *       cache::cache_evict_group(store, groups, "users", batch_update_handler));
  *
- *   // 条件缓存: 仅当 id > 0 时缓存, 响应含 error 字段时不缓存
+ *   // Conditional caching: cache only when id > 0, don't cache if response contains error field
  *   router.get("/api/items/:id",
  *       cache::cacheable(store, {.key_pattern = "item:{id}", .ttl = 30s,
  *           .condition = [](auto& ctx) { return ctx.param("id") != "0"; },
@@ -43,7 +43,7 @@
  *           }
  *       }, get_item_handler));
  *
- *   // Redis 后端
+ *   // Redis backend
  *   cnetmod::cache::redis_cache rstore(redis_client, {.key_prefix = "myapp:"});
  *   router.get("/api/posts/:id",
  *       cache::cacheable(rstore, {.key_pattern = "post:{id}", .ttl = 120s},
@@ -55,7 +55,7 @@ module;
 
 export module cnetmod.middleware.cache;
 
-export import cnetmod.middleware.cache_store;  // re-export cache_store 接口
+export import cnetmod.middleware.cache_store;  // re-export cache_store interface
 
 import std;
 import cnetmod.coro.task;
@@ -66,7 +66,7 @@ import cnetmod.protocol.http;
 namespace cnetmod::cache {
 
 // =============================================================================
-// memory_cache — 本地内存缓存 (LRU + TTL, 协程读写锁)
+// memory_cache — Local memory cache (LRU + TTL, coroutine read-write lock)
 // =============================================================================
 
 export struct memory_cache_options {
@@ -81,7 +81,7 @@ public:
     auto get(std::string_view key)
         -> task<std::optional<std::string>> override
     {
-        // 先用读锁尝试查找
+        // First try to find with read lock
         co_await rw_.lock_shared();
         async_shared_lock_guard rg(rw_, std::adopt_lock);
 
@@ -91,8 +91,8 @@ public:
 
         auto& entry = it->second;
 
-        // 检查过期 — 过期时需要写操作，但这里先返回 nullopt
-        // 惰性删除：过期条目在下次 set/del 时清理
+        // Check expiry — expired entries need write operation, but return nullopt here first
+        // Lazy deletion: expired entries cleaned up on next set/del
         if (entry.has_expiry && clock::now() >= entry.expire_at)
             co_return std::nullopt;
 
@@ -109,7 +109,7 @@ public:
         auto it = map_.find(key_str);
 
         if (it != map_.end()) {
-            // 已存在: 更新
+            // Already exists: update
             lru_.erase(it->second.lru_it);
             lru_.push_front(key_str);
             it->second.value = std::string(value);
@@ -123,14 +123,14 @@ public:
             co_return true;
         }
 
-        // 容量检查: 淘汰最久未用（同时清理过期条目）
+        // Capacity check: evict least recently used (also clean expired entries)
         while (map_.size() >= opts_.max_entries && !lru_.empty()) {
             auto& evict_key = lru_.back();
             map_.erase(evict_key);
             lru_.pop_back();
         }
 
-        // 插入新条目
+        // Insert new entry
         lru_.push_front(key_str);
         cache_entry entry;
         entry.value = std::string(value);
@@ -165,21 +165,21 @@ public:
         if (it == map_.end())
             co_return false;
 
-        // 惰性过期检查
+        // Lazy expiry check
         if (it->second.has_expiry && clock::now() >= it->second.expire_at)
             co_return false;
 
         co_return true;
     }
 
-    /// 获取当前缓存条目数
+    /// Get current cache entry count
     auto size() -> task<std::size_t> {
         co_await rw_.lock_shared();
         async_shared_lock_guard rg(rw_, std::adopt_lock);
         co_return map_.size();
     }
 
-    /// 清空所有缓存
+    /// Clear all cache
     auto clear() -> task<void> {
         co_await rw_.lock();
         async_unique_lock_guard wg(rw_, std::adopt_lock);
@@ -198,17 +198,17 @@ private:
     };
 
     memory_cache_options opts_;
-    async_shared_mutex rw_;   // 协程读写锁：读多写少场景最优
+    async_shared_mutex rw_;   // Coroutine read-write lock: optimal for read-heavy scenarios
     std::unordered_map<std::string, cache_entry> map_;
-    std::list<std::string> lru_;   // front = 最近使用, back = 最久未用
+    std::list<std::string> lru_;   // front = most recently used, back = least recently used
 };
 
 // =============================================================================
-// redis_cache — Redis 缓存后端
+// redis_cache — Redis cache backend
 // =============================================================================
 
 export struct redis_cache_options {
-    std::string key_prefix;   // 命名空间隔离, 如 "myapp:"
+    std::string key_prefix;   // Namespace isolation, e.g. "myapp:"
 };
 
 export class redis_cache : public cache_store {
@@ -275,22 +275,22 @@ private:
 };
 
 // =============================================================================
-// cache_group_registry — 缓存分组注册表
-// 跟踪每个 group 下有哪些 cache key，用于按组批量失效
+// cache_group_registry — Cache group registry
+// Tracks which cache keys belong to each group, for batch invalidation by group
 // =============================================================================
 
 export class cache_group_registry {
 public:
     cache_group_registry() = default;
 
-    /// 将 key 注册到指定 group
+    /// Register key to specified group
     auto add(std::string_view group, std::string_view key) -> task<void> {
         co_await rw_.lock();
         async_unique_lock_guard wg(rw_, std::adopt_lock);
         groups_[std::string(group)].emplace(std::string(key));
     }
 
-    /// 获取 group 下所有 key 的快照
+    /// Get snapshot of all keys under group
     auto keys(std::string_view group) -> task<std::vector<std::string>> {
         co_await rw_.lock_shared();
         async_shared_lock_guard rg(rw_, std::adopt_lock);
@@ -306,7 +306,7 @@ public:
         co_return result;
     }
 
-    /// 从 group 中移除指定 key
+    /// Remove specified key from group
     auto remove_key(std::string_view group, std::string_view key) -> task<void> {
         co_await rw_.lock();
         async_unique_lock_guard wg(rw_, std::adopt_lock);
@@ -319,7 +319,7 @@ public:
         }
     }
 
-    /// 清空整个 group 的所有 key 记录
+    /// Clear all key records for entire group
     auto clear_group(std::string_view group) -> task<void> {
         co_await rw_.lock();
         async_unique_lock_guard wg(rw_, std::adopt_lock);
@@ -332,31 +332,31 @@ private:
 };
 
 // =============================================================================
-// cache_key_options — 缓存 key 配置 (Spring Cache 注解参数)
+// cache_key_options — Cache key configuration (Spring Cache annotation parameters)
 // =============================================================================
 
 export struct cache_key_options {
-    std::string key_pattern;               // 如 "user:{id}"
-    std::chrono::seconds ttl{60};          // 缓存过期时间
-    std::string group;                     // 缓存分组, 如 "users"
+    std::string key_pattern;               // e.g. "user:{id}"
+    std::chrono::seconds ttl{60};          // Cache expiration time
+    std::string group;                     // Cache group, e.g. "users"
     bool all_entries = false;              // @CacheEvict(allEntries=true)
 
-    /// 前置条件: 返回 false 时跳过缓存逻辑，直接执行 handler（透传）
-    /// 类似 Spring @Cacheable(condition = "...")
+    /// Precondition: skip cache logic and execute handler directly (pass-through) when returns false
+    /// Similar to Spring @Cacheable(condition = "...")
     std::function<bool(const http::request_context&)> condition;
 
-    /// 后置排除: handler 执行后若返回 true，则不缓存该结果
-    /// 类似 Spring @Cacheable(unless = "...")
+    /// Post-exclusion: don't cache the result if returns true after handler execution
+    /// Similar to Spring @Cacheable(unless = "...")
     std::function<bool(const http::request_context&)> unless;
 };
 
 // =============================================================================
-// 内部: key 解析 — 将 {param} 占位符替换为路由参数值
+// Internal: key resolution — replace {param} placeholders with route parameter values
 // =============================================================================
 
 namespace detail {
 
-/// 从 request_context 解析 key_pattern 中的 {param} 占位符
+/// Parse {param} placeholders in key_pattern from request_context
 /// e.g. "user:{id}:detail" + ctx.param("id")=="42" → "user:42:detail"
 inline auto resolve_key(const std::string& pattern,
                         const http::request_context& ctx) -> std::string
@@ -374,7 +374,7 @@ inline auto resolve_key(const std::string& pattern,
                 if (!val.empty()) {
                     result.append(val);
                 } else {
-                    // 参数不存在, 用 query_string 中的值或原样保留
+                    // Parameter doesn't exist, use value from query_string or keep as-is
                     result += '{';
                     result.append(name);
                     result += '}';
@@ -390,8 +390,8 @@ inline auto resolve_key(const std::string& pattern,
     return result;
 }
 
-/// 缓存条目序列化: content-type + '\n' + body
-/// Content-Type 不含换行符，第一个 '\n' 作为分隔符
+/// Cache entry serialization: content-type + '\n' + body
+/// Content-Type doesn't contain newlines, first '\n' serves as delimiter
 inline auto serialize_entry(std::string_view content_type,
                             std::string_view body) -> std::string
 {
@@ -403,7 +403,7 @@ inline auto serialize_entry(std::string_view content_type,
     return entry;
 }
 
-/// 反序列化缓存条目
+/// Deserialize cache entry
 struct cached_response {
     std::string content_type;
     std::string body;
@@ -421,7 +421,7 @@ inline auto deserialize_entry(std::string_view data)
     };
 }
 
-/// 批量删除 group 下所有 key 并清空注册表
+/// Batch delete all keys under group and clear registry
 inline auto evict_all_in_group(cache_store& store,
                                cache_group_registry& registry,
                                std::string_view group) -> task<void>
@@ -435,9 +435,9 @@ inline auto evict_all_in_group(cache_store& store,
 } // namespace detail
 
 // =============================================================================
-// cacheable — 类似 Spring @Cacheable
-// 命中缓存直接返回，未命中执行 handler 后缓存结果
-// 支持 condition/unless/group
+// cacheable — similar to Spring @Cacheable
+// Return cached result if hit, execute handler and cache result if miss
+// Supports condition/unless/group
 // =============================================================================
 
 export auto cacheable(cache_store& store, cache_key_options opts,
@@ -449,7 +449,7 @@ export auto cacheable(cache_store& store, cache_key_options opts,
             handler = std::move(handler), registry](
         http::request_context& ctx) -> task<void>
     {
-        // condition: 不满足则直接透传
+        // condition: skip caching if not satisfied
         if (opts.condition && !opts.condition(ctx)) {
             co_await handler(ctx);
             co_return;
@@ -457,7 +457,7 @@ export auto cacheable(cache_store& store, cache_key_options opts,
 
         auto key = detail::resolve_key(opts.key_pattern, ctx);
 
-        // 1. 查缓存
+        // 1. Check cache
         auto cached = co_await store.get(key);
         if (cached) {
             auto entry = detail::deserialize_entry(*cached);
@@ -470,16 +470,16 @@ export auto cacheable(cache_store& store, cache_key_options opts,
             }
         }
 
-        // 2. 未命中: 执行原始 handler
+        // 2. Cache miss: execute original handler
         co_await handler(ctx);
 
-        // unless: handler 执行后判断是否排除缓存
+        // unless: check if caching should be skipped after handler execution
         if (opts.unless && opts.unless(ctx)) {
             ctx.resp().set_header("X-Cache", "SKIP");
             co_return;
         }
 
-        // 3. 仅缓存 2xx 成功响应
+        // 3. Only cache 2xx successful responses
         auto status = ctx.resp().status_code();
         if (status >= 200 && status < 300) {
             auto ct = ctx.resp().get_header("Content-Type");
@@ -488,7 +488,7 @@ export auto cacheable(cache_store& store, cache_key_options opts,
                 auto entry = detail::serialize_entry(ct, body);
                 co_await store.set(key, entry, opts.ttl);
 
-                // 注册到分组
+                // Register to group
                 if (registry && !opts.group.empty())
                     co_await registry->add(opts.group, key);
             }
@@ -499,9 +499,9 @@ export auto cacheable(cache_store& store, cache_key_options opts,
 }
 
 // =============================================================================
-// cache_put — 类似 Spring @CachePut
-// 始终执行 handler，然后用结果更新缓存
-// 支持 condition/unless/group
+// cache_put — similar to Spring @CachePut
+// Always execute handler, then update cache with result
+// Supports condition/unless/group
 // =============================================================================
 
 export auto cache_put(cache_store& store, cache_key_options opts,
@@ -513,20 +513,20 @@ export auto cache_put(cache_store& store, cache_key_options opts,
             handler = std::move(handler), registry](
         http::request_context& ctx) -> task<void>
     {
-        // condition: 不满足则直接透传
+        // condition: skip if not satisfied
         if (opts.condition && !opts.condition(ctx)) {
             co_await handler(ctx);
             co_return;
         }
 
-        // 1. 始终执行 handler
+        // 1. Always execute handler
         co_await handler(ctx);
 
-        // unless: 排除
+        // unless: skip caching
         if (opts.unless && opts.unless(ctx))
             co_return;
 
-        // 2. 更新缓存
+        // 2. Update cache
         auto key = detail::resolve_key(opts.key_pattern, ctx);
         auto status = ctx.resp().status_code();
         if (status >= 200 && status < 300) {
@@ -536,7 +536,7 @@ export auto cache_put(cache_store& store, cache_key_options opts,
                 auto entry = detail::serialize_entry(ct, body);
                 co_await store.set(key, entry, opts.ttl);
 
-                // 注册到分组
+                // Register to group
                 if (registry && !opts.group.empty())
                     co_await registry->add(opts.group, key);
             }
@@ -545,9 +545,9 @@ export auto cache_put(cache_store& store, cache_key_options opts,
 }
 
 // =============================================================================
-// cache_evict — 类似 Spring @CacheEvict
-// 执行 handler 后删除指定缓存
-// 支持 all_entries=true 按组清除、condition、group
+// cache_evict — similar to Spring @CacheEvict
+// Delete specified cache after executing handler
+// Supports all_entries=true for group-based clearing, condition, group
 // =============================================================================
 
 export auto cache_evict(cache_store& store, cache_key_options opts,
@@ -559,24 +559,24 @@ export auto cache_evict(cache_store& store, cache_key_options opts,
             handler = std::move(handler), registry](
         http::request_context& ctx) -> task<void>
     {
-        // condition: 不满足则直接透传
+        // condition: skip if not satisfied
         if (opts.condition && !opts.condition(ctx)) {
             co_await handler(ctx);
             co_return;
         }
 
-        // 1. 执行 handler
+        // 1. Execute handler
         co_await handler(ctx);
 
-        // 2. 按组全部清除 or 单 key 删除
+        // 2. Clear entire group or delete single key
         if (opts.all_entries && registry && !opts.group.empty()) {
-            // @CacheEvict(allEntries=true): 清除整组
+            // @CacheEvict(allEntries=true): clear entire group
             co_await detail::evict_all_in_group(store, *registry, opts.group);
         } else {
             auto key = detail::resolve_key(opts.key_pattern, ctx);
             co_await store.del(key);
 
-            // 从分组注册表中移除
+            // Remove from group registry
             if (registry && !opts.group.empty())
                 co_await registry->remove_key(opts.group, key);
         }
@@ -584,9 +584,9 @@ export auto cache_evict(cache_store& store, cache_key_options opts,
 }
 
 // =============================================================================
-// cache_evict_group — 便捷接口: 使整组缓存失效
-// 适用于批量修改接口，一次性清除所有相关缓存
-// e.g. POST /api/users/batch → 使 "users" 组全部失效
+// cache_evict_group — convenience interface: invalidate entire cache group
+// Suitable for batch modification endpoints, clear all related caches at once
+// e.g. POST /api/users/batch → invalidate entire "users" group
 // =============================================================================
 
 export auto cache_evict_group(cache_store& store,
@@ -604,16 +604,16 @@ export auto cache_evict_group(cache_store& store,
 }
 
 // =============================================================================
-// 全局中间件 — 按路径模式自动缓存 GET 请求
-// 适用于需要对一批路由统一加缓存的场景
-// 支持 group 注册
+// Global middleware — automatically cache GET requests by path pattern
+// Suitable for scenarios requiring unified caching for a batch of routes
+// Supports group registration
 // =============================================================================
 
 export struct global_cache_options {
     std::chrono::seconds ttl{60};
     std::string key_prefix = "http:";
-    std::string group;     // 可选: 注册到指定分组
-    /// 自定义判断是否缓存该请求 (为空则默认只缓存 GET)
+    std::string group;     // Optional: register to specified group
+    /// Custom function to determine if request should be cached (defaults to GET only if empty)
     std::function<bool(const http::request_context&)> cacheable_fn;
 };
 
@@ -625,12 +625,12 @@ export auto make_cache_middleware(cache_store& store,
     return [&store, opts = std::move(opts), registry](
         http::request_context& ctx, http::next_fn next) -> task<void>
     {
-        // 判断是否需要缓存
+        // Determine if caching is needed
         bool should_cache = false;
         if (opts.cacheable_fn) {
             should_cache = opts.cacheable_fn(ctx);
         } else {
-            // 默认仅缓存 GET 请求
+            // Default: only cache GET requests
             should_cache = (ctx.method() == "GET");
         }
 
@@ -639,7 +639,7 @@ export auto make_cache_middleware(cache_store& store,
             co_return;
         }
 
-        // 生成 key: prefix + path + query
+        // Generate key: prefix + path + query
         auto key = opts.key_prefix + std::string(ctx.path());
         auto qs = ctx.query_string();
         if (!qs.empty()) {
@@ -647,7 +647,7 @@ export auto make_cache_middleware(cache_store& store,
             key.append(qs);
         }
 
-        // 查缓存
+        // Check cache
         auto cached = co_await store.get(key);
         if (cached) {
             auto entry = detail::deserialize_entry(*cached);
@@ -660,10 +660,10 @@ export auto make_cache_middleware(cache_store& store,
             }
         }
 
-        // 未命中: 继续执行
+        // Cache miss: continue execution
         co_await next();
 
-        // 缓存 2xx 响应
+        // Cache 2xx responses
         auto status = ctx.resp().status_code();
         if (status >= 200 && status < 300) {
             auto ct = ctx.resp().get_header("Content-Type");
@@ -672,7 +672,7 @@ export auto make_cache_middleware(cache_store& store,
                 auto entry = detail::serialize_entry(ct, body);
                 co_await store.set(key, entry, opts.ttl);
 
-                // 注册到分组
+                // Register to group
                 if (registry && !opts.group.empty())
                     co_await registry->add(opts.group, key);
             }

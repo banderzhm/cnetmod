@@ -2,13 +2,13 @@
 # cnetmod examples
 # ==============================================================================
 
-# MSVC Debug 模式下，/RTC1（运行时检测）与 import std; 的模板实例化叠加，
-# 单 TU 对象文件会轻易超4GB（C1605）。
-# 在本子目录作用域内移除 /RTC1 并将 /Ob0 替换为 /Ob1：
-#   - /Ob1：允许内联标记函数，大幅压缩 std 小工具函数的个别函数体
-#   - 去 /RTC1：移除每个变量访问的检测截面代码
-# 注：该变量修改仅影响本子目录创建的 target，不会回传到父目录
-# 注：调试符号（/Zi）和调试运行库（/MDd）仍然保留
+# In MSVC Debug mode, /RTC1 (runtime checks) combined with import std; template instantiation
+# can easily cause single TU object files to exceed 4GB (C1605).
+# Remove /RTC1 and replace /Ob0 with /Ob1 in this subdirectory scope:
+#   - /Ob1: Allow inlining of marked functions, significantly compressing std utility function bodies
+#   - Remove /RTC1: Eliminate instrumentation code for each variable access
+# Note: This variable modification only affects targets created in this subdirectory, not propagated to parent
+# Note: Debug symbols (/Zi) and debug runtime library (/MDd) are still retained
 if(MSVC)
     string(REPLACE "/RTC1" "" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
     string(REPLACE "/Ob0"  "/Ob1" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
@@ -36,7 +36,7 @@ set(EXAMPLE_TARGETS
         mqtt_demo
 )
 
-# SSL 示例（仅在 OpenSSL 可用时构建）
+# SSL examples (only built when OpenSSL is available)
 if(CNETMOD_HAS_SSL)
     list(APPEND EXAMPLE_TARGETS ssl_echo_server)
 endif()
@@ -48,9 +48,9 @@ foreach(example ${EXAMPLE_TARGETS})
         CXX_MODULE_GENERATION_MODE "SEPARATE"
     )
     if(MSVC)
-        # 关闭调试信息 + 禁用 LTCG + 最小化代码，避免 MSVC C1605（对象文件超4GB）
-        # /O1 追加在 AdditionalOptions 末尾，覆盖 MSBuild 生成的 /Od
-        # /RTC1 已在本子目录顶部通过 string(REPLACE) 移除，故 /O1 不与 /RTC1 冲突
+        # Disable debug info + disable LTCG + minimize code to avoid MSVC C1605 (object file exceeds 4GB)
+        # /O1 appended at end of AdditionalOptions, overrides MSBuild-generated /Od
+        # /RTC1 already removed at top of this subdirectory via string(REPLACE), so /O1 doesn't conflict with /RTC1
         set_property(TARGET example_${example} PROPERTY
             MSVC_DEBUG_INFORMATION_FORMAT "")
         target_compile_options(example_${example} PRIVATE /bigobj /Zm800 /EHsc /GL- /O1)

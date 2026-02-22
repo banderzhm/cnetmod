@@ -1,44 +1,44 @@
 /**
  * @file ip_firewall.cppm
- * @brief IP 自适应防火墙 — 频率检测 + 自动封禁，基于 cache_store
+ * @brief IP adaptive firewall — frequency detection + auto-ban, based on cache_store
  *
- * 自动追踪 IP 违规行为（高频请求、大量 4xx/5xx、路径扫描等），
- * 超阈值后自动将 IP 加入黑名单，封禁期到后自动解除。
- * 底层使用 cache_store 接口存储状态，可无缝切换 memory_cache / redis_cache。
+ * Automatically tracks IP violations (high-frequency requests, excessive 4xx/5xx, path scanning, etc.),
+ * automatically adds IP to blacklist when threshold exceeded, auto-unban after ban period expires.
+ * Uses cache_store interface for state storage, seamlessly switchable between memory_cache / redis_cache.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.ip_firewall;
  *   import cnetmod.middleware.cache;
  *
  *   cnetmod::cache::memory_cache store({.max_entries = 50000});
  *
  *   cnetmod::ip_firewall fw(store, {
- *       .max_violations     = 10,               // 窗口内最多 10 次违规
- *       .violation_window   = std::chrono::minutes{5},  // 5 分钟统计窗口
- *       .ban_duration       = std::chrono::hours{1},    // 封禁 1 小时
- *       .track_4xx          = true,              // 4xx 响应计入违规
- *       .track_5xx          = false,             // 5xx 不计入（服务端问题）
- *       .track_rate_limit   = true,              // 429 计入违规
+ *       .max_violations     = 10,               // Max 10 violations in window
+ *       .violation_window   = std::chrono::minutes{5},  // 5-minute tracking window
+ *       .ban_duration       = std::chrono::hours{1},    // Ban for 1 hour
+ *       .track_4xx          = true,              // Count 4xx responses as violations
+ *       .track_5xx          = false,             // Don't count 5xx (server issues)
+ *       .track_rate_limit   = true,              // Count 429 as violations
  *   });
  *
- *   // 封禁检查（放在中间件链最前面）
+ *   // Ban check (place at front of middleware chain)
  *   svr.use(fw.check_middleware());
  *
- *   // 违规追踪（放在中间件链最后面，handler 执行完后统计）
+ *   // Violation tracking (place at end of middleware chain, tracks after handler execution)
  *   svr.use(fw.track_middleware());
  *
- *   // 手动举报违规（如配合 rate_limiter 回调）
+ *   // Manual violation report (e.g., from rate_limiter callback)
  *   co_await fw.report_violation(client_ip);
  *
- *   // 手动封禁/解封
+ *   // Manual ban/unban
  *   co_await fw.ban(ip);
  *   co_await fw.unban(ip);
  *
- *   // 查询状态
+ *   // Query status
  *   bool banned = co_await fw.is_banned(ip);
  *   int count = co_await fw.violation_count(ip);
  *
- *   // handler: 暴露封禁状态 API (可选)
+ *   // handler: expose ban status API (optional)
  *   router.get("/admin/firewall/:ip", cnetmod::firewall_status_handler(fw));
  *   router.post("/admin/firewall/:ip/ban", cnetmod::firewall_ban_handler(fw));
  *   router.del("/admin/firewall/:ip/ban", cnetmod::firewall_unban_handler(fw));
@@ -48,48 +48,48 @@ export module cnetmod.middleware.ip_firewall;
 import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
-import cnetmod.middleware.cache_store;  // 仅需抽象接口，避免引入 redis 等重量级依赖
-// 注意: 不 import cnetmod.core.log，避免 MSVC C1605（对象文件超4GB）
-// 改用 std::println(std::cerr, ...) 直接输出
+import cnetmod.middleware.cache_store;  // Only need abstract interface, avoid heavy dependencies like redis
+// Note: Don't import cnetmod.core.log to avoid MSVC C1605 (object file exceeds 4GB)
+// Use std::println(std::cerr, ...) for direct output
 
 namespace cnetmod {
 
 // =============================================================================
-// ip_firewall_options — 防火墙配置
+// ip_firewall_options — Firewall configuration
 // =============================================================================
 
 export struct ip_firewall_options {
-    /// 违规阈值: 窗口内累计达到此值则封禁
+    /// Violation threshold: ban when count reaches this value within window
     int max_violations = 10;
 
-    /// 统计窗口: 违规计数器的 TTL
-    std::chrono::seconds violation_window{300};  // 5 分钟
+    /// Tracking window: TTL for violation counter
+    std::chrono::seconds violation_window{300};  // 5 minutes
 
-    /// 封禁时长: 自动解封 TTL
-    std::chrono::seconds ban_duration{3600};     // 1 小时
+    /// Ban duration: auto-unban TTL
+    std::chrono::seconds ban_duration{3600};     // 1 hour
 
-    /// 是否追踪 4xx 响应 (除 429 外)
+    /// Whether to track 4xx responses (except 429)
     bool track_4xx = true;
 
-    /// 是否追踪 5xx 响应
+    /// Whether to track 5xx responses
     bool track_5xx = false;
 
-    /// 是否追踪 429 (Too Many Requests) — 配合 rate_limiter
+    /// Whether to track 429 (Too Many Requests) — works with rate_limiter
     bool track_rate_limit = true;
 
-    /// 特定路径的违规权重 (如扫描敏感路径加重处罚)
-    /// key: 路径前缀, value: 违规权重 (默认每次 +1)
+    /// Violation weights for specific paths (e.g., heavier penalty for scanning sensitive paths)
+    /// key: path prefix, value: violation weight (default +1 per violation)
     std::vector<std::pair<std::string, int>> path_weights;
 
-    /// 缓存 key 前缀
+    /// Cache key prefix
     std::string key_prefix = "fw:";
 
-    /// 被封禁时的响应状态码
+    /// Response status code when banned
     int banned_status = http::status::forbidden;
 };
 
 // =============================================================================
-// ip_firewall — 自适应 IP 防火墙
+// ip_firewall — Adaptive IP firewall
 // =============================================================================
 
 export class ip_firewall {
@@ -99,7 +99,7 @@ public:
         : store_(store), opts_(std::move(opts)) {}
 
     // =========================================================================
-    // check_middleware — 封禁检查 (放在中间件链头部)
+    // check_middleware — Ban check (place at head of middleware chain)
     // =========================================================================
 
     auto check_middleware() -> http::middleware_fn {
@@ -109,7 +109,7 @@ public:
             auto ip = http::resolve_client_ip(ctx);
             auto banned = co_await is_banned(ip);
             if (banned) {
-                // 获取剩余封禁时间（尽力估算）
+                // Get remaining ban time (best effort estimate)
                 std::println(std::cerr, "[firewall] blocked banned IP: {}", ip);
                 ctx.resp().set_header("Connection", "close");
                 ctx.json(opts_.banned_status, std::format(
@@ -121,11 +121,11 @@ public:
     }
 
     // =========================================================================
-    // track_middleware — 违规追踪 (放在中间件链尾部)
+    // track_middleware — Violation tracking (place at tail of middleware chain)
     // =========================================================================
     //
-    // handler 执行完后检查响应状态码，满足条件则累加违规次数。
-    // 超过阈值自动封禁。
+    // After handler execution, check response status code, accumulate violations if conditions met.
+    // Auto-ban when threshold exceeded.
 
     auto track_middleware() -> http::middleware_fn {
         return [this](http::request_context& ctx,
@@ -136,24 +136,24 @@ public:
             auto status = ctx.resp().status_code();
             int weight = 0;
 
-            // 429 检测
+            // 429 detection
             if (opts_.track_rate_limit && status == 429) {
                 weight = 1;
             }
-            // 4xx 检测 (排除 429，已单独处理)
+            // 4xx detection (exclude 429, already handled separately)
             else if (opts_.track_4xx && status >= 400 && status < 500
                      && status != 429)
             {
                 weight = 1;
             }
-            // 5xx 检测
+            // 5xx detection
             else if (opts_.track_5xx && status >= 500) {
                 weight = 1;
             }
 
             if (weight <= 0) co_return;
 
-            // 检查路径权重
+            // Check path weights
             auto path = ctx.path();
             for (auto& [prefix, w] : opts_.path_weights) {
                 if (path.starts_with(prefix)) {
@@ -168,43 +168,43 @@ public:
     }
 
     // =========================================================================
-    // 编程式 API
+    // Programmatic API
     // =========================================================================
 
-    /// 手动举报违规 (如从 rate_limiter 回调中使用)
+    /// Manual violation report (e.g., from rate_limiter callback)
     auto report_violation(std::string_view ip, int weight = 1) -> task<void> {
         co_await add_violation(std::string(ip), weight);
     }
 
-    /// 手动封禁
+    /// Manual ban
     auto ban(std::string_view ip) -> task<void> {
         co_await ban(std::string(ip), opts_.ban_duration);
     }
 
-    /// 手动封禁（自定义时长）
+    /// Manual ban (custom duration)
     auto ban(std::string_view ip, std::chrono::seconds duration) -> task<void> {
         auto key = ban_key(std::string(ip));
         co_await store_.set(key, "1", duration);
         std::println(std::cerr, "[firewall] banned IP: {} for {}s", ip, duration.count());
     }
 
-    /// 手动解封
+    /// Manual unban
     auto unban(std::string_view ip) -> task<void> {
         auto key = ban_key(std::string(ip));
         co_await store_.del(key);
-        // 同时清除违规计数
+        // Also clear violation count
         auto vk = violation_key(std::string(ip));
         co_await store_.del(vk);
         std::println(std::cerr, "[firewall] unbanned IP: {}", ip);
     }
 
-    /// 查询 IP 是否被封禁
+    /// Query if IP is banned
     auto is_banned(std::string_view ip) -> task<bool> {
         auto key = ban_key(std::string(ip));
         co_return co_await store_.exists(key);
     }
 
-    /// 查询 IP 当前违规次数
+    /// Query current violation count for IP
     auto violation_count(std::string_view ip) -> task<int> {
         auto key = violation_key(std::string(ip));
         auto val = co_await store_.get(key);
@@ -220,7 +220,7 @@ private:
     ip_firewall_options opts_;
 
     // =========================================================================
-    // cache key 生成
+    // cache key generation
     // =========================================================================
 
     auto ban_key(const std::string& ip) const -> std::string {
@@ -232,16 +232,16 @@ private:
     }
 
     // =========================================================================
-    // 违规累加 + 自动封禁判定
+    // Violation accumulation + auto-ban decision
     // =========================================================================
 
     auto add_violation(const std::string& ip, int weight) -> task<void> {
-        // 已封禁的 IP 无需继续累加
+        // No need to continue accumulating for already banned IPs
         if (co_await is_banned(ip)) co_return;
 
         auto key = violation_key(ip);
 
-        // 读取当前计数
+        // Read current count
         int count = 0;
         auto val = co_await store_.get(key);
         if (val) {
@@ -252,17 +252,17 @@ private:
 
         count += weight;
 
-        // 写回（刷新 TTL = violation_window）
+        // Write back (refresh TTL = violation_window)
         co_await store_.set(key, std::to_string(count), opts_.violation_window);
 
-        // debug 级别日志，仅在需要时启用
+        // debug level logging, enable only when needed
         // std::println(std::cerr, "[firewall] violation: ip={} count={}/{}", ip, count,
         //              opts_.max_violations);
 
-        // 超阈值 → 封禁
+        // Exceeded threshold → ban
         if (count >= opts_.max_violations) {
             co_await ban(ip, opts_.ban_duration);
-            // 清除违规计数（封禁后重新开始）
+            // Clear violation count (restart after ban)
             co_await store_.del(key);
         }
     }
@@ -273,7 +273,7 @@ private:
 
 namespace cnetmod {
 
-/// GET /admin/firewall/:ip — 查询 IP 封禁状态
+/// GET /admin/firewall/:ip — Query IP ban status
 export inline auto firewall_status_handler(ip_firewall& fw) -> http::handler_fn {
     return [&fw](http::request_context& ctx) -> task<void> {
         auto ip = ctx.param("ip");
@@ -290,7 +290,7 @@ export inline auto firewall_status_handler(ip_firewall& fw) -> http::handler_fn 
     };
 }
 
-/// POST /admin/firewall/:ip/ban — 手动封禁
+/// POST /admin/firewall/:ip/ban — Manual ban
 export inline auto firewall_ban_handler(ip_firewall& fw) -> http::handler_fn {
     return [&fw](http::request_context& ctx) -> task<void> {
         auto ip = ctx.param("ip");
@@ -305,7 +305,7 @@ export inline auto firewall_ban_handler(ip_firewall& fw) -> http::handler_fn {
     };
 }
 
-/// DELETE /admin/firewall/:ip/ban — 手动解封
+/// DELETE /admin/firewall/:ip/ban — Manual unban
 export inline auto firewall_unban_handler(ip_firewall& fw) -> http::handler_fn {
     return [&fw](http::request_context& ctx) -> task<void> {
         auto ip = ctx.param("ip");

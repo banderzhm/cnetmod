@@ -1,13 +1,13 @@
 /**
  * @file metrics.cppm
- * @brief Prometheus 文本格式指标收集 — 中间件自动统计 + /metrics 端点暴露
+ * @brief Prometheus text format metrics collection — middleware auto-stats + /metrics endpoint exposure
  *
- * 三个组件:
- *   1. metrics_collector — 全局指标收集器（atomic 计数器，零开销）
- *   2. metrics_middleware — 中间件，自动统计每个请求
- *   3. metrics_handler — handler，暴露 Prometheus text format
+ * Three components:
+ *   1. metrics_collector — Global metrics collector (atomic counters, zero overhead)
+ *   2. metrics_middleware — Middleware, automatically tracks each request
+ *   3. metrics_handler — Handler, exposes Prometheus text format
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.metrics;
  *
  *   cnetmod::metrics_collector mc;
@@ -23,7 +23,7 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
-// metrics_collector — Prometheus 指标收集器
+// metrics_collector — Prometheus metrics collector
 // =============================================================================
 
 export class metrics_collector {
@@ -31,18 +31,18 @@ public:
     metrics_collector() noexcept
         : start_time_(std::chrono::steady_clock::now()) {}
 
-    // --- 请求计数 ---
+    // --- Request counters ---
     std::atomic<std::uint64_t> requests_total{0};
     std::atomic<std::uint64_t> responses_2xx{0};
     std::atomic<std::uint64_t> responses_3xx{0};
     std::atomic<std::uint64_t> responses_4xx{0};
     std::atomic<std::uint64_t> responses_5xx{0};
 
-    // --- 连接 ---
+    // --- Connections ---
     std::atomic<std::uint64_t> connections_total{0};
     std::atomic<std::int64_t>  connections_active{0};
 
-    // --- 延迟直方图 bucket（累积，Prometheus 风格）---
+    // --- Latency histogram buckets (cumulative, Prometheus style) ---
     std::atomic<std::uint64_t> latency_le_1ms{0};     // ≤ 1ms
     std::atomic<std::uint64_t> latency_le_5ms{0};     // ≤ 5ms
     std::atomic<std::uint64_t> latency_le_10ms{0};    // ≤ 10ms
@@ -53,13 +53,13 @@ public:
     std::atomic<std::uint64_t> latency_le_5s{0};      // ≤ 5s
     std::atomic<std::uint64_t> latency_le_inf{0};     // +Inf
 
-    // --- 延迟累积 ---
-    std::atomic<std::uint64_t> latency_sum_us{0};     // 微秒总和
+    // --- Latency accumulation ---
+    std::atomic<std::uint64_t> latency_sum_us{0};     // Total microseconds
 
-    // --- body 大小 ---
+    // --- Body size ---
     std::atomic<std::uint64_t> response_bytes_total{0};
 
-    /// 记录一个请求的延迟（微秒）
+    /// Record request latency (in microseconds)
     void record_latency(std::uint64_t us) noexcept {
         latency_sum_us.fetch_add(us, std::memory_order_relaxed);
         latency_le_inf.fetch_add(1, std::memory_order_relaxed);
@@ -73,13 +73,13 @@ public:
         if (us <= 1000)    latency_le_1ms.fetch_add(1, std::memory_order_relaxed);
     }
 
-    /// 服务启动时间
+    /// Service uptime
     [[nodiscard]] auto uptime_seconds() const noexcept -> double {
         auto elapsed = std::chrono::steady_clock::now() - start_time_;
         return std::chrono::duration<double>(elapsed).count();
     }
 
-    /// 序列化为 Prometheus text exposition format
+    /// Serialize to Prometheus text exposition format
     [[nodiscard]] auto serialize() const -> std::string {
         auto total = requests_total.load(std::memory_order_relaxed);
         auto sum_us = latency_sum_us.load(std::memory_order_relaxed);
@@ -88,19 +88,19 @@ public:
         std::string out;
         out.reserve(2048);
 
-        // 进程运行时间
+        // Process uptime
         out += std::format(
             "# HELP cnetmod_uptime_seconds Process uptime.\n"
             "# TYPE cnetmod_uptime_seconds gauge\n"
             "cnetmod_uptime_seconds {:.3f}\n", uptime_seconds());
 
-        // 请求总数
+        // Total requests
         out += std::format(
             "# HELP cnetmod_http_requests_total Total HTTP requests.\n"
             "# TYPE cnetmod_http_requests_total counter\n"
             "cnetmod_http_requests_total {}\n", total);
 
-        // 按状态码分类
+        // Responses by status code
         out += std::format(
             "# HELP cnetmod_http_responses_total Responses by status class.\n"
             "# TYPE cnetmod_http_responses_total counter\n"
@@ -113,14 +113,14 @@ public:
             responses_4xx.load(std::memory_order_relaxed),
             responses_5xx.load(std::memory_order_relaxed));
 
-        // 连接
+        // Connections
         out += std::format(
             "# HELP cnetmod_connections_active Current active connections.\n"
             "# TYPE cnetmod_connections_active gauge\n"
             "cnetmod_connections_active {}\n",
             connections_active.load(std::memory_order_relaxed));
 
-        // 延迟直方图
+        // Latency histogram
         out += std::format(
             "# HELP cnetmod_http_request_duration_seconds Request latency histogram.\n"
             "# TYPE cnetmod_http_request_duration_seconds histogram\n"
@@ -146,7 +146,7 @@ public:
             latency_le_inf.load(std::memory_order_relaxed),
             sum_s, total);
 
-        // 响应 body 总字节数
+        // Total response body bytes
         out += std::format(
             "# HELP cnetmod_http_response_bytes_total Total response body bytes.\n"
             "# TYPE cnetmod_http_response_bytes_total counter\n"
@@ -161,7 +161,7 @@ private:
 };
 
 // =============================================================================
-// metrics_middleware — 自动统计中间件
+// metrics_middleware — Auto-tracking middleware
 // =============================================================================
 
 export inline auto metrics_middleware(metrics_collector& mc)
@@ -174,13 +174,13 @@ export inline auto metrics_middleware(metrics_collector& mc)
 
         co_await next();
 
-        // 延迟
+        // Latency
         auto elapsed = std::chrono::steady_clock::now() - start;
         auto us = static_cast<std::uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(elapsed).count());
         mc.record_latency(us);
 
-        // 状态码分类
+        // Status code classification
         auto status = ctx.resp().status_code();
         if (status >= 200 && status < 300)
             mc.responses_2xx.fetch_add(1, std::memory_order_relaxed);
@@ -191,14 +191,14 @@ export inline auto metrics_middleware(metrics_collector& mc)
         else if (status >= 500)
             mc.responses_5xx.fetch_add(1, std::memory_order_relaxed);
 
-        // body 大小
+        // Body size
         mc.response_bytes_total.fetch_add(
             ctx.resp().body().size(), std::memory_order_relaxed);
     };
 }
 
 // =============================================================================
-// metrics_handler — 暴露 /metrics 端点
+// metrics_handler — Expose /metrics endpoint
 // =============================================================================
 
 export inline auto metrics_handler(metrics_collector& mc) -> http::handler_fn

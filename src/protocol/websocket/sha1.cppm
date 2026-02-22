@@ -10,7 +10,7 @@ import std;
 namespace cnetmod::ws::detail {
 
 // =============================================================================
-// SHA-1 实现 (基于 smallsha1, BSD license)
+// SHA-1 Implementation (based on smallsha1, BSD license)
 // =============================================================================
 
 namespace {
@@ -61,7 +61,7 @@ inline void inner_hash(std::uint32_t* result, std::uint32_t* w) noexcept {
 
 } // anonymous namespace
 
-/// 计算 SHA-1 哈希
+/// Compute SHA-1 hash
 export auto sha1(const void* src, std::size_t len) noexcept
     -> std::array<std::byte, 20>
 {
@@ -109,14 +109,14 @@ export auto sha1(const void* src, std::size_t len) noexcept
     return hash;
 }
 
-/// 计算 SHA-1 哈希 (span 版本)
+/// Compute SHA-1 hash (span version)
 export auto sha1(std::span<const std::byte> input) noexcept
     -> std::array<std::byte, 20>
 {
     return sha1(input.data(), input.size());
 }
 
-/// 计算 SHA-1 哈希 (string_view 版本)
+/// Compute SHA-1 hash (string_view version)
 export auto sha1(std::string_view input) noexcept
     -> std::array<std::byte, 20>
 {

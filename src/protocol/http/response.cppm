@@ -10,7 +10,7 @@ import :types;
 namespace cnetmod::http {
 
 // =============================================================================
-// response — HTTP 响应构建器
+// response — HTTP Response Builder
 // =============================================================================
 
 export class response {
@@ -21,7 +21,7 @@ public:
                       http_version version = http_version::http_1_1)
         : status_code_(status_code), version_(version) {}
 
-    // --- 设置 ---
+    // --- Settings ---
 
     auto& set_status(int code) noexcept { status_code_ = code; return *this; }
     auto& set_status_message(std::string_view msg) { status_msg_ = std::string(msg); return *this; }
@@ -60,7 +60,7 @@ public:
         return *this;
     }
 
-    // --- 访问 ---
+    // --- Access ---
 
     [[nodiscard]] auto status_code() const noexcept -> int { return status_code_; }
     [[nodiscard]] auto version() const noexcept -> http_version { return version_; }
@@ -73,9 +73,9 @@ public:
         return {};
     }
 
-    // --- 序列化 ---
+    // --- Serialization ---
 
-    /// 序列化为完整的 HTTP 响应字符串
+    /// Serialize to complete HTTP response string
     [[nodiscard]] auto serialize() const -> std::string {
         std::string out;
         out.reserve(256 + body_.size());
@@ -100,7 +100,7 @@ public:
             out += "\r\n";
         }
 
-        // 空行
+        // Empty line
         out += "\r\n";
 
         // Body

@@ -10,7 +10,7 @@ import :types;
 namespace cnetmod::http {
 
 // =============================================================================
-// request — HTTP 请求构建器
+// request — HTTP Request Builder
 // =============================================================================
 
 export class request {
@@ -21,7 +21,7 @@ public:
                      http_version version = http_version::http_1_1)
         : method_(method), uri_(uri), version_(version) {}
 
-    // --- 设置 ---
+    // --- Settings ---
 
     auto& set_method(http_method m) noexcept { method_ = m; return *this; }
     auto& set_uri(std::string_view uri) { uri_ = std::string(uri); return *this; }
@@ -50,7 +50,7 @@ public:
 
     auto& set_body(std::string_view body) {
         body_ = std::string(body);
-        // 自动设置 Content-Length
+        // Automatically set Content-Length
         headers_["Content-Length"] = std::to_string(body_.size());
         return *this;
     }
@@ -61,7 +61,7 @@ public:
         return *this;
     }
 
-    // --- 访问 ---
+    // --- Access ---
 
     [[nodiscard]] auto method() const noexcept -> http_method { return method_; }
     [[nodiscard]] auto uri() const noexcept -> std::string_view { return uri_; }
@@ -75,9 +75,9 @@ public:
         return {};
     }
 
-    // --- 序列化 ---
+    // --- Serialization ---
 
-    /// 序列化为完整的 HTTP 请求字符串
+    /// Serialize to complete HTTP request string
     [[nodiscard]] auto serialize() const -> std::string {
         std::string out;
         out.reserve(256 + body_.size());
@@ -98,7 +98,7 @@ public:
             out += "\r\n";
         }
 
-        // 空行
+        // Empty line
         out += "\r\n";
 
         // Body

@@ -19,7 +19,7 @@ import cnetmod.core.error;
 namespace cnetmod {
 
 // =============================================================================
-// 平台类型别名
+// Platform type aliases
 // =============================================================================
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
@@ -31,7 +31,7 @@ export inline constexpr file_handle_t invalid_file_handle = -1;
 #endif
 
 // =============================================================================
-// 文件打开模式
+// File open modes
 // =============================================================================
 
 export enum class open_mode : std::uint32_t {
@@ -39,9 +39,9 @@ export enum class open_mode : std::uint32_t {
     write        = 0x02,
     read_write   = 0x03,
     append       = 0x04,
-    create       = 0x08,   // 不存在则创建
-    truncate     = 0x10,   // 存在则截断
-    create_new   = 0x20,   // 必须不存在
+    create       = 0x08,   // Create if not exists
+    truncate     = 0x10,   // Truncate if exists
+    create_new   = 0x20,   // Must not exist
 };
 
 export constexpr auto operator|(open_mode a, open_mode b) noexcept -> open_mode {
@@ -59,49 +59,49 @@ export constexpr auto has_flag(open_mode mode, open_mode flag) noexcept -> bool 
 }
 
 // =============================================================================
-// File 类
+// File class
 // =============================================================================
 
-/// 平台无关的文件句柄封装（RAII）
-/// 支持异步 I/O（通过 io_context 驱动）
+/// Platform-independent file handle wrapper (RAII)
+/// Supports async I/O (driven by io_context)
 export class file {
 public:
     file() noexcept = default;
     ~file();
 
-    // 不可复制
+    // Non-copyable
     file(const file&) = delete;
     auto operator=(const file&) -> file& = delete;
 
-    // 可移动
+    // Movable
     file(file&& other) noexcept;
     auto operator=(file&& other) noexcept -> file&;
 
-    /// 打开文件
+    /// Open file
     [[nodiscard]] static auto open(
         const std::filesystem::path& path,
         open_mode mode
     ) -> std::expected<file, std::error_code>;
 
-    /// 关闭文件
+    /// Close file
     void close() noexcept;
 
-    /// 获取文件大小
+    /// Get file size
     [[nodiscard]] auto size() const -> std::expected<std::uint64_t, std::error_code>;
 
-    /// 获取原生句柄
+    /// Get native handle
     [[nodiscard]] auto native_handle() const noexcept -> file_handle_t {
         return handle_;
     }
 
-    /// 释放所有权（不关闭）
+    /// Release ownership (without closing)
     [[nodiscard]] auto release() noexcept -> file_handle_t {
         auto h = handle_;
         handle_ = invalid_file_handle;
         return h;
     }
 
-    /// 是否有效
+    /// Check if valid
     [[nodiscard]] auto is_open() const noexcept -> bool {
         return handle_ != invalid_file_handle;
     }

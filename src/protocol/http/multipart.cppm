@@ -11,7 +11,7 @@ import :types;
 namespace cnetmod::http {
 
 // =============================================================================
-// URL 编码 / 解码
+// URL Encoding / Decoding
 // =============================================================================
 
 namespace detail {
@@ -25,7 +25,7 @@ inline auto hex_digit(char c) noexcept -> int {
 
 inline constexpr char hex_chars[] = "0123456789ABCDEF";
 
-/// RFC 3986 非保留字符
+/// RFC 3986 unreserved characters
 inline auto is_unreserved(char c) noexcept -> bool {
     return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
            (c >= '0' && c <= '9') || c == '-' || c == '_' ||
@@ -34,7 +34,7 @@ inline auto is_unreserved(char c) noexcept -> bool {
 
 } // namespace detail
 
-/// 百分号解码。`+` → 空格 (form 模式)。无效序列原样保留。
+/// Percent decoding. `+` → space (form mode). Invalid sequences preserved as-is.
 export auto url_decode(std::string_view input, bool plus_as_space = true)
     -> std::string
 {
@@ -50,7 +50,7 @@ export auto url_decode(std::string_view input, bool plus_as_space = true)
                 i += 2;
                 continue;
             }
-            // 无效序列 — 原样保留
+            // Invalid sequence — preserve as-is
         }
         if (plus_as_space && input[i] == '+') {
             out += ' ';
@@ -61,7 +61,7 @@ export auto url_decode(std::string_view input, bool plus_as_space = true)
     return out;
 }
 
-/// RFC 3986 百分号编码
+/// RFC 3986 percent encoding
 export auto url_encode(std::string_view input) -> std::string {
     std::string out;
     out.reserve(input.size() * 3 / 2);
@@ -79,7 +79,7 @@ export auto url_encode(std::string_view input) -> std::string {
 }
 
 // =============================================================================
-// Content-Type 解析
+// Content-Type Parsing
 // =============================================================================
 
 export struct content_type {
@@ -87,7 +87,7 @@ export struct content_type {
     std::unordered_map<std::string, std::string> params;
 
     [[nodiscard]] auto param(std::string_view key) const -> std::string_view {
-        // 参数名大小写不敏感查找
+        // Case-insensitive parameter name lookup
         for (auto& [k, v] : params) {
             if (k.size() != key.size()) continue;
             bool eq = true;
@@ -104,18 +104,18 @@ export struct content_type {
 
 namespace detail {
 
-/// 跳过 OWS (可选空白: SP / HTAB)
+/// Skip OWS (optional whitespace: SP / HTAB)
 inline auto skip_ows(std::string_view s) noexcept -> std::string_view {
     while (!s.empty() && (s[0] == ' ' || s[0] == '\t'))
         s.remove_prefix(1);
     return s;
 }
 
-/// 解析引号字符串 (含 \" \\ 转义)，返回解引号后的值和剩余串
+/// Parse quoted string (with \" \\ escaping), returns unquoted value and remaining string
 inline auto parse_quoted_string(std::string_view s)
     -> std::pair<std::string, std::string_view>
 {
-    // s 以 '"' 开始
+    // s starts with '"'
     if (s.empty() || s[0] != '"') return {{}, s};
     s.remove_prefix(1);
 
@@ -133,10 +133,10 @@ inline auto parse_quoted_string(std::string_view s)
             s.remove_prefix(1);
         }
     }
-    return {val, s}; // 缺少闭合引号 — 尽力而为
+    return {val, s}; // Missing closing quote — best effort
 }
 
-/// 解析 token (RFC 7230: 非分隔符可见 ASCII)
+/// Parse token (RFC 7230: non-delimiter visible ASCII)
 inline auto parse_token(std::string_view s)
     -> std::pair<std::string_view, std::string_view>
 {
@@ -157,7 +157,7 @@ inline auto parse_token(std::string_view s)
     return {s.substr(0, i), s.substr(i)};
 }
 
-/// 从 string_view 构造小写 string
+/// Construct lowercase string from string_view
 inline auto to_lower(std::string_view sv) -> std::string {
     std::string s(sv);
     for (auto& c : s) {
@@ -168,7 +168,7 @@ inline auto to_lower(std::string_view sv) -> std::string {
 
 } // namespace detail
 
-/// 解析 Content-Type header value
+/// Parse Content-Type header value
 /// e.g. "multipart/form-data; boundary=----abc; charset=utf-8"
 export auto parse_content_type(std::string_view header) -> content_type {
     content_type ct;
@@ -185,7 +185,7 @@ export auto parse_content_type(std::string_view header) -> content_type {
         ct.mime = detail::to_lower(type_part);
     }
 
-    // 参数: (; name=value)*
+    // Parameters: (; name=value)*
     while (!rest.empty()) {
         rest = detail::skip_ows(rest);
         if (rest.empty() || rest[0] != ';') break;
@@ -219,16 +219,16 @@ export auto parse_content_type(std::string_view header) -> content_type {
 }
 
 // =============================================================================
-// Content-Disposition 解析
+// Content-Disposition Parsing
 // =============================================================================
 
 export struct content_disposition {
-    std::string type;            // "form-data", "attachment" 等
-    std::string name;            // 字段名
-    std::string filename;        // 原始文件名 (可空)
-    std::string filename_star;   // RFC 5987 扩展文件名 (可空)
+    std::string type;            // "form-data", "attachment", etc.
+    std::string name;            // Field name
+    std::string filename;        // Original filename (may be empty)
+    std::string filename_star;   // RFC 5987 extended filename (may be empty)
 
-    /// 返回有效文件名：优先 filename_star，其次 filename
+    /// Returns effective filename: filename_star preferred, then filename
     [[nodiscard]] auto effective_filename() const noexcept -> std::string_view {
         if (!filename_star.empty()) return filename_star;
         return filename;
@@ -241,7 +241,7 @@ export struct content_disposition {
 
 namespace detail {
 
-/// 解析 RFC 5987 ext-value: charset'language'value-chars
+/// Parse RFC 5987 ext-value: charset'language'value-chars
 /// e.g. "UTF-8''my%20file.txt" → "my file.txt"
 inline auto decode_ext_value(std::string_view input) -> std::string {
     // charset'[language]'percent-encoded
@@ -250,14 +250,14 @@ inline auto decode_ext_value(std::string_view input) -> std::string {
     auto tick2 = input.find('\'', tick1 + 1);
     if (tick2 == std::string_view::npos) return std::string(input);
 
-    // charset = input.substr(0, tick1); // 暂不做 charset 转换
+    // charset = input.substr(0, tick1); // No charset conversion for now
     auto encoded = input.substr(tick2 + 1);
     return url_decode(encoded, /*plus_as_space=*/false);
 }
 
 } // namespace detail
 
-/// 解析 Content-Disposition header value
+/// Parse Content-Disposition header value
 /// e.g. "form-data; name=\"field1\"; filename=\"my file.txt\""
 export auto parse_content_disposition(std::string_view header)
     -> content_disposition
@@ -269,7 +269,7 @@ export auto parse_content_disposition(std::string_view header)
     auto [dtype, rest] = detail::parse_token(header);
     cd.type = detail::to_lower(dtype);
 
-    // 参数
+    // Parameters
     while (!rest.empty()) {
         rest = detail::skip_ows(rest);
         if (rest.empty() || rest[0] != ';') break;
@@ -285,9 +285,9 @@ export auto parse_content_disposition(std::string_view header)
         if (rest.empty() || rest[0] != '=') continue;
         rest.remove_prefix(1);
 
-        // filename* 使用 ext-value 语法 (不加引号)
+        // filename* uses ext-value syntax (no quotes)
         if (pname_lower == "filename*") {
-            // ext-value 到 ; 或末尾
+            // ext-value to ; or end
             auto end = rest.find(';');
             auto raw = (end != std::string_view::npos)
                 ? rest.substr(0, end) : rest;
@@ -325,7 +325,7 @@ export auto parse_content_disposition(std::string_view header)
 }
 
 // =============================================================================
-// Base64 解码 (用于 Content-Transfer-Encoding: base64)
+// Base64 Decoding (for Content-Transfer-Encoding: base64)
 // =============================================================================
 
 namespace detail {
@@ -349,7 +349,7 @@ inline constexpr std::int8_t b64_table[256] = {
     -1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,
 };
 
-/// Base64 解码，忽略空白字符 (CR/LF/SP/TAB)，处理 padding
+/// Base64 decode, ignoring whitespace (CR/LF/SP/TAB), handling padding
 inline auto base64_decode(std::string_view input)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
@@ -360,9 +360,9 @@ inline auto base64_decode(std::string_view input)
     int bits = 0;
 
     for (auto c : input) {
-        // 跳过空白
+        // Skip whitespace
         if (c == '\r' || c == '\n' || c == ' ' || c == '\t') continue;
-        // padding 或结束
+        // Padding or end
         if (c == '=') break;
 
         auto val = b64_table[static_cast<unsigned char>(c)];
@@ -382,7 +382,7 @@ inline auto base64_decode(std::string_view input)
     return out;
 }
 
-/// Quoted-Printable 解码 (RFC 2045)
+/// Quoted-Printable decode (RFC 2045)
 inline auto quoted_printable_decode(std::string_view input)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
@@ -391,7 +391,7 @@ inline auto quoted_printable_decode(std::string_view input)
 
     for (std::size_t i = 0; i < input.size(); ++i) {
         if (input[i] == '=') {
-            // soft line break: =\r\n 或 =\n
+            // soft line break: =\r\n or =\n
             if (i + 1 < input.size() && input[i + 1] == '\n') {
                 ++i; // skip \n
                 continue;
@@ -410,7 +410,7 @@ inline auto quoted_printable_decode(std::string_view input)
                     continue;
                 }
             }
-            // 无效 — 原样保留
+            // Invalid — preserve as-is
             out.push_back(static_cast<std::byte>('='));
         } else {
             out.push_back(static_cast<std::byte>(input[i]));
@@ -434,8 +434,8 @@ export struct form_field {
 export struct form_file {
     std::string field_name;
     std::string filename;
-    std::string content_type;     // 默认 "application/octet-stream"
-    header_map  headers;          // 该 part 的完整 headers
+    std::string content_type;     // Default "application/octet-stream"
+    header_map  headers;          // Complete headers for this part
     std::vector<std::byte> data;
 
     [[nodiscard]] auto size() const noexcept -> std::size_t {
@@ -449,7 +449,7 @@ export struct form_file {
 
 export class form_data {
 public:
-    // --- 字段访问 ---
+    // --- Field Access ---
 
     [[nodiscard]] auto field(std::string_view name) const
         -> std::optional<std::string_view>
@@ -477,7 +477,7 @@ public:
         return false;
     }
 
-    // --- 文件访问 ---
+    // --- File Access ---
 
     [[nodiscard]] auto file(std::string_view name) const -> const form_file* {
         for (auto& f : files_) {
@@ -503,7 +503,7 @@ public:
         return false;
     }
 
-    // --- 全部 ---
+    // --- All ---
 
     [[nodiscard]] auto all_fields() const noexcept
         -> const std::vector<form_field>& { return fields_; }
@@ -519,7 +519,7 @@ public:
         return files_.size();
     }
 
-    // --- 修改 ---
+    // --- Modification ---
 
     void add_field(form_field f) { fields_.push_back(std::move(f)); }
     void add_file(form_file f)   { files_.push_back(std::move(f)); }
@@ -530,7 +530,7 @@ private:
 };
 
 // =============================================================================
-// multipart_parser — 完整 multipart/form-data 解析器
+// multipart_parser — Complete multipart/form-data Parser
 // =============================================================================
 
 export class multipart_parser {
@@ -541,13 +541,13 @@ public:
         , close_delimiter_("--" + boundary_ + "--")
     {}
 
-    /// 解析完整的 multipart body，返回 form_data
+    /// Parse complete multipart body, returns form_data
     [[nodiscard]] auto parse(std::string_view body)
         -> std::expected<form_data, std::error_code>
     {
         form_data result;
 
-        // 1. 找到第一个 delimiter (跳过 preamble)
+        // 1. Find first delimiter (skip preamble)
         auto first = find_in(body, delimiter_, 0);
         if (first == std::string_view::npos) {
             return std::unexpected(make_error_code(http_errc::invalid_multipart));
@@ -555,32 +555,32 @@ public:
 
         auto pos = first + delimiter_.size();
 
-        // 跳过 delimiter 后的 CRLF (或 -- 表示结束)
+        // Skip CRLF after delimiter (or -- indicating end)
         if (!skip_transport_padding(body, pos)) {
             return std::unexpected(make_error_code(http_errc::invalid_multipart));
         }
 
-        // 2. 循环解析 parts
+        // 2. Loop parsing parts
         while (pos < body.size()) {
-            // 检查是否是 close delimiter
-            // 已在上一轮的 skip_transport_padding 或 boundary 后处理
+            // Check if this is close delimiter
+            // Already handled in previous skip_transport_padding or after boundary
 
-            // 查找下一个 boundary
-            // part body 从 pos 开始，到 \r\n + delimiter 之前结束
+            // Find next boundary
+            // Part body starts at pos, ends before \r\n + delimiter
             auto next_delim = find_in(body, "\r\n" + delimiter_, pos);
 
             std::string_view part_data;
             bool is_last = false;
 
             if (next_delim == std::string_view::npos) {
-                // 没有更多 boundary — 可能格式错误或缺少 close delimiter
-                // 尝试查找 close delimiter without leading CRLF (容错)
+                // No more boundaries — possibly malformed or missing close delimiter
+                // Try to find close delimiter without leading CRLF (error tolerance)
                 auto close_pos = find_in(body, "\r\n" + close_delimiter_, pos);
                 if (close_pos != std::string_view::npos) {
                     part_data = body.substr(pos, close_pos - pos);
                     is_last = true;
                 } else {
-                    // 取剩余所有内容作为最后一个 part (容错)
+                    // Take all remaining content as last part (error tolerance)
                     part_data = body.substr(pos);
                     is_last = true;
                 }
@@ -588,21 +588,21 @@ public:
                 part_data = body.substr(pos, next_delim - pos);
             }
 
-            // 解析这个 part
+            // Parse this part
             auto r = parse_part(part_data, result);
             if (!r) return std::unexpected(r.error());
 
             if (is_last) break;
 
-            // 跳过 \r\n + delimiter
+            // Skip \r\n + delimiter
             pos = next_delim + 2 + delimiter_.size();
 
-            // 检查是否是 close delimiter (--)
+            // Check if this is close delimiter (--)
             if (pos + 1 < body.size() && body[pos] == '-' && body[pos + 1] == '-') {
-                break; // 结束
+                break; // End
             }
 
-            // 跳过 CRLF
+            // Skip CRLF
             if (!skip_transport_padding(body, pos)) break;
         }
 
@@ -610,7 +610,7 @@ public:
     }
 
 private:
-    /// 在 data 中从 offset 开始查找 needle
+    /// Find needle in data starting from offset
     static auto find_in(std::string_view data, std::string_view needle,
                         std::size_t offset) noexcept -> std::size_t
     {
@@ -623,44 +623,44 @@ private:
         return offset + static_cast<std::size_t>(it - haystack.begin());
     }
 
-    /// 跳过 transport-padding 和 CRLF
+    /// Skip transport-padding and CRLF
     auto skip_transport_padding(std::string_view body, std::size_t& pos) const
         -> bool
     {
-        // 跳过 SP/HTAB (transport-padding)
+        // Skip SP/HTAB (transport-padding)
         while (pos < body.size() && (body[pos] == ' ' || body[pos] == '\t'))
             ++pos;
-        // 跳过 CRLF
+        // Skip CRLF
         if (pos + 1 < body.size() && body[pos] == '\r' && body[pos + 1] == '\n') {
             pos += 2;
             return true;
         }
-        // 也接受单独 LF (容错)
+        // Also accept single LF (error tolerance)
         if (pos < body.size() && body[pos] == '\n') {
             ++pos;
             return true;
         }
-        // 可能是 close delimiter
+        // Might be close delimiter
         if (pos + 1 < body.size() && body[pos] == '-' && body[pos + 1] == '-') {
-            return true; // caller 会检查
+            return true; // Caller will check
         }
-        return pos >= body.size(); // EOF 也算结束
+        return pos >= body.size(); // EOF also counts as end
     }
 
-    /// 解析单个 part: headers 和 body，分类为 field 或 file
+    /// Parse single part: headers and body, classify as field or file
     auto parse_part(std::string_view part_data, form_data& result)
         -> std::expected<void, std::error_code>
     {
-        // 空行 (\r\n\r\n) 分隔 headers 和 body
+        // Empty line (\r\n\r\n) separates headers and body
         auto header_end = find_in(part_data, "\r\n\r\n", 0);
         std::string_view header_block;
         std::string_view body_block;
 
         if (header_end == std::string_view::npos) {
-            // 也尝试 \n\n (容错)
+            // Also try \n\n (error tolerance)
             header_end = find_in(part_data, "\n\n", 0);
             if (header_end == std::string_view::npos) {
-                // 无 headers，整体作为 body (极端容错)
+                // No headers, treat entire content as body (extreme error tolerance)
                 body_block = part_data;
             } else {
                 header_block = part_data.substr(0, header_end);
@@ -671,21 +671,21 @@ private:
             body_block = part_data.substr(header_end + 4);
         }
 
-        // 解析 headers
+        // Parse headers
         auto headers_r = parse_part_headers(header_block);
         if (!headers_r) return std::unexpected(headers_r.error());
         auto& headers = *headers_r;
 
-        // 解析 Content-Disposition
+        // Parse Content-Disposition
         auto cd_it = headers.find("Content-Disposition");
         if (cd_it == headers.end()) {
-            // 缺少 Content-Disposition — 跳过该 part
+            // Missing Content-Disposition — skip this part
             return {};
         }
 
         auto cd = parse_content_disposition(cd_it->second);
         if (cd.name.empty() && cd.type != "form-data") {
-            // 非 form-data 且无 name — 跳过
+            // Not form-data and no name — skip
             return {};
         }
 
@@ -694,13 +694,13 @@ private:
         std::string_view encoding;
         if (cte_it != headers.end()) encoding = cte_it->second;
 
-        // 解码 body
+        // Decode body
         auto decoded = decode_body(body_block, encoding);
         if (!decoded) return std::unexpected(decoded.error());
 
-        // 分类
+        // Classify
         if (cd.has_filename()) {
-            // 文件
+            // File
             form_file ff;
             ff.field_name = std::move(cd.name);
             ff.filename = std::string(cd.effective_filename());
@@ -716,7 +716,7 @@ private:
             ff.data = std::move(*decoded);
             result.add_file(std::move(ff));
         } else {
-            // 普通字段
+            // Regular field
             form_field field;
             field.name = std::move(cd.name);
             field.value = std::string(
@@ -728,14 +728,14 @@ private:
         return {};
     }
 
-    /// 解析 part 的 header block (每行 "Key: Value\r\n")
+    /// Parse part header block (each line "Key: Value\r\n")
     static auto parse_part_headers(std::string_view block)
         -> std::expected<header_map, std::error_code>
     {
         header_map headers;
         if (block.empty()) return headers;
 
-        // 支持 continuation lines (以 SP/HTAB 开始的行拼接到上一行)
+        // Support continuation lines (lines starting with SP/HTAB are appended to previous line)
         std::string_view pending_key;
         std::string pending_value;
         bool has_pending = false;
@@ -757,7 +757,7 @@ private:
         };
 
         while (!block.empty()) {
-            // 找行结束
+            // Find line end
             std::size_t eol = std::string_view::npos;
             bool crlf = false;
             for (std::size_t i = 0; i < block.size(); ++i) {
@@ -789,20 +789,20 @@ private:
                 continue;
             }
 
-            // 先 flush 前一个 header
+            // Flush previous header first
             flush();
 
-            // 解析 "Key: Value"
+            // Parse "Key: Value"
             auto colon = line.find(':');
-            if (colon == std::string_view::npos) continue; // 无效行 — 跳过
+            if (colon == std::string_view::npos) continue; // Invalid line — skip
 
             auto key = line.substr(0, colon);
-            // trim key 尾空白
+            // Trim trailing whitespace from key
             while (!key.empty() && (key.back() == ' ' || key.back() == '\t'))
                 key.remove_suffix(1);
 
             auto val = detail::skip_ows(line.substr(colon + 1));
-            // trim val 尾空白
+            // Trim trailing whitespace from val
             while (!val.empty() && (val.back() == ' ' || val.back() == '\t'))
                 val.remove_suffix(1);
 
@@ -815,16 +815,16 @@ private:
         return headers;
     }
 
-    /// 根据 Content-Transfer-Encoding 解码 body
+    /// Decode body based on Content-Transfer-Encoding
     static auto decode_body(std::string_view body, std::string_view encoding)
         -> std::expected<std::vector<std::byte>, std::error_code>
     {
-        // 空 encoding 或 7bit/8bit/binary — 直接复制
+        // Empty encoding or 7bit/8bit/binary — direct copy
         if (encoding.empty()) {
             return raw_copy(body);
         }
 
-        // 转小写比较
+        // Convert to lowercase for comparison
         std::string enc_lower;
         enc_lower.reserve(encoding.size());
         for (auto c : encoding) {
@@ -858,15 +858,15 @@ private:
 };
 
 // =============================================================================
-// URL-encoded 表单解析
+// URL-encoded Form Parsing
 // =============================================================================
 
-/// 解析 application/x-www-form-urlencoded body
+/// Parse application/x-www-form-urlencoded body
 export auto parse_form_urlencoded(std::string_view body) -> form_data {
     form_data result;
 
     while (!body.empty()) {
-        // 按 & 分割
+        // Split by &
         auto amp = body.find('&');
         auto pair = (amp != std::string_view::npos)
             ? body.substr(0, amp) : body;
@@ -891,10 +891,10 @@ export auto parse_form_urlencoded(std::string_view body) -> form_data {
 }
 
 // =============================================================================
-// 统一入口
+// Unified Entry Point
 // =============================================================================
 
-/// 根据 Content-Type 自动选择解析方式
+/// Automatically select parsing method based on Content-Type
 export auto parse_form(std::string_view content_type_header,
                        std::string_view body)
     -> std::expected<form_data, std::error_code>
@@ -918,7 +918,7 @@ export auto parse_form(std::string_view content_type_header,
 }
 
 // =============================================================================
-// multipart_builder — 客户端构建 multipart 请求
+// multipart_builder — Client-side Multipart Request Builder
 // =============================================================================
 
 export class multipart_builder {
@@ -931,7 +931,7 @@ public:
         : boundary_(std::move(boundary))
     {}
 
-    /// 添加普通字段
+    /// Add regular field
     auto add_field(std::string_view name, std::string_view value)
         -> multipart_builder&
     {
@@ -944,7 +944,7 @@ public:
         return *this;
     }
 
-    /// 添加文件 (字节数据)
+    /// Add file (byte data)
     auto add_file(std::string_view field_name, std::string_view filename,
                   std::string_view content_type,
                   std::span<const std::byte> data)
@@ -959,7 +959,7 @@ public:
         return *this;
     }
 
-    /// 添加文件 (字符串数据)
+    /// Add file (string data)
     auto add_file(std::string_view field_name, std::string_view filename,
                   std::string_view content_type, std::string_view data)
         -> multipart_builder&
@@ -975,17 +975,17 @@ public:
         return *this;
     }
 
-    /// 返回 Content-Type header value (含 boundary)
+    /// Return Content-Type header value (with boundary)
     [[nodiscard]] auto content_type() const -> std::string {
         return std::format("multipart/form-data; boundary={}", boundary_);
     }
 
-    /// 返回 boundary
+    /// Return boundary
     [[nodiscard]] auto boundary() const noexcept -> std::string_view {
         return boundary_;
     }
 
-    /// 构建完整的 multipart body
+    /// Build complete multipart body
     [[nodiscard]] auto build() const -> std::string {
         std::string out;
 
@@ -999,14 +999,14 @@ public:
             out += p.disposition;
             out += "\r\n";
 
-            // Content-Type (仅文件)
+            // Content-Type (files only)
             if (!p.content_type.empty()) {
                 out += "Content-Type: ";
                 out += p.content_type;
                 out += "\r\n";
             }
 
-            // 空行
+            // Empty line
             out += "\r\n";
 
             // Body
@@ -1015,7 +1015,7 @@ public:
             out += "\r\n";
         }
 
-        // 结束 delimiter
+        // End delimiter
         out += "--";
         out += boundary_;
         out += "--\r\n";
@@ -1030,11 +1030,11 @@ private:
         std::vector<std::byte> body;
     };
 
-    /// 生成随机 boundary
+    /// Generate random boundary
     static auto generate_boundary() -> std::string {
         static constexpr char chars[] =
             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-        // 使用 steady_clock + 简单混合生成伪随机 boundary
+        // Use steady_clock + simple mixing to generate pseudo-random boundary
         auto seed = static_cast<std::uint64_t>(
             std::chrono::steady_clock::now().time_since_epoch().count());
         // xorshift64

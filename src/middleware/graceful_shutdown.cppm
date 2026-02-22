@@ -1,25 +1,25 @@
 /**
  * @file graceful_shutdown.cppm
- * @brief 优雅关停 — 信号处理 + 在途请求等待
+ * @brief Graceful shutdown — signal handling + in-flight request waiting
  *
- * 注册 SIGINT/SIGTERM（Windows: SetConsoleCtrlHandler），
- * 收到信号后唤醒等待者，配合 drain 等待在途请求完成。
+ * Registers SIGINT/SIGTERM (Windows: SetConsoleCtrlHandler),
+ * wakes up waiters after receiving signal, works with drain to wait for in-flight requests to complete.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.graceful_shutdown;
  *
  *   cnetmod::shutdown_handler sh;
- *   sh.install();  // 注册信号处理
+ *   sh.install();  // Register signal handler
  *
- *   // 在途请求追踪（中间件自动 +1/-1）
+ *   // In-flight request tracking (middleware auto +1/-1)
  *   svr.use(sh.track_middleware());
  *
- *   // 主协程等待关停信号
+ *   // Main coroutine waits for shutdown signal
  *   auto sleeper = [&](auto dur) { return async_sleep(io, dur); };
  *   co_await sh.wait_for_signal(sleeper);
  *   logger::info("Shutting down...");
  *
- *   // 等待在途请求完成（最多 5 秒）
+ *   // Wait for in-flight requests to complete (max 5 seconds)
  *   co_await sh.drain(sleeper, std::chrono::seconds{5});
  *
  *   srv.stop();
@@ -45,15 +45,15 @@ import cnetmod.core.log;
 namespace cnetmod {
 
 // =============================================================================
-// shutdown_handler — 优雅关停控制器
+// shutdown_handler — Graceful shutdown controller
 // =============================================================================
 
 export class shutdown_handler {
 public:
     shutdown_handler() noexcept = default;
 
-    /// 注册信号处理器（SIGINT/SIGTERM / Windows Ctrl+C）
-    /// 收到信号后设置 signaled_ 并通知等待者
+    /// Register signal handler (SIGINT/SIGTERM / Windows Ctrl+C)
+    /// Sets signaled_ and notifies waiters after receiving signal
     void install() noexcept {
         instance_ = this;
 #ifdef CNETMOD_PLATFORM_WINDOWS
@@ -68,25 +68,25 @@ public:
 #endif
     }
 
-    /// 是否已收到关停信号
+    /// Whether shutdown signal has been received
     [[nodiscard]] auto is_signaled() const noexcept -> bool {
         return signaled_.load(std::memory_order_acquire);
     }
 
-    /// 当前在途请求数
+    /// Current number of in-flight requests
     [[nodiscard]] auto in_flight() const noexcept -> std::int64_t {
         return in_flight_.load(std::memory_order_relaxed);
     }
 
     // =========================================================================
-    // wait_for_signal — 协程等待关停信号
+    // wait_for_signal — Coroutine waits for shutdown signal
     // =========================================================================
 
-    /// 通过轮询实现信号等待（避免跨平台 eventfd/pipe 复杂性）
-    /// 100ms 检查一次，收到信号后返回
+    /// Implements signal waiting via polling (avoids cross-platform eventfd/pipe complexity)
+    /// Checks every 100ms, returns after receiving signal
     ///
-    /// @param sleep_fn 异步睡眠函数，签名: (duration) -> task<void>
-    ///   典型用法: [&](auto dur) { return async_sleep(io, dur); }
+    /// @param sleep_fn Async sleep function, signature: (duration) -> task<void>
+    ///   Typical usage: [&](auto dur) { return async_sleep(io, dur); }
     template<typename SleepFn>
     auto wait_for_signal(SleepFn sleep_fn) -> task<void> {
         while (!signaled_.load(std::memory_order_acquire)) {
@@ -96,13 +96,13 @@ public:
     }
 
     // =========================================================================
-    // drain — 等待在途请求完成
+    // drain — Wait for in-flight requests to complete
     // =========================================================================
 
-    /// 等待所有在途请求完成，或超时后强制返回
-    /// @param sleep_fn 异步睡眠函数，同 wait_for_signal
-    /// @param timeout 最大等待时间
-    /// @return true 表示正常排空，false 表示超时
+    /// Wait for all in-flight requests to complete, or force return after timeout
+    /// @param sleep_fn Async sleep function, same as wait_for_signal
+    /// @param timeout Maximum wait time
+    /// @return true indicates normal drain, false indicates timeout
     template<typename SleepFn>
     auto drain(SleepFn sleep_fn, std::chrono::steady_clock::duration timeout)
         -> task<bool>
@@ -121,16 +121,16 @@ public:
     }
 
     // =========================================================================
-    // track_middleware — 在途请求追踪中间件
+    // track_middleware — In-flight request tracking middleware
     // =========================================================================
 
-    /// 放在中间件链中，自动追踪在途请求数
-    /// 关停信号后的新请求直接返回 503
+    /// Place in middleware chain to automatically track in-flight request count
+    /// New requests after shutdown signal directly return 503
     auto track_middleware() -> http::middleware_fn {
         return [this](http::request_context& ctx,
                       http::next_fn next) -> task<void>
         {
-            // 如果已收到关停信号，拒绝新请求
+            // If shutdown signal received, reject new requests
             if (signaled_.load(std::memory_order_acquire)) {
                 ctx.resp().set_header("Connection", "close");
                 ctx.json(http::status::service_unavailable,
@@ -153,7 +153,7 @@ private:
     std::atomic<bool> signaled_{false};
     std::atomic<std::int64_t> in_flight_{0};
 
-    // 全局实例指针（信号处理器只能是静态/全局函数）
+    // Global instance pointer (signal handler must be static/global function)
     static inline shutdown_handler* instance_ = nullptr;
 
     void signal() noexcept {

@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:topic_filter — MQTT Topic 过滤器验证与匹配
-/// 支持 +/# 通配符，遵循 MQTT v3.1.1 / v5.0 规范
+/// cnetmod.protocol.mqtt:topic_filter — MQTT Topic filter validation and matching
+/// Supports +/# wildcards, follows MQTT v3.1.1 / v5.0 spec
 
 module;
 
@@ -12,38 +12,38 @@ import std;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// Topic Filter 验证
+// Topic Filter validation
 // =============================================================================
 
-/// 验证 topic filter 是否合法
-/// 规则来自 https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901247
+/// Validate if topic filter is legal
+/// Rules from https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html#_Toc3901247
 export constexpr auto validate_topic_filter(std::string_view filter) noexcept -> bool {
-    // 至少 1 字节, 最多 65535 字节
+    // At least 1 byte, at most 65535 bytes
     if (filter.empty() || filter.size() > 65535) return false;
 
     for (std::size_t i = 0; i < filter.size(); ++i) {
         auto ch = filter[i];
-        // 不允许 null 字符
+        // Null character not allowed
         if (ch == '\0') return false;
 
         if (ch == '+') {
-            // + 必须独占一个层级：前面必须是 / 或位于开头
+            // + must occupy a level alone: must be preceded by / or at the beginning
             if (i > 0 && filter[i - 1] != '/') return false;
-            // 后面必须是 / 或位于末尾
+            // Must be followed by / or at the end
             if (i + 1 < filter.size() && filter[i + 1] != '/') return false;
         }
 
         if (ch == '#') {
-            // # 必须是最后一个字符
+            // # must be the last character
             if (i != filter.size() - 1) return false;
-            // 前面必须是 / 或位于开头
+            // Must be preceded by / or at the beginning
             if (i > 0 && filter[i - 1] != '/') return false;
         }
     }
     return true;
 }
 
-/// 验证 topic name 是否合法（不允许通配符 + #）
+/// Validate if topic name is legal (wildcards + # not allowed)
 export constexpr auto validate_topic_name(std::string_view name) noexcept -> bool {
     if (name.empty() || name.size() > 65535) return false;
     for (auto ch : name) {
@@ -53,12 +53,12 @@ export constexpr auto validate_topic_name(std::string_view name) noexcept -> boo
 }
 
 // =============================================================================
-// Topic 匹配
+// Topic matching
 // =============================================================================
 
 namespace detail {
 
-/// 分割 topic 路径为层级段
+/// Split topic path into level segments
 inline auto split_topic(std::string_view topic) -> std::vector<std::string_view> {
     std::vector<std::string_view> segments;
     std::size_t start = 0;
@@ -70,7 +70,7 @@ inline auto split_topic(std::string_view topic) -> std::vector<std::string_view>
         }
         segments.push_back(topic.substr(start, pos - start));
         start = pos + 1;
-        // 末尾 / 产生一个空段
+        // Trailing / produces an empty segment
         if (start == topic.size()) {
             segments.push_back(std::string_view{});
         }
@@ -80,11 +80,11 @@ inline auto split_topic(std::string_view topic) -> std::vector<std::string_view>
 
 } // namespace detail
 
-/// 检查 topic_name 是否匹配 topic_filter（含 +/# 通配符）
-/// 前提：filter 和 name 已通过各自的 validate 验证
+/// Check if topic_name matches topic_filter (with +/# wildcards)
+/// Prerequisite: filter and name have passed their respective validate checks
 export inline auto topic_matches(std::string_view filter, std::string_view name) noexcept -> bool {
-    // $ 前缀特殊处理：
-    // 通配符 # 或 + 开头的 filter 不匹配 $ 开头的 topic
+    // $ prefix special handling:
+    // Wildcard # or + at the beginning of filter does not match $ prefix topic
     if (!name.empty() && name[0] == '$') {
         if (!filter.empty() && (filter[0] == '#' || filter[0] == '+')) {
             return false;
@@ -100,23 +100,23 @@ export inline auto topic_matches(std::string_view filter, std::string_view name)
         auto& fs = filter_segs[fi];
 
         if (fs == "#") {
-            // # 匹配剩余所有层级 (包括 0 个)
+            // # matches all remaining levels (including 0)
             return true;
         }
 
         if (ni >= name_segs.size()) {
-            // name 段用完了，但 filter 还有非 # 段
+            // name segments exhausted, but filter still has non-# segments
             return false;
         }
 
         if (fs == "+") {
-            // + 匹配当前层级任意内容
+            // + matches any content at current level
             ++fi;
             ++ni;
             continue;
         }
 
-        // 精确匹配
+        // Exact match
         if (fs != name_segs[ni]) {
             return false;
         }
@@ -125,12 +125,12 @@ export inline auto topic_matches(std::string_view filter, std::string_view name)
         ++ni;
     }
 
-    // filter 段用完时，name 段也必须用完
+    // When filter segments are exhausted, name segments must also be exhausted
     return ni == name_segs.size();
 }
 
 // =============================================================================
-// 辅助：检查 filter 是否包含通配符
+// Helper: check if filter contains wildcards
 // =============================================================================
 
 export constexpr auto has_wildcards(std::string_view filter) noexcept -> bool {

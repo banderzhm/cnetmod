@@ -24,7 +24,7 @@ import cnetmod.protocol.tcp;
 namespace cnetmod::ws {
 
 // =============================================================================
-// 路由段解析
+// Route Segment Parsing
 // =============================================================================
 
 namespace detail {
@@ -120,7 +120,7 @@ inline auto try_ws_match(const std::vector<seg>& segs,
 } // namespace detail
 
 // =============================================================================
-// ws_context — WebSocket 连接上下文
+// ws_context — WebSocket Connection Context
 // =============================================================================
 
 export class ws_context {
@@ -147,7 +147,7 @@ public:
         -> std::string_view
     { return params_.get(name); }
 
-    // --- 消息收发 ---
+    // --- Message Send/Receive ---
 
     auto send_text(std::string_view text)
         -> task<std::expected<void, std::error_code>>
@@ -184,10 +184,10 @@ export using ws_handler_fn = std::function<task<void>(ws_context&)>;
 
 export class server {
 public:
-    /// 单线程模式
+    /// Single-threaded mode
     explicit server(io_context& ctx) : ctx_(ctx) {}
 
-    /// 多核模式：accept 在 sctx.accept_io()，连接分发到 worker io_context
+    /// Multi-core mode: accept on sctx.accept_io(), connections dispatched to worker io_context
     explicit server(server_context& sctx)
         : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
@@ -212,12 +212,12 @@ public:
             auto r = co_await async_accept(ctx_, acc_->native_socket());
             if (!r) { if (!running_) break; continue; }
             if (sctx_) {
-                // 多核模式：round-robin 分发到 worker io_context
+                // Multi-core mode: round-robin dispatch to worker io_context
                 auto& worker = sctx_->next_worker_io();
                 spawn_on(worker, handle_connection(
                     std::move(*r), worker));
             } else {
-                // 单线程模式
+                // Single-threaded mode
                 spawn(ctx_, handle_connection(
                     std::move(*r), ctx_));
             }
@@ -233,7 +233,7 @@ private:
     };
 
     auto handle_connection(socket client, io_context& io) -> task<void> {
-        // 1. 读 HTTP 升级请求
+        // 1. Read HTTP upgrade request
         http::request_parser req_parser;
         std::array<std::byte, 4096> buf{};
         while (!req_parser.ready()) {
@@ -245,7 +245,7 @@ private:
             if (!consumed) { client.close(); co_return; }
         }
 
-        // 2. 提取 path / query
+        // 2. Extract path / query
         auto uri = req_parser.uri();
         std::string path, query;
         auto qpos = uri.find('?');
@@ -256,7 +256,7 @@ private:
             path = std::string(uri);
         }
 
-        // 3. 路由匹配
+        // 3. Route matching
         detail::ws_route_params rp;
         const route_entry* matched = nullptr;
         auto parts = detail::split_ws_path(path);
@@ -278,7 +278,7 @@ private:
             client.close(); co_return;
         }
 
-        // 4. 验证 WS 升级
+        // 4. Validate WS upgrade
         auto accept_key = validate_upgrade_request(req_parser);
         if (!accept_key) {
             http::response resp(http::status::bad_request);
@@ -289,31 +289,31 @@ private:
             client.close(); co_return;
         }
 
-        // 5. 发送升级响应
+        // 5. Send upgrade response
         auto upgrade_resp = build_upgrade_response(*accept_key);
         auto resp_data = upgrade_resp.serialize();
         auto wr = co_await async_write(io, client,
             const_buffer{resp_data.data(), resp_data.size()});
         if (!wr) { client.close(); co_return; }
 
-        // 6. attach 已握手的 socket 到 connection
+        // 6. Attach handshaked socket to connection
         connection conn(io);
         conn.attach(std::move(client), /*as_server=*/true);
 
-        // 7. 运行 handler
+        // 7. Run handler
         ws_context wctx(conn, std::move(path),
                         req_parser.headers(), std::move(query),
                         std::move(rp));
         co_await matched->handler(wctx);
 
-        // 8. 确保关闭
+        // 8. Ensure closed
         if (conn.is_open()) {
             (void)co_await conn.async_close();
         }
     }
 
     io_context& ctx_;
-    server_context* sctx_ = nullptr;  // 非 null 时为多核模式
+    server_context* sctx_ = nullptr;  // Multi-core mode when non-null
     std::unique_ptr<tcp::acceptor> acc_;
     std::vector<route_entry> routes_;
     bool running_ = false;

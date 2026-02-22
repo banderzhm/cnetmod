@@ -25,15 +25,15 @@ import cnetmod.protocol.tcp;
 namespace cnetmod::http {
 
 // =============================================================================
-// MIME 类型推断
+// MIME Type Inference
 // =============================================================================
 
 export auto guess_mime_type(std::string_view ext) noexcept -> std::string_view {
-    // 转小写首字母比较即可（扩展名通常很短）
+    // Compare lowercase first letter is enough (extensions are usually short)
     if (ext.empty()) return "application/octet-stream";
     if (ext[0] == '.') ext.remove_prefix(1);
 
-    // 文本
+    // Text
     if (ext == "html" || ext == "htm") return "text/html; charset=utf-8";
     if (ext == "css")   return "text/css; charset=utf-8";
     if (ext == "js")    return "application/javascript; charset=utf-8";
@@ -43,7 +43,7 @@ export auto guess_mime_type(std::string_view ext) noexcept -> std::string_view {
     if (ext == "csv")   return "text/csv; charset=utf-8";
     if (ext == "md")    return "text/markdown; charset=utf-8";
 
-    // 图片
+    // Images
     if (ext == "png")   return "image/png";
     if (ext == "jpg" || ext == "jpeg") return "image/jpeg";
     if (ext == "gif")   return "image/gif";
@@ -52,21 +52,21 @@ export auto guess_mime_type(std::string_view ext) noexcept -> std::string_view {
     if (ext == "webp")  return "image/webp";
     if (ext == "bmp")   return "image/bmp";
 
-    // 音视频
+    // Audio/Video
     if (ext == "mp3")   return "audio/mpeg";
     if (ext == "mp4")   return "video/mp4";
     if (ext == "webm")  return "video/webm";
     if (ext == "ogg")   return "audio/ogg";
     if (ext == "wav")   return "audio/wav";
 
-    // 压缩/二进制
+    // Compressed/Binary
     if (ext == "pdf")   return "application/pdf";
     if (ext == "zip")   return "application/zip";
     if (ext == "gz" || ext == "gzip")  return "application/gzip";
     if (ext == "tar")   return "application/x-tar";
     if (ext == "wasm")  return "application/wasm";
 
-    // 字体
+    // Fonts
     if (ext == "woff")  return "font/woff";
     if (ext == "woff2") return "font/woff2";
     if (ext == "ttf")   return "font/ttf";
@@ -76,7 +76,7 @@ export auto guess_mime_type(std::string_view ext) noexcept -> std::string_view {
 }
 
 // =============================================================================
-// 静态文件服务
+// Static File Serving
 // =============================================================================
 
 export struct static_file_options {
@@ -84,7 +84,7 @@ export struct static_file_options {
     std::string index_file = "index.html";
 };
 
-/// serve_dir 协程实现（非导出）— 避免 MSVC 14.50 「导出函数内协程 lambda 序列化到 IFC」ICE
+/// serve_dir coroutine implementation (non-exported) — Avoids MSVC 14.50 ICE with coroutine lambda serialization to IFC in exported functions
 namespace detail {
 auto serve_dir_body(const static_file_options& opts, request_context& ctx) -> task<void> {
     auto rel_path = ctx.wildcard();
@@ -195,8 +195,8 @@ auto serve_dir_body(const static_file_options& opts, request_context& ctx) -> ta
 }
 } // namespace detail
 
-/// 创建静态文件服务 handler（非协程，委托给 detail::serve_dir_body）
-/// 路由应注册为 /prefix/*filepath 形式
+/// Create static file serving handler (non-coroutine, delegates to detail::serve_dir_body)
+/// Route should be registered in the form /prefix/*filepath
 export auto serve_dir(static_file_options opts) -> handler_fn {
     auto opts_ptr = std::make_shared<static_file_options>(std::move(opts));
     return [opts_ptr](request_context& ctx) -> task<void> {
@@ -205,7 +205,7 @@ export auto serve_dir(static_file_options opts) -> handler_fn {
 }
 
 // =============================================================================
-// 文件上传保存
+// File Upload Saving
 // =============================================================================
 
 export struct upload_options {
@@ -214,7 +214,7 @@ export struct upload_options {
     std::size_t max_size = 32 * 1024 * 1024;  // 32MB
 };
 
-/// save_upload 协程实现（非导出）— 避免 MSVC 14.50 「导出函数内协程 lambda 序列化到 IFC」ICE
+/// save_upload coroutine implementation (non-exported) — Avoids MSVC 14.50 ICE with coroutine lambda serialization to IFC in exported functions
 namespace detail {
 auto save_upload_body(const upload_options& opts, request_context& ctx) -> task<void> {
     auto body = ctx.body();
@@ -291,7 +291,7 @@ auto save_upload_body(const upload_options& opts, request_context& ctx) -> task<
         co_return;
     }
 
-    // === raw body 模式 ===
+    // === raw body mode ===
     std::string filename = opts.default_filename;
     auto qs = ctx.query_string();
     auto name_pos = qs.find("name=");
@@ -330,15 +330,15 @@ auto save_upload_body(const upload_options& opts, request_context& ctx) -> task<
     co_return;
 }
 
-/// 404 协程实现（非导出）— 避免 MSVC 14.50 「handle_connection 内协程 lambda」ICE
+/// 404 coroutine implementation (non-exported) — Avoids MSVC 14.50 ICE with handle_connection coroutine lambda
 auto not_found_handler(request_context& ctx) -> task<void> {
     ctx.not_found();
     co_return;
 }
 } // namespace detail
 
-/// 创建文件上传处理 handler（非协程，委托给 detail::save_upload_body）
-/// 支持 multipart/form-data 和 raw body 两种模式
+/// Create file upload handler (non-coroutine, delegates to detail::save_upload_body)
+/// Supports both multipart/form-data and raw body modes
 export auto save_upload(upload_options opts) -> handler_fn {
     auto opts_ptr = std::make_shared<upload_options>(std::move(opts));
     return [opts_ptr](request_context& ctx) -> task<void> {
@@ -347,20 +347,20 @@ export auto save_upload(upload_options opts) -> handler_fn {
 }
 
 // =============================================================================
-// http::server — 高级 HTTP 服务器
+// http::server — Advanced HTTP Server
 // =============================================================================
 
 export class server {
 public:
-    /// 单线程模式：所有连接在同一个 io_context 上处理
+    /// Single-threaded mode: all connections handled on the same io_context
     explicit server(io_context& ctx)
         : ctx_(ctx) {}
 
-    /// 多核模式：accept 在 sctx.accept_io()，连接分发到 worker io_context
+    /// Multi-core mode: accept on sctx.accept_io(), connections dispatched to worker io_context
     explicit server(server_context& sctx)
         : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
-    /// 监听指定地址和端口
+    /// Listen on specified address and port
     auto listen(std::string_view host, std::uint16_t port)
         -> std::expected<void, std::error_code>
     {
@@ -377,13 +377,13 @@ public:
         return {};
     }
 
-    /// 设置路由
+    /// Set router
     void set_router(router r) { router_ = std::move(r); }
 
-    /// 添加中间件
+    /// Add middleware
     void use(middleware_fn mw) { middlewares_.push_back(std::move(mw)); }
 
-    /// 运行服务器（accept 循环，协程）
+    /// Run server (accept loop, coroutine)
     auto run() -> task<void> {
         running_ = true;
         while (running_) {
@@ -393,32 +393,32 @@ public:
                 continue;
             }
             if (sctx_) {
-                // 多核模式：round-robin 分发到 worker io_context
+                // Multi-core mode: round-robin dispatch to worker io_context
                 auto& worker = sctx_->next_worker_io();
                 spawn_on(worker, handle_connection(
                     std::move(*r), worker));
             } else {
-                // 单线程模式：在当前 io_context 处理
+                // Single-threaded mode: handle on current io_context
                 spawn(ctx_, handle_connection(
                     std::move(*r), ctx_));
             }
         }
     }
 
-    /// 停止服务器
+    /// Stop server
     void stop() {
         running_ = false;
         if (acc_) acc_->close();
     }
 
 private:
-    /// 处理单个连接（支持 keep-alive）
-    /// @param io 该连接绑定的 io_context（可能是 worker）
+    /// Handle single connection (supports keep-alive)
+    /// @param io The io_context bound to this connection (may be worker)
     auto handle_connection(socket client, io_context& io) -> task<void> {
         bool keep_alive = true;
 
         while (keep_alive) {
-            // 解析请求
+            // Parse request
             request_parser parser;
             std::array<std::byte, 8192> buf{};
 
@@ -431,13 +431,13 @@ private:
                 if (!consumed) { client.close(); co_return; }
             }
 
-            // 提取 path（去除 query string）
+            // Extract path (remove query string)
             auto uri = parser.uri();
             auto qpos = uri.find('?');
             auto path = (qpos != std::string_view::npos)
                 ? uri.substr(0, qpos) : uri;
 
-            // 路由匹配
+            // Route matching
             auto mr = router_.match(parser.method(), path);
 
             response resp(status::ok);
@@ -450,7 +450,7 @@ private:
                 handler = std::move(mr->handler);
                 rp = std::move(mr->params);
             } else {
-                // 404 — 非协程 lambda，委托给 detail::not_found_handler
+                // 404 — Non-coroutine lambda, delegates to detail::not_found_handler
                 handler = [](request_context& ctx) -> task<void> {
                     return detail::not_found_handler(ctx);
                 };
@@ -458,19 +458,19 @@ private:
 
             request_context rctx(io, client, parser, resp, std::move(rp));
 
-            // 执行中间件链 + handler
+            // Execute middleware chain + handler
             co_await execute_chain(rctx, handler);
 
-            // 检查是否已流式发送（X-Streamed 标记）
+            // Check if already streamed (X-Streamed marker)
             if (resp.get_header("X-Streamed") != "1") {
-                // 正常发送响应
+                // Normal response sending
                 auto data = resp.serialize();
                 auto wr = co_await async_write(io, client,
                     const_buffer{data.data(), data.size()});
                 if (!wr) { client.close(); co_return; }
             }
 
-            // 检查 keep-alive
+            // Check keep-alive
             auto conn_hdr = parser.get_header("Connection");
             if (parser.version() == http_version::http_1_1) {
                 keep_alive = (conn_hdr != "close");
@@ -482,8 +482,8 @@ private:
         client.close();
     }
 
-    /// 执行中间件链，最后调用 handler
-    /// 使用 index-based 递归协程，避免 MSVC 「泛型 lambda + 协程 + std::function」ICE
+    /// Execute middleware chain, finally call handler
+    /// Uses index-based recursive coroutine to avoid MSVC ICE with generic lambda + coroutine + std::function
     auto execute_chain(request_context& ctx, handler_fn& handler,
                        std::size_t idx = 0) -> task<void>
     {
@@ -491,7 +491,7 @@ private:
             co_await handler(ctx);
             co_return;
         }
-        // next 是普通（非协程）闭包，直接返回下一层 task<void>
+        // next is a regular (non-coroutine) closure that directly returns the next layer's task<void>
         next_fn next = [this, &ctx, &handler, idx]() -> task<void> {
             return execute_chain(ctx, handler, idx + 1);
         };
@@ -499,7 +499,7 @@ private:
     }
 
     io_context& ctx_;
-    server_context* sctx_ = nullptr;  // 非 null 时为多核模式
+    server_context* sctx_ = nullptr;  // Non-null for multi-core mode
     std::unique_ptr<tcp::acceptor> acc_;
     router router_;
     std::vector<middleware_fn> middlewares_;

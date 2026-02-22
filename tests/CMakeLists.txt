@@ -1,4 +1,4 @@
-# cnetmod 测试配置
-# 使用 -DCNETMOD_BUILD_TESTS=ON 启用
+# cnetmod test configuration
+# Enable with -DCNETMOD_BUILD_TESTS=ON
 
-# TODO: 集成测试框架 (如 Catch2 / Google Test)
+# TODO: Integrate test framework (e.g., Catch2 / Google Test)

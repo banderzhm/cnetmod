@@ -11,32 +11,32 @@ import cnetmod.core.buffer;
 namespace cnetmod {
 
 // =============================================================================
-// I/O 操作类型
+// I/O Operation Type
 // =============================================================================
 
-/// I/O 操作类型
+/// I/O operation type
 export enum class io_op_type {
-    // 网络操作
+    // Network operations
     accept,
     connect,
     read,
     write,
     close,
 
-    // 文件操作
+    // File operations
     file_read,
     file_write,
     file_flush,
 };
 
 // =============================================================================
-// I/O 操作结果
+// I/O Operation Result
 // =============================================================================
 
-/// I/O 操作完成结果
+/// I/O operation completion result
 export struct io_result {
-    std::error_code error;          // 错误码
-    std::size_t bytes_transferred;  // 传输的字节数
+    std::error_code error;          // Error code
+    std::size_t bytes_transferred;  // Number of bytes transferred
 
     [[nodiscard]] auto success() const noexcept -> bool {
         return !error;
@@ -48,23 +48,23 @@ export struct io_result {
 };
 
 // =============================================================================
-// I/O 操作基类
+// I/O Operation Base Class
 // =============================================================================
 
-/// 异步 I/O 操作的抽象基类
-/// 平台特定的实现需要继承此类
+/// Async I/O operation abstract base class
+/// Platform-specific implementations need to inherit from this class
 export class io_operation {
 public:
     virtual ~io_operation() = default;
 
-    /// 获取操作类型
+    /// Get operation type
     [[nodiscard]] virtual auto type() const noexcept -> io_op_type = 0;
 
-    /// 执行操作（由 io_context 调用）
+    /// Execute operation (called by io_context)
     virtual void execute() = 0;
 
-    /// 完成操作（由 io_context 在操作完成时调用）
-    /// @param result 操作结果
+    /// Complete operation (called by io_context when operation completes)
+    /// @param result Operation result
     virtual void complete(io_result result) = 0;
 
 protected:

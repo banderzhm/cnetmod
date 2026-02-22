@@ -77,10 +77,10 @@ auto ipv6_address::loopback() noexcept -> ipv6_address {
 auto ip_address::from_string(std::string_view str)
     -> std::expected<ip_address, std::error_code>
 {
-    // 先尝试 IPv4
+    //  IPv4
     if (auto v4 = ipv4_address::from_string(str))
         return ip_address{*v4};
-    // 再尝试 IPv6
+    //  IPv6
     if (auto v6 = ipv6_address::from_string(str))
         return ip_address{*v6};
     return std::unexpected(make_error_code(errc::invalid_argument));

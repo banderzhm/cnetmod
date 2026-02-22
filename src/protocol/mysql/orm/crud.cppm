@@ -13,7 +13,7 @@ import cnetmod.coro.task;
 namespace cnetmod::mysql::orm {
 
 // =============================================================================
-// orm_result<T> — ORM 操作结果
+// orm_result<T> — ORM operation result
 // =============================================================================
 
 export template <class T>
@@ -34,18 +34,18 @@ struct orm_result {
 };
 
 // =============================================================================
-// db_session — 异步 ORM 会话，封装 mysql::client
+// db_session — Async ORM session, wraps mysql::client
 // =============================================================================
 
 export class db_session {
 public:
     explicit db_session(client& cli) noexcept : cli_(cli) {}
 
-    /// 带雪花生成器的构造
+    /// Constructor with snowflake generator
     db_session(client& cli, snowflake_generator& sf) noexcept
         : cli_(cli), snowflake_(&sf) {}
 
-    // ── 查询 ─────────────────────────────────────────────────
+    // ── Query ─────────────────────────────────────────────────
 
     /// SELECT * FROM table
     template <Model T>
@@ -72,16 +72,16 @@ public:
         co_return co_await exec_select<T>(sql);
     }
 
-    /// 自定义 select_builder 查询
+    /// Custom select_builder query
     template <Model T>
     auto find(const select_builder<T>& qb) -> task<orm_result<T>> {
         auto sql = qb.build_sql(cli_.current_format_opts());
         co_return co_await exec_select<T>(sql);
     }
 
-    // ── 插入 ─────────────────────────────────────────────────
+    // ── Insert ─────────────────────────────────────────────────
 
-    /// INSERT 单条记录（自动生成 uuid/snowflake ID，回填 auto_increment ID）
+    /// INSERT single record (auto-generate uuid/snowflake ID, fill back auto_increment ID)
     template <Model T>
     auto insert(T& model) -> task<orm_result<T>> {
         generate_id_if_needed(model);
@@ -99,16 +99,16 @@ public:
         co_return r;
     }
 
-    /// INSERT 批量
+    /// INSERT batch
     template <Model T>
     auto insert_many(std::span<T> models) -> task<orm_result<T>> {
         if (models.empty()) co_return orm_result<T>{};
 
-        // 为每条记录生成 ID
+        // Generate ID for each record
         for (auto& m : models)
             generate_id_if_needed(m);
 
-        // 构建为 const span
+        // Build as const span
         std::vector<T> copy(models.begin(), models.end());
         auto [sql, params] = insert_of<T>()
             .values(std::span<const T>(copy))
@@ -117,7 +117,7 @@ public:
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err()) co_return make_err<T>(rs.error_msg);
 
-        // 回填第一条 auto_increment id
+        // Fill back first auto_increment id
         if (rs.last_insert_id > 0 && !models.empty())
             fill_insert_id<T>(models[0], rs.last_insert_id);
 
@@ -127,9 +127,9 @@ public:
         co_return r;
     }
 
-    // ── 更新 ─────────────────────────────────────────────────
+    // ── Update ─────────────────────────────────────────────────
 
-    /// UPDATE 按 PK（模型自身携带 PK 值）
+    /// UPDATE by PK (model itself carries PK value)
     template <Model T>
     auto update(const T& model) -> task<orm_result<T>> {
         auto [sql, params] = update_of<T>().set(model).build(cli_.current_format_opts());
@@ -141,7 +141,7 @@ public:
         co_return r;
     }
 
-    /// UPDATE 自定义 builder
+    /// UPDATE custom builder
     template <Model T>
     auto update(const update_builder<T>& ub) -> task<orm_result<T>> {
         auto [sql, params] = ub.build(cli_.current_format_opts());
@@ -153,9 +153,9 @@ public:
         co_return r;
     }
 
-    // ── 删除 ─────────────────────────────────────────────────
+    // ── Delete ─────────────────────────────────────────────────
 
-    /// DELETE 按 PK
+    /// DELETE by PK
     template <Model T>
     auto remove(const T& model) -> task<orm_result<T>> {
         auto& meta = model_traits<T>::meta();
@@ -178,7 +178,7 @@ public:
         co_return r;
     }
 
-    /// DELETE 按 PK 值
+    /// DELETE by PK value
     template <Model T>
     auto remove_by_id(param_value id) -> task<orm_result<T>> {
         auto& meta = model_traits<T>::meta();
@@ -201,7 +201,7 @@ public:
         co_return r;
     }
 
-    /// DELETE 自定义 builder
+    /// DELETE custom builder
     template <Model T>
     auto remove(const delete_builder<T>& db) -> task<orm_result<T>> {
         auto [sql, params] = db.build(cli_.current_format_opts());
@@ -233,19 +233,19 @@ public:
         co_return orm_result<T>{};
     }
 
-    /// 原始 SQL 查询
+    /// Raw SQL query
     auto raw_query(std::string_view sql) -> task<result_set> {
         co_return co_await cli_.query(sql);
     }
 
-    /// 底层 client 访问
+    /// Underlying client access
     auto underlying() noexcept -> client& { return cli_; }
 
 private:
     client& cli_;
     snowflake_generator* snowflake_ = nullptr;
 
-    /// 插入前自动生成 ID（uuid / snowflake）
+    /// Auto-generate ID before insert (uuid / snowflake)
     template <Model T>
     void generate_id_if_needed(T& model) {
         auto& meta = model_traits<T>::meta();
@@ -253,7 +253,7 @@ private:
         if (!pk) return;
 
         if (pk->col.is_uuid()) {
-            // 检查当前 PK 是否为空（nil uuid 或空字符串）
+            // Check if current PK is empty (nil uuid or empty string)
             auto cur = pk->getter(model);
             bool need_gen = (cur.kind == param_value::kind_t::null_kind)
                          || (cur.kind == param_value::kind_t::string_kind && cur.str_val.empty())
@@ -265,7 +265,7 @@ private:
                 pk->setter(model, fv);
             }
         } else if (pk->col.is_snowflake()) {
-            // 检查当前 PK 是否为 0
+            // Check if current PK is 0
             auto cur = pk->getter(model);
             bool need_gen = (cur.kind == param_value::kind_t::null_kind)
                          || (cur.kind == param_value::kind_t::int64_kind && cur.int_val == 0)

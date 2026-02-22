@@ -26,12 +26,12 @@ namespace cnetmod {
 #ifdef CNETMOD_HAS_IO_URING
 
 // =============================================================================
-// io_uring 挂起 awaiter
+// io_uring Suspend Awaiter
 // =============================================================================
 
-/// 挂起协程，等待 io_uring CQE 完成
-/// 事件循环从 CQE user_data 取出 uring_overlapped*，
-/// 写入 result 后恢复协程
+/// Suspend coroutine, wait for io_uring CQE completion
+/// Event loop extracts uring_overlapped* from CQE user_data,
+/// writes result and resumes coroutine
 struct uring_suspend {
     uring_overlapped& ov;
     auto await_ready() const noexcept -> bool { return false; }
@@ -40,21 +40,21 @@ struct uring_suspend {
 };
 
 // =============================================================================
-// io_uring cancel 版挂起 awaiter
+// io_uring Cancel Version Suspend Awaiter
 // =============================================================================
 
-/// cancel_fn_：提交 IORING_OP_ASYNC_CANCEL 取消操作
+/// cancel_fn_: Submit IORING_OP_ASYNC_CANCEL to cancel operation
 static void uring_cancel_fn(cancel_token& token) noexcept {
     auto* uring = static_cast<io_uring_context*>(token.ctx_);
     auto* sqe = uring->get_sqe();
     if (sqe) {
         ::io_uring_prep_cancel(sqe, token.overlapped_, 0);
-        ::io_uring_sqe_set_data(sqe, nullptr);  // cancel 自身无需回调
+        ::io_uring_sqe_set_data(sqe, nullptr);  // Cancel itself needs no callback
         (void)uring->submit();
     }
 }
 
-/// 带取消支持的 io_uring 挂起 awaiter
+/// io_uring suspend awaiter with cancel support
 struct uring_cancel_suspend {
     uring_overlapped& ov;
     cancel_token& token;
@@ -78,7 +78,7 @@ struct uring_cancel_suspend {
 };
 
 // =============================================================================
-// 辅助
+// Helper Functions
 // =============================================================================
 
 namespace {
@@ -115,7 +115,7 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
 } // anonymous namespace
 
 // =============================================================================
-// 异步网络操作 — io_uring (completion-based)
+// Async Network Operations — io_uring (completion-based)
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener)
@@ -228,7 +228,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 }
 
 // =============================================================================
-// 异步文件操作 — io_uring (原生异步 file I/O)
+// Async File Operations — io_uring (native async file I/O)
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -311,7 +311,7 @@ auto async_file_flush(io_context& ctx, file& f)
 }
 
 // =============================================================================
-// 异步串口操作 — io_uring
+// Async Serial Port Operations — io_uring
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
@@ -367,7 +367,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 }
 
 // =============================================================================
-// 异步定时器 — io_uring (IORING_OP_TIMEOUT)
+// Async Timer — io_uring (IORING_OP_TIMEOUT)
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -405,7 +405,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 可取消版本 — 异步网络操作
+// Cancellable Version — Async Network Operations
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
@@ -541,7 +541,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步文件操作
+// Cancellable Version — Async File Operations
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -609,7 +609,7 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步串口操作
+// Cancellable Version — Async Serial Port Operations
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
@@ -677,7 +677,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步定时器
+// Cancellable Version — Async Timer
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -720,7 +720,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 异步 UDP I/O — io_uring
+// Async UDP I/O — io_uring
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,
@@ -798,7 +798,7 @@ auto async_sendto(io_context& ctx, socket& sock,
 }
 
 // =============================================================================
-// 可取消版本 — 异步 UDP I/O
+// Cancellable Version — Async UDP I/O
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,

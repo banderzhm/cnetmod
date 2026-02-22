@@ -1,6 +1,6 @@
-/// cnetmod.protocol.openai:types — OpenAI API 类型定义
+/// cnetmod.protocol.openai:types — OpenAI API type definitions
 /// Chat Completions / Embeddings / Models
-/// 使用 nlohmann::json 序列化/反序列化
+/// Uses nlohmann::json for serialization/deserialization
 
 module;
 
@@ -21,12 +21,12 @@ using json = nlohmann::json;
 
 export struct function_call {
     std::string name;
-    std::string arguments;          // JSON 字符串
+    std::string arguments;          // JSON string
 };
 
 export struct tool_call {
     std::string   id;
-    std::string   type = "function"; // 目前只有 "function"
+    std::string   type = "function"; // Currently only "function"
     function_call function;
 };
 
@@ -38,33 +38,33 @@ export struct tool {
 };
 
 // =============================================================================
-// content_part — 多模态内容块 (Vision API)
+// content_part — Multimodal content block (Vision API)
 // =============================================================================
 
-/// 图片URL详情
+/// Image URL details
 export struct image_url_detail {
-    std::string url;                          // URL 或 base64 data URI
+    std::string url;                          // URL or base64 data URI
     std::string detail = "auto";              // "auto" | "low" | "high"
 };
 
-/// 内容块: 文本或图片
+/// Content block: text or image
 export struct content_part {
     std::string      type;                    // "text" | "image_url"
-    std::string      text;                    // type="text" 时有效
-    image_url_detail image_url;               // type="image_url" 时有效
+    std::string      text;                    // Valid when type="text"
+    image_url_detail image_url;               // Valid when type="image_url"
 
-    /// 创建文本内容块
+    /// Create text content block
     static auto make_text(std::string_view t) -> content_part {
         return content_part{.type = "text", .text = std::string(t), .image_url = {}};
     }
 
-    /// 创建图片URL内容块
+    /// Create image URL content block
     static auto make_image_url(std::string_view url, std::string_view detail = "auto") -> content_part {
         return content_part{.type = "image_url", .text = {},
             .image_url = {.url = std::string(url), .detail = std::string(detail)}};
     }
 
-    /// 创建 base64 图片内容块
+    /// Create base64 image content block
     static auto make_image_base64(std::string_view base64_data,
                                    std::string_view media_type = "image/png",
                                    std::string_view detail = "auto") -> content_part {
@@ -87,18 +87,18 @@ export struct content_part {
 };
 
 // =============================================================================
-// message — 聊天消息 (支持多模态)
+// message — Chat message (supports multimodal)
 // =============================================================================
 
 export struct message {
     std::string              role;           // "system" | "user" | "assistant" | "tool"
-    std::string              content;        // 纯文本内容 (简单模式)
-    std::vector<content_part> content_parts; // 多模态内容 (Vision 模式)
-    std::string              name;           // 可选
-    std::vector<tool_call>   tool_calls;     // assistant 返回的 tool calls
-    std::string              tool_call_id;   // role="tool" 时必填
+    std::string              content;        // Plain text content (simple mode)
+    std::vector<content_part> content_parts; // Multimodal content (Vision mode)
+    std::string              name;           // Optional
+    std::vector<tool_call>   tool_calls;     // Tool calls returned by assistant
+    std::string              tool_call_id;   // Required when role="tool"
 
-    /// 创建简单文本消息
+    /// Create simple text message
     static auto user(std::string_view text) -> message {
         return message{.role = "user", .content = std::string(text),
             .content_parts = {}, .name = {}, .tool_calls = {}, .tool_call_id = {}};
@@ -114,7 +114,7 @@ export struct message {
             .content_parts = {}, .name = {}, .tool_calls = {}, .tool_call_id = {}};
     }
 
-    /// 创建多模态消息 (Vision)
+    /// Create multimodal message (Vision)
     static auto user_multimodal(std::vector<content_part> parts) -> message {
         return message{.role = "user", .content = {},
             .content_parts = std::move(parts), .name = {}, .tool_calls = {}, .tool_call_id = {}};
@@ -124,7 +124,7 @@ export struct message {
         json j;
         j["role"] = role;
 
-        // 多模态内容优先
+        // Multimodal content takes priority
         if (!content_parts.empty()) {
             json arr = json::array();
             for (auto& p : content_parts)
@@ -155,7 +155,7 @@ export struct message {
 };
 
 // =============================================================================
-// chat_request — Chat Completions 请求
+// chat_request — Chat Completions request
 // =============================================================================
 
 export struct chat_request {
@@ -167,13 +167,13 @@ export struct chat_request {
     double                   top_p              = 1.0;
     double                   frequency_penalty  = 0.0;
     double                   presence_penalty   = 0.0;
-    std::string              stop;               // 可选 stop
+    std::string              stop;               // Optional stop
     int                      n                  = 1;
     std::optional<int>       seed;
     std::string              user;
     std::string              response_format;    // "" | "json_object" | "json_schema"
     std::vector<tool>        tools;
-    std::string              tool_choice;        // "auto" | "none" | "required" 或 JSON
+    std::string              tool_choice;        // "auto" | "none" | "required" or JSON
 
     [[nodiscard]] auto to_json() const -> std::string {
         json j;
@@ -220,7 +220,7 @@ export struct chat_request {
 };
 
 // =============================================================================
-// chat_chunk — SSE 流式响应块
+// chat_chunk — SSE streaming response chunk
 // =============================================================================
 
 export struct chat_chunk {
@@ -236,7 +236,7 @@ export struct chat_chunk {
         auto j = json::parse(text, nullptr, false);
         if (j.is_discarded()) return c;
 
-        // 安全提取字符串字段 (处理 null)
+        // Safely extract string fields (handle null)
         auto safe_string = [](const json& obj, const char* key) -> std::string {
             if (!obj.contains(key)) return {};
             auto& val = obj[key];
@@ -276,7 +276,7 @@ export struct chat_chunk {
 };
 
 // =============================================================================
-// usage — token 使用统计
+// usage — Token usage statistics
 // =============================================================================
 
 export struct usage {
@@ -286,17 +286,17 @@ export struct usage {
 };
 
 // =============================================================================
-// choice — 响应选项
+// choice — Response option
 // =============================================================================
 
 export struct choice {
     int                      index = 0;
-    message                  msg;               // message 内容
+    message                  msg;               // Message content
     std::string              finish_reason;
 };
 
 // =============================================================================
-// chat_response — 非流式完整响应
+// chat_response — Non-streaming complete response
 // =============================================================================
 
 export struct chat_response {
@@ -305,13 +305,13 @@ export struct chat_response {
     std::vector<choice>  choices;
     usage                token_usage;
 
-    /// 便捷访问: choices[0].msg.content
+    /// Convenient access: choices[0].msg.content
     [[nodiscard]] auto content() const -> std::string_view {
         if (choices.empty()) return {};
         return choices[0].msg.content;
     }
 
-    /// 从完整 JSON body 解析
+    /// Parse from complete JSON body
     [[nodiscard]] static auto from_json(std::string_view text) -> chat_response {
         chat_response r;
         auto j = json::parse(text, nullptr, false);
@@ -361,7 +361,7 @@ export struct chat_response {
 };
 
 // =============================================================================
-// error_response — API 错误
+// error_response — API error
 // =============================================================================
 
 export struct error_response {
@@ -454,12 +454,12 @@ export struct model_info {
 };
 
 // =============================================================================
-// TTS (Text-to-Speech) — 语音合成
+// TTS (Text-to-Speech) — Speech synthesis
 // =============================================================================
 
 export struct tts_request {
     std::string model = "tts-1";              // "tts-1" | "tts-1-hd"
-    std::string input;                        // 要转换的文本 (最大 4096 字符)
+    std::string input;                        // Text to convert (max 4096 characters)
     std::string voice = "alloy";              // "alloy"|"echo"|"fable"|"onyx"|"nova"|"shimmer"
     std::string response_format = "mp3";      // "mp3"|"opus"|"aac"|"flac"|"wav"|"pcm"
     double      speed = 1.0;                  // 0.25 ~ 4.0
@@ -476,29 +476,29 @@ export struct tts_request {
 };
 
 // =============================================================================
-// STT (Speech-to-Text) — 语音识别 (Whisper)
+// STT (Speech-to-Text) — Speech recognition (Whisper)
 // =============================================================================
 
 export struct transcription_request {
-    std::vector<std::byte> file;              // 音频文件数据
-    std::string            filename = "audio.mp3"; // 文件名 (含扩展名)
+    std::vector<std::byte> file;              // Audio file data
+    std::string            filename = "audio.mp3"; // Filename (with extension)
     std::string            model = "whisper-1";
-    std::string            language;          // ISO-639-1 语言代码 (可选)
-    std::string            prompt;            // 提示词 (可选)
+    std::string            language;          // ISO-639-1 language code (optional)
+    std::string            prompt;            // Prompt (optional)
     std::string            response_format = "json"; // "json"|"text"|"srt"|"vtt"|"verbose_json"
     double                 temperature = 0.0; // 0 ~ 1
 };
 
 export struct transcription_response {
-    std::string text;                         // 转录文本
-    std::string language;                     // 检测到的语言
-    double      duration = 0.0;               // 音频时长 (秒)
+    std::string text;                         // Transcribed text
+    std::string language;                     // Detected language
+    double      duration = 0.0;               // Audio duration (seconds)
 
     [[nodiscard]] static auto from_json(std::string_view text_data) -> transcription_response {
         transcription_response r;
         auto j = json::parse(text_data, nullptr, false);
         if (j.is_discarded()) {
-            // 可能是纯文本格式
+            // Might be plain text format
             r.text = std::string(text_data);
             return r;
         }
@@ -510,22 +510,22 @@ export struct transcription_response {
 };
 
 export struct translation_request {
-    std::vector<std::byte> file;              // 音频文件数据
+    std::vector<std::byte> file;              // Audio file data
     std::string            filename = "audio.mp3";
     std::string            model = "whisper-1";
-    std::string            prompt;            // 提示词 (可选)
+    std::string            prompt;            // Prompt (optional)
     std::string            response_format = "json";
     double                 temperature = 0.0;
 };
 
 // =============================================================================
-// DALL-E — 图像生成
+// DALL-E — Image generation
 // =============================================================================
 
 export struct image_generation_request {
     std::string model = "dall-e-3";           // "dall-e-2" | "dall-e-3"
-    std::string prompt;                       // 描述文本 (最大 4000 字符)
-    int         n = 1;                        // 生成数量 (dall-e-3 只支持 1)
+    std::string prompt;                       // Description text (max 4000 characters)
+    int         n = 1;                        // Generation count (dall-e-3 only supports 1)
     std::string quality = "standard";         // "standard" | "hd" (dall-e-3 only)
     std::string response_format = "url";      // "url" | "b64_json"
     std::string size = "1024x1024";           // "256x256"|"512x512"|"1024x1024"|"1792x1024"|"1024x1792"
@@ -547,12 +547,12 @@ export struct image_generation_request {
 };
 
 export struct image_edit_request {
-    std::vector<std::byte> image;             // 原图 (PNG, <4MB, 正方形)
+    std::vector<std::byte> image;             // Original image (PNG, <4MB, square)
     std::string            image_filename = "image.png";
-    std::vector<std::byte> mask;              // 蒙版 (可选, 透明区域为编辑区)
+    std::vector<std::byte> mask;              // Mask (optional, transparent area is edit area)
     std::string            mask_filename = "mask.png";
-    std::string            prompt;            // 描述文本
-    std::string            model = "dall-e-2"; // 目前只支持 dall-e-2
+    std::string            prompt;            // Description text
+    std::string            model = "dall-e-2"; // Currently only supports dall-e-2
     int                    n = 1;
     std::string            size = "1024x1024";
     std::string            response_format = "url";
@@ -560,7 +560,7 @@ export struct image_edit_request {
 };
 
 export struct image_variation_request {
-    std::vector<std::byte> image;             // 原图 (PNG, <4MB, 正方形)
+    std::vector<std::byte> image;             // Original image (PNG, <4MB, square)
     std::string            image_filename = "image.png";
     std::string            model = "dall-e-2";
     int                    n = 1;
@@ -570,9 +570,9 @@ export struct image_variation_request {
 };
 
 export struct generated_image {
-    std::string url;                          // 图片 URL (1小时有效)
-    std::string b64_json;                     // base64 编码的图片
-    std::string revised_prompt;               // dall-e-3 修改后的 prompt
+    std::string url;                          // Image URL (valid for 1 hour)
+    std::string b64_json;                     // Base64 encoded image
+    std::string revised_prompt;               // dall-e-3 revised prompt
 };
 
 export struct image_response {
@@ -598,7 +598,7 @@ export struct image_response {
 };
 
 // =============================================================================
-// Moderation — 内容审核
+// Moderation — Content moderation
 // =============================================================================
 
 export struct moderation_request {
@@ -670,7 +670,7 @@ export struct moderation_response {
 };
 
 // =============================================================================
-// connect_options — 连接配置
+// connect_options — Connection configuration
 // =============================================================================
 
 export struct connect_options {
@@ -683,11 +683,11 @@ export struct connect_options {
 };
 
 // =============================================================================
-// on_chunk_fn — 流式回调类型
+// on_chunk_fn — Streaming callback type
 // =============================================================================
 
-/// SSE 流式回调: (chunk) -> void
-/// 每收到一个 SSE 数据块就调用一次
+/// SSE streaming callback: (chunk) -> void
+/// Called once for each SSE data chunk received
 export using on_chunk_fn = std::function<void(const chat_chunk& chunk)>;
 
 } // namespace cnetmod::openai

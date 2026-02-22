@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:types — MQTT 基础类型定义
-/// 支持 MQTT v3.1.1 和 v5.0
+/// cnetmod.protocol.mqtt:types — MQTT basic type definitions
+/// Supports MQTT v3.1.1 and v5.0
 
 module;
 
@@ -12,7 +12,7 @@ import std;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// 协议版本
+// Protocol version
 // =============================================================================
 
 export enum class protocol_version : std::uint8_t {
@@ -48,7 +48,7 @@ export constexpr auto to_string(qos q) noexcept -> std::string_view {
 }
 
 // =============================================================================
-// 控制报文类型
+// Control packet types
 // =============================================================================
 
 export enum class control_packet_type : std::uint8_t {
@@ -99,7 +99,7 @@ export constexpr auto to_string(control_packet_type t) noexcept -> std::string_v
 }
 
 // =============================================================================
-// CONNECT 返回码 (v3.1.1)
+// CONNECT return codes (v3.1.1)
 // =============================================================================
 
 export enum class connect_return_code : std::uint8_t {
@@ -124,7 +124,7 @@ export constexpr auto to_string(connect_return_code c) noexcept -> std::string_v
 }
 
 // =============================================================================
-// SUBACK 返回码 (v3.1.1)
+// SUBACK return codes (v3.1.1)
 // =============================================================================
 
 export enum class suback_return_code : std::uint8_t {
@@ -315,7 +315,7 @@ export enum class property_id : std::uint8_t {
     shared_subscription_available     = 42,
 };
 
-/// 属性值类型
+/// Property value type
 export struct mqtt_property {
     property_id id;
     std::variant<
@@ -326,7 +326,7 @@ export struct mqtt_property {
         std::pair<std::string, std::string>            // string pair (user property)
     > value;
 
-    /// 便捷构造
+    /// Convenience constructors
     static auto byte_prop(property_id id, std::uint8_t v) -> mqtt_property {
         return {id, v};
     }
@@ -349,19 +349,19 @@ export struct mqtt_property {
 
 export using properties = std::vector<mqtt_property>;
 
-/// v5 AUTH 回调 (Enhanced Authentication)
-/// 参数: client_id, reason_code, props
-/// 返回: 响应 (reason_code, props)，或 nullopt 表示不响应
+/// v5 AUTH callback (Enhanced Authentication)
+/// Parameters: client_id, reason_code, props
+/// Returns: response (reason_code, props), or nullopt for no response
 export using broker_auth_handler = std::function<
     std::optional<std::pair<std::uint8_t, properties>>(
         const std::string& client_id, std::uint8_t reason_code,
         const properties& props)>;
 
 // =============================================================================
-// 核心结构体
+// Core structures
 // =============================================================================
 
-/// 遗嘱消息
+/// Will message
 export struct will {
     std::string topic;
     std::string message;
@@ -370,14 +370,14 @@ export struct will {
     properties  props;     // v5 only
 };
 
-/// v5 订阅选项
+/// v5 subscription options
 export enum class retain_handling : std::uint8_t {
     send                      = 0,
     send_only_new_subscription = 1,
     not_send                  = 2,
 };
 
-/// 订阅条目
+/// Subscription entry
 export struct subscribe_entry {
     std::string      topic_filter;
     qos              max_qos         = qos::at_most_once;
@@ -387,7 +387,7 @@ export struct subscribe_entry {
     retain_handling  rh                  = retain_handling::send;
     std::uint32_t    subscription_id     = 0;   // v5 Subscription Identifier
 
-    /// 编码为 v5 subscribe options 字节
+    /// Encode as v5 subscribe options byte
     [[nodiscard]] auto encode_options() const noexcept -> std::uint8_t {
         std::uint8_t opts = static_cast<std::uint8_t>(max_qos);
         if (no_local)            opts |= 0x04;
@@ -397,7 +397,7 @@ export struct subscribe_entry {
     }
 };
 
-/// 接收到的 PUBLISH 消息
+/// Received PUBLISH message
 export struct publish_message {
     std::string      topic;
     std::string      payload;
@@ -407,11 +407,11 @@ export struct publish_message {
     std::uint16_t    packet_id  = 0;
     properties       props;     // v5 only
 
-    /// 离线队列入队时间戳 (用于 message_expiry_interval 检查)
+    /// Offline queue enqueue timestamp (for message_expiry_interval check)
     std::chrono::steady_clock::time_point enqueue_time{};
 };
 
-/// 连接选项
+/// Connection options
 export struct connect_options {
     std::string      host           = "127.0.0.1";
     std::uint16_t    port           = 1883;
@@ -424,7 +424,7 @@ export struct connect_options {
     protocol_version version       = protocol_version::v3_1_1;
     properties       props;        // v5 CONNECT properties
 
-    // 超时
+    // Timeout
     std::chrono::milliseconds connect_timeout = std::chrono::seconds(30);
 
     // TLS
@@ -437,13 +437,13 @@ export struct connect_options {
 };
 
 // =============================================================================
-// 错误码
+// Error codes
 // =============================================================================
 
 export enum class mqtt_errc {
     success = 0,
 
-    // 协议错误
+    // Protocol errors
     malformed_packet,
     protocol_error,
     invalid_remaining_length,
@@ -451,13 +451,13 @@ export enum class mqtt_errc {
     invalid_qos,
     packet_too_large,
 
-    // 连接错误
+    // Connection errors
     not_connected,
     connect_refused,
     connect_timeout,
     keep_alive_timeout,
 
-    // 通用
+    // General
     unexpected_disconnect,
     unknown_error,
 };
@@ -499,13 +499,13 @@ export inline auto make_error_code(mqtt_errc e) noexcept -> std::error_code {
 }
 
 // =============================================================================
-// UTF-8 字符串验证 (MQTT 规范要求)
+// UTF-8 string validation (MQTT spec requirement)
 // =============================================================================
 
-/// 验证 MQTT 规范要求的 UTF-8 合规性
-/// 禁止: U+0000, U+0001-001F 控制字符 (除 U+000D, U+000A 外),
-///       U+007F-009F 控制字符, U+D800-DFFF 代理对, U+FFFE/FFFF
-/// 同时验证 UTF-8 编码本身的合法性（无截断序列、无 overlong 编码）
+/// Validate UTF-8 compliance as required by MQTT spec
+/// Forbidden: U+0000, U+0001-001F control characters (except U+000D, U+000A),
+///            U+007F-009F control characters, U+D800-DFFF surrogates, U+FFFE/FFFF
+/// Also validates UTF-8 encoding itself (no truncated sequences, no overlong encoding)
 export inline auto validate_utf8(std::string_view s) noexcept -> bool {
     std::size_t i = 0;
     while (i < s.size()) {
@@ -543,16 +543,16 @@ export inline auto validate_utf8(std::string_view s) noexcept -> bool {
             if (cp < 0x10000 || cp > 0x10FFFF) return false; // overlong or out of range
             len = 4;
         } else {
-            return false; // 非法起始字节
+            return false; // Invalid start byte
         }
 
-        // MQTT 禁止的码点
+        // MQTT forbidden codepoints
         if (cp == 0x0000) return false;                        // U+0000 (null)
         if (cp >= 0x0001 && cp <= 0x001F && cp != 0x000A && cp != 0x000D)
-            return false;                                      // 控制字符 (保留 LF, CR)
-        if (cp >= 0x007F && cp <= 0x009F) return false;        // DEL + C1 控制字符
-        if (cp >= 0xD800 && cp <= 0xDFFF) return false;        // 代理对
-        if (cp == 0xFFFE || cp == 0xFFFF) return false;        // 非字符
+            return false;                                      // Control characters (preserve LF, CR)
+        if (cp >= 0x007F && cp <= 0x009F) return false;        // DEL + C1 control characters
+        if (cp >= 0xD800 && cp <= 0xDFFF) return false;        // Surrogates
+        if (cp == 0xFFFE || cp == 0xFFFF) return false;        // Non-characters
 
         i += len;
     }
@@ -565,9 +565,9 @@ export inline auto validate_utf8(std::string_view s) noexcept -> bool {
 
 namespace detail {
 
-/// 编码变长整数到字符串末尾
+/// Encode variable length integer to end of string
 export inline void encode_variable_length(std::string& buf, std::size_t value) {
-    if (value > 0x0FFFFFFF) return; // 最大 268,435,455
+    if (value > 0x0FFFFFFF) return; // Maximum 268,435,455
     do {
         auto byte = static_cast<char>(value & 0x7F);
         value >>= 7;
@@ -576,7 +576,7 @@ export inline void encode_variable_length(std::string& buf, std::size_t value) {
     } while (value > 0);
 }
 
-/// 解码变长整数，返回 (value, consumed_bytes)；失败返回 (0, 0)
+/// Decode variable length integer, returns (value, consumed_bytes); returns (0, 0) on failure
 export constexpr auto decode_variable_length(std::string_view data) noexcept
     -> std::pair<std::size_t, std::size_t>
 {
@@ -590,23 +590,23 @@ export constexpr auto decode_variable_length(std::string_view data) noexcept
         ++consumed;
         if (!(byte & 0x80)) return {value, consumed};
     }
-    return {0, 0}; // 不完整或无效
+    return {0, 0}; // Incomplete or invalid
 }
 
-/// 写入 16 位大端整数
+/// Write 16-bit big-endian integer
 export inline void write_u16(std::string& buf, std::uint16_t v) {
     buf.push_back(static_cast<char>((v >> 8) & 0xFF));
     buf.push_back(static_cast<char>(v & 0xFF));
 }
 
-/// 读取 16 位大端整数
+/// Read 16-bit big-endian integer
 export constexpr auto read_u16(std::string_view data) noexcept -> std::uint16_t {
     return static_cast<std::uint16_t>(
         (static_cast<std::uint8_t>(data[0]) << 8) |
          static_cast<std::uint8_t>(data[1]));
 }
 
-/// 写入 32 位大端整数
+/// Write 32-bit big-endian integer
 export inline void write_u32(std::string& buf, std::uint32_t v) {
     buf.push_back(static_cast<char>((v >> 24) & 0xFF));
     buf.push_back(static_cast<char>((v >> 16) & 0xFF));
@@ -614,7 +614,7 @@ export inline void write_u32(std::string& buf, std::uint32_t v) {
     buf.push_back(static_cast<char>(v & 0xFF));
 }
 
-/// 读取 32 位大端整数
+/// Read 32-bit big-endian integer
 export constexpr auto read_u32(std::string_view data) noexcept -> std::uint32_t {
     return (static_cast<std::uint32_t>(static_cast<std::uint8_t>(data[0])) << 24) |
            (static_cast<std::uint32_t>(static_cast<std::uint8_t>(data[1])) << 16) |
@@ -622,13 +622,13 @@ export constexpr auto read_u32(std::string_view data) noexcept -> std::uint32_t 
             static_cast<std::uint32_t>(static_cast<std::uint8_t>(data[3]));
 }
 
-/// 写入 UTF-8 前缀字符串 (2 字节长度 + 内容)
+/// Write UTF-8 prefixed string (2-byte length + content)
 export inline void write_utf8_string(std::string& buf, std::string_view s) {
     write_u16(buf, static_cast<std::uint16_t>(s.size()));
     buf.append(s);
 }
 
-/// 写入二进制数据 (2 字节长度 + 内容)
+/// Write binary data (2-byte length + content)
 export inline void write_binary(std::string& buf, std::string_view s) {
     write_u16(buf, static_cast<std::uint16_t>(s.size()));
     buf.append(s);

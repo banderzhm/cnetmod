@@ -1,16 +1,16 @@
 /**
  * @file cors.cppm
- * @brief CORS 跨域资源共享中间件
+ * @brief CORS (Cross-Origin Resource Sharing) middleware
  *
- * 处理浏览器跨域请求：OPTIONS 预检自动响应 + 所有响应附加 CORS 头。
+ * Handles browser cross-origin requests: OPTIONS preflight auto-response + CORS headers added to all responses.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.cors;
  *
- *   // 默认: 允许所有 Origin
+ *   // Default: allow all Origins
  *   svr.use(cors());
  *
- *   // 自定义
+ *   // Custom
  *   svr.use(cors({
  *       .allow_origins = {"https://example.com", "https://app.example.com"},
  *       .allow_credentials = true,
@@ -26,7 +26,7 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
-// cors_options — CORS 配置
+// cors_options — CORS configuration
 // =============================================================================
 
 export struct cors_options {
@@ -35,7 +35,7 @@ export struct cors_options {
     std::vector<std::string> allow_headers  = {"Content-Type","Authorization","X-Request-ID"};
     std::vector<std::string> expose_headers = {"X-Request-ID"};
     bool allow_credentials = false;
-    int  max_age = 86400;  // 预检缓存秒数 (24h)
+    int  max_age = 86400;  // Preflight cache seconds (24h)
 };
 
 namespace detail {
@@ -64,14 +64,14 @@ inline auto origin_allowed(const std::vector<std::string>& origins,
 } // namespace detail
 
 // =============================================================================
-// cors — CORS 中间件
+// cors — CORS middleware
 // =============================================================================
 //
-// 行为:
-//   1. 无 Origin 头 → 直接放行 (非跨域请求)
-//   2. Origin 不在允许列表 → 直接放行 (浏览器会拒绝)
-//   3. OPTIONS 预检 → 设置 CORS 头，返回 204，不调用 next()
-//   4. 其他请求 → 设置 CORS 头，调用 next()
+// Behavior:
+//   1. No Origin header → pass through (non-cross-origin request)
+//   2. Origin not in allow list → pass through (browser will reject)
+//   3. OPTIONS preflight → set CORS headers, return 204, don't call next()
+//   4. Other requests → set CORS headers, call next()
 
 export inline auto cors(cors_options opts = {}) -> http::middleware_fn
 {
@@ -91,7 +91,7 @@ export inline auto cors(cors_options opts = {}) -> http::middleware_fn
 
         auto& resp = ctx.resp();
 
-        // 设置 Access-Control-Allow-Origin
+        // Set Access-Control-Allow-Origin
         if (opts.allow_origins.size() == 1
             && opts.allow_origins[0] == "*"
             && !opts.allow_credentials)
@@ -109,7 +109,7 @@ export inline auto cors(cors_options opts = {}) -> http::middleware_fn
             resp.set_header("Access-Control-Expose-Headers",
                             detail::join(opts.expose_headers, ", "));
 
-        // OPTIONS 预检: 短路返回 204
+        // OPTIONS preflight: short-circuit return 204
         if (ctx.method() == "OPTIONS") {
             resp.set_status(http::status::no_content);
             resp.set_header("Access-Control-Allow-Methods",

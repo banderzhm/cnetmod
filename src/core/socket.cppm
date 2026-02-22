@@ -21,7 +21,7 @@ import cnetmod.core.address;
 namespace cnetmod {
 
 // =============================================================================
-// 平台类型别名
+// Platform Type Aliases
 // =============================================================================
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
@@ -33,87 +33,87 @@ export inline constexpr native_handle_t invalid_handle = -1;
 #endif
 
 // =============================================================================
-// 套接字类型
+// Socket Type
 // =============================================================================
 
-/// 套接字协议类型
+/// Socket protocol type
 export enum class socket_type {
     stream,    // TCP
     datagram,  // UDP
 };
 
 // =============================================================================
-// 套接字选项
+// Socket Options
 // =============================================================================
 
-/// 套接字选项
+/// Socket options
 export struct socket_options {
     bool reuse_address = false;
     bool reuse_port = false;
     bool non_blocking = true;
     bool no_delay = false;        // TCP_NODELAY
-    int recv_buffer_size = 0;     // 0 = 系统默认
-    int send_buffer_size = 0;     // 0 = 系统默认
+    int recv_buffer_size = 0;     // 0 = system default
+    int send_buffer_size = 0;     // 0 = system default
 };
 
 // =============================================================================
-// Socket 类
+// Socket Class
 // =============================================================================
 
-/// 平台无关的套接字封装
-/// 拥有 native handle 的生命周期（RAII）
+/// Platform-independent socket wrapper
+/// Owns the lifetime of native handle (RAII)
 export class socket {
 public:
     socket() noexcept = default;
     ~socket();
 
-    // 不可复制
+    // Non-copyable
     socket(const socket&) = delete;
     auto operator=(const socket&) -> socket& = delete;
 
-    // 可移动
+    // Movable
     socket(socket&& other) noexcept;
     auto operator=(socket&& other) noexcept -> socket&;
 
-    /// 创建套接字
+    /// Create socket
     [[nodiscard]] static auto create(
         address_family family,
         socket_type type
     ) -> std::expected<socket, std::error_code>;
 
-    /// 从原生句柄构造（接管所有权）
+    /// Construct from native handle (takes ownership)
     [[nodiscard]] static auto from_native(native_handle_t handle) noexcept -> socket {
         return socket{handle};
     }
 
-    /// 绑定地址
+    /// Bind address
     [[nodiscard]] auto bind(const endpoint& ep) -> std::expected<void, std::error_code>;
 
-    /// 监听
+    /// Listen
     [[nodiscard]] auto listen(int backlog = 128) -> std::expected<void, std::error_code>;
 
-    /// 设置非阻塞模式
+    /// Set non-blocking mode
     [[nodiscard]] auto set_non_blocking(bool enabled) -> std::expected<void, std::error_code>;
 
-    /// 应用选项
+    /// Apply options
     [[nodiscard]] auto apply_options(const socket_options& opts) -> std::expected<void, std::error_code>;
 
-    /// 关闭套接字
+    /// Close socket
     void close() noexcept;
 
-    /// 获取原生句柄
+    /// Get native handle
     [[nodiscard]] auto native_handle() const noexcept -> native_handle_t {
         return handle_;
     }
 
-    /// 释放所有权（不关闭）
+    /// Release ownership (does not close)
     [[nodiscard]] auto release() noexcept -> native_handle_t {
         auto h = handle_;
         handle_ = invalid_handle;
         return h;
     }
 
-    /// 是否有效
+    /// Check if valid
     [[nodiscard]] auto is_open() const noexcept -> bool {
         return handle_ != invalid_handle;
     }

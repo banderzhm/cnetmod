@@ -1,13 +1,13 @@
 /**
  * @file body_limit.cppm
- * @brief 请求体大小限制中间件 — 超限返回 413 Payload Too Large
+ * @brief Request body size limit middleware — returns 413 Payload Too Large when exceeded
  *
- * 检查 Content-Length 和实际 body 大小，在 handler 执行前拒绝过大请求，防止 OOM。
+ * Checks Content-Length and actual body size, rejects oversized requests before handler execution to prevent OOM.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.body_limit;
  *
- *   svr.use(body_limit());                     // 默认 1MB
+ *   svr.use(body_limit());                     // Default 1MB
  *   svr.use(body_limit(8 * 1024 * 1024));      // 8MB
  */
 export module cnetmod.middleware.body_limit;
@@ -19,13 +19,13 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
-// body_limit — 请求体大小限制中间件
+// body_limit — Request body size limit middleware
 // =============================================================================
 //
-// 检查顺序:
-//   1. Content-Length 头 (如果存在) > max_bytes → 413
-//   2. 实际 body.size() > max_bytes → 413 (兜底，处理 chunked 传输)
-//   3. 通过 → 调用 next()
+// Check order:
+//   1. Content-Length header (if exists) > max_bytes → 413
+//   2. Actual body.size() > max_bytes → 413 (fallback, handles chunked transfer)
+//   3. Pass → call next()
 
 export inline auto body_limit(std::size_t max_bytes = 1024 * 1024)
     -> http::middleware_fn
@@ -33,7 +33,7 @@ export inline auto body_limit(std::size_t max_bytes = 1024 * 1024)
     return [max_bytes]
            (http::request_context& ctx, http::next_fn next) -> task<void>
     {
-        // 检查 Content-Length 头
+        // Check Content-Length header
         auto cl = ctx.get_header("Content-Length");
         if (!cl.empty()) {
             std::size_t len = 0;
@@ -47,7 +47,7 @@ export inline auto body_limit(std::size_t max_bytes = 1024 * 1024)
             }
         }
 
-        // 兜底: 检查实际 body 大小
+        // Fallback: check actual body size
         if (ctx.body().size() > max_bytes) {
             ctx.json(http::status::payload_too_large, std::format(
                 R"({{"error":"request body too large","limit":{},"size":{}}})",

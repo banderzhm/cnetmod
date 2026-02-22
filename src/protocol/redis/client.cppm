@@ -22,18 +22,18 @@ import :parser;
 namespace cnetmod::redis {
 
 // =============================================================================
-// 连接选项
+// Connection Options
 // =============================================================================
 
 export struct connect_options {
     std::string   host     = "127.0.0.1";
     std::uint16_t port     = 6379;
-    std::string   password;            // AUTH 密码（空 = 不认证）
-    std::string   username;            // Redis 6+ ACL 用户名（空 = default）
-    std::uint32_t db       = 0;       // SELECT 数据库号（0 = 默认）
-    bool          resp3    = true;    // 是否发送 HELLO 3 切换 RESP3
+    std::string   password;            // AUTH password (empty = no auth)
+    std::string   username;            // Redis 6+ ACL username (empty = default)
+    std::uint32_t db       = 0;       // SELECT database number (0 = default)
+    bool          resp3    = true;    // Whether to send HELLO 3 to switch to RESP3
 
-    // TLS 配置
+    // TLS configuration
     bool        tls           = false;
     bool        tls_verify    = true;
     std::string tls_ca_file;
@@ -43,24 +43,24 @@ export struct connect_options {
 };
 
 // =============================================================================
-// PubSub 推送回调类型
+// PubSub Push Callback Type
 // =============================================================================
 
-/// push 消息回调: (channel, message, 完整节点列表)
+/// Push message callback: (channel, message, complete node list)
 export using push_callback = std::function<void(std::string_view channel,
                                                 std::string_view message)>;
 
 // =============================================================================
-// redis::client — 单连接异步客户端 (RESP3)
+// redis::client — Single Connection Async Client (RESP3)
 // =============================================================================
 
 export class client {
 public:
     explicit client(io_context& ctx) noexcept : ctx_(ctx) {}
 
-    // ----- 连接 / 关闭 -----
+    // ----- Connect / Close -----
 
-    /// 连接 Redis，自动处理 TLS、HELLO 3、AUTH 和 SELECT
+    /// Connect to Redis, automatically handles TLS, HELLO 3, AUTH and SELECT
     auto connect(connect_options opts = {}) -> task<std::expected<void, std::string>> {
         auto addr_r = ip_address::from_string(opts.host);
         if (!addr_r)
@@ -115,7 +115,7 @@ public:
         }
 #endif
 
-        // HELLO 3 (切换 RESP3 协议)
+        // HELLO 3 (switch to RESP3 protocol)
         if (opts.resp3) {
             request hello_req;
             if (!opts.password.empty()) {
@@ -129,11 +129,11 @@ public:
             auto hello_r = co_await exec(hello_req);
             if (!hello_r)
                 co_return std::unexpected("HELLO 3 failed: " + hello_r.error());
-            // HELLO 回复是一个 map，检查有无错误
+            // HELLO reply is a map, check for errors
             if (!hello_r->empty() && hello_r->front().is_error()) {
-                // 服务器不支持 RESP3，降级到 RESP2
+                // Server doesn't support RESP3, fallback to RESP2
                 resp3_mode_ = false;
-                // 仍需 AUTH
+                // Still need AUTH
                 if (!opts.password.empty()) {
                     auto auth_r = co_await do_auth(opts);
                     if (!auth_r) co_return auth_r;
@@ -174,9 +174,9 @@ public:
         sock_.close();
     }
 
-    // ----- 执行命令 -----
+    // ----- Execute Commands -----
 
-    /// 执行一个 request (可含多条命令)，返回所有响应节点 (前序遍历)
+    /// Execute a request (can contain multiple commands), returns all response nodes (pre-order traversal)
     auto exec(const request& req)
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
@@ -194,15 +194,15 @@ public:
         co_return all_nodes;
     }
 
-    /// 便捷: 单条命令 (initializer_list)
+    /// Convenience: single command (initializer_list)
     auto cmd(std::initializer_list<std::string_view> args)
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
         request req;
-        // 构建: 第一个是命令，后面是参数
+        // Build: first is command, rest are arguments
         if (args.size() == 0) co_return std::unexpected(std::string("empty command"));
 
-        // 手动构造以支持 initializer_list
+        // Manually construct to support initializer_list
         std::string payload;
         detail::add_header(payload, resp3_type::array, args.size());
         for (auto a : args)
@@ -213,7 +213,7 @@ public:
         co_return co_await parse_one_response();
     }
 
-    /// Pipeline: 多条命令单次往返
+    /// Pipeline: Multiple commands in single round-trip
     auto pipe(std::initializer_list<std::initializer_list<std::string_view>> cmds)
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
@@ -241,7 +241,7 @@ public:
 
     // ----- PubSub -----
 
-    /// 订阅频道
+    /// Subscribe to channels
     auto subscribe(std::initializer_list<std::string_view> channels)
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
@@ -254,7 +254,7 @@ public:
         auto w = co_await do_write(const_buffer{payload.data(), payload.size()});
         if (!w) co_return std::unexpected(w.error().message());
 
-        // 每个频道一个确认响应
+        // One confirmation response per channel
         std::vector<resp3_node> all;
         for (std::size_t i = 0; i < channels.size(); ++i) {
             auto nodes = co_await parse_one_response();
@@ -265,7 +265,7 @@ public:
         co_return all;
     }
 
-    /// 取消订阅频道
+    /// Unsubscribe from channels
     auto unsubscribe(std::initializer_list<std::string_view> channels)
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
@@ -288,21 +288,21 @@ public:
         co_return all;
     }
 
-    /// 注册 push 消息回调
+    /// Register push message callback
     void on_push(push_callback cb) { push_cb_ = std::move(cb); }
 
-    /// 接收一条 push 消息 (阻塞等待)
+    /// Receive one push message (blocking wait)
     auto receive_push()
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
         co_return co_await parse_one_response();
     }
 
-    /// 是否运行在 RESP3 模式
+    /// Check if running in RESP3 mode
     [[nodiscard]] auto is_resp3() const noexcept -> bool { return resp3_mode_; }
 
 private:
-    // ── 传输层 ──
+    // ── Transport layer ──
 
     auto do_write(const_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>
@@ -322,7 +322,7 @@ private:
         co_return co_await async_read(ctx_, sock_, buf);
     }
 
-    // ── AUTH 辅助 ──
+    // ── AUTH helper ──
 
     auto do_auth(const connect_options& opts)
         -> task<std::expected<void, std::string>>
@@ -339,7 +339,7 @@ private:
         co_return std::expected<void, std::string>{};
     }
 
-    // ── 解析一个完整响应 ──
+    // ── Parse one complete response ──
 
     auto parse_one_response()
         -> task<std::expected<std::vector<resp3_node>, std::string>>
@@ -349,9 +349,9 @@ private:
         std::error_code ec;
 
         while (!parser.done()) {
-            // 确保缓冲区有数据
+            // Ensure buffer has data
             if (parser.consumed() >= rbuf_.size() || rbuf_.empty()) {
-                // 需要从网络读取更多数据
+                // Need to read more data from network
                 auto ok = co_await fill();
                 if (!ok) co_return std::unexpected(std::string("connection closed"));
             }
@@ -366,11 +366,11 @@ private:
                 rpos_ += parser.consumed();
                 parser.reset();
 
-                // 检查是否还需要更多节点 (聚合类型)
+                // Check if more nodes needed (aggregate types)
                 if (!nodes.empty()) {
                     auto& first = nodes.front();
                     if (first.is_aggregate() && first.aggregate_size > 0) {
-                        // 继续解析子节点
+                        // Continue parsing child nodes
                         auto remaining = co_await parse_children(
                             first.aggregate_size * element_multiplicity(first.data_type));
                         if (!remaining)
@@ -383,7 +383,7 @@ private:
                 co_return nodes;
             }
 
-            // 需要更多数据
+            // Need more data
             rpos_ += parser.consumed();
             parser.reset();
             auto ok = co_await fill();
@@ -395,7 +395,7 @@ private:
         co_return nodes;
     }
 
-    /// 解析 N 个子节点
+    /// Parse N child nodes
     auto parse_children(std::size_t count)
         -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
@@ -424,7 +424,7 @@ private:
                     children.push_back(std::move(*node));
                     got_node = true;
 
-                    // 如果子节点是聚合类型，递归解析
+                    // If child node is aggregate type, parse recursively
                     auto& child = children.back();
                     if (child.is_aggregate() && child.aggregate_size > 0) {
                         auto sub = co_await parse_children(
@@ -432,7 +432,7 @@ private:
                         if (!sub) co_return std::unexpected(sub.error());
                         for (auto& n : *sub)
                             children.push_back(std::move(n));
-                        i += sub->size(); // 跳过已计入的子元素
+                        i += sub->size(); // Skip already counted child elements
                     }
                 } else {
                     rpos_ += parser.consumed();
@@ -445,7 +445,7 @@ private:
         co_return children;
     }
 
-    // ── 读缓冲 ──
+    // ── Read buffer ──
 
     auto fill() -> task<bool> {
         std::array<std::byte, 8192> tmp{};
@@ -462,7 +462,7 @@ private:
         }
     }
 
-    // ── 成员 ──
+    // ── Members ──
 
     io_context& ctx_;
     socket      sock_;
@@ -478,10 +478,10 @@ private:
 };
 
 // =============================================================================
-// 便捷函数: 从节点列表中提取简单值
+// Convenience functions: Extract simple values from node list
 // =============================================================================
 
-/// 从节点列表中提取第一个值 (跳过聚合头节点)
+/// Extract first value from node list (skip aggregate header node)
 export auto first_value(const std::vector<resp3_node>& nodes) noexcept
     -> std::string_view
 {
@@ -492,7 +492,7 @@ export auto first_value(const std::vector<resp3_node>& nodes) noexcept
     return {};
 }
 
-/// 从节点列表中提取所有值 (跳过聚合头节点)
+/// Extract all values from node list (skip aggregate header node)
 export auto all_values(const std::vector<resp3_node>& nodes)
     -> std::vector<std::string_view>
 {
@@ -504,14 +504,14 @@ export auto all_values(const std::vector<resp3_node>& nodes)
     return vals;
 }
 
-/// 检查节点列表是否表示 OK 响应
+/// Check if node list represents OK response
 export auto is_ok(const std::vector<resp3_node>& nodes) noexcept -> bool {
     if (nodes.empty()) return false;
     auto& n = nodes.front();
     return (n.data_type == resp3_type::simple_string && n.value == "OK");
 }
 
-/// 检查节点列表是否包含错误
+/// Check if node list contains error
 export auto has_error(const std::vector<resp3_node>& nodes) noexcept -> bool {
     for (auto& n : nodes) {
         if (n.is_error()) return true;
@@ -519,7 +519,7 @@ export auto has_error(const std::vector<resp3_node>& nodes) noexcept -> bool {
     return false;
 }
 
-/// 获取第一个错误信息
+/// Get first error message
 export auto error_message(const std::vector<resp3_node>& nodes) noexcept
     -> std::string_view
 {

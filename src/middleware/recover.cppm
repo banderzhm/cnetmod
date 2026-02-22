@@ -1,14 +1,14 @@
 /**
  * @file recover.cppm
- * @brief 异常恢复中间件 — 捕获 handler 未处理异常，返回 500 并记录日志
+ * @brief Exception Recovery Middleware — Catch unhandled handler exceptions, return 500 and log
  *
- * 防止 handler 抛异常导致连接直接断开且无响应。
- * 应放在中间件链最外层，确保所有异常都能被捕获。
+ * Prevents handler exceptions from causing connection drops without response.
+ * Should be placed at outermost layer of middleware chain to catch all exceptions.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.recover;
  *
- *   svr.use(recover());  // 最外层
+ *   svr.use(recover());  // Outermost layer
  *   svr.use(access_log());
  *   svr.use(cors());
  *   // ...
@@ -23,13 +23,13 @@ import cnetmod.core.log;
 namespace cnetmod {
 
 // =============================================================================
-// recover — 异常恢复中间件
+// recover — Exception Recovery Middleware
 // =============================================================================
 //
-// 行为:
+// Behavior:
 //   try { co_await next(); }
-//   catch (std::exception) → 500 + 错误日志
-//   catch (...)            → 500 + 错误日志
+//   catch (std::exception) → 500 + error log
+//   catch (...)            → 500 + error log
 
 export inline auto recover() -> http::middleware_fn
 {

@@ -48,14 +48,14 @@ export namespace close_code {
     inline constexpr std::uint16_t going_away          = 1001;
     inline constexpr std::uint16_t protocol_error      = 1002;
     inline constexpr std::uint16_t unsupported_data    = 1003;
-    inline constexpr std::uint16_t no_status           = 1005;  // 不可发送
-    inline constexpr std::uint16_t abnormal_close      = 1006;  // 不可发送
+    inline constexpr std::uint16_t no_status           = 1005;  // Cannot be sent
+    inline constexpr std::uint16_t abnormal_close      = 1006;  // Cannot be sent
     inline constexpr std::uint16_t invalid_payload     = 1007;
     inline constexpr std::uint16_t policy_violation    = 1008;
     inline constexpr std::uint16_t message_too_big     = 1009;
     inline constexpr std::uint16_t extension_required  = 1010;
     inline constexpr std::uint16_t internal_error      = 1011;
-    inline constexpr std::uint16_t tls_handshake       = 1015;  // 不可发送
+    inline constexpr std::uint16_t tls_handshake       = 1015;  // Cannot be sent
 }
 
 export constexpr auto close_reason_string(std::uint16_t code) noexcept -> std::string_view {
@@ -99,14 +99,14 @@ export struct ws_message {
     opcode op = opcode::text;
     std::vector<std::byte> payload;
 
-    /// 以 string_view 访问 payload
+    /// Access payload as string_view
     [[nodiscard]] auto as_string() const noexcept -> std::string_view {
         return {reinterpret_cast<const char*>(payload.data()), payload.size()};
     }
 };
 
 // =============================================================================
-// WebSocket 错误码
+// WebSocket Error Codes
 // =============================================================================
 
 export enum class ws_errc {

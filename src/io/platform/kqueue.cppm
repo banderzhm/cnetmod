@@ -20,10 +20,10 @@ import cnetmod.io.io_operation;
 namespace cnetmod {
 
 // =============================================================================
-// kqueue Context 实现
+// kqueue Context implementation
 // =============================================================================
 
-/// macOS/BSD kqueue 实现（readiness-based）
+/// macOS/BSD kqueue implementation (readiness-based)
 export class kqueue_context : public io_context {
 public:
     explicit kqueue_context(std::size_t max_events = 128)
@@ -34,14 +34,14 @@ public:
             throw std::system_error(
                 errno, std::generic_category(), "kqueue failed");
 
-        // 创建管道用于 stop 信号
+        // Create pipe for stop signal
         if (::pipe(pipe_fds_) < 0) {
             ::close(kqueue_fd_);
             throw std::system_error(
                 errno, std::generic_category(), "pipe failed");
         }
 
-        // 注册管道读端到 kqueue
+        // Register pipe read end to kqueue
         struct kevent ev{};
         EV_SET(&ev, pipe_fds_[0], EVFILT_READ, EV_ADD, 0, 0, nullptr);
         if (::kevent(kqueue_fd_, &ev, 1, nullptr, 0, nullptr) < 0) {
@@ -61,7 +61,7 @@ public:
 
     void run() override {
         while (!stopped_.load(std::memory_order_relaxed)) {
-            run_one_impl(nullptr);  // 无超时
+            run_one_impl(nullptr);  // No timeout
         }
     }
 
@@ -86,12 +86,12 @@ public:
 
     void restart() override {
         stopped_.store(false, std::memory_order_relaxed);
-        // 排空管道
+        // Drain pipe
         char buf[64];
         while (::read(pipe_fds_[0], buf, sizeof(buf)) > 0) {}
     }
 
-    // kqueue 事件注册接口（供 async_op 层使用）
+    // kqueue event registration interface (for async_op layer use)
 
     [[nodiscard]] auto add_event(int ident, int16_t filter, uint16_t flags, void* udata)
         -> std::expected<void, std::error_code>
@@ -115,7 +115,7 @@ public:
         return {};
     }
 
-    /// 返回底层 kqueue fd，供 async_timer_wait 等需要扩展参数的操作使用
+    /// Returns underlying kqueue fd, for operations like async_timer_wait that need extended parameters
     [[nodiscard]] auto native_handle() const noexcept -> int {
         return kqueue_fd_;
     }
@@ -137,7 +137,7 @@ private:
         for (int i = 0; i < n; ++i) {
             auto* udata = events_[i].udata;
             if (udata == nullptr) {
-                // 管道（stop 或 post 唤醒）— 排空
+                // Pipe (stop or post wake) — drain
                 char buf[64];
                 ::read(pipe_fds_[0], buf, sizeof(buf));
                 handled += drain_post_queue();

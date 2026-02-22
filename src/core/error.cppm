@@ -13,14 +13,14 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// 错误码枚举
+// Error code enum
 // =============================================================================
 
-/// 网络操作错误码
+/// Network operation error codes
 export enum class errc {
     success = 0,
 
-    // 连接相关
+    // Connection-related
     connection_refused,
     connection_reset,
     connection_aborted,
@@ -28,34 +28,34 @@ export enum class errc {
     not_connected,
     already_connected,
 
-    // 地址相关
+    // Address-related
     address_in_use,
     address_not_available,
     address_family_not_supported,
 
-    // 操作相关
+    // Operation-related
     operation_aborted,
     operation_in_progress,
     operation_not_supported,
     operation_would_block,
 
-    // 资源相关
+    // Resource-related
     too_many_files_open,
     no_buffer_space,
     out_of_memory,
 
-    // 网络相关
+    // Network-related
     network_down,
     network_unreachable,
     host_unreachable,
     host_not_found,
 
-    // I/O 相关
+    // I/O related
     broken_pipe,
     end_of_file,
     bad_descriptor,
 
-    // 通用
+    // General
     permission_denied,
     invalid_argument,
     unknown_error,
@@ -65,7 +65,7 @@ export enum class errc {
 // error_category
 // =============================================================================
 
-/// cnetmod 错误类别
+/// cnetmod error category
 export class network_error_category : public std::error_category {
 public:
     [[nodiscard]] auto name() const noexcept -> const char* override {
@@ -106,7 +106,7 @@ public:
     }
 };
 
-/// 获取全局 network_error_category 实例
+/// Get global network_error_category instance
 export [[nodiscard]] inline auto network_category() noexcept
     -> const std::error_category&
 {
@@ -114,18 +114,18 @@ export [[nodiscard]] inline auto network_category() noexcept
     return instance;
 }
 
-/// 创建 std::error_code
+/// Create std::error_code
 export [[nodiscard]] inline auto make_error_code(errc e) noexcept
     -> std::error_code
 {
     return {static_cast<int>(e), network_category()};
 }
 
-/// 将平台原生错误码转换为 cnetmod::errc
+/// Convert platform native error code to cnetmod::errc
 export [[nodiscard]] auto from_native_error(int native_error) noexcept -> errc;
 
 } // namespace cnetmod
 
-// 注册到 std::error_code 系统
+// Register with std::error_code system
 template <>
 struct std::is_error_code_enum<cnetmod::errc> : std::true_type {};

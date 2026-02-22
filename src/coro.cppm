@@ -1,5 +1,5 @@
-/// cnetmod.coro — 协程模块聚合
-/// 一次导入即可获得所有协程原语：
+/// cnetmod.coro — Coroutine module aggregation
+/// Import once to get all coroutine primitives:
 ///   task / spawn / timer / cancel / awaitable / bridge /
 ///   channel / mutex / shared_mutex / semaphore / wait_group
 

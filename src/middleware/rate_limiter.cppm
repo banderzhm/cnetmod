@@ -1,17 +1,17 @@
 /**
  * @file rate_limiter.cppm
- * @brief 通用限流中间件 — Token Bucket 算法
+ * @brief Generic Rate Limiting Middleware — Token Bucket Algorithm
  *
- * O(1) 判定，支持突发流量，自动回收不活跃条目。
- * 默认按客户端 IP 限流，可自定义 key 提取函数。
+ * O(1) decision, supports burst traffic, auto-reclaims inactive entries.
+ * Defaults to rate limiting by client IP, customizable key extraction function.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.rate_limiter;
  *
- *   // 默认: 10 req/s, 突发 20
+ *   // Default: 10 req/s, burst 20
  *   svr.use(rate_limiter());
  *
- *   // 自定义
+ *   // Custom
  *   svr.use(rate_limiter({
  *       .rate = 5.0,
  *       .burst = 10.0,
@@ -27,31 +27,31 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
-// rate_limiter_options — 限流配置
+// rate_limiter_options — Rate Limiting Configuration
 // =============================================================================
 
 export struct rate_limiter_options {
-    double rate  = 10.0;   ///< 每秒补充令牌数
-    double burst = 20.0;   ///< 桶容量 (最大突发)
+    double rate  = 10.0;   ///< Tokens replenished per second
+    double burst = 20.0;   ///< Bucket capacity (max burst)
 
-    /// Key 提取函数: 从请求上下文提取限流维度 (默认: 客户端 IP)
+    /// Key extraction function: Extract rate limiting dimension from request context (default: client IP)
     std::function<std::string(http::request_context&)> key_fn;
 
-    /// 空闲条目过期时间 (长时间无请求的桶自动回收)
+    /// Idle entry expiration time (buckets with no requests for long time are auto-reclaimed)
     std::chrono::seconds entry_ttl{300};
 };
 
 // =============================================================================
-// rate_limiter — Token Bucket 限流中间件
+// rate_limiter — Token Bucket Rate Limiting Middleware
 // =============================================================================
 //
-// 算法:
+// Algorithm:
 //   tokens = min(burst, tokens + elapsed * rate)
 //   if tokens >= 1: consume, allow
 //   else: reject 429 + Retry-After
 //
-// 线程安全: std::mutex (临界区极短, 无 co_await)
-// 内存管理: 每 60s lazy GC 清理超过 entry_ttl 未活跃的桶
+// Thread safety: std::mutex (critical section extremely short, no co_await)
+// Memory management: Lazy GC every 60s clears buckets inactive beyond entry_ttl
 
 export inline auto rate_limiter(rate_limiter_options opts = {})
     -> http::middleware_fn
@@ -70,7 +70,7 @@ export inline auto rate_limiter(rate_limiter_options opts = {})
     auto st = std::make_shared<state>();
     st->last_gc = std::chrono::steady_clock::now();
 
-    // 默认 key: 客户端 IP (X-Forwarded-For > X-Real-IP > "global")
+    // Default key: Client IP (X-Forwarded-For > X-Real-IP > "global")
     if (!opts.key_fn) {
         opts.key_fn = [](http::request_context& ctx) -> std::string {
             return http::resolve_client_ip(ctx, "global");
@@ -89,7 +89,7 @@ export inline auto rate_limiter(rate_limiter_options opts = {})
         {
             std::lock_guard lock(st->mtx);
 
-            // Lazy GC: 每 60s 清理一次
+            // Lazy GC: Clean up every 60s
             if ((now - st->last_gc) > std::chrono::seconds{60}) {
                 st->last_gc = now;
                 for (auto it = st->buckets.begin(); it != st->buckets.end(); ) {
@@ -104,7 +104,7 @@ export inline auto rate_limiter(rate_limiter_options opts = {})
                 key, bucket{opts.burst, now});
             auto& b = it->second;
 
-            // 补充令牌
+            // Replenish tokens
             auto elapsed = std::chrono::duration<double>(
                 now - b.last_refill).count();
             b.tokens = std::min(opts.burst, b.tokens + elapsed * opts.rate);

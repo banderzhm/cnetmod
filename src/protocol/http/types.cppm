@@ -9,7 +9,7 @@ import std;
 namespace cnetmod::http {
 
 // =============================================================================
-// HTTP 方法
+// HTTP Method
 // =============================================================================
 
 export enum class http_method {
@@ -17,7 +17,7 @@ export enum class http_method {
     HEAD,
     POST,
     PUT,
-    DELETE_,   // DELETE 是 Windows 宏
+    DELETE_,   // DELETE is a Windows macro
     CONNECT,
     OPTIONS,
     TRACE,
@@ -55,7 +55,7 @@ export constexpr auto string_to_method(std::string_view s) noexcept
 }
 
 // =============================================================================
-// HTTP 版本
+// HTTP Version
 // =============================================================================
 
 export enum class http_version {
@@ -80,7 +80,7 @@ export constexpr auto string_to_version(std::string_view s) noexcept
 }
 
 // =============================================================================
-// HTTP 状态码
+// HTTP Status Code
 // =============================================================================
 
 export namespace status {
@@ -166,7 +166,7 @@ export constexpr auto status_reason(int code) noexcept -> std::string_view {
 }
 
 // =============================================================================
-// 大小写不敏感的 header map
+// Case-Insensitive Header Map
 // =============================================================================
 
 export struct case_insensitive_less {
@@ -187,18 +187,18 @@ export struct case_insensitive_less {
 export using header_map = std::map<std::string, std::string, case_insensitive_less>;
 
 // =============================================================================
-// 简单 URL 结构
+// Simple URL Structure
 // =============================================================================
 
 export struct url {
     std::string scheme;    // "http", "https", "ws", "wss"
     std::string host;
     std::uint16_t port = 0;
-    std::string path;      // 含前导 '/'
-    std::string query;     // 不含 '?'
-    std::string fragment;  // 不含 '#'
+    std::string path;      // With leading '/'
+    std::string query;     // Without '?'
+    std::string fragment;  // Without '#'
 
-    /// 解析 URL 字符串
+    /// Parse URL string
     [[nodiscard]] static auto parse(std::string_view input)
         -> std::expected<url, std::string>
     {
@@ -234,7 +234,7 @@ export struct url {
         }
 
         // host:port
-        // 处理 IPv6 [::1]:port
+        // Handle IPv6 [::1]:port
         if (!rest.empty() && rest[0] == '[') {
             auto bracket = rest.find(']');
             if (bracket == std::string_view::npos)
@@ -260,7 +260,7 @@ export struct url {
             }
         }
 
-        // 默认端口
+        // Default port
         if (u.port == 0) {
             if (u.scheme == "http" || u.scheme == "ws")   u.port = 80;
             if (u.scheme == "https" || u.scheme == "wss") u.port = 443;
@@ -271,14 +271,14 @@ export struct url {
 };
 
 // =============================================================================
-// HTTP 限制常量
+// HTTP Limit Constants
 // =============================================================================
 
 export inline constexpr std::size_t max_header_size = 16 * 1024;  // 16 KB
 export inline constexpr std::size_t max_body_size   = 32 * 1024 * 1024; // 32 MB
 
 // =============================================================================
-// HTTP 错误码
+// HTTP Error Codes
 // =============================================================================
 
 export enum class http_errc {

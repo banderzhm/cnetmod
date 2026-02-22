@@ -11,12 +11,12 @@ import :types;
 namespace cnetmod::http {
 
 // =============================================================================
-// 辅助：查找 \r\n
+// Helper: Find \r\n
 // =============================================================================
 
 namespace detail {
 
-/// 在 [begin, end) 中查找 "\r\n"，返回 '\r' 的位置，未找到返回 npos
+/// Find "\r\n" in [begin, end), return position of '\r', return npos if not found
 inline auto find_crlf(const char* data, std::size_t size) noexcept
     -> std::size_t
 {
@@ -27,7 +27,7 @@ inline auto find_crlf(const char* data, std::size_t size) noexcept
     return std::string_view::npos;
 }
 
-/// 去除首尾空白
+/// Trim leading and trailing whitespace
 inline auto trim(std::string_view s) noexcept -> std::string_view {
     while (!s.empty() && (s.front() == ' ' || s.front() == '\t'))
         s.remove_prefix(1);
@@ -39,16 +39,16 @@ inline auto trim(std::string_view s) noexcept -> std::string_view {
 } // namespace detail
 
 // =============================================================================
-// request_parser — 流式 HTTP 请求解析器
+// request_parser — Streaming HTTP Request Parser
 // =============================================================================
 
 export class request_parser {
 public:
     request_parser() = default;
 
-    /// 输入数据进行解析，返回消耗的字节数
-    /// 如果解析完成，ready() 返回 true
-    /// 出错时返回 error_code
+    /// Parse input data, returns number of bytes consumed
+    /// If parsing is complete, ready() returns true
+    /// Returns error_code on error
     [[nodiscard]] auto consume(const char* data, std::size_t len)
         -> std::expected<std::size_t, std::error_code>
     {
@@ -85,7 +85,7 @@ public:
                 }
 
                 if (pos == 0) {
-                    // 空行：headers 结束
+                    // Empty line: headers end
                     buf_.erase(0, 2);
                     header_bytes_ += 2;
 
@@ -109,7 +109,7 @@ public:
                 if (chunked_) {
                     auto r = process_chunked_body();
                     if (!r) return std::unexpected(r.error());
-                    if (!*r) return total_consumed; // 需要更多数据
+                    if (!*r) return total_consumed; // Need more data
                 } else {
                     auto available = buf_.size();
                     auto need = body_bytes_remaining_;
@@ -130,10 +130,10 @@ public:
         return total_consumed;
     }
 
-    /// 解析是否完成
+    /// Check if parsing is complete
     [[nodiscard]] auto ready() const noexcept -> bool { return ready_; }
 
-    // 访问解析结果
+    // Access parsing results
     [[nodiscard]] auto method() const noexcept -> std::string_view { return method_; }
     [[nodiscard]] auto method_enum() const noexcept -> std::optional<http_method> {
         return string_to_method(method_);
@@ -149,7 +149,7 @@ public:
         return {};
     }
 
-    /// 重置解析器以复用
+    /// Reset parser for reuse
     void reset() noexcept {
         buf_.clear();
         method_.clear();
@@ -207,7 +207,7 @@ private:
 
         auto it = headers_.find(std::string(key));
         if (it != headers_.end()) {
-            // 追加多值 header（如 Set-Cookie）
+            // Append multi-value header (e.g., Set-Cookie)
             it->second += ", ";
             it->second += val;
         } else {
@@ -216,7 +216,7 @@ private:
         return {};
     }
 
-    /// 检查是否有 body，设置 body 读取模式
+    /// Check if body exists, set body reading mode
     auto prepare_body() -> bool {
         // chunked?
         auto te = get_header("Transfer-Encoding");
@@ -232,7 +232,7 @@ private:
             if (ec == std::errc{} && len > 0) {
                 if (len > max_body_size) {
                     body_bytes_remaining_ = 0;
-                    return false; // 会在后续处理中报错
+                    return false; // Will error in subsequent processing
                 }
                 body_bytes_remaining_ = len;
                 body_.reserve(len);
@@ -242,17 +242,17 @@ private:
         return false;
     }
 
-    /// 处理 chunked body，返回 true 表示 body 完成
+    /// Process chunked body, returns true when body is complete
     auto process_chunked_body()
         -> std::expected<bool, std::error_code>
     {
         for (;;) {
             auto pos = detail::find_crlf(buf_.data(), buf_.size());
             if (pos == std::string_view::npos)
-                return false; // 需要更多数据
+                return false; // Need more data
 
             auto size_str = std::string_view(buf_.data(), pos);
-            // 解析 chunk size（十六进制）
+            // Parse chunk size (hexadecimal)
             std::size_t chunk_size = 0;
             auto [ptr, ec] = std::from_chars(
                 size_str.data(), size_str.data() + size_str.size(),
@@ -261,18 +261,18 @@ private:
                 return std::unexpected(make_error_code(http_errc::invalid_chunk));
 
             if (chunk_size == 0) {
-                // 最后一个 chunk，跳过 "0\r\n\r\n"
+                // Last chunk, skip "0\r\n\r\n"
                 buf_.erase(0, pos + 2);
-                // 跳过 trailing \r\n
+                // Skip trailing \r\n
                 if (buf_.size() >= 2 && buf_[0] == '\r' && buf_[1] == '\n')
                     buf_.erase(0, 2);
                 return true;
             }
 
-            // 需要 chunk_size + \r\n (chunk data 后面的 \r\n)
+            // Need chunk_size + \r\n (the \r\n after chunk data)
             auto data_start = pos + 2;
             if (buf_.size() < data_start + chunk_size + 2)
-                return false; // 需要更多数据
+                return false; // Need more data
 
             body_.append(buf_.data() + data_start, chunk_size);
             buf_.erase(0, data_start + chunk_size + 2);
@@ -297,14 +297,14 @@ private:
 };
 
 // =============================================================================
-// response_parser — 流式 HTTP 响应解析器
+// response_parser — Streaming HTTP Response Parser
 // =============================================================================
 
 export class response_parser {
 public:
     response_parser() = default;
 
-    /// 输入数据进行解析，返回消耗的字节数
+    /// Parse input data, returns number of bytes consumed
     [[nodiscard]] auto consume(const char* data, std::size_t len)
         -> std::expected<std::size_t, std::error_code>
     {
@@ -387,7 +387,7 @@ public:
 
     [[nodiscard]] auto ready() const noexcept -> bool { return ready_; }
 
-    // 访问解析结果
+    // Access parsing results
     [[nodiscard]] auto version() const noexcept -> http_version { return version_; }
     [[nodiscard]] auto status_code() const noexcept -> int { return status_code_; }
     [[nodiscard]] auto status_message() const noexcept -> std::string_view { return status_msg_; }

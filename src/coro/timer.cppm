@@ -14,17 +14,17 @@ import cnetmod.coro.cancel;
 namespace cnetmod {
 
 // =============================================================================
-// steady_timer — 低精度定时器（绑定 io_context）
+// steady_timer — Low-Precision Timer (bound to io_context)
 // =============================================================================
 
-/// 基于 io_context 的异步定时器
-/// 使用平台原生定时器（timerfd / EVFILT_TIMER / IOCP timer / io_uring timeout）
+/// Async timer based on io_context
+/// Uses platform-native timers (timerfd / EVFILT_TIMER / IOCP timer / io_uring timeout)
 export class steady_timer {
 public:
     explicit steady_timer(io_context& ctx) noexcept
         : ctx_(&ctx) {}
 
-    /// 异步等待指定时长
+    /// Async wait for specified duration
     auto async_wait(std::chrono::steady_clock::duration duration)
         -> task<std::expected<void, std::error_code>>
     {
@@ -38,16 +38,16 @@ private:
 };
 
 // =============================================================================
-// high_resolution_timer — 高精度定时器
+// high_resolution_timer — High-Precision Timer
 // =============================================================================
 
-/// 高精度定时器，支持 time_point 等待
+/// High-precision timer, supports time_point waiting
 export class high_resolution_timer {
 public:
     explicit high_resolution_timer(io_context& ctx) noexcept
         : ctx_(&ctx) {}
 
-    /// 异步等待到指定时间点
+    /// Async wait until specified time point
     auto async_wait_until(std::chrono::steady_clock::time_point deadline)
         -> task<std::expected<void, std::error_code>>
     {
@@ -57,7 +57,7 @@ public:
         co_return co_await async_timer_wait(*ctx_, deadline - now);
     }
 
-    /// 异步等待指定时长
+    /// Async wait for specified duration
     auto async_wait(std::chrono::steady_clock::duration duration)
         -> task<std::expected<void, std::error_code>>
     {
@@ -71,11 +71,11 @@ private:
 };
 
 // =============================================================================
-// async_sleep — 便捷函数
+// async_sleep — Convenience functions
 // =============================================================================
 
 /// co_await async_sleep(ctx, 100ms);
-/// 通过 io_context 原生定时器实现，不创建额外线程
+/// Implemented via io_context native timer, no extra threads created
 export inline auto async_sleep(io_context& ctx,
                                std::chrono::steady_clock::duration duration)
     -> task<void>
@@ -85,7 +85,7 @@ export inline auto async_sleep(io_context& ctx,
         throw std::system_error(r.error());
 }
 
-/// 便捷: async_sleep 到指定时间点
+/// Convenience: async_sleep until specified time point
 export inline auto async_sleep_until(io_context& ctx,
                                      std::chrono::steady_clock::time_point tp)
     -> task<void>
@@ -97,12 +97,12 @@ export inline auto async_sleep_until(io_context& ctx,
 }
 
 // =============================================================================
-// with_timeout — 给可取消异步操作添加超时
+// with_timeout — Add timeout to cancellable async operations
 // =============================================================================
 
 namespace detail {
 
-/// 定时器侧：超时后取消操作
+/// Timer side: cancel operation after timeout
 inline auto timeout_timer_task(io_context& ctx,
                                std::chrono::steady_clock::duration dur,
                                cancel_token& timer_token,
@@ -115,7 +115,7 @@ inline auto timeout_timer_task(io_context& ctx,
     co_return 0;
 }
 
-/// 操作侧：完成后取消定时器
+/// Operation side: cancel timer after completion
 template<typename T>
 auto timeout_op_wrapper(task<std::expected<T, std::error_code>> op,
                         cancel_token& timer_token)
@@ -128,13 +128,13 @@ auto timeout_op_wrapper(task<std::expected<T, std::error_code>> op,
 
 } // namespace detail
 
-/// 给可取消异步操作添加超时
-/// 用法:
+/// Add timeout to cancellable async operation
+/// Usage:
 ///   cancel_token token;
 ///   auto r = co_await with_timeout(ctx, 5s,
 ///       async_read(ctx, sock, buf, token), token);
 ///
-/// 超时后操作返回 errc::operation_aborted
+/// After timeout, operation returns errc::operation_aborted
 export template<typename T>
 auto with_timeout(io_context& ctx,
                   std::chrono::steady_clock::duration timeout,

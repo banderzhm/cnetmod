@@ -7,11 +7,11 @@ import :orm_meta;
 namespace cnetmod::mysql::orm {
 
 // =============================================================================
-// from_row — result_set 行 → 模型对象
+// from_row — result_set row → model object
 // =============================================================================
 
-/// 从 row + columns 构造模型 T
-/// 按列名匹配（不依赖列序）
+/// Construct model T from row + columns
+/// Match by column name (not dependent on column order)
 export template <Model T>
 auto from_row(const row& r, const std::vector<column_meta>& columns) -> T {
     T obj{};
@@ -25,7 +25,7 @@ auto from_row(const row& r, const std::vector<column_meta>& columns) -> T {
     return obj;
 }
 
-/// 从 result_set 构造模型列表
+/// Construct model list from result_set
 export template <Model T>
 auto from_result_set(const result_set& rs) -> std::vector<T> {
     std::vector<T> result;
@@ -36,10 +36,10 @@ auto from_result_set(const result_set& rs) -> std::vector<T> {
 }
 
 // =============================================================================
-// to_params — 模型对象 → param_value 列表
+// to_params — Model object → param_value list
 // =============================================================================
 
-/// 提取所有可插入字段的 param_value（跳过 auto_increment）
+/// Extract param_value for all insertable fields (skip auto_increment)
 export template <Model T>
 auto to_insert_params(const T& model) -> std::vector<param_value> {
     auto& meta = model_traits<T>::meta();
@@ -51,13 +51,13 @@ auto to_insert_params(const T& model) -> std::vector<param_value> {
     return params;
 }
 
-/// 提取所有可更新字段的 param_value（跳过 PK）+ 末尾追加 PK 值
+/// Extract all updatable field param_value (skip PK) + append PK value at end
 export template <Model T>
 auto to_update_params(const T& model) -> std::vector<param_value> {
     auto& meta = model_traits<T>::meta();
     std::vector<param_value> params;
 
-    // SET 部分
+    // SET part
     for (auto& f : meta.fields) {
         if (!f.col.is_pk() && f.getter)
             params.push_back(f.getter(model));
@@ -69,7 +69,7 @@ auto to_update_params(const T& model) -> std::vector<param_value> {
     return params;
 }
 
-/// 提取 PK 值
+/// Extract PK value
 export template <Model T>
 auto to_pk_param(const T& model) -> param_value {
     auto& meta = model_traits<T>::meta();
@@ -79,7 +79,7 @@ auto to_pk_param(const T& model) -> param_value {
     return param_value::null();
 }
 
-/// 回填 last_insert_id 到模型 PK
+/// Fill last_insert_id back to model PK
 export template <Model T>
 void fill_insert_id(T& model, std::uint64_t last_id) {
     auto& meta = model_traits<T>::meta();

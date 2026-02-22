@@ -11,21 +11,21 @@ import :types;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// 常量
+// Constants
 // =============================================================================
 
 inline constexpr std::size_t  max_packet_payload  = 0xFFFFFF;  // 16 MB - 1
 inline constexpr std::size_t  packet_header_size  = 4;
 inline constexpr std::size_t  scramble_size       = 20;
 
-// 包头标识
+// Packet header identifiers
 inline constexpr std::uint8_t OK_HEADER    = 0x00;
 inline constexpr std::uint8_t EOF_HEADER   = 0xFE;
 inline constexpr std::uint8_t ERR_HEADER   = 0xFF;
 inline constexpr std::uint8_t AUTH_SWITCH  = 0xFE;
 inline constexpr std::uint8_t AUTH_MORE    = 0x01;
 
-// MySQL 命令码
+// MySQL command codes
 inline constexpr std::uint8_t COM_QUIT              = 0x01;
 inline constexpr std::uint8_t COM_QUERY             = 0x03;
 inline constexpr std::uint8_t COM_PING              = 0x0E;
@@ -58,7 +58,7 @@ inline constexpr std::uint32_t CLIENT_SESSION_TRACK          = (1u << 23);
 inline constexpr std::uint32_t CLIENT_DEPRECATE_EOF          = (1u << 24);
 
 // =============================================================================
-// 小端序读写
+// Little-endian read/write
 // =============================================================================
 
 namespace detail {
@@ -130,7 +130,7 @@ inline void write_double_le(std::uint8_t* p, double v) noexcept {
 }
 
 // =============================================================================
-// length-encoded integer 读写
+// length-encoded integer read/write
 // =============================================================================
 
 struct lenenc_result {
@@ -218,18 +218,18 @@ inline auto read_null_string(const std::uint8_t* p, std::size_t avail) noexcept
 }
 
 // =============================================================================
-// null bitmap 工具
+// null bitmap utilities
 // =============================================================================
 
-/// 计算 null bitmap 大小
-/// offset: 对于 binary result rows = 2, 对于 COM_STMT_EXECUTE params = 0
+/// Calculate null bitmap size
+/// offset: for binary result rows = 2, for COM_STMT_EXECUTE params = 0
 inline auto null_bitmap_size(std::size_t num_fields, std::size_t offset) noexcept
     -> std::size_t
 {
     return (num_fields + 7 + offset) / 8;
 }
 
-/// 检查 null bitmap 中某字段是否为 NULL
+/// Check if a field in null bitmap is NULL
 inline auto null_bitmap_is_null(
     const std::uint8_t* bitmap,
     std::size_t field_index,
@@ -241,7 +241,7 @@ inline auto null_bitmap_is_null(
     return (bitmap[byte_pos] & (1u << bit_pos)) != 0;
 }
 
-/// 在 null bitmap 中设置某字段为 NULL
+/// Set a field in null bitmap to NULL
 inline void null_bitmap_set(
     std::uint8_t* bitmap,
     std::size_t field_index,
@@ -254,7 +254,7 @@ inline void null_bitmap_set(
 }
 
 // =============================================================================
-// param_value → protocol_field_type 映射
+// param_value → protocol_field_type mapping
 // =============================================================================
 
 inline auto param_kind_to_field_type(param_value::kind_t k) noexcept -> std::uint8_t {

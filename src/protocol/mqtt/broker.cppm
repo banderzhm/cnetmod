@@ -1,6 +1,6 @@
-/// cnetmod.protocol.mqtt:broker — MQTT Broker 核心
-/// TCP MQTT Broker，支持 v3.1.1 和 v5.0
-/// channel-based 双协程模型实时投递，trie 订阅匹配，security/ACL，TLS
+/// cnetmod.protocol.mqtt:broker — MQTT Broker Core
+/// TCP MQTT Broker, supports v3.1.1 and v5.0
+/// channel-based dual-coroutine model for real-time delivery, trie subscription matching, security/ACL, TLS
 
 module;
 
@@ -40,37 +40,37 @@ import :topic_alias;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// Broker 配置
+// Broker Configuration
 // =============================================================================
 
 export struct broker_options {
     std::uint16_t port                   = 1883;
     std::string   host                   = "127.0.0.1";
     std::uint16_t max_connections        = 10000;
-    std::uint32_t default_session_expiry = 0;     // 秒, 0=clean session 立即过期
-    std::uint16_t max_keep_alive         = 600;   // 最大 keep-alive 秒数
-    std::size_t   max_inflight_messages  = 100;   // 每连接最大 inflight 消息数
-    std::size_t   delivery_channel_size  = 1000;  // 投递 channel 容量
-    std::uint16_t topic_alias_maximum    = 0;     // 服务端支持的 topic alias 最大数
+    std::uint32_t default_session_expiry = 0;     // Seconds, 0=clean session expires immediately
+    std::uint16_t max_keep_alive         = 600;   // Maximum keep-alive seconds
+    std::size_t   max_inflight_messages  = 100;   // Maximum inflight messages per connection
+    std::size_t   delivery_channel_size  = 1000;  // Delivery channel capacity
+    std::uint16_t topic_alias_maximum    = 0;     // Maximum topic alias supported by server
 
-    // v5 能力通告
-    std::uint16_t receive_maximum        = 65535; // 服务端允许的最大 inflight 数
-    std::uint32_t maximum_packet_size    = 0;     // 服务端最大包大小, 0=无限制
-    qos           maximum_qos            = qos::exactly_once; // 服务端支持的最大 QoS
+    // v5 capability announcement
+    std::uint16_t receive_maximum        = 65535; // Maximum inflight allowed by server
+    std::uint32_t maximum_packet_size    = 0;     // Server maximum packet size, 0=unlimited
+    qos           maximum_qos            = qos::exactly_once; // Maximum QoS supported by server
     bool          retain_available       = true;
     bool          wildcard_sub_available = true;
     bool          sub_id_available       = true;
     bool          shared_sub_available   = true;
 
-    // TLS 配置
-    std::uint16_t tls_port               = 0;     // 0=不启用 TLS 监听
+    // TLS configuration
+    std::uint16_t tls_port               = 0;     // 0=TLS listening disabled
     std::string   tls_cert_file;
     std::string   tls_key_file;
     std::string   tls_ca_file;
 };
 
 // =============================================================================
-// 连接状态 (每连接，shared_ptr 共享于 read_loop 和 delivery_loop)
+// Connection State (per connection, shared_ptr shared between read_loop and delivery_loop)
 // =============================================================================
 
 namespace detail {
@@ -84,16 +84,16 @@ struct conn_state {
     bool             connected = false;
     std::uint16_t    keep_alive = 0;
 
-    // 投递 channel: route_publish → delivery_loop
+    // Delivery channel: route_publish → delivery_loop
     channel<publish_message> delivery_ch;
 
-    // v5 Topic Alias (接收端)
+    // v5 Topic Alias (receiver side)
     topic_alias_recv alias_recv{0};
 
-    // v5 Maximum Packet Size (客户端告知的最大包大小)
-    std::size_t max_packet_size = 0; // 0=无限制
+    // v5 Maximum Packet Size (maximum packet size informed by client)
+    std::size_t max_packet_size = 0; // 0=unlimited
 
-    // Keep-alive 超时跟踪
+    // Keep-alive timeout tracking
     std::chrono::steady_clock::time_point last_packet_time
         = std::chrono::steady_clock::now();
 
@@ -207,7 +207,7 @@ public:
 #ifdef CNETMOD_HAS_SSL
         if (tls_acc_) spawn(ctx_, run_tls_accept());
 #endif
-        // 启动会话过期清理定时器
+        // Start session expiry cleanup timer
         spawn(ctx_, session_expiry_loop());
         while (running_) {
             auto r = co_await async_accept(ctx_, acc_->native_socket());
@@ -254,7 +254,7 @@ private:
 #endif
 
     // =========================================================================
-    // Session 过期清理
+    // Session Expiry Cleanup
     // =========================================================================
 
     auto session_expiry_loop() -> task<void> {
@@ -262,7 +262,7 @@ private:
             co_await async_sleep(ctx_, std::chrono::seconds(60));
             if (!running_) break;
 
-            // 收集待清理的过期会话 client_id
+            // Collect expired session client_ids to be cleaned up
             std::vector<std::string> expired;
             sessions_.for_each([&](const session_state& ss) {
                 if (ss.is_expired())
@@ -283,7 +283,7 @@ private:
     // =========================================================================
 
     auto keep_alive_watchdog(std::shared_ptr<detail::conn_state> conn) -> task<void> {
-        // MQTT 规范: 服务端在 1.5 × keep_alive 秒内未收到任何报文时应断开
+        // MQTT spec: Server should disconnect if no packet received within 1.5 × keep_alive seconds
         auto timeout = std::chrono::milliseconds(
             static_cast<int>(conn->keep_alive * 1500));
         while (conn->connected) {
@@ -303,7 +303,7 @@ private:
     }
 
     // =========================================================================
-    // 帧读取
+    // Frame Reading
     // =========================================================================
 
     static auto read_frame(detail::conn_state& conn)
@@ -323,7 +323,7 @@ private:
     }
 
     // =========================================================================
-    // 连接处理 — 双协程模型
+    // Connection Handling — Dual-Coroutine Model
     // =========================================================================
 
     auto handle_connection(socket client, io_context& io, bool use_tls) -> task<void> {
@@ -345,7 +345,7 @@ private:
         (void)use_tls;
 #endif
 
-        // 等待 CONNECT 报文
+        // Wait for CONNECT packet
         auto frame_r = co_await read_frame(*conn);
         if (!frame_r) { conn->sock.close(); co_return; }
 
@@ -357,11 +357,11 @@ private:
         auto ok = co_await handle_connect(*frame_r, conn);
         if (!ok) { conn->sock.close(); co_return; }
 
-        // 启动 delivery_loop + retry_loop 协程
+        // Start delivery_loop + retry_loop coroutines
         spawn(io, delivery_loop(conn));
         spawn(io, retry_loop(conn));
 
-        // 启动 keep-alive watchdog
+        // Start keep-alive watchdog
         if (conn->keep_alive > 0)
             spawn(io, keep_alive_watchdog(conn));
 
@@ -373,12 +373,12 @@ private:
                 co_return;
             }
 
-            // 更新最后收包时间
+            // Update last packet time
             conn->last_packet_time = std::chrono::steady_clock::now();
 
             switch (fr->type) {
             case control_packet_type::connect:
-                // MQTT 规范: 同一连接上收到第二个 CONNECT 报文是协议错误
+                // MQTT spec: Receiving a second CONNECT packet on the same connection is a protocol error
                 logger::warn("mqtt duplicate CONNECT from client={}",
                     conn->session ? conn->session->client_id : "?");
                 co_await send_disconnect_and_close(conn,
@@ -413,7 +413,7 @@ private:
     }
 
     // =========================================================================
-    // delivery_loop — 从 channel 读取并写入 socket
+    // delivery_loop — Read from channel and write to socket
     // =========================================================================
 
     auto delivery_loop(std::shared_ptr<detail::conn_state> conn) -> task<void> {
@@ -425,7 +425,7 @@ private:
 
             auto& msg = *msg_opt;
 
-            // Receive Maximum 流控
+            // Receive Maximum flow control
             if (msg.qos_value != qos::at_most_once && conn->session) {
                 if (conn->session->inflight_out.size() >=
                     static_cast<std::size_t>(conn->session->receive_maximum)) {
@@ -442,11 +442,11 @@ private:
                 msg.topic, msg.payload, msg.qos_value,
                 false, false, pid, conn->version, msg.props);
 
-            // Maximum Packet Size 检查
+            // Maximum Packet Size check
             if (conn->max_packet_size > 0 && pkt.size() > conn->max_packet_size) {
                 logger::debug("mqtt delivery: packet too large for client={}",
                     conn->session ? conn->session->client_id : "?");
-                continue; // 丢弃超限消息
+                continue; // Discard oversized message
             }
 
             auto wr = co_await conn->do_write(pkt);
@@ -465,7 +465,7 @@ private:
     }
 
     // =========================================================================
-    // retry_loop — QoS 消息重传 (Phase 2.1)
+    // retry_loop — QoS Message Retransmission (Phase 2.1)
     // =========================================================================
 
     auto retry_loop(std::shared_ptr<detail::conn_state> conn) -> task<void> {
@@ -489,12 +489,12 @@ private:
                     continue;
                 }
 
-                // 重发 (DUP=1)
+                // Resend (DUP=1)
                 auto pkt = encode_publish(
                     it->msg.topic, it->msg.payload, it->msg.qos_value,
                     false, true, it->packet_id, conn->version, it->msg.props);
 
-                // Maximum Packet Size 检查
+                // Maximum Packet Size check
                 if (conn->max_packet_size > 0 && pkt.size() > conn->max_packet_size) {
                     conn->session->release_packet_id(it->packet_id);
                     it = inflight.erase(it);
@@ -514,7 +514,7 @@ private:
     }
 
     // =========================================================================
-    // CONNECT 处理
+    // CONNECT Handling
     // =========================================================================
 
     auto handle_connect(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -533,7 +533,7 @@ private:
         conn->version   = cd.version;
         conn->keep_alive = cd.keep_alive;
 
-        // 安全认证
+        // Security authentication
         if (security_.enabled()) {
             auto auth_user = security_.authenticate(cd.username, cd.password);
             if (!auth_user) {
@@ -547,7 +547,7 @@ private:
             cd.username = *auth_user;
         }
 
-        // client_id 处理
+        // client_id handling
         bool cd_client_id_was_empty = cd.client_id.empty();
         if (cd.client_id.empty()) {
             if (cd.clean_session) {
@@ -577,7 +577,7 @@ private:
             }
         }
 
-        // 创建或恢复会话
+        // Create or resume session
         auto [ss, session_present] = sessions_.create_or_resume(
             cd.client_id, cd.clean_session, cd.version);
 
@@ -585,7 +585,7 @@ private:
         ss.will_msg   = cd.will_msg;
         ss.username   = cd.username;
 
-        // v5 属性
+        // v5 properties
         if (cd.version == protocol_version::v5) {
             for (auto& p : cd.props) {
                 if (p.id == property_id::session_expiry_interval)
@@ -596,26 +596,26 @@ private:
                         ss.receive_maximum = *v;
                         ss.inflight_quota  = *v;
                     }
-                // 客户端 topic_alias_maximum → 服务端可向该客户端发送的别名上限 (暂不使用)
+                // Client topic_alias_maximum → upper limit of aliases server can send to this client (not used for now)
                 if (p.id == property_id::maximum_packet_size)
                     if (auto* v = std::get_if<std::uint32_t>(&p.value))
                         conn->max_packet_size = static_cast<std::size_t>(*v);
             }
-            // 服务端 opts_.topic_alias_maximum → 服务端可接收的别名上限 (已在 CONNACK 通告)
+            // Server opts_.topic_alias_maximum → upper limit of aliases server can receive (already announced in CONNACK)
             conn->alias_recv.set_max(opts_.topic_alias_maximum);
         }
 
         conn->session  = &ss;
         conn->connected = true;
 
-        // 注册在线 channel
+        // Register online channel
         {
             co_await channels_rw_.lock();
             async_unique_lock_guard wg(channels_rw_, std::adopt_lock);
             online_channels_[cd.client_id] = &conn->delivery_ch;
         }
 
-        // 订阅管理
+        // Subscription management
         if (cd.clean_session) {
             sub_map_.erase_client(cd.client_id);
             shared_store_.remove_client(cd.client_id);
@@ -632,7 +632,7 @@ private:
             }
         }
 
-        // 服务端可覆盖 keep-alive
+        // Server can override keep-alive
         if (cd.version == protocol_version::v5 && opts_.max_keep_alive > 0
             && conn->keep_alive > opts_.max_keep_alive) {
             conn->keep_alive = opts_.max_keep_alive;
@@ -650,7 +650,7 @@ private:
             if (opts_.topic_alias_maximum > 0)
                 connack_props.push_back({property_id::topic_alias_maximum,
                     opts_.topic_alias_maximum});
-            // Server Keep Alive (如果被覆盖)
+            // Server Keep Alive (if overridden)
             if (opts_.max_keep_alive > 0 && conn->keep_alive != cd.keep_alive)
                 connack_props.push_back({property_id::server_keep_alive, conn->keep_alive});
             // Receive Maximum
@@ -693,7 +693,7 @@ private:
         logger::info("mqtt connected client={} version={} session_present={}",
             cd.client_id, to_string(cd.version), session_present);
 
-        // Phase 2.2: inflight 重发
+        // Phase 2.2: inflight resend
         if (session_present)
             co_await deliver_inflight_resend(conn);
 
@@ -702,7 +702,7 @@ private:
     }
 
     // =========================================================================
-    // PUBLISH 处理
+    // PUBLISH Handling
     // =========================================================================
 
     auto handle_publish(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -717,7 +717,7 @@ private:
         }
         auto& msg = *msg_r;
 
-        // Maximum QoS 强制检查
+        // Maximum QoS enforcement check
         if (static_cast<std::uint8_t>(msg.qos_value) >
             static_cast<std::uint8_t>(opts_.maximum_qos)) {
             logger::warn("mqtt PUBLISH qos={} exceeds server maximum_qos={}",
@@ -746,7 +746,7 @@ private:
 
         if (!validate_topic_name(msg.topic)) co_return;
 
-        // ACL 检查
+        // ACL check
         if (security_.enabled() && conn->session)
             if (!security_.authorize_publish(conn->session->username, msg.topic)) {
                 logger::warn("mqtt publish denied user={} topic={}",
@@ -759,7 +759,7 @@ private:
             (void)co_await conn->do_write(encode_puback(msg.packet_id, conn->version));
         }
 
-        // QoS 2 → PUBREC, 暂存消息等 PUBREL 后转发
+        // QoS 2 → PUBREC, store message and wait for PUBREL before forwarding
         if (msg.qos_value == qos::exactly_once && msg.packet_id != 0) {
             if (conn->session) {
                 conn->session->qos2_received.insert(msg.packet_id);
@@ -777,7 +777,7 @@ private:
     }
 
     // =========================================================================
-    // ACK 处理
+    // ACK Handling
     // =========================================================================
 
     auto handle_puback(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -829,7 +829,7 @@ private:
         (void)co_await conn->do_write(encode_pubcomp(ack_r->packet_id, conn->version));
         if (conn->session) {
             conn->session->qos2_received.erase(ack_r->packet_id);
-            // 取出暂存的 QoS 2 消息并转发
+            // Retrieve stored QoS 2 message and forward
             auto it = conn->session->qos2_pending_publish.find(ack_r->packet_id);
             if (it != conn->session->qos2_pending_publish.end()) {
                 auto msg = std::move(it->second);
@@ -860,7 +860,7 @@ private:
     }
 
     // =========================================================================
-    // SUBSCRIBE 处理
+    // SUBSCRIBE Handling
     // =========================================================================
 
     auto handle_subscribe(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -886,7 +886,7 @@ private:
                 continue;
             }
 
-            // ACL 检查
+            // ACL check
             if (security_.enabled()) {
                 auto actual_filter = extract_topic_filter(entry.topic_filter);
                 if (!security_.authorize_subscribe(conn->session->username, actual_filter)) {
@@ -901,7 +901,7 @@ private:
 
             bool is_new = conn->session->add_subscription(entry);
 
-            // 注册到 trie + shared store
+            // Register to trie + shared store
             auto shared = parse_shared_subscription(entry.topic_filter);
             if (shared && !shared->share_name.empty()) {
                 sub_map_.insert(shared->topic_filter, conn->session->client_id, entry);
@@ -924,7 +924,7 @@ private:
     }
 
     // =========================================================================
-    // UNSUBSCRIBE 处理
+    // UNSUBSCRIBE Handling
     // =========================================================================
 
     auto handle_unsubscribe(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -991,7 +991,7 @@ private:
     }
 
     // =========================================================================
-    // AUTH 处理 (v5 Enhanced Authentication)
+    // AUTH Handling (v5 Enhanced Authentication)
     // =========================================================================
 
     auto handle_auth(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -1010,7 +1010,7 @@ private:
     }
 
     // =========================================================================
-    // 非预期断连
+    // Unexpected Disconnection
     // =========================================================================
 
     auto handle_unexpected_disconnect(std::shared_ptr<detail::conn_state> conn)
@@ -1052,7 +1052,7 @@ private:
     {
         co_await async_sleep(io, std::chrono::seconds(delay_sec));
         auto* ss = sessions_.find(client_id);
-        if (ss && ss->online) co_return; // 已重连
+        if (ss && ss->online) co_return; // Already reconnected
 
         publish_message wp;
         wp.topic = will_msg.topic;   wp.payload = will_msg.message;
@@ -1078,7 +1078,7 @@ private:
     }
 
     // =========================================================================
-    // 连接清理
+    // Connection Cleanup
     // =========================================================================
 
     auto cleanup_connection(std::shared_ptr<detail::conn_state> conn) -> task<void> {
@@ -1098,7 +1098,7 @@ private:
     }
 
     // =========================================================================
-    // 消息路由 — 使用 subscription_map trie
+    // Message Routing — Using subscription_map trie
     // =========================================================================
 
     auto route_publish(const publish_message& msg, const std::string& sender_cid)
@@ -1106,14 +1106,14 @@ private:
     {
         auto matches = sub_map_.match(msg.topic);
 
-        // 去重: 每个 client 只投递一次
+        // Deduplication: deliver only once per client
         std::map<std::string, subscribe_entry> targets;
         for (auto& m : matches) {
             if (m.client_id == sender_cid && m.entry.no_local) continue;
             targets.try_emplace(m.client_id, m.entry);
         }
 
-        // 共享订阅
+        // Shared subscriptions
         auto shared_targets = shared_store_.find_matching_groups(
             msg.topic,
             [](std::string_view filter, std::string_view topic) {
@@ -1134,7 +1134,7 @@ private:
             }
         }
 
-        // 投递
+        // Delivery
         for (auto& [cid, entry] : targets) {
             auto effective_qos = static_cast<qos>(
                 std::min(static_cast<std::uint8_t>(msg.qos_value),
@@ -1170,7 +1170,7 @@ private:
     }
 
     // =========================================================================
-    // 保留消息投递
+    // Retained Message Delivery
     // =========================================================================
 
     auto deliver_retained(std::shared_ptr<detail::conn_state> conn,
@@ -1193,7 +1193,7 @@ private:
     }
 
     // =========================================================================
-    // Phase 2.2: Inflight 重发
+    // Phase 2.2: Inflight Resend
     // =========================================================================
 
     auto deliver_inflight_resend(std::shared_ptr<detail::conn_state> conn) -> task<void> {
@@ -1214,14 +1214,14 @@ private:
     }
 
     // =========================================================================
-    // 离线队列投递
+    // Offline Queue Delivery
     // =========================================================================
 
     auto deliver_offline_queue(std::shared_ptr<detail::conn_state> conn) -> task<void> {
         if (!conn->session) co_return;
         auto& queue = conn->session->offline_queue;
         for (auto& msg : queue) {
-            // 检查 message_expiry_interval 过期
+            // Check message_expiry_interval expiration
             if (session_state::check_message_expiry(msg)) continue;
 
             std::uint16_t pid = 0;
@@ -1244,11 +1244,11 @@ private:
     }
 
     // =========================================================================
-    // 工具
+    // Utilities
     // =========================================================================
 
     // =========================================================================
-    // 协议错误断连辅助 (v5 发送 DISCONNECT reason code)
+    // Protocol Error Disconnection Helper (v5 sends DISCONNECT reason code)
     // =========================================================================
 
     static auto send_disconnect_and_close(
@@ -1272,7 +1272,7 @@ private:
     }
 
     // =========================================================================
-    // 成员
+    // Members
     // =========================================================================
 
     io_context&      ctx_;
@@ -1287,10 +1287,10 @@ private:
     bool             running_  = false;
     std::unique_ptr<tcp::acceptor> acc_;
 
-    // async_shared_mutex: 读多写少
-    //   读 (route_publish): co_await lock_shared()
-    //   写 (connect/disconnect): co_await lock()
-    //   stop(): try_lock() 自旋获取写锁
+    // async_shared_mutex: read-heavy
+    //   read (route_publish): co_await lock_shared()
+    //   write (connect/disconnect): co_await lock()
+    //   stop(): try_lock() spin to acquire write lock
     async_shared_mutex channels_rw_;
     std::map<std::string, channel<publish_message>*> online_channels_;
 

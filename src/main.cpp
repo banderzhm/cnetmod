@@ -6,7 +6,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.io.io_context;
 import cnetmod.executor.scheduler;
-// import cnetmod.core.log;  // TODO: 暂时禁用以检查编译问题
+// import cnetmod.core.log;  // TODO: temporarily disabled to check compilation issues
 
 // =============================================================================
 // Demo: coroutine chain + spawn + stdexec bridge (smoke test)

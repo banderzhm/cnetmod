@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:client — MQTT 异步客户端
-/// 支持 MQTT v3.1.1 和 v5.0，基于协程的完整客户端
+/// cnetmod.protocol.mqtt:client — MQTT Async Client
+/// Full coroutine-based client supporting MQTT v3.1.1 and v5.0
 
 module;
 
@@ -33,25 +33,25 @@ import :session;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// 消息回调类型
+// Message Callback Types
 // =============================================================================
 
-/// 收到 PUBLISH 消息时的回调
+/// Callback invoked when a PUBLISH message is received
 export using message_callback = std::function<void(const publish_message&)>;
 
-/// 连接断开回调
+/// Callback invoked when connection is lost
 export using disconnect_callback = std::function<void(std::string reason)>;
 
-/// v5 AUTH 回调 (Enhanced Authentication)
-/// 参数: reason_code, properties  返回: 是否自动发送响应 AUTH
+/// v5 AUTH callback (Enhanced Authentication)
+/// Parameters: reason_code, properties  Returns: whether to auto-send AUTH response
 export using auth_callback = std::function<
     std::optional<std::pair<std::uint8_t, properties>>(
         std::uint8_t reason_code, const properties& props)>;
 
-/// 自动重连配置
+/// Auto-reconnect configuration
 export struct reconnect_options {
     bool                     enabled              = false;
-    std::uint32_t            max_retries          = 0;     // 0=无限重试
+    std::uint32_t            max_retries          = 0;     // 0=unlimited retries
     std::chrono::milliseconds initial_delay       = std::chrono::seconds(1);
     std::chrono::milliseconds max_delay           = std::chrono::seconds(60);
     double                   backoff_multiplier   = 2.0;
@@ -59,7 +59,7 @@ export struct reconnect_options {
 };
 
 // =============================================================================
-// MQTT 异步客户端
+// MQTT Async Client
 // =============================================================================
 
 export class client {
@@ -68,18 +68,18 @@ public:
 
     ~client() { close(); }
 
-    // 不可复制
+    // Non-copyable
     client(const client&) = delete;
     auto operator=(const client&) -> client& = delete;
 
-    // ----- 连接 / 关闭 -----
+    // ----- Connection / Disconnection -----
 
-    /// 连接到 MQTT Broker
+    /// Connect to MQTT Broker
     auto connect(connect_options opts = {}) -> task<std::expected<void, std::string>> {
         version_ = opts.version;
         keep_alive_sec_ = opts.keep_alive_sec;
 
-        // TCP 连接：先尝试 IP 字面量，失败时回退到异步 DNS 解析
+        // TCP connection: Try IP literal first, fallback to async DNS resolution
         auto addr_r = ip_address::from_string(opts.host);
         if (!addr_r) {
             auto dns_r = co_await async_resolve(ctx_, opts.host,
@@ -100,7 +100,7 @@ public:
             co_return std::unexpected(std::string("socket create failed"));
         sock_ = std::move(*sock_r);
 
-        // TCP 连接超时
+        // TCP connection timeout
         if (opts.connect_timeout.count() > 0) {
             cancel_token conn_token;
             auto cr = co_await with_timeout(ctx_, opts.connect_timeout,
@@ -158,7 +158,7 @@ public:
         }
 #endif
 
-        // 发送 CONNECT 报文
+        // Send CONNECT packet
         auto connect_pkt = encode_connect(opts);
         auto wr = co_await do_write(const_buffer{connect_pkt.data(), connect_pkt.size()});
         if (!wr) {
@@ -166,7 +166,7 @@ public:
             co_return std::unexpected(std::string("send CONNECT failed: ") + wr.error().message());
         }
 
-        // 等待 CONNACK
+        // Wait for CONNACK
         auto frame_r = co_await read_frame();
         if (!frame_r)
             co_return std::unexpected(std::string("read CONNACK failed: ") + frame_r.error());
@@ -201,7 +201,7 @@ public:
         session_present_ = connack.session_present;
         connected_ = true;
 
-        // v5: 从 CONNACK 提取关键属性
+        // v5: Extract key properties from CONNACK
         if (version_ == protocol_version::v5) {
             for (auto& p : connack_props_) {
                 if (p.id == property_id::topic_alias_maximum)
@@ -219,36 +219,36 @@ public:
         logger::info("mqtt client connected to {}:{} version={} session_present={}",
             opts.host, opts.port, to_string(version_), session_present_);
 
-        // 保存连接参数（供重连使用）
+        // Save connection parameters (for reconnection)
         last_connect_opts_ = opts;
 
-        // 会话恢复: 重发 inflight 消息
+        // Session resumption: Resend inflight messages
         if (session_present_)
             co_await resend_inflight();
 
-        // 启动内部读循环
+        // Start internal read loop
         spawn(ctx_, read_loop());
 
-        // 启动 keep-alive 定时器
+        // Start keep-alive timer
         if (keep_alive_sec_ > 0)
             spawn(ctx_, keep_alive_loop());
 
-        // 启动 QoS 重传定时器
+        // Start QoS retransmission timer
         spawn(ctx_, retry_loop());
 
         co_return std::expected<void, std::string>{};
     }
 
-    /// 是否已连接
+    /// Check if connected
     [[nodiscard]] auto is_connected() const noexcept -> bool { return connected_; }
 
-    /// 获取 session present 标志
+    /// Get session present flag
     [[nodiscard]] auto session_present() const noexcept -> bool { return session_present_; }
 
-    /// 获取 CONNACK 属性 (v5)
+    /// Get CONNACK properties (v5)
     [[nodiscard]] auto connack_properties() const noexcept -> const properties& { return connack_props_; }
 
-    /// 关闭连接
+    /// Close connection
     void close() noexcept {
         connected_ = false;
 #ifdef CNETMOD_HAS_SSL
@@ -258,9 +258,9 @@ public:
         sock_.close();
     }
 
-    // ----- 发布 -----
+    // ----- Publish -----
 
-    /// 发布消息
+    /// Publish message
     auto publish(
         std::string_view topic,
         std::string_view payload,
@@ -276,7 +276,7 @@ public:
         logger::debug("mqtt client publish topic={} qos={} retain={}",
             topic, to_string(q), retain);
 
-        // Receive Maximum 流控: QoS 1/2 等待 inflight 空位
+        // Receive Maximum flow control: QoS 1/2 wait for inflight quota
         if (q != qos::at_most_once) {
             for (int wait_i = 0; wait_i < 3000; ++wait_i) {
                 if (inflight_out_.size() < static_cast<std::size_t>(receive_maximum_))
@@ -299,14 +299,14 @@ public:
             auto [alias, is_new] = alias_send_.allocate(topic);
             if (alias != 0) {
                 pub_props.push_back({property_id::topic_alias, alias});
-                if (!is_new) send_topic = {};  // 已知 alias，topic 为空
+                if (!is_new) send_topic = {};  // Known alias, topic is empty
             }
         }
 
         auto pkt = encode_publish(send_topic, payload, q, retain, false, pid,
                                   version_, pub_props);
 
-        // Maximum Packet Size 检查
+        // Maximum Packet Size check
         if (max_packet_size_ > 0 && pkt.size() > max_packet_size_)
             co_return std::unexpected(std::string("packet exceeds server maximum_packet_size"));
 
@@ -314,11 +314,11 @@ public:
         if (!wr)
             co_return std::unexpected(wr.error().message());
 
-        // QoS 0: 不需要等待 ACK
+        // QoS 0: No need to wait for ACK
         if (q == qos::at_most_once)
             co_return std::expected<void, std::string>{};
 
-        // 记录 inflight
+        // Record inflight
         {
             inflight_message im;
             im.packet_id    = pid;
@@ -333,39 +333,39 @@ public:
             inflight_out_.push_back(std::move(im));
         }
 
-        // QoS 1: 等待 PUBACK
+        // QoS 1: Wait for PUBACK
         if (q == qos::at_least_once) {
             auto ack_r = co_await wait_for_ack(pid);
             if (!ack_r) co_return std::unexpected(ack_r.error());
             co_return std::expected<void, std::string>{};
         }
 
-        // QoS 2: 等待 PUBREC → 发送 PUBREL → 等待 PUBCOMP
+        // QoS 2: Wait for PUBREC → Send PUBREL → Wait for PUBCOMP
         auto rec_r = co_await wait_for_ack(pid);
         if (!rec_r) co_return std::unexpected(rec_r.error());
 
-        // 更新 inflight 状态为等待 PUBCOMP
+        // Update inflight state to wait for PUBCOMP
         for (auto& im : inflight_out_)
             if (im.packet_id == pid) {
                 im.expected_ack = control_packet_type::pubcomp;
                 break;
             }
 
-        // 发送 PUBREL
+        // Send PUBREL
         auto pubrel_pkt = encode_pubrel(pid, version_);
         auto wr2 = co_await do_write(const_buffer{pubrel_pkt.data(), pubrel_pkt.size()});
         if (!wr2) co_return std::unexpected(wr2.error().message());
 
-        // 等待 PUBCOMP
+        // Wait for PUBCOMP
         auto comp_r = co_await wait_for_ack(pid);
         if (!comp_r) co_return std::unexpected(comp_r.error());
 
         co_return std::expected<void, std::string>{};
     }
 
-    // ----- 订阅 -----
+    // ----- Subscribe -----
 
-    /// 订阅主题
+    /// Subscribe to topics
     auto subscribe(
         std::vector<subscribe_entry> entries,
         const properties& props = {}
@@ -380,18 +380,18 @@ public:
         if (!wr)
             co_return std::unexpected(wr.error().message());
 
-        // 等待 SUBACK
+        // Wait for SUBACK
         auto ack_r = co_await wait_for_suback(pid);
         if (!ack_r) co_return std::unexpected(ack_r.error());
 
-        // 保存订阅（供自动重连恢复）
+        // Save subscriptions (for auto-reconnect restoration)
         for (auto& e : entries)
             save_subscription(e);
 
         co_return ack_r->return_codes;
     }
 
-    /// 便捷：单个主题订阅
+    /// Convenience: Single topic subscription
     auto subscribe(
         std::string topic_filter,
         qos max_qos = qos::at_most_once,
@@ -403,9 +403,9 @@ public:
         co_return co_await subscribe(std::move(entries), props);
     }
 
-    // ----- 取消订阅 -----
+    // ----- Unsubscribe -----
 
-    /// 取消订阅
+    /// Unsubscribe from topics
     auto unsubscribe(
         std::vector<std::string> topic_filters,
         const properties& props = {}
@@ -420,20 +420,20 @@ public:
         if (!wr)
             co_return std::unexpected(wr.error().message());
 
-        // 等待 UNSUBACK
+        // Wait for UNSUBACK
         auto ack_r = co_await wait_for_ack(pid);
         if (!ack_r) co_return std::unexpected(ack_r.error());
 
-        // 移除已保存的订阅
+        // Remove saved subscriptions
         for (auto& tf : topic_filters)
             remove_saved_subscription(tf);
 
         co_return std::expected<void, std::string>{};
     }
 
-    // ----- 断开连接 -----
+    // ----- Disconnect -----
 
-    /// 优雅断开
+    /// Graceful disconnect
     auto disconnect(
         std::uint8_t reason_code = 0,
         const properties& props = {}
@@ -442,7 +442,7 @@ public:
         if (!connected_)
             co_return std::expected<void, std::string>{};
 
-        // 主动断开时禁止自动重连
+        // Disable auto-reconnect on intentional disconnect
         reconnecting_ = false;
 
         logger::info("mqtt client disconnect reason_code={}", reason_code);
@@ -450,7 +450,7 @@ public:
         auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
         connected_ = false;
         close();
-        // 等待所有内部协程（read_loop/keep_alive_loop/retry_loop）退出
+        // Wait for all internal coroutines (read_loop/keep_alive_loop/retry_loop) to exit
         while (active_loops_ > 0)
             co_await async_sleep(ctx_, std::chrono::milliseconds{10});
         if (!wr)
@@ -458,21 +458,21 @@ public:
         co_return std::expected<void, std::string>{};
     }
 
-    // ----- 回调 -----
+    // ----- Callbacks -----
 
-    /// 注册消息到达回调
+    /// Register message arrival callback
     void on_message(message_callback cb) { msg_cb_ = std::move(cb); }
 
-    /// 注册断连回调
+    /// Register disconnection callback
     void on_disconnect(disconnect_callback cb) { disconnect_cb_ = std::move(cb); }
 
-    /// 注册 v5 AUTH 回调 (Enhanced Authentication)
+    /// Register v5 AUTH callback (Enhanced Authentication)
     void on_auth(auth_callback cb) { auth_cb_ = std::move(cb); }
 
-    /// 设置自动重连配置
+    /// Set auto-reconnect configuration
     void set_reconnect(reconnect_options opts) { reconnect_opts_ = std::move(opts); }
 
-    /// 发送 AUTH 报文 (v5 only)
+    /// Send AUTH packet (v5 only)
     auto send_auth(
         std::uint8_t reason_code = 0,
         const properties& props = {}
@@ -489,11 +489,11 @@ public:
         co_return std::expected<void, std::string>{};
     }
 
-    /// 获取协议版本
+    /// Get protocol version
     [[nodiscard]] auto version() const noexcept -> protocol_version { return version_; }
 
 private:
-    // ── 传输层 ──
+    // ── Transport Layer ──
 
     auto do_write(const_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
 #ifdef CNETMOD_HAS_SSL
@@ -509,14 +509,14 @@ private:
         co_return co_await async_read(ctx_, sock_, buf);
     }
 
-    // ── 帧读取 ──
+    // ── Frame Reading ──
 
     auto read_frame() -> task<std::expected<mqtt_frame, std::string>> {
         while (true) {
             auto frame = parser_.next();
             if (frame) co_return std::move(*frame);
 
-            // 需要更多数据
+            // Need more data
             std::array<std::byte, 8192> tmp{};
             auto r = co_await do_read(mutable_buffer{tmp.data(), tmp.size()});
             if (!r || *r == 0)
@@ -526,20 +526,20 @@ private:
         }
     }
 
-    // ── 内部读循环 ──
+    // ── Internal Read Loop ──
 
     auto read_loop() -> task<void> {
         ++active_loops_;
         while (connected_) {
             auto frame_r = co_await read_frame();
             if (!frame_r) {
-                // 如果 connected_ 已经为 false，说明是主动断开（disconnect() 或 close()），
-                // 不需要触发自动重连，也不需要调用 disconnect_cb_
+                // If connected_ is already false, it's an intentional disconnect (disconnect() or close()),
+                // no need to trigger auto-reconnect or call disconnect_cb_
                 if (!connected_) break;
                 connected_ = false;
                 logger::warn("mqtt client read_loop error: {}", frame_r.error());
                 if (disconnect_cb_) disconnect_cb_(frame_r.error());
-                // 触发自动重连
+                // Trigger auto-reconnect
                 if (reconnect_opts_.enabled) {
                     reconnecting_ = true;
                     spawn(ctx_, auto_reconnect_loop());
@@ -553,7 +553,7 @@ private:
         --active_loops_;
     }
 
-    // ── 帧分发 ──
+    // ── Frame Dispatch ──
 
     auto dispatch_frame(const mqtt_frame& frame) -> task<void> {
         switch (frame.type) {
@@ -567,7 +567,7 @@ private:
             auto ack_r = decode_ack(frame.payload, version_);
             if (ack_r) {
                 complete_pending(ack_r->packet_id, frame.type, frame.payload);
-                // 从 inflight 移除已确认的消息
+                // Remove acknowledged messages from inflight
                 if (frame.type == control_packet_type::puback ||
                     frame.type == control_packet_type::pubcomp) {
                     std::erase_if(inflight_out_, [&](const inflight_message& im) {
@@ -579,7 +579,7 @@ private:
         }
 
         case control_packet_type::pubrel: {
-            // QoS 2 入站：收到 PUBREL → 回复 PUBCOMP，清除去重记录
+            // QoS 2 inbound: Received PUBREL → Reply PUBCOMP, clear deduplication record
             auto ack_r = decode_ack(frame.payload, version_);
             if (ack_r) {
                 qos2_received_.erase(ack_r->packet_id);
@@ -606,7 +606,7 @@ private:
         }
 
         case control_packet_type::pingresp:
-            // PINGRESP — 不需要特殊处理
+            // PINGRESP — No special handling needed
             ping_outstanding_ = false;
             break;
 
@@ -645,7 +645,7 @@ private:
         co_return;
     }
 
-    // ── PUBLISH 处理 ──
+    // ── PUBLISH Handling ──
 
     auto handle_publish(const mqtt_frame& frame) -> task<void> {
         auto msg_r = decode_publish(frame.payload, frame.flags, version_);
@@ -653,7 +653,7 @@ private:
 
         auto& msg = *msg_r;
 
-        // v5 Topic Alias 还原
+        // v5 Topic Alias resolution
         if (version_ == protocol_version::v5) {
             std::uint16_t alias = 0;
             for (auto& p : msg.props)
@@ -670,33 +670,33 @@ private:
             }
         }
 
-        // QoS 1: 回复 PUBACK
+        // QoS 1: Reply with PUBACK
         if (msg.qos_value == qos::at_least_once && msg.packet_id != 0) {
             auto pkt = encode_puback(msg.packet_id, version_);
             (void)co_await do_write(const_buffer{pkt.data(), pkt.size()});
         }
 
-        // QoS 2: 回复 PUBREC（PUBREL 在 dispatch 中处理）
+        // QoS 2: Reply with PUBREC (PUBREL handled in dispatch)
         if (msg.qos_value == qos::exactly_once && msg.packet_id != 0) {
             auto pkt = encode_pubrec(msg.packet_id, version_);
             (void)co_await do_write(const_buffer{pkt.data(), pkt.size()});
-            // 去重：仅首次收到时通知用户
+            // Deduplication: Only notify user on first receipt
             auto [_, inserted] = qos2_received_.insert(msg.packet_id);
-            if (!inserted) co_return; // DUP — 已通知过用户
+            if (!inserted) co_return; // DUP — Already notified user
         }
 
-        // 通知用户
+        // Notify user
         if (msg_cb_) msg_cb_(msg);
         co_return;
     }
 
-    // ── Packet ID 管理 ──
+    // ── Packet ID Management ──
 
     auto alloc_packet_id() -> std::uint16_t {
         for (std::uint32_t attempt = 0; attempt < 65535; ++attempt) {
             auto id = next_packet_id_++;
             if (next_packet_id_ == 0) next_packet_id_ = 1;
-            // 跳过仍在 inflight / pending 中的 ID
+            // Skip IDs still in inflight / pending
             bool in_use = false;
             for (auto& im : inflight_out_)
                 if (im.packet_id == id) { in_use = true; break; }
@@ -707,7 +707,7 @@ private:
         return next_packet_id_++;
     }
 
-    // ── 等待 ACK 机制 ──
+    // ── ACK Waiting Mechanism ──
 
     struct pending_ack {
         control_packet_type expected_type;
@@ -737,15 +737,15 @@ private:
         }
     }
 
-    /// 等待特定 packet_id 的 ACK
+    /// Wait for ACK for specific packet_id
     auto wait_for_ack(std::uint16_t pid)
         -> task<std::expected<ack_result, std::string>>
     {
         pending_acks_[pid] = {};
 
-        // 简单轮询等待（在协程上下文中会 yield）
-        // 实际由 read_loop 推送完成
-        for (int retry = 0; retry < 3000; ++retry) { // ~30 秒超时
+        // Simple polling wait (yields in coroutine context)
+        // Actually pushed to completion by read_loop
+        for (int retry = 0; retry < 3000; ++retry) { // ~30 second timeout
             auto it = pending_acks_.find(pid);
             if (it != pending_acks_.end() && it->second.completed) {
                 auto ack = decode_ack(it->second.payload, version_);
@@ -759,7 +759,7 @@ private:
                 co_return std::unexpected(std::string("disconnected while waiting for ACK"));
             }
 
-            // yield 让 read_loop 有机会运行
+            // yield to give read_loop a chance to run
             co_await async_sleep(ctx_, std::chrono::milliseconds(10));
         }
 
@@ -768,7 +768,7 @@ private:
                                   std::to_string(pid));
     }
 
-    /// 等待 SUBACK
+    /// Wait for SUBACK
     auto wait_for_suback(std::uint16_t pid)
         -> task<std::expected<suback_result, std::string>>
     {
@@ -804,13 +804,13 @@ private:
         ping_outstanding_ = true;
     }
 
-    /// 自动 keep-alive 定时器协程
+    /// Auto keep-alive timer coroutine
     auto keep_alive_loop() -> task<void> {
         if (keep_alive_sec_ == 0) co_return;
         ++active_loops_;
         auto interval = std::chrono::milliseconds(
             static_cast<int>(keep_alive_sec_ * 750)); // 0.75 * keep_alive
-        // PINGRESP 等待超时: keep_alive 的一半，确保比下次 PINGREQ 更早检测
+        // PINGRESP wait timeout: half of keep_alive, ensures earlier detection than next PINGREQ
         auto ping_wait = std::chrono::milliseconds(
             static_cast<int>(keep_alive_sec_ * 500)); // 0.5 * keep_alive
         while (connected_) {
@@ -818,7 +818,7 @@ private:
             if (!connected_) break;
 
             if (ping_outstanding_) {
-                // 上次 PINGRESP 未收到 → 断连
+                // Previous PINGRESP not received → disconnect
                 logger::warn("mqtt client keep-alive timeout");
                 connected_ = false;
                 if (disconnect_cb_) disconnect_cb_("keep-alive timeout");
@@ -828,7 +828,7 @@ private:
 
             co_await send_ping();
 
-            // 发送 PINGREQ 后等待较短时间，提前检测 PINGRESP 超时
+            // Wait shorter time after sending PINGREQ to detect PINGRESP timeout early
             co_await sleep_while_connected(ping_wait);
             if (!connected_) break;
             if (ping_outstanding_) {
@@ -842,9 +842,9 @@ private:
         --active_loops_;
     }
 
-    // ── QoS 重传 ──
+    // ── QoS Retransmission ──
 
-    /// QoS 消息重传定时器协程
+    /// QoS message retransmission timer coroutine
     auto retry_loop() -> task<void> {
         ++active_loops_;
         while (connected_) {
@@ -863,7 +863,7 @@ private:
                     continue;
                 }
 
-                // 重发 (DUP=1)
+                // Resend (DUP=1)
                 if (it->expected_ack == control_packet_type::puback ||
                     it->expected_ack == control_packet_type::pubrec) {
                     auto pkt = encode_publish(
@@ -887,12 +887,12 @@ private:
         --active_loops_;
     }
 
-    // ── 订阅记录 (供重连恢复) ──
+    // ── Subscription Records (for reconnection restoration) ──
 
     void save_subscription(const subscribe_entry& entry) {
         for (auto& s : saved_subscriptions_)
             if (s.topic_filter == entry.topic_filter) {
-                s = entry; // 更新
+                s = entry; // Update
                 return;
             }
         saved_subscriptions_.push_back(entry);
@@ -923,9 +923,9 @@ private:
                 attempt, delay.count());
             co_await async_sleep(ctx_, delay);
 
-            if (!reconnecting_) co_return; // 用户主动断开或已手动重连
+            if (!reconnecting_) co_return; // User intentionally disconnected or manually reconnected
 
-            // 重置解析器状态
+            // Reset parser state
             parser_ = mqtt_parser{};
             ping_outstanding_ = false;
 
@@ -933,7 +933,7 @@ private:
             if (r) {
                 logger::info("mqtt client auto-reconnect succeeded");
                 reconnecting_ = false;
-                // 恢复订阅
+                // Restore subscriptions
                 if (reconnect_opts_.restore_subscriptions && !saved_subscriptions_.empty()) {
                     auto sub_r = co_await subscribe(saved_subscriptions_);
                     if (sub_r)
@@ -943,7 +943,7 @@ private:
                 co_return;
             }
 
-            // 指数退避
+            // Exponential backoff
             delay = std::chrono::milliseconds(static_cast<long long>(
                 delay.count() * reconnect_opts_.backoff_multiplier));
             if (delay > reconnect_opts_.max_delay)
@@ -951,7 +951,7 @@ private:
         }
     }
 
-    /// 会话恢复: 重发 inflight 消息
+    /// Session resumption: Resend inflight messages
     auto resend_inflight() -> task<void> {
         for (auto& im : inflight_out_) {
             if (im.expected_ack == control_packet_type::puback ||
@@ -970,9 +970,9 @@ private:
         }
     }
 
-    // ── 内部工具 ──
+    // ── Internal Utilities ──
 
-    /// 可中断的睡眠：分段休眠，disconnect 后快速退出
+    /// Interruptible sleep: Sleep in chunks, exit quickly after disconnect
     auto sleep_while_connected(std::chrono::milliseconds duration) -> task<void> {
         constexpr auto chunk = std::chrono::milliseconds(200);
         while (duration.count() > 0 && connected_) {
@@ -982,7 +982,7 @@ private:
         }
     }
 
-    // ── 成员 ──
+    // ── Members ──
 
     io_context&      ctx_;
     socket           sock_;
@@ -994,7 +994,7 @@ private:
     std::uint16_t    next_packet_id_ = 1;
     bool             ping_outstanding_ = false;
 
-    // CONNACK v5 属性
+    // CONNACK v5 properties
     properties       connack_props_;
 
     // v5 Topic Alias
@@ -1003,15 +1003,15 @@ private:
 
     // v5 Receive Maximum / Maximum Packet Size
     std::uint16_t    receive_maximum_  = 65535;
-    std::size_t      max_packet_size_  = 0;     // 0=无限制
+    std::size_t      max_packet_size_  = 0;     // 0=unlimited
 
-    // QoS inflight 重传
+    // QoS inflight retransmission
     std::vector<inflight_message> inflight_out_;
-    std::set<std::uint16_t>       qos2_received_;  // QoS 2 入站去重
+    std::set<std::uint16_t>       qos2_received_;  // QoS 2 inbound deduplication
     std::chrono::seconds retry_interval_{20};
     std::uint8_t         max_retries_ = 5;
 
-    // 回调
+    // Callbacks
     message_callback    msg_cb_;
     disconnect_callback disconnect_cb_;
     auth_callback       auth_cb_;
@@ -1022,10 +1022,10 @@ private:
     std::vector<subscribe_entry> saved_subscriptions_;
     bool                reconnecting_ = false;
 
-    // 内部协程生命周期跟踪
+    // Internal coroutine lifecycle tracking
     int              active_loops_  = 0;
 
-    // 等待 ACK 的映射
+    // ACK waiting maps
     std::map<std::uint16_t, pending_ack>          pending_acks_;
     std::map<std::uint16_t, pending_suback_entry> pending_subacks_;
 

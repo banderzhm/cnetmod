@@ -1,17 +1,17 @@
 /**
  * @file health_check.cppm
- * @brief K8s 风格健康检查端点 — /health (liveness) + /ready (readiness)
+ * @brief K8s-style health check endpoints — /health (liveness) + /ready (readiness)
  *
- * 提供 handler 工厂函数，配合路由注册使用。
- * check_fn 返回 health_status 结构体，支持自定义检查逻辑（数据库连接、外部服务等）。
+ * Provides handler factory functions for use with route registration.
+ * check_fn returns health_status struct, supports custom check logic (database connections, external services, etc.).
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.health_check;
  *
- *   // 简单存活检查（始终 OK）
+ *   // Simple liveness check (always OK)
  *   router.get("/health", health_check());
  *
- *   // 带自定义检查的就绪探针
+ *   // Readiness probe with custom check
  *   router.get("/ready", readiness_check([&db]() -> health_status {
  *       if (!db.is_connected()) return {false, "database disconnected"};
  *       return {true, "all systems operational"};
@@ -26,7 +26,7 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
-// health_status — 健康检查结果
+// health_status — Health check result
 // =============================================================================
 
 export struct health_status {
@@ -35,13 +35,13 @@ export struct health_status {
 };
 
 // =============================================================================
-// health_check — 存活探针 (liveness probe)
+// health_check — Liveness probe
 // =============================================================================
 //
-// K8s livenessProbe: 返回 200 表示进程活着。
-// 失败（503）时 K8s 会重启 Pod。
+// K8s livenessProbe: returns 200 to indicate process is alive.
+// On failure (503), K8s will restart the Pod.
 
-/// 创建简单存活检查 handler（始终返回 200）
+/// Create simple liveness check handler (always returns 200)
 export inline auto health_check() -> http::handler_fn
 {
     return [](http::request_context& ctx) -> task<void> {
@@ -51,7 +51,7 @@ export inline auto health_check() -> http::handler_fn
     };
 }
 
-/// 创建带自定义检查逻辑的存活探针
+/// Create liveness probe with custom check logic
 export inline auto health_check(std::function<health_status()> check_fn)
     -> http::handler_fn
 {
@@ -69,13 +69,13 @@ export inline auto health_check(std::function<health_status()> check_fn)
 }
 
 // =============================================================================
-// readiness_check — 就绪探针 (readiness probe)
+// readiness_check — Readiness probe
 // =============================================================================
 //
-// K8s readinessProbe: 返回 200 表示可以接收流量。
-// 失败（503）时 K8s 从 Service 端点移除该 Pod（不再转发流量）。
+// K8s readinessProbe: returns 200 to indicate ready to receive traffic.
+// On failure (503), K8s removes the Pod from Service endpoints (no longer forwards traffic).
 
-/// 创建带自定义检查逻辑的就绪探针
+/// Create readiness probe with custom check logic
 export inline auto readiness_check(std::function<health_status()> check_fn)
     -> http::handler_fn
 {
@@ -86,7 +86,7 @@ export inline auto readiness_check(std::function<health_status()> check_fn)
         auto status = result.ok ? http::status::ok
                                 : http::status::service_unavailable;
 
-        // 就绪探针返回更详细的信息
+        // Readiness probe returns more detailed information
         ctx.json(status, std::format(
             R"({{"status":"{}","message":"{}","ready":{}}})",
             result.ok ? "UP" : "DOWN",
@@ -96,7 +96,7 @@ export inline auto readiness_check(std::function<health_status()> check_fn)
     };
 }
 
-/// 创建组合就绪探针（所有检查都通过才返回 200）
+/// Create combined readiness probe (returns 200 only if all checks pass)
 export inline auto readiness_check(
     std::vector<std::pair<std::string, std::function<health_status()>>> checks)
     -> http::handler_fn

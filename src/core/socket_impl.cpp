@@ -26,7 +26,7 @@ import cnetmod.core.error;
 namespace cnetmod {
 
 // =============================================================================
-// 辅助：address_family -> AF_xxx / socket_type -> SOCK_xxx
+// Helpers: address_family -> AF_xxx / socket_type -> SOCK_xxx
 // =============================================================================
 
 namespace {
@@ -56,7 +56,7 @@ auto last_error() noexcept -> int {
 #endif
 }
 
-/// 填充 sockaddr_storage，返回长度
+/// Fill sockaddr_storage, return length
 auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> int {
     std::memset(&storage, 0, sizeof(storage));
     if (ep.address().is_v4()) {
@@ -77,7 +77,7 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
 } // anonymous namespace
 
 // =============================================================================
-// 生命周期
+// Lifecycle
 // =============================================================================
 
 socket::~socket() {
@@ -98,7 +98,7 @@ auto socket::operator=(socket&& other) noexcept -> socket& {
 }
 
 // =============================================================================
-// 创建
+// Creation
 // =============================================================================
 
 auto socket::create(address_family family, socket_type type)
@@ -109,7 +109,7 @@ auto socket::create(address_family family, socket_type type)
     int proto = (type == socket_type::stream) ? IPPROTO_TCP : IPPROTO_UDP;
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    // WSA_FLAG_OVERLAPPED 使得句柄可关联 IOCP
+    // WSA_FLAG_OVERLAPPED allows handle to be associated with IOCP
     SOCKET fd = ::WSASocketW(af, st, proto, nullptr, 0, WSA_FLAG_OVERLAPPED);
     if (fd == INVALID_SOCKET)
         return std::unexpected(make_error_code(from_native_error(last_error())));
@@ -143,7 +143,7 @@ auto socket::listen(int backlog) -> std::expected<void, std::error_code> {
 }
 
 // =============================================================================
-// 选项
+// Options
 // =============================================================================
 
 auto socket::set_non_blocking(bool enabled) -> std::expected<void, std::error_code> {
@@ -173,7 +173,7 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
-    // SO_REUSEPORT (仅 POSIX)
+    // SO_REUSEPORT (POSIX only)
 #ifndef CNETMOD_PLATFORM_WINDOWS
     if (opts.reuse_port) {
         int val = 1;
@@ -191,12 +191,12 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
-    // 非阻塞
+    // Non-blocking
     if (opts.non_blocking) {
         if (auto r = set_non_blocking(true); !r) return r;
     }
 
-    // 接收缓冲区
+    // Receive buffer
     if (opts.recv_buffer_size > 0) {
         int val = opts.recv_buffer_size;
         if (::setsockopt(handle_, SOL_SOCKET, SO_RCVBUF,
@@ -204,7 +204,7 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
-    // 发送缓冲区
+    // Send buffer
     if (opts.send_buffer_size > 0) {
         int val = opts.send_buffer_size;
         if (::setsockopt(handle_, SOL_SOCKET, SO_SNDBUF,
@@ -216,7 +216,7 @@ auto socket::apply_options(const socket_options& opts)
 }
 
 // =============================================================================
-// 关闭
+// Close
 // =============================================================================
 
 void socket::close() noexcept {

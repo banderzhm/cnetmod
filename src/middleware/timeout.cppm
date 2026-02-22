@@ -1,17 +1,17 @@
 /**
  * @file timeout.cppm
- * @brief 请求超时中间件 — 检测慢请求并覆盖为 504 Gateway Timeout
+ * @brief Request Timeout Middleware — Detects slow requests and overrides with 504 Gateway Timeout
  *
- * 调用 next() 后检测耗时，若超过阈值则：
- *   1. 覆盖响应为 504 Gateway Timeout
- *   2. 输出 warn 级别日志
+ * After calling next(), checks elapsed time, if exceeds threshold:
+ *   1. Override response to 504 Gateway Timeout
+ *   2. Output warn level log
  *
- * 注意：此为「软超时」— 不能中断正在执行的 handler，
- * 但能确保客户端收到超时响应而非超时成功响应。
- * 应放在中间件链靠外层（recover 之后），
- * 使 handler 返回后能覆盖其响应。
+ * Note: This is a "soft timeout" — cannot interrupt executing handler,
+ * but ensures client receives timeout response instead of late success response.
+ * Should be placed in outer layer of middleware chain (after recover),
+ * so handler's response can be overridden after it returns.
  *
- * 使用示例:
+ * Usage Example:
  *   import cnetmod.middleware.timeout;
  *
  *   svr.use(recover());
@@ -28,7 +28,7 @@ import cnetmod.core.log;
 namespace cnetmod {
 
 // =============================================================================
-// request_timeout — 请求超时中间件
+// request_timeout — Request timeout middleware
 // =============================================================================
 
 export inline auto request_timeout(std::chrono::steady_clock::duration max_time)
@@ -47,7 +47,7 @@ export inline auto request_timeout(std::chrono::steady_clock::duration max_time)
             logger::warn("{} {} exceeded timeout ({:.0f}ms > {:.0f}ms)",
                          ctx.method(), ctx.path(), ms, limit_ms);
 
-            // 覆盖 handler 的响应为 504
+            // Override handler's response to 504
             ctx.json(http::status::gateway_timeout, std::format(
                 R"({{"error":"request timeout","elapsed_ms":{:.0f},"limit_ms":{:.0f}}})",
                 ms, limit_ms));

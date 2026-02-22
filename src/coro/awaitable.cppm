@@ -11,14 +11,14 @@ import cnetmod.core.buffer;
 namespace cnetmod {
 
 // =============================================================================
-// I/O awaitable 基础类型
+// I/O awaitable base types
 // =============================================================================
 
-/// I/O 操作完成回调类型
+/// I/O operation completion callback type
 export using io_callback = std::function<void(std::error_code, std::size_t)>;
 
-/// 通用的 I/O 操作 awaitable
-/// 当 co_await 时挂起协程，I/O 完成后恢复
+/// General I/O operation awaitable
+/// Suspends coroutine when co_await, resumes when I/O completes
 export class io_awaitable {
 public:
     using result_type = std::expected<std::size_t, std::error_code>;
@@ -37,7 +37,7 @@ public:
         return bytes_transferred_;
     }
 
-    /// 由 I/O 完成通知调用，恢复协程
+    /// Called by I/O completion notification, resumes coroutine
     void complete(std::error_code ec, std::size_t bytes) noexcept {
         error_ = ec;
         bytes_transferred_ = bytes;
@@ -46,7 +46,7 @@ public:
             caller_.resume();
     }
 
-    /// 设置立即完成（无需挂起）
+    /// Set immediate completion (no suspension needed)
     void set_ready(std::error_code ec, std::size_t bytes) noexcept {
         error_ = ec;
         bytes_transferred_ = bytes;
@@ -60,7 +60,7 @@ protected:
     bool ready_ = false;
 };
 
-/// accept 操作的 awaitable（返回 native handle 而非字节数）
+/// accept operation awaitable (returns native handle instead of byte count)
 export class accept_awaitable {
 public:
     using result_type = std::expected<int, std::error_code>;  // native fd/SOCKET
@@ -79,7 +79,7 @@ public:
         return accepted_fd_;
     }
 
-    /// 由 I/O 完成通知调用
+    /// Called by I/O completion notification
     void complete(std::error_code ec, int fd) noexcept {
         error_ = ec;
         accepted_fd_ = fd;
@@ -95,7 +95,7 @@ protected:
     bool ready_ = false;
 };
 
-/// connect 操作的 awaitable（无返回值，只有 error_code）
+/// connect operation awaitable (no return value, only error_code)
 export class connect_awaitable {
 public:
     using result_type = std::expected<void, std::error_code>;
@@ -114,7 +114,7 @@ public:
         return {};
     }
 
-    /// 由 I/O 完成通知调用
+    /// Called by I/O completion notification
     void complete(std::error_code ec) noexcept {
         error_ = ec;
         ready_ = true;

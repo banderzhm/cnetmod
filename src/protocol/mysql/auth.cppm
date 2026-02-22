@@ -55,7 +55,7 @@ inline auto hash_native_password(
 }
 
 // =============================================================================
-// caching_sha2_password (MySQL 8+ 默认)
+// caching_sha2_password (MySQL 8+ default)
 // SHA256(password) XOR SHA256( SHA256(SHA256(password)) + scramble )
 // =============================================================================
 
@@ -94,7 +94,7 @@ inline auto hash_caching_sha2(
 
 #else
 
-// 无 OpenSSL — 返回空（认证会失败）
+// No OpenSSL — return empty (authentication will fail)
 inline auto hash_native_password(
     std::string_view, std::span<const std::uint8_t>
 ) -> std::vector<std::uint8_t> { return {}; }
@@ -106,7 +106,7 @@ inline auto hash_caching_sha2(
 #endif
 
 // =============================================================================
-// 按插件名选择哈希函数
+// Select hash function by plugin name
 // =============================================================================
 
 inline constexpr std::string_view PLUGIN_NATIVE   = "mysql_native_password";
@@ -120,7 +120,7 @@ inline auto hash_password_for_plugin(
 {
     if (plugin_name == PLUGIN_CSHA2P)
         return hash_caching_sha2(password, scramble);
-    // 默认回退到 mysql_native_password
+    // Default fallback to mysql_native_password
     return hash_native_password(password, scramble);
 }
 

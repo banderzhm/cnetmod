@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:persistence — MQTT 持久化存储
-/// 基于文件系统 JSON 持久化 session 和 retained messages
+/// cnetmod.protocol.mqtt:persistence — MQTT persistence storage
+/// Filesystem-based JSON persistence for sessions and retained messages
 
 module;
 
@@ -21,7 +21,7 @@ namespace cnetmod::mqtt {
 using json = nlohmann::json;
 
 // =============================================================================
-// 持久化配置
+// Persistence configuration
 // =============================================================================
 
 export struct persistence_options {
@@ -30,12 +30,12 @@ export struct persistence_options {
 };
 
 // =============================================================================
-// JSON 序列化辅助
+// JSON serialization helpers
 // =============================================================================
 
 namespace detail {
 
-// --- properties 序列化 ---
+// --- properties serialization ---
 
 inline auto props_to_json(const properties& props) -> json {
     json arr = json::array();
@@ -92,7 +92,7 @@ inline auto props_from_json(const json& arr) -> properties {
     return result;
 }
 
-// --- will 序列化 ---
+// --- will serialization ---
 
 inline auto will_to_json(const will& w) -> json {
     json obj;
@@ -115,7 +115,7 @@ inline auto will_from_json(const json& obj) -> will {
     return w;
 }
 
-// --- subscribe_entry 序列化 ---
+// --- subscribe_entry serialization ---
 
 inline auto sub_entry_to_json(const subscribe_entry& e) -> json {
     json obj;
@@ -137,7 +137,7 @@ inline auto sub_entry_from_json(const json& obj) -> subscribe_entry {
     return e;
 }
 
-// --- publish_message 序列化 ---
+// --- publish_message serialization ---
 
 inline auto pub_msg_to_json(const publish_message& m) -> json {
     json obj;
@@ -160,7 +160,7 @@ inline auto pub_msg_from_json(const json& obj) -> publish_message {
     return m;
 }
 
-// --- inflight_message 序列化 ---
+// --- inflight_message serialization ---
 
 inline auto inflight_to_json(const inflight_message& im) -> json {
     json obj;
@@ -179,11 +179,11 @@ inline auto inflight_from_json(const json& obj) -> inflight_message {
     im.expected_ack = static_cast<control_packet_type>(
         obj.value("expected_ack", static_cast<std::uint8_t>(0x40)));
     im.retry_count  = obj.value("retry_count", static_cast<std::uint8_t>(0));
-    im.send_time    = std::chrono::steady_clock::now(); // 加载时重置
+    im.send_time    = std::chrono::steady_clock::now(); // Reset on load
     return im;
 }
 
-// --- session_state 序列化 ---
+// --- session_state serialization ---
 
 inline auto session_to_json(const session_state& ss) -> json {
     json obj;
@@ -259,11 +259,11 @@ inline auto session_from_json(const json& obj) -> session_state {
         ss.will_msg = will_from_json(obj["will"]);
     }
 
-    ss.online = false; // 加载时都是离线的
+    ss.online = false; // All sessions are offline on load
     return ss;
 }
 
-// --- retained_message 序列化 ---
+// --- retained_message serialization ---
 
 inline auto retained_to_json(const retained_message& rm) -> json {
     json obj;
@@ -287,7 +287,7 @@ inline auto retained_from_json(const json& obj) -> retained_message {
 } // namespace detail
 
 // =============================================================================
-// Persistence — 持久化管理器
+// Persistence — Persistence manager
 // =============================================================================
 
 export class persistence {
@@ -296,10 +296,10 @@ public:
         : opts_(std::move(opts)) {}
 
     // =========================================================================
-    // Session 持久化
+    // Session persistence
     // =========================================================================
 
-    /// 保存所有 session 到文件
+    /// Save all sessions to file
     auto save_sessions(const session_store& store)
         -> std::expected<void, std::string>
     {
@@ -307,7 +307,7 @@ public:
 
         json root = json::array();
         store.for_each([&](const session_state& ss) {
-            // 只持久化非 clean-session 或有离线数据的会话
+            // Only persist non-clean-session or sessions with offline data
             if (!ss.clean_session || !ss.offline_queue.empty() ||
                 !ss.subscriptions.empty()) {
                 root.push_back(detail::session_to_json(ss));
@@ -318,7 +318,7 @@ public:
         return write_file(path, root.dump(2));
     }
 
-    /// 从文件加载 session
+    /// Load sessions from file
     auto load_sessions() -> std::expected<session_store, std::string> {
         auto path = opts_.data_dir + "/sessions.json";
         auto content = read_file(path);
@@ -347,10 +347,10 @@ public:
     }
 
     // =========================================================================
-    // Retained Messages 持久化
+    // Retained Messages persistence
     // =========================================================================
 
-    /// 保存保留消息
+    /// Save retained messages
     auto save_retained(const retained_store& store)
         -> std::expected<void, std::string>
     {
@@ -365,7 +365,7 @@ public:
         return write_file(path, root.dump(2));
     }
 
-    /// 加载保留消息
+    /// Load retained messages
     auto load_retained() -> std::expected<retained_store, std::string> {
         auto path = opts_.data_dir + "/retained.json";
         auto content = read_file(path);
@@ -391,10 +391,10 @@ public:
     }
 
     // =========================================================================
-    // 自动刷盘
+    // Auto-flush
     // =========================================================================
 
-    /// 启动定时自动刷盘协程
+    /// Start timed auto-flush coroutine
     auto start_auto_flush(io_context& ctx,
                            session_store& sessions,
                            retained_store& retained)
@@ -403,28 +403,28 @@ public:
         while (true) {
             co_await async_sleep(ctx, opts_.flush_interval);
 
-            // 保存 session
+            // Save sessions
             auto sr = save_sessions(sessions);
             if (!sr) {
-                // 保存失败，静默继续 (可添加日志)
+                // Save failed, silently continue (can add logging)
             }
 
-            // 保存 retained
+            // Save retained
             auto rr = save_retained(retained);
             if (!rr) {
-                // 保存失败，静默继续
+                // Save failed, silently continue
             }
         }
     }
 
-    /// 获取配置
+    /// Get configuration
     [[nodiscard]] auto options() const noexcept -> const persistence_options& {
         return opts_;
     }
 
 private:
     // =========================================================================
-    // 文件操作辅助
+    // File operation helpers
     // =========================================================================
 
     void ensure_dir() {
@@ -434,7 +434,7 @@ private:
     static auto write_file(const std::string& path, const std::string& content)
         -> std::expected<void, std::string>
     {
-        // 原子写入：先写临时文件，再 rename
+        // Atomic write: write to temp file first, then rename
         auto tmp_path = path + ".tmp";
         {
             std::ofstream ofs(tmp_path, std::ios::binary | std::ios::trunc);
@@ -446,7 +446,7 @@ private:
         std::error_code ec;
         std::filesystem::rename(tmp_path, path, ec);
         if (ec) {
-            // rename 失败时尝试 copy + remove
+            // If rename fails, try copy + remove
             std::filesystem::copy_file(tmp_path, path,
                 std::filesystem::copy_options::overwrite_existing, ec);
             std::filesystem::remove(tmp_path, ec);

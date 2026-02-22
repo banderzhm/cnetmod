@@ -9,71 +9,71 @@ import std;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// client_errc — 客户端错误码（参考 Boost.MySQL client_errc）
+// client_errc — Client error codes (reference: Boost.MySQL client_errc)
 // =============================================================================
 
 export enum class client_errc : int {
-    /// 收到不完整的消息（反序列化错误）
+    /// Received incomplete message (deserialization error)
     incomplete_message = 1,
-    /// 服务端消息中发现意外值
+    /// Unexpected value found in server message
     protocol_value_error,
-    /// 服务器不支持建立连接所需的最低能力集
+    /// Server doesn't support minimum capability set required to establish connection
     server_unsupported,
-    /// 消息末尾有多余字节
+    /// Extra bytes at end of message
     extra_bytes,
-    /// 序列号不匹配
+    /// Sequence number mismatch
     sequence_number_mismatch,
-    /// 未知认证插件
+    /// Unknown authentication plugin
     unknown_auth_plugin,
-    /// 认证插件要求 SSL
+    /// Authentication plugin requires SSL
     auth_plugin_requires_ssl,
-    /// 传给 prepared statement 的参数数量不匹配
+    /// Number of parameters passed to prepared statement doesn't match
     wrong_num_params,
-    /// ssl_mode::require 但服务端不支持 SSL
+    /// ssl_mode::require but server doesn't support SSL
     server_doesnt_support_ssl,
-    /// 静态接口：C++ 类型与服务端返回不匹配
+    /// Static interface: C++ type doesn't match server return
     metadata_check_failed,
-    /// 静态接口：结果集数量不匹配
+    /// Static interface: Number of result sets doesn't match
     num_resultsets_mismatch,
-    /// 静态接口：行类型不匹配
+    /// Static interface: Row type mismatch
     row_type_mismatch,
-    /// 静态接口：行解析错误
+    /// Static interface: Row parsing error
     static_row_parsing_error,
-    /// 连接池未运行
+    /// Connection pool not running
     pool_not_running,
-    /// 连接池已取消
+    /// Connection pool cancelled
     pool_cancelled,
-    /// 无可用连接
+    /// No connection available
     no_connection_available,
-    /// 无效编码
+    /// Invalid encoding
     invalid_encoding,
-    /// 无法格式化值
+    /// Cannot format value
     unformattable_value,
-    /// 格式字符串语法错误
+    /// Format string syntax error
     format_string_invalid_syntax,
-    /// 格式字符串编码无效
+    /// Format string encoding invalid
     format_string_invalid_encoding,
-    /// 混合使用手动/自动索引
+    /// Mixed use of manual/auto indexing
     format_string_manual_auto_mix,
-    /// 格式说明符不支持
+    /// Format specifier not supported
     format_string_invalid_specifier,
-    /// 格式参数未找到
+    /// Format argument not found
     format_arg_not_found,
-    /// 未知字符集
+    /// Unknown character set
     unknown_character_set,
-    /// 超出最大缓冲区
+    /// Maximum buffer size exceeded
     max_buffer_size_exceeded,
-    /// 连接上有另一个操作正在进行
+    /// Another operation is in progress on the connection
     operation_in_progress,
-    /// 操作需要已建立的会话
+    /// Operation requires an established session
     not_connected,
-    /// 连接正在进行多函数操作
+    /// Connection is engaged in multi-function operation
     engaged_in_multi_function,
-    /// 操作需要连接处于多函数操作中
+    /// Operation requires connection to be in multi-function operation
     not_engaged_in_multi_function,
-    /// 握手包类型错误
+    /// Bad handshake packet type
     bad_handshake_packet_type,
-    /// OpenSSL 未知错误
+    /// Unknown OpenSSL error
     unknown_openssl_error,
 };
 
@@ -115,11 +115,11 @@ export inline auto client_errc_to_str(client_errc e) noexcept -> const char* {
 }
 
 // =============================================================================
-// common_server_errc — 常用 MySQL 服务端错误码
+// common_server_errc — Common MySQL server error codes
 // =============================================================================
 //
-// 仅包含最常用的错误码。完整列表见 MySQL 文档。
-// 数值与 MySQL 服务端定义一致。
+// Only includes most commonly used error codes. See MySQL documentation for complete list.
+// Values match MySQL server definitions.
 
 export enum class common_server_errc : int {
     er_dup_key                     = 1022,
@@ -189,10 +189,10 @@ export inline auto common_server_errc_to_str(common_server_errc e) noexcept -> c
 }
 
 // =============================================================================
-// is_fatal_error — 判断错误是否需要重连（参考 Boost.MySQL is_fatal_error）
+// is_fatal_error — Determine if error requires reconnection (reference: Boost.MySQL is_fatal_error)
 // =============================================================================
 
-/// 判断客户端错误是否致命
+/// Determine if client error is fatal
 export inline auto is_fatal_error(client_errc ec) noexcept -> bool {
     switch (ec) {
     case client_errc::incomplete_message:
@@ -216,9 +216,9 @@ export inline auto is_fatal_error(client_errc ec) noexcept -> bool {
     }
 }
 
-/// 判断服务端错误码 (uint16) 是否致命（通常是通信类错误）
+/// Determine if server error code (uint16) is fatal (usually communication errors)
 export inline auto is_fatal_error(std::uint16_t server_error_code) noexcept -> bool {
-    // 通信错误 / 连接中断类错误视为致命
+    // Communication errors / connection interruption errors are considered fatal
     switch (static_cast<common_server_errc>(server_error_code)) {
     case common_server_errc::er_unknown_com_error:
     case common_server_errc::er_aborting_connection:

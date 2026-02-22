@@ -1,14 +1,14 @@
 /**
  * @file semaphore.cppm
- * @brief 协程计数信号量 — 限制并发数，不阻塞线程
+ * @brief Coroutine counting semaphore — Limit concurrency, non-blocking
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.coro.semaphore;
  *
- *   async_semaphore sem(10);  // 最多 10 个并发
+ *   async_semaphore sem(10);  // Max 10 concurrent
  *
  *   co_await sem.acquire();
- *   // ... 受限操作 (如数据库连接) ...
+ *   // ... Limited operation (e.g., database connection) ...
  *   sem.release();
  */
 module;
@@ -22,11 +22,11 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// async_semaphore — 协程计数信号量
+// async_semaphore — Coroutine counting semaphore
 // =============================================================================
 
-/// 不阻塞线程的协程信号量
-/// count > 0 时 acquire 立即返回，count == 0 时挂起等待 release
+/// Non-blocking coroutine semaphore
+/// acquire returns immediately when count > 0, suspends when count == 0 waiting for release
 export class async_semaphore {
     struct waiter_node {
         std::coroutine_handle<> handle{};
@@ -43,7 +43,7 @@ public:
     auto operator=(const async_semaphore&) -> async_semaphore& = delete;
 
     // =========================================================================
-    // acquire — 获取一个许可
+    // acquire — Acquire a permit
     // =========================================================================
 
     struct [[nodiscard]] acquire_awaitable {
@@ -65,13 +65,13 @@ public:
             node_.handle = h;
             node_.next = nullptr;
             std::lock_guard lock(sem_.mtx_);
-            // 再次尝试（可能在 suspend 前有 release）
+            // Try again (may have release before suspend)
             if (sem_.count_ > 0) {
                 --sem_.count_;
                 h.resume();
                 return;
             }
-            // 加入等待队列（FIFO）
+            // Add to wait queue (FIFO)
             if (!sem_.tail_) {
                 sem_.head_ = sem_.tail_ = &node_;
             } else {
@@ -88,16 +88,16 @@ public:
     }
 
     // =========================================================================
-    // release — 释放一个许可
+    // release — Release a permit
     // =========================================================================
 
-    /// 释放一个许可，唤醒等待队列中的下一个协程
+    /// Release a permit, wake up next coroutine in wait queue
     void release() noexcept {
         std::coroutine_handle<> to_resume;
         {
             std::lock_guard lock(mtx_);
             if (head_) {
-                // 有等待者：直接传递许可（不增加 count_）
+                // Has waiters: directly transfer permit (don't increment count_)
                 auto* w = head_;
                 head_ = w->next;
                 if (!head_) tail_ = nullptr;
@@ -109,14 +109,14 @@ public:
         if (to_resume) to_resume.resume();
     }
 
-    /// 释放 n 个许可
+    /// Release n permits
     void release(std::size_t n) noexcept {
         for (std::size_t i = 0; i < n; ++i)
             release();
     }
 
     // =========================================================================
-    // try_acquire — 非阻塞尝试
+    // try_acquire — Non-blocking attempt
     // =========================================================================
 
     [[nodiscard]] auto try_acquire() noexcept -> bool {
@@ -128,7 +128,7 @@ public:
         return false;
     }
 
-    /// 当前可用许可数（仅供监控，非线程安全快照）
+    /// Current available permits (for monitoring only, not thread-safe snapshot)
     [[nodiscard]] auto available() const noexcept -> std::size_t {
         std::lock_guard lock(mtx_);
         return count_;

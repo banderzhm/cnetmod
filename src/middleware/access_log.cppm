@@ -1,22 +1,22 @@
 /**
  * @file access_log.cppm
- * @brief HTTP / WebSocket 切面工具 — 接口耗时计算与访问日志
+ * @brief HTTP / WebSocket Aspect Tool — API Latency Calculation and Access Logging
  *
- * 提供两个切面:
+ * Provides two aspects:
  *
  * 1. access_log() → http::middleware_fn
- *    HTTP 请求耗时日志中间件（洋葱模型），记录 method、path、status、耗时。
+ *    HTTP request latency logging middleware (onion model), records method, path, status, latency.
  *
  * 2. ws_access_log(handler) → ws::ws_handler_fn
- *    WebSocket 连接耗时日志包装器，记录 path、连接持续时间。
+ *    WebSocket connection latency logging wrapper, records path, connection duration.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.aspect;
  *
  *   // HTTP
  *   http::server svr(ctx);
- *   svr.use(access_log());                         // 全局中间件
- *   svr.use(access_log(logger::level::debug));      // 指定日志级别
+ *   svr.use(access_log());                         // Global middleware
+ *   svr.use(access_log(logger::level::debug));      // Specify log level
  *
  *   // WebSocket
  *   ws::server ws_svr(ctx);
@@ -35,19 +35,19 @@ import cnetmod.core.log;
 namespace cnetmod {
 
 // =============================================================================
-// access_log — HTTP 接口耗时日志中间件
+// access_log — HTTP API Latency Logging Middleware
 // =============================================================================
 //
-// 洋葱模型: 在 handler 前后打点计时
+// Onion model: Timing before and after handler
 //
-// 日志格式:
+// Log format:
 //   [INFO] GET /api/users 200 3.25ms
-//   [WARN] POST /api/login 500 120.40ms   (5xx 自动升级为 warn)
+//   [WARN] POST /api/login 500 120.40ms   (5xx auto-upgraded to warn)
 //
 
-/// 创建 HTTP 访问日志中间件
-/// @param lv  正常请求的日志级别（5xx 会自动升级为 warn/error）
-/// @param loc 自动捕获调用处位置（即 svr.use(access_log()) 所在行）
+/// Create HTTP access log middleware
+/// @param lv  Log level for normal requests (5xx auto-upgraded to warn/error)
+/// @param loc Auto-capture call site location (line where svr.use(access_log()) is called)
 export inline auto access_log(logger::level lv = logger::level::info,
     std::source_location loc = std::source_location::current())
     -> http::middleware_fn
@@ -64,7 +64,7 @@ export inline auto access_log(logger::level lv = logger::level::info,
         auto method = ctx.method();
         auto path   = ctx.path();
 
-        // 5xx → warn, 4xx → 保持原级别, 其余 → lv
+        // 5xx → warn, 4xx → keep original level, others → lv
         auto log_lv = lv;
         if (status >= 500)      log_lv = logger::level::warn;
         else if (status >= 400) log_lv = std::max(lv, logger::level::info);
@@ -75,18 +75,18 @@ export inline auto access_log(logger::level lv = logger::level::info,
 }
 
 // =============================================================================
-// ws_access_log — WebSocket 连接耗时日志包装器
+// ws_access_log — WebSocket Connection Latency Logging Wrapper
 // =============================================================================
 //
-// 包裹一个 ws_handler_fn，在连接建立/断开时打印日志:
-//   [INFO] WS+ /ws/chat            — 连接建立
-//   [INFO] WS- /ws/chat 45230.12ms — 连接断开 + 持续时间
+// Wraps a ws_handler_fn, prints logs on connection establish/disconnect:
+//   [INFO] WS+ /ws/chat            — Connection established
+//   [INFO] WS- /ws/chat 45230.12ms — Connection closed + duration
 //
 
-/// 包装 WebSocket handler，添加连接生命周期日志
-/// @param handler 原始 handler
-/// @param lv  日志级别
-/// @param loc 自动捕获调用处位置
+/// Wrap WebSocket handler, add connection lifecycle logging
+/// @param handler Original handler
+/// @param lv  Log level
+/// @param loc Auto-capture call site location
 export inline auto ws_access_log(ws::ws_handler_fn handler,
                                  logger::level lv = logger::level::info,
                                  std::source_location loc = std::source_location::current())

@@ -19,7 +19,7 @@ import cnetmod.coro.task;
 namespace cnetmod::http {
 
 // =============================================================================
-// route_params — 路由参数
+// route_params — Route Parameters
 // =============================================================================
 
 export struct route_params {
@@ -36,7 +36,7 @@ export struct route_params {
 };
 
 // =============================================================================
-// request_context — 请求上下文
+// request_context — Request Context
 // =============================================================================
 
 export class request_context {
@@ -47,7 +47,7 @@ public:
         : ctx_(ctx), sock_(sock), parser_(parser)
         , resp_(resp), params_(std::move(params))
     {
-        // 拆分 path 与 query_string
+        // Split path and query_string
         auto uri = parser_.uri();
         auto qpos = uri.find('?');
         if (qpos != std::string_view::npos) {
@@ -58,7 +58,7 @@ public:
         }
     }
 
-    // --- 请求访问 ---
+    // --- Request Access ---
 
     [[nodiscard]] auto method() const noexcept -> std::string_view {
         return parser_.method();
@@ -84,7 +84,7 @@ public:
         return parser_.get_header(key);
     }
 
-    // --- 路由参数 ---
+    // --- Route Parameters ---
 
     [[nodiscard]] auto param(std::string_view name) const noexcept
         -> std::string_view
@@ -100,7 +100,7 @@ public:
         return params_;
     }
 
-    // --- 响应快捷方法 ---
+    // --- Response Shortcuts ---
 
     void text(int status_code, std::string_view text_body) {
         resp_.set_status(status_code);
@@ -129,10 +129,10 @@ public:
         text(status::not_found, "404 Not Found");
     }
 
-    // --- 表单解析 ---
+    // --- Form Parsing ---
 
-    /// 惰性解析 multipart/form-data 或 application/x-www-form-urlencoded body
-    /// 首次调用执行解析并缓存，后续直接返回缓存指针
+    /// Lazily parse multipart/form-data or application/x-www-form-urlencoded body
+    /// First call performs parsing and caches, subsequent calls return cached pointer
     [[nodiscard]] auto parse_form()
         -> std::expected<const form_data*, std::error_code>
     {
@@ -150,7 +150,7 @@ public:
         return &*form_cache_;
     }
 
-    // --- 底层访问 ---
+    // --- Low-level Access ---
 
     [[nodiscard]] auto resp() noexcept -> response& { return resp_; }
     [[nodiscard]] auto io_ctx() noexcept -> io_context& { return ctx_; }
@@ -168,19 +168,19 @@ private:
 };
 
 // =============================================================================
-// handler / middleware 类型
+// handler / middleware types
 // =============================================================================
 
 export using handler_fn = std::function<task<void>(request_context&)>;
 
-/// next_fn: 调用 co_await next() 继续执行后续中间件/handler
+/// next_fn: call co_await next() to continue executing subsequent middleware/handler
 export using next_fn = std::function<task<void>()>;
 
-/// middleware: fn(ctx, next) — 洋葱模型
+/// middleware: fn(ctx, next) — Onion model
 export using middleware_fn = std::function<task<void>(request_context&, next_fn)>;
 
 // =============================================================================
-// 路由段解析
+// Route Segment Parsing
 // =============================================================================
 
 namespace detail {
@@ -192,13 +192,13 @@ struct segment {
     std::string  value;   // exact: literal; param: name; wildcard: name
 };
 
-/// 解析路由模式为段序列
+/// Parse route pattern into segment sequence
 /// e.g. "/api/users/:id/posts/*rest"
 ///  → [exact("api"), exact("users"), param("id"), exact("posts"), wildcard("rest")]
 inline auto parse_pattern(std::string_view pattern) -> std::vector<segment> {
     std::vector<segment> segs;
 
-    // 去除前导 /
+    // Remove leading /
     if (!pattern.empty() && pattern[0] == '/')
         pattern.remove_prefix(1);
 
@@ -213,7 +213,7 @@ inline auto parse_pattern(std::string_view pattern) -> std::vector<segment> {
         } else if (!part.empty() && part[0] == '*') {
             segs.push_back({segment_kind::wildcard,
                             std::string(part.size() > 1 ? part.substr(1) : "path")});
-            break; // wildcard 消耗剩余所有
+            break; // wildcard consumes all remaining
         } else {
             segs.push_back({segment_kind::exact, std::string(part)});
         }
@@ -225,7 +225,7 @@ inline auto parse_pattern(std::string_view pattern) -> std::vector<segment> {
     return segs;
 }
 
-/// 将路径拆分为段
+/// Split path into segments
 inline auto split_path(std::string_view path) -> std::vector<std::string_view> {
     std::vector<std::string_view> parts;
     if (!path.empty() && path[0] == '/')
@@ -245,8 +245,8 @@ inline auto split_path(std::string_view path) -> std::vector<std::string_view> {
     return parts;
 }
 
-/// 计算路由优先级分数（越小越优先）
-/// exact=0, param=1, wildcard=2，按段求和
+/// Calculate route priority score (lower is higher priority)
+/// exact=0, param=1, wildcard=2, sum by segment
 inline auto route_priority(const std::vector<segment>& segs) -> int {
     int score = 0;
     for (auto& s : segs) {
@@ -262,7 +262,7 @@ inline auto route_priority(const std::vector<segment>& segs) -> int {
 } // namespace detail
 
 // =============================================================================
-// match_result — 匹配结果
+// match_result — Match Result
 // =============================================================================
 
 export struct match_result {
@@ -271,14 +271,14 @@ export struct match_result {
 };
 
 // =============================================================================
-// router — 路由注册与匹配
+// router — Route Registration and Matching
 // =============================================================================
 
 export class router {
 public:
     router() = default;
 
-    // --- 注册路由 ---
+    // --- Register Routes ---
 
     auto get(std::string_view pattern, handler_fn fn) -> router& {
         return add(http_method::GET, pattern, std::move(fn));
@@ -300,7 +300,7 @@ public:
         return add(http_method::PATCH, pattern, std::move(fn));
     }
 
-    /// 任意方法匹配
+    /// Match any method
     auto any(std::string_view pattern, handler_fn fn) -> router& {
         entries_.push_back({
             std::nullopt, // any method
@@ -310,7 +310,7 @@ public:
         return *this;
     }
 
-    // --- 匹配 ---
+    // --- Matching ---
 
     [[nodiscard]] auto match(http_method method, std::string_view path) const
         -> std::optional<match_result>
@@ -322,7 +322,7 @@ public:
         int best_priority = std::numeric_limits<int>::max();
 
         for (auto& entry : entries_) {
-            // 检查方法
+            // Check method
             if (entry.method.has_value() && *entry.method != method)
                 continue;
 
@@ -343,7 +343,7 @@ public:
         return std::nullopt;
     }
 
-    /// 字符串版本（从 request_parser 传入 method string）
+    /// String version (method string passed from request_parser)
     [[nodiscard]] auto match(std::string_view method_str, std::string_view path) const
         -> std::optional<match_result>
     {
@@ -370,7 +370,7 @@ private:
         return *this;
     }
 
-    /// 尝试将 path parts 与 pattern segments 匹配
+    /// Try to match path parts with pattern segments
     static auto try_match(const std::vector<detail::segment>& segs,
                           const std::vector<std::string_view>& parts,
                           route_params& out) -> bool
@@ -382,7 +382,7 @@ private:
             auto& seg = segs[si];
 
             if (seg.kind == detail::segment_kind::wildcard) {
-                // 消耗剩余所有 parts
+                // Consume all remaining parts
                 std::string rest;
                 for (std::size_t j = pi; j < parts.size(); ++j) {
                     if (!rest.empty()) rest += '/';
@@ -403,7 +403,7 @@ private:
             ++pi;
         }
 
-        // pattern 段全部匹配完，path 段也应该用尽
+        // All pattern segments matched, path segments should also be exhausted
         return pi == parts.size();
     }
 

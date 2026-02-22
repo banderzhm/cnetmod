@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:sync_client — MQTT 同步客户端
-/// 包装异步 client，提供阻塞式 API
+/// cnetmod.protocol.mqtt:sync_client — MQTT synchronous client
+/// Wraps async client, provides blocking API
 
 module;
 
@@ -17,11 +17,11 @@ import :client;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// MQTT 同步客户端
+// MQTT synchronous client
 // =============================================================================
 
-/// 同步客户端：包装异步 client，使用 io_context 驱动协程到完成
-/// 适用于简单脚本、测试和不需要协程的场景
+/// Synchronous client: wraps async client, uses io_context to drive coroutines to completion
+/// Suitable for simple scripts, tests, and scenarios that don't need coroutines
 export class sync_client {
 public:
     explicit sync_client()
@@ -29,11 +29,11 @@ public:
 
     ~sync_client() = default;
 
-    // 不可复制
+    // Non-copyable
     sync_client(const sync_client&) = delete;
     auto operator=(const sync_client&) -> sync_client& = delete;
 
-    /// 同步连接到 MQTT Broker
+    /// Synchronously connect to MQTT Broker
     auto connect_sync(connect_options opts = {}) -> std::expected<void, std::string> {
         std::expected<void, std::string> result;
         bool done = false;
@@ -47,7 +47,7 @@ public:
         return result;
     }
 
-    /// 同步发布消息
+    /// Synchronously publish message
     auto publish_sync(
         std::string_view topic,
         std::string_view payload,
@@ -68,7 +68,7 @@ public:
         return result;
     }
 
-    /// 同步订阅
+    /// Synchronously subscribe
     auto subscribe_sync(
         std::string topic_filter,
         qos max_qos = qos::at_most_once,
@@ -87,7 +87,7 @@ public:
         return result;
     }
 
-    /// 同步取消订阅
+    /// Synchronously unsubscribe
     auto unsubscribe_sync(
         std::vector<std::string> topic_filters,
         const properties& props = {}
@@ -105,7 +105,7 @@ public:
         return result;
     }
 
-    /// 同步断开连接
+    /// Synchronously disconnect
     auto disconnect_sync(
         std::uint8_t reason_code = 0,
         const properties& props = {}
@@ -123,32 +123,32 @@ public:
         return result;
     }
 
-    /// 注册消息到达回调
+    /// Register message arrival callback
     void on_message(message_callback cb) { client_.on_message(std::move(cb)); }
 
-    /// 注册断连回调
+    /// Register disconnection callback
     void on_disconnect(disconnect_callback cb) { client_.on_disconnect(std::move(cb)); }
 
-    /// 驱动事件循环一次（处理收到的消息等）
+    /// Drive event loop once (process received messages, etc.)
     void poll() { ctx_->poll(); }
 
-    /// 驱动事件循环直到没有待处理事件
+    /// Drive event loop until no pending events
     void poll_all() { ctx_->poll(); }
 
-    /// 获取底层异步 client
+    /// Get underlying async client
     [[nodiscard]] auto async_client() noexcept -> client& { return client_; }
     [[nodiscard]] auto async_client() const noexcept -> const client& { return client_; }
 
-    /// 获取 io_context
+    /// Get io_context
     [[nodiscard]] auto context() noexcept -> io_context& { return *ctx_; }
 
-    /// 是否已连接
+    /// Whether connected
     [[nodiscard]] auto is_connected() const noexcept -> bool {
         return client_.is_connected();
     }
 
 private:
-    /// 驱动事件循环直到条件满足
+    /// Drive event loop until condition is met
     void run_until(bool& done) {
         while (!done) {
             ctx_->poll();

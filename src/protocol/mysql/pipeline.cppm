@@ -11,7 +11,7 @@ import :diagnostics;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// pipeline stage 类型（参考 Boost.MySQL pipeline — experimental）
+// pipeline stage types (reference: Boost.MySQL pipeline — experimental)
 // =============================================================================
 
 export enum class stage_kind : std::uint8_t {
@@ -23,7 +23,7 @@ export enum class stage_kind : std::uint8_t {
 };
 
 // =============================================================================
-// pipeline_stage — 单个 pipeline 步骤
+// pipeline_stage — Single pipeline step
 // =============================================================================
 
 struct pipeline_stage {
@@ -34,10 +34,10 @@ struct pipeline_stage {
 };
 
 // =============================================================================
-// stage_response — 单个 pipeline 步骤的响应
+// stage_response — Single pipeline step response
 // =============================================================================
 //
-// 类似 variant: 可以包含 statement / result_set / error
+// Similar to variant: can contain statement / result_set / error
 
 export class stage_response {
 public:
@@ -55,7 +55,7 @@ public:
     auto error_msg()  const noexcept -> std::string_view { return error_msg_; }
     auto diag()       const noexcept -> const diagnostics& { return diag_; }
 
-    // 内部设置方法
+    // Internal setter methods
     void set_statement(statement s) {
         stmt_ = s;
         has_stmt_ = true;
@@ -74,7 +74,7 @@ public:
         has_rs_ = false;
     }
     void set_ok() {
-        // 无返回值的成功（close_statement / reset_connection）
+        // Success with no return value (close_statement / reset_connection)
         has_stmt_ = false;
         has_rs_ = false;
         error_code_ = 0;
@@ -92,14 +92,14 @@ private:
 };
 
 // =============================================================================
-// pipeline_request — 批量请求构建器（参考 Boost.MySQL pipeline_request）
+// pipeline_request — Batch request builder (reference: Boost.MySQL pipeline_request)
 // =============================================================================
 
 export class pipeline_request {
 public:
     pipeline_request() = default;
 
-    /// 添加一个 COM_QUERY 步骤
+    /// Add a COM_QUERY step
     auto add_execute(std::string sql) -> pipeline_request& {
         pipeline_stage s;
         s.kind = stage_kind::execute;
@@ -108,7 +108,7 @@ public:
         return *this;
     }
 
-    /// 添加一个 COM_STMT_PREPARE 步骤
+    /// Add a COM_STMT_PREPARE step
     auto add_prepare(std::string sql) -> pipeline_request& {
         pipeline_stage s;
         s.kind = stage_kind::prepare;
@@ -117,7 +117,7 @@ public:
         return *this;
     }
 
-    /// 添加一个 COM_STMT_CLOSE 步骤
+    /// Add a COM_STMT_CLOSE step
     auto add_close_statement(std::uint32_t stmt_id) -> pipeline_request& {
         pipeline_stage s;
         s.kind = stage_kind::close_statement;
@@ -126,7 +126,7 @@ public:
         return *this;
     }
 
-    /// 添加一个 COM_RESET_CONNECTION 步骤
+    /// Add a COM_RESET_CONNECTION step
     auto add_reset_connection() -> pipeline_request& {
         pipeline_stage s;
         s.kind = stage_kind::reset_connection;
@@ -134,7 +134,7 @@ public:
         return *this;
     }
 
-    /// 添加一个 SET NAMES 步骤
+    /// Add a SET NAMES step
     auto add_set_character_set(std::string charset) -> pipeline_request& {
         pipeline_stage s;
         s.kind = stage_kind::set_character_set;

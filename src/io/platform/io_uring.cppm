@@ -18,21 +18,21 @@ import cnetmod.io.io_operation;
 namespace cnetmod {
 
 // =============================================================================
-// io_uring 协程操作基类
+// io_uring coroutine operation base class
 // =============================================================================
 
-/// io_uring 完成信息（类似 IOCP 的 iocp_overlapped）
-/// 每个异步操作创建一个，设为 SQE user_data，CQE 完成后恢复协程
+/// io_uring completion info (similar to IOCP's iocp_overlapped)
+/// Create one for each async operation, set as SQE user_data, resume coroutine after CQE completion
 export struct uring_overlapped {
-    std::coroutine_handle<> coroutine{};  // 完成后恢复的协程
-    int32_t result = 0;                   // CQE 结果（>=0 成功字节数，<0 错误码取反）
+    std::coroutine_handle<> coroutine{};  // Coroutine to resume after completion
+    int32_t result = 0;                   // CQE result (>=0 success bytes, <0 negated error code)
 };
 
 // =============================================================================
-// io_uring Context 实现
+// io_uring Context implementation
 // =============================================================================
 
-/// Linux io_uring 实现
+/// Linux io_uring implementation
 export class io_uring_context : public io_context {
 public:
     explicit io_uring_context(unsigned queue_depth = 256) {
@@ -43,13 +43,13 @@ public:
                 "io_uring_queue_init failed");
         initialized_ = true;
 
-        // 创建非阻塞 pipe 用于 post() 唤醒
+        // Create non-blocking pipe for post() wake
         if (::pipe2(pipe_fds_, O_NONBLOCK | O_CLOEXEC) < 0) {
             ::io_uring_queue_exit(&ring_);
             throw std::system_error(
                 errno, std::generic_category(), "pipe2 failed");
         }
-        // 提交对 pipe 读端的 read，用 wake_ov_ 作为哨兵
+        // Submit read on pipe read end, use wake_ov_ as sentinel
         submit_wake_read();
     }
 
@@ -76,11 +76,11 @@ public:
 
     void stop() override {
         stopped_.store(true, std::memory_order_relaxed);
-        // 提交一个 NOP 唤醒等待中的 io_uring_wait_cqe
+        // Submit a NOP to wake waiting io_uring_wait_cqe
         auto* sqe = ::io_uring_get_sqe(&ring_);
         if (sqe) {
             ::io_uring_prep_nop(sqe);
-            ::io_uring_sqe_set_data(sqe, nullptr);  // nullptr = stop 信号
+            ::io_uring_sqe_set_data(sqe, nullptr);  // nullptr = stop signal
             ::io_uring_submit(&ring_);
         }
     }
@@ -93,13 +93,13 @@ public:
         stopped_.store(false, std::memory_order_relaxed);
     }
 
-    /// 获取 SQE 并立即提交（兼容旧接口）
+    /// Get SQE and submit immediately (compatible with old interface)
     [[nodiscard]] auto get_sqe() -> ::io_uring_sqe* {
         return ::io_uring_get_sqe(&ring_);
     }
 
-    /// 获取 SQE 但不提交（延迟提交模式）
-    /// 调用者填充 SQE 后，run loop 会在下一轮自动 flush
+    /// Get SQE but don't submit (deferred submission mode)
+    /// After caller fills SQE, run loop will auto flush in next round
     [[nodiscard]] auto prepare_sqe() -> ::io_uring_sqe* {
         auto* sqe = ::io_uring_get_sqe(&ring_);
         if (sqe)
@@ -107,7 +107,7 @@ public:
         return sqe;
     }
 
-    /// 批量提交所有待提交的 SQE
+    /// Batch submit all pending SQEs
     [[nodiscard]] auto flush() -> std::expected<int, std::error_code> {
         if (pending_sqes_ == 0)
             return 0;
@@ -119,7 +119,7 @@ public:
         return ret;
     }
 
-    /// 立即提交 I/O 请求（兼容旧接口）
+    /// Submit I/O request immediately (compatible with old interface)
     [[nodiscard]] auto submit() -> std::expected<int, std::error_code> {
         pending_sqes_ = 0;
         int ret = ::io_uring_submit(&ring_);
@@ -139,13 +139,13 @@ private:
     static constexpr unsigned max_cqe_batch_ = 64;
 
     auto run_one_impl(bool blocking) -> std::size_t {
-        // 先刷新待提交的 SQE
+        // First flush pending SQEs
         if (pending_sqes_ > 0) {
             ::io_uring_submit(&ring_);
             pending_sqes_ = 0;
         }
 
-        // 阻塞等待至少一个 CQE
+        // Block waiting for at least one CQE
         if (blocking) {
             ::io_uring_cqe* cqe = nullptr;
             int ret = ::io_uring_wait_cqe(&ring_, &cqe);
@@ -153,7 +153,7 @@ private:
                 return 0;
         }
 
-        // 批量收割所有就绪 CQE
+        // Batch reap all ready CQEs
         ::io_uring_cqe* cqes[max_cqe_batch_];
         unsigned n = ::io_uring_peek_batch_cqe(&ring_, cqes, max_cqe_batch_);
         if (n == 0)
@@ -167,12 +167,12 @@ private:
             auto result = cqe->res;
 
             if (ov == nullptr) {
-                // NOP (stop 唤醒信号)
+                // NOP (stop wake signal)
                 continue;
             }
 
             if (ov == &wake_ov_) {
-                // pipe 唤醒哨兵 — drain post 队列并重新注册 pipe 读
+                // Pipe wake sentinel — drain post queue and re-register pipe read
                 char buf[64];
                 while (::read(pipe_fds_[0], buf, sizeof(buf)) > 0) {}
                 submit_wake_read();
@@ -186,7 +186,7 @@ private:
             ++handled;
         }
 
-        // 一次性推进 CQ head
+        // Advance CQ head in one go
         ::io_uring_cq_advance(&ring_, n);
         return handled;
     }
@@ -205,8 +205,8 @@ private:
     bool initialized_ = false;
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;
-    uring_overlapped wake_ov_{};  // 哨兵，不存协程
-    unsigned pending_sqes_ = 0;   // 待提交 SQE 计数
+    uring_overlapped wake_ov_{};  // Sentinel, no coroutine stored
+    unsigned pending_sqes_ = 0;   // Pending SQE count
 };
 
 } // namespace cnetmod

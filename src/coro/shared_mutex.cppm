@@ -1,18 +1,18 @@
 /**
  * @file shared_mutex.cppm
- * @brief 协程读写锁 — 不阻塞线程，支持并发读 + 独占写
+ * @brief Coroutine read-write lock — Non-blocking, supports concurrent reads + exclusive writes
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.coro.shared_mutex;
  *
  *   async_shared_mutex rw;
  *
- *   // 读锁 (多个协程可同时持有)
+ *   // Read lock (multiple coroutines can hold simultaneously)
  *   co_await rw.lock_shared();
  *   async_shared_lock_guard rg(rw, std::adopt_lock);
  *   // ... read ...
  *
- *   // 写锁 (独占)
+ *   // Write lock (exclusive)
  *   co_await rw.lock();
  *   async_unique_lock_guard wg(rw, std::adopt_lock);
  *   // ... write ...
@@ -28,13 +28,13 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// async_shared_mutex — 协程读写锁
+// async_shared_mutex — Coroutine read-write lock
 // =============================================================================
 
-/// 不阻塞线程的协程读写锁
-/// - lock_shared / unlock_shared: 读锁 (共享, 多个读者并发)
-/// - lock / unlock: 写锁 (独占)
-/// - 写者优先: 有写等待时新读者排队，防止写者饿死
+/// Non-blocking coroutine read-write lock
+/// - lock_shared / unlock_shared: Read lock (shared, multiple readers concurrent)
+/// - lock / unlock: Write lock (exclusive)
+/// - Writer priority: New readers queue when writers waiting, prevents writer starvation
 export class async_shared_mutex {
     struct waiter_node {
         std::coroutine_handle<> handle{};
@@ -49,7 +49,7 @@ public:
     auto operator=(const async_shared_mutex&) -> async_shared_mutex& = delete;
 
     // =========================================================================
-    // 共享读锁
+    // Shared read lock
     // =========================================================================
 
     struct [[nodiscard]] lock_shared_awaitable {
@@ -60,7 +60,7 @@ public:
 
         auto await_ready() noexcept -> bool {
             std::lock_guard lock(rw_.mtx_);
-            // 可以获取读锁: 没有写者持有、没有写者等待
+            // Can acquire read lock: no writer holding, no writer waiting
             if (rw_.state_ >= 0 && !rw_.write_head_) {
                 ++rw_.state_;
                 return true;
@@ -72,13 +72,13 @@ public:
             node_.handle = h;
             node_.next = nullptr;
             std::lock_guard lock(rw_.mtx_);
-            // 再次尝试
+            // Try again
             if (rw_.state_ >= 0 && !rw_.write_head_) {
                 ++rw_.state_;
                 h.resume();
                 return;
             }
-            // 加入读等待队列
+            // Add to read wait queue
             if (!rw_.read_tail_) {
                 rw_.read_head_ = rw_.read_tail_ = &node_;
             } else {
@@ -94,7 +94,7 @@ public:
         return lock_shared_awaitable{*this};
     }
 
-    /// 释放读锁
+    /// Release read lock
     void unlock_shared() noexcept {
         std::coroutine_handle<> to_resume;
         std::vector<std::coroutine_handle<>> readers_to_resume;
@@ -102,9 +102,9 @@ public:
             std::lock_guard lock(mtx_);
             --state_;
 
-            // 最后一个读者释放 → 尝试唤醒写者
+            // Last reader releases → try to wake writer
             if (state_ == 0 && write_head_) {
-                state_ = -1;  // 转为写锁
+                state_ = -1;  // Convert to write lock
                 auto* w = write_head_;
                 write_head_ = w->next;
                 if (!write_head_) write_tail_ = nullptr;
@@ -115,7 +115,7 @@ public:
     }
 
     // =========================================================================
-    // 独占写锁
+    // Exclusive write lock
     // =========================================================================
 
     struct [[nodiscard]] lock_awaitable {
@@ -137,13 +137,13 @@ public:
             node_.handle = h;
             node_.next = nullptr;
             std::lock_guard lock(rw_.mtx_);
-            // 再次尝试
+            // Try again
             if (rw_.state_ == 0) {
                 rw_.state_ = -1;
                 h.resume();
                 return;
             }
-            // 加入写等待队列
+            // Add to write wait queue
             if (!rw_.write_tail_) {
                 rw_.write_head_ = rw_.write_tail_ = &node_;
             } else {
@@ -159,7 +159,7 @@ public:
         return lock_awaitable{*this};
     }
 
-    /// 非协程上下文同步尝试获取写锁（非阻塞）
+    /// Non-coroutine context synchronous try to acquire write lock (non-blocking)
     [[nodiscard]] auto try_lock() noexcept -> bool {
         std::lock_guard lk(mtx_);
         if (state_ == 0) {
@@ -169,22 +169,22 @@ public:
         return false;
     }
 
-    /// 释放写锁
+    /// Release write lock
     void unlock() noexcept {
         std::coroutine_handle<> writer_to_resume;
         std::vector<std::coroutine_handle<>> readers_to_resume;
         {
             std::lock_guard lock(mtx_);
 
-            // 优先唤醒下一个写者 (锁传递)
+            // Prioritize waking next writer (lock handoff)
             if (write_head_) {
-                // state_ 保持 -1 (写锁直接移交)
+                // state_ remains -1 (write lock directly transferred)
                 auto* w = write_head_;
                 write_head_ = w->next;
                 if (!write_head_) write_tail_ = nullptr;
                 writer_to_resume = w->handle;
             } else if (read_head_) {
-                // 没有写者等待 → 唤醒所有读者
+                // No writer waiting → wake all readers
                 int count = 0;
                 while (read_head_) {
                     auto* r = read_head_;
@@ -198,7 +198,7 @@ public:
                 state_ = 0;
             }
         }
-        // 先 resume writer，或 resume 所有 readers
+        // Resume writer first, or resume all readers
         if (writer_to_resume) {
             writer_to_resume.resume();
         } else {
@@ -208,7 +208,7 @@ public:
     }
 
 private:
-    std::mutex mtx_;                     // 保护内部状态和等待队列
+    std::mutex mtx_;                     // Protect internal state and wait queues
     int state_ = 0;                      // 0=free, >0=N readers, -1=writer
 
     waiter_node* write_head_ = nullptr;
@@ -218,10 +218,10 @@ private:
 };
 
 // =============================================================================
-// async_shared_lock_guard — 读锁 RAII 守卫
+// async_shared_lock_guard — read lock RAII guard
 // =============================================================================
 
-/// 用法:
+/// Usage:
 ///   co_await rw.lock_shared();
 ///   async_shared_lock_guard guard(rw, std::adopt_lock);
 export class async_shared_lock_guard {
@@ -254,10 +254,10 @@ private:
 };
 
 // =============================================================================
-// async_unique_lock_guard — 写锁 RAII 守卫
+// async_unique_lock_guard — write lock RAII guard
 // =============================================================================
 
-/// 用法:
+/// Usage:
 ///   co_await rw.lock();
 ///   async_unique_lock_guard guard(rw, std::adopt_lock);
 export class async_unique_lock_guard {

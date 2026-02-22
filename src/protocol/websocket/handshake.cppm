@@ -13,7 +13,7 @@ import cnetmod.protocol.http;
 namespace cnetmod::ws {
 
 // =============================================================================
-// WebSocket 握手常量
+// WebSocket Handshake Constants
 // =============================================================================
 
 namespace detail {
@@ -23,10 +23,10 @@ inline constexpr std::string_view ws_guid = "258EAFA5-E914-47DA-95CA-5AB5DC58718
 } // namespace detail
 
 // =============================================================================
-// 握手辅助函数
+// Handshake Helper Functions
 // =============================================================================
 
-/// 生成随机的 Sec-WebSocket-Key（16 字节随机数的 base64）
+/// Generate random Sec-WebSocket-Key (base64 of 16 random bytes)
 export auto generate_sec_key() -> std::string {
     std::array<std::byte, 16> raw{};
     static thread_local std::mt19937 rng{std::random_device{}()};
@@ -36,7 +36,7 @@ export auto generate_sec_key() -> std::string {
     return detail::base64_encode(raw);
 }
 
-/// 计算 Sec-WebSocket-Accept 值
+/// Compute Sec-WebSocket-Accept value
 /// accept = base64(SHA1(key + GUID))
 export auto compute_accept_key(std::string_view sec_key) -> std::string {
     std::string concat;
@@ -49,10 +49,10 @@ export auto compute_accept_key(std::string_view sec_key) -> std::string {
 }
 
 // =============================================================================
-// 客户端握手
+// Client Handshake
 // =============================================================================
 
-/// 构建 WebSocket 升级请求
+/// Build WebSocket upgrade request
 export auto build_upgrade_request(std::string_view host, std::string_view path,
                                   std::string_view sec_key,
                                   std::string_view subprotocol = {},
@@ -74,7 +74,7 @@ export auto build_upgrade_request(std::string_view host, std::string_view path,
     return req;
 }
 
-/// 验证服务端的升级响应
+/// Validate server upgrade response
 export auto validate_upgrade_response(const http::response_parser& resp,
                                       std::string_view expected_accept)
     -> std::expected<void, std::error_code>
@@ -82,11 +82,11 @@ export auto validate_upgrade_response(const http::response_parser& resp,
     if (resp.status_code() != 101)
         return std::unexpected(make_error_code(ws_errc::handshake_failed));
 
-    // 检查 Upgrade: websocket (大小写不敏感)
+    // Check Upgrade: websocket (case-insensitive)
     auto upgrade = resp.get_header("Upgrade");
     bool upgrade_ok = false;
     if (upgrade.size() == 9) {
-        // 手动大小写不敏感比较
+        // Manual case-insensitive comparison
         std::string lower;
         lower.reserve(upgrade.size());
         for (auto c : upgrade)
@@ -96,7 +96,7 @@ export auto validate_upgrade_response(const http::response_parser& resp,
     if (!upgrade_ok)
         return std::unexpected(make_error_code(ws_errc::handshake_failed));
 
-    // 检查 Connection: Upgrade
+    // Check Connection: Upgrade
     auto connection = resp.get_header("Connection");
     bool conn_ok = false;
     if (!connection.empty()) {
@@ -109,7 +109,7 @@ export auto validate_upgrade_response(const http::response_parser& resp,
     if (!conn_ok)
         return std::unexpected(make_error_code(ws_errc::handshake_failed));
 
-    // 检查 Sec-WebSocket-Accept
+    // Check Sec-WebSocket-Accept
     auto accept = resp.get_header("Sec-WebSocket-Accept");
     if (accept != expected_accept)
         return std::unexpected(make_error_code(ws_errc::handshake_failed));
@@ -118,18 +118,18 @@ export auto validate_upgrade_response(const http::response_parser& resp,
 }
 
 // =============================================================================
-// 服务端握手
+// Server Handshake
 // =============================================================================
 
-/// 验证客户端的 WebSocket 升级请求，返回 accept key
+/// Validate client WebSocket upgrade request, return accept key
 export auto validate_upgrade_request(const http::request_parser& req)
     -> std::expected<std::string, std::error_code>
 {
-    // 必须是 GET
+    // Must be GET
     if (req.method() != "GET")
         return std::unexpected(make_error_code(ws_errc::handshake_failed));
 
-    // 必须是 HTTP/1.1
+    // Must be HTTP/1.1
     if (req.version() != http::http_version::http_1_1)
         return std::unexpected(make_error_code(ws_errc::handshake_failed));
 
@@ -144,7 +144,7 @@ export auto validate_upgrade_request(const http::request_parser& req)
             return std::unexpected(make_error_code(ws_errc::handshake_failed));
     }
 
-    // Connection 包含 "Upgrade"
+    // Connection contains "Upgrade"
     auto connection = req.get_header("Connection");
     {
         std::string lower;
@@ -168,7 +168,7 @@ export auto validate_upgrade_request(const http::request_parser& req)
     return compute_accept_key(sec_key);
 }
 
-/// 构建服务端的 WebSocket 升级响应
+/// Build server WebSocket upgrade response
 export auto build_upgrade_response(std::string_view accept_key,
                                    std::string_view subprotocol = {})
     -> http::response

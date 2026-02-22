@@ -9,7 +9,7 @@ import std;
 namespace cnetmod::ws::detail {
 
 // =============================================================================
-// Base64 编解码
+// Base64 Encoding/Decoding
 // =============================================================================
 
 namespace {
@@ -33,7 +33,7 @@ constexpr auto find_base64_index(unsigned char c) noexcept -> unsigned char {
 
 } // anonymous namespace
 
-/// Base64 编码
+/// Base64 encoding
 export auto base64_encode(const void* input, std::size_t len) -> std::string {
     std::string ret;
     ret.reserve(((len + 2) / 3) * 4);
@@ -69,12 +69,12 @@ export auto base64_encode(const void* input, std::size_t len) -> std::string {
     return ret;
 }
 
-/// Base64 编码 (span 版本)
+/// Base64 encoding (span version)
 export auto base64_encode(std::span<const std::byte> input) -> std::string {
     return base64_encode(input.data(), input.size());
 }
 
-/// Base64 解码
+/// Base64 decoding
 export auto base64_decode(std::string_view input) -> std::vector<std::byte> {
     auto in_len = input.size();
     int i = 0;

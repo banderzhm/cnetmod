@@ -10,7 +10,7 @@ import :orm_mapper;
 namespace cnetmod::mysql::orm {
 
 // =============================================================================
-// select_builder<T> — SELECT 查询构建器
+// select_builder<T> — SELECT query builder
 // =============================================================================
 
 export template <Model T>
@@ -18,19 +18,19 @@ class select_builder {
 public:
     select_builder() = default;
 
-    /// 自定义 SELECT 列（默认从 meta 生成全列）
+    /// Custom SELECT columns (default generates all columns from meta)
     auto columns(std::string_view cols) -> select_builder& {
         custom_cols_ = cols;
         return *this;
     }
 
-    /// WHERE 子句（原始 SQL）
+    /// WHERE clause (raw SQL)
     auto where(std::string_view clause) -> select_builder& {
         where_ = clause;
         return *this;
     }
 
-    /// WHERE 子句 + format_sql 参数
+    /// WHERE clause + format_sql parameters
     auto where(std::string_view fmt,
                std::initializer_list<param_value> args) -> select_builder& {
         where_fmt_ = fmt;
@@ -38,7 +38,7 @@ public:
         return *this;
     }
 
-    /// WHERE 子句 + vector 参数
+    /// WHERE clause + vector parameters
     auto where(std::string_view fmt,
                std::vector<param_value> args) -> select_builder& {
         where_fmt_ = fmt;
@@ -61,7 +61,7 @@ public:
         return *this;
     }
 
-    /// 生成最终 SQL
+    /// Generate final SQL
     [[nodiscard]] auto build_sql(
         const format_options& opts = {}
     ) const -> std::string
@@ -69,7 +69,7 @@ public:
         auto& meta = model_traits<T>::meta();
         std::string sql = "SELECT ";
 
-        // 列列表
+        // Column list
         if (!custom_cols_.empty()) {
             sql.append(custom_cols_);
         } else {
@@ -127,31 +127,31 @@ private:
     std::size_t              offset_ = 0;
 };
 
-/// 工厂函数
+/// Factory function
 export template <Model T>
 auto select() -> select_builder<T> { return {}; }
 
 // =============================================================================
-// insert_builder<T> — INSERT 构建器
+// insert_builder<T> — INSERT builder
 // =============================================================================
 
 export template <Model T>
 class insert_builder {
 public:
-    /// 设置要插入的模型
+    /// Set the model to insert
     auto values(const T& model) -> insert_builder& {
         models_.clear();
         models_.push_back(model);
         return *this;
     }
 
-    /// 批量插入
+    /// Batch insert
     auto values(std::span<const T> models) -> insert_builder& {
         models_.assign(models.begin(), models.end());
         return *this;
     }
 
-    /// 生成 SQL + params
+    /// Generate SQL + params
     struct built_sql {
         std::string              sql;
         std::vector<param_value> params;
@@ -165,7 +165,7 @@ public:
         sql.append(meta.table_name);
         sql.append("` (");
 
-        // 列名
+        // Column names
         for (std::size_t i = 0; i < ins_fields.size(); ++i) {
             if (i > 0) sql.append(", ");
             sql.push_back('`');
@@ -176,7 +176,7 @@ public:
 
         std::vector<param_value> params;
 
-        // 每行一组 (?, ?, ...)
+        // One group (?, ?, ...) per row
         for (std::size_t m = 0; m < models_.size(); ++m) {
             if (m > 0) sql.append(", ");
             sql.push_back('(');
@@ -188,7 +188,7 @@ public:
             sql.push_back(')');
         }
 
-        // format_sql 展开占位符
+        // format_sql expands placeholders
         auto final_sql = format_sql(opts, sql, params);
         return {final_sql ? std::move(*final_sql) : sql, std::move(params)};
     }
@@ -197,18 +197,18 @@ private:
     std::vector<T> models_;
 };
 
-/// 工厂函数
+/// Factory function
 export template <Model T>
 auto insert_of() -> insert_builder<T> { return {}; }
 
 // =============================================================================
-// update_builder<T> — UPDATE 构建器
+// update_builder<T> — UPDATE builder
 // =============================================================================
 
 export template <Model T>
 class update_builder {
 public:
-    /// 按模型 PK 更新所有非 PK 字段
+    /// Update all non-PK fields by model PK
     auto set(const T& model) -> update_builder& {
         model_ = model;
         has_model_ = true;
@@ -262,7 +262,7 @@ public:
             sql.append(" WHERE ");
             sql.append(where_);
         } else if (has_model_) {
-            // 默认按 PK
+            // Default by PK
             auto* pk = meta.pk();
             if (pk) {
                 sql.append(" WHERE `");
@@ -284,12 +284,12 @@ private:
     std::vector<param_value> where_args_;
 };
 
-/// 工厂函数
+/// Factory function
 export template <Model T>
 auto update_of() -> update_builder<T> { return {}; }
 
 // =============================================================================
-// delete_builder<T> — DELETE 构建器
+// delete_builder<T> — DELETE builder
 // =============================================================================
 
 export template <Model T>
@@ -347,15 +347,15 @@ private:
     std::vector<param_value> where_args_;
 };
 
-/// 工厂函数
+/// Factory function
 export template <Model T>
 auto delete_of() -> delete_builder<T> { return {}; }
 
 // =============================================================================
-// DDL 生成
+// DDL generation
 // =============================================================================
 
-/// 生成 CREATE TABLE IF NOT EXISTS SQL
+/// Generate CREATE TABLE IF NOT EXISTS SQL
 export template <Model T>
 auto build_create_table_sql() -> std::string {
     auto& meta = model_traits<T>::meta();
@@ -373,7 +373,7 @@ auto build_create_table_sql() -> std::string {
         sql.append(f.col.column_name);
         sql.append("` ");
 
-        // UUID 主键强制 CHAR(36)
+        // UUID primary key forced to CHAR(36)
         if (f.col.is_uuid())
             sql.append("CHAR(36)");
         else
@@ -388,7 +388,7 @@ auto build_create_table_sql() -> std::string {
             sql.append(" DEFAULT NULL");
         }
 
-        // 仅 auto_increment 策略才加 AUTO_INCREMENT
+        // Only add AUTO_INCREMENT for auto_increment strategy
         if (f.col.is_auto() && f.col.strategy != id_strategy::uuid
                             && f.col.strategy != id_strategy::snowflake)
             sql.append(" AUTO_INCREMENT");
@@ -404,7 +404,7 @@ auto build_create_table_sql() -> std::string {
     return sql;
 }
 
-/// 生成 DROP TABLE IF EXISTS SQL
+/// Generate DROP TABLE IF EXISTS SQL
 export template <Model T>
 auto build_drop_table_sql() -> std::string {
     auto& meta = model_traits<T>::meta();

@@ -2,8 +2,8 @@ module;
 
 #include <cnetmod/config.hpp>
 
-// epoll 仅在有 epoll 且无 io_uring 时作为 async_op 后端
-// 当 io_uring 可用时，优先使用 io_uring
+// epoll is only used as async_op backend when epoll is available but io_uring is not
+// When io_uring is available, io_uring is preferred
 #if defined(CNETMOD_HAS_EPOLL) && !defined(CNETMOD_HAS_IO_URING)
 
 #include <sys/epoll.h>
@@ -29,22 +29,22 @@ namespace cnetmod {
 #if defined(CNETMOD_HAS_EPOLL) && !defined(CNETMOD_HAS_IO_URING)
 
 // =============================================================================
-// 辅助
+// Helper Functions
 // =============================================================================
 
 namespace {
 
 // =============================================================================
-// epoll awaiter — readiness 通知
+// epoll awaiter — Readiness Notification
 // =============================================================================
 
-/// 注册 fd 到 epoll，就绪时恢复协程
-/// 使用 EPOLLONESHOT 确保单次触发
+/// Register fd to epoll, resume coroutine when ready
+/// Use EPOLLONESHOT to ensure single trigger
 struct epoll_awaiter {
     epoll_context& ctx;
     int fd;
-    uint32_t events;               // EPOLLIN 或 EPOLLOUT
-    std::error_code sync_error{};  // 注册失败时的同步错误
+    uint32_t events;               // EPOLLIN or EPOLLOUT
+    std::error_code sync_error{};  // Synchronous error on registration failure
 
     auto await_ready() const noexcept -> bool { return false; }
 
@@ -53,7 +53,7 @@ struct epoll_awaiter {
                          reinterpret_cast<void*>(h.address()));
         if (!r) {
             sync_error = r.error();
-            return false;  // 注册失败，不挂起
+            return false;  // Registration failed, don't suspend
         }
         return true;
     }
@@ -91,10 +91,10 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
 }
 
 // =============================================================================
-// epoll cancel 版 awaiter
+// epoll Cancel Version Awaiter
 // =============================================================================
 
-/// cancel_fn_：从 epoll 删除 fd，然后 post 协程恢复
+/// cancel_fn_: Remove fd from epoll, then post coroutine resume
 static void epoll_cancel_fn(cancel_token& token) noexcept {
     auto* ep = static_cast<epoll_context*>(token.ctx_);
     ep->remove(token.fd_);
@@ -102,8 +102,8 @@ static void epoll_cancel_fn(cancel_token& token) noexcept {
         ep->post(token.coroutine_);
 }
 
-/// 带取消支持的 epoll awaiter
-/// 注册 fd 到 epoll，就绪或取消时恢复协程
+/// epoll awaiter with cancel support
+/// Register fd to epoll, resume coroutine on ready or cancel
 struct epoll_cancel_awaiter {
     epoll_context& ctx;
     int fd;
@@ -121,7 +121,7 @@ struct epoll_cancel_awaiter {
             return false;
         }
 
-        // 写入 cancel 信息
+        // Write cancel info
         token.ctx_ = &ctx;
         token.fd_ = fd;
         token.coroutine_ = h;
@@ -136,7 +136,7 @@ struct epoll_cancel_awaiter {
 
         token.pending_.store(true, std::memory_order_release);
 
-        // 双重检查：设置 pending 后再检查 cancelled
+        // Double check: check cancelled again after setting pending
         if (token.is_cancelled()) {
             token.pending_.store(false, std::memory_order_relaxed);
             ctx.remove(fd);
@@ -167,7 +167,7 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
 } // anonymous namespace
 
 // =============================================================================
-// 异步网络操作 — epoll (readiness-based)
+// Async Network Operations — epoll (readiness-based)
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener)
@@ -175,13 +175,13 @@ auto async_accept(io_context& ctx, socket& listener)
 {
     auto& epoll = static_cast<epoll_context&>(ctx);
 
-    // 等待监听 socket 可读（有新连接就绪）
+    // Wait for listening socket to be readable (new connection ready)
     epoll_awaiter aw{epoll, static_cast<int>(listener.native_handle()), EPOLLIN};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
 
-    // 就绪后执行 accept4
+    // Execute accept4 after ready
     int fd = ::accept4(static_cast<int>(listener.native_handle()),
                        nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
     if (fd < 0)
@@ -206,13 +206,13 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     if (errno != EINPROGRESS)
         co_return std::unexpected(last_error());
 
-    // 等待 socket 可写（连接完成）
+    // Wait for socket to be writable (connection complete)
     epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
 
-    // 检查连接结果
+    // Check connection result
     int so_error = 0;
     ::socklen_t len = sizeof(so_error);
     ::getsockopt(static_cast<int>(sock.native_handle()),
@@ -228,7 +228,7 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
 {
     auto& epoll = static_cast<epoll_context&>(ctx);
 
-    // 等待 socket 可读
+    // Wait for socket to be readable
     epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLIN};
     co_await aw;
     if (aw.sync_error)
@@ -249,7 +249,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 {
     auto& epoll = static_cast<epoll_context&>(ctx);
 
-    // 等待 socket 可写
+    // Wait for socket to be writable
     epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
     co_await aw;
     if (aw.sync_error)
@@ -264,8 +264,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 }
 
 // =============================================================================
-// 异步文件操作 — epoll (同步包装)
-// epoll 不支持常规文件异步 I/O，使用 pread/pwrite 同步执行
+// Async File Operations — epoll (synchronous wrapper)
+// epoll does not support async I/O for regular files, using pread/pwrite synchronously
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -305,7 +305,7 @@ auto async_file_flush(io_context& ctx, file& f)
 }
 
 // =============================================================================
-// 异步串口操作 — epoll (串口 fd 支持 epoll 事件)
+// Async Serial Port Operations — epoll (serial fd supports epoll events)
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
@@ -345,7 +345,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 }
 
 // =============================================================================
-// 异步定时器 — epoll (timerfd)
+// Async Timer — epoll (timerfd)
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -363,7 +363,7 @@ auto async_timer_wait(io_context& ctx,
     its.it_value.tv_sec = static_cast<time_t>(ns / 1000000000LL);
     its.it_value.tv_nsec = static_cast<long>(ns % 1000000000LL);
     if (its.it_value.tv_sec == 0 && its.it_value.tv_nsec == 0)
-        its.it_value.tv_nsec = 1;  // 最小 1ns
+        its.it_value.tv_nsec = 1;  // Minimum 1ns
 
     if (::timerfd_settime(tfd, 0, &its, nullptr) < 0) {
         auto ec = last_error();
@@ -374,7 +374,7 @@ auto async_timer_wait(io_context& ctx,
     epoll_awaiter aw{ep, tfd, EPOLLIN};
     co_await aw;
 
-    // 读取 timerfd 清除定时器
+    // Read timerfd to clear timer
     std::uint64_t exp = 0;
     ::read(tfd, &exp, sizeof(exp));
     ::close(tfd);
@@ -386,7 +386,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 可取消版本 — 异步网络操作
+// Cancellable Version — Async Network Operations
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
@@ -504,7 +504,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步文件操作（同步包装，cancel 仅前置检查）
+// Cancellable Version — Async File Operations (synchronous wrapper, cancel only pre-checks)
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -536,7 +536,7 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步串口操作
+// Cancellable Version — Async Serial Port Operations
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
@@ -590,7 +590,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步定时器
+// Cancellable Version — Async Timer
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -636,7 +636,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 异步 UDP I/O — epoll
+// Async UDP I/O — epoll
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,
@@ -685,7 +685,7 @@ auto async_sendto(io_context& ctx, socket& sock,
 }
 
 // =============================================================================
-// 可取消版本 — 异步 UDP I/O
+// Cancellable Version — Async UDP I/O
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,

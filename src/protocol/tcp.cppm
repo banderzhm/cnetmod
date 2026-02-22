@@ -17,8 +17,8 @@ namespace cnetmod::tcp {
 // TCP Acceptor
 // =============================================================================
 
-/// TCP 连接接受器
-/// 用于监听端口并接受传入连接
+/// TCP connection acceptor
+/// Used to listen on a port and accept incoming connections
 export class acceptor {
 public:
     explicit acceptor(io_context& ctx)
@@ -26,34 +26,34 @@ public:
 
     ~acceptor() = default;
 
-    // 不可复制
+    // Non-copyable
     acceptor(const acceptor&) = delete;
     auto operator=(const acceptor&) -> acceptor& = delete;
 
-    // 可移动
+    // Movable
     acceptor(acceptor&&) noexcept = default;
     auto operator=(acceptor&&) noexcept -> acceptor& = default;
 
-    /// 打开并绑定到指定端点
+    /// Open and bind to specified endpoint
     [[nodiscard]] auto open(const endpoint& ep, const socket_options& opts = {})
         -> std::expected<void, std::error_code>;
 
-    /// 关闭 acceptor
+    /// Close acceptor
     void close() noexcept {
         socket_.close();
     }
 
-    /// 是否打开
+    /// Check if open
     [[nodiscard]] auto is_open() const noexcept -> bool {
         return socket_.is_open();
     }
 
-    /// 获取底层 socket
+    /// Get underlying socket
     [[nodiscard]] auto native_socket() noexcept -> socket& {
         return socket_;
     }
 
-    /// 获取关联的 io_context
+    /// Get associated io_context
     [[nodiscard]] auto context() noexcept -> io_context& {
         return *ctx_;
     }
@@ -67,8 +67,8 @@ private:
 // TCP Connection
 // =============================================================================
 
-/// TCP 连接
-/// 表示一个已建立的 TCP 连接
+/// TCP connection
+/// Represents an established TCP connection
 export class connection {
 public:
     explicit connection(io_context& ctx)
@@ -79,36 +79,36 @@ public:
 
     ~connection() = default;
 
-    // 不可复制
+    // Non-copyable
     connection(const connection&) = delete;
     auto operator=(const connection&) -> connection& = delete;
 
-    // 可移动
+    // Movable
     connection(connection&&) noexcept = default;
     auto operator=(connection&&) noexcept -> connection& = default;
 
-    /// 获取远程端点
+    /// Get remote endpoint
     [[nodiscard]] auto remote_endpoint() const -> std::expected<endpoint, std::error_code>;
 
-    /// 获取本地端点
+    /// Get local endpoint
     [[nodiscard]] auto local_endpoint() const -> std::expected<endpoint, std::error_code>;
 
-    /// 关闭连接
+    /// Close connection
     void close() noexcept {
         socket_.close();
     }
 
-    /// 是否打开
+    /// Check if open
     [[nodiscard]] auto is_open() const noexcept -> bool {
         return socket_.is_open();
     }
 
-    /// 获取底层 socket
+    /// Get underlying socket
     [[nodiscard]] auto native_socket() noexcept -> socket& {
         return socket_;
     }
 
-    /// 获取关联的 io_context
+    /// Get associated io_context
     [[nodiscard]] auto context() noexcept -> io_context& {
         return *ctx_;
     }

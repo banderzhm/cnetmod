@@ -25,7 +25,7 @@ import cnetmod.core.ssl;
 namespace cnetmod::ws {
 
 // =============================================================================
-// WebSocket 连接选项
+// WebSocket Connection Options
 // =============================================================================
 
 export struct connect_options {
@@ -38,7 +38,7 @@ export struct connect_options {
 };
 
 // =============================================================================
-// ws::connection — 异步 WebSocket 连接
+// ws::connection — Async WebSocket Connection
 // =============================================================================
 
 export class connection {
@@ -48,11 +48,11 @@ public:
 
     ~connection() { close_socket(); }
 
-    // 不可复制
+    // Non-copyable
     connection(const connection&) = delete;
     auto operator=(const connection&) -> connection& = delete;
 
-    // 可移动
+    // Movable
     connection(connection&& o) noexcept
         : ctx_(o.ctx_)
         , sock_(std::move(o.sock_))
@@ -69,10 +69,10 @@ public:
     {}
 
     // =========================================================================
-    // 客户端：连接到 WebSocket 服务器
+    // Client: Connect to WebSocket Server
     // =========================================================================
 
-    /// 连接到 ws:// 或 wss:// URL
+    /// Connect to ws:// or wss:// URL
     auto async_connect(std::string_view url_str,
                        const connect_options& opts = {})
         -> task<std::expected<void, std::error_code>>
@@ -89,7 +89,7 @@ public:
         }
 #endif
 
-        // TCP 连接
+        // TCP connection
         auto addr_r = ip_address::from_string(u.host);
         if (!addr_r)
             co_return std::unexpected(make_error_code(errc::host_not_found));
@@ -131,11 +131,11 @@ public:
         }
 #endif
 
-        // WebSocket 握手
+        // WebSocket handshake
         auto sec_key = generate_sec_key();
         auto expected_accept = compute_accept_key(sec_key);
 
-        // Host header 含端口（非默认端口时）
+        // Host header with port (for non-default ports)
         std::string host_header = u.host;
         if ((u.scheme == "ws" && u.port != 80) ||
             (u.scheme == "wss" && u.port != 443)) {
@@ -149,7 +149,7 @@ public:
         auto wr = co_await async_write_all(req_data.data(), req_data.size());
         if (!wr) { close_socket(); co_return std::unexpected(wr.error()); }
 
-        // 读取响应
+        // Read response
         http::response_parser resp_parser;
         while (!resp_parser.ready()) {
             auto buf = recv_buf_.prepare(4096);
@@ -180,16 +180,16 @@ public:
     }
 
     // =========================================================================
-    // 服务端：接受 WebSocket 升级
+    // Server: Accept WebSocket Upgrade
     // =========================================================================
 
-    /// 在已接受的 TCP socket 上执行 WebSocket 握手
+    /// Perform WebSocket handshake on accepted TCP socket
     auto async_accept(socket client_sock)
         -> task<std::expected<void, std::error_code>>
     {
         sock_ = std::move(client_sock);
 
-        // 读取客户端的 HTTP 升级请求
+        // Read client HTTP upgrade request
         http::request_parser req_parser;
         while (!req_parser.ready()) {
             auto buf = recv_buf_.prepare(4096);
@@ -229,7 +229,7 @@ public:
     }
 
 #ifdef CNETMOD_HAS_SSL
-    /// 在已接受的 TCP socket 上执行 TLS + WebSocket 握手（服务端）
+    /// Perform TLS + WebSocket handshake on accepted TCP socket (server-side)
     auto async_accept_tls(socket client_sock, ssl_context& ssl_ctx)
         -> task<std::expected<void, std::error_code>>
     {
@@ -242,7 +242,7 @@ public:
         if (!hs) { close_socket(); co_return std::unexpected(hs.error()); }
         secure_ = true;
 
-        // 然后执行 WebSocket 握手（复用 async_accept 的逻辑）
+        // Then perform WebSocket handshake (reuse async_accept logic)
         http::request_parser req_parser;
         while (!req_parser.ready()) {
             auto buf = recv_buf_.prepare(4096);
@@ -283,10 +283,10 @@ public:
 #endif
 
     // =========================================================================
-    // 发送
+    // Send
     // =========================================================================
 
-    /// 发送文本消息
+    /// Send text message
     auto async_send_text(std::string_view text)
         -> task<std::expected<void, std::error_code>>
     {
@@ -294,21 +294,21 @@ public:
             std::span{reinterpret_cast<const std::byte*>(text.data()), text.size()});
     }
 
-    /// 发送二进制消息
+    /// Send binary message
     auto async_send_binary(std::span<const std::byte> data)
         -> task<std::expected<void, std::error_code>>
     {
         co_return co_await async_send(opcode::binary, data);
     }
 
-    /// 发送 ping
+    /// Send ping
     auto async_ping(std::span<const std::byte> payload = {})
         -> task<std::expected<void, std::error_code>>
     {
         co_return co_await async_send(opcode::ping, payload);
     }
 
-    /// 发送通用帧
+    /// Send generic frame
     auto async_send(opcode op, std::span<const std::byte> payload)
         -> task<std::expected<void, std::error_code>>
     {
@@ -317,17 +317,17 @@ public:
         if (close_sent_)
             co_return std::unexpected(make_error_code(ws_errc::already_closed));
 
-        bool do_mask = !is_server_; // 客户端必须 mask
+        bool do_mask = !is_server_; // Client must mask
         auto frame_data = build_frame(op, payload, do_mask);
         co_return co_await async_write_all(
             reinterpret_cast<const char*>(frame_data.data()), frame_data.size());
     }
 
     // =========================================================================
-    // 接收
+    // Receive
     // =========================================================================
 
-    /// 接收一条完整的 WebSocket 消息（自动处理分片、ping/pong、close）
+    /// Receive a complete WebSocket message (auto-handles fragmentation, ping/pong, close)
     auto async_recv() -> task<std::expected<ws_message, std::error_code>> {
         if (!connected_)
             co_return std::unexpected(make_error_code(ws_errc::not_connected));
@@ -336,13 +336,13 @@ public:
         bool first_frame = true;
 
         for (;;) {
-            // 确保 recv_buf_ 有数据
+            // Ensure recv_buf_ has data
             auto readable = recv_buf_.data();
             auto hdr_r = parse_frame_header(
                 std::span{static_cast<const std::byte*>(readable.data), readable.size});
 
             if (!hdr_r && hdr_r.error() == make_error_code(ws_errc::need_more_data)) {
-                // 读取更多数据
+                // Read more data
                 auto buf = recv_buf_.prepare(4096);
                 auto rd = co_await async_read_some(
                     static_cast<char*>(buf.data), buf.size);
@@ -360,7 +360,7 @@ public:
             auto& [hdr, hdr_size] = *hdr_r;
             auto total_frame = hdr_size + hdr.payload_length;
 
-            // 确保完整帧可用
+            // Ensure complete frame is available
             while (recv_buf_.readable_bytes() < total_frame) {
                 auto buf = recv_buf_.prepare(4096);
                 auto rd = co_await async_read_some(
@@ -373,7 +373,7 @@ public:
                 recv_buf_.commit(*rd);
             }
 
-            // 提取 payload
+            // Extract payload
             readable = recv_buf_.data();
             auto payload_ptr = static_cast<const std::byte*>(readable.data) + hdr_size;
             std::vector<std::byte> payload_data(
@@ -385,21 +385,21 @@ public:
 
             recv_buf_.consume(total_frame);
 
-            // 处理控制帧
+            // Handle control frames
             if (is_control(hdr.op)) {
                 co_await handle_control_frame(hdr, payload_data);
                 if (hdr.op == opcode::close) {
                     close_received_ = true;
-                    // 构建 close 消息返回
+                    // Build close message to return
                     ws_message close_msg;
                     close_msg.op = opcode::close;
                     close_msg.payload = std::move(payload_data);
                     co_return close_msg;
                 }
-                continue; // ping/pong 已处理，继续读
+                continue; // ping/pong already handled, continue reading
             }
 
-            // 数据帧
+            // Data frame
             if (first_frame) {
                 msg.op = hdr.op;
                 first_frame = false;
@@ -411,15 +411,15 @@ public:
             if (hdr.fin) {
                 co_return msg;
             }
-            // 否则继续读取 continuation 帧
+            // Otherwise continue reading continuation frames
         }
     }
 
     // =========================================================================
-    // 关闭
+    // Close
     // =========================================================================
 
-    /// 发送 close 帧并等待对端回复
+    /// Send close frame and wait for peer reply
     auto async_close(std::uint16_t code = close_code::normal,
                      std::string_view reason = "")
         -> task<std::expected<void, std::error_code>>
@@ -438,10 +438,10 @@ public:
 
         close_sent_ = true;
 
-        // 如果对端还没发 close，等待
+        // If peer hasn't sent close yet, wait for it
         if (!close_received_) {
             auto msg = co_await async_recv();
-            // 不管成功失败，连接都该关了
+            // Regardless of success/failure, connection should close
         }
 
 #ifdef CNETMOD_HAS_SSL
@@ -455,11 +455,11 @@ public:
     }
 
     // =========================================================================
-    // 附加已完成握手的 socket（供 ws::server 使用）
+    // Attach Already-Handshaked Socket (for ws::server use)
     // =========================================================================
 
-    /// 将已完成 WebSocket 握手的 socket 附加到此 connection
-    /// 调用后可直接使用 async_send_*/async_recv/async_close
+    /// Attach a socket that has completed WebSocket handshake to this connection
+    /// After calling, can directly use async_send_*/async_recv/async_close
     void attach(socket sock, bool as_server = true) noexcept {
         close_socket();
         sock_ = std::move(sock);
@@ -470,17 +470,17 @@ public:
     }
 
     // =========================================================================
-    // 取消令牌支持（配合 with_timeout 使用）
+    // Cancel Token Support (for use with with_timeout)
     // =========================================================================
 
-    /// 设置取消令牌，后续内部 I/O 操作将使用此令牌
+    /// Set cancel token, subsequent internal I/O operations will use this token
     void set_cancel_token(cancel_token* t) noexcept { cancel_token_ = t; }
 
-    /// 清除取消令牌
+    /// Clear cancel token
     void clear_cancel_token() noexcept { cancel_token_ = nullptr; }
 
     // =========================================================================
-    // 状态查询
+    // State Query
     // =========================================================================
 
     [[nodiscard]] auto is_open() const noexcept -> bool { return connected_; }
@@ -491,10 +491,10 @@ public:
 
 private:
     // =========================================================================
-    // 内部辅助
+    // Internal Helpers
     // =========================================================================
 
-    /// 读取（根据 secure_ / cancel_token_ 分发）
+    /// Read (dispatch based on secure_ / cancel_token_)
     auto async_read_some(char* buf, std::size_t len)
         -> task<std::expected<std::size_t, std::error_code>>
     {
@@ -511,7 +511,7 @@ private:
             mutable_buffer{buf, len});
     }
 
-    /// 写入全部数据
+    /// Write all data
     auto async_write_all(const char* data, std::size_t len)
         -> task<std::expected<void, std::error_code>>
     {
@@ -541,19 +541,19 @@ private:
         co_return {};
     }
 
-    /// 处理控制帧（ping → auto pong, close → auto reply）
+    /// Handle control frames (ping → auto pong, close → auto reply)
     auto handle_control_frame(const frame_header& hdr,
                               const std::vector<std::byte>& payload)
         -> task<void>
     {
         if (hdr.op == opcode::ping) {
-            // 自动回复 pong
+            // Auto-reply with pong
             bool do_mask = !is_server_;
             auto pong = build_frame(opcode::pong, payload, do_mask);
             (void)co_await async_write_all(
                 reinterpret_cast<const char*>(pong.data()), pong.size());
         } else if (hdr.op == opcode::close && !close_sent_) {
-            // 自动回复 close
+            // Auto-reply with close
             bool do_mask = !is_server_;
             auto close_reply = build_frame(opcode::close, payload, do_mask);
             (void)co_await async_write_all(

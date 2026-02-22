@@ -10,10 +10,10 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// 基础缓冲区视图
+// Basic buffer views
 // =============================================================================
 
-/// 只读缓冲区视图（不拥有数据）
+/// Read-only buffer view (does not own data)
 export struct const_buffer {
     const void* data = nullptr;
     std::size_t size = 0;
@@ -22,12 +22,12 @@ export struct const_buffer {
     constexpr const_buffer(const void* p, std::size_t n) noexcept
         : data(p), size(n) {}
 
-    /// 从 span 构造
+    /// Construct from span
     constexpr const_buffer(std::span<const std::byte> s) noexcept
         : data(s.data()), size(s.size()) {}
 };
 
-/// 可写缓冲区视图（不拥有数据）
+/// Writable buffer view (does not own data)
 export struct mutable_buffer {
     void* data = nullptr;
     std::size_t size = 0;
@@ -36,56 +36,56 @@ export struct mutable_buffer {
     constexpr mutable_buffer(void* p, std::size_t n) noexcept
         : data(p), size(n) {}
 
-    /// 从 span 构造
+    /// Construct from span
     constexpr mutable_buffer(std::span<std::byte> s) noexcept
         : data(s.data()), size(s.size()) {}
 
-    /// 隐式转换为 const_buffer
+    /// Implicit conversion to const_buffer
     constexpr operator const_buffer() const noexcept {
         return {data, size};
     }
 };
 
 // =============================================================================
-// 工厂函数
+// Factory functions
 // =============================================================================
 
-/// 从原始指针和大小创建 const_buffer
+/// Create const_buffer from raw pointer and size
 export constexpr auto buffer(const void* data, std::size_t size) noexcept
     -> const_buffer
 {
     return {data, size};
 }
 
-/// 从原始指针和大小创建 mutable_buffer
+/// Create mutable_buffer from raw pointer and size
 export constexpr auto buffer(void* data, std::size_t size) noexcept
     -> mutable_buffer
 {
     return {data, size};
 }
 
-/// 从 string_view 创建 const_buffer
+/// Create const_buffer from string_view
 export constexpr auto buffer(std::string_view sv) noexcept
     -> const_buffer
 {
     return {sv.data(), sv.size()};
 }
 
-/// 从 vector<byte> 创建 mutable_buffer
+/// Create mutable_buffer from vector<byte>
 export inline auto buffer(std::vector<std::byte>& v) noexcept
     -> mutable_buffer
 {
     return {v.data(), v.size()};
 }
 
-/// 从 vector<byte> 创建 const_buffer
+/// Create const_buffer from vector<byte>
 export inline auto buffer(const std::vector<std::byte>& v) noexcept
     -> const_buffer
 {
     return {v.data(), v.size()};
 }
 
-/// 从 array<byte, N> 创建 mutable_buffer
+/// Create mutable_buffer from array<byte, N>
 export template <std::size_t N>
 constexpr auto buffer(std::array<std::byte, N>& a) noexcept
     -> mutable_buffer
@@ -94,16 +94,16 @@ constexpr auto buffer(std::array<std::byte, N>& a) noexcept
 }
 
 // =============================================================================
-// 动态缓冲区
+// Dynamic buffer
 // =============================================================================
 
-/// 可增长的动态缓冲区，用于接收不定长数据
+/// Growable dynamic buffer for receiving variable-length data
 export class dynamic_buffer {
 public:
     explicit dynamic_buffer(std::size_t initial_capacity = 4096)
         : data_(initial_capacity) {}
 
-    /// 获取可写区域
+    /// Get writable region
     [[nodiscard]] auto prepare(std::size_t n) -> mutable_buffer {
         if (write_pos_ + n > data_.size()) {
             data_.resize(write_pos_ + n);
@@ -111,17 +111,17 @@ public:
         return {data_.data() + write_pos_, n};
     }
 
-    /// 确认已写入 n 字节
+    /// Confirm n bytes written
     void commit(std::size_t n) noexcept {
         write_pos_ += n;
     }
 
-    /// 获取可读数据
+    /// Get readable data
     [[nodiscard]] auto data() const noexcept -> const_buffer {
         return {data_.data() + read_pos_, write_pos_ - read_pos_};
     }
 
-    /// 消费已读取的 n 字节
+    /// Consume n bytes read
     void consume(std::size_t n) noexcept {
         read_pos_ += n;
         if (read_pos_ == write_pos_) {
@@ -130,7 +130,7 @@ public:
         }
     }
 
-    /// 可读字节数
+    /// Number of readable bytes
     [[nodiscard]] auto readable_bytes() const noexcept -> std::size_t {
         return write_pos_ - read_pos_;
     }
@@ -142,10 +142,10 @@ private:
 };
 
 // =============================================================================
-// 字节序转换 (Endianness)
+// Byte order conversion (Endianness)
 // =============================================================================
 
-/// 字节序枚举
+/// Byte order enum
 export enum class byte_order {
     little_endian,
     big_endian,
@@ -226,14 +226,14 @@ export constexpr auto letoh(std::uint16_t v) noexcept -> std::uint16_t { return 
 export constexpr auto letoh(std::uint32_t v) noexcept -> std::uint32_t { return htole(v); }
 export constexpr auto letoh(std::uint64_t v) noexcept -> std::uint64_t { return htole(v); }
 
-// --- 泛型 byte_swap ---
+// --- Generic byte_swap ---
 
 export constexpr auto byte_swap(std::uint16_t v) noexcept -> std::uint16_t { return detail::bswap16(v); }
 export constexpr auto byte_swap(std::uint32_t v) noexcept -> std::uint32_t { return detail::bswap32(v); }
 export constexpr auto byte_swap(std::uint64_t v) noexcept -> std::uint64_t { return detail::bswap64(v); }
 
 // =============================================================================
-// buffer_reader — 从缓冲区按指定字节序读取整数
+// buffer_reader — Read integers from buffer in specified byte order
 // =============================================================================
 
 export class buffer_reader {
@@ -245,24 +245,24 @@ public:
     explicit buffer_reader(std::span<const std::byte> s) noexcept
         : data_(s.data()), size_(s.size()) {}
 
-    /// 剩余可读字节
+    /// Remaining readable bytes
     [[nodiscard]] auto remaining() const noexcept -> std::size_t {
         return size_ - pos_;
     }
 
-    /// 当前偏移
+    /// Current offset
     [[nodiscard]] auto position() const noexcept -> std::size_t {
         return pos_;
     }
 
-    /// 跳过 n 字节
+    /// Skip n bytes
     auto skip(std::size_t n) noexcept -> bool {
         if (remaining() < n) return false;
         pos_ += n;
         return true;
     }
 
-    /// 读取原始字节
+    /// Read raw bytes
     auto read_bytes(void* dst, std::size_t n) noexcept -> bool {
         if (remaining() < n) return false;
         std::memcpy(dst, data_ + pos_, n);
@@ -270,7 +270,7 @@ public:
         return true;
     }
 
-    // --- 大端 (network byte order) ---
+    // --- Big-endian (network byte order) ---
 
     auto read_u8() noexcept -> std::optional<std::uint8_t> {
         if (remaining() < 1) return std::nullopt;
@@ -302,7 +302,7 @@ public:
         return ntoh(v);
     }
 
-    // --- 小端 ---
+    // --- Little-endian ---
 
     auto read_u16_le() noexcept -> std::optional<std::uint16_t> {
         if (remaining() < 2) return std::nullopt;
@@ -335,7 +335,7 @@ private:
 };
 
 // =============================================================================
-// buffer_writer — 向缓冲区按指定字节序写入整数
+// buffer_writer — Write integers to buffer in specified byte order
 // =============================================================================
 
 export class buffer_writer {
@@ -347,17 +347,17 @@ public:
     explicit buffer_writer(std::span<std::byte> s) noexcept
         : data_(s.data()), capacity_(s.size()) {}
 
-    /// 剩余可写字节
+    /// Remaining writable bytes
     [[nodiscard]] auto remaining() const noexcept -> std::size_t {
         return capacity_ - pos_;
     }
 
-    /// 已写入字节数
+    /// Number of bytes written
     [[nodiscard]] auto written() const noexcept -> std::size_t {
         return pos_;
     }
 
-    /// 写入原始字节
+    /// Write raw bytes
     auto write_bytes(const void* src, std::size_t n) noexcept -> bool {
         if (remaining() < n) return false;
         std::memcpy(data_ + pos_, src, n);
@@ -365,7 +365,7 @@ public:
         return true;
     }
 
-    // --- 大端 (network byte order) ---
+    // --- Big-endian (network byte order) ---
 
     auto write_u8(std::uint8_t v) noexcept -> bool {
         if (remaining() < 1) return false;
@@ -397,7 +397,7 @@ public:
         return true;
     }
 
-    // --- 小端 ---
+    // --- Little-endian ---
 
     auto write_u16_le(std::uint16_t v) noexcept -> bool {
         if (remaining() < 2) return false;

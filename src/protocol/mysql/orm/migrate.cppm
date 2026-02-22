@@ -12,7 +12,7 @@ import cnetmod.coro.task;
 namespace cnetmod::mysql::orm {
 
 // =============================================================================
-// schema_diff — 表结构差异描述
+// schema_diff — Table structure difference description
 // =============================================================================
 
 export struct column_change {
@@ -20,31 +20,31 @@ export struct column_change {
 
     action_t    action;
     std::string column_name;
-    std::string ddl;           ///< 生成的 ALTER TABLE 子句
+    std::string ddl;           ///< Generated ALTER TABLE clause
 };
 
 export struct schema_diff {
     std::vector<column_change> changes;
-    bool table_missing = false;  ///< 表不存在，需要 CREATE TABLE
+    bool table_missing = false;  ///< Table doesn't exist, needs CREATE TABLE
 };
 
 // =============================================================================
-// detect_diff — 从 DESCRIBE 结果对比模型元数据
+// detect_diff — Compare model metadata from DESCRIBE results
 // =============================================================================
 //
-// DESCRIBE 结果集列: Field, Type, Null, Key, Default, Extra
+// DESCRIBE result set columns: Field, Type, Null, Key, Default, Extra
 //
 
 namespace detail {
 
-/// 从 DESCRIBE 结果行提取列名
+/// Extract column name from DESCRIBE result row
 inline auto get_describe_field(const row& r) -> std::string {
     if (!r.empty() && r[0].is_string())
         return std::string(r[0].get_string());
     return {};
 }
 
-/// 从 DESCRIBE 结果行提取类型字符串（大写归一化）
+/// Extract type string from DESCRIBE result row (uppercase normalized)
 inline auto get_describe_type(const row& r) -> std::string {
     if (r.size() > 1 && r[1].is_string()) {
         std::string t(r[1].get_string());
@@ -55,31 +55,31 @@ inline auto get_describe_type(const row& r) -> std::string {
     return {};
 }
 
-/// 将 ORM column_type + strategy 转为预期的 MySQL 类型前缀（用于宽松比较）
+/// Convert ORM column_type + strategy to expected MySQL type prefix (for loose comparison)
 inline auto expected_type_prefix(const column_def& col) -> std::string {
     if (col.is_uuid())
         return "CHAR(36)";
 
     auto sv = sql_type_str(col.type);
     std::string s(sv);
-    // sql_type_str 返回如 "VARCHAR(255)" / "INT" 等
+    // sql_type_str returns like "VARCHAR(255)" / "INT" etc
     return s;
 }
 
-/// 宽松类型匹配: 检查实际类型是否以预期前缀开头（忽略 display width）
+/// Loose type matching: check if actual type starts with expected prefix (ignore display width)
 inline auto type_matches(std::string_view actual, std::string_view expected) -> bool {
-    // 归一化: 去掉 actual 中的 display width 如 "bigint(20)" → "BIGINT"
-    // 先取到 '(' 前的部分做前缀比较
+    // Normalize: remove display width from actual like "bigint(20)" → "BIGINT"
+    // First take the part before '(' for prefix comparison
     auto actual_base = actual.substr(0, actual.find('('));
     auto expected_base = expected.substr(0, expected.find('('));
 
-    // 特殊处理: CHAR(36) 需要精确匹配长度
+    // Special handling: CHAR(36) needs exact length match
     if (expected == "CHAR(36)") {
         return actual.find("CHAR(36)") != std::string_view::npos
             || actual.find("char(36)") != std::string_view::npos;
     }
 
-    // 基础类型名相同即可
+    // Base type names must match
     if (actual_base.size() != expected_base.size())
         return false;
     for (std::size_t i = 0; i < actual_base.size(); ++i) {
@@ -90,7 +90,7 @@ inline auto type_matches(std::string_view actual, std::string_view expected) -> 
     return true;
 }
 
-/// 生成 ADD COLUMN 的 DDL 片段
+/// Generate ADD COLUMN DDL fragment
 inline auto build_add_column_ddl(std::string_view table,
                                   const column_def& col) -> std::string
 {
@@ -119,7 +119,7 @@ inline auto build_add_column_ddl(std::string_view table,
     return sql;
 }
 
-/// 生成 DROP COLUMN 的 DDL
+/// Generate DROP COLUMN DDL
 inline auto build_drop_column_ddl(std::string_view table,
                                    std::string_view col_name) -> std::string
 {
@@ -131,7 +131,7 @@ inline auto build_drop_column_ddl(std::string_view table,
     return sql;
 }
 
-/// 生成 MODIFY COLUMN 的 DDL
+/// Generate MODIFY COLUMN DDL
 inline auto build_modify_column_ddl(std::string_view table,
                                      const column_def& col) -> std::string
 {
@@ -162,13 +162,13 @@ inline auto build_modify_column_ddl(std::string_view table,
 
 } // namespace detail
 
-/// 检测模型与数据库表的差异
+/// Detect differences between model and database table
 export template <Model T>
 auto detect_diff(const result_set& describe_rs) -> schema_diff {
     schema_diff diff;
     auto& meta = model_traits<T>::meta();
 
-    // 收集数据库中的实际列
+    // Collect actual columns in database
     std::vector<std::pair<std::string, std::string>> db_cols; // {name, type}
     for (auto& r : describe_rs.rows) {
         auto name = detail::get_describe_field(r);
@@ -177,8 +177,8 @@ auto detect_diff(const result_set& describe_rs) -> schema_diff {
             db_cols.emplace_back(std::move(name), std::move(type));
     }
 
-    // 1) 模型有、数据库无 → ADD COLUMN
-    // 2) 类型不匹配 → MODIFY COLUMN
+    // 1) Model has, database doesn't → ADD COLUMN
+    // 2) Type mismatch → MODIFY COLUMN
     for (auto& f : meta.fields) {
         bool found = false;
         for (auto& [db_name, db_type] : db_cols) {
@@ -204,7 +204,7 @@ auto detect_diff(const result_set& describe_rs) -> schema_diff {
         }
     }
 
-    // 3) 数据库有、模型无 → DROP COLUMN
+    // 3) Database has, model doesn't → DROP COLUMN
     for (auto& [db_name, db_type] : db_cols) {
         bool found = false;
         for (auto& f : meta.fields) {
@@ -226,20 +226,20 @@ auto detect_diff(const result_set& describe_rs) -> schema_diff {
 }
 
 // =============================================================================
-// sync_result — 同步结果
+// sync_result — Sync result
 // =============================================================================
 
 export struct sync_result {
     schema_diff  diff;
     std::string  error_msg;
-    bool         created = false;   ///< 表是新建的
+    bool         created = false;   ///< Table was newly created
 
     auto ok()     const noexcept -> bool { return error_msg.empty(); }
     auto is_err() const noexcept -> bool { return !ok(); }
 };
 
 // =============================================================================
-// sync_schema — 异步同步表结构
+// sync_schema — Async sync table structure
 // =============================================================================
 
 export template <Model T>
@@ -247,7 +247,7 @@ auto sync_schema(client& cli) -> task<sync_result> {
     sync_result result;
     auto& meta = model_traits<T>::meta();
 
-    // 1) 尝试 DESCRIBE
+    // 1) Try DESCRIBE
     std::string desc_sql = "DESCRIBE `";
     desc_sql.append(meta.table_name);
     desc_sql.push_back('`');
@@ -255,9 +255,9 @@ auto sync_schema(client& cli) -> task<sync_result> {
     auto rs = co_await cli.query(desc_sql);
 
     if (rs.is_err()) {
-        // 表不存在 — 错误码 1146 (ER_NO_SUCH_TABLE)
+        // Table doesn't exist — error code 1146 (ER_NO_SUCH_TABLE)
         if (rs.error_code == 1146 || rs.error_msg.find("doesn't exist") != std::string::npos) {
-            // 直接 CREATE TABLE
+            // Directly CREATE TABLE
             auto create_sql = build_create_table_sql<T>();
             auto cr = co_await cli.execute(create_sql);
             if (cr.is_err()) {
@@ -272,13 +272,13 @@ auto sync_schema(client& cli) -> task<sync_result> {
         co_return result;
     }
 
-    // 2) 检测差异
+    // 2) Detect differences
     result.diff = detect_diff<T>(rs);
 
     if (result.diff.changes.empty())
-        co_return result; // 无变更
+        co_return result; // No changes
 
-    // 3) 应用差异
+    // 3) Apply differences
     for (auto& chg : result.diff.changes) {
         auto ar = co_await cli.execute(chg.ddl);
         if (ar.is_err()) {

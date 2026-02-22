@@ -1,25 +1,25 @@
 /**
  * @file utils.cppm
- * @brief HTTP 通用工具函数
+ * @brief HTTP Common Utility Functions
  *
- * 提供在多个中间件与 handler 中共用的 HTTP 辅助函数，
- * 避免各处重复实现相同逻辑。
+ * Provides HTTP helper functions shared across multiple middleware and handlers,
+ * avoiding duplicate implementations of the same logic.
  *
- * 函数列表:
- *   resolve_client_ip  — 从反向代理头解析客户端真实 IP
- *   parse_query_param  — 从 query string 提取单个参数值
- *   parse_query_params — 将 query string 完整解析为 key-value map
+ * Function List:
+ *   resolve_client_ip  — Parse real client IP from reverse proxy headers
+ *   parse_query_param  — Extract single parameter value from query string
+ *   parse_query_params — Parse complete query string into key-value map
  *
- * 使用示例:
+ * Usage Example:
  *   import cnetmod.protocol.http;
  *
- *   // 解析真实 IP（支持 X-Forwarded-For / X-Real-IP）
+ *   // Parse real IP (supports X-Forwarded-For / X-Real-IP)
  *   auto ip = http::resolve_client_ip(ctx);
  *
- *   // 提取 query 参数
+ *   // Extract query parameter
  *   auto type = http::parse_query_param(ctx.query_string(), "type");
  *
- *   // 解析全部参数
+ *   // Parse all parameters
  *   auto params = http::parse_query_params(ctx.query_string());
  */
 export module cnetmod.protocol.http:utils;
@@ -30,15 +30,15 @@ import :router;   // request_context
 namespace cnetmod::http {
 
 // =============================================================================
-// resolve_client_ip — 解析客户端真实 IP
+// resolve_client_ip — Parse Real Client IP
 // =============================================================================
 //
-// 优先级（从高到低）：
-//   1. X-Forwarded-For  最左侧 IP（原始客户端），去除首尾空格
+// Priority (high to low):
+//   1. X-Forwarded-For  leftmost IP (original client), trim whitespace
 //   2. X-Real-IP
-//   3. fallback（默认 "unknown"）
+//   3. fallback (default "unknown")
 //
-// 适用场景：Nginx / Cloudflare 等反向代理前置时获取真实来源 IP。
+// Use Case: Get real source IP when behind reverse proxy like Nginx / Cloudflare.
 
 export inline auto resolve_client_ip(
     const request_context& ctx,
@@ -58,16 +58,16 @@ export inline auto resolve_client_ip(
 }
 
 // =============================================================================
-// parse_query_param — 从 query string 提取单个参数值
+// parse_query_param — Extract Single Parameter Value from Query String
 // =============================================================================
 //
-// 正确处理边界：避免 "mykey=v" 被 "key=" 误匹配。
+// Correctly handles boundaries: avoids "mykey=v" being matched by "key=".
 //
-// 示例:
+// Example:
 //   parse_query_param("type=send_email&params=to%40x.com", "params")
 //   → "to%40x.com"
 //
-// 注意: 不做 URL 解码，调用方按需处理 %xx 转义。
+// Note: Does not perform URL decoding, caller handles %xx escaping as needed.
 
 export inline auto parse_query_param(
     std::string_view query,
@@ -91,14 +91,14 @@ export inline auto parse_query_param(
 }
 
 // =============================================================================
-// parse_query_params — 将 query string 完整解析为 key-value map
+// parse_query_params — Parse Complete Query String into Key-Value Map
 // =============================================================================
 //
-// 示例:
+// Example:
 //   parse_query_params("a=1&b=hello&c=")
 //   → {{"a","1"}, {"b","hello"}, {"c",""}}
 //
-// 注意: 重复 key 时，后者覆盖前者。不做 URL 解码。
+// Note: For duplicate keys, later value overwrites earlier. Does not perform URL decoding.
 
 export inline auto parse_query_params(std::string_view query)
     -> std::unordered_map<std::string, std::string>

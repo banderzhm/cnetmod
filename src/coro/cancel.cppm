@@ -5,43 +5,43 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// cancel_token — 异步操作取消句柄
+// cancel_token — Async operation cancellation handle
 // =============================================================================
 
-/// 可取消的异步操作句柄
-/// 用法：
+/// Cancellable async operation handle
+/// Usage:
 ///   cancel_token token;
-///   auto t = async_read(ctx, sock, buf, token);  // 带 cancel 的读
-///   // 另一个协程或线程中：
-///   token.cancel();  // 请求取消
+///   auto t = async_read(ctx, sock, buf, token);  // Read with cancel
+///   // In another coroutine or thread:
+///   token.cancel();  // Request cancellation
 ///
-/// 注意：cancel_token 不可复制/移动（地址稳定性），可通过 reset() 复用
+/// Note: cancel_token is not copyable/movable (address stability), can be reused via reset()
 export class cancel_token {
 public:
     cancel_token() = default;
     ~cancel_token() = default;
 
-    // 不可复制/移动（awaiter 存储了指向 token 的指针）
+    // Not copyable/movable (awaiter stores pointer to token)
     cancel_token(const cancel_token&) = delete;
     cancel_token& operator=(const cancel_token&) = delete;
 
-    /// 请求取消。线程安全，可从任意线程调用。
-    /// 如果有挂起的操作，会通过平台特定机制取消它。
-    /// 多次调用安全（仅首次生效）。
+    /// Request cancellation. Thread-safe, can be called from any thread.
+    /// If there's a pending operation, will cancel it via platform-specific mechanism.
+    /// Safe to call multiple times (only first call takes effect).
     void cancel() noexcept {
         if (cancelled_.exchange(true, std::memory_order_acq_rel))
-            return;  // 已取消
+            return;  // Already cancelled
         if (pending_.load(std::memory_order_acquire) && cancel_fn_)
             cancel_fn_(*this);
     }
 
-    /// 是否已请求取消
+    /// Whether cancellation has been requested
     [[nodiscard]] auto is_cancelled() const noexcept -> bool {
         return cancelled_.load(std::memory_order_acquire);
     }
 
-    /// 重置 token（复用于下一个操作）
-    /// 前提：当前没有挂起的操作
+    /// Reset token (reuse for next operation)
+    /// Prerequisite: no pending operation currently
     void reset() noexcept {
         cancelled_.store(false, std::memory_order_relaxed);
         pending_.store(false, std::memory_order_relaxed);
@@ -55,21 +55,21 @@ public:
     }
 
     // =================================================================
-    // 以下字段由平台 awaiter 内部设置，用户不应直接操作
+    // Following fields are set internally by platform awaiter, users should not manipulate directly
     // =================================================================
 
-    std::atomic<bool> cancelled_{false};   // 是否已请求取消
-    std::atomic<bool> pending_{false};     // 是否有操作正在挂起
+    std::atomic<bool> cancelled_{false};   // Whether cancellation has been requested
+    std::atomic<bool> pending_{false};     // Whether an operation is pending
 
-    /// 平台特定取消函数（由 cancel awaiter 设置）
+    /// Platform-specific cancel function (set by cancel awaiter)
     void (*cancel_fn_)(cancel_token&) noexcept = nullptr;
 
-    void* ctx_{};              // 平台 context 指针（epoll_context*/io_uring_context*）
-    void* io_handle_{};        // IOCP: HANDLE（socket/file）
+    void* ctx_{};              // Platform context pointer (epoll_context*/io_uring_context*)
+    void* io_handle_{};        // IOCP: HANDLE (socket/file)
     void* overlapped_{};       // IOCP: OVERLAPPED* / io_uring: uring_overlapped*
-    int fd_{-1};               // epoll/kqueue: 文件描述符
+    int fd_{-1};               // epoll/kqueue: file descriptor
     std::int16_t filter_{0};   // kqueue: EVFILT_READ / EVFILT_WRITE
-    std::coroutine_handle<> coroutine_{};  // epoll/kqueue: 挂起的协程
+    std::coroutine_handle<> coroutine_{};  // epoll/kqueue: suspended coroutine
 };
 
 } // namespace cnetmod

@@ -1,17 +1,17 @@
 /**
  * @file ip_filter.cppm
- * @brief IP 黑白名单中间件 — 基于客户端 IP 的访问控制
+ * @brief IP whitelist/blacklist middleware — access control based on client IP
  *
- * 支持白名单模式（仅允许列表内 IP）和黑名单模式（拒绝列表内 IP）。
- * 自动解析 X-Forwarded-For / X-Real-IP 获取真实客户端 IP。
+ * Supports whitelist mode (only allow IPs in list) and blacklist mode (deny IPs in list).
+ * Automatically parses X-Forwarded-For / X-Real-IP to get real client IP.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.ip_filter;
  *
- *   // 白名单: 仅允许内网
+ *   // Whitelist: only allow internal network
  *   svr.use(ip_filter({.allow_list = {"127.0.0.1", "10.0.0.0/8"}}));
  *
- *   // 黑名单: 封禁特定 IP
+ *   // Blacklist: ban specific IPs
  *   svr.use(ip_filter({.deny_list = {"1.2.3.4", "5.6.7.8"}}));
  */
 export module cnetmod.middleware.ip_filter;
@@ -24,36 +24,36 @@ import cnetmod.core.log;
 namespace cnetmod {
 
 // =============================================================================
-// ip_filter_options — IP 过滤配置
+// ip_filter_options — IP filter configuration
 // =============================================================================
 
 export struct ip_filter_options {
-    /// 白名单: 非空时仅允许列表内 IP（优先于黑名单）
+    /// Whitelist: when non-empty, only allow IPs in list (takes priority over blacklist)
     std::vector<std::string> allow_list;
 
-    /// 黑名单: 拒绝列表内 IP（仅在白名单为空时生效）
+    /// Blacklist: deny IPs in list (only effective when whitelist is empty)
     std::vector<std::string> deny_list;
 
-    /// 被拒绝时的 HTTP 状态码
+    /// HTTP status code when denied
     int denied_status = http::status::forbidden;
 };
 
 // =============================================================================
-// 内部: IP 解析与匹配
+// Internal: IP parsing and matching
 // =============================================================================
 
 namespace detail {
 
-/// 简单 CIDR 匹配（仅支持 IPv4）
-/// 格式: "10.0.0.0/8" 或精确 IP "192.168.1.1"
+/// Simple CIDR matching (IPv4 only)
+/// Format: "10.0.0.0/8" or exact IP "192.168.1.1"
 inline auto ip_matches(std::string_view client_ip,
                        std::string_view pattern) -> bool
 {
-    // 精确匹配
+    // Exact match
     if (client_ip == pattern)
         return true;
 
-    // CIDR 匹配
+    // CIDR match
     auto slash = pattern.find('/');
     if (slash == std::string_view::npos)
         return false;
@@ -64,7 +64,7 @@ inline auto ip_matches(std::string_view client_ip,
     std::from_chars(bits_str.data(), bits_str.data() + bits_str.size(), bits);
     if (bits < 0 || bits > 32) return false;
 
-    // 解析 IPv4 为 uint32
+    // Parse IPv4 to uint32
     auto parse_ipv4 = [](std::string_view s) -> std::optional<std::uint32_t> {
         std::uint32_t result = 0;
         int octet_count = 0;
@@ -92,7 +92,7 @@ inline auto ip_matches(std::string_view client_ip,
     return (*client & mask) == (*network & mask);
 }
 
-/// 检查 IP 是否在列表中（支持 CIDR）
+/// Check if IP is in list (supports CIDR)
 inline auto ip_in_list(std::string_view ip,
                        const std::vector<std::string>& list) -> bool
 {
@@ -104,13 +104,13 @@ inline auto ip_in_list(std::string_view ip,
 } // namespace detail
 
 // =============================================================================
-// ip_filter — IP 过滤中间件
+// ip_filter — IP filter middleware
 // =============================================================================
 //
-// 行为:
-//   白名单非空时: IP 在列表内 → 放行, 否则 → denied_status
-//   白名单为空 + 黑名单非空时: IP 在列表内 → denied_status, 否则 → 放行
-//   两个都为空: 直接放行
+// Behavior:
+//   When whitelist is non-empty: IP in list → pass, otherwise → denied_status
+//   When whitelist is empty + blacklist is non-empty: IP in list → denied_status, otherwise → pass
+//   Both empty: pass through
 
 export inline auto ip_filter(ip_filter_options opts = {}) -> http::middleware_fn
 {
@@ -122,11 +122,11 @@ export inline auto ip_filter(ip_filter_options opts = {}) -> http::middleware_fn
         bool denied = false;
 
         if (!opts.allow_list.empty()) {
-            // 白名单模式: 不在列表内则拒绝
+            // Whitelist mode: deny if not in list
             if (!detail::ip_in_list(client_ip, opts.allow_list))
                 denied = true;
         } else if (!opts.deny_list.empty()) {
-            // 黑名单模式: 在列表内则拒绝
+            // Blacklist mode: deny if in list
             if (detail::ip_in_list(client_ip, opts.deny_list))
                 denied = true;
         }

@@ -1,15 +1,15 @@
-/// cnetmod.protocol.mqtt — 聚合模块
-/// 统一导出 mqtt 子模块
+/// cnetmod.protocol.mqtt — Aggregation module
+/// Unified export of mqtt submodules
 
 export module cnetmod.protocol.mqtt;
 
-// Phase 1: 客户端
+// Phase 1: Client
 export import :types;
 export import :codec;
 export import :parser;
 export import :client;
 
-// Phase 2: Broker / 服务端
+// Phase 2: Broker / Server
 export import :topic_filter;
 export import :session;
 export import :retained;

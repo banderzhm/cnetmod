@@ -19,7 +19,7 @@ import cnetmod.core.file;  // file_handle_t, invalid_file_handle
 namespace cnetmod {
 
 // =============================================================================
-// 串口配置枚举
+// Serial port configuration enums
 // =============================================================================
 
 export enum class parity : std::uint8_t {
@@ -31,9 +31,9 @@ export enum class parity : std::uint8_t {
 };
 
 export enum class stop_bits : std::uint8_t {
-    one,        // 1 停止位
-    one_half,   // 1.5 停止位
-    two,        // 2 停止位
+    one,        // 1 stop bit
+    one_half,   // 1.5 stop bits
+    two,        // 2 stop bits
 };
 
 export enum class flow_control : std::uint8_t {
@@ -43,7 +43,7 @@ export enum class flow_control : std::uint8_t {
 };
 
 // =============================================================================
-// 串口配置
+// Serial port configuration
 // =============================================================================
 
 export struct serial_config {
@@ -53,32 +53,32 @@ export struct serial_config {
     parity         par           = parity::none;
     flow_control   flow          = flow_control::none;
 
-    // 读超时 (毫秒, 0 = 不超时)
+    // Read timeout (milliseconds, 0 = no timeout)
     std::uint32_t  read_timeout_ms  = 1000;
-    // 写超时 (毫秒, 0 = 不超时)
+    // Write timeout (milliseconds, 0 = no timeout)
     std::uint32_t  write_timeout_ms = 1000;
 };
 
 // =============================================================================
-// Serial Port 类
+// Serial Port class
 // =============================================================================
 
-/// 平台无关的串口句柄封装（RAII）
-/// 支持异步 I/O（通过 io_context 驱动）
+/// Platform-independent serial port handle wrapper (RAII)
+/// Supports async I/O (driven by io_context)
 export class serial_port {
 public:
     serial_port() noexcept = default;
     ~serial_port();
 
-    // 不可复制
+    // Non-copyable
     serial_port(const serial_port&) = delete;
     auto operator=(const serial_port&) -> serial_port& = delete;
 
-    // 可移动
+    // Movable
     serial_port(serial_port&& other) noexcept;
     auto operator=(serial_port&& other) noexcept -> serial_port&;
 
-    /// 打开串口
+    /// Open serial port
     /// Windows: name = "COM3", "COM4", ...
     /// Linux:   name = "/dev/ttyUSB0", "/dev/ttyS0", ...
     [[nodiscard]] static auto open(
@@ -86,29 +86,29 @@ public:
         const serial_config& config = {}
     ) -> std::expected<serial_port, std::error_code>;
 
-    /// 关闭串口
+    /// Close serial port
     void close() noexcept;
 
-    /// 获取原生句柄
+    /// Get native handle
     [[nodiscard]] auto native_handle() const noexcept -> file_handle_t {
         return handle_;
     }
 
-    /// 释放所有权（不关闭）
+    /// Release ownership (without closing)
     [[nodiscard]] auto release() noexcept -> file_handle_t {
         auto h = handle_;
         handle_ = invalid_file_handle;
         return h;
     }
 
-    /// 是否已打开
+    /// Check if opened
     [[nodiscard]] auto is_open() const noexcept -> bool {
         return handle_ != invalid_file_handle;
     }
 
     explicit operator bool() const noexcept { return is_open(); }
 
-    /// 获取当前配置
+    /// Get current configuration
     [[nodiscard]] auto config() const noexcept -> const serial_config& {
         return config_;
     }

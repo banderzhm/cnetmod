@@ -23,7 +23,7 @@ import cnetmod.core.error;
 namespace cnetmod {
 
 // =============================================================================
-// 生命周期
+// Lifecycle
 // =============================================================================
 
 serial_port::~serial_port() {
@@ -47,7 +47,7 @@ auto serial_port::operator=(serial_port&& other) noexcept -> serial_port& {
 }
 
 // =============================================================================
-// 关闭
+// Close
 // =============================================================================
 
 void serial_port::close() noexcept {
@@ -61,7 +61,7 @@ void serial_port::close() noexcept {
 }
 
 // =============================================================================
-// 打开 — Windows
+// Open — Windows
 // =============================================================================
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
@@ -69,7 +69,7 @@ void serial_port::close() noexcept {
 auto serial_port::open(std::string_view name, const serial_config& config)
     -> std::expected<serial_port, std::error_code>
 {
-    // 构造设备路径: \\.\COMn
+    // Construct device path: \\.\COMn
     std::string device_path;
     if (name.starts_with("\\\\.\\")) {
         device_path = std::string(name);
@@ -77,7 +77,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         device_path = std::string("\\\\.\\") + std::string(name);
     }
 
-    // 转宽字符
+    // Convert to wide character
     int wlen = ::MultiByteToWideChar(CP_UTF8, 0,
         device_path.data(), static_cast<int>(device_path.size()),
         nullptr, 0);
@@ -86,11 +86,11 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         device_path.data(), static_cast<int>(device_path.size()),
         wpath.data(), wlen);
 
-    // 打开串口 (FILE_FLAG_OVERLAPPED 用于 IOCP 异步)
+    // Open serial port (FILE_FLAG_OVERLAPPED for IOCP async)
     HANDLE h = ::CreateFileW(
         wpath.c_str(),
         GENERIC_READ | GENERIC_WRITE,
-        0,              // 不共享
+        0,              // No sharing
         nullptr,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
@@ -102,7 +102,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         return std::unexpected(make_error_code(from_native_error(err)));
     }
 
-    // --- 配置 DCB ---
+    // --- Configure DCB ---
     DCB dcb{};
     dcb.DCBlength = sizeof(DCB);
 
@@ -115,14 +115,14 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     dcb.BaudRate = config.baud_rate;
     dcb.ByteSize = config.data_bits;
 
-    // 停止位
+    // Stop bits
     switch (config.stop) {
         case stop_bits::one:      dcb.StopBits = ONESTOPBIT;   break;
         case stop_bits::one_half: dcb.StopBits = ONE5STOPBITS; break;
         case stop_bits::two:      dcb.StopBits = TWOSTOPBITS;  break;
     }
 
-    // 校验
+    // Parity
     switch (config.par) {
         case parity::none:  dcb.Parity = NOPARITY;    dcb.fParity = FALSE; break;
         case parity::odd:   dcb.Parity = ODDPARITY;   dcb.fParity = TRUE;  break;
@@ -131,7 +131,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         case parity::space: dcb.Parity = SPACEPARITY; dcb.fParity = TRUE;  break;
     }
 
-    // 流控
+    // Flow control
     dcb.fOutxCtsFlow = FALSE;
     dcb.fRtsControl  = RTS_CONTROL_DISABLE;
     dcb.fOutX        = FALSE;
@@ -150,7 +150,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
             break;
     }
 
-    // 二进制模式
+    // Binary mode
     dcb.fBinary = TRUE;
     dcb.fDtrControl = DTR_CONTROL_ENABLE;
     dcb.fAbortOnError = FALSE;
@@ -161,10 +161,10 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         return std::unexpected(make_error_code(from_native_error(err)));
     }
 
-    // --- 超时设置 ---
+    // --- Timeout settings ---
     COMMTIMEOUTS timeouts{};
-    // OVERLAPPED 模式下通常设 0 让 IOCP 管理
-    // 但设置 ReadTotalTimeoutConstant 可以给读操作一个上限
+    // In OVERLAPPED mode, typically set to 0 to let IOCP manage
+    // But setting ReadTotalTimeoutConstant can give read operations an upper limit
     timeouts.ReadIntervalTimeout         = MAXDWORD;
     timeouts.ReadTotalTimeoutMultiplier  = MAXDWORD;
     timeouts.ReadTotalTimeoutConstant    = config.read_timeout_ms > 0
@@ -178,7 +178,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         return std::unexpected(make_error_code(from_native_error(err)));
     }
 
-    // 清空收发缓冲区
+    // Clear send/receive buffers
     ::PurgeComm(h, PURGE_RXCLEAR | PURGE_TXCLEAR);
 
     return serial_port{h, config};
@@ -187,7 +187,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
 #else
 
 // =============================================================================
-// 打开 — Linux / POSIX
+// Open — Linux / POSIX
 // =============================================================================
 
 namespace {
@@ -232,12 +232,12 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     if (fd < 0)
         return std::unexpected(make_error_code(from_native_error(errno)));
 
-    // 取消 O_NONBLOCK (后续由 epoll/io_uring 管理)
+    // Cancel O_NONBLOCK (subsequently managed by epoll/io_uring)
     int flags = ::fcntl(fd, F_GETFL, 0);
     if (flags >= 0)
         ::fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
 
-    // --- termios 配置 ---
+    // --- termios configuration ---
     struct termios tty{};
     if (::tcgetattr(fd, &tty) != 0) {
         int err = errno;
@@ -245,12 +245,12 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         return std::unexpected(make_error_code(from_native_error(err)));
     }
 
-    // 波特率
+    // Baud rate
     auto baud = to_posix_baud(config.baud_rate);
     ::cfsetispeed(&tty, baud);
     ::cfsetospeed(&tty, baud);
 
-    // 数据位
+    // Data bits
     tty.c_cflag &= ~CSIZE;
     switch (config.data_bits) {
         case 5: tty.c_cflag |= CS5; break;
@@ -259,7 +259,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         default: tty.c_cflag |= CS8; break;
     }
 
-    // 校验
+    // Parity
     switch (config.par) {
         case parity::none:
             tty.c_cflag &= ~PARENB;
@@ -286,10 +286,10 @@ auto serial_port::open(std::string_view name, const serial_config& config)
             break;
     }
 
-    // 停止位
+    // Stop bits
     switch (config.stop) {
         case stop_bits::one:
-        case stop_bits::one_half: // POSIX 不支持 1.5, fallback 1
+        case stop_bits::one_half: // POSIX doesn't support 1.5, fallback to 1
             tty.c_cflag &= ~CSTOPB;
             break;
         case stop_bits::two:
@@ -297,7 +297,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
             break;
     }
 
-    // 流控
+    // Flow control
     switch (config.flow) {
         case flow_control::none:
             tty.c_cflag &= ~CRTSCTS;
@@ -313,15 +313,15 @@ auto serial_port::open(std::string_view name, const serial_config& config)
             break;
     }
 
-    // 启用接收, 本地模式
+    // Enable receive, local mode
     tty.c_cflag |= CLOCAL | CREAD;
 
-    // 原始模式 (无回显, 无信号, 无规范处理)
+    // Raw mode (no echo, no signals, no canonical processing)
     tty.c_lflag &= ~(ICANON | ECHO | ECHOE | ISIG);
     tty.c_iflag &= ~(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL);
     tty.c_oflag &= ~OPOST;
 
-    // 最小字符数和超时
+    // Minimum character count and timeout
     tty.c_cc[VMIN]  = 0;
     tty.c_cc[VTIME] = config.read_timeout_ms > 0
                        ? static_cast<cc_t>(config.read_timeout_ms / 100)
@@ -333,7 +333,7 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         return std::unexpected(make_error_code(from_native_error(err)));
     }
 
-    // 清空收发缓冲区
+    // Clear send/receive buffers
     ::tcflush(fd, TCIOFLUSH);
 
     return serial_port{fd, config};

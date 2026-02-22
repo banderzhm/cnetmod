@@ -1,7 +1,7 @@
-/// cnetmod.protocol.mqtt:ws_transport — MQTT over WebSocket 传输层
-/// 通过 WebSocket binary frames 传输 MQTT 报文
-/// 子协议: "mqtt"
-/// 集成: subscription_map trie, shared_sub, security/ACL, topic_alias, will_delay
+/// cnetmod.protocol.mqtt:ws_transport — MQTT over WebSocket Transport Layer
+/// Transmits MQTT packets through WebSocket binary frames
+/// Subprotocol: "mqtt"
+/// Integration: subscription_map trie, shared_sub, security/ACL, topic_alias, will_delay
 
 module;
 
@@ -39,22 +39,22 @@ import :topic_alias;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// WebSocket Broker 配置
+// WebSocket Broker Configuration
 // =============================================================================
 
 export struct ws_broker_options {
-    std::uint16_t port                   = 8083;   // 默认 MQTT over WS 端口
+    std::uint16_t port                   = 8083;   // Default MQTT over WS port
     std::string   host                   = "*******";
-    std::string   path                   = "/mqtt"; // WebSocket 路径
+    std::string   path                   = "/mqtt"; // WebSocket path
     std::uint16_t max_connections        = 10000;
     std::uint32_t default_session_expiry = 0;
-    std::uint16_t max_keep_alive         = 600;    // 最大 keep-alive 秒数
-    std::size_t   delivery_channel_size  = 1000;   // 投递 channel 容量
-    std::uint16_t topic_alias_maximum    = 0;       // 服务端支持的 topic alias 最大数
+    std::uint16_t max_keep_alive         = 600;    // Max keep-alive seconds
+    std::size_t   delivery_channel_size  = 1000;   // Delivery channel capacity
+    std::uint16_t topic_alias_maximum    = 0;       // Max topic alias supported by server
 
-    // v5 能力通告
+    // v5 capability announcement
     std::uint16_t receive_maximum        = 65535;
-    std::uint32_t maximum_packet_size    = 0;       // 0=无限制
+    std::uint32_t maximum_packet_size    = 0;       // 0=unlimited
     qos           maximum_qos            = qos::exactly_once;
     bool          retain_available       = true;
     bool          wildcard_sub_available = true;
@@ -68,19 +68,19 @@ export struct ws_broker_options {
 
 export class ws_broker {
 public:
-    /// 单线程模式
+    /// Single-threaded mode
     explicit ws_broker(io_context& ctx) : ctx_(ctx), ws_server_(ctx) {}
 
-    /// 多核模式
+    /// Multi-core mode
     explicit ws_broker(server_context& sctx)
         : ctx_(sctx.accept_io()), ws_server_(sctx) {}
 
-    /// 配置
+    /// Configuration
     void set_options(ws_broker_options opts) { opts_ = std::move(opts); }
     void set_security(security_config cfg) { security_ = std::move(cfg); }
     void set_auth_handler(broker_auth_handler h) { auth_handler_ = std::move(h); }
 
-    /// 获取引用
+    /// Get references
     [[nodiscard]] auto security() noexcept -> security_config& { return security_; }
     [[nodiscard]] auto sessions() noexcept -> session_store& { return sessions_; }
     [[nodiscard]] auto sessions() const noexcept -> const session_store& { return sessions_; }
@@ -88,7 +88,7 @@ public:
     [[nodiscard]] auto retained() const noexcept -> const retained_store& { return retained_; }
     [[nodiscard]] auto subscriptions() noexcept -> subscription_map& { return sub_map_; }
 
-    /// 监听端口
+    /// Listen on port
     auto listen() -> std::expected<void, std::error_code> {
         return listen(opts_.host, opts_.port);
     }
@@ -96,7 +96,7 @@ public:
     auto listen(std::string_view host, std::uint16_t port)
         -> std::expected<void, std::error_code>
     {
-        // 注册 WebSocket 路由
+        // Register WebSocket route
         ws_server_.on(opts_.path, [this](ws::ws_context& ctx) -> task<void> {
             co_await handle_ws_connection(ctx);
         });
@@ -105,12 +105,12 @@ public:
         return ws_server_.listen(host, port);
     }
 
-    /// 运行
+    /// Run
     auto run() -> task<void> {
         co_await ws_server_.run();
     }
 
-    /// 停止
+    /// Stop
     void stop() {
         ws_server_.stop();
         while (!channels_rw_.try_lock())
@@ -123,7 +123,7 @@ public:
 
 private:
     // =========================================================================
-    // WebSocket 连接处理
+    // WebSocket connection handling
     // =========================================================================
 
     auto handle_ws_connection(ws::ws_context& wctx) -> task<void> {
@@ -135,14 +135,14 @@ private:
         std::size_t max_packet_size = 0;
         channel<publish_message> delivery_ch(opts_.delivery_channel_size);
 
-        // 等待 CONNECT 报文
+        // Wait for CONNECT packet
         auto frame_r = co_await ws_read_frame(wctx, parser);
         if (!frame_r) co_return;
 
         auto& frame = *frame_r;
         if (frame.type != control_packet_type::connect) co_return;
 
-        // 处理 CONNECT
+        // Handle CONNECT
         auto cd_r = decode_connect(frame.payload);
         if (!cd_r) {
             logger::debug("mqtt ws: decode CONNECT failed");
@@ -156,7 +156,7 @@ private:
         auto& cd = *cd_r;
         version = cd.version;
 
-        // 安全认证
+        // Security authentication
         if (security_.enabled()) {
             auto auth_user = security_.authenticate(cd.username, cd.password);
             if (!auth_user) {
@@ -170,7 +170,7 @@ private:
             cd.username = *auth_user;
         }
 
-        // 生成 client_id
+        // Generate client_id
         bool cd_client_id_was_empty = cd.client_id.empty();
         if (cd.client_id.empty()) {
             if (cd.clean_session) {
@@ -200,14 +200,14 @@ private:
             }
         }
 
-        // 创建或恢复会话
+        // Create or resume session
         auto [ss, session_present] = sessions_.create_or_resume(
             cd.client_id, cd.clean_session, cd.version);
         ss.keep_alive = cd.keep_alive;
         ss.will_msg = cd.will_msg;
         ss.username = cd.username;
 
-        // v5 属性
+        // v5 properties
         if (cd.version == protocol_version::v5) {
             for (auto& p : cd.props) {
                 if (p.id == property_id::session_expiry_interval)
@@ -218,19 +218,19 @@ private:
                         ss.receive_maximum = *v;
                         ss.inflight_quota  = *v;
                     }
-                // 客户端 topic_alias_maximum → 服务端可向该客户端发送的别名上限 (暂不使用)
+                // Client topic_alias_maximum → upper limit of aliases server can send to this client (not used yet)
                 if (p.id == property_id::maximum_packet_size)
                     if (auto* v = std::get_if<std::uint32_t>(&p.value))
                         max_packet_size = static_cast<std::size_t>(*v);
             }
-            // 服务端 opts_.topic_alias_maximum → 服务端可接收的别名上限 (已在 CONNACK 通告)
+            // Server opts_.topic_alias_maximum → upper limit of aliases server can receive (announced in CONNACK)
             alias_recv.set_max(opts_.topic_alias_maximum);
         }
 
         session = &ss;
         connected = true;
 
-        // 订阅管理
+        // Subscription management
         if (cd.clean_session) {
             sub_map_.erase_client(cd.client_id);
             shared_store_.remove_client(cd.client_id);
@@ -247,7 +247,7 @@ private:
             }
         }
 
-        // 服务端可覆盖 keep-alive
+        // Server can override keep-alive
         std::uint16_t original_keep_alive = cd.keep_alive;
         if (cd.version == protocol_version::v5 && opts_.max_keep_alive > 0
             && cd.keep_alive > opts_.max_keep_alive) {
@@ -265,7 +265,7 @@ private:
             if (opts_.topic_alias_maximum > 0)
                 connack_props.push_back({property_id::topic_alias_maximum,
                     opts_.topic_alias_maximum});
-            // Server Keep Alive (如果被覆盖)
+            // Server Keep Alive (if overridden)
             if (opts_.max_keep_alive > 0 && ss.keep_alive != original_keep_alive)
                 connack_props.push_back({property_id::server_keep_alive, ss.keep_alive});
             // Receive Maximum
@@ -306,17 +306,17 @@ private:
         logger::info("mqtt ws connected client={} version={} session_present={}",
             cd.client_id, to_string(cd.version), session_present);
 
-        // 注册在线 channel
+        // Register online channel
         {
             co_await channels_rw_.lock();
             async_unique_lock_guard wg(channels_rw_, std::adopt_lock);
             online_channels_[cd.client_id] = &delivery_ch;
         }
 
-        // 启动 delivery_loop
+        // Start delivery_loop
         spawn(ctx_, ws_delivery_loop(wctx, session, version, max_packet_size, delivery_ch));
 
-        // Inflight 重发
+        // Inflight retransmission
         if (session_present) {
             for (auto& im : session->inflight_out) {
                 if (im.expected_ack == control_packet_type::puback ||
@@ -331,9 +331,9 @@ private:
             }
         }
 
-        // 投递离线消息
+        // Deliver offline messages
         for (auto& msg : session->offline_queue) {
-            // 检查 message_expiry_interval 过期
+            // Check message_expiry_interval expiration
             if (session_state::check_message_expiry(msg)) continue;
 
             std::uint16_t pid = 0;
@@ -355,11 +355,11 @@ private:
         }
         session->offline_queue.clear();
 
-        // 主循环
+        // Main loop
         while (connected && wctx.is_open()) {
             auto fr = co_await ws_read_frame(wctx, parser);
             if (!fr) {
-                // 非预期断连
+                // Unexpected disconnection
                 if (session) {
                     logger::info("mqtt ws unexpected disconnect client={}", session->client_id);
 
@@ -399,7 +399,7 @@ private:
             auto& f = *fr;
             switch (f.type) {
             case control_packet_type::connect:
-                // MQTT 规范: 同一连接上收到第二个 CONNECT 报文是协议错误
+                // MQTT spec: receiving a second CONNECT packet on the same connection is a protocol error
                 logger::warn("mqtt ws duplicate CONNECT from client={}",
                     session ? session->client_id : "?");
                 if (version == protocol_version::v5) {
@@ -425,7 +425,7 @@ private:
                 }
                 auto& msg = *msg_r;
 
-                // Maximum QoS 强制检查
+                // Maximum QoS enforcement check
                 if (static_cast<std::uint8_t>(msg.qos_value) >
                     static_cast<std::uint8_t>(opts_.maximum_qos)) {
                     logger::warn("mqtt ws PUBLISH qos={} exceeds maximum_qos={}",
@@ -458,7 +458,7 @@ private:
 
                 if (!validate_topic_name(msg.topic)) break;
 
-                // ACL 检查
+                // ACL check
                 if (security_.enabled() && session)
                     if (!security_.authorize_publish(session->username, msg.topic)) {
                         logger::warn("mqtt ws publish denied user={} topic={}",
@@ -470,7 +470,7 @@ private:
                 if (msg.qos_value == qos::at_least_once && msg.packet_id != 0)
                     co_await ws_write(wctx, encode_puback(msg.packet_id, version));
 
-                // QoS 2 → PUBREC, 暂存消息等 PUBREL 后转发
+                // QoS 2 → PUBREC, store message and forward after PUBREL
                 if (msg.qos_value == qos::exactly_once && msg.packet_id != 0) {
                     if (session) {
                         session->qos2_received.insert(msg.packet_id);
@@ -546,7 +546,7 @@ private:
                 co_await ws_write(wctx, encode_pubcomp(ack_r->packet_id, version));
                 if (session) {
                     session->qos2_received.erase(ack_r->packet_id);
-                    // 取出暂存的 QoS 2 消息并转发
+                    // Retrieve stored QoS 2 message and forward
                     auto it = session->qos2_pending_publish.find(ack_r->packet_id);
                     if (it != session->qos2_pending_publish.end()) {
                         auto pending_msg = std::move(it->second);
@@ -584,7 +584,7 @@ private:
                         continue;
                     }
 
-                    // ACL 检查
+                    // ACL check
                     if (security_.enabled()) {
                         auto actual_filter = extract_topic_filter(entry.topic_filter);
                         if (!security_.authorize_subscribe(session->username, actual_filter)) {
@@ -599,7 +599,7 @@ private:
 
                     bool is_new = session->add_subscription(entry);
 
-                    // 注册到 trie + shared store
+                    // Register to trie + shared store
                     auto shared = parse_shared_subscription(entry.topic_filter);
                     if (shared && !shared->share_name.empty()) {
                         sub_map_.insert(shared->topic_filter, session->client_id, entry);
@@ -611,7 +611,7 @@ private:
 
                     return_codes.push_back(static_cast<std::uint8_t>(entry.max_qos));
 
-                    // 投递保留消息
+                    // Deliver retained messages
                     if (is_new || entry.rh == retain_handling::send) {
                         auto actual = extract_topic_filter(entry.topic_filter);
                         auto matches = retained_.match(actual);
@@ -708,7 +708,7 @@ private:
     }
 
     // =========================================================================
-    // WebSocket 传输辅助
+    // WebSocket transport helpers
     // =========================================================================
 
     static auto ws_read_frame(ws::ws_context& wctx, mqtt_parser& parser)
@@ -742,7 +742,7 @@ private:
     }
 
     // =========================================================================
-    // delivery_loop — 从 channel 读取并写入 WebSocket
+    // delivery_loop — read from channel and write to WebSocket
     // =========================================================================
 
     auto ws_delivery_loop(ws::ws_context& wctx, session_state* session,
@@ -755,7 +755,7 @@ private:
 
             auto& msg = *msg_opt;
 
-            // Receive Maximum 流控
+            // Receive Maximum flow control
             if (msg.qos_value != qos::at_most_once && session) {
                 if (session->inflight_out.size() >=
                     static_cast<std::size_t>(session->receive_maximum)) {
@@ -772,7 +772,7 @@ private:
                 msg.topic, msg.payload, msg.qos_value,
                 false, false, pid, version, msg.props);
 
-            // Maximum Packet Size 检查
+            // Maximum Packet Size check
             if (max_packet_size > 0 && pkt.size() > max_packet_size) continue;
 
             co_await ws_write(wctx, pkt);
@@ -790,7 +790,7 @@ private:
     }
 
     // =========================================================================
-    // 消息路由 — subscription_map trie
+    // Message routing — subscription_map trie
     // =========================================================================
 
     auto route_publish(const publish_message& msg,
@@ -798,14 +798,14 @@ private:
     {
         auto matches = sub_map_.match(msg.topic);
 
-        // 去重
+        // Deduplication
         std::map<std::string, subscribe_entry> targets;
         for (auto& m : matches) {
             if (m.client_id == sender_cid && m.entry.no_local) continue;
             targets.try_emplace(m.client_id, m.entry);
         }
 
-        // 共享订阅
+        // Shared subscriptions
         auto shared_targets = shared_store_.find_matching_groups(
             msg.topic,
             [](std::string_view filter, std::string_view topic) {
@@ -826,7 +826,7 @@ private:
             }
         }
 
-        // 投递
+        // Delivery
         for (auto& [cid, entry] : targets) {
             auto effective_qos = static_cast<qos>(
                 std::min(static_cast<std::uint8_t>(msg.qos_value),
@@ -870,7 +870,7 @@ private:
     {
         co_await async_sleep(ctx_, std::chrono::seconds(delay_sec));
         auto* ss = sessions_.find(client_id);
-        if (ss && ss->online) co_return; // 已重连
+        if (ss && ss->online) co_return; // Already reconnected
 
         publish_message wp;
         wp.topic = will_msg.topic;   wp.payload = will_msg.message;
@@ -883,7 +883,7 @@ private:
     }
 
     // =========================================================================
-    // 连接清理
+    // Connection cleanup
     // =========================================================================
 
     auto cleanup_session(session_state* session) -> task<void> {
@@ -903,7 +903,7 @@ private:
     }
 
     // =========================================================================
-    // 工具
+    // Utilities
     // =========================================================================
 
     static auto generate_client_id() -> std::string {
@@ -913,7 +913,7 @@ private:
     }
 
     // =========================================================================
-    // 成员
+    // Member variables
     // =========================================================================
 
     io_context&          ctx_;
@@ -926,10 +926,10 @@ private:
     security_config      security_;
     broker_auth_handler  auth_handler_;
 
-    // async_shared_mutex: 读多写少
-    //   读 (route_publish): co_await lock_shared()
-    //   写 (connect/disconnect): co_await lock()
-    //   stop(): try_lock() 自旋获取写锁
+    // async_shared_mutex: read-heavy workload
+    //   read (route_publish): co_await lock_shared()
+    //   write (connect/disconnect): co_await lock()
+    //   stop(): try_lock() spin to acquire write lock
     async_shared_mutex channels_rw_;
     std::map<std::string, channel<publish_message>*> online_channels_;
 };

@@ -9,7 +9,7 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// channel<T> — 有界异步 MPSC channel
+// channel<T> — Bounded async MPSC channel
 // =============================================================================
 
 export template <typename T>
@@ -26,7 +26,7 @@ class channel {
     };
 
     struct recv_node : waiter_node {
-        std::optional<T>* slot = nullptr;  // 写入接收结果
+        std::optional<T>* slot = nullptr;  // Write receive result
     };
 
 public:
@@ -55,7 +55,7 @@ public:
                 std::lock_guard lock(ch_.mtx_);
                 if (ch_.closed_) { sent_ = false; return true; }
 
-                // 如果有等待的接收者，直接交付
+                // If there's a waiting receiver, deliver directly
                 if (ch_.recv_head_) {
                     auto* w = static_cast<recv_node*>(ch_.recv_head_);
                     ch_.recv_head_ = w->next;
@@ -67,7 +67,7 @@ public:
                     ch_.buffer_.push_back(std::move(value_));
                     sent_ = true;
                 } else {
-                    return false;  // 需要挂起
+                    return false;  // Need to suspend
                 }
             }
             if (to_resume) to_resume.resume();
@@ -87,7 +87,7 @@ public:
             }
         }
 
-        /// 返回 true 表示发送成功，false 表示 channel 已关闭
+        /// Returns true if send succeeded, false if channel is closed
         auto await_resume() noexcept -> bool { return sent_ || !ch_.closed_; }
     };
 
@@ -109,7 +109,7 @@ public:
                 if (!ch_.buffer_.empty()) {
                     result_.emplace(std::move(ch_.buffer_.front()));
                     ch_.buffer_.pop_front();
-                    // 唤醒等待发送的协程，将其值入队
+                    // Wake up waiting send coroutine, enqueue its value
                     if (ch_.send_head_) {
                         auto* w = static_cast<send_node*>(ch_.send_head_);
                         ch_.send_head_ = w->next;
@@ -117,18 +117,18 @@ public:
                         ch_.buffer_.push_back(std::move(w->value));
                         to_resume = w->handle;
                     }
-                    // 解锁后再 resume
+                    // Unlock before resume
                 } else if (ch_.send_head_) {
-                    // buffer 为空但有发送者等待，直接取值
+                    // Buffer is empty but sender is waiting, take value directly
                     auto* w = static_cast<send_node*>(ch_.send_head_);
                     ch_.send_head_ = w->next;
                     if (!ch_.send_head_) ch_.send_tail_ = nullptr;
                     result_.emplace(std::move(w->value));
                     to_resume = w->handle;
                 } else if (ch_.closed_) {
-                    return true;  // 关闭且无数据，result_ 为 nullopt
+                    return true;  // Closed and no data, result_ is nullopt
                 } else {
-                    return false; // 需要挂起
+                    return false; // Need to suspend
                 }
             }
             if (to_resume) to_resume.resume();
@@ -148,23 +148,23 @@ public:
             }
         }
 
-        /// 返回值，或 nullopt 表示 channel 已关闭且无数据
+        /// Returns value, or nullopt if channel is closed and has no data
         auto await_resume() noexcept -> std::optional<T> {
             return std::move(result_);
         }
     };
 
-    /// co_await ch.send(value) — 满时挂起
+    /// co_await ch.send(value) — Suspends when full
     auto send(T value) -> send_awaitable {
         return send_awaitable{*this, std::move(value)};
     }
 
-    /// co_await ch.receive() — 空时挂起
+    /// co_await ch.receive() — Suspends when empty
     auto receive() -> recv_awaitable {
         return recv_awaitable{*this};
     }
 
-    /// 关闭 channel
+    /// Close channel
     void close() noexcept {
         std::vector<std::coroutine_handle<>> to_resume;
         {

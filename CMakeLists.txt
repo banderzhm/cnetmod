@@ -7,7 +7,7 @@ project(cnetmod
 )
 
 # ==============================================================================
-# C++ 标准配置
+# C++ Standard Configuration
 # ==============================================================================
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -16,34 +16,34 @@ set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ==============================================================================
-# 自动检测平台特定的标准库模块路径
+# Auto-detect platform-specific standard library module paths
 # ==============================================================================
 
 if(UNIX)
-    # Linux/Unix/macOS: 自动检测 libc++ 标准库模块路径
+    # Linux/Unix/macOS: Auto-detect libc++ standard library module paths
     
-    # macOS 特殊处理：检测 Homebrew LLVM 路径
+    # macOS special handling: Detect Homebrew LLVM path
     if(APPLE)
-        # Apple Silicon (arm64) Homebrew 路径
+        # Apple Silicon (arm64) Homebrew path
         set(HOMEBREW_LLVM_PREFIX_ARM64 "/opt/homebrew/opt/llvm")
-        # Intel Mac (x86_64) Homebrew 路径
+        # Intel Mac (x86_64) Homebrew path
         set(HOMEBREW_LLVM_PREFIX_X64 "/usr/local/opt/llvm")
         
-        # 根据架构选择 Homebrew 路径
+        # Select Homebrew path based on architecture
         if(CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL "arm64")
             set(HOMEBREW_LLVM_PREFIX ${HOMEBREW_LLVM_PREFIX_ARM64})
         else()
             set(HOMEBREW_LLVM_PREFIX ${HOMEBREW_LLVM_PREFIX_X64})
         endif()
         
-        message(STATUS "macOS 检测: 架构=${CMAKE_HOST_SYSTEM_PROCESSOR}, Homebrew LLVM 路径=${HOMEBREW_LLVM_PREFIX}")
+        message(STATUS "macOS detection: arch=${CMAKE_HOST_SYSTEM_PROCESSOR}, Homebrew LLVM path=${HOMEBREW_LLVM_PREFIX}")
     endif()
     
-    # 尝试查找 libc++ 模块目录 (LLVM 19-21)
+    # Try to find libc++ module directory (LLVM 19-21)
     find_path(LIBCXX_MODULE_DIRS
         NAMES std.cppm
         PATHS
-            # Linux 路径
+            # Linux paths
             /usr/lib/llvm-21/share/libc++/v1
             /usr/lib/llvm-20/share/libc++/v1
             /usr/lib/llvm-19/share/libc++/v1
@@ -51,17 +51,17 @@ if(UNIX)
             /usr/local/lib/llvm-20/share/libc++/v1
             /usr/local/lib/llvm-19/share/libc++/v1
             /opt/llvm/share/libc++/v1
-            # macOS Homebrew 路径 (Apple Silicon & Intel)
+            # macOS Homebrew paths (Apple Silicon & Intel)
             /opt/homebrew/opt/llvm/share/libc++/v1
             /usr/local/opt/llvm/share/libc++/v1
         DOC "Path to libc++ standard library modules"
     )
     
-    # 尝试查找 libc++ 头文件目录 (LLVM 19-21)
+    # Try to find libc++ header directory (LLVM 19-21)
     find_path(LIBCXX_INCLUDE_DIRS
         NAMES __config
         PATHS
-            # Linux 路径
+            # Linux paths
             /usr/lib/llvm-21/include/c++/v1
             /usr/lib/llvm-20/include/c++/v1
             /usr/lib/llvm-19/include/c++/v1
@@ -70,38 +70,38 @@ if(UNIX)
             /usr/local/lib/llvm-19/include/c++/v1
             /opt/llvm/include/c++/v1
             /usr/include/c++/v1
-            # macOS Homebrew 路径 (Apple Silicon & Intel)
+            # macOS Homebrew paths (Apple Silicon & Intel)
             /opt/homebrew/opt/llvm/include/c++/v1
             /usr/local/opt/llvm/include/c++/v1
         DOC "Path to libc++ headers"
     )
     
     if(LIBCXX_MODULE_DIRS AND LIBCXX_INCLUDE_DIRS)
-        message(STATUS "自动检测到 libc++ 路径:")
-        message(STATUS "  模块目录: ${LIBCXX_MODULE_DIRS}")
-        message(STATUS "  头文件目录: ${LIBCXX_INCLUDE_DIRS}")
+        message(STATUS "Auto-detected libc++ paths:")
+        message(STATUS "  Module directory: ${LIBCXX_MODULE_DIRS}")
+        message(STATUS "  Header directory: ${LIBCXX_INCLUDE_DIRS}")
         
-        # 强制所有目标使用 libc++ (必须在添加第三方库之前设置)
+        # Force all targets to use libc++ (must be set before adding third-party libraries)
         if(APPLE)
-            # macOS: 需要指定 sysroot 和 LLVM libc++ 库路径
-            # 获取 macOS SDK 路径
+            # macOS: Need to specify sysroot and LLVM libc++ library path
+            # Get macOS SDK path
             execute_process(
                 COMMAND xcrun --show-sdk-path
                 OUTPUT_VARIABLE MACOS_SDK_PATH
                 OUTPUT_STRIP_TRAILING_WHITESPACE
             )
-            message(STATUS "macOS SDK 路径: ${MACOS_SDK_PATH}")
+            message(STATUS "macOS SDK path: ${MACOS_SDK_PATH}")
             
-            # 从模块目录推断 LLVM 安装路径
+            # Infer LLVM installation path from module directory
             get_filename_component(LLVM_LIB_PATH "${LIBCXX_MODULE_DIRS}/../../../lib/c++" ABSOLUTE)
-            message(STATUS "LLVM libc++ 库路径: ${LLVM_LIB_PATH}")
+            message(STATUS "LLVM libc++ library path: ${LLVM_LIB_PATH}")
             
             add_compile_options(
                 -nostdinc++
                 -isystem ${LIBCXX_INCLUDE_DIRS}
                 -isysroot ${MACOS_SDK_PATH}
             )
-            # macOS 链接选项：指定 LLVM libc++ 路径避免与系统 libc++ 冲突
+            # macOS link options: Specify LLVM libc++ path to avoid conflicts with system libc++
             add_link_options(
                 -stdlib=libc++
                 -L${LLVM_LIB_PATH}
@@ -118,44 +118,44 @@ if(UNIX)
             add_link_options(-stdlib=libc++ -lc++ -lc++abi)
         endif()
     else()
-        message(WARNING "无法自动检测 libc++ 路径。请手动设置:")
+        message(WARNING "Unable to auto-detect libc++ paths. Please set manually:")
         message(WARNING "  cmake -DLIBCXX_MODULE_DIRS=<path> -DLIBCXX_INCLUDE_DIRS=<path> ..")
     endif()
     
 elseif(WIN32)
-    # Windows: 自动检测 MSVC 标准库模块路径
+    # Windows: Auto-detect MSVC standard library module paths
     
-    # 优先级1: 尝试从 VCToolsInstallDir 环境变量获取
+    # Priority 1: Try to get from VCToolsInstallDir environment variable
     if(DEFINED ENV{VCToolsInstallDir})
         set(LIBCXX_MODULE_DIRS "$ENV{VCToolsInstallDir}/modules" CACHE PATH "Path to MSVC modules")
         if(EXISTS "${LIBCXX_MODULE_DIRS}/std.ixx")
-            message(STATUS "从 VCToolsInstallDir 环境变量检测到 MSVC 模块目录: ${LIBCXX_MODULE_DIRS}")
+            message(STATUS "Detected MSVC module directory from VCToolsInstallDir environment variable: ${LIBCXX_MODULE_DIRS}")
         else()
-            message(WARNING "找到 VCToolsInstallDir 但 std.ixx 不存在于: ${LIBCXX_MODULE_DIRS}")
+            message(WARNING "Found VCToolsInstallDir but std.ixx does not exist at: ${LIBCXX_MODULE_DIRS}")
             unset(LIBCXX_MODULE_DIRS CACHE)
         endif()
     endif()
     
-    # 优先级2: 如果环境变量未找到或无效，尝试从编译器路径检测
+    # Priority 2: If environment variable not found or invalid, try to detect from compiler path
     if(NOT LIBCXX_MODULE_DIRS)
-        # 从编译器路径提取 MSVC 版本目录
-        # cl.exe 位于: VC/Tools/MSVC/{version}/bin/Hostx64/x64/cl.exe
-        # modules 位于: VC/Tools/MSVC/{version}/modules/
-        # 所以需要从 cl.exe 目录向上3级
+        # Extract MSVC version directory from compiler path
+        # cl.exe is located at: VC/Tools/MSVC/{version}/bin/Hostx64/x64/cl.exe
+        # modules are located at: VC/Tools/MSVC/{version}/modules/
+        # So we need to go up 3 levels from cl.exe directory
         get_filename_component(COMPILER_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
         get_filename_component(COMPILER_HOST_DIR "${COMPILER_DIR}" DIRECTORY)
         get_filename_component(COMPILER_BIN_DIR "${COMPILER_HOST_DIR}" DIRECTORY)
         get_filename_component(MSVC_VERSION_DIR "${COMPILER_BIN_DIR}" DIRECTORY)
         
-        # 首先尝试从编译器路径提取的路径
+        # First try the path extracted from compiler path
         set(DETECTED_MODULE_PATH "${MSVC_VERSION_DIR}/modules")
         
         if(EXISTS "${DETECTED_MODULE_PATH}/std.ixx")
             set(LIBCXX_MODULE_DIRS "${DETECTED_MODULE_PATH}" CACHE PATH "Path to MSVC modules")
-            message(STATUS "从编译器路径自动检测到 MSVC 模块目录: ${LIBCXX_MODULE_DIRS}")
+            message(STATUS "Auto-detected MSVC module directory from compiler path: ${LIBCXX_MODULE_DIRS}")
         else()
-            # 后备方案: 在常见的 Visual Studio 安装位置搜索
-            message(STATUS "无法从编译器路径检测，搜索常见安装位置...")
+            # Fallback: Search common Visual Studio installation locations
+            message(STATUS "Unable to detect from compiler path, searching common installation locations...")
             find_path(LIBCXX_MODULE_DIRS
                 NAMES std.ixx
                 PATHS
@@ -171,9 +171,9 @@ elseif(WIN32)
             )
             
             if(LIBCXX_MODULE_DIRS)
-                message(STATUS "在常见位置找到 MSVC 模块目录: ${LIBCXX_MODULE_DIRS}")
+                message(STATUS "Found MSVC module directory at common location: ${LIBCXX_MODULE_DIRS}")
             else()
-                message(WARNING "无法自动检测 MSVC 模块路径。请手动设置:")
+                message(WARNING "Unable to auto-detect MSVC module path. Please set manually:")
                 message(WARNING "  cmake -DLIBCXX_MODULE_DIRS=<path> ..")
             endif()
         endif()
@@ -182,20 +182,20 @@ endif()
 
 
 # ==============================================================================
-# 编译器标志
+# Compiler Flags
 # ==============================================================================
 if(MSVC)
     add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
-    # 使用 C7 兼容调试格式 (/Z7) 而非程序数据库 (/Zi)
-    # 将调试符号放入 .obj 文件而非单个巨大的 .pdb，绕过 4GB 限制
+    # Use C7-compatible debug format (/Z7) instead of program database (/Zi)
+    # Embeds debug symbols in .obj files instead of a single huge .pdb, bypassing 4GB limit
     add_compile_options(/Z7)
     
-    # 禁用过度内联（减少代码膨胀）
+    # Disable excessive inlining (reduces code bloat)
     add_compile_options(/Ob1)
-    # 禁用全程序优化（避免目标文件合并膨胀）
+    # Disable whole program optimization (avoids merged object file bloat)
     add_compile_options(/GL-)
-    # 定义宏屏蔽 CRT 安全警告（消除无关警告）
+    # Define macro to suppress CRT security warnings (eliminates irrelevant warnings)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
@@ -209,87 +209,87 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ==============================================================================
-# 第三方库配置
+# Third-party Library Configuration
 # ==============================================================================
-# stdexec: 纯头文件模式（不走 add_subdirectory，避免 CPM 依赖）
-# 用于上层 sender/receiver 组织，底层 I/O 使用原生协程
+# stdexec: Header-only mode (not using add_subdirectory to avoid CPM dependency)
+# Used for upper-layer sender/receiver organization, lower-layer I/O uses native coroutines
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include)
 
-# jwt-cpp: header-only JWT 库 (HS256/RS256 等)
+# jwt-cpp: Header-only JWT library (HS256/RS256, etc.)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include)
 
-# nlohmann/json: C++ modules 支持 (json.cppm)
+# nlohmann/json: C++ modules support (json.cppm)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include)
 set(NLOHMANN_JSON_MODULE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm)
 
-# 日志模块使用纯 C++23 std::format 实现，无需外部依赖
+# Logging module uses pure C++23 std::format implementation, no external dependencies
 
 # ==============================================================================
-# SSL/TLS 支持（可选）
+# SSL/TLS Support (Optional)
 # ==============================================================================
 option(CNETMOD_ENABLE_SSL "Enable SSL/TLS support (requires OpenSSL)" ON)
 if(CNETMOD_ENABLE_SSL)
     find_package(OpenSSL QUIET)
     if(OpenSSL_FOUND)
         set(CNETMOD_HAS_SSL ON)
-        message(STATUS "SSL/TLS: 已启用 (OpenSSL ${OPENSSL_VERSION})")
+        message(STATUS "SSL/TLS: Enabled (OpenSSL ${OPENSSL_VERSION})")
     else()
         set(CNETMOD_HAS_SSL OFF)
-        message(STATUS "SSL/TLS: 未找到 OpenSSL，禁用 SSL 支持")
+        message(STATUS "SSL/TLS: OpenSSL not found, SSL support disabled")
     endif()
 else()
     set(CNETMOD_HAS_SSL OFF)
-    message(STATUS "SSL/TLS: 用户禁用")
+    message(STATUS "SSL/TLS: Disabled by user")
 endif()
 
 # ==============================================================================
-# zlib 压缩支持（可选）
+# zlib Compression Support (Optional)
 # ==============================================================================
 find_package(ZLIB QUIET)
 if(ZLIB_FOUND)
     set(CNETMOD_HAS_ZLIB ON)
-    message(STATUS "zlib: 已找到 (${ZLIB_VERSION_STRING})")
+    message(STATUS "zlib: Found (${ZLIB_VERSION_STRING})")
 else()
     set(CNETMOD_HAS_ZLIB OFF)
-    message(STATUS "zlib: 未找到，禁用 gzip 压缩中间件")
+    message(STATUS "zlib: Not found, gzip compression middleware disabled")
 endif()
 
 # ==============================================================================
-# 平台特定 I/O 后端检测
+# Platform-specific I/O Backend Detection
 # ==============================================================================
 if(WIN32)
     set(CNETMOD_HAS_IOCP ON)
-    message(STATUS "I/O 后端: IOCP (Windows)")
+    message(STATUS "I/O backend: IOCP (Windows)")
 elseif(APPLE)
     set(CNETMOD_HAS_KQUEUE ON)
-    message(STATUS "I/O 后端: kqueue (macOS)")
+    message(STATUS "I/O backend: kqueue (macOS)")
 elseif(UNIX)
-    # 检测 io_uring 支持
+    # Detect io_uring support
     include(CheckIncludeFileCXX)
     check_include_file_cxx("liburing.h" CNETMOD_HAS_IO_URING)
     if(CNETMOD_HAS_IO_URING)
-        message(STATUS "I/O 后端: io_uring (Linux)")
+        message(STATUS "I/O backend: io_uring (Linux)")
     endif()
-    # epoll 在 Linux 上始终可用
+    # epoll is always available on Linux
     set(CNETMOD_HAS_EPOLL ON)
-    message(STATUS "I/O 后端: epoll (Linux)")
+    message(STATUS "I/O backend: epoll (Linux)")
 endif()
 
 # ==============================================================================
-# 源文件收集
+# Source File Collection
 # ==============================================================================
 
-# 收集模块接口文件
+# Collect module interface files
 file(GLOB_RECURSE MODULE_INTERFACE_FILES
     "src/*.cppm"
     "src/*.ixx"
 )
 
-# 收集实现文件（排除 main.cpp）
+# Collect implementation files (excluding main.cpp)
 file(GLOB_RECURSE CPP_SOURCES "src/*.cpp")
 list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
-# 按平台过滤：排除当前平台不需要的 I/O 后端模块
+# Filter by platform: Exclude I/O backend modules not needed for current platform
 if(NOT CNETMOD_HAS_IOCP)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/iocp")
 endif()
@@ -307,7 +307,7 @@ if(NOT CNETMOD_HAS_SSL)
 endif()
 
 # ==============================================================================
-# 核心库目标: cnetmod_core
+# Core Library Target: cnetmod_core
 # ==============================================================================
 
 add_library(cnetmod_core STATIC
@@ -319,7 +319,7 @@ target_include_directories(cnetmod_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-# 平台特定宏定义
+# Platform-specific macro definitions
 target_compile_definitions(cnetmod_core PUBLIC
     $<$<PLATFORM_ID:Windows>:CNETMOD_PLATFORM_WINDOWS>
     $<$<PLATFORM_ID:Linux>:CNETMOD_PLATFORM_LINUX>
@@ -332,29 +332,29 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
 )
 
-# 平台特定链接
+# Platform-specific linking
 if(WIN32)
     target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock)
 elseif(CNETMOD_HAS_IO_URING)
     target_link_libraries(cnetmod_core PUBLIC uring)
 endif()
 
-# SSL/TLS 链接
+# SSL/TLS linking
 if(CNETMOD_HAS_SSL)
     target_link_libraries(cnetmod_core PUBLIC OpenSSL::SSL OpenSSL::Crypto)
 endif()
 
-# zlib 链接
+# zlib linking
 if(CNETMOD_HAS_ZLIB)
     target_link_libraries(cnetmod_core PUBLIC ZLIB::ZLIB)
 endif()
 
 # ==============================================================================
-# C++ 模块配置
+# C++ Module Configuration
 # ==============================================================================
 
 if(UNIX AND LIBCXX_MODULE_DIRS AND LIBCXX_INCLUDE_DIRS)
-    # Linux/macOS: libc++ 标准库模块
+    # Linux/macOS: libc++ standard library modules
     target_include_directories(cnetmod_core SYSTEM PUBLIC
         ${LIBCXX_INCLUDE_DIRS}
     )
@@ -368,7 +368,7 @@ if(UNIX AND LIBCXX_MODULE_DIRS AND LIBCXX_INCLUDE_DIRS)
             ${NLOHMANN_JSON_MODULE}
     )
 elseif(WIN32 AND LIBCXX_MODULE_DIRS)
-    # Windows: MSVC 标准库模块
+    # Windows: MSVC standard library modules
     target_sources(cnetmod_core PUBLIC
         FILE_SET cxx_modules TYPE CXX_MODULES
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${LIBCXX_MODULE_DIRS}
@@ -379,7 +379,7 @@ elseif(WIN32 AND LIBCXX_MODULE_DIRS)
             ${NLOHMANN_JSON_MODULE}
     )
 else()
-    message(WARNING "标准库模块路径未检测到，请手动设置 LIBCXX_MODULE_DIRS")
+    message(WARNING "Standard library module path not detected, please set LIBCXX_MODULE_DIRS manually")
     target_sources(cnetmod_core PUBLIC
         FILE_SET cxx_modules TYPE CXX_MODULES
         BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
@@ -387,7 +387,7 @@ else()
     )
 endif()
 
-# 模块生成模式
+# Module generation mode
 set_property(TARGET cnetmod_core PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE"
 )
@@ -395,7 +395,7 @@ set_property(TARGET cnetmod_core PROPERTY
 set(CNETMOD_LINK_TARGET cnetmod_core)
 
 # ==============================================================================
-# 主可执行文件
+# Main Executable
 # ==============================================================================
 
 add_executable(cnetmod_app src/main.cpp)
@@ -405,7 +405,7 @@ set_property(TARGET cnetmod_app PROPERTY
 )
 
 # ==============================================================================
-# 测试配置
+# Test Configuration
 # ==============================================================================
 
 option(CNETMOD_BUILD_TESTS "Build tests" OFF)
@@ -414,7 +414,7 @@ if(CNETMOD_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.
 endif()
 
 # ==============================================================================
-# 示例程序配置
+# Example Program Configuration
 # ==============================================================================
 
 option(CNETMOD_BUILD_EXAMPLES "Build examples" ON)
@@ -423,7 +423,7 @@ if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMake
 endif()
 
 # ==============================================================================
-# 文档示例
+# Documentation Examples
 # ==============================================================================
 
 if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/doc/CMakeLists.txt")
@@ -431,16 +431,16 @@ if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/doc/CMakeLists
 endif()
 
 # ==============================================================================
-# 构建信息汇总
+# Build Information Summary
 # ==============================================================================
 
 message(STATUS "==========================================")
-message(STATUS "项目: ${PROJECT_NAME} v${PROJECT_VERSION}")
-message(STATUS "C++ 标准: C++${CMAKE_CXX_STANDARD}")
-message(STATUS "编译器: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
-message(STATUS "构建类型: ${CMAKE_BUILD_TYPE}")
-message(STATUS "平台: ${CMAKE_SYSTEM_NAME}")
+message(STATUS "Project: ${PROJECT_NAME} v${PROJECT_VERSION}")
+message(STATUS "C++ Standard: C++${CMAKE_CXX_STANDARD}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
 if(LIBCXX_MODULE_DIRS)
-    message(STATUS "标准库模块: ${LIBCXX_MODULE_DIRS}")
+    message(STATUS "Standard Library Modules: ${LIBCXX_MODULE_DIRS}")
 endif()
 message(STATUS "==========================================")

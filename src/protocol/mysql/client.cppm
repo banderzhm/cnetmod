@@ -28,19 +28,19 @@ import cnetmod.core.ssl;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// mysql::client — 异步 MySQL 客户端
+// mysql::client — Async MySQL client
 // =============================================================================
 
 export class client {
 public:
     explicit client(io_context& ctx) noexcept : ctx_(ctx) {}
 
-    // ── 连接 ────────────────────────────────────────────────
+    // ── Connection ────────────────────────────────────────────────
 
     auto connect(connect_options opts = {}) -> task<result_set> {
         result_set err_rs;
 
-        // TCP 连接
+        // TCP connection
         auto addr_r = ip_address::from_string(opts.host);
         if (!addr_r) { err_rs.error_msg = "invalid host"; co_return err_rs; }
 
@@ -75,7 +75,7 @@ public:
         auth_plugin_ = greeting.auth_plugin_name;
         auth_scramble_.assign(greeting.auth_data.begin(), greeting.auth_data.end());
 
-        // Capability 协商
+        // Capability negotiation
         std::uint32_t client_caps =
             CLIENT_LONG_PASSWORD | CLIENT_FOUND_ROWS | CLIENT_LONG_FLAG |
             CLIENT_PROTOCOL_41 | CLIENT_TRANSACTIONS |
@@ -149,17 +149,17 @@ public:
         client_caps_ = client_caps;
         password_ = opts.password;
 
-        // 密码哈希
+        // Password hash
         auto auth_response = detail::hash_password_for_plugin(
             greeting.auth_plugin_name, opts.password,
             std::span<const std::uint8_t>(greeting.auth_data.data(), greeting.auth_data.size()));
 
-        // Login 包
+        // Login packet
         auto login_pkt = detail::build_login_packet(opts, greeting, client_caps, auth_response);
         auto lw = co_await write_packet(login_pkt, seq_++);
         if (!lw) { sock_.close(); err_rs.error_msg = "failed to send login"; co_return err_rs; }
 
-        // 认证响应循环
+        // Authentication response loop
         auto auth_rs = co_await handle_auth_response(opts.password);
         if (auth_rs.is_err()) { sock_.close(); co_return auth_rs; }
 
@@ -181,12 +181,12 @@ public:
         co_return co_await read_result_set(false);
     }
 
-    /// execute 是 query 的别名
+    /// execute is an alias for query
     auto execute(std::string_view sql) -> task<result_set> {
         return query(sql);
     }
 
-    /// execute with_params — 客户端 SQL 格式化后执行 (COM_QUERY)
+    /// execute with_params — Client-side SQL formatting then execute (COM_QUERY)
     auto execute(with_params_t wp) -> task<result_set> {
         result_set err_rs;
         if (!connected_) { err_rs.error_msg = "not connected"; co_return err_rs; }
@@ -201,7 +201,7 @@ public:
         co_return co_await query(*sql_r);
     }
 
-    /// 获取当前连接的格式选项
+    /// Get current connection's format options
     auto current_format_opts() const noexcept -> const format_options& {
         return format_opts_;
     }
@@ -234,12 +234,12 @@ public:
         std::vector<row> batch;
         if (!st.should_read_rows()) co_return batch;
 
-        // 读取一批行（最多 100 行或直到 EOF）
+        // Read a batch of rows (max 100 rows or until EOF)
         for (int i = 0; i < 100; ++i) {
             auto row_pkt = co_await read_packet();
             if (row_pkt.empty()) { st.set_error(0, "connection lost"); break; }
 
-            // EOF/OK = 结果集结束
+            // EOF/OK = result set end
             if (row_pkt[0] == EOF_HEADER && row_pkt.size() < 9) {
                 auto ok = detail::parse_ok_packet(row_pkt.data(), row_pkt.size());
                 st.set_ok_data(ok.affected_rows, ok.last_insert_id,
@@ -257,7 +257,7 @@ public:
                 break;
             }
 
-            // 解析行数据
+            // Parse row data
             batch.push_back(
                 detail::parse_text_row(row_pkt.data(), row_pkt.size(), st.columns()));
         }
@@ -272,7 +272,7 @@ public:
         co_await read_resultset_head_impl(st, false);
     }
 
-    // ── run_pipeline — 批量执行多个命令（experimental）────
+    // ── run_pipeline — Batch execute multiple commands (experimental)────
 
     auto run_pipeline(const pipeline_request& req,
                       std::vector<stage_response>& responses) -> task<void>
@@ -286,7 +286,7 @@ public:
             co_return;
         }
 
-        // 逐个发送并读取响应
+        // Send and read responses one by one
         for (std::size_t i = 0; i < req.size(); ++i) {
             auto& stage = req.stages()[i];
             auto& resp  = responses[i];
@@ -355,7 +355,7 @@ public:
         stmt.num_params  = pr->num_params;
         stmt.num_columns = pr->num_columns;
 
-        // 跳过 param 列定义包
+        // Skip param column definition packets
         bool has_deprecate_eof = (client_caps_ & CLIENT_DEPRECATE_EOF) != 0;
         if (stmt.num_params > 0) {
             for (std::uint16_t i = 0; i < stmt.num_params; ++i)
@@ -364,7 +364,7 @@ public:
                 (void)co_await read_packet(); // EOF
         }
 
-        // 跳过 column 列定义包
+        // Skip column definition packets
         if (stmt.num_columns > 0) {
             for (std::uint16_t i = 0; i < stmt.num_columns; ++i)
                 (void)co_await read_packet();
@@ -400,7 +400,7 @@ public:
         seq_ = 0;
         auto pkt = detail::build_close_stmt_command(stmt.id);
         (void)co_await write_packet(pkt, seq_++);
-        // COM_STMT_CLOSE 无响应
+        // COM_STMT_CLOSE has no response
     }
 
     // ── COM_PING ─────────────────────────────────────────────
@@ -470,7 +470,7 @@ public:
     auto is_open() const noexcept -> bool { return connected_ && sock_.is_open(); }
 
 private:
-    // ── 传输层 ──────────────────────────────────────────────
+    // ── Transport layer ──────────────────────────────────────────────
 
     auto do_write(const_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
 #ifdef CNETMOD_HAS_SSL
@@ -486,7 +486,7 @@ private:
         co_return co_await async_read(ctx_, sock_, buf);
     }
 
-    // ── 精确读取 N 字节 ─────────────────────────────────────
+    // ── Read exactly N bytes ─────────────────────────────────────
 
     auto read_exact(std::uint8_t* dst, std::size_t n) -> task<bool> {
         std::size_t got = 0;
@@ -507,7 +507,7 @@ private:
         co_return true;
     }
 
-    // ── MySQL 包读写 ────────────────────────────────────────
+    // ── MySQL packet read/write ────────────────────────────────────────
 
     auto read_packet() -> task<std::vector<std::uint8_t>> {
         std::vector<std::uint8_t> payload;
@@ -566,7 +566,7 @@ private:
         co_return true;
     }
 
-    // ── 认证响应处理 ────────────────────────────────────────
+    // ── Authentication response handling ────────────────────────────────────────
 
     auto handle_auth_response(std::string_view password) -> task<result_set> {
         result_set err_rs;
@@ -607,28 +607,28 @@ private:
                 break;
             }
             case detail::handshake_response_type::auth_more_data: {
-                // caching_sha2_password 流程:
+                // caching_sha2_password flow:
                 // data[1]==3 => fast auth success, read next packet for OK
                 // data[1]==4 => full auth required
                 if (resp.size() >= 2 && resp[1] == 3) {
-                    // fast auth OK — 继续读下一个包（应该是 OK）
+                    // fast auth OK — continue reading next packet (should be OK)
                     break;
                 }
                 if (resp.size() >= 2 && resp[1] == 4) {
-                    // full auth: 如果在安全通道(TLS)上，发送明文密码+\0
+                    // full auth: if on secure channel (TLS), send plaintext password+\0
                     if (secure_channel_) {
                         std::vector<std::uint8_t> pwd_pkt(password.begin(), password.end());
                         pwd_pkt.push_back(0);
                         auto w = co_await write_packet(pwd_pkt, seq_++);
                         if (!w) { err_rs.error_msg = "failed to send full auth"; co_return err_rs; }
                     } else {
-                        // 非安全通道 — 需要 RSA 加密，暂不支持
+                        // Non-secure channel — requires RSA encryption, not yet supported
                         err_rs.error_msg = "caching_sha2_password full auth requires TLS";
                         co_return err_rs;
                     }
                     break;
                 }
-                // 未知 more_data，跳过继续
+                // Unknown more_data, skip and continue
                 break;
             }
             default:
@@ -641,7 +641,7 @@ private:
         co_return err_rs;
     }
 
-    // ── read_resultset_head_impl（内部，用于 streaming）───────
+    // ── read_resultset_head_impl (internal, for streaming)───────
 
     auto read_resultset_head_impl(execution_state& st, [[maybe_unused]] bool binary) -> task<void> {
         auto resp = co_await read_packet();
@@ -654,7 +654,7 @@ private:
         }
 
         // OK (no result set — INSERT/UPDATE/DELETE etc.)
-        // 0x00 始终是 OK 包（列数 > 0，不会是 lenenc 0）
+        // 0x00 is always OK packet (column count > 0, cannot be lenenc 0)
         if (resp[0] == OK_HEADER) {
             auto ok = detail::parse_ok_packet(resp.data(), resp.size());
             st.set_ok_data(ok.affected_rows, ok.last_insert_id,
@@ -691,7 +691,7 @@ private:
         st.set_state(execution_state::state_t::reading_rows);
     }
 
-    // ── 结果集读取（text / binary）─────────────────────
+    // ── Result set reading (text / binary)─────────────────────
 
     auto read_result_set(bool binary) -> task<result_set> {
         result_set err_rs;
@@ -709,8 +709,8 @@ private:
             co_return err_rs;
         }
 
-        // OK (无结果集 — INSERT/UPDATE/DELETE)
-        // 0x00 始终是 OK 包（结果集列数 > 0，不会与 lenenc 0 冲突）
+        // OK (no result set — INSERT/UPDATE/DELETE)
+        // 0x00 is always OK packet (result set column count > 0, won't conflict with lenenc 0)
         if (resp[0] == OK_HEADER) {
             auto ok = detail::parse_ok_packet(resp.data(), resp.size());
             result_set rs;
@@ -722,7 +722,7 @@ private:
             co_return rs;
         }
 
-        // 结果集: 列数
+        // Result set: column count
         auto col_count_r = detail::read_lenenc(resp.data(), resp.size());
         if (col_count_r.bytes_consumed == 0) {
             err_rs.error_msg = "bad column count";
@@ -733,26 +733,26 @@ private:
         result_set rs;
         rs.columns.reserve(num_cols);
 
-        // 列定义
+        // Column definitions
         for (std::size_t i = 0; i < num_cols; ++i) {
             auto col_pkt = co_await read_packet();
             if (col_pkt.empty()) { err_rs.error_msg = "truncated column def"; co_return err_rs; }
             rs.columns.push_back(detail::parse_column_def(col_pkt.data(), col_pkt.size()));
         }
 
-        // EOF（如果没有 DEPRECATE_EOF）
+        // EOF (if no DEPRECATE_EOF)
         bool has_deprecate_eof = (client_caps_ & CLIENT_DEPRECATE_EOF) != 0;
         if (!has_deprecate_eof) {
             auto eof_pkt = co_await read_packet();
             (void)eof_pkt;
         }
 
-        // 行数据
+        // Row data
         for (;;) {
             auto row_pkt = co_await read_packet();
             if (row_pkt.empty()) break;
 
-            // EOF / OK = 结果集结束
+            // EOF / OK = result set end
             if (row_pkt[0] == EOF_HEADER && row_pkt.size() < 9) {
                 auto ok = detail::parse_ok_packet(row_pkt.data(), row_pkt.size());
                 rs.affected_rows = ok.affected_rows;
@@ -778,7 +778,7 @@ private:
         co_return rs;
     }
 
-    // ── 成员 ────────────────────────────────────────────────
+    // ── Members ────────────────────────────────────────────────
 
     io_context& ctx_;
     socket      sock_;
@@ -792,7 +792,7 @@ private:
     std::vector<std::uint8_t> auth_scramble_;
     format_options format_opts_;
 
-    // 读缓冲区
+    // Read buffer
     std::array<std::uint8_t, 8192> rbuf_{};
     std::size_t rbuf_pos_ = 0;
     std::size_t rbuf_len_ = 0;

@@ -22,15 +22,15 @@ import cnetmod.io.io_operation;
 namespace cnetmod {
 
 // =============================================================================
-// IOCP 协程操作基类
+// IOCP coroutine operation base class
 // =============================================================================
 
-/// OVERLAPPED + coroutine_handle 封装
-/// 每个异步操作都继承此类，I/O 完成后自动恢复协程
+/// OVERLAPPED + coroutine_handle wrapper
+/// Each async operation inherits this class, automatically resumes coroutine after I/O completion
 export struct iocp_overlapped : OVERLAPPED {
-    std::coroutine_handle<> coroutine{};  // 完成后恢复的协程
-    std::error_code error{};              // 完成错误码
-    DWORD bytes_transferred = 0;          // 传输字节数
+    std::coroutine_handle<> coroutine{};  // Coroutine to resume after completion
+    std::error_code error{};              // Completion error code
+    DWORD bytes_transferred = 0;          // Transferred bytes
 
     iocp_overlapped() noexcept {
         Internal = 0;
@@ -51,7 +51,7 @@ export struct iocp_overlapped : OVERLAPPED {
         bytes_transferred = 0;
     }
 
-    /// 设置文件偏移
+    /// Set file offset
     void set_offset(std::uint64_t offset) noexcept {
         Offset = static_cast<DWORD>(offset & 0xFFFFFFFF);
         OffsetHigh = static_cast<DWORD>(offset >> 32);
@@ -59,10 +59,10 @@ export struct iocp_overlapped : OVERLAPPED {
 };
 
 // =============================================================================
-// IOCP Context 实现
+// IOCP Context implementation
 // =============================================================================
 
-/// Windows IOCP (I/O Completion Port) 事件循环
+/// Windows IOCP (I/O Completion Port) event loop
 export class iocp_context : public io_context {
 public:
     iocp_context() {
@@ -80,26 +80,26 @@ public:
             ::CloseHandle(iocp_handle_);
     }
 
-    /// 运行事件循环直到 stop()
+    /// Run event loop until stop()
     void run() override {
         while (!stopped_.load(std::memory_order_relaxed)) {
             run_batch_impl(INFINITE);
         }
     }
 
-    /// 处理一批完成事件（阻塞）
+    /// Process a batch of completion events (blocking)
     auto run_one() -> std::size_t override {
         return run_batch_impl(INFINITE);
     }
 
-    /// 非阻塞轮询
+    /// Non-blocking poll
     auto poll() -> std::size_t override {
         return run_batch_impl(0);
     }
 
     void stop() override {
         stopped_.store(true, std::memory_order_relaxed);
-        // 投递一个空完成包唤醒 GetQueuedCompletionStatus
+        // Post an empty completion packet to wake GetQueuedCompletionStatus
         ::PostQueuedCompletionStatus(iocp_handle_, 0, 0, nullptr);
     }
 
@@ -111,7 +111,7 @@ public:
         stopped_.store(false, std::memory_order_relaxed);
     }
 
-    /// 关联句柄（socket/file HANDLE）到 IOCP
+    /// Associate handle (socket/file HANDLE) to IOCP
     [[nodiscard]] auto associate(HANDLE handle)
         -> std::expected<void, std::error_code>
     {
@@ -124,28 +124,28 @@ public:
         return {};
     }
 
-    /// 投递用户自定义完成通知
+    /// Post user-defined completion notification
     void post_completion(iocp_overlapped* ov) {
         ::PostQueuedCompletionStatus(
             iocp_handle_, 0, 0,
             reinterpret_cast<LPOVERLAPPED>(ov));
     }
 
-    /// 获取原生 IOCP 句柄
+    /// Get native IOCP handle
     [[nodiscard]] auto native_handle() const noexcept -> HANDLE {
         return iocp_handle_;
     }
 
 protected:
     void wake() override {
-        // key=1 区分 stop(key=0)，ov=nullptr 表示 post 唤醒
+        // key=1 distinguishes from stop(key=0), ov=nullptr indicates post wake
         ::PostQueuedCompletionStatus(iocp_handle_, 0, 1, nullptr);
     }
 
 private:
     static constexpr ULONG max_batch_ = 64;
 
-    /// 核心事件分发 — 批量版
+    /// Core event dispatch — batch version
     auto run_batch_impl(DWORD timeout_ms) -> std::size_t {
         OVERLAPPED_ENTRY entries[max_batch_];
         ULONG removed = 0;
@@ -163,16 +163,16 @@ private:
 
             if (entry.lpOverlapped == nullptr) {
                 if (entry.lpCompletionKey == 1) {
-                    // post 唤醒信号
+                    // post wake signal
                     handled += drain_post_queue();
                 }
-                // key==0: stop 信号，忽略
+                // key==0: stop signal, ignore
                 continue;
             }
 
             auto* iov = static_cast<iocp_overlapped*>(entry.lpOverlapped);
 
-            // 检查错误：Internal 字段存储 NTSTATUS
+            // Check error: Internal field stores NTSTATUS
             if (entry.lpOverlapped->Internal != 0) {
                 // NTSTATUS → Win32 error code (RtlNtStatusToDosError from ntdll)
                 iov->error = std::error_code(
@@ -190,7 +190,7 @@ private:
         return handled;
     }
 
-    /// 动态加载 ntdll.dll!RtlNtStatusToDosError
+    /// Dynamically load ntdll.dll!RtlNtStatusToDosError
     static auto ntstatus_to_win32(long ntstatus) noexcept -> unsigned long {
         using fn_t = unsigned long (__stdcall*)(long);
         static fn_t fn = []() -> fn_t {

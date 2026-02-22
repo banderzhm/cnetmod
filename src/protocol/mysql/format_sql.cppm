@@ -11,19 +11,19 @@ import :diagnostics;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// format_error — 格式化错误码
+// format_error — Format error code
 // =============================================================================
 
 export enum class format_errc : std::uint8_t {
     ok = 0,
-    invalid_format_string,      // 格式字符串语法错误
-    arg_not_found,              // 参数索引越界或名称未找到
-    invalid_encoding,           // 字符串编码无效
-    manual_auto_mix,            // 混合使用 {} 和 {0}
+    invalid_format_string,      // Format string syntax error
+    arg_not_found,              // Argument index out of bounds or name not found
+    invalid_encoding,           // Invalid string encoding
+    manual_auto_mix,            // Mixed use of {} and {0}
 };
 
 // =============================================================================
-// format_context — SQL 格式化上下文（参考 Boost.MySQL format_context）
+// format_context — SQL formatting context (reference: Boost.MySQL format_context)
 // =============================================================================
 
 export class format_context {
@@ -37,19 +37,19 @@ public:
         output_.clear();
     }
 
-    // 追加原始 SQL（不转义）
+    // Append raw SQL (no escaping)
     auto append_raw(std::string_view sql) -> format_context& {
         output_.append(sql);
         return *this;
     }
 
-    // 追加格式化后的 param_value
+    // Append formatted param_value
     auto append_value(const param_value& v) -> format_context& {
         format_one(v);
         return *this;
     }
 
-    // 设置错误
+    // Set error
     void add_error(format_errc ec) noexcept {
         if (ec_ == format_errc::ok)
             ec_ = ec;
@@ -58,7 +58,7 @@ public:
     auto error_state() const noexcept -> format_errc { return ec_; }
     auto format_opts() const noexcept -> const format_options& { return opts_; }
 
-    // 获取结果
+    // Get result
     auto get() && -> std::expected<std::string, format_errc> {
         if (ec_ != format_errc::ok)
             return std::unexpected(ec_);
@@ -87,7 +87,7 @@ private:
 
         case K::double_kind: {
             auto s = std::format("{}", v.double_val);
-            // NaN / Inf 不可格式化为 SQL
+            // NaN / Inf cannot be formatted as SQL
             if (std::isnan(v.double_val) || std::isinf(v.double_val)) {
                 add_error(format_errc::invalid_encoding);
                 return;
@@ -137,14 +137,14 @@ private:
 };
 
 // =============================================================================
-// format_sql_to — 带占位符的 SQL 格式化（追加到 context）
+// format_sql_to — SQL formatting with placeholders (append to context)
 // =============================================================================
 //
-// 占位符语法:
-//   {}     — 自动索引（依次递增）
-//   {0}    — 手动索引
-//   {{     — 转义的 '{'
-//   }}     — 转义的 '}'
+// Placeholder syntax:
+//   {}     — Auto-indexing (increments sequentially)
+//   {0}    — Manual indexing
+//   {{     — Escaped '{'
+//   }}     — Escaped '}'
 
 export inline void format_sql_to(
     format_context& ctx,
@@ -157,13 +157,13 @@ export inline void format_sql_to(
 
     std::size_t i = 0;
     while (i < fmt.size()) {
-        // 转义 {{ → {
+        // Escape {{ → {
         if (i + 1 < fmt.size() && fmt[i] == '{' && fmt[i + 1] == '{') {
             ctx.append_raw("{");
             i += 2;
             continue;
         }
-        // 转义 }} → }
+        // Escape }} → }
         if (i + 1 < fmt.size() && fmt[i] == '}' && fmt[i + 1] == '}') {
             ctx.append_raw("}");
             i += 2;
@@ -172,7 +172,7 @@ export inline void format_sql_to(
 
         if (fmt[i] == '{') {
             ++i; // skip '{'
-            // 查找闭合 '}'
+            // Find closing '}'
             auto close = fmt.find('}', i);
             if (close == std::string_view::npos) {
                 ctx.add_error(format_errc::invalid_format_string);
@@ -183,11 +183,11 @@ export inline void format_sql_to(
             std::size_t arg_idx = 0;
 
             if (spec.empty()) {
-                // 自动索引 {}
+                // Auto-indexing {}
                 used_auto = true;
                 arg_idx = auto_idx++;
             } else {
-                // 手动索引 {N}
+                // Manual indexing {N}
                 used_manual = true;
                 auto [ptr, ec] = std::from_chars(spec.data(), spec.data() + spec.size(), arg_idx);
                 if (ec != std::errc{} || ptr != spec.data() + spec.size()) {
@@ -211,7 +211,7 @@ export inline void format_sql_to(
             continue;
         }
 
-        // 普通字符 — 批量追加直到下一个 '{' 或 '}'
+        // Regular characters — batch append until next '{' or '}'
         auto next = fmt.find_first_of("{}", i);
         if (next == std::string_view::npos) next = fmt.size();
         ctx.append_raw(fmt.substr(i, next - i));
@@ -220,7 +220,7 @@ export inline void format_sql_to(
 }
 
 // =============================================================================
-// format_sql — 一步格式化，返回 SQL 字符串
+// format_sql — One-step formatting, returns SQL string
 // =============================================================================
 
 export inline auto format_sql(
@@ -234,7 +234,7 @@ export inline auto format_sql(
     return std::move(ctx).get();
 }
 
-/// 无参数便捷重载
+/// No-parameter convenience overload
 export inline auto format_sql(
     const format_options& opts,
     std::string_view fmt
@@ -244,18 +244,18 @@ export inline auto format_sql(
 }
 
 // =============================================================================
-// with_params_t — 查询 + 参数绑定（参考 Boost.MySQL with_params）
+// with_params_t — Query + parameter binding (reference: Boost.MySQL with_params)
 // =============================================================================
 //
-// 将格式字符串和参数打包在一起，传给 client::execute(with_params_t)
-// 在执行时由客户端自动调用 format_sql 展开。
+// Packages format string and parameters together, passed to client::execute(with_params_t)
+// Automatically expanded by client calling format_sql during execution.
 
 export struct with_params_t {
     std::string_view              query;
     std::vector<param_value>      args;
 };
 
-/// 便捷工厂：with_params("SELECT {} FROM t WHERE id = {}", p1, p2)
+/// Convenience factory: with_params("SELECT {} FROM t WHERE id = {}", p1, p2)
 export inline auto with_params(
     std::string_view query,
     std::initializer_list<param_value> args
@@ -264,7 +264,7 @@ export inline auto with_params(
     return {query, std::vector<param_value>(args)};
 }
 
-/// 可变参数版
+/// Variadic parameter version
 export inline auto with_params(
     std::string_view query,
     std::vector<param_value> args
@@ -274,11 +274,11 @@ export inline auto with_params(
 }
 
 // =============================================================================
-// format_sequence — 范围格式化助手（参考 Boost.MySQL sequence）
+// format_sequence — Range formatting helper (reference: Boost.MySQL sequence)
 // =============================================================================
 //
-// 将一个范围的每个元素通过格式化函数写入 SQL，元素间用 glue 字符串连接。
-// 用法: sequence(vec, [](const auto& elem, format_context& ctx) { ... }, ", ")
+// Writes each element of a range to SQL via formatting function, joining elements with glue string.
+// Usage: sequence(vec, [](const auto& elem, format_context& ctx) { ... }, ", ")
 
 export template <class Range, class FormatFn>
 struct format_sequence {
@@ -287,7 +287,7 @@ struct format_sequence {
     std::string_view glue;
 };
 
-/// 将 format_sequence 追加到 format_context
+/// Append format_sequence to format_context
 export template <class Range, class FormatFn>
 inline void format_sequence_to(
     format_context& ctx,
@@ -301,7 +301,7 @@ inline void format_sequence_to(
     }
 }
 
-/// 便捷工厂：创建 format_sequence
+/// Convenience factory: create format_sequence
 export template <class Range, class FormatFn>
 inline auto sequence(
     Range&& range,

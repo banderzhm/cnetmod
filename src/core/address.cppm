@@ -19,54 +19,54 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// IP 地址
+// IP Address
 // =============================================================================
 
-/// IP 地址族
+/// IP address family
 export enum class address_family {
     ipv4,
     ipv6,
     unspecified,
 };
 
-/// IPv4 地址
+/// IPv4 address
 export class ipv4_address {
 public:
     constexpr ipv4_address() noexcept : addr_{} {}
 
-    /// 从 4 字节构造
+    /// Construct from 4 bytes
     constexpr ipv4_address(std::uint8_t a, std::uint8_t b,
                            std::uint8_t c, std::uint8_t d) noexcept
         : bytes_{a, b, c, d} {}
 
-    /// 从字符串解析
+    /// Parse from string
     [[nodiscard]] static auto from_string(std::string_view str)
         -> std::expected<ipv4_address, std::error_code>;
 
-    /// 转换为字符串
+    /// Convert to string
     [[nodiscard]] auto to_string() const -> std::string;
 
-    /// 是否为回环地址 (127.0.0.0/8)
+    /// Check if loopback address (127.0.0.0/8)
     [[nodiscard]] constexpr auto is_loopback() const noexcept -> bool {
         return bytes_[0] == 127;
     }
 
-    /// 是否为任意地址 (0.0.0.0)
+    /// Check if any address (0.0.0.0)
     [[nodiscard]] constexpr auto is_any() const noexcept -> bool {
         return addr_.s_addr == 0;
     }
 
-    /// 获取底层原生地址
+    /// Get underlying native address
     [[nodiscard]] auto native() const noexcept -> const ::in_addr& {
         return addr_;
     }
 
-    /// 回环地址 127.0.0.1
+    /// Loopback address 127.0.0.1
     [[nodiscard]] static constexpr auto loopback() noexcept -> ipv4_address {
         return {127, 0, 0, 1};
     }
 
-    /// 任意地址 0.0.0.0
+    /// Any address 0.0.0.0
     [[nodiscard]] static constexpr auto any() noexcept -> ipv4_address {
         return {};
     }
@@ -85,27 +85,27 @@ private:
     };
 };
 
-/// IPv6 地址
+/// IPv6 address
 export class ipv6_address {
 public:
     constexpr ipv6_address() noexcept : addr_{} {}
 
-    /// 从字符串解析
+    /// Parse from string
     [[nodiscard]] static auto from_string(std::string_view str)
         -> std::expected<ipv6_address, std::error_code>;
 
-    /// 转换为字符串
+    /// Convert to string
     [[nodiscard]] auto to_string() const -> std::string;
 
-    /// 是否为回环地址 (::1)
+    /// Check if loopback address (::1)
     [[nodiscard]] auto is_loopback() const noexcept -> bool;
 
-    /// 获取底层原生地址
+    /// Get underlying native address
     [[nodiscard]] auto native() const noexcept -> const ::in6_addr& {
         return addr_;
     }
 
-    /// 从原生 in6_addr 构造
+    /// Construct from native in6_addr
     [[nodiscard]] static auto from_native(const ::in6_addr& native_addr) noexcept
         -> ipv6_address
     {
@@ -114,10 +114,10 @@ public:
         return result;
     }
 
-    /// 回环地址 ::1
+    /// Loopback address ::1
     [[nodiscard]] static auto loopback() noexcept -> ipv6_address;
 
-    /// 任意地址 ::
+    /// Any address ::
     [[nodiscard]] static constexpr auto any() noexcept -> ipv6_address {
         return {};
     }
@@ -133,14 +133,14 @@ private:
     ::in6_addr addr_;
 };
 
-/// 通用 IP 地址（IPv4 或 IPv6）
+/// Generic IP address (IPv4 or IPv6)
 export class ip_address {
 public:
     ip_address() noexcept : v4_{}, family_(address_family::ipv4) {}
     ip_address(ipv4_address addr) noexcept : v4_(addr), family_(address_family::ipv4) {}
     ip_address(ipv6_address addr) noexcept : v6_(addr), family_(address_family::ipv6) {}
 
-    /// 从字符串自动检测并解析
+    /// Auto-detect and parse from string
     [[nodiscard]] static auto from_string(std::string_view str)
         -> std::expected<ip_address, std::error_code>;
 
@@ -161,10 +161,10 @@ private:
 };
 
 // =============================================================================
-// 端点（地址 + 端口）
+// Endpoint (Address + Port)
 // =============================================================================
 
-/// 网络端点 = IP 地址 + 端口号
+/// Network endpoint = IP address + port number
 export class endpoint {
 public:
     endpoint() noexcept = default;

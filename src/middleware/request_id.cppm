@@ -1,15 +1,15 @@
 /**
  * @file request_id.cppm
- * @brief 请求追踪 ID 中间件 — 生成/传播 X-Request-ID
+ * @brief Request Tracking ID Middleware — Generate/Propagate X-Request-ID
  *
- * 每个请求分配唯一 ID，写入响应头。若请求已携带 X-Request-ID (反代链路)，
- * 则复用该 ID，实现分布式链路追踪。
+ * Assigns unique ID to each request, writes to response header. If request already
+ * carries X-Request-ID (reverse proxy chain), reuses that ID for distributed tracing.
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.middleware.request_id;
  *
  *   svr.use(request_id());
- *   // handler 中可通过 ctx.resp().get_header("X-Request-ID") 获取当前请求 ID
+ *   // Handler can get current request ID via ctx.resp().get_header("X-Request-ID")
  */
 export module cnetmod.middleware.request_id;
 
@@ -21,7 +21,7 @@ namespace cnetmod {
 
 namespace detail {
 
-/// 生成 128-bit 随机 hex ID (CSPRNG)
+/// Generate 128-bit random hex ID (CSPRNG)
 inline auto generate_request_id() -> std::string {
     static thread_local std::random_device rd;
     static constexpr char hex[] = "0123456789abcdef";
@@ -38,14 +38,14 @@ inline auto generate_request_id() -> std::string {
 } // namespace detail
 
 // =============================================================================
-// request_id — 请求追踪 ID 中间件
+// request_id — Request Tracking ID Middleware
 // =============================================================================
 //
-// 行为:
-//   1. 请求已有 X-Request-ID → 复用 (反代/网关传入)
-//   2. 没有 → 生成 128-bit 随机 hex
-//   3. 写入响应头 X-Request-ID
-//   4. handler 通过 ctx.resp().get_header("X-Request-ID") 读取
+// Behavior:
+//   1. Request already has X-Request-ID → Reuse (passed from reverse proxy/gateway)
+//   2. No ID → Generate 128-bit random hex
+//   3. Write to response header X-Request-ID
+//   4. Handler reads via ctx.resp().get_header("X-Request-ID")
 
 export inline auto request_id(std::string_view header_name = "X-Request-ID")
     -> http::middleware_fn

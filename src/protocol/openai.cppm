@@ -1,5 +1,5 @@
-/// cnetmod.protocol.openai — 聚合模块
-/// 统一导出 openai 子模块: types / client
+/// cnetmod.protocol.openai — Aggregation module
+/// Unified export of openai submodules: types / client
 
 export module cnetmod.protocol.openai;
 

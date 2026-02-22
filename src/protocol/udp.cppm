@@ -17,8 +17,8 @@ namespace cnetmod::udp {
 // UDP Socket
 // =============================================================================
 
-/// UDP 套接字
-/// 无连接的数据报通信
+/// UDP socket
+/// Connectionless datagram communication
 export class udp_socket {
 public:
     explicit udp_socket(io_context& ctx)
@@ -26,38 +26,38 @@ public:
 
     ~udp_socket() = default;
 
-    // 不可复制
+    // Non-copyable
     udp_socket(const udp_socket&) = delete;
     auto operator=(const udp_socket&) -> udp_socket& = delete;
 
-    // 可移动
+    // Movable
     udp_socket(udp_socket&&) noexcept = default;
     auto operator=(udp_socket&&) noexcept -> udp_socket& = default;
 
-    /// 打开并绑定到指定端点
+    /// Open and bind to specified endpoint
     [[nodiscard]] auto open(const endpoint& ep, const socket_options& opts = {})
         -> std::expected<void, std::error_code>;
 
-    /// 仅打开（不绑定，用于发送）
+    /// Open only (no bind, for sending)
     [[nodiscard]] auto open(address_family family = address_family::ipv4)
         -> std::expected<void, std::error_code>;
 
-    /// 关闭
+    /// Close
     void close() noexcept {
         socket_.close();
     }
 
-    /// 是否打开
+    /// Check if open
     [[nodiscard]] auto is_open() const noexcept -> bool {
         return socket_.is_open();
     }
 
-    /// 获取底层 socket
+    /// Get underlying socket
     [[nodiscard]] auto native_socket() noexcept -> socket& {
         return socket_;
     }
 
-    /// 获取关联的 io_context
+    /// Get associated io_context
     [[nodiscard]] auto context() noexcept -> io_context& {
         return *ctx_;
     }

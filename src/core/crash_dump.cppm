@@ -1,18 +1,18 @@
 /**
  * @file crash_dump.cppm
- * @brief 崩溃核心转存 — 信号/SEH + 栈回溯 + MiniDump/Core Dump
+ * @brief Crash core dump — Signal/SEH + Stack trace + MiniDump/Core Dump
  *
- * Windows: SetUnhandledExceptionFilter → MiniDump (.dmp) + 文本报告
- * Unix:    sigaction (SIGSEGV/SIGABRT/SIGFPE/SIGILL/SIGBUS) → 文本报告 + core dump
+ * Windows: SetUnhandledExceptionFilter → MiniDump (.dmp) + text report
+ * Unix:    sigaction (SIGSEGV/SIGABRT/SIGFPE/SIGILL/SIGBUS) → text report + core dump
  *
- * 使用示例:
+ * Usage example:
  *   import cnetmod.core.crash_dump;
  *
- *   // 程序入口处安装
- *   cnetmod::crash_dump::install();                  // 默认输出到 ./crash/
- *   cnetmod::crash_dump::install("logs/crash");      // 自定义目录
+ *   // Install at program entry
+ *   cnetmod::crash_dump::install();                  // Default output to ./crash/
+ *   cnetmod::crash_dump::install("logs/crash");      // Custom directory
  *   cnetmod::crash_dump::set_callback([](const auto& info) {
- *       // 自定义回调，如上报到远程服务
+ *       // Custom callback, e.g. report to remote service
  *   });
  */
 module;
@@ -43,43 +43,43 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// crash_info — 崩溃上下文信息
+// crash_info — Crash context information
 // =============================================================================
 
 export struct crash_info {
-    std::string signal_name;       // 信号/异常名称
-    int         signal_code{0};    // 信号编号 / Windows exception code
-    std::string timestamp;         // 崩溃时间
-    std::string stack_trace;       // 栈回溯文本
-    std::string dump_file_path;    // MiniDump / report 文件路径
+    std::string signal_name;       // Signal/exception name
+    int         signal_code{0};    // Signal number / Windows exception code
+    std::string timestamp;         // Crash time
+    std::string stack_trace;       // Stack trace text
+    std::string dump_file_path;    // MiniDump / report file path
 };
 
 // =============================================================================
-// crash_dump — 崩溃转存控制器
+// crash_dump — Crash dump controller
 // =============================================================================
 
 export class crash_dump {
 public:
     using callback_fn = std::function<void(const crash_info&)>;
 
-    /// 安装崩溃处理器
-    /// @param dump_dir 转存文件输出目录（自动创建）
+    /// Install crash handler
+    /// @param dump_dir Dump file output directory (auto-created)
     static void install(std::string dump_dir = "crash") {
         state().dump_dir = std::move(dump_dir);
 
-        // 确保目录存在
+        // Ensure directory exists
         std::filesystem::create_directories(state().dump_dir);
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
         SetUnhandledExceptionFilter(win_exception_handler);
 #else
-        // 允许生成 core dump
+        // Allow core dump generation
         enable_core_dump();
 
-        // 注册信号处理
+        // Register signal handlers
         struct sigaction sa{};
         sa.sa_sigaction = unix_signal_handler;
-        sa.sa_flags     = SA_SIGINFO | SA_RESETHAND; // 一次性，防止递归
+        sa.sa_flags     = SA_SIGINFO | SA_RESETHAND; // One-shot, prevent recursion
         sigemptyset(&sa.sa_mask);
 
         sigaction(SIGSEGV, &sa, nullptr);
@@ -91,17 +91,17 @@ public:
         state().installed = true;
     }
 
-    /// 设置崩溃回调（在转存完成后、进程退出前调用）
+    /// Set crash callback (called after dump completes, before process exits)
     static void set_callback(callback_fn fn) {
         state().callback = std::move(fn);
     }
 
-    /// 设置应用名称（用于报告头）
+    /// Set application name (for report header)
     static void set_app_name(std::string name) {
         state().app_name = std::move(name);
     }
 
-    /// 手动触发崩溃报告（用于 fatal error 场景）
+    /// Manually trigger crash report (for fatal error scenarios)
     static void trigger_crash_report(std::string_view reason) {
         crash_info info;
         info.signal_name = std::string(reason);
@@ -128,7 +128,7 @@ private:
     }
 
     // =========================================================================
-    // 时间戳
+    // Timestamp
     // =========================================================================
 
     static auto make_timestamp() -> std::string {
@@ -146,13 +146,13 @@ private:
     }
 
     // =========================================================================
-    // 栈回溯
+    // Stack trace
     // =========================================================================
 
     static auto capture_stack_trace() -> std::string {
-        // C++23 std::stacktrace（MSVC 完整支持，Clang/GCC 可能受限）
+        // C++23 std::stacktrace (full support in MSVC, may be limited in Clang/GCC)
 #if __cpp_lib_stacktrace >= 202011L
-        auto st = std::stacktrace::current(2); // 跳过自身 + 调用者
+        auto st = std::stacktrace::current(2); // Skip self + caller
         std::string result;
         int frame_no = 0;
         for (const auto& entry : st) {
@@ -178,10 +178,10 @@ private:
         if (!symbols) return "  (backtrace_symbols failed)\n";
 
         std::string result;
-        for (int i = 2; i < count; ++i) { // 跳过自身帧
-            // 尝试 demangle
+        for (int i = 2; i < count; ++i) { // Skip self frame
+            // Try demangle
             std::string line = symbols[i];
-            // 格式通常: "/path/to/lib(mangled_name+0xoffset) [0xaddr]"
+            // Format usually: "/path/to/lib(mangled_name+0xoffset) [0xaddr]"
             auto paren_start = line.find('(');
             auto plus_pos    = line.find('+', paren_start);
             if (paren_start != std::string::npos && plus_pos != std::string::npos) {
@@ -206,14 +206,14 @@ private:
 #endif
 
     // =========================================================================
-    // 文本报告写入
+    // Text report writing
     // =========================================================================
 
     static auto write_text_report(const crash_info& info) -> std::string {
         auto ts   = info.timestamp.empty() ? make_timestamp() : info.timestamp;
         auto path = std::format("{}/crash_{}.log", state().dump_dir, ts);
 
-        // 使用 C FILE* 写入（信号处理上下文更安全）
+        // Use C FILE* for writing (safer in signal handler context)
         FILE* fp = std::fopen(path.c_str(), "w");
         if (!fp) return {};
 
@@ -248,7 +248,7 @@ private:
     }
 
     // =========================================================================
-    // 回调调用
+    // Callback invocation
     // =========================================================================
 
     static void invoke_callback(const crash_info& info) {
@@ -256,13 +256,13 @@ private:
             try {
                 state().callback(info);
             } catch (...) {
-                // 崩溃回调本身不能再崩溃
+                // Crash callback itself must not crash
             }
         }
     }
 
     // =========================================================================
-    // 信号名称
+    // Signal names
     // =========================================================================
 
     static auto signal_name([[maybe_unused]] int sig) -> const char* {
@@ -292,14 +292,14 @@ private:
         info.timestamp   = make_timestamp();
         info.stack_trace = capture_stack_trace();
 
-        // 写入 MiniDump
+        // Write MiniDump
         auto dmp_path = write_minidump(ep, info.timestamp);
 
-        // 写入文本报告
+        // Write text report
         auto txt_path = write_text_report(info);
         info.dump_file_path = dmp_path.empty() ? txt_path : dmp_path;
 
-        // 输出到 stderr
+        // Output to stderr
         std::fprintf(stderr,
             "\n[CRASH] %s (0x%08X)\n"
             "  Dump: %s\n"
@@ -309,7 +309,7 @@ private:
 
         invoke_callback(info);
 
-        return EXCEPTION_CONTINUE_SEARCH; // 让系统默认处理也执行
+        return EXCEPTION_CONTINUE_SEARCH; // Let system default handler also execute
     }
 
     static auto write_minidump(EXCEPTION_POINTERS* ep,
@@ -328,8 +328,8 @@ private:
         mei.ExceptionPointers = ep;
         mei.ClientPointers    = FALSE;
 
-        // MiniDumpWithDataSegs: 包含全局变量
-        // MiniDumpWithHandleData: 包含句柄信息
+        // MiniDumpWithDataSegs: Include global variables
+        // MiniDumpWithHandleData: Include handle information
         auto dump_type = static_cast<MINIDUMP_TYPE>(
             MiniDumpWithDataSegs | MiniDumpWithHandleData);
 
@@ -368,16 +368,16 @@ private:
         info.signal_code = sig;
         info.timestamp   = make_timestamp();
 
-        // 在信号处理上下文中获取栈回溯
-        // 注意: backtrace() 不是 async-signal-safe，但崩溃后进程即将终止，
-        // 实践中被广泛使用（glibc/libunwind 实现通常可在此场景工作）
+        // Get stack trace in signal handler context
+        // Note: backtrace() is not async-signal-safe, but process is about to terminate after crash,
+        // widely used in practice (glibc/libunwind implementations usually work in this scenario)
         info.stack_trace = capture_backtrace_unix();
 
-        // 写入文本报告
+        // Write text report
         auto path = write_text_report(info);
         info.dump_file_path = path;
 
-        // 尽量输出到 stderr（write 是 async-signal-safe 的）
+        // Try to output to stderr (write is async-signal-safe)
         char msg[512]{};
         int len = std::snprintf(msg, sizeof(msg),
             "\n[CRASH] %s (signal %d) at address %p\n"
@@ -393,14 +393,14 @@ private:
 
         invoke_callback(info);
 
-        // 重新发送信号让系统生成 core dump（SA_RESETHAND 已还原默认处理）
+        // Re-send signal to let system generate core dump (SA_RESETHAND has restored default handler)
         raise(sig);
     }
 
     static void enable_core_dump() {
         struct rlimit rl{};
         getrlimit(RLIMIT_CORE, &rl);
-        rl.rlim_cur = rl.rlim_max; // 设置为系统允许的最大值
+        rl.rlim_cur = rl.rlim_max; // Set to system-allowed maximum
         setrlimit(RLIMIT_CORE, &rl);
     }
 #endif

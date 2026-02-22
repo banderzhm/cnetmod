@@ -1,33 +1,33 @@
 /**
  * @file bridge.cppm
- * @brief 协程桥接工具 — 连接阻塞世界、stdexec sender、外部协程类型
+ * @brief Coroutine bridge tools — Connect blocking world, stdexec sender, external coroutine types
  *
- * 三大核心工具:
+ * Three core tools:
  *
  * 1. blocking_invoke(pool, io, fn) → task<R>
- *    将阻塞调用卸载到 stdexec 线程池，完成后自动切回 io_context。
- *    适用于 RabbitMQ、gRPC 同步客户端、传统数据库驱动等。
+ *    Offload blocking calls to stdexec thread pool, automatically switch back to io_context when complete.
+ *    Suitable for RabbitMQ, gRPC synchronous clients, traditional database drivers, etc.
  *
  * 2. await_sender<T>(sender) → sender_awaitable
- *    在 task<T> 协程内 co_await 任意 stdexec sender。
- *    适用于与其他 sender/receiver 库的互操作。
+ *    co_await any stdexec sender within task<T> coroutine.
+ *    Suitable for interoperability with other sender/receiver libraries.
  *
  * 3. from_awaitable(awaitable) → task<R>
- *    将任意 C++20 awaitable（第三方协程库的 task 类型）包装为 cnetmod task<T>。
+ *    Wrap any C++20 awaitable (third-party coroutine library task types) as cnetmod task<T>.
  *
- * 使用示例:
+ * Usage examples:
  *   import cnetmod.coro.bridge;
  *
- *   // 1. 阻塞操作桥接
+ *   // 1. Blocking operation bridge
  *   auto msg = co_await blocking_invoke(pool, io, [&] {
- *       return rabbitmq_client.consume("queue1");  // 阻塞调用
+ *       return rabbitmq_client.consume("queue1");  // Blocking call
  *   });
  *
  *   // 2. co_await stdexec sender
  *   auto val = co_await await_sender<int>(
  *       stdexec::then(sched.schedule(), [] { return 42; }));
  *
- *   // 3. 包装第三方协程
+ *   // 3. Wrap third-party coroutine
  *   auto result = co_await from_awaitable(third_party_async_call());
  */
 module;
@@ -47,30 +47,30 @@ import cnetmod.executor.pool;
 namespace cnetmod {
 
 // =============================================================================
-// blocking_invoke — 将阻塞调用卸载到 stdexec 线程池
+// blocking_invoke — Offload blocking calls to stdexec thread pool
 // =============================================================================
 
-/// 在 stdexec 线程池上执行阻塞 callable，完成后切回 io_context 事件循环线程。
+/// Execute blocking callable on stdexec thread pool, switch back to io_context event loop thread when complete.
 ///
-/// 适用场景:
-///   - RabbitMQ、Kafka 等消息队列的同步消费
-///   - gRPC 同步客户端调用
-///   - 传统数据库驱动（非异步版本）
-///   - 任何只提供多线程/阻塞 API 的第三方库
+/// Use cases:
+///   - Synchronous consumption of message queues like RabbitMQ, Kafka
+///   - gRPC synchronous client calls
+///   - Traditional database drivers (non-async versions)
+///   - Any third-party library that only provides multi-threaded/blocking API
 ///
-/// 原理:
-///   1. co_await pool_post_awaitable → 协程挂起，在线程池线程上恢复
-///   2. 执行 fn() → 阻塞操作在线程池线程上运行，不影响 io_context
-///   3. co_await post_awaitable → 协程挂起，在 io_context 线程上恢复
-///   4. co_return result → 调用者在 io_context 线程上拿到结果
+/// Principle:
+///   1. co_await pool_post_awaitable → coroutine suspends, resumes on thread pool thread
+///   2. Execute fn() → blocking operation runs on thread pool thread, doesn't affect io_context
+///   3. co_await post_awaitable → coroutine suspends, resumes on io_context thread
+///   4. co_return result → caller gets result on io_context thread
 ///
-/// 用法:
+/// Usage:
 ///   auto msg = co_await blocking_invoke(pool, io_ctx, [&] {
 ///       return rabbitmq.basic_consume("queue1", timeout_ms);
 ///   });
 namespace detail {
 
-/// blocking_invoke 协程实现（非导出，避免 MSVC 14.50 「导出协程模板」ICE bug）
+/// blocking_invoke coroutine implementation (not exported, avoids MSVC 14.50 "export coroutine template" ICE bug)
 template <typename F>
     requires std::invocable<F>
           && (!std::is_void_v<std::invoke_result_t<F>>)
@@ -97,8 +97,8 @@ auto blocking_invoke_impl(exec::static_thread_pool& pool, io_context& io, F fn)
 
 } // namespace detail
 
-/// 非协程包装：调用 detail 层的协程实现，避免 MSVC IFC 导出协程模板 ICE
-/// 使用 auto 返回类型，避免 MSVC 14.50 将 task<...> 依赖类型序列化到 IFC 时的 ICE
+/// Non-coroutine wrapper: calls detail layer coroutine implementation, avoids MSVC IFC export coroutine template ICE
+/// Uses auto return type, avoids MSVC 14.50 ICE when serializing task<...> dependent type to IFC
 export template <typename F>
     requires std::invocable<std::decay_t<F>>
           && (!std::is_void_v<std::invoke_result_t<std::decay_t<F>>>)
@@ -107,7 +107,7 @@ auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn) {
         pool, io, std::decay_t<F>(std::forward<F>(fn)));
 }
 
-/// void 返回值特化
+/// void return value specialization
 export template <typename F>
     requires std::invocable<std::decay_t<F>>
           && std::is_void_v<std::invoke_result_t<std::decay_t<F>>>
@@ -117,21 +117,21 @@ auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn) {
 }
 
 // =============================================================================
-// sender_awaitable — 在 task<T> 中 co_await 任意 stdexec sender
+// sender_awaitable — co_await any stdexec sender in task<T>
 // =============================================================================
 //
-// sender_awaitable 是一个 awaitable 对象，嵌入在协程帧中。
-// 当 co_await 时:
-//   1. await_suspend: connect(sender, bridge_receiver) → op_state，然后 start
-//   2. sender 完成时: bridge_receiver 存储结果并 resume 协程
-//   3. await_resume: 返回存储的结果
+// sender_awaitable is an awaitable object embedded in the coroutine frame.
+// When co_await:
+//   1. await_suspend: connect(sender, bridge_receiver) → op_state, then start
+//   2. When sender completes: bridge_receiver stores result and resumes coroutine
+//   3. await_resume: returns stored result
 //
-// op_state 使用 placement storage（awaitable 在协程帧中，suspension 期间存活）
+// op_state uses placement storage (awaitable is in coroutine frame, survives during suspension)
 // =============================================================================
 
 namespace detail {
 
-/// 用于 sender_awaitable 的 bridge receiver (non-void)
+/// Bridge receiver for sender_awaitable (non-void)
 template <typename T>
 struct bridge_receiver {
     using receiver_concept = stdexec::receiver_t;
@@ -160,7 +160,7 @@ struct bridge_receiver {
     auto get_env() const noexcept -> env { return {}; }
 };
 
-/// void 特化
+/// void specialization
 template <>
 struct bridge_receiver<void> {
     using receiver_concept = stdexec::receiver_t;
@@ -191,14 +191,14 @@ struct bridge_receiver<void> {
 
 } // namespace detail
 
-/// co_await 一个 stdexec sender (non-void result)
+/// co_await a stdexec sender (non-void result)
 ///
-/// T = sender 完成时发送的值类型
-/// Sender = stdexec sender 类型
+/// T = value type sent when sender completes
+/// Sender = stdexec sender type
 ///
-/// 用法:
+/// Usage:
 ///   auto v = co_await sender_awaitable<int, decltype(sndr)>{std::move(sndr)};
-///   // 或使用 await_sender<int>(sndr) 工厂函数
+///   // Or use await_sender<int>(sndr) factory function
 template <typename T, typename Sender>
 struct sender_awaitable {
     using receiver_t = detail::bridge_receiver<T>;
@@ -224,7 +224,7 @@ struct sender_awaitable {
     }
 
     auto await_resume() -> T {
-        // 销毁 op_state
+        // Destroy op_state
         std::launder(reinterpret_cast<op_t*>(op_storage_))->~op_t();
         if (error_)
             std::rethrow_exception(error_);
@@ -232,7 +232,7 @@ struct sender_awaitable {
     }
 };
 
-/// void sender 特化
+/// void sender specialization
 template <typename Sender>
 struct sender_awaitable<void, Sender> {
     using receiver_t = detail::bridge_receiver<void>;
@@ -265,12 +265,12 @@ struct sender_awaitable<void, Sender> {
 };
 
 // =============================================================================
-// await_sender — 工厂函数，自动推导 Sender 类型
+// await_sender — Factory function, automatically deduce Sender type
 // =============================================================================
 
 /// co_await await_sender<int>(some_sender)
-/// T 需要显式指定（sender 的值类型）
-/// 使用 auto 返回类型，避免 MSVC 14.50 将 sender_awaitable<...> 序列化到 IFC 时的 ICE
+/// T needs to be explicitly specified (sender's value type)
+/// Uses auto return type, avoids MSVC 14.50 ICE when serializing sender_awaitable<...> to IFC
 export template <typename T, typename Sender>
 auto await_sender(Sender&& sndr) {
     return sender_awaitable<T, std::decay_t<Sender>>{
@@ -278,24 +278,24 @@ auto await_sender(Sender&& sndr) {
 }
 
 // =============================================================================
-// from_awaitable — 将任意 C++20 awaitable 包装为 cnetmod task<T>
+// from_awaitable — Wrap any C++20 awaitable as cnetmod task<T>
 // =============================================================================
 
-/// 将第三方协程库的 awaitable 类型包装为 cnetmod::task<T>
+/// Wrap third-party coroutine library awaitable type as cnetmod::task<T>
 ///
-/// T 需要显式指定（awaitable 的 co_await 结果类型）
+/// T needs to be explicitly specified (awaitable's co_await result type)
 ///
-/// 适用于:
-///   - 其他协程库返回的 task/future 类型（如 folly::coro::Task）
-///   - 任何实现了 operator co_await() 的类型
+/// Suitable for:
+///   - task/future types returned by other coroutine libraries (e.g., folly::coro::Task)
+///   - Any type that implements operator co_await()
 ///
-/// 用法:
+/// Usage:
 ///   auto result = co_await from_awaitable<int>(third_party_call());
 ///   co_await from_awaitable<void>(third_party_fire_and_forget());
 ///
-/// 实现说明：导出的 from_awaitable 是普通（非协程）包装函数，
-/// 真正的协程实现在 detail::from_awaitable_impl（不导出）。
-/// 这是规避 MSVC 14.50 对「导出协程模板」ICE bug 的 workaround。
+/// Implementation note: Exported from_awaitable is a regular (non-coroutine) wrapper function,
+/// the actual coroutine implementation is in detail::from_awaitable_impl (not exported).
+/// This is a workaround for MSVC 14.50 ICE bug with "exported coroutine templates".
 namespace detail {
 template <typename T, typename Awaitable>
 auto from_awaitable_impl(Awaitable aw) -> task<T> {
@@ -307,10 +307,10 @@ auto from_awaitable_impl(Awaitable aw) -> task<T> {
 }
 } // namespace detail
 
-/// 使用 auto 返回类型，避免 MSVC 14.50 将 task<T> 序列化到 IFC 时的 ICE
+/// Uses auto return type, avoids MSVC 14.50 ICE when serializing task<T> to IFC
 export template <typename T, typename Awaitable>
 auto from_awaitable(Awaitable&& aw) {
-    // 非协程包装：调用 detail 层的协程实现，避免 MSVC IFC 导出协程模板 ICE
+    // Non-coroutine wrapper: calls detail layer coroutine implementation, avoids MSVC IFC export coroutine template ICE
     return detail::from_awaitable_impl<T>(std::forward<Awaitable>(aw));
 }
 

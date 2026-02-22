@@ -1,17 +1,17 @@
 /**
  * @file wait_group.cppm
- * @brief 协程等待组 — 等待一组协程全部完成（类似 Go sync.WaitGroup）
+ * @brief Coroutine Wait Group — Wait for a group of coroutines to complete (similar to Go sync.WaitGroup)
  *
- * 使用示例:
+ * Usage Example:
  *   import cnetmod.coro.wait_group;
  *
  *   async_wait_group wg;
  *   wg.add(3);
  *
  *   for (int i = 0; i < 3; ++i)
- *       spawn(ctx, worker(wg));  // worker 完成时调用 wg.done()
+ *       spawn(ctx, worker(wg));  // worker calls wg.done() when complete
  *
- *   co_await wg.wait();  // 所有 worker 完成后恢复
+ *   co_await wg.wait();  // Resumes after all workers complete
  */
 module;
 
@@ -24,13 +24,13 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// async_wait_group — 协程等待组
+// async_wait_group — Coroutine Wait Group
 // =============================================================================
 
-/// 等待一组协程完成的同步原语
-/// - add(n): 增加待完成计数
-/// - done(): 减少计数，归零时唤醒所有 wait() 等待者
-/// - co_await wait(): 计数归零时恢复（已归零则立即返回）
+/// Synchronization primitive for waiting on a group of coroutines to complete
+/// - add(n): Increase pending completion count
+/// - done(): Decrease count, wakes all wait() waiters when reaching zero
+/// - co_await wait(): Resumes when count reaches zero (returns immediately if already zero)
 export class async_wait_group {
     struct waiter_node {
         std::coroutine_handle<> handle{};
@@ -44,15 +44,15 @@ public:
     async_wait_group(const async_wait_group&) = delete;
     auto operator=(const async_wait_group&) -> async_wait_group& = delete;
 
-    /// 增加待完成任务计数
+    /// Increase pending task count
     void add(int n = 1) noexcept {
         count_.fetch_add(n, std::memory_order_relaxed);
     }
 
-    /// 标记一个任务完成，归零时唤醒所有 wait() 等待者
+    /// Mark one task complete, wakes all wait() waiters when reaching zero
     void done() noexcept {
         if (count_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-            // 计数归零，唤醒所有等待者
+            // Count reached zero, wake all waiters
             std::vector<std::coroutine_handle<>> to_resume;
             {
                 std::lock_guard lock(mtx_);
@@ -69,7 +69,7 @@ public:
     }
 
     // =========================================================================
-    // wait — 等待计数归零
+    // wait — Wait for count to reach zero
     // =========================================================================
 
     struct [[nodiscard]] wait_awaitable {
@@ -86,12 +86,12 @@ public:
             node_.handle = h;
             node_.next = nullptr;
             std::lock_guard lock(wg_.mtx_);
-            // 再次检查（可能在 suspend 前已归零）
+            // Check again (may have reached zero before suspend)
             if (wg_.count_.load(std::memory_order_acquire) <= 0) {
                 h.resume();
                 return;
             }
-            // 加入等待队列
+            // Add to wait queue
             if (!wg_.tail_) {
                 wg_.head_ = wg_.tail_ = &node_;
             } else {
@@ -107,14 +107,14 @@ public:
         return wait_awaitable{*this};
     }
 
-    /// 当前剩余计数（仅供监控）
+    /// Current remaining count (for monitoring only)
     [[nodiscard]] auto count() const noexcept -> int {
         return count_.load(std::memory_order_relaxed);
     }
 
 private:
     std::atomic<int> count_{0};
-    std::mutex mtx_;  // 保护等待队列
+    std::mutex mtx_;  // Protects wait queue
     waiter_node* head_ = nullptr;
     waiter_node* tail_ = nullptr;
 };

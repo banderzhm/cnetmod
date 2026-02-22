@@ -9,20 +9,20 @@ import std;
 namespace cnetmod::redis {
 
 // =============================================================================
-// RESP3 数据类型
+// RESP3 Data Types
 // =============================================================================
 
-/// RESP3 协议的所有数据类型
-/// 参考: https://github.com/redis/redis-specifications/blob/master/protocol/RESP3.md
+/// All data types in RESP3 protocol
+/// Reference: https://github.com/redis/redis-specifications/blob/master/protocol/RESP3.md
 export enum class resp3_type {
-    // 聚合类型
+    // Aggregate types
     array,                  // *
     push,                   // >
     set,                    // ~
     map,                    // %
     attribute,              // |
 
-    // 简单类型
+    // Simple types
     simple_string,          // +
     simple_error,           // -
     number,                 // :
@@ -35,11 +35,11 @@ export enum class resp3_type {
     blob_string,            // $
     streamed_string_part,   // ;
 
-    // 无效
+    // Invalid
     invalid,
 };
 
-/// RESP3 类型 → 线上字符
+/// RESP3 type → wire character
 export constexpr auto to_code(resp3_type t) noexcept -> char {
     switch (t) {
         case resp3_type::blob_error:           return '!';
@@ -62,7 +62,7 @@ export constexpr auto to_code(resp3_type t) noexcept -> char {
     }
 }
 
-/// 线上字符 → RESP3 类型
+/// Wire character → RESP3 type
 export constexpr auto to_type(char c) noexcept -> resp3_type {
     switch (c) {
         case '!': return resp3_type::blob_error;
@@ -85,7 +85,7 @@ export constexpr auto to_type(char c) noexcept -> resp3_type {
     }
 }
 
-/// 是否为聚合类型
+/// Check if aggregate type
 export constexpr auto is_aggregate(resp3_type t) noexcept -> bool {
     switch (t) {
         case resp3_type::array:
@@ -97,7 +97,7 @@ export constexpr auto is_aggregate(resp3_type t) noexcept -> bool {
     }
 }
 
-/// 聚合类型的元素乘数 (map/attribute 每个 entry 计 2 个元素)
+/// Element multiplicity for aggregate types (map/attribute counts 2 elements per entry)
 export constexpr auto element_multiplicity(resp3_type t) noexcept -> std::size_t {
     switch (t) {
         case resp3_type::map:
@@ -106,7 +106,7 @@ export constexpr auto element_multiplicity(resp3_type t) noexcept -> std::size_t
     }
 }
 
-/// 类型名称字符串
+/// Type name string
 export constexpr auto type_name(resp3_type t) noexcept -> std::string_view {
     switch (t) {
         case resp3_type::array:                return "array";
@@ -130,17 +130,17 @@ export constexpr auto type_name(resp3_type t) noexcept -> std::string_view {
 }
 
 // =============================================================================
-// RESP3 响应节点
+// RESP3 Response Node
 // =============================================================================
 
-/// 响应树中的单个节点（前序遍历）
+/// Single node in response tree (pre-order traversal)
 export struct resp3_node {
     resp3_type  data_type      = resp3_type::invalid;
-    std::size_t aggregate_size = 0;   // 聚合类型的元素数量
-    std::size_t depth          = 0;   // 在响应树中的深度
-    std::string value;                // 简单类型的值（聚合类型为空）
+    std::size_t aggregate_size = 0;   // Number of elements in aggregate type
+    std::size_t depth          = 0;   // Depth in response tree
+    std::string value;                // Value for simple types (empty for aggregate types)
 
-    /// 便捷方法
+    /// Convenience methods
     [[nodiscard]] auto is_error() const noexcept -> bool {
         return data_type == resp3_type::simple_error ||
                data_type == resp3_type::blob_error;
@@ -170,7 +170,7 @@ export struct resp3_node {
         return value == "t" || value == "1";
     }
 
-    /// 可读字符串表示
+    /// Readable string representation
     [[nodiscard]] auto to_string() const -> std::string {
         switch (data_type) {
         case resp3_type::simple_string:
@@ -203,7 +203,7 @@ export struct resp3_node {
     }
 };
 
-/// 节点相等比较
+/// Node equality comparison
 export auto operator==(const resp3_node& a, const resp3_node& b) noexcept -> bool {
     return a.data_type == b.data_type &&
            a.aggregate_size == b.aggregate_size &&
@@ -212,13 +212,13 @@ export auto operator==(const resp3_node& a, const resp3_node& b) noexcept -> boo
 }
 
 // =============================================================================
-// Redis 错误码
+// Redis Error Codes
 // =============================================================================
 
 export enum class redis_errc {
     success = 0,
 
-    // 协议错误
+    // Protocol errors
     invalid_data_type,
     not_a_number,
     exceeds_max_nested_depth,
@@ -227,19 +227,19 @@ export enum class redis_errc {
     incompatible_size,
     not_a_double,
 
-    // RESP3 错误
+    // RESP3 errors
     resp3_simple_error,
     resp3_blob_error,
     resp3_null,
 
-    // 连接错误
+    // Connection errors
     not_connected,
     resolve_timeout,
     connect_timeout,
     pong_timeout,
     ssl_handshake_timeout,
 
-    // 通用
+    // General
     unknown_error,
 };
 

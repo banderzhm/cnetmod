@@ -1,6 +1,6 @@
-/// cnetmod.core.dns — 异步 DNS 解析
-/// 使用 stdexec::static_thread_pool 执行阻塞的 getaddrinfo
-/// 完成后通过 io_context::post 恢复协程
+/// cnetmod.core.dns — Async DNS resolution
+/// Uses stdexec::static_thread_pool to execute blocking getaddrinfo
+/// Resumes coroutine via io_context::post after completion
 
 module;
 
@@ -30,7 +30,7 @@ import cnetmod.coro.task;
 namespace cnetmod {
 
 // =============================================================================
-// 全局线程池 (stdexec) — 用于阻塞操作卸载
+// Global thread pool (stdexec) — For offloading blocking operations
 // =============================================================================
 
 namespace detail {
@@ -48,7 +48,7 @@ inline auto& blocking_scope() {
 } // namespace detail
 
 // =============================================================================
-// detail::resolve_awaitable — stdexec 线程池异步 DNS
+// detail::resolve_awaitable — stdexec thread pool async DNS
 // =============================================================================
 
 namespace detail {
@@ -64,7 +64,7 @@ struct resolve_awaitable {
 
     void await_suspend(std::coroutine_handle<> h) noexcept {
         caller_ = h;
-        // 在 stdexec 线程池上调度阻塞的 getaddrinfo，完成后 post 回 io_context
+        // Schedule blocking getaddrinfo on stdexec thread pool, post back to io_context when done
         auto work = stdexec::then(
             stdexec::schedule(blocking_pool().get_scheduler()),
             [this]() noexcept { run(); }
@@ -130,14 +130,14 @@ private:
 } // namespace detail
 
 // =============================================================================
-// async_resolve — 异步 DNS 解析
+// async_resolve — Async DNS resolution
 // =============================================================================
 
-/// 异步解析主机名为 IP 地址列表
-/// @param ctx      事件循环上下文（用于恢复协程）
-/// @param host     主机名，如 "api.openai.com"
-/// @param service  服务名或端口字符串，如 "443"（可选）
-/// @return         解析到的 IP 地址字符串列表（IPv4/IPv6 混合）
+/// Async resolve hostname to IP address list
+/// @param ctx      Event loop context (for resuming coroutine)
+/// @param host     Hostname, e.g. "api.openai.com"
+/// @param service  Service name or port string, e.g. "443" (optional)
+/// @return         List of resolved IP address strings (IPv4/IPv6 mixed)
 export auto async_resolve(io_context& ctx, std::string_view host,
                           std::string_view service = {})
     -> task<std::expected<std::vector<std::string>, std::string>>

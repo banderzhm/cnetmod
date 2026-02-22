@@ -14,22 +14,22 @@ import cnetmod.coro.spawn;
 namespace cnetmod {
 
 // =============================================================================
-// pool_post_awaitable — 将当前协程切换到 stdexec 线程池执行
+// pool_post_awaitable — Switch Current Coroutine to stdexec Thread Pool
 // =============================================================================
 //
-// 使用 stdexec 公共 API：schedule() + connect() + start()
-// 协程挂起后由线程池线程恢复，实现 CPU 密集型工作的卸载
+// Uses stdexec public API: schedule() + connect() + start()
+// Coroutine resumes on thread pool thread after suspension, offloading CPU-intensive work
 //
-// 用法:
+// Usage:
 //   co_await pool_post_awaitable{pool};
-//   // 此后运行在 pool 线程上
+//   // Now running on pool thread
 //   do_heavy_work();
 //   co_await post_awaitable{io_ctx};
-//   // 此后运行在 io_context 线程上
+//   // Now running on io_context thread
 
 namespace detail {
 
-/// 最小化的 stdexec receiver：恢复协程
+/// Minimal stdexec receiver: resume coroutine
 struct coro_resume_receiver {
     using receiver_concept = stdexec::receiver_t;
     std::coroutine_handle<> coro;
@@ -51,7 +51,7 @@ export struct pool_post_awaitable {
     using op_t = decltype(stdexec::connect(
         std::declval<sender_t>(), std::declval<detail::coro_resume_receiver>()));
 
-    // op_state 存储在协程帧上（awaitable 嵌入协程帧，挂起期间存活）
+    // op_state stored on coroutine frame (awaitable embedded in frame, alive during suspension)
     alignas(op_t) std::byte storage_[sizeof(op_t)];
 
     explicit pool_post_awaitable(exec::static_thread_pool& p) noexcept : pool(p), storage_{} {}
@@ -72,34 +72,34 @@ export struct pool_post_awaitable {
 };
 
 // =============================================================================
-// spawn_on — 将协程投递到指定 io_context 执行（跨线程安全）
+// spawn_on — Post Coroutine to Specified io_context (cross-thread safe)
 // =============================================================================
 //
-// 与 spawn(ctx, t) 语义相同，但明确用于跨线程场景。
-// 通过 io_context::post() 将协程切换到目标事件循环线程。
+// Same semantics as spawn(ctx, t), but explicitly for cross-thread scenarios.
+// Switches coroutine to target event loop thread via io_context::post().
 
 export inline void spawn_on(io_context& target, task<void> t) {
     spawn(target, std::move(t));
 }
 
 // =============================================================================
-// server_context — 多核服务器上下文
+// server_context — Multi-Core Server Context
 // =============================================================================
 //
-// 管理 accept 专用 io_context + N 个 worker io_context + stdexec 线程池
+// Manages accept-dedicated io_context + N worker io_contexts + stdexec thread pool
 //
-// 架构:
-//   Thread 0 (main):  accept_io  — 运行 accept 循环
-//   Thread 1..N:      worker_io  — 每线程一个 io_context，处理连接 I/O
-//   exec::static_thread_pool:      可选的 CPU 密集型工作卸载
+// Architecture:
+//   Thread 0 (main):  accept_io  — Runs accept loop
+//   Thread 1..N:      worker_io  — One io_context per thread, handles connection I/O
+//   exec::static_thread_pool:      Optional CPU-intensive work offload
 //
-// IOCP 特性: accept 后的新 socket 未关联 IOCP，首次 async_read/write
-// 在 worker io_context 上调用时自动关联到 worker 的 IOCP。
+// IOCP Feature: New socket after accept is not associated with IOCP, first async_read/write
+// on worker io_context automatically associates with worker's IOCP.
 
 export class server_context {
 public:
-    /// @param workers worker 线程数（默认 = CPU 核心数）
-    /// @param pool_threads stdexec 线程池大小（默认 = CPU 核心数）
+    /// @param workers Number of worker threads (default = CPU cores)
+    /// @param pool_threads stdexec thread pool size (default = CPU cores)
     explicit server_context(
         unsigned workers = std::thread::hardware_concurrency(),
         unsigned pool_threads = std::thread::hardware_concurrency())
@@ -119,38 +119,38 @@ public:
         stop();
     }
 
-    // 不可复制或移动
+    // Non-copyable and non-movable
     server_context(const server_context&) = delete;
     server_context(server_context&&) = delete;
     auto operator=(const server_context&) -> server_context& = delete;
     auto operator=(server_context&&) -> server_context& = delete;
 
-    /// accept 专用 io_context
+    /// Accept-dedicated io_context
     [[nodiscard]] auto accept_io() noexcept -> io_context& {
         return *accept_io_;
     }
 
-    /// 轮询选择下一个 worker io_context（原子 round-robin，线程安全）
+    /// Round-robin select next worker io_context (atomic, thread-safe)
     [[nodiscard]] auto next_worker_io() noexcept -> io_context& {
         auto idx = next_.fetch_add(1, std::memory_order_relaxed)
                    % workers_.size();
         return *workers_[idx];
     }
 
-    /// worker 数量
+    /// Worker count
     [[nodiscard]] auto worker_count() const noexcept -> unsigned {
         return static_cast<unsigned>(workers_.size());
     }
 
-    /// stdexec 线程池
+    /// stdexec thread pool
     [[nodiscard]] auto pool() noexcept -> exec::static_thread_pool& {
         return pool_;
     }
 
-    /// 启动 worker 线程，然后在当前线程运行 accept_io
-    /// 阻塞直到 stop()
+    /// Start worker threads, then run accept_io on current thread
+    /// Blocks until stop()
     void run() {
-        // 启动 worker 线程
+        // Start worker threads
         threads_.reserve(workers_.size());
         for (auto& w : workers_) {
             threads_.emplace_back([&w]() {
@@ -158,10 +158,10 @@ public:
             });
         }
 
-        // 当前线程运行 accept_io
+        // Run accept_io on current thread
         accept_io_->run();
 
-        // accept_io 停止后，等待所有 worker 线程结束
+        // After accept_io stops, wait for all worker threads to finish
         for (auto& t : threads_) {
             if (t.joinable())
                 t.join();
@@ -169,7 +169,7 @@ public:
         threads_.clear();
     }
 
-    /// 停止所有 io_context 和线程池
+    /// Stop all io_context and thread pool
     void stop() {
         accept_io_->stop();
         for (auto& w : workers_) {

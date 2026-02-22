@@ -1,21 +1,21 @@
 /**
  * @file log.cppm
- * @brief cnetmod 日志模块 - 使用 std::format 的纯 C++23 实现
+ * @brief cnetmod logging module - Pure C++23 implementation using std::format
  * 
- * 使用示例:
+ * Usage Example:
  *   import cnetmod.core.log;
  *   
- *   // 初始化 (可选, 使用默认配置则无需调用)
+ *   // Initialize (optional, no need to call if using default config)
  *   logger::init("myapp", logger::level::debug);
  *   
- *   // 基本日志 (自动捕获调用处的文件名和行号)
+ *   // Basic logging (automatically captures file name and line number at call site)
  *   logger::info("Hello {}", "world");
  *   logger::debug("value = {}", 42);
  *   logger::warn("Warning message");
  *   logger::error("Error: {}", err_code);
- *   // 输出格式: [timestamp] [level] [thread_id] [file:line] message
+ *   // Output format: [timestamp] [level] [thread_id] [file:line] message
  *   
- *   // 带文件输出
+ *   // With file output
  *   logger::init_with_file("myapp", "logs/app.log");
  */
 module;
@@ -34,7 +34,7 @@ import std;
 export namespace logger {
 
     // ============================================================================
-    // 日志级别
+    // Log Level
     // ============================================================================
     enum class level {
         trace    = 0,
@@ -47,7 +47,7 @@ export namespace logger {
     };
 
     // ============================================================================
-    // 内部实现
+    // Internal Implementation
     // ============================================================================
     namespace detail {
         inline level& current_level() {
@@ -92,13 +92,13 @@ export namespace logger {
             }
         }
 
-        // 是否支持 ANSI 颜色（Windows 需要显式开启 VT 处理）
+        // Whether ANSI colors are supported (Windows needs explicit VT processing enabled)
         inline bool& ansi_enabled() {
             static bool enabled = false;
             return enabled;
         }
 
-        /// 尝试开启 Windows VT 颜色支持，返回是否成功
+        /// Try to enable Windows VT color support, returns whether successful
         inline bool try_enable_ansi() {
 #ifdef _WIN32
             HANDLE h = GetStdHandle(STD_ERROR_HANDLE);
@@ -107,13 +107,13 @@ export namespace logger {
             if (!GetConsoleMode(h, &mode)) return false;
             return SetConsoleMode(h, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING) != 0;
 #else
-            return true;  // POSIX 终端默认支持 ANSI
+            return true;  // POSIX terminals support ANSI by default
 #endif
         }
 
         inline std::string level_colored(level lv) {
             if (!ansi_enabled()) {
-                // 无颜色：与 level_to_string 保持一致
+                // No color: keep consistent with level_to_string
                 return level_to_string(lv);
             }
             switch (lv) {
@@ -129,13 +129,13 @@ export namespace logger {
 
         inline std::string get_timestamp() {
             using namespace std::chrono;
-            // 纯 C++20 chrono 分解 UTC 时间：
-            // - 不使用 gmtime_s/gmtime_r（static inline，import std 不提供函数体）
-            // - 不使用 {:%Y-%m-%d %H:%M:%S} 格式（MSVC 可能触发时区数据库查找）
+            // Pure C++20 chrono decompose UTC time:
+            // - Don't use gmtime_s/gmtime_r (static inline, import std doesn't provide function body)
+            // - Don't use {:%Y-%m-%d %H:%M:%S} format (MSVC may trigger timezone database lookup)
             auto now  = system_clock::now();
-            auto dp   = floor<days>(now);           // 自 epoch 起的天数
-            year_month_day ymd{dp};                 // 日期分解
-            auto tod  = now - dp;                   // 当天已过时间
+            auto dp   = floor<days>(now);           // Days since epoch
+            year_month_day ymd{dp};                 // Date decomposition
+            auto tod  = now - dp;                   // Time elapsed today
             auto h    = floor<hours>(tod);      tod -= h;
             auto mn   = floor<minutes>(tod);    tod -= mn;
             auto s    = floor<seconds>(tod);    tod -= s;
@@ -170,13 +170,13 @@ export namespace logger {
             
             std::lock_guard<std::mutex> lock(log_mutex());
 
-            // 控制台输出 (带颜色)
+            // Console output (with color)
             if (console_enabled()) {
                 std::println(std::cerr, "[{}] [{}] [{}] [{}] {}", 
                     timestamp, level_colored(lv), thread_id, source, message);
             }
 
-            // 文件输出 (无颜色)
+            // File output (no color)
             if (file_enabled() && log_file().is_open()) {
                 log_file() << std::format("[{}] [{}] [{}] [{}] {}\n",
                     timestamp, level_to_string(lv), thread_id, source, message);
@@ -184,8 +184,8 @@ export namespace logger {
             }
         }
 
-        /// 不携带源码位置的日志写入
-        /// 适用于访问日志、框架内部事件等非调试场景，避免打印无意义的框架内部行号
+        /// Log write without source location
+        /// Suitable for access logs, framework internal events, etc. non-debug scenarios, avoids printing meaningless framework internal line numbers
         inline void write_log_no_src(level lv, std::string_view message) {
             if (lv < current_level()) return;
 
@@ -206,8 +206,8 @@ export namespace logger {
             }
         }
 
-        /// 将 source_location 嵌入格式串参数，避免 MSVC 对
-        /// "variadic pack + trailing default source_location" 的推导缺陷
+        /// Embed source_location in format string parameters to avoid MSVC's
+        /// deduction defect for "variadic pack + trailing default source_location"
         template<typename... Args>
         struct fmt_loc {
             std::format_string<Args...> fmt;
@@ -221,13 +221,13 @@ export namespace logger {
     }
 
     // ============================================================================
-    // 初始化函数
+    // Initialization Functions
     // ============================================================================
 
     /**
-     * @brief 初始化日志系统 (仅控制台输出)
-     * @param name 日志器名称
-     * @param lv 日志级别
+     * @brief Initialize logging system (console output only)
+     * @param name Logger name
+     * @param lv Log level
      */
     inline void init(const std::string& name = "cnetmod", level lv = level::info) {
         detail::logger_name() = name;
@@ -238,10 +238,10 @@ export namespace logger {
     }
 
     /**
-     * @brief 初始化日志系统 (控制台 + 文件)
-     * @param name 日志器名称
-     * @param filepath 日志文件路径
-     * @param lv 日志级别
+     * @brief Initialize logging system (console + file)
+     * @param name Logger name
+     * @param filepath Log file path
+     * @param lv Log level
      */
     inline void init_with_file(const std::string& name,
                                const std::string& filepath,
@@ -255,7 +255,7 @@ export namespace logger {
     }
 
     // ============================================================================
-    // 配置函数
+    // Configuration Functions
     // ============================================================================
 
     inline void set_level(level lv) {
@@ -278,8 +278,8 @@ export namespace logger {
     }
 
     // ============================================================================
-    // 日志输出函数 (使用 std::format + std::source_location)
-    // 使用 struct + 模板构造函数技巧，使 source_location 默认参数能与变参模板共存
+    // Log Output Functions (using std::format + std::source_location)
+    // Uses struct + template constructor trick to allow source_location default parameter to coexist with variadic templates
     // ============================================================================
 
     struct trace {

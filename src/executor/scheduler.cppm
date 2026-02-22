@@ -66,7 +66,7 @@ class schedule_sender {
         Receiver rcvr_;
 
         void start() noexcept {
-            // 零协程开销：通过函数指针回调 post 到事件循环
+            // Zero coroutine overhead: post to event loop via function pointer callback
             ctx_->post(&deliver, static_cast<void*>(this));
         }
 
@@ -278,7 +278,7 @@ auto as_sender(task<T> t) -> task_sender<T> {
 
 namespace detail {
 
-/// 手动 receiver：存储 set_value / set_error 结果
+/// Manual receiver: stores set_value / set_error result
 template <typename T>
 struct manual_receiver {
     using receiver_concept = stdexec::receiver_t;
@@ -298,7 +298,7 @@ struct manual_receiver {
     auto get_env() const noexcept -> env { return {}; }
 };
 
-/// void 特化
+/// void specialization
 template <>
 struct manual_receiver<void> {
     using receiver_concept = stdexec::receiver_t;
@@ -320,8 +320,8 @@ struct manual_receiver<void> {
 
 } // namespace detail
 
-/// 同步运行 task_sender<T>，返回 T
-/// 通过手动 connect + start 实现，兼容 MSVC
+/// Synchronously run task_sender<T>, returns T
+/// Implemented via manual connect + start, MSVC compatible
 export template <typename T>
 auto sync_wait_sender(task_sender<T>&& sender) -> T {
     if constexpr (std::is_void_v<T>) {

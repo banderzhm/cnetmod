@@ -9,11 +9,11 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// async_mutex — 协程互斥锁
+// async_mutex — Coroutine mutex
 // =============================================================================
 
-/// 不阻塞线程的协程互斥锁
-/// 冲突时挂起协程而非阻塞线程
+/// Non-blocking coroutine mutex
+/// Suspends coroutine instead of blocking thread when contention occurs
 export class async_mutex {
     struct waiter_node {
         std::coroutine_handle<> handle{};
@@ -27,7 +27,7 @@ public:
     async_mutex(const async_mutex&) = delete;
     auto operator=(const async_mutex&) -> async_mutex& = delete;
 
-    /// co_await mtx.lock() 获取锁
+    /// co_await mtx.lock() to acquire lock
     struct [[nodiscard]] lock_awaitable {
         async_mutex& mtx_;
         waiter_node node_;
@@ -35,7 +35,7 @@ public:
         explicit lock_awaitable(async_mutex& mtx) noexcept : mtx_(mtx) {}
 
         auto await_ready() noexcept -> bool {
-            // 尝试无竞争获取
+            // Try lock-free acquisition
             bool expected = false;
             return mtx_.locked_.compare_exchange_strong(
                 expected, true, std::memory_order_acquire);
@@ -45,15 +45,15 @@ public:
             node_.handle = h;
             node_.next = nullptr;
             std::lock_guard lock(mtx_.mtx_);
-            // 再次尝试获取（可能在 suspend 前已释放）
+            // Try again (may have been released before suspend)
             bool expected = false;
             if (mtx_.locked_.compare_exchange_strong(
                     expected, true, std::memory_order_acquire)) {
-                // 获取成功，直接恢复
+                // Acquired successfully, resume directly
                 h.resume();
                 return;
             }
-            // 加入等待队列
+            // Add to wait queue
             if (!mtx_.tail_) {
                 mtx_.head_ = mtx_.tail_ = &node_;
             } else {
@@ -69,26 +69,26 @@ public:
         return lock_awaitable{*this};
     }
 
-    /// 释放锁，唤醒下一个等待者
+    /// Release lock, wake up next waiter
     void unlock() noexcept {
         std::coroutine_handle<> to_resume;
         {
             std::lock_guard lock(mtx_);
             if (head_) {
-                // 唤醒队首等待者（锁传递，不释放 locked_）
+                // Wake up head waiter (lock transfer, don't release locked_)
                 auto* w = head_;
                 head_ = w->next;
                 if (!head_) tail_ = nullptr;
                 to_resume = w->handle;
             } else {
-                // 无等待者，释放锁
+                // No waiters, release lock
                 locked_.store(false, std::memory_order_release);
             }
         }
         if (to_resume) to_resume.resume();
     }
 
-    /// 尝试获取锁（非阻塞）
+    /// Try to acquire lock (non-blocking)
     [[nodiscard]] auto try_lock() noexcept -> bool {
         bool expected = false;
         return locked_.compare_exchange_strong(
@@ -97,21 +97,21 @@ public:
 
 private:
     std::atomic<bool> locked_{false};
-    std::mutex mtx_;  // 保护等待队列
+    std::mutex mtx_;  // Protect wait queue
     waiter_node* head_ = nullptr;
     waiter_node* tail_ = nullptr;
 };
 
 // =============================================================================
-// async_lock_guard — RAII 锁守卫
+// async_lock_guard — RAII lock guard
 // =============================================================================
 
-/// 配合 async_mutex 使用的 RAII 守卫
-/// 用法:
+/// RAII guard for use with async_mutex
+/// Usage:
 ///   co_await mtx.lock();
 ///   async_lock_guard guard(mtx, std::adopt_lock);
 ///   // ... critical section ...
-///   // guard 析构时自动 unlock
+///   // guard destructor automatically unlocks
 export class async_lock_guard {
 public:
     explicit async_lock_guard(async_mutex& mtx, std::adopt_lock_t) noexcept

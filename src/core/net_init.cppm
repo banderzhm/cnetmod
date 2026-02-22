@@ -16,10 +16,10 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// net_init — 跨平台网络初始化 RAII guard
+// net_init — Cross-platform network initialization RAII guard
 // =============================================================================
 
-/// 构造时初始化平台网络库，析构时清理
+/// Initialize platform network library on construction, cleanup on destruction
 /// Windows: WSAStartup / WSACleanup
 /// Linux/macOS: no-op
 export class net_init {

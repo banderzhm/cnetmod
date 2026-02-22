@@ -1,9 +1,9 @@
-/// cnetmod.core — 核心模块聚合
-/// 一次导入即可获得所有核心功能：
+/// cnetmod.core — Core module aggregation
+/// Import once to get all core functionality:
 ///   error / buffer / buffer_pool / address / socket / net_init /
 ///   file / serial_port / log / dns / crash_dump
 ///
-/// 注意：cnetmod.core.ssl 需单独导入（需要 #ifdef CNETMOD_HAS_SSL 保护）
+/// Note: cnetmod.core.ssl needs separate import (requires #ifdef CNETMOD_HAS_SSL protection)
 
 export module cnetmod.core;
 

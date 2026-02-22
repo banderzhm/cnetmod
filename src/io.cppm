@@ -1,5 +1,5 @@
-/// cnetmod.io — I/O 上下文模块聚合
-/// 一次导入即可获得所有 I/O 上下文功能：
+/// cnetmod.io — I/O context module aggregation
+/// Import once to get all I/O context functionality:
 ///   io_context / io_operation
 
 export module cnetmod.io;

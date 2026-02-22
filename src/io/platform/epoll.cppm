@@ -19,10 +19,10 @@ import cnetmod.io.io_operation;
 namespace cnetmod {
 
 // =============================================================================
-// epoll Context 实现
+// epoll Context implementation
 // =============================================================================
 
-/// Linux epoll 实现（readiness-based）
+/// Linux epoll implementation (readiness-based)
 export class epoll_context : public io_context {
 public:
     explicit epoll_context(std::size_t max_events = 128)
@@ -40,10 +40,10 @@ public:
                 errno, std::generic_category(), "eventfd failed");
         }
 
-        // 注册 eventfd 到 epoll（用于 stop 唤醒）
+        // Register eventfd to epoll (for stop wake)
         ::epoll_event ev{};
         ev.events = EPOLLIN;
-        ev.data.ptr = nullptr;  // nullptr = stop 信号
+        ev.data.ptr = nullptr;  // nullptr = stop signal
         if (::epoll_ctl(epoll_fd_, EPOLL_CTL_ADD, event_fd_, &ev) < 0) {
             ::close(event_fd_);
             ::close(epoll_fd_);
@@ -83,12 +83,12 @@ public:
 
     void restart() override {
         stopped_.store(false, std::memory_order_relaxed);
-        // 排空 eventfd
+        // Drain eventfd
         std::uint64_t val = 0;
         ::read(event_fd_, &val, sizeof(val));
     }
 
-    // epoll 事件注册接口（供 async_op 层使用）
+    // epoll event registration interface (for async_op layer use)
 
     [[nodiscard]] auto add(int fd, uint32_t events, void* user_data)
         -> std::expected<void, std::error_code>
@@ -99,7 +99,7 @@ public:
         int op = EPOLL_CTL_ADD;
         if (::epoll_ctl(epoll_fd_, op, fd, &ev) < 0) {
             if (errno == EEXIST) {
-                // 已存在，改为 MOD
+                // Already exists, change to MOD
                 if (::epoll_ctl(epoll_fd_, EPOLL_CTL_MOD, fd, &ev) < 0)
                     return std::unexpected(
                         std::error_code(errno, std::generic_category()));
@@ -148,13 +148,13 @@ private:
         for (int i = 0; i < n; ++i) {
             auto* ptr = events_[i].data.ptr;
             if (ptr == nullptr) {
-                // eventfd（stop 或 post 唤醒）— 排空
+                // eventfd (stop or post wake) — drain
                 std::uint64_t val = 0;
                 ::read(event_fd_, &val, sizeof(val));
                 handled += drain_post_queue();
                 continue;
             }
-            // user_data 是 coroutine_handle<>::address()
+            // user_data is coroutine_handle<>::address()
             auto h = std::coroutine_handle<>::from_address(ptr);
             h.resume();
             ++handled;

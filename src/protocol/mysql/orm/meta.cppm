@@ -11,7 +11,7 @@ import :orm_id_gen;
 namespace cnetmod::mysql::orm {
 
 // =============================================================================
-// 列属性标志
+// Column attribute flags
 // =============================================================================
 
 export enum class col_flag : std::uint8_t {
@@ -34,13 +34,13 @@ export constexpr auto has_flag(col_flag flags, col_flag f) noexcept -> bool {
 }
 
 // =============================================================================
-// column_def — 单列元数据
+// column_def — Single column metadata
 // =============================================================================
 
 export struct column_def {
-    std::string_view field_name;      // C++ 成员名
-    std::string_view column_name;     // SQL 列名
-    column_type      type;            // MySQL 列类型
+    std::string_view field_name;      // C++ member name
+    std::string_view column_name;     // SQL column name
+    column_type      type;            // MySQL column type
     col_flag         flags    = col_flag::none;
     id_strategy      strategy = id_strategy::none;
 
@@ -62,19 +62,19 @@ export struct column_def {
 };
 
 // =============================================================================
-// field_setter / field_getter — 函数指针类型
+// field_setter / field_getter — Function pointer types
 // =============================================================================
 
-/// 从 field_value 设置 model 成员
+/// Set model member from field_value
 export template <class T>
 using field_setter = void(*)(T& model, const field_value& val);
 
-/// 从 model 成员提取 param_value
+/// Extract param_value from model member
 export template <class T>
 using field_getter = param_value(*)(const T& model);
 
 // =============================================================================
-// field_mapping — 列定义 + getter/setter 绑定
+// field_mapping — Column definition + getter/setter binding
 // =============================================================================
 
 export template <class T>
@@ -85,7 +85,7 @@ struct field_mapping {
 };
 
 // =============================================================================
-// table_meta — 表级元数据
+// table_meta — Table-level metadata
 // =============================================================================
 
 export template <class T>
@@ -93,14 +93,14 @@ struct table_meta {
     std::string_view                    table_name;
     std::span<const field_mapping<T>>   fields;
 
-    /// 查找主键列
+    /// Find primary key column
     [[nodiscard]] auto pk() const noexcept -> const field_mapping<T>* {
         for (auto& f : fields)
             if (f.col.is_pk()) return &f;
         return nullptr;
     }
 
-    /// 按列名查找
+    /// Find by column name
     [[nodiscard]] auto find_column(std::string_view col_name) const noexcept
         -> const field_mapping<T>*
     {
@@ -109,7 +109,7 @@ struct table_meta {
         return nullptr;
     }
 
-    /// 所有非 auto_increment 列
+    /// All non-auto_increment columns
     [[nodiscard]] auto insertable_fields() const
         -> std::vector<const field_mapping<T>*>
     {
@@ -119,7 +119,7 @@ struct table_meta {
         return result;
     }
 
-    /// 所有非 PK 列（用于 UPDATE SET）
+    /// All non-PK columns (for UPDATE SET)
     [[nodiscard]] auto updatable_fields() const
         -> std::vector<const field_mapping<T>*>
     {
@@ -131,11 +131,11 @@ struct table_meta {
 };
 
 // =============================================================================
-// model_traits — 用户特化此 trait 以声明模型映射
+// model_traits — Users specialize this trait to declare model mapping
 // =============================================================================
 
 export template <class T>
-struct model_traits;   // 由 CNETMOD_MODEL 宏特化
+struct model_traits;   // Specialized by CNETMOD_MODEL macro
 
 // =============================================================================
 // Model concept
@@ -147,7 +147,7 @@ concept Model = requires {
 };
 
 // =============================================================================
-// column_type → SQL DDL 类型字符串
+// column_type → SQL DDL type string
 // =============================================================================
 
 export inline auto sql_type_str(column_type ct) noexcept -> std::string_view {
@@ -182,17 +182,17 @@ export inline auto sql_type_str(column_type ct) noexcept -> std::string_view {
 
 } // namespace cnetmod::mysql::orm
 
-// 宏定义已移至 include/cnetmod/orm.hpp
-// 用户在 import cnetmod.protocol.mysql; 之后 #include <cnetmod/orm.hpp> 即可使用
+// Macro definitions have been moved to include/cnetmod/orm.hpp
+// Users can use them after import cnetmod.protocol.mysql; by #include <cnetmod/orm.hpp>
 // CNETMOD_MODEL / CNETMOD_FIELD / PK / AUTO_INC / NULLABLE
 
 // =============================================================================
-// detail: set_member / get_member 自动类型转换
+// detail: set_member / get_member automatic type conversion
 // =============================================================================
 
 export namespace cnetmod::mysql::orm::detail {
 
-// ── set_member: field_value → C++ 成员 ──
+// ── set_member: field_value → C++ member ──
 
 inline void set_member(std::int64_t& m, const field_value& v) {
     if (v.is_int64()) m = v.get_int64();
@@ -276,7 +276,7 @@ inline void set_member(std::optional<double>& m, const field_value& v) {
     else { double tmp{}; set_member(tmp, v); m = tmp; }
 }
 
-// ── get_member: C++ 成员 → param_value ──
+// ── get_member: C++ member → param_value ──
 
 inline auto get_member(std::int64_t v) -> param_value {
     return param_value::from_int(v);

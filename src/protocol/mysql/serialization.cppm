@@ -13,7 +13,7 @@ import :deserialization;
 namespace cnetmod::mysql::detail {
 
 // =============================================================================
-// 登录包构建
+// Login packet construction
 // =============================================================================
 
 inline auto build_login_packet(
@@ -74,7 +74,7 @@ inline auto build_login_packet(
 }
 
 // =============================================================================
-// SSL 请求包构建
+// SSL request packet construction
 // =============================================================================
 
 inline auto build_ssl_request(std::uint32_t client_caps) -> std::vector<std::uint8_t> {
@@ -95,7 +95,7 @@ inline auto build_ssl_request(std::uint32_t client_caps) -> std::vector<std::uin
 }
 
 // =============================================================================
-// COM_STMT_PREPARE 命令构建
+// COM_STMT_PREPARE command construction
 // =============================================================================
 
 inline auto build_prepare_stmt_command(std::string_view sql) -> std::vector<std::uint8_t> {
@@ -109,7 +109,7 @@ inline auto build_prepare_stmt_command(std::string_view sql) -> std::vector<std:
 }
 
 // =============================================================================
-// COM_STMT_EXECUTE 命令构建
+// COM_STMT_EXECUTE command construction
 // =============================================================================
 
 inline auto build_execute_stmt_command(
@@ -265,7 +265,7 @@ inline auto build_execute_stmt_command(
 }
 
 // =============================================================================
-// COM_STMT_CLOSE 命令构建
+// COM_STMT_CLOSE command construction
 // =============================================================================
 
 inline auto build_close_stmt_command(std::uint32_t stmt_id) -> std::vector<std::uint8_t> {
@@ -276,7 +276,7 @@ inline auto build_close_stmt_command(std::uint32_t stmt_id) -> std::vector<std::
 }
 
 // =============================================================================
-// COM_QUERY 命令构建
+// COM_QUERY command construction
 // =============================================================================
 
 inline auto build_query_command(std::string_view sql) -> std::vector<std::uint8_t> {

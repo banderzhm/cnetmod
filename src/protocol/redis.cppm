@@ -1,5 +1,5 @@
-/// cnetmod.protocol.redis — 聚合模块
-/// 统一导出 redis 子模块: types / request / parser / client
+/// cnetmod.protocol.redis — Aggregation Module
+/// Unified export of redis submodules: types / request / parser / client
 
 export module cnetmod.protocol.redis;
 

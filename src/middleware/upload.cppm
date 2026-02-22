@@ -1,33 +1,33 @@
 /**
  * @file upload.cppm
- * @brief 文件上传中间件 — 解析并校验 multipart/form-data，支持业务自定义处理
+ * @brief File Upload Middleware — Parse and validate multipart/form-data, supports custom business handling
  *
- * 与 save_upload handler 的区别：
- *   save_upload  — 终端 handler，固定逻辑：解析 → 保存磁盘 → 返回 JSON
- *   upload()     — 中间件，负责解析与校验；业务 handler 自行决定如何处置文件
+ * Difference from save_upload handler:
+ *   save_upload  — Terminal handler, fixed logic: parse → save to disk → return JSON
+ *   upload()     — Middleware, handles parsing and validation; business handler decides how to handle files
  *
- * 使用示例:
+ * Usage Example:
  *   import cnetmod.middleware.upload;
  *
- *   // 1. 挂载中间件（全局或路由级别）
+ *   // 1. Mount middleware (global or route level)
  *   svr.use(cnetmod::upload({
- *       .max_file_size  = 5 * 1024 * 1024,   // 5MB / 文件
- *       .max_files      = 3,                   // 最多 3 个文件字段
- *       .allowed_types  = {"image/"},          // MIME 前缀白名单
+ *       .max_file_size  = 5 * 1024 * 1024,   // 5MB per file
+ *       .max_files      = 3,                   // Max 3 file fields
+ *       .allowed_types  = {"image/"},          // MIME prefix whitelist
  *       .allowed_exts   = {".jpg", ".png", ".webp"},
  *   }));
  *
- *   // 2. 业务 handler：ctx.parse_form() 已由中间件解析完毕，直接使用
+ *   // 2. Business handler: ctx.parse_form() already parsed by middleware, use directly
  *   router.post("/upload/avatar",
  *       [](http::request_context& ctx) -> task<void>
  *   {
- *       auto form = *ctx.parse_form();    //中间件已解析并缓存
+ *       auto form = *ctx.parse_form();    // Already parsed and cached by middleware
  *       auto* img = form->file("avatar");
  *       if (!img) {
  *           ctx.json(http::status::bad_request, R"({"error":"avatar required"})");
  *           co_return;
  *       }
- *       // 自定义业务：写入指定目录、上传 OSS、入库、生成缩略图...
+ *       // Custom business logic: write to directory, upload to OSS, save to DB, generate thumbnails...
  *       auto save_path = uploads_dir / img->filename;
  *       co_await save_bytes(save_path, img->data);
  *
@@ -44,50 +44,50 @@ import cnetmod.protocol.http;
 namespace cnetmod {
 
 // =============================================================================
-// upload_config — 文件上传中间件配置
+// upload_config — File Upload Middleware Configuration
 // =============================================================================
 
 export struct upload_config {
-    /// 单个文件最大字节数 (默认 10MB；设 0 = 不限)
+    /// Max bytes per file (default 10MB; 0 = unlimited)
     std::size_t max_file_size = 10 * 1024 * 1024;
 
-    /// 请求总 body 大小上限 (0 = 不限)
+    /// Total body size limit (0 = unlimited)
     std::size_t max_total_size = 0;
 
-    /// 最大文件字段数 (0 = 不限)
+    /// Max file fields (0 = unlimited)
     std::size_t max_files = 0;
 
-    /// 最大普通表单字段数 (0 = 不限)
+    /// Max regular form fields (0 = unlimited)
     std::size_t max_fields = 0;
 
-    /// MIME 类型前缀白名单 (空 = 全部允许)
-    /// 前缀匹配，e.g. {"image/"} 允许所有图片；{"image/png"} 仅 PNG
+    /// MIME type prefix whitelist (empty = allow all)
+    /// Prefix match, e.g. {"image/"} allows all images; {"image/png"} only PNG
     std::vector<std::string> allowed_types;
 
-    /// 文件扩展名白名单，含前导点 (空 = 全部允许)
-    /// 大小写不敏感，e.g. {".jpg", ".png", ".pdf"}
+    /// File extension whitelist, with leading dot (empty = allow all)
+    /// Case insensitive, e.g. {".jpg", ".png", ".pdf"}
     std::vector<std::string> allowed_exts;
 };
 
 // =============================================================================
-// 内部实现
+// Internal Implementation
 // =============================================================================
 
 namespace detail {
 
-/// 转小写（原地）
+/// Convert to lowercase (in-place)
 inline void to_lower_inplace(std::string& s) {
     for (auto& c : s)
         if (c >= 'A' && c <= 'Z') c += 32;
 }
 
-/// upload 中间件协程体（非导出，避免 MSVC 「导出协程 lambda」ICE）
+/// upload middleware coroutine body (not exported, avoids MSVC "exported coroutine lambda" ICE)
 auto upload_mw_body(const upload_config& cfg,
                     http::request_context& ctx,
                     http::next_fn next) -> task<void>
 {
     // -------------------------------------------------------------------------
-    // 1. Content-Type 检查
+    // 1. Content-Type check
     // -------------------------------------------------------------------------
     auto ct_hdr = ctx.get_header("Content-Type");
     auto ct = http::parse_content_type(ct_hdr);
@@ -98,7 +98,7 @@ auto upload_mw_body(const upload_config& cfg,
     }
 
     // -------------------------------------------------------------------------
-    // 2. 总体 body 大小检查
+    // 2. Total body size check
     // -------------------------------------------------------------------------
     if (cfg.max_total_size > 0 && ctx.body().size() > cfg.max_total_size) {
         ctx.json(http::status::payload_too_large, std::format(
@@ -108,7 +108,7 @@ auto upload_mw_body(const upload_config& cfg,
     }
 
     // -------------------------------------------------------------------------
-    // 3. 解析 multipart（结果缓存在 ctx 内，下游直接 ctx.parse_form() 复用）
+    // 3. Parse multipart (result cached in ctx, downstream uses ctx.parse_form() directly)
     // -------------------------------------------------------------------------
     auto form_r = ctx.parse_form();
     if (!form_r) {
@@ -120,7 +120,7 @@ auto upload_mw_body(const upload_config& cfg,
     const auto& form = **form_r;
 
     // -------------------------------------------------------------------------
-    // 4. 文件数量检查
+    // 4. File count check
     // -------------------------------------------------------------------------
     if (cfg.max_files > 0 && form.file_count() > cfg.max_files) {
         ctx.json(http::status::bad_request, std::format(
@@ -130,7 +130,7 @@ auto upload_mw_body(const upload_config& cfg,
     }
 
     // -------------------------------------------------------------------------
-    // 5. 表单字段数检查
+    // 5. Form field count check
     // -------------------------------------------------------------------------
     if (cfg.max_fields > 0 && form.field_count() > cfg.max_fields) {
         ctx.json(http::status::bad_request, std::format(
@@ -140,11 +140,11 @@ auto upload_mw_body(const upload_config& cfg,
     }
 
     // -------------------------------------------------------------------------
-    // 6. 逐文件校验：大小 / MIME / 扩展名
+    // 6. Per-file validation: size / MIME / extension
     // -------------------------------------------------------------------------
     for (const auto& ff : form.all_files()) {
 
-        // 单文件大小
+        // Single file size
         if (cfg.max_file_size > 0 && ff.size() > cfg.max_file_size) {
             ctx.json(http::status::payload_too_large, std::format(
                 R"({{"error":"file too large","file":"{}","limit":{},"size":{}}})",
@@ -152,7 +152,7 @@ auto upload_mw_body(const upload_config& cfg,
             co_return;
         }
 
-        // MIME 类型前缀白名单
+        // MIME type prefix whitelist
         if (!cfg.allowed_types.empty()) {
             bool ok = false;
             for (const auto& t : cfg.allowed_types) {
@@ -166,7 +166,7 @@ auto upload_mw_body(const upload_config& cfg,
             }
         }
 
-        // 扩展名白名单（大小写不敏感）
+        // Extension whitelist (case insensitive)
         if (!cfg.allowed_exts.empty()) {
             auto dot = ff.filename.rfind('.');
             std::string ext = (dot != std::string::npos)
@@ -187,7 +187,7 @@ auto upload_mw_body(const upload_config& cfg,
     }
 
     // -------------------------------------------------------------------------
-    // 7. 全部校验通过 → 交给下游 handler 处理业务逻辑
+    // 7. All validation passed → pass to downstream handler for business logic
     // -------------------------------------------------------------------------
     co_await next();
 }
@@ -195,16 +195,16 @@ auto upload_mw_body(const upload_config& cfg,
 } // namespace detail
 
 // =============================================================================
-// upload — 文件上传中间件工厂
+// upload — File Upload Middleware Factory
 // =============================================================================
 
-/// 创建文件上传中间件。
+/// Create file upload middleware.
 ///
-/// 执行顺序：
-///   解析 multipart/form-data → 按 upload_config 校验 → co_await next()
+/// Execution order:
+///   Parse multipart/form-data → Validate per upload_config → co_await next()
 ///
-/// 下游 handler 通过 ctx.parse_form() 获取已解析的 form_data，
-/// 自行决定文件保存路径、OSS 上传、数据库写入、图像处理等业务逻辑。
+/// Downstream handlers get parsed form_data via ctx.parse_form(),
+/// and decide file save paths, OSS uploads, database writes, image processing, etc.
 export inline auto upload(upload_config cfg = {}) -> http::middleware_fn {
     auto cfg_ptr = std::make_shared<upload_config>(std::move(cfg));
     return [cfg_ptr](http::request_context& ctx, http::next_fn next) -> task<void> {

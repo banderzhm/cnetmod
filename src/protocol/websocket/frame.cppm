@@ -11,7 +11,7 @@ import :types;
 namespace cnetmod::ws {
 
 // =============================================================================
-// 帧头常量 (RFC 6455 §5.2)
+// Frame Header Constants (RFC 6455 §5.2)
 // =============================================================================
 
 namespace detail {
@@ -27,12 +27,12 @@ inline constexpr std::uint8_t BHB1_PAYLOAD = 0x7F;
 } // namespace detail
 
 // =============================================================================
-// 解析帧头
+// Frame Header Parsing
 // =============================================================================
 
-/// 解析 WebSocket 帧头
-/// 返回 (frame_header, header_size)，header_size 是帧头占用的字节数
-/// 如果数据不足返回 ws_errc::need_more_data
+/// Parse WebSocket frame header
+/// Returns (frame_header, header_size), where header_size is the number of bytes consumed
+/// Returns ws_errc::need_more_data if insufficient data
 export auto parse_frame_header(std::span<const std::byte> data)
     -> std::expected<std::pair<frame_header, std::size_t>, std::error_code>
 {
@@ -60,7 +60,7 @@ export auto parse_frame_header(std::span<const std::byte> data)
             return std::unexpected(make_error_code(ws_errc::need_more_data));
         std::uint16_t len16;
         std::memcpy(&len16, data.data() + 2, 2);
-        // 网络字节序 -> 主机字节序
+        // Network byte order -> host byte order
         hdr.payload_length = (static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[2])) << 8)
                            | static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[3]));
         header_size = 4;
@@ -82,7 +82,7 @@ export auto parse_frame_header(std::span<const std::byte> data)
         header_size += 4;
     }
 
-    // 验证
+    // Validation
     if (is_control(hdr.op)) {
         if (hdr.payload_length > 125)
             return std::unexpected(make_error_code(ws_errc::control_frame_too_large));
@@ -97,7 +97,7 @@ export auto parse_frame_header(std::span<const std::byte> data)
 // XOR masking
 // =============================================================================
 
-/// 对数据应用/取消 XOR masking (RFC 6455 §5.3)
+/// Apply/remove XOR masking on data (RFC 6455 §5.3)
 export void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept {
     auto mask = reinterpret_cast<const std::byte*>(&key);
     for (std::size_t i = 0; i < data.size(); ++i) {
@@ -106,11 +106,11 @@ export void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept {
 }
 
 // =============================================================================
-// 构建帧
+// Frame Building
 // =============================================================================
 
-/// 构建 WebSocket 帧（头 + payload）
-/// mask=true 时自动生成随机 masking key 并 mask payload
+/// Build WebSocket frame (header + payload)
+/// When mask=true, automatically generates random masking key and masks payload
 export auto build_frame(opcode op, std::span<const std::byte> payload,
                         bool mask, bool fin = true) -> std::vector<std::byte>
 {
@@ -159,13 +159,13 @@ export auto build_frame(opcode op, std::span<const std::byte> payload,
 
     // Masking key + payload
     if (mask) {
-        // 使用简单的伪随机（生产环境建议用 CSPRNG）
+        // Use simple pseudo-random (production should use CSPRNG)
         static thread_local std::mt19937 rng{std::random_device{}()};
         std::uint32_t key = rng();
         std::memcpy(frame.data() + offset, &key, 4);
         offset += 4;
 
-        // 复制并 mask payload
+        // Copy and mask payload
         std::memcpy(frame.data() + offset, payload.data(), payload.size());
         apply_mask(std::span{frame.data() + offset, payload.size()}, key);
     } else {
@@ -175,7 +175,7 @@ export auto build_frame(opcode op, std::span<const std::byte> payload,
     return frame;
 }
 
-/// 构建 close 帧
+/// Build close frame
 export auto build_close_frame(std::uint16_t code, std::string_view reason,
                               bool mask) -> std::vector<std::byte>
 {

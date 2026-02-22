@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:codec — MQTT 报文编解码
-/// 支持 MQTT v3.1.1 和 v5.0 全部报文类型
+/// cnetmod.protocol.mqtt:codec — MQTT Packet Encoding/Decoding
+/// Supports all packet types for MQTT v3.1.1 and v5.0
 
 module;
 
@@ -23,14 +23,14 @@ using detail::write_utf8_string;
 using detail::write_binary;
 
 // =============================================================================
-// V5 Properties 编解码
+// V5 Properties Encoding/Decoding
 // =============================================================================
 
 namespace detail {
 
-/// 判断属性 ID 对应的值类型并编码单个属性
+/// Determine value type for property ID and encode single property
 export inline void encode_property(std::string& buf, const mqtt_property& prop) {
-    // 属性 ID 作为变长整数 (实际是 1 字节，因为所有 ID < 128)
+    // Property ID as variable length integer (actually 1 byte, since all IDs < 128)
     buf.push_back(static_cast<char>(static_cast<std::uint8_t>(prop.id)));
 
     std::visit([&](auto&& val) {
@@ -40,14 +40,14 @@ export inline void encode_property(std::string& buf, const mqtt_property& prop) 
         } else if constexpr (std::is_same_v<T, std::uint16_t>) {
             write_u16(buf, val);
         } else if constexpr (std::is_same_v<T, std::uint32_t>) {
-            // subscription_identifier 使用变长编码，其他使用 4 字节
+            // subscription_identifier uses variable length encoding, others use 4 bytes
             if (prop.id == property_id::subscription_identifier) {
                 encode_variable_length(buf, val);
             } else {
                 write_u32(buf, val);
             }
         } else if constexpr (std::is_same_v<T, std::string>) {
-            // correlation_data 和 authentication_data 是二进制
+            // correlation_data and authentication_data are binary
             if (prop.id == property_id::correlation_data ||
                 prop.id == property_id::authentication_data) {
                 write_binary(buf, val);
@@ -61,7 +61,7 @@ export inline void encode_property(std::string& buf, const mqtt_property& prop) 
     }, prop.value);
 }
 
-/// 编码属性列表：先编码到临时 buffer，再写变长长度 + 内容
+/// Encode property list: first encode to temporary buffer, then write variable length + content
 export inline void encode_properties(std::string& buf, const properties& props) {
     std::string prop_buf;
     for (auto& p : props)
@@ -70,7 +70,7 @@ export inline void encode_properties(std::string& buf, const properties& props) 
     buf.append(prop_buf);
 }
 
-/// 解码属性列表，返回 (属性列表, 消耗字节数)
+/// Decode property list, returns (property list, bytes consumed)
 export inline auto decode_properties(std::string_view data)
     -> std::pair<properties, std::size_t>
 {
@@ -183,7 +183,7 @@ export inline auto decode_properties(std::string_view data)
         }
 
         default:
-            goto done; // 未知属性，停止解析
+            goto done; // Unknown property, stop parsing
         }
 
         result.push_back(std::move(prop));
@@ -193,8 +193,8 @@ done:
     return {std::move(result), total_consumed + prop_len};
 }
 
-/// 构建完整的 MQTT 报文：fixed_header_byte + remaining_length + payload
-/// max_packet_size > 0 时检查总长度是否超限，超限返回空字符串
+/// Build complete MQTT packet: fixed_header_byte + remaining_length + payload
+/// When max_packet_size > 0, check if total length exceeds limit, return empty string if exceeded
 export inline auto build_packet(std::uint8_t fixed_header, std::string_view payload,
                                  std::size_t max_packet_size = 0) -> std::string
 {
@@ -203,9 +203,9 @@ export inline auto build_packet(std::uint8_t fixed_header, std::string_view payl
     pkt.push_back(static_cast<char>(fixed_header));
     encode_variable_length(pkt, payload.size());
     pkt.append(payload);
-    // 检查 Maximum Packet Size (v5)
+    // Check Maximum Packet Size (v5)
     if (max_packet_size > 0 && pkt.size() > max_packet_size) {
-        return {}; // 超限
+        return {}; // Exceeded limit
     }
     return pkt;
 }
@@ -213,7 +213,7 @@ export inline auto build_packet(std::uint8_t fixed_header, std::string_view payl
 } // namespace detail
 
 // =============================================================================
-// CONNECT 编码
+// CONNECT Encoding
 // =============================================================================
 
 export inline auto encode_connect(const connect_options& opts) -> std::string {
@@ -278,10 +278,10 @@ export inline auto encode_connect(const connect_options& opts) -> std::string {
 }
 
 // =============================================================================
-// CONNACK 解码
+// CONNACK Decoding
 // =============================================================================
 
-/// v3.1.1 CONNACK 结果
+/// v3.1.1 CONNACK result
 export struct connack_result {
     bool                session_present = false;
     connect_return_code return_code     = connect_return_code::accepted;
@@ -311,7 +311,7 @@ export inline auto decode_connack(std::string_view payload, protocol_version ver
 }
 
 // =============================================================================
-// PUBLISH 编解码
+// PUBLISH Encoding/Decoding
 // =============================================================================
 
 export inline auto encode_publish(
@@ -353,7 +353,7 @@ export inline auto encode_publish(
     return detail::build_packet(fh, payload);
 }
 
-/// 解码 PUBLISH 报文 (从 frame payload + flags)
+/// Decode PUBLISH packet (from frame payload + flags)
 export inline auto decode_publish(std::string_view payload, std::uint8_t flags, protocol_version ver)
     -> std::expected<publish_message, std::string>
 {
@@ -371,7 +371,7 @@ export inline auto decode_publish(std::string_view payload, std::uint8_t flags, 
     msg.topic = std::string(payload.substr(pos, topic_len));
     pos += topic_len;
 
-    // MQTT UTF-8 合规性校验
+    // MQTT UTF-8 compliance validation
     if (!validate_utf8(msg.topic)) {
         logger::debug("mqtt decode_publish: invalid UTF-8 in topic");
         return std::unexpected("PUBLISH: invalid UTF-8 in topic");
@@ -456,7 +456,7 @@ export inline auto encode_pubcomp(std::uint16_t packet_id, protocol_version ver,
     return detail::build_packet(static_cast<std::uint8_t>(control_packet_type::pubcomp), payload);
 }
 
-/// 解码 ACK 类报文 (PUBACK/PUBREC/PUBREL/PUBCOMP)
+/// Decode ACK type packets (PUBACK/PUBREC/PUBREL/PUBCOMP)
 export struct ack_result {
     std::uint16_t packet_id   = 0;
     std::uint8_t  reason_code = 0;  // v5
@@ -519,7 +519,7 @@ export inline auto encode_subscribe(
 }
 
 // =============================================================================
-// SUBACK 解码
+// SUBACK Decoding
 // =============================================================================
 
 export struct suback_result {
@@ -581,7 +581,7 @@ export inline auto encode_unsubscribe(
 }
 
 // =============================================================================
-// UNSUBACK 解码
+// UNSUBACK Decoding
 // =============================================================================
 
 export struct unsuback_result {
@@ -650,7 +650,7 @@ export inline auto encode_disconnect(
             static_cast<char>(0)};
 }
 
-/// 解码 DISCONNECT
+/// Decode DISCONNECT
 export struct disconnect_result {
     std::uint8_t reason_code = 0;  // v5
     properties   props;             // v5
@@ -706,11 +706,11 @@ export inline auto decode_auth(std::string_view payload)
 }
 
 // =============================================================================
-// ================== Broker 侧编解码 (Server-side codec) ==================
+// ================== Broker-side Encoding/Decoding (Server-side codec) ==================
 // =============================================================================
 
 // =============================================================================
-// CONNECT 解码 (服务端接收)
+// CONNECT Decoding (Server receives)
 // =============================================================================
 
 export struct connect_data {
@@ -750,7 +750,7 @@ export inline auto decode_connect(std::string_view payload)
     // Connect Flags
     if (pos >= payload.size()) return std::unexpected("CONNECT: no flags");
     auto flags = static_cast<std::uint8_t>(payload[pos]); pos++;
-    // MQTT 规范要求保留位 (bit 0) 必须为 0
+    // MQTT spec requires reserved bit (bit 0) must be 0
     if (flags & 0x01) return std::unexpected("CONNECT: reserved flag bit 0 must be 0");
     r.clean_session = (flags & 0x02) != 0;
     bool has_will      = (flags & 0x04) != 0;
@@ -777,7 +777,7 @@ export inline auto decode_connect(std::string_view payload)
     if (pos + cid_len > payload.size()) return std::unexpected("CONNECT: client_id overflow");
     r.client_id = std::string(payload.substr(pos, cid_len)); pos += cid_len;
 
-    // MQTT UTF-8 合规性校验
+    // MQTT UTF-8 compliance validation
     if (!r.client_id.empty() && !validate_utf8(r.client_id)) {
         logger::debug("mqtt decode_connect: invalid UTF-8 in client_id");
         return std::unexpected("CONNECT: invalid UTF-8 in client_id");
@@ -803,7 +803,7 @@ export inline auto decode_connect(std::string_view payload)
         if (pos + wt_len > payload.size()) return std::unexpected("CONNECT: will topic overflow");
         w.topic = std::string(payload.substr(pos, wt_len)); pos += wt_len;
 
-        // Will Topic UTF-8 校验
+        // Will Topic UTF-8 validation
         if (!validate_utf8(w.topic)) {
             logger::debug("mqtt decode_connect: invalid UTF-8 in will topic");
             return std::unexpected("CONNECT: invalid UTF-8 in will topic");
@@ -843,7 +843,7 @@ export inline auto decode_connect(std::string_view payload)
 }
 
 // =============================================================================
-// CONNACK 编码 (服务端发送)
+// CONNACK Encoding (Server sends)
 // =============================================================================
 
 export inline auto encode_connack(
@@ -872,7 +872,7 @@ export inline auto encode_connack(
 }
 
 // =============================================================================
-// SUBSCRIBE 解码 (服务端接收)
+// SUBSCRIBE Decoding (Server receives)
 // =============================================================================
 
 export struct subscribe_data {
@@ -898,7 +898,7 @@ export inline auto decode_subscribe(std::string_view payload, protocol_version v
         pos += consumed;
     }
 
-    // v5: 提取 Subscription Identifier
+    // v5: Extract Subscription Identifier
     std::uint32_t sub_id = 0;
     if (ver == protocol_version::v5) {
         for (auto& p : r.props)
@@ -917,7 +917,7 @@ export inline auto decode_subscribe(std::string_view payload, protocol_version v
         if (pos >= payload.size()) break;
         auto opts_byte = static_cast<std::uint8_t>(payload[pos]); pos++;
 
-        // MQTT UTF-8 合规性校验
+        // MQTT UTF-8 compliance validation
         if (!validate_utf8(topic_filter)) {
             logger::debug("mqtt decode_subscribe: invalid UTF-8 in topic_filter");
             return std::unexpected("SUBSCRIBE: invalid UTF-8 in topic_filter");
@@ -939,7 +939,7 @@ export inline auto decode_subscribe(std::string_view payload, protocol_version v
 }
 
 // =============================================================================
-// SUBACK 编码 (服务端发送)
+// SUBACK Encoding (Server sends)
 // =============================================================================
 
 export inline auto encode_suback(
@@ -967,7 +967,7 @@ export inline auto encode_suback(
 }
 
 // =============================================================================
-// UNSUBSCRIBE 解码 (服务端接收)
+// UNSUBSCRIBE Decoding (Server receives)
 // =============================================================================
 
 export struct unsubscribe_data {
@@ -1005,7 +1005,7 @@ export inline auto decode_unsubscribe(std::string_view payload, protocol_version
 }
 
 // =============================================================================
-// UNSUBACK 编码 (服务端发送)
+// UNSUBACK Encoding (Server sends)
 // =============================================================================
 
 export inline auto encode_unsuback(

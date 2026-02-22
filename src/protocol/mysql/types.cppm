@@ -10,7 +10,7 @@ import :diagnostics;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// 字段类型 (protocol_field_type) — 协议级别
+// Field Type (protocol_field_type) — Protocol Level
 // =============================================================================
 
 export enum class field_type : std::uint8_t {
@@ -44,13 +44,13 @@ export enum class field_type : std::uint8_t {
 };
 
 // =============================================================================
-// field_kind — 字段值的 C++ 存储类型（参考 Boost.MySQL field_kind）
+// field_kind — C++ Storage Type for Field Values (ref: Boost.MySQL field_kind)
 // =============================================================================
 
 export enum class field_kind : std::uint8_t {
     null = 0,  ///< NULL
-    int64,     ///< std::int64_t  (有符号整数)
-    uint64,    ///< std::uint64_t (无符号整数 / YEAR / BIT)
+    int64,     ///< std::int64_t  (signed integer)
+    uint64,    ///< std::uint64_t (unsigned integer / YEAR / BIT)
     string,    ///< std::string   (CHAR/VARCHAR/TEXT/DECIMAL/ENUM/SET/JSON)
     blob,      ///< blob / std::string (BINARY/VARBINARY/BLOB/GEOMETRY)
     float_,    ///< float (FLOAT)
@@ -77,14 +77,14 @@ export inline auto field_kind_to_str(field_kind k) noexcept -> const char* {
 }
 
 // =============================================================================
-// blob / blob_view — 二进制数据类型
+// blob / blob_view — Binary Data Types
 // =============================================================================
 
 export using mysql_blob      = std::vector<unsigned char>;
 export using mysql_blob_view  = std::span<const unsigned char>;
 
 // =============================================================================
-// bad_field_access — 类型不匹配异常（参考 Boost.MySQL bad_field_access）
+// bad_field_access — Type Mismatch Exception (ref: Boost.MySQL bad_field_access)
 // =============================================================================
 
 export class bad_field_access : public std::exception {
@@ -93,7 +93,7 @@ public:
 };
 
 // =============================================================================
-// column_type — 高级列类型（参考 Boost.MySQL column_type）
+// column_type — High-Level Column Type (ref: Boost.MySQL column_type)
 // =============================================================================
 
 export enum class column_type {
@@ -121,11 +121,11 @@ export enum class column_type {
     set,          ///< SET
     json,         ///< JSON
     geometry,     ///< GEOMETRY
-    unknown,      ///< 未知类型
+    unknown,      ///< Unknown type
 };
 
 // =============================================================================
-// column_flags — 列标志位（参考 Boost.MySQL column_flags）
+// column_flags — Column flag bits (reference: Boost.MySQL column_flags)
 // =============================================================================
 
 export namespace column_flags {
@@ -150,7 +150,7 @@ export namespace column_flags {
 inline constexpr std::uint16_t binary_collation = 63;
 
 // =============================================================================
-// compute_column_type — 从协议级 field_type + flags + charset 计算高级 column_type
+// compute_column_type — Compute high-level column_type from protocol-level field_type + flags + charset
 // =============================================================================
 
 export inline auto compute_column_type(
@@ -180,7 +180,7 @@ export inline auto compute_column_type(
     case field_type::enum_type:   return column_type::enum_;
     case field_type::set_type:    return column_type::set;
     case field_type::string: {
-        // CHAR/BINARY/ENUM/SET — 通过 flags 和 collation 区分
+        // CHAR/BINARY/ENUM/SET — distinguished by flags and collation
         if (flags & column_flags::is_set)  return column_type::set;
         if (flags & column_flags::is_enum) return column_type::enum_;
         if (collation == binary_collation) return column_type::binary;
@@ -200,7 +200,7 @@ export inline auto compute_column_type(
 }
 
 // =============================================================================
-// column_type_to_str — 列类型转可读字符串
+// column_type_to_str — Convert column type to readable string
 // =============================================================================
 
 export inline auto column_type_to_str(
@@ -238,7 +238,7 @@ export inline auto column_type_to_str(
 }
 
 // =============================================================================
-// mysql_date — DATE 类型（参考 Boost.MySQL date）
+// mysql_date — DATE type (reference: Boost.MySQL date)
 // =============================================================================
 
 export struct mysql_date {
@@ -260,7 +260,7 @@ export struct mysql_date {
 };
 
 // =============================================================================
-// mysql_datetime — DATETIME / TIMESTAMP 类型（参考 Boost.MySQL datetime）
+// mysql_datetime — DATETIME / TIMESTAMP type (reference: Boost.MySQL datetime)
 // =============================================================================
 
 export struct mysql_datetime {
@@ -296,9 +296,9 @@ export struct mysql_datetime {
 };
 
 // =============================================================================
-// mysql_time — TIME 类型（参考 Boost.MySQL time）
-// 范围: -838:59:59.000000 ~ +838:59:59.000000
-// 内部存储为 std::chrono::microseconds
+// mysql_time — TIME type (reference: Boost.MySQL time)
+// Range: -838:59:59.000000 ~ +838:59:59.000000
+// Internally stored as std::chrono::microseconds
 // =============================================================================
 
 export struct mysql_time {
@@ -326,7 +326,7 @@ export struct mysql_time {
 };
 
 // =============================================================================
-// compute_field_kind — 从协议 field_type + flags + charset 推导 C++ 存储类型
+// compute_field_kind — Infer C++ storage type from protocol field_type + flags + charset
 // =============================================================================
 
 export inline auto compute_field_kind(
@@ -347,7 +347,7 @@ export inline auto compute_field_kind(
     case field_type::float_type:  return field_kind::float_;
     case field_type::double_type: return field_kind::double_;
     case field_type::decimal:
-    case field_type::newdecimal:  return field_kind::string;  // 任意精度
+    case field_type::newdecimal:  return field_kind::string;  // Arbitrary precision
     case field_type::date:        return field_kind::date;
     case field_type::datetime:
     case field_type::timestamp:   return field_kind::datetime;
@@ -371,11 +371,11 @@ export inline auto compute_field_kind(
 }
 
 // =============================================================================
-// field_value — 单个字段值（参考 Boost.MySQL field / field_view）
+// field_value — Single field value (reference: Boost.MySQL field / field_view)
 // =============================================================================
 //
-// 以 field_kind 为判别器，存储对应类型的值。
-// 提供 kind() / is_xxx() / as_xxx()（带检查）/ get_xxx()（无检查）访问器。
+// Uses field_kind as discriminator, stores values of corresponding types.
+// Provides kind() / is_xxx() / as_xxx() (with check) / get_xxx() (no check) accessors.
 
 export struct field_value {
     field_kind     kind_        = field_kind::null;
@@ -383,12 +383,12 @@ export struct field_value {
     std::uint64_t  uint_val     = 0;
     float          float_val    = 0.0f;
     double         double_val   = 0.0;
-    std::string    str_val;              // string & blob 共用
+    std::string    str_val;              // Shared by string & blob
     mysql_date     date_val;
     mysql_datetime datetime_val;
     mysql_time     time_val;
 
-    // ── 判别 ────────────────────────────────────────────────
+    // ── Type discrimination ────────────────────────────────────────────────
     auto kind()        const noexcept -> field_kind { return kind_; }
     auto is_null()     const noexcept -> bool { return kind_ == field_kind::null; }
     auto is_int64()    const noexcept -> bool { return kind_ == field_kind::int64; }
@@ -401,7 +401,7 @@ export struct field_value {
     auto is_datetime() const noexcept -> bool { return kind_ == field_kind::datetime; }
     auto is_time()     const noexcept -> bool { return kind_ == field_kind::time; }
 
-    // ── as_xxx — 带类型检查的访问（不匹配抛 bad_field_access）──
+    // ── as_xxx — Type-checked access (throws bad_field_access on mismatch) ──
     auto as_int64()    const -> std::int64_t              { chk(field_kind::int64);    return int_val; }
     auto as_uint64()   const -> std::uint64_t             { chk(field_kind::uint64);   return uint_val; }
     auto as_float()    const -> float                     { chk(field_kind::float_);   return float_val; }
@@ -415,7 +415,7 @@ export struct field_value {
     auto as_datetime() const -> const mysql_datetime&     { chk(field_kind::datetime); return datetime_val; }
     auto as_time()     const -> const mysql_time&         { chk(field_kind::time);     return time_val; }
 
-    // ── get_xxx — 无检查访问（调用者需确保 kind 正确）─────────
+    // ── get_xxx — Unchecked access (caller must ensure kind is correct) ─────────
     auto get_int64()    const noexcept -> std::int64_t          { return int_val; }
     auto get_uint64()   const noexcept -> std::uint64_t         { return uint_val; }
     auto get_float()    const noexcept -> float                 { return float_val; }
@@ -425,7 +425,7 @@ export struct field_value {
     auto get_datetime() const noexcept -> const mysql_datetime& { return datetime_val; }
     auto get_time()     const noexcept -> const mysql_time&     { return time_val; }
 
-    // ── 便捷工厂 ────────────────────────────────────────────
+    // ── Convenience factories ────────────────────────────────────────────
     static auto null() -> field_value { return {}; }
     static auto from_int64(std::int64_t v) -> field_value {
         field_value f; f.kind_ = field_kind::int64; f.int_val = v; return f;
@@ -455,7 +455,7 @@ export struct field_value {
         field_value f; f.kind_ = field_kind::time; f.time_val = t; return f;
     }
 
-    // ── 转可读字符串 ────────────────────────────────────────
+    // ── Convert to readable string ────────────────────────────────────────
     auto to_string() const -> std::string {
         switch (kind_) {
         case field_kind::null:     return "NULL";
@@ -480,7 +480,7 @@ private:
 };
 
 // =============================================================================
-// column_meta — 列元信息 / metadata（参考 Boost.MySQL metadata）
+// column_meta — Column metadata (reference: Boost.MySQL metadata)
 // =============================================================================
 
 export struct column_meta {
@@ -495,41 +495,41 @@ export struct column_meta {
     std::uint16_t charset       = 0;
     std::uint32_t column_length = 0;
 
-    // ── 高级访问器（参考 Boost.MySQL metadata 接口）───────────
+    // ── Advanced accessors (reference: Boost.MySQL metadata interface) ───────────
 
-    /// 获取高级列类型（通过 field_type + flags + charset 计算）
+    /// Get high-level column type (computed from field_type + flags + charset)
     auto col_type() const noexcept -> column_type {
         return compute_column_type(type, flags, charset);
     }
 
-    /// 获取列类型的可读字符串
+    /// Get readable string for column type
     auto type_str() const noexcept -> const char* {
         return column_type_to_str(col_type(), is_unsigned());
     }
 
-    /// 是否为 UNSIGNED
+    /// Whether UNSIGNED
     auto is_unsigned()         const noexcept -> bool { return (flags & column_flags::is_unsigned) != 0; }
-    /// NOT NULL 约束
+    /// NOT NULL constraint
     auto is_not_null()         const noexcept -> bool { return (flags & column_flags::not_null) != 0; }
     /// PRIMARY KEY
     auto is_primary_key()      const noexcept -> bool { return (flags & column_flags::pri_key) != 0; }
     /// UNIQUE KEY
     auto is_unique_key()       const noexcept -> bool { return (flags & column_flags::unique_key) != 0; }
-    /// KEY (非唯一索引)
+    /// KEY (non-unique index)
     auto is_multiple_key()     const noexcept -> bool { return (flags & column_flags::multiple_key) != 0; }
     /// AUTO_INCREMENT
     auto is_auto_increment()   const noexcept -> bool { return (flags & column_flags::auto_increment) != 0; }
     /// ZEROFILL
     auto is_zerofill()         const noexcept -> bool { return (flags & column_flags::zerofill) != 0; }
-    /// BINARY 标志
+    /// BINARY flag
     auto is_binary()           const noexcept -> bool { return (flags & column_flags::is_binary) != 0; }
-    /// BLOB/TEXT 标志
+    /// BLOB/TEXT flag
     auto is_blob_or_text()     const noexcept -> bool { return (flags & column_flags::is_blob) != 0; }
-    /// ENUM 标志
+    /// ENUM flag
     auto is_enum()             const noexcept -> bool { return (flags & column_flags::is_enum) != 0; }
-    /// SET 标志
+    /// SET flag
     auto is_set()              const noexcept -> bool { return (flags & column_flags::is_set) != 0; }
-    /// 无默认值
+    /// No default value
     auto has_no_default_value() const noexcept -> bool { return (flags & column_flags::no_default_value) != 0; }
     /// ON UPDATE CURRENT_TIMESTAMP
     auto is_set_to_now_on_update() const noexcept -> bool { return (flags & column_flags::on_update_now) != 0; }
@@ -552,7 +552,7 @@ export struct result_set {
     std::string   error_msg;
     std::uint16_t error_code     = 0;
     std::string   sql_state;          // 5-char SQL state (e.g. "42S02")
-    diagnostics   diag;               // 详细诊断信息
+    diagnostics   diag;               // Detailed diagnostic information
 
     auto ok()       const noexcept -> bool { return error_code == 0 && error_msg.empty(); }
     auto is_err()   const noexcept -> bool { return !ok(); }
@@ -560,7 +560,7 @@ export struct result_set {
 };
 
 // =============================================================================
-// statement — prepared statement 句柄
+// statement — prepared statement handle
 // =============================================================================
 
 export struct statement {
@@ -572,7 +572,7 @@ export struct statement {
 };
 
 // =============================================================================
-// param_value — prepared statement 参数值
+// param_value — prepared statement parameter value
 // =============================================================================
 
 export struct param_value {
@@ -619,16 +619,16 @@ export struct param_value {
 };
 
 // =============================================================================
-// execution_state — 多结果集状态机（参考 Boost.MySQL execution_state）
+// execution_state — Multi-result set state machine (reference: Boost.MySQL execution_state)
 // =============================================================================
 
 export class execution_state {
 public:
     enum class state_t : std::uint8_t {
-        needs_start,     // 初始状态，需要调用 start_execution
-        reading_rows,    // 正在读取当前结果集的行
-        reading_head,    // 需要读取下一个结果集的头
-        complete,        // 所有结果集已读取完毕
+        needs_start,     // Initial state, needs to call start_execution
+        reading_rows,    // Reading rows of current result set
+        reading_head,    // Need to read next result set header
+        complete,        // All result sets have been read
     };
 
     execution_state() noexcept = default;
@@ -646,7 +646,7 @@ public:
     auto error_msg()      const noexcept -> std::string_view { return error_msg_; }
     auto error_code()     const noexcept -> std::uint16_t { return error_code_; }
 
-    // 内部使用 — 由 client 调用
+    // Internal use — called by client
     void set_state(state_t s) noexcept { state_ = s; }
     void set_columns(std::vector<column_meta> cols) { columns_ = std::move(cols); }
     void set_ok_data(std::uint64_t aff, std::uint64_t lid, std::uint16_t warn,
@@ -680,16 +680,16 @@ private:
 };
 
 // =============================================================================
-// metadata_mode — 元数据保留策略（参考 Boost.MySQL metadata_mode）
+// metadata_mode — Metadata retention policy (reference: Boost.MySQL metadata_mode)
 // =============================================================================
 
 export enum class metadata_mode : std::uint8_t {
-    minimal,   ///< 仅保留必要元数据（性能优先，部分字段为空）
-    full,      ///< 保留完整元数据（所有 column_meta 字段可用）
+    minimal,   ///< Keep only necessary metadata (performance priority, some fields empty)
+    full,      ///< Keep complete metadata (all column_meta fields available)
 };
 
 // =============================================================================
-// 连接选项
+// Connection options
 // =============================================================================
 
 export struct connect_options {
@@ -700,18 +700,18 @@ export struct connect_options {
     std::string   database;
     std::string   charset  = "utf8mb4";
 
-    // TLS 配置
+    // TLS configuration
     ssl_mode    ssl          = ssl_mode::enable;  // disable / enable / require
     bool        tls_verify   = true;
     std::string tls_ca_file;
     std::string tls_cert_file;
     std::string tls_key_file;
 
-    // 高级
+    // Advanced
     bool multi_statements = false;
     metadata_mode meta_mode = metadata_mode::full;
 
-    // 缓冲区
+    // Buffer
     std::size_t initial_buffer_size = 8192;
 };
 

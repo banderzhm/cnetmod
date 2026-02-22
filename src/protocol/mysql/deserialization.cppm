@@ -111,7 +111,7 @@ inline auto parse_server_greeting(const std::uint8_t* data, std::size_t size)
 }
 
 // =============================================================================
-// OK 包
+// OK packet
 // =============================================================================
 
 struct ok_packet {
@@ -143,7 +143,7 @@ inline auto parse_ok_packet(const std::uint8_t* data, std::size_t size) -> ok_pa
 }
 
 // =============================================================================
-// Error 包
+// Error packet
 // =============================================================================
 
 struct err_packet {
@@ -175,7 +175,7 @@ inline auto parse_err_packet(const std::uint8_t* data, std::size_t size) -> err_
 }
 
 // =============================================================================
-// 列定义
+// Column definition
 // =============================================================================
 
 inline auto parse_column_def(const std::uint8_t* data, std::size_t size) -> column_meta {
@@ -224,7 +224,7 @@ inline auto parse_column_def(const std::uint8_t* data, std::size_t size) -> colu
 }
 
 // =============================================================================
-// 文本协议行解析
+// Text protocol row parsing
 // =============================================================================
 
 inline auto parse_text_row(
@@ -338,7 +338,7 @@ inline auto parse_text_row(
 }
 
 // =============================================================================
-// 二进制协议行解析 (prepared statement 结果集)
+// Binary protocol row parsing (prepared statement result set)
 // =============================================================================
 
 inline auto parse_binary_row(
@@ -351,7 +351,7 @@ inline auto parse_binary_row(
     std::size_t pos = 0;
     auto ncols = columns.size();
 
-    // 跳过 packet header (0x00)
+    // Skip packet header (0x00)
     if (pos >= size) return r;
     ++pos;
 
@@ -371,7 +371,7 @@ inline auto parse_binary_row(
         bool is_unsigned = (columns[i].flags & column_flags::is_unsigned) != 0;
         fv.kind_ = compute_field_kind(columns[i].type, columns[i].flags, columns[i].charset);
 
-        // 二进制协议线格式由 field_type 决定
+        // Binary protocol wire format determined by field_type
         switch (columns[i].type) {
         case field_type::tiny:
             if (pos + 1 > size) { r.push_back(field_value{}); return r; }
@@ -406,7 +406,7 @@ inline auto parse_binary_row(
             break;
 
         case field_type::bit:
-            // BIT: 以 lenenc string 传输，解释为 uint64
+            // BIT: transmitted as lenenc string, interpreted as uint64
             {
                 auto bsv = read_lenenc_string(data + pos, size - pos);
                 if (bsv.bytes_consumed > 0) {
@@ -480,7 +480,7 @@ inline auto parse_binary_row(
             break;
         }
 
-        // 字符串/BLOB/DECIMAL 类型: lenenc string
+        // String/BLOB/DECIMAL types: lenenc string
         default: {
             auto sv = read_lenenc_string(data + pos, size - pos);
             if (sv.bytes_consumed > 0) {
@@ -498,7 +498,7 @@ inline auto parse_binary_row(
 }
 
 // =============================================================================
-// COM_STMT_PREPARE 响应解析
+// COM_STMT_PREPARE response parsing
 // =============================================================================
 
 struct prepare_stmt_response {
@@ -531,7 +531,7 @@ inline auto parse_prepare_stmt_response(const std::uint8_t* data, std::size_t si
 }
 
 // =============================================================================
-// 认证服务器响应分类
+// Authentication server response classification
 // =============================================================================
 
 enum class handshake_response_type {
@@ -557,7 +557,7 @@ inline auto classify_handshake_response(const std::uint8_t* data, std::size_t si
 }
 
 // =============================================================================
-// AuthSwitch 请求解析
+// AuthSwitch request parsing
 // =============================================================================
 
 struct auth_switch_request {

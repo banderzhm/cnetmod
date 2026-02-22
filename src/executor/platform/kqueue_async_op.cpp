@@ -27,15 +27,15 @@ namespace cnetmod {
 #ifdef CNETMOD_HAS_KQUEUE
 
 // =============================================================================
-// kqueue awaiter — readiness 通知
+// kqueue awaiter — readiness notification
 // =============================================================================
 
-/// 注册事件到 kqueue，就绪时恢复协程
-/// 使用 EV_ONESHOT 确保单次触发
+/// Register event to kqueue, resume coroutine when ready
+/// Use EV_ONESHOT to ensure single trigger
 struct kqueue_awaiter {
     kqueue_context& ctx;
     int fd;
-    int16_t filter;                // EVFILT_READ 或 EVFILT_WRITE
+    int16_t filter;                // EVFILT_READ or EVFILT_WRITE
     std::error_code sync_error{};
 
     auto await_ready() const noexcept -> bool { return false; }
@@ -54,7 +54,7 @@ struct kqueue_awaiter {
 };
 
 // =============================================================================
-// 辅助
+// Helper functions
 // =============================================================================
 
 namespace {
@@ -89,10 +89,10 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
 }
 
 // =============================================================================
-// kqueue cancel 版 awaiter
+// kqueue awaiter with cancellation support
 // =============================================================================
 
-/// cancel_fn_：从 kqueue 删除事件，然后 post 协程恢复
+/// cancel_fn_: delete event from kqueue, then post coroutine resume
 static void kqueue_cancel_fn(cancel_token& token) noexcept {
     auto* kq = static_cast<kqueue_context*>(token.ctx_);
     (void)kq->delete_event(token.fd_, token.filter_);
@@ -100,7 +100,7 @@ static void kqueue_cancel_fn(cancel_token& token) noexcept {
         kq->post(token.coroutine_);
 }
 
-/// 带取消支持的 kqueue awaiter
+/// kqueue awaiter with cancellation support
 struct kqueue_cancel_awaiter {
     kqueue_context& ctx;
     int fd;
@@ -163,7 +163,7 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
 } // anonymous namespace
 
 // =============================================================================
-// 异步网络操作 — kqueue (readiness-based)
+// Async Network Operations — kqueue (readiness-based)
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener)
@@ -171,7 +171,7 @@ auto async_accept(io_context& ctx, socket& listener)
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
 
-    // 等待监听 socket 可读
+    // Wait for listening socket to be readable
     kqueue_awaiter aw{kq, static_cast<int>(listener.native_handle()), EVFILT_READ};
     co_await aw;
     if (aw.sync_error)
@@ -181,7 +181,7 @@ auto async_accept(io_context& ctx, socket& listener)
     if (fd < 0)
         co_return std::unexpected(last_error());
 
-    // 设置非阻塞
+    // Set non-blocking
     int flags = ::fcntl(fd, F_GETFL, 0);
     if (flags >= 0)
         ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
@@ -205,13 +205,13 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     if (errno != EINPROGRESS)
         co_return std::unexpected(last_error());
 
-    // 等待 socket 可写（连接完成）
+    // Wait for socket to be writable (connection complete)
     kqueue_awaiter aw{kq, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
 
-    // 检查连接结果
+    // Check connection result
     int so_error = 0;
     ::socklen_t len = sizeof(so_error);
     ::getsockopt(static_cast<int>(sock.native_handle()),
@@ -261,8 +261,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 }
 
 // =============================================================================
-// 异步文件操作 — kqueue (同步包装)
-// kqueue 不支持常规文件异步 I/O，使用 pread/pwrite 同步执行
+// Async File Operations — kqueue (synchronous wrapper)
+// kqueue does not support async I/O for regular files, using pread/pwrite synchronously
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -302,7 +302,7 @@ auto async_file_flush(io_context& ctx, file& f)
 }
 
 // =============================================================================
-// 异步串口操作 — kqueue (同步 read/write，串口 fd 支持 kqueue 事件)
+// Async Serial Port Operations — kqueue (synchronous read/write, serial fd supports kqueue events)
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
@@ -342,7 +342,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 }
 
 // =============================================================================
-// 异步定时器 — kqueue (EVFILT_TIMER + EV_ONESHOT)
+// Async Timer — kqueue (EVFILT_TIMER + EV_ONESHOT)
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -354,11 +354,11 @@ auto async_timer_wait(io_context& ctx,
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
     if (ms <= 0) ms = 1;
 
-    // 用全局递增 ID 作为 EVFILT_TIMER 的 ident
+    // Use globally incrementing ID as EVFILT_TIMER ident
     static std::atomic<int> next_id{1000000};
     int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
 
-    // 直接通过 native kqueue fd 注册 EVFILT_TIMER + EV_ONESHOT
+    // Register EVFILT_TIMER + EV_ONESHOT directly via native kqueue fd
     struct kqueue_timer_awaiter {
         int kq_fd;
         int id;
@@ -392,7 +392,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 可取消版本 — 异步网络操作
+// Cancellable Version — Async Network Operations
 // =============================================================================
 
 auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
@@ -513,7 +513,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步文件操作（同步包装，cancel 仅前置检查）
+// Cancellable Version — Async File Operations (synchronous wrapper, cancel only pre-checks)
 // =============================================================================
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
@@ -545,7 +545,7 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步串口操作
+// Cancellable Version — Async Serial Port Operations
 // =============================================================================
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
@@ -599,7 +599,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 }
 
 // =============================================================================
-// 可取消版本 — 异步定时器
+// Cancellable Version — Async Timer
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
@@ -618,8 +618,8 @@ auto async_timer_wait(io_context& ctx,
     static std::atomic<int> next_id{1000000};
     int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
 
-    // kqueue EVFILT_TIMER 不能用 cancel_awaiter（ident 是 timer_id 而非 fd）
-    // 用原始 kqueue_timer_awaiter + 手动检查 token
+    // kqueue EVFILT_TIMER cannot use cancel_awaiter (ident is timer_id not fd)
+    // Use raw kqueue_timer_awaiter + manual token check
     struct kqueue_timer_cancel_awaiter {
         int kq_fd;
         int id;
@@ -668,7 +668,7 @@ auto async_timer_wait(io_context& ctx,
 }
 
 // =============================================================================
-// 异步 UDP I/O — kqueue
+// Async UDP I/O — kqueue
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,
@@ -717,7 +717,7 @@ auto async_sendto(io_context& ctx, socket& sock,
 }
 
 // =============================================================================
-// 可取消版本 — 异步 UDP I/O
+// Cancellable Version — Async UDP I/O
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,

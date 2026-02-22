@@ -24,7 +24,7 @@ namespace cnetmod {
 #ifdef CNETMOD_HAS_SSL
 
 // =============================================================================
-// OpenSSL 全局初始化（线程安全，只执行一次）
+// OpenSSL Global Initialization (thread-safe, executes once)
 // =============================================================================
 
 namespace detail {
@@ -41,7 +41,7 @@ inline void ssl_global_init() noexcept {
 } // namespace detail
 
 // =============================================================================
-// ssl_error_category — OpenSSL 错误映射到 std::error_code
+// ssl_error_category — Map OpenSSL Errors to std::error_code
 // =============================================================================
 
 namespace detail {
@@ -66,26 +66,26 @@ inline auto ssl_category() -> const std::error_category& {
 
 } // namespace detail
 
-/// 从 OpenSSL 错误栈获取 error_code
+/// Get error_code from OpenSSL error stack
 export inline auto make_ssl_error() -> std::error_code {
     auto e = ERR_get_error();
     if (e == 0) return {};
     return {static_cast<int>(e), detail::ssl_category()};
 }
 
-/// 从 SSL_get_error 结果创建 error_code
+/// Create error_code from SSL_get_error result
 export inline auto make_ssl_error(int ssl_err) -> std::error_code {
-    // 对于 WANT_READ/WANT_WRITE 不应到达这里
-    // 对于其他错误，从错误栈取详细信息
+    // Should not reach here for WANT_READ/WANT_WRITE
+    // For other errors, get detailed info from error stack
     auto e = ERR_get_error();
     if (e != 0)
         return {static_cast<int>(e), detail::ssl_category()};
-    // 回退到 ssl_err 本身
+    // Fallback to ssl_err itself
     return {ssl_err, detail::ssl_category()};
 }
 
 // =============================================================================
-// ssl_context — SSL_CTX 的 RAII 封装
+// ssl_context — RAII wrapper for SSL_CTX
 // =============================================================================
 
 export class ssl_context {
@@ -94,11 +94,11 @@ public:
         if (ctx_) SSL_CTX_free(ctx_);
     }
 
-    // 不可复制
+    // Non-copyable
     ssl_context(const ssl_context&) = delete;
     auto operator=(const ssl_context&) -> ssl_context& = delete;
 
-    // 可移动
+    // Movable
     ssl_context(ssl_context&& o) noexcept : ctx_(std::exchange(o.ctx_, nullptr)) {}
     auto operator=(ssl_context&& o) noexcept -> ssl_context& {
         if (this != &o) {
@@ -108,17 +108,17 @@ public:
         return *this;
     }
 
-    /// 创建 TLS 客户端上下文
+    /// Create TLS client context
     [[nodiscard]] static auto client() -> std::expected<ssl_context, std::error_code> {
         detail::ssl_global_init();
         auto* ctx = SSL_CTX_new(TLS_client_method());
         if (!ctx) return std::unexpected(make_ssl_error());
-        // 设置合理的最小 TLS 版本
+        // Set reasonable minimum TLS version
         SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
         return ssl_context{ctx};
     }
 
-    /// 创建 TLS 服务器上下文
+    /// Create TLS server context
     [[nodiscard]] static auto server() -> std::expected<ssl_context, std::error_code> {
         detail::ssl_global_init();
         auto* ctx = SSL_CTX_new(TLS_server_method());
@@ -127,7 +127,7 @@ public:
         return ssl_context{ctx};
     }
 
-    /// 加载证书文件（PEM）
+    /// Load certificate file (PEM)
     [[nodiscard]] auto load_cert_file(std::string_view path)
         -> std::expected<void, std::error_code>
     {
@@ -137,7 +137,7 @@ public:
         return {};
     }
 
-    /// 加载私钥文件（PEM）
+    /// Load private key file (PEM)
     [[nodiscard]] auto load_key_file(std::string_view path)
         -> std::expected<void, std::error_code>
     {
@@ -147,7 +147,7 @@ public:
         return {};
     }
 
-    /// 加载 CA 证书文件
+    /// Load CA certificate file
     [[nodiscard]] auto load_ca_file(std::string_view path)
         -> std::expected<void, std::error_code>
     {
@@ -157,7 +157,7 @@ public:
         return {};
     }
 
-    /// 加载系统默认 CA 证书
+    /// Load system default CA certificates
     [[nodiscard]] auto set_default_ca()
         -> std::expected<void, std::error_code>
     {
@@ -166,14 +166,14 @@ public:
         return {};
     }
 
-    /// 设置是否验证对端证书
+    /// Set whether to verify peer certificate
     void set_verify_peer(bool verify) noexcept {
         SSL_CTX_set_verify(ctx_,
             verify ? SSL_VERIFY_PEER : SSL_VERIFY_NONE,
             nullptr);
     }
 
-    /// 获取原生 SSL_CTX 指针
+    /// Get native SSL_CTX pointer
     [[nodiscard]] auto native() const noexcept -> SSL_CTX* { return ctx_; }
 
 private:
@@ -182,39 +182,39 @@ private:
 };
 
 // =============================================================================
-// ssl_stream — 基于 Memory BIO 的异步 SSL 流
+// ssl_stream — Async SSL stream based on Memory BIO
 // =============================================================================
 
 export class ssl_stream {
 public:
-    /// 构造 ssl_stream，绑定到已有的 ssl_context、io_context 和 socket
-    /// socket 必须已经通过 async_connect 连接（客户端）或从 async_accept 获得（服务器）
+    /// Construct ssl_stream, bind to existing ssl_context, io_context and socket
+    /// Socket must already be connected via async_connect (client) or obtained from async_accept (server)
     ssl_stream(ssl_context& ssl_ctx, io_context& io_ctx, socket& sock)
         : io_ctx_(io_ctx), sock_(sock)
     {
         ssl_ = SSL_new(ssl_ctx.native());
 
-        // 创建 memory BIO 对
+        // Create memory BIO pair
         rbio_ = BIO_new(BIO_s_mem());
         wbio_ = BIO_new(BIO_s_mem());
 
-        // 关联到 SSL：SSL 从 rbio_ 读（网络数据进入），向 wbio_ 写（加密数据输出）
-        // SSL_set_bio 会接管 BIO 的所有权
+        // Associate with SSL: SSL reads from rbio_ (network data in), writes to wbio_ (encrypted data out)
+        // SSL_set_bio takes ownership of BIOs
         SSL_set_bio(ssl_, rbio_, wbio_);
     }
 
     ~ssl_stream() {
         if (ssl_) {
-            // SSL_free 会同时释放关联的 BIO
+            // SSL_free also releases associated BIOs
             SSL_free(ssl_);
         }
     }
 
-    // 不可复制
+    // Non-copyable
     ssl_stream(const ssl_stream&) = delete;
     auto operator=(const ssl_stream&) -> ssl_stream& = delete;
 
-    // 可移动
+    // Movable
     ssl_stream(ssl_stream&& o) noexcept
         : io_ctx_(o.io_ctx_), sock_(o.sock_)
         , ssl_(std::exchange(o.ssl_, nullptr))
@@ -222,31 +222,31 @@ public:
         , wbio_(std::exchange(o.wbio_, nullptr))
     {}
 
-    /// 设置 SNI 主机名（必须在 handshake 之前调用）
+    /// Set SNI hostname (must be called before handshake)
     void set_hostname(std::string_view hostname) {
         std::string h(hostname);
         SSL_set_tlsext_host_name(ssl_, h.c_str());
-        // 同时设置证书验证的主机名
+        // Also set hostname for certificate verification
         auto* param = SSL_get0_param(ssl_);
         X509_VERIFY_PARAM_set1_host(param, h.c_str(), h.size());
     }
 
-    /// 设置为客户端模式（connect）
+    /// Set to client mode (connect)
     void set_connect_state() noexcept { SSL_set_connect_state(ssl_); }
 
-    /// 设置为服务器模式（accept）
+    /// Set to server mode (accept)
     void set_accept_state() noexcept { SSL_set_accept_state(ssl_); }
 
     // =========================================================================
-    // 异步操作
+    // Async operations
     // =========================================================================
 
-    /// 异步 TLS 握手
+    /// Async TLS handshake
     auto async_handshake() -> task<std::expected<void, std::error_code>> {
         for (;;) {
             int ret = SSL_do_handshake(ssl_);
             if (ret == 1) {
-                // 握手完成，刷新 wbio_ 中可能残留的数据
+                // Handshake complete, flush any remaining data in wbio_
                 auto fr = co_await flush_wbio();
                 if (!fr) co_return std::unexpected(fr.error());
                 co_return {};
@@ -260,7 +260,7 @@ public:
                 break;
             }
             case SSL_ERROR_WANT_READ: {
-                // 先刷新输出，再读取输入
+                // Flush output first, then read input
                 auto fr = co_await flush_wbio();
                 if (!fr) co_return std::unexpected(fr.error());
                 auto rr = co_await fill_rbio();
@@ -273,7 +273,7 @@ public:
         }
     }
 
-    /// 异步读取解密后的明文
+    /// Async read decrypted plaintext
     auto async_read(mutable_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>
     {
@@ -298,7 +298,7 @@ public:
                 break;
             }
             case SSL_ERROR_ZERO_RETURN:
-                // 对端已关闭 TLS
+                // Peer has closed TLS
                 co_return static_cast<std::size_t>(0);
             default:
                 co_return std::unexpected(make_ssl_error(err));
@@ -306,14 +306,14 @@ public:
         }
     }
 
-    /// 异步写入明文（SSL 加密后发送）
+    /// Async write plaintext (SSL encrypts then sends)
     auto async_write(const_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>
     {
         for (;;) {
             int ret = SSL_write(ssl_, buf.data, static_cast<int>(buf.size));
             if (ret > 0) {
-                // 加密数据在 wbio_ 中，刷新到 socket
+                // Encrypted data in wbio_, flush to socket
                 auto fr = co_await flush_wbio();
                 if (!fr) co_return std::unexpected(fr.error());
                 co_return static_cast<std::size_t>(ret);
@@ -339,19 +339,19 @@ public:
         }
     }
 
-    /// 异步 TLS 关闭
+    /// Async TLS shutdown
     auto async_shutdown() -> task<std::expected<void, std::error_code>> {
-        // SSL_shutdown 需要调用两次：发送 close_notify + 接收 close_notify
+        // SSL_shutdown needs to be called twice: send close_notify + receive close_notify
         for (int attempt = 0; attempt < 2; ++attempt) {
             int ret = SSL_shutdown(ssl_);
             if (ret == 1) {
-                // 完全关闭
+                // Fully closed
                 auto fr = co_await flush_wbio();
                 if (!fr) co_return std::unexpected(fr.error());
                 co_return {};
             }
             if (ret == 0) {
-                // 发送了 close_notify，等待对方的
+                // Sent close_notify, waiting for peer's
                 auto fr = co_await flush_wbio();
                 if (!fr) co_return std::unexpected(fr.error());
                 auto rr = co_await fill_rbio();
@@ -364,7 +364,7 @@ public:
             case SSL_ERROR_WANT_WRITE: {
                 auto fr = co_await flush_wbio();
                 if (!fr) co_return std::unexpected(fr.error());
-                --attempt; // 重试
+                --attempt; // Retry
                 break;
             }
             case SSL_ERROR_WANT_READ: {
@@ -372,26 +372,26 @@ public:
                 if (!fr) co_return std::unexpected(fr.error());
                 auto rr = co_await fill_rbio();
                 if (!rr) co_return std::unexpected(rr.error());
-                --attempt; // 重试
+                --attempt; // Retry
                 break;
             }
             default:
-                // 关闭时的错误通常可以忽略
+                // Errors during shutdown can usually be ignored
                 co_return {};
             }
         }
         co_return {};
     }
 
-    /// 获取原生 SSL 指针
+    /// Get native SSL pointer
     [[nodiscard]] auto native() const noexcept -> SSL* { return ssl_; }
 
 private:
     // =========================================================================
-    // BIO 刷新/填充辅助协程
+    // BIO flush/fill helper coroutines
     // =========================================================================
 
-    /// 将 wbio_ 中的加密数据写入 socket
+    /// Write encrypted data from wbio_ to socket
     auto flush_wbio() -> task<std::expected<void, std::error_code>> {
         char tmp[8192];
         for (;;) {
@@ -401,7 +401,7 @@ private:
             int n = BIO_read(wbio_, tmp, std::min(pending, static_cast<int>(sizeof(tmp))));
             if (n <= 0) break;
 
-            // 全部写入 socket
+            // Write all to socket
             std::size_t written = 0;
             while (written < static_cast<std::size_t>(n)) {
                 auto w = co_await cnetmod::async_write(io_ctx_, sock_,
@@ -413,7 +413,7 @@ private:
         co_return {};
     }
 
-    /// 从 socket 读取数据写入 rbio_
+    /// Read data from socket and write to rbio_
     auto fill_rbio() -> task<std::expected<void, std::error_code>> {
         std::array<std::byte, 8192> tmp{};
         auto r = co_await cnetmod::async_read(io_ctx_, sock_,
@@ -430,8 +430,8 @@ private:
     io_context& io_ctx_;
     socket&     sock_;
     SSL*        ssl_  = nullptr;
-    BIO*        rbio_ = nullptr;  // 网络 -> SSL（接收方向）
-    BIO*        wbio_ = nullptr;  // SSL -> 网络（发送方向）
+    BIO*        rbio_ = nullptr;  // Network -> SSL (receive direction)
+    BIO*        wbio_ = nullptr;  // SSL -> Network (send direction)
 };
 
 #endif // CNETMOD_HAS_SSL

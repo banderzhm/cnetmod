@@ -10,20 +10,20 @@ import :types;
 namespace cnetmod::redis {
 
 // =============================================================================
-// RESP3 增量解析器
+// RESP3 Incremental Parser
 // =============================================================================
 
-/// 增量 RESP3 解析器
-/// 支持所有 17 种 RESP3 数据类型，处理嵌套聚合结构
-/// 参考 Boost.Redis parser 设计
+/// Incremental RESP3 parser
+/// Supports all 17 RESP3 data types, handles nested aggregate structures
+/// Reference: Boost.Redis parser design
 ///
-/// 使用方式:
+/// Usage:
 ///   resp3_parser parser;
 ///   while (!parser.done()) {
 ///       auto node = parser.consume(data, ec);
 ///       if (ec) break;
-///       if (!node) break;  // 需要更多数据
-///       // 处理 *node
+///       if (!node) break;  // Need more data
+///       // Process *node
 ///   }
 export class resp3_parser {
 public:
@@ -32,15 +32,15 @@ public:
 
     resp3_parser() { reset(); }
 
-    /// 从数据中消费并产出一个节点
-    /// 返回 nullopt 表示需要更多数据
+    /// Consume data and produce a node
+    /// Returns nullopt to indicate need for more data
     [[nodiscard]] auto consume(std::string_view data, std::error_code& ec)
         -> std::optional<resp3_node>
     {
         while (consumed_ < data.size()) {
             auto remaining = data.substr(consumed_);
 
-            // 是否在等待 bulk body
+            // Waiting for bulk body?
             if (bulk_expected()) {
                 auto result = consume_bulk_body(remaining, ec);
                 if (ec) return std::nullopt;
@@ -50,12 +50,12 @@ public:
                 return node;
             }
 
-            // 找行结束 (CRLF)
+            // Find line ending (CRLF)
             auto crlf = remaining.find(sep);
             if (crlf == std::string_view::npos) return std::nullopt;
 
             auto line = remaining.substr(0, crlf);
-            consumed_ += crlf + 2; // 消耗 line + CRLF
+            consumed_ += crlf + 2; // Consume line + CRLF
 
             if (line.empty()) {
                 ec = make_error_code(redis_errc::invalid_data_type);
@@ -70,19 +70,19 @@ public:
                 return std::nullopt;
             }
 
-            // 需要读取 bulk body 的类型
+            // Types that need to read bulk body
             if (is_bulk_type(t)) {
                 auto len = parse_length(body, ec);
                 if (ec) return std::nullopt;
                 if (len < 0) {
-                    // RESP2 兼容: $-1 → null
+                    // RESP2 compatibility: $-1 → null
                     auto node = make_node(resp3_type::null, "");
                     commit_elem();
                     return node;
                 }
                 bulk_length_ = static_cast<std::size_t>(len);
                 bulk_type_ = t;
-                // 尝试立即读取 body
+                // Try to read body immediately
                 remaining = data.substr(consumed_);
                 auto result = consume_bulk_body(remaining, ec);
                 if (ec) return std::nullopt;
@@ -93,12 +93,12 @@ public:
                 return node;
             }
 
-            // 聚合类型
+            // Aggregate types
             if (is_aggregate(t)) {
                 auto count = parse_length(body, ec);
                 if (ec) return std::nullopt;
                 if (count < 0) {
-                    // RESP2 兼容: *-1 → null
+                    // RESP2 compatibility: *-1 → null
                     auto node = make_node(resp3_type::null, "");
                     commit_elem();
                     return node;
@@ -113,7 +113,7 @@ public:
                     return node;
                 }
 
-                // 推入聚合栈
+                // Push to aggregate stack
                 if (depth_ >= max_embedded_depth) {
                     ec = make_error_code(redis_errc::exceeds_max_nested_depth);
                     return std::nullopt;
@@ -123,7 +123,7 @@ public:
                 return node;
             }
 
-            // 简单类型 (内联值)
+            // Simple types (inline values)
             auto node = consume_simple(t, body, ec);
             if (ec) return std::nullopt;
             commit_elem();
@@ -133,39 +133,39 @@ public:
         return std::nullopt; // need more data
     }
 
-    /// 当前消息是否已完整解析
+    /// Check if current message is fully parsed
     [[nodiscard]] auto done() const noexcept -> bool {
         return depth_ == 0 && sizes_[0] == 0;
     }
 
-    /// 已消费的字节数
+    /// Number of bytes consumed
     [[nodiscard]] auto consumed() const noexcept -> std::size_t {
         return consumed_;
     }
 
-    /// 是否正在解析中 (已消费部分数据)
+    /// Check if parsing is in progress (has consumed some data)
     [[nodiscard]] auto is_parsing() const noexcept -> bool {
         return consumed_ > 0 || depth_ > 0;
     }
 
-    /// 重置解析器状态
+    /// Reset parser state
     void reset() {
         depth_ = 0;
-        sizes_.fill(1); // sizes_[0] = 1 (顶层哨兵)
+        sizes_.fill(1); // sizes_[0] = 1 (top-level sentinel)
         bulk_length_ = 0;
         bulk_type_ = resp3_type::invalid;
         consumed_ = 0;
     }
 
 private:
-    // --- 状态 ---
+    // --- State ---
     std::size_t depth_ = 0;
     std::array<std::size_t, max_embedded_depth + 1> sizes_{};
     std::size_t bulk_length_ = 0;
     resp3_type  bulk_type_ = resp3_type::invalid;
     std::size_t consumed_ = 0;
 
-    // --- 辅助 ---
+    // --- Helpers ---
 
     [[nodiscard]] auto bulk_expected() const noexcept -> bool {
         return bulk_type_ != resp3_type::invalid;
@@ -191,7 +191,7 @@ private:
     auto consume_bulk_body(std::string_view remaining, std::error_code& /*ec*/)
         -> std::optional<std::string>
     {
-        // 需要 bulk_length_ + 2 (trailing CRLF) 字节
+        // Need bulk_length_ + 2 (trailing CRLF) bytes
         auto needed = bulk_length_ + 2;
         if (remaining.size() < needed) return std::nullopt;
 
@@ -233,22 +233,22 @@ private:
     }
 
     void commit_elem() noexcept {
-        // 逐层向上递减聚合计数
+        // Decrement aggregate count upward through levels
         while (depth_ > 0) {
             --sizes_[depth_];
             if (sizes_[depth_] > 0) return;
             --depth_;
         }
-        // 顶层
+        // Top level
         if (sizes_[0] > 0) --sizes_[0];
     }
 };
 
 // =============================================================================
-// 便捷函数: 从完整数据解析所有节点
+// Convenience Function: Parse All Nodes from Complete Data
 // =============================================================================
 
-/// 从完整的 RESP3 数据中解析一个响应 (所有节点)
+/// Parse one response (all nodes) from complete RESP3 data
 export auto parse_response(std::string_view data, std::size_t expected_responses = 1)
     -> std::expected<std::vector<resp3_node>, std::error_code>
 {

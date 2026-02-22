@@ -16,11 +16,11 @@ import cnetmod.coro.mutex;
 namespace cnetmod::mysql {
 
 // =============================================================================
-// pool_params — 连接池配置（参考 Boost.MySQL pool_params）
+// pool_params — Connection pool configuration (reference: Boost.MySQL pool_params)
 // =============================================================================
 
 export struct pool_params {
-    // 连接参数
+    // Connection parameters
     std::string host     = "127.0.0.1";
     std::uint16_t port   = 3306;
     std::string username;
@@ -28,30 +28,30 @@ export struct pool_params {
     std::string database;
     ssl_mode    ssl      = ssl_mode::enable;
 
-    // 池大小
-    std::size_t initial_size = 1;      // 初始连接数
-    std::size_t max_size     = 16;     // 最大连接数
+    // Pool size
+    std::size_t initial_size = 1;      // Initial connection count
+    std::size_t max_size     = 16;     // Maximum connection count
 
-    // 超时与健康检查
+    // Timeout and health check
     std::chrono::steady_clock::duration connect_timeout  = std::chrono::seconds(20);
     std::chrono::steady_clock::duration retry_interval   = std::chrono::seconds(30);
     std::chrono::steady_clock::duration ping_interval    = std::chrono::hours(1);
     std::chrono::steady_clock::duration ping_timeout     = std::chrono::seconds(10);
 
-    // TLS 选项
+    // TLS options
     bool        tls_verify    = false;
     std::string tls_ca_file;
 };
 
 // =============================================================================
-// 连接节点状态
+// Connection node state
 // =============================================================================
 
 enum class conn_state : std::uint8_t {
-    idle,           // 空闲可用
-    in_use,         // 已借出
-    connecting,     // 正在连接
-    dead,           // 连接已断开
+    idle,           // Idle and available
+    in_use,         // Borrowed
+    connecting,     // Connecting
+    dead,           // Connection closed
 };
 
 struct conn_node {
@@ -60,18 +60,18 @@ struct conn_node {
     std::chrono::steady_clock::time_point last_used;
 };
 
-/// 等待者队列节点 — 用于异步等待空闲连接
+/// Waiter queue node — for asynchronously waiting for idle connections
 struct pool_waiter {
-    std::coroutine_handle<> handle{};   // 等待者的协程
-    std::size_t* result_idx = nullptr;  // 分配到的连接索引
+    std::coroutine_handle<> handle{};   // Waiter's coroutine
+    std::size_t* result_idx = nullptr;  // Allocated connection index
     pool_waiter* next = nullptr;
 };
 
 // =============================================================================
-// pooled_connection — RAII 借出连接（参考 Boost.MySQL pooled_connection）
+// pooled_connection — RAII borrowed connection (reference: Boost.MySQL pooled_connection)
 // =============================================================================
 //
-// 析构时自动归还连接到池中（标记需要 reset）。
+// Automatically returns connection to pool on destruction (marked for reset).
 
 // Forward declare
 export class connection_pool;
@@ -109,7 +109,7 @@ public:
     auto operator->() noexcept -> client* { return conn_; }
     auto operator->() const noexcept -> const client* { return conn_; }
 
-    /// 归还连接但跳过 reset（性能优化，需确保未修改会话状态）
+    /// Return connection but skip reset (performance optimization, must ensure session state not modified)
     void return_without_reset();
 
 private:
@@ -126,7 +126,7 @@ private:
 };
 
 // =============================================================================
-// connection_pool — 异步连接池（参考 Boost.MySQL connection_pool）
+// connection_pool — Async connection pool (reference: Boost.MySQL connection_pool)
 // =============================================================================
 
 export class connection_pool {
@@ -140,17 +140,17 @@ public:
     connection_pool(const connection_pool&) = delete;
     auto operator=(const connection_pool&) -> connection_pool& = delete;
 
-    // ── async_run — 启动连接池（建立初始连接 + 后台健康检查）──
+    // ── async_run — Start connection pool (establish initial connections + background health check) ──
 
     auto async_run() -> task<void> {
         running_ = true;
 
-        // 建立初始连接
+        // Establish initial connections
         for (std::size_t i = 0; i < params_.initial_size && i < params_.max_size; ++i) {
             co_await create_and_connect();
         }
 
-        // 后台健康检查循环
+        // Background health check loop
         while (running_) {
             co_await async_sleep(ctx_, params_.ping_interval);
             if (!running_) break;
@@ -158,13 +158,13 @@ public:
         }
     }
 
-    // ── async_get_connection — 借出一个空闲连接 ──────────────
+    // ── async_get_connection — Borrow an idle connection ──────────────
 
     auto async_get_connection() -> task<pooled_connection> {
         co_await mtx_.lock();
         async_lock_guard guard(mtx_, std::adopt_lock);
 
-        // 1) 查找空闲节点
+        // 1) Find idle node
         for (std::size_t i = 0; i < nodes_.size(); ++i) {
             if (nodes_[i].state == conn_state::idle) {
                 nodes_[i].state = conn_state::in_use;
@@ -173,7 +173,7 @@ public:
             }
         }
 
-        // 2) 没有空闲连接 — 尝试创建新连接（释放锁，因为 connect 是异步 I/O）
+        // 2) No idle connections — try to create new connection (release lock, because connect is async I/O)
         if (nodes_.size() < params_.max_size) {
             guard.release();
             mtx_.unlock();
@@ -187,11 +187,11 @@ public:
                 co_return pooled_connection(this, idx, nodes_[idx].conn.get());
             }
 
-            // 创建失败，重新获取锁
+            // Creation failed, reacquire lock
             co_await mtx_.lock();
             guard = async_lock_guard(mtx_, std::adopt_lock);
 
-            // 二次检查: 创建期间可能有连接归还
+            // Double check: connections may have been returned during creation
             for (std::size_t i = 0; i < nodes_.size(); ++i) {
                 if (nodes_[i].state == conn_state::idle) {
                     nodes_[i].state = conn_state::in_use;
@@ -201,8 +201,8 @@ public:
             }
         }
 
-        // 3) 所有连接都忙 — 在持有锁的情况下加入 waiter 队列，然后挂起
-        //    await_suspend 中释放锁，保证 handle 设置与入队的原子性
+        // 3) All connections busy — add to waiter queue while holding lock, then suspend
+        //    Release lock in await_suspend, ensuring atomicity of handle setting and enqueue
         std::size_t assigned_idx = nodes_.size();
         pool_waiter waiter;
         waiter.result_idx = &assigned_idx;
@@ -215,14 +215,14 @@ public:
             auto await_ready() const noexcept -> bool { return false; }
             void await_suspend(std::coroutine_handle<> h) noexcept {
                 w.handle = h;
-                // 持有协程锁 — 安全操作 waiter 队列
+                // Hold coroutine lock — safe to operate waiter queue
                 if (!pool.waiters_head_) {
                     pool.waiters_head_ = pool.waiters_tail_ = &w;
                 } else {
                     pool.waiters_tail_->next = &w;
                     pool.waiters_tail_ = &w;
                 }
-                // 入队完成，释放协程锁
+                // Enqueue complete, release coroutine lock
                 guard.release();
                 pool.mtx_.unlock();
             }
@@ -231,14 +231,14 @@ public:
 
         co_await waiter_awaitable{*this, waiter, guard};
 
-        // 被唤醒时 assigned_idx 已被 return_connection 设置
+        // When awakened, assigned_idx has been set by return_connection
         if (assigned_idx < nodes_.size()) {
             co_return pooled_connection(this, assigned_idx, nodes_[assigned_idx].conn.get());
         }
         co_return pooled_connection{};
     }
 
-    // ── cancel / 关闭 ───────────────────────────────────────
+    // ── cancel / close ───────────────────────────────────────
 
     auto cancel() -> task<void> {
         running_ = false;
@@ -246,7 +246,7 @@ public:
         async_lock_guard guard(mtx_, std::adopt_lock);
         for (auto& node : nodes_) {
             if (node.conn && node.conn->is_open()) {
-                // 不等待 quit 完成
+                // Don't wait for quit to complete
                 node.state = conn_state::dead;
             }
         }
@@ -291,8 +291,8 @@ private:
 
         auto rs = co_await c->connect(opts);
         if (rs.is_err()) {
-            // 连接失败 — 不添加到池中
-            co_return nodes_.size(); // 返回无效索引
+            // Connection failed — don't add to pool
+            co_return nodes_.size(); // Return invalid index
         }
 
         co_await mtx_.lock();
@@ -310,7 +310,7 @@ private:
         auto now = std::chrono::steady_clock::now();
 
         co_await mtx_.lock();
-        // 收集需要 ping 的空闲连接索引
+        // Collect idle connection indices that need ping
         std::vector<std::size_t> to_ping;
         for (std::size_t i = 0; i < nodes_.size(); ++i) {
             if (nodes_[i].state == conn_state::idle &&
@@ -332,7 +332,7 @@ private:
             auto rs = co_await c->ping();
             co_await mtx_.lock();
             if (rs.is_err()) {
-                // ping 失败 — 标记死亡，尝试重连
+                // ping failed — mark as dead, try to reconnect
                 nodes_[idx].state = conn_state::dead;
                 mtx_.unlock();
                 co_await reconnect(idx);
@@ -363,8 +363,8 @@ private:
         if (idx >= nodes_.size())
             return;
 
-        // 从析构函数调用（非协程），用 try_lock 获取协程锁保护 waiter 队列
-        // 单线程事件循环中 try_lock 必定成功（归还时无协程持有锁）
+        // Called from destructor (non-coroutine), use try_lock to protect waiter queue with coroutine lock
+        // In single-threaded event loop, try_lock always succeeds (no coroutine holds lock when returning)
         if (mtx_.try_lock()) {
             if (waiters_head_) {
                 auto* w = waiters_head_;
@@ -377,7 +377,7 @@ private:
                 *w->result_idx = idx;
                 mtx_.unlock();
 
-                // 通过 post 恢复等待者协程，避免在析构栈上直接 resume
+                // Resume waiter coroutine via post, avoid direct resume on destructor stack
                 if (w->handle)
                     ctx_.post(w->handle);
                 return;
@@ -386,7 +386,7 @@ private:
             nodes_[idx].last_used = std::chrono::steady_clock::now();
             mtx_.unlock();
         } else {
-            // 极端边界: 其他协程持有锁，仅标记空闲
+            // Extreme edge case: another coroutine holds lock, just mark as idle
             nodes_[idx].state = conn_state::idle;
             nodes_[idx].last_used = std::chrono::steady_clock::now();
         }
@@ -394,7 +394,7 @@ private:
 };
 
 // =============================================================================
-// pooled_connection 方法实现
+// pooled_connection method implementation
 // =============================================================================
 
 inline void pooled_connection::return_to_pool(bool needs_reset) {

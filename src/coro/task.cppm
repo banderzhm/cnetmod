@@ -9,7 +9,7 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// promise_base — 共享的 promise 基类
+// promise_base — Shared promise base class
 // =============================================================================
 
 class promise_base {
@@ -44,11 +44,11 @@ protected:
 };
 
 // =============================================================================
-// task<T> 实现
+// task<T> implementation
 // =============================================================================
 
 // =============================================================================
-// task_awaiter — 命名空间级别模板（避免 MSVC COMDAT 重复）
+// task_awaiter — Namespace-level template (avoid MSVC COMDAT duplication)
 // =============================================================================
 
 template <typename T, typename Promise>
@@ -64,7 +64,7 @@ struct task_awaiter {
     auto await_resume() -> T { return h.promise().result(); }
 };
 
-/// void 特化
+/// void specialization
 template <typename Promise>
 struct task_awaiter<void, Promise> {
     std::coroutine_handle<Promise> h;
@@ -79,7 +79,7 @@ struct task_awaiter<void, Promise> {
 };
 
 // =============================================================================
-// task<T> 实现
+// task<T> implementation
 // =============================================================================
 
 export template <typename T>
@@ -105,7 +105,7 @@ public:
         }
 
     private:
-        // index 0 = monostate (未设置), index 1 = 值
+        // index 0 = monostate (not set), index 1 = value
         std::variant<std::monostate, T> value_;
     };
 
@@ -115,11 +115,11 @@ public:
             handle_.destroy();
     }
 
-    // 不可复制
+    // Non-copyable
     task(const task&) = delete;
     auto operator=(const task&) -> task& = delete;
 
-    // 可移动
+    // Movable
     task(task&& other) noexcept
         : handle_(std::exchange(other.handle_, nullptr)) {}
     auto operator=(task&& other) noexcept -> task& {
@@ -135,7 +135,7 @@ public:
         return {handle_};
     }
 
-    /// 获取底层 coroutine_handle
+    /// Get underlying coroutine_handle
     [[nodiscard]] auto handle() const noexcept
         -> std::coroutine_handle<promise_type>
     {
@@ -150,7 +150,7 @@ private:
 };
 
 // =============================================================================
-// task<void> 特化
+// task<void> specialization
 // =============================================================================
 
 export template <>
@@ -210,20 +210,20 @@ private:
 };
 
 // =============================================================================
-// sync_wait — 同步等待协程完成
+// sync_wait — Synchronously wait for coroutine completion
 // =============================================================================
 
-/// 在当前线程阻塞等待 task 完成并返回结果
+/// Block current thread waiting for task completion and return result
 export template <typename T>
 auto sync_wait(task<T> t) -> T {
     auto handle = t.handle();
     handle.resume();
 
-    // 协程应该已经运行到 final_suspend
+    // Coroutine should have run to final_suspend
     return handle.promise().result();
 }
 
-/// sync_wait<void> 特化
+/// sync_wait<void> specialization
 export inline void sync_wait(task<void> t) {
     auto handle = t.handle();
     handle.resume();
@@ -231,19 +231,19 @@ export inline void sync_wait(task<void> t) {
 }
 
 // =============================================================================
-// when_all — 真正并发等待多个 task
+// when_all — True concurrent waiting for multiple tasks
 // =============================================================================
 
 namespace detail {
 
-/// 共享状态：原子计数器 + 调用者 handle
+/// Shared state: atomic counter + caller handle
 struct when_all_state {
     std::atomic<int> remaining;
     std::coroutine_handle<> caller{};
 
     explicit when_all_state(int n) noexcept : remaining(n) {}
 
-    /// 某个子任务完成时调用，最后一个完成者恢复调用者
+    /// Called when a subtask completes, last one resumes caller
     void notify_one_done() noexcept {
         if (remaining.fetch_sub(1, std::memory_order_acq_rel) == 1) {
             if (caller)
@@ -252,7 +252,7 @@ struct when_all_state {
     }
 };
 
-/// when_all 子任务包装器 — final_suspend 时通知 state 而非恢复 caller
+/// when_all subtask wrapper — notify state at final_suspend instead of resuming caller
 template <typename T>
 class when_all_task {
 public:
@@ -311,7 +311,7 @@ private:
     std::coroutine_handle<promise_type> handle_;
 };
 
-/// void 特化
+/// void specialization
 template <>
 class when_all_task<void> {
 public:
@@ -362,7 +362,7 @@ private:
     std::coroutine_handle<promise_type> handle_;
 };
 
-/// 将 task<T> 包装为 when_all_task<T>
+/// Wrap task<T> as when_all_task<T>
 template <typename T>
 auto make_when_all_task(task<T> t) -> when_all_task<T> {
     co_return co_await std::move(t);
@@ -372,7 +372,7 @@ inline auto make_when_all_task(task<void> t) -> when_all_task<void> {
     co_await std::move(t);
 }
 
-/// when_all awaiter：挂起调用者，并发启动所有子任务
+/// when_all awaiter: suspend caller and concurrently start all subtasks
 template <typename... Tasks>
 struct when_all_awaiter {
     when_all_state state_;
@@ -386,7 +386,7 @@ struct when_all_awaiter {
 
     void await_suspend(std::coroutine_handle<> caller) noexcept {
         state_.caller = caller;
-        // 设置 state 并启动所有子任务
+        // Set state and start all subtasks
         std::apply([this](auto&... t) {
             (t.set_state(&state_), ...);
         }, tasks_);
@@ -400,7 +400,7 @@ struct when_all_awaiter {
 
 } // namespace detail
 
-/// 并发执行两个 task，返回结果 tuple
+/// Concurrently execute two tasks, return result tuple
 export template <typename T1, typename T2>
 auto when_all(task<T1> t1, task<T2> t2)
     -> task<std::tuple<T1, T2>>
@@ -415,7 +415,7 @@ auto when_all(task<T1> t1, task<T2> t2)
     co_return std::tuple{a.result(), b.result()};
 }
 
-/// 并发执行三个 task
+/// Concurrently execute three tasks
 export template <typename T1, typename T2, typename T3>
 auto when_all(task<T1> t1, task<T2> t2, task<T3> t3)
     -> task<std::tuple<T1, T2, T3>>

@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:security — MQTT 认证与授权
-/// 支持明文密码/SHA256/匿名认证，基于用户组的 topic 级授权
+/// cnetmod.protocol.mqtt:security — MQTT Authentication and Authorization
+/// Supports plain password/SHA256/anonymous authentication, topic-level authorization based on user groups
 
 module;
 
@@ -17,30 +17,30 @@ namespace cnetmod::mqtt {
 using json = nlohmann::json;
 
 // =============================================================================
-// 认证方式
+// Authentication Methods
 // =============================================================================
 
 export enum class auth_method {
-    plain_password,   // 明文密码
+    plain_password,   // Plain text password
     sha256,           // SHA256(salt + password)
-    anonymous,        // 匿名用户（无需密码）
-    unauthenticated,  // 未认证（拒绝所有）
+    anonymous,        // Anonymous user (no password required)
+    unauthenticated,  // Unauthenticated (deny all)
 };
 
 // =============================================================================
-// 用户条目
+// User Entry
 // =============================================================================
 
 export struct user_entry {
     auth_method method = auth_method::plain_password;
-    std::string password;          // 明文密码（plain_password 模式）
-    std::string digest;            // 哈希值（sha256 模式）
-    std::string salt;              // 盐值（sha256 模式）
-    std::vector<std::string> groups; // 所属用户组
+    std::string password;          // Plain password (plain_password mode)
+    std::string digest;            // Hash value (sha256 mode)
+    std::string salt;              // Salt value (sha256 mode)
+    std::vector<std::string> groups; // User groups
 };
 
 // =============================================================================
-// 授权规则
+// Authorization Rules
 // =============================================================================
 
 export enum class auth_action {
@@ -49,31 +49,31 @@ export enum class auth_action {
 };
 
 export struct auth_rule {
-    std::string  topic_filter;      // 支持 +/# 通配符
+    std::string  topic_filter;      // Supports +/# wildcards
     auth_action  pub_action = auth_action::deny;
     auth_action  sub_action = auth_action::deny;
-    std::set<std::string> groups;   // 适用的用户组（空表示所有用户）
+    std::set<std::string> groups;   // Applicable user groups (empty means all users)
 };
 
 // =============================================================================
-// Security Config — 安全配置
+// Security Config — Security Configuration
 // =============================================================================
 
-/// SHA256 哈希回调：接受原始数据，返回十六进制哈希字符串
+/// SHA256 hash callback: accepts raw data, returns hexadecimal hash string
 export using sha256_hash_fn = std::function<std::string(std::string_view)>;
 
 export class security_config {
 public:
     security_config() = default;
 
-    // ----- SHA256 哈希函数注入 -----
+    // ----- SHA256 Hash Function Injection -----
 
-    /// 设置 SHA256 哈希函数（用于 auth_method::sha256 验证）
+    /// Set SHA256 hash function (for auth_method::sha256 verification)
     void set_sha256_hasher(sha256_hash_fn fn) { sha256_hasher_ = std::move(fn); }
 
-    // ----- 用户管理 -----
+    // ----- User Management -----
 
-    /// 添加明文密码用户
+    /// Add plain password user
     void add_user(const std::string& username, const std::string& password,
                   std::vector<std::string> groups = {})
     {
@@ -84,7 +84,7 @@ public:
         users_[username] = std::move(u);
     }
 
-    /// 添加匿名用户
+    /// Add anonymous user
     void set_anonymous_user(const std::string& username) {
         user_entry u;
         u.method = auth_method::anonymous;
@@ -92,17 +92,17 @@ public:
         anonymous_user_ = username;
     }
 
-    /// 是否允许匿名连接
+    /// Whether to allow anonymous connections
     void set_allow_anonymous(bool allow) { allow_anonymous_ = allow; }
 
-    // ----- 授权规则 -----
+    // ----- Authorization Rules -----
 
-    /// 添加授权规则
+    /// Add authorization rule
     void add_rule(auth_rule rule) {
         rules_.push_back(std::move(rule));
     }
 
-    /// 添加允许发布规则
+    /// Add allow publish rule
     void allow_publish(const std::string& topic_filter,
                        std::set<std::string> groups = {})
     {
@@ -114,7 +114,7 @@ public:
         rules_.push_back(std::move(r));
     }
 
-    /// 添加允许订阅规则
+    /// Add allow subscribe rule
     void allow_subscribe(const std::string& topic_filter,
                          std::set<std::string> groups = {})
     {
@@ -126,7 +126,7 @@ public:
         rules_.push_back(std::move(r));
     }
 
-    /// 添加允许发布和订阅规则
+    /// Add allow publish and subscribe rule
     void allow_all(const std::string& topic_filter,
                    std::set<std::string> groups = {})
     {
@@ -138,16 +138,16 @@ public:
         rules_.push_back(std::move(r));
     }
 
-    // ----- 认证 -----
+    // ----- Authentication -----
 
-    /// 认证用户
-    /// 返回认证后的用户名（可能是匿名用户），nullopt 表示认证失败
+    /// Authenticate user
+    /// Returns authenticated username (may be anonymous user), nullopt indicates authentication failure
     [[nodiscard]] auto authenticate(std::string_view username,
                                      std::string_view password) const
         -> std::optional<std::string>
     {
         if (username.empty()) {
-            // 匿名连接
+            // Anonymous connection
             if (allow_anonymous_ && !anonymous_user_.empty()) {
                 return anonymous_user_;
             }
@@ -167,7 +167,7 @@ public:
 
         case auth_method::sha256:
             if (sha256_hasher_) {
-                // SHA256 验证：digest == sha256(salt + password)
+                // SHA256 verification: digest == sha256(salt + password)
                 auto computed = sha256_hasher_(u.salt + std::string(password));
                 if (computed == u.digest)
                     return std::string(username);
@@ -183,17 +183,17 @@ public:
         return std::nullopt;
     }
 
-    // ----- 授权 -----
+    // ----- Authorization -----
 
-    /// 检查用户是否有权发布到指定 topic
+    /// Check if user has permission to publish to specified topic
     [[nodiscard]] auto authorize_publish(const std::string& username,
                                           std::string_view topic) const -> bool
     {
-        if (rules_.empty()) return true; // 无规则时默认允许
+        if (rules_.empty()) return true; // Default allow when no rules
 
         auto user_groups = get_user_groups(username);
 
-        // 遍历规则，最后匹配的生效（后定义优先）
+        // Iterate through rules, last match takes effect (later defined takes priority)
         bool allowed = false;
         for (auto& rule : rules_) {
             if (!matches_topic(rule.topic_filter, topic)) continue;
@@ -203,7 +203,7 @@ public:
         return allowed;
     }
 
-    /// 检查用户是否有权订阅指定 topic filter
+    /// Check if user has permission to subscribe to specified topic filter
     [[nodiscard]] auto authorize_subscribe(const std::string& username,
                                             std::string_view topic_filter_str) const -> bool
     {
@@ -213,7 +213,7 @@ public:
 
         bool allowed = false;
         for (auto& rule : rules_) {
-            // 订阅授权：规则的 filter 需要覆盖订阅的 filter
+            // Subscribe authorization: rule filter needs to cover subscription filter
             if (!matches_topic(rule.topic_filter, topic_filter_str)) continue;
             if (!matches_groups(rule.groups, user_groups)) continue;
             allowed = (rule.sub_action == auth_action::allow);
@@ -221,15 +221,15 @@ public:
         return allowed;
     }
 
-    /// 是否启用安全（有用户或规则）
+    /// Whether security is enabled (has users or rules)
     [[nodiscard]] auto enabled() const noexcept -> bool {
         return !users_.empty() || !rules_.empty();
     }
 
-    // ----- JSON 配置加载 -----
+    // ----- JSON Configuration Loading -----
 
-    /// 从 JSON 加载配置
-    /// 格式:
+    /// Load configuration from JSON
+    /// Format:
     /// {
     ///   "allow_anonymous": false,
     ///   "users": { "user1": { "password": "pass1", "groups": ["admin"] }, ... },
@@ -298,7 +298,7 @@ public:
         }
     }
 
-    /// 从 JSON 文件加载
+    /// Load from JSON file
     auto load_file(const std::string& path) -> std::expected<void, std::string> {
         std::ifstream ifs(path);
         if (!ifs) return std::unexpected("cannot open: " + path);
@@ -319,18 +319,18 @@ private:
         return {};
     }
 
-    /// 检查 rule topic filter 是否匹配 target
+    /// Check rule topic filter matches target
     static auto matches_topic(std::string_view rule_filter,
                                std::string_view target) -> bool
     {
         return topic_matches(rule_filter, target);
     }
 
-    /// 检查 rule groups 是否匹配 user groups
+    /// Check if rule groups match user groups
     static auto matches_groups(const std::set<std::string>& rule_groups,
                                 const std::vector<std::string>& user_groups) -> bool
     {
-        if (rule_groups.empty()) return true; // 空表示所有用户
+        if (rule_groups.empty()) return true; // Empty means all users
         for (auto& ug : user_groups) {
             if (rule_groups.count(ug)) return true;
         }
@@ -341,7 +341,7 @@ private:
     std::vector<auth_rule>            rules_;
     std::string                       anonymous_user_;
     bool                              allow_anonymous_ = false;
-    sha256_hash_fn                    sha256_hasher_;   // 可选 SHA256 哈希回调
+    sha256_hash_fn                    sha256_hasher_;   // Optional SHA256 hash callback
 };
 
 } // namespace cnetmod::mqtt

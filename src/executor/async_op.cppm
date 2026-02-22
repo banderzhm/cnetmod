@@ -19,149 +19,149 @@ import cnetmod.coro.cancel;
 namespace cnetmod {
 
 // =============================================================================
-// 异步 I/O 操作（协程版本）
+// Async I/O Operations (Coroutine Version)
 // =============================================================================
-// 返回 task<T>，使用 co_await 调用
-// 这些是底层协程接口，上层可通过 as_sender() 转换为 stdexec sender
+// Returns task<T>, call with co_await
+// These are low-level coroutine interfaces, can be converted to stdexec sender via as_sender()
 
-/// 异步 accept
-/// 用法: auto conn = co_await async_accept(ctx, listener);
+/// Async accept
+/// Usage: auto conn = co_await async_accept(ctx, listener);
 export auto async_accept(io_context& ctx, socket& listener)
     -> task<std::expected<socket, std::error_code>>;
 
-/// 异步 connect
-/// 用法: co_await async_connect(ctx, sock, endpoint);
+/// Async connect
+/// Usage: co_await async_connect(ctx, sock, endpoint);
 export auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     -> task<std::expected<void, std::error_code>>;
 
-/// 异步 read
-/// 用法: auto n = co_await async_read(ctx, sock, buf);
+/// Async read
+/// Usage: auto n = co_await async_read(ctx, sock, buf);
 export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 异步 write
-/// 用法: auto n = co_await async_write(ctx, sock, buf);
+/// Async write
+/// Usage: auto n = co_await async_write(ctx, sock, buf);
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 异步 recvfrom — 接收 UDP 数据报并获取发送方地址
-/// 用法: auto n = co_await async_recvfrom(ctx, sock, buf, peer);
+/// Async recvfrom — Receive UDP datagram and get sender address
+/// Usage: auto n = co_await async_recvfrom(ctx, sock, buf, peer);
 export auto async_recvfrom(io_context& ctx, socket& sock,
                            mutable_buffer buf, endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 异步 sendto — 向指定地址发送 UDP 数据报
-/// 用法: auto n = co_await async_sendto(ctx, sock, buf, peer);
+/// Async sendto — Send UDP datagram to specified address
+/// Usage: auto n = co_await async_sendto(ctx, sock, buf, peer);
 export auto async_sendto(io_context& ctx, socket& sock,
                          const_buffer buf, const endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 // =============================================================================
-// 异步文件 I/O 操作（协程版本）
+// Async File I/O Operations (Coroutine Version)
 // =============================================================================
 
-/// 异步文件读取
-/// 用法: auto n = co_await async_file_read(ctx, f, buf, offset);
+/// Async file read
+/// Usage: auto n = co_await async_file_read(ctx, f, buf, offset);
 export auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
                             std::uint64_t offset = 0)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 异步文件写入
-/// 用法: auto n = co_await async_file_write(ctx, f, buf, offset);
+/// Async file write
+/// Usage: auto n = co_await async_file_write(ctx, f, buf, offset);
 export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
                              std::uint64_t offset = 0)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 异步文件刷新
-/// 用法: co_await async_file_flush(ctx, f);
+/// Async file flush
+/// Usage: co_await async_file_flush(ctx, f);
 export auto async_file_flush(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>;
 
 // =============================================================================
-// 异步串口 I/O 操作（协程版本）
+// Async Serial Port I/O Operations (Coroutine Version)
 // =============================================================================
 
-/// 异步串口读取
-/// 用法: auto n = co_await async_serial_read(ctx, port, buf);
+/// Async serial port read
+/// Usage: auto n = co_await async_serial_read(ctx, port, buf);
 export auto async_serial_read(io_context& ctx, serial_port& port,
                               mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 异步串口写入
-/// 用法: auto n = co_await async_serial_write(ctx, port, buf);
+/// Async serial port write
+/// Usage: auto n = co_await async_serial_write(ctx, port, buf);
 export auto async_serial_write(io_context& ctx, serial_port& port,
                                const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 // =============================================================================
-// 异步定时器操作
+// Async Timer Operations
 // =============================================================================
 
-/// 异步等待指定时长
-/// 用法: co_await async_timer_wait(ctx, std::chrono::milliseconds(500));
+/// Async wait for specified duration
+/// Usage: co_await async_timer_wait(ctx, std::chrono::milliseconds(500));
 export auto async_timer_wait(io_context& ctx,
                              std::chrono::steady_clock::duration duration)
     -> task<std::expected<void, std::error_code>>;
 
 // =============================================================================
-// 可取消版本 — 接受 cancel_token& 参数
+// Cancellable Version — Accept cancel_token& parameter
 // =============================================================================
-// 与上述接口语义相同，但可通过 cancel_token::cancel() 取消挂起的操作。
-// 被取消的操作返回 errc::operation_aborted。
+// Same semantics as above interfaces, but can cancel pending operations via cancel_token::cancel().
+// Cancelled operations return errc::operation_aborted.
 
-/// 可取消的异步 accept
+/// Cancellable async accept
 export auto async_accept(io_context& ctx, socket& listener,
                          cancel_token& token)
     -> task<std::expected<socket, std::error_code>>;
 
-/// 可取消的异步 connect
+/// Cancellable async connect
 export auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
                           cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
-/// 可取消的异步 read
+/// Cancellable async read
 export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
                        cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步 write
+/// Cancellable async write
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
                         cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步 recvfrom
+/// Cancellable async recvfrom
 export auto async_recvfrom(io_context& ctx, socket& sock,
                            mutable_buffer buf, endpoint& peer,
                            cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步 sendto
+/// Cancellable async sendto
 export auto async_sendto(io_context& ctx, socket& sock,
                          const_buffer buf, const endpoint& peer,
                          cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步文件读取
+/// Cancellable async file read
 export auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
                             std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步文件写入
+/// Cancellable async file write
 export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
                              std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步串口读取
+/// Cancellable async serial port read
 export auto async_serial_read(io_context& ctx, serial_port& port,
                               mutable_buffer buf, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步串口写入
+/// Cancellable async serial port write
 export auto async_serial_write(io_context& ctx, serial_port& port,
                                const_buffer buf, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-/// 可取消的异步定时器
+/// Cancellable async timer
 export auto async_timer_wait(io_context& ctx,
                              std::chrono::steady_clock::duration duration,
                              cancel_token& token)

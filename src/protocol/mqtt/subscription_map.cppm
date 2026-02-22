@@ -1,5 +1,5 @@
-/// cnetmod.protocol.mqtt:subscription_map — Trie-based 订阅匹配
-/// 高效的 topic filter → subscriber 映射，支持 +/# 通配符匹配
+/// cnetmod.protocol.mqtt:subscription_map — Trie-based subscription matching
+/// Efficient topic filter → subscriber mapping, supports +/# wildcard matching
 
 module;
 
@@ -13,7 +13,7 @@ import :types;
 namespace cnetmod::mqtt {
 
 // =============================================================================
-// 订阅条目（匹配结果）
+// Subscription entry (match result)
 // =============================================================================
 
 export struct subscription_entry_ref {
@@ -22,24 +22,24 @@ export struct subscription_entry_ref {
 };
 
 // =============================================================================
-// Subscription Map — Trie 实现
+// Subscription Map — Trie implementation
 // =============================================================================
 
-/// Trie-based 订阅映射
-/// 将 topic filter 按 '/' 分割后存入 trie，匹配时沿 trie 遍历
+/// Trie-based subscription mapping
+/// Splits topic filter by '/' and stores in trie, traverses trie during matching
 export class subscription_map {
 public:
     subscription_map() = default;
 
-    // 不可复制
+    // Non-copyable
     subscription_map(const subscription_map&) = delete;
     auto operator=(const subscription_map&) -> subscription_map& = delete;
 
-    // 可移动
+    // Movable
     subscription_map(subscription_map&&) = default;
     auto operator=(subscription_map&&) -> subscription_map& = default;
 
-    /// 插入订阅
+    /// Insert subscription
     void insert(const std::string& topic_filter, const std::string& client_id,
                 const subscribe_entry& entry)
     {
@@ -57,18 +57,18 @@ public:
             }
         }
 
-        // 在叶节点存储订阅者
+        // Store subscriber at leaf node
         node->subscribers[client_id] = entry;
         ++total_subscriptions_;
     }
 
-    /// 移除订阅
-    /// 返回是否成功移除
+    /// Remove subscription
+    /// Returns whether successfully removed
     auto erase(const std::string& topic_filter, const std::string& client_id) -> bool {
         auto segments = split(topic_filter);
         auto* node = &root_;
 
-        // 先找到目标节点
+        // First find target node
         std::vector<std::pair<trie_node*, std::string>> path;
         for (auto& seg : segments) {
             path.emplace_back(node, std::string(seg));
@@ -77,12 +77,12 @@ public:
             node = it->second.get();
         }
 
-        // 移除订阅者
+        // Remove subscriber
         auto erased = node->subscribers.erase(client_id);
         if (erased == 0) return false;
         --total_subscriptions_;
 
-        // 回溯清理空节点
+        // Backtrack to clean up empty nodes
         for (auto rit = path.rbegin(); rit != path.rend(); ++rit) {
             auto [parent, seg] = *rit;
             auto child_it = parent->children.find(seg);
@@ -91,19 +91,19 @@ public:
             if (child->subscribers.empty() && child->children.empty()) {
                 parent->children.erase(child_it);
             } else {
-                break; // 非空，不再继续清理
+                break; // Non-empty, stop cleaning
             }
         }
 
         return true;
     }
 
-    /// 移除某个 client 的所有订阅
+    /// Remove all subscriptions for a client
     void erase_client(const std::string& client_id) {
         erase_client_recursive(&root_, client_id);
     }
 
-    /// 匹配 topic name，返回所有匹配的订阅者
+    /// Match topic name, return all matching subscribers
     [[nodiscard]] auto match(std::string_view topic) const
         -> std::vector<subscription_entry_ref>
     {
@@ -113,17 +113,17 @@ public:
         return result;
     }
 
-    /// 总订阅数
+    /// Total subscription count
     [[nodiscard]] auto size() const noexcept -> std::size_t {
         return total_subscriptions_;
     }
 
-    /// 是否为空
+    /// Whether empty
     [[nodiscard]] auto empty() const noexcept -> bool {
         return total_subscriptions_ == 0;
     }
 
-    /// 清空
+    /// Clear all
     void clear() {
         root_.children.clear();
         root_.subscribers.clear();
@@ -136,7 +136,7 @@ private:
         std::map<std::string, subscribe_entry> subscribers; // client_id → entry
     };
 
-    /// 分割 topic 路径
+    /// Split topic path
     static auto split(std::string_view topic) -> std::vector<std::string_view> {
         std::vector<std::string_view> segments;
         std::size_t start = 0;
@@ -155,7 +155,7 @@ private:
         return segments;
     }
 
-    /// 递归匹配
+    /// Recursive matching
     void match_recursive(const trie_node* node,
                          const std::vector<std::string_view>& segments,
                          std::size_t depth,
@@ -164,12 +164,12 @@ private:
     {
         if (!node) return;
 
-        // 检查 # 通配符子节点
+        // Check # wildcard child node
         auto hash_it = node->children.find("#");
         if (hash_it != node->children.end()) {
             auto* hash_node = hash_it->second.get();
-            // # 匹配剩余所有层级
-            // 但 $ 前缀 topic 不匹配以 # 或 + 开头的 filter
+            // # matches all remaining levels
+            // But $ prefix topic doesn't match filter starting with # or +
             bool dollar_block = (depth == 0 && !original_topic.empty() &&
                                  original_topic[0] == '$');
             if (!dollar_block) {
@@ -180,7 +180,7 @@ private:
         }
 
         if (depth >= segments.size()) {
-            // 完全匹配：收集此节点的订阅者
+            // Complete match: collect subscribers at this node
             for (auto& [cid, entry] : node->subscribers) {
                 result.push_back({cid, entry});
             }
@@ -189,7 +189,7 @@ private:
 
         auto& seg = segments[depth];
 
-        // 检查 + 通配符子节点
+        // Check + wildcard child node
         auto plus_it = node->children.find("+");
         if (plus_it != node->children.end()) {
             bool dollar_block = (depth == 0 && !original_topic.empty() &&
@@ -200,7 +200,7 @@ private:
             }
         }
 
-        // 精确匹配子节点
+        // Exact match child node
         auto exact_it = node->children.find(std::string(seg));
         if (exact_it != node->children.end()) {
             match_recursive(exact_it->second.get(), segments, depth + 1,
@@ -208,7 +208,7 @@ private:
         }
     }
 
-    /// 递归移除 client 的所有订阅
+    /// Recursively remove all subscriptions for a client
     void erase_client_recursive(trie_node* node, const std::string& client_id) {
         auto erased = node->subscribers.erase(client_id);
         if (erased > 0) --total_subscriptions_;
