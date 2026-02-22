@@ -15,6 +15,31 @@ namespace cnetmod {
 /// Non-blocking coroutine mutex
 /// Suspends coroutine instead of blocking thread when contention occurs
 export class async_mutex {
+    // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
+
+    class spinlock {
+        std::atomic_flag flag_{};
+    public:
+        void lock() noexcept {
+            if (!flag_.test_and_set(std::memory_order_acquire)) return;
+            do {
+                flag_.wait(true, std::memory_order_relaxed);
+            } while (flag_.test_and_set(std::memory_order_acquire));
+        }
+        void unlock() noexcept {
+            flag_.clear(std::memory_order_release);
+            flag_.notify_one();
+        }
+    };
+
+    struct auto_lock {
+        spinlock& lk_;
+        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
+        ~auto_lock() { lk_.unlock(); }
+        auto_lock(const auto_lock&) = delete;
+        auto operator=(const auto_lock&) -> auto_lock& = delete;
+    };
+
     struct waiter_node {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
@@ -41,17 +66,17 @@ public:
                 expected, true, std::memory_order_acquire);
         }
 
-        void await_suspend(std::coroutine_handle<> h) noexcept {
+        auto await_suspend(std::coroutine_handle<> h) noexcept
+            -> std::coroutine_handle<>
+        {
             node_.handle = h;
             node_.next = nullptr;
-            std::lock_guard lock(mtx_.mtx_);
-            // Try again (may have been released before suspend)
+            auto_lock g(mtx_.lock_);
+            // Re-check: may have been released between ready() and suspend()
             bool expected = false;
             if (mtx_.locked_.compare_exchange_strong(
                     expected, true, std::memory_order_acquire)) {
-                // Acquired successfully, resume directly
-                h.resume();
-                return;
+                return h;  // auto_lock destructs first, then resume
             }
             // Add to wait queue
             if (!mtx_.tail_) {
@@ -60,6 +85,7 @@ public:
                 mtx_.tail_->next = &node_;
                 mtx_.tail_ = &node_;
             }
+            return std::noop_coroutine();
         }
 
         void await_resume() noexcept {}
@@ -73,7 +99,7 @@ public:
     void unlock() noexcept {
         std::coroutine_handle<> to_resume;
         {
-            std::lock_guard lock(mtx_);
+            auto_lock g(lock_);
             if (head_) {
                 // Wake up head waiter (lock transfer, don't release locked_)
                 auto* w = head_;
@@ -97,7 +123,7 @@ public:
 
 private:
     std::atomic<bool> locked_{false};
-    std::mutex mtx_;  // Protect wait queue
+    mutable spinlock lock_;
     waiter_node* head_ = nullptr;
     waiter_node* tail_ = nullptr;
 };

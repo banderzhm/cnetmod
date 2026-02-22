@@ -98,6 +98,9 @@ public:
     /// Apply options
     [[nodiscard]] auto apply_options(const socket_options& opts) -> std::expected<void, std::error_code>;
 
+    /// Get local endpoint (getsockname)
+    [[nodiscard]] auto local_endpoint() const -> std::expected<endpoint, std::error_code>;
+
     /// Close socket
     void close() noexcept;
 

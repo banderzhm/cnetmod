@@ -431,6 +431,50 @@ auto when_all(task<T1> t1, task<T2> t2, task<T3> t3)
     co_return std::tuple{a.result(), b.result(), c.result()};
 }
 
+/// Variadic when_all for N >= 4 tasks of any types
+export template <typename... Ts>
+    requires (sizeof...(Ts) >= 4)
+auto when_all(task<Ts>... ts) -> task<std::tuple<Ts...>> {
+    using AwaiterT = detail::when_all_awaiter<detail::when_all_task<Ts>...>;
+    AwaiterT aw{detail::make_when_all_task(std::move(ts))...};
+    co_await aw;
+    co_return std::apply([](auto&... w) {
+        return std::tuple<Ts...>{w.result()...};
+    }, aw.tasks_);
+}
+
+/// when_all: void + non-void → returns non-void result (void task runs concurrently)
+export template <typename T2>
+    requires (!std::is_void_v<T2>)
+auto when_all(task<void> t1, task<T2> t2) -> task<T2>
+{
+    auto w1 = detail::make_when_all_task(std::move(t1));
+    auto w2 = detail::make_when_all_task(std::move(t2));
+
+    detail::when_all_awaiter<detail::when_all_task<void>, detail::when_all_task<T2>> aw{std::move(w1), std::move(w2)};
+    co_await aw;
+
+    auto& [a, b] = aw.tasks_;
+    a.result(); // propagate exception if any
+    co_return b.result();
+}
+
+/// when_all: non-void + void → returns non-void result
+export template <typename T1>
+    requires (!std::is_void_v<T1>)
+auto when_all(task<T1> t1, task<void> t2) -> task<T1>
+{
+    auto w1 = detail::make_when_all_task(std::move(t1));
+    auto w2 = detail::make_when_all_task(std::move(t2));
+
+    detail::when_all_awaiter<detail::when_all_task<T1>, detail::when_all_task<void>> aw{std::move(w1), std::move(w2)};
+    co_await aw;
+
+    auto& [a, b] = aw.tasks_;
+    b.result(); // propagate exception if any
+    co_return a.result();
+}
+
 /// when_all for void tasks
 export inline auto when_all(task<void> t1, task<void> t2)
     -> task<void>

@@ -28,6 +28,31 @@ namespace cnetmod {
 /// Non-blocking coroutine semaphore
 /// acquire returns immediately when count > 0, suspends when count == 0 waiting for release
 export class async_semaphore {
+    // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
+
+    class spinlock {
+        std::atomic_flag flag_{};
+    public:
+        void lock() noexcept {
+            if (!flag_.test_and_set(std::memory_order_acquire)) return;
+            do {
+                flag_.wait(true, std::memory_order_relaxed);
+            } while (flag_.test_and_set(std::memory_order_acquire));
+        }
+        void unlock() noexcept {
+            flag_.clear(std::memory_order_release);
+            flag_.notify_one();
+        }
+    };
+
+    struct auto_lock {
+        spinlock& lk_;
+        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
+        ~auto_lock() { lk_.unlock(); }
+        auto_lock(const auto_lock&) = delete;
+        auto operator=(const auto_lock&) -> auto_lock& = delete;
+    };
+
     struct waiter_node {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
@@ -53,23 +78,32 @@ public:
         explicit acquire_awaitable(async_semaphore& sem) noexcept : sem_(sem) {}
 
         auto await_ready() noexcept -> bool {
-            std::lock_guard lock(sem_.mtx_);
-            if (sem_.count_ > 0) {
-                --sem_.count_;
-                return true;
+            // Lock-free fast path: CAS decrement
+            auto cur = sem_.count_.load(std::memory_order_acquire);
+            while (cur > 0) {
+                if (sem_.count_.compare_exchange_weak(
+                        cur, cur - 1,
+                        std::memory_order_acquire,
+                        std::memory_order_relaxed))
+                    return true;
             }
             return false;
         }
 
-        void await_suspend(std::coroutine_handle<> h) noexcept {
+        auto await_suspend(std::coroutine_handle<> h) noexcept
+            -> std::coroutine_handle<>
+        {
             node_.handle = h;
             node_.next = nullptr;
-            std::lock_guard lock(sem_.mtx_);
-            // Try again (may have release before suspend)
-            if (sem_.count_ > 0) {
-                --sem_.count_;
-                h.resume();
-                return;
+            auto_lock g(sem_.lock_);
+            // Re-check: permit may have been released between ready() and suspend()
+            auto cur = sem_.count_.load(std::memory_order_acquire);
+            while (cur > 0) {
+                if (sem_.count_.compare_exchange_weak(
+                        cur, cur - 1,
+                        std::memory_order_acquire,
+                        std::memory_order_relaxed))
+                    return h;  // auto_lock destructs first, then resume
             }
             // Add to wait queue (FIFO)
             if (!sem_.tail_) {
@@ -78,6 +112,7 @@ public:
                 sem_.tail_->next = &node_;
                 sem_.tail_ = &node_;
             }
+            return std::noop_coroutine();
         }
 
         void await_resume() noexcept {}
@@ -95,7 +130,7 @@ public:
     void release() noexcept {
         std::coroutine_handle<> to_resume;
         {
-            std::lock_guard lock(mtx_);
+            auto_lock g(lock_);
             if (head_) {
                 // Has waiters: directly transfer permit (don't increment count_)
                 auto* w = head_;
@@ -103,7 +138,7 @@ public:
                 if (!head_) tail_ = nullptr;
                 to_resume = w->handle;
             } else {
-                ++count_;
+                count_.fetch_add(1, std::memory_order_release);
             }
         }
         if (to_resume) to_resume.resume();
@@ -120,23 +155,25 @@ public:
     // =========================================================================
 
     [[nodiscard]] auto try_acquire() noexcept -> bool {
-        std::lock_guard lock(mtx_);
-        if (count_ > 0) {
-            --count_;
-            return true;
+        auto cur = count_.load(std::memory_order_acquire);
+        while (cur > 0) {
+            if (count_.compare_exchange_weak(
+                    cur, cur - 1,
+                    std::memory_order_acquire,
+                    std::memory_order_relaxed))
+                return true;
         }
         return false;
     }
 
     /// Current available permits (for monitoring only, not thread-safe snapshot)
     [[nodiscard]] auto available() const noexcept -> std::size_t {
-        std::lock_guard lock(mtx_);
-        return count_;
+        return count_.load(std::memory_order_relaxed);
     }
 
 private:
-    mutable std::mutex mtx_;
-    std::size_t count_;
+    mutable spinlock lock_;
+    std::atomic<std::size_t> count_;
     waiter_node* head_ = nullptr;
     waiter_node* tail_ = nullptr;
 };

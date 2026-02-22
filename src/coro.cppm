@@ -16,3 +16,5 @@ export import cnetmod.coro.mutex;
 export import cnetmod.coro.shared_mutex;
 export import cnetmod.coro.semaphore;
 export import cnetmod.coro.wait_group;
+export import cnetmod.coro.retry;
+export import cnetmod.coro.circuit_breaker;

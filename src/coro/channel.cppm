@@ -9,11 +9,77 @@ import std;
 namespace cnetmod {
 
 // =============================================================================
-// channel<T> — Bounded async MPSC channel
+// channel<T> — Bounded async channel
 // =============================================================================
+//
+// Optimized design:
+//  • Ring buffer: pre-allocated aligned slots, O(1) push/pop, zero per-send allocation
+//  • Adaptive spinlock (atomic_flag + C++20 wait/notify): lightweight for short critical sections
+//  • Direct handoff: bypasses buffer when sender meets waiting receiver (or vice versa)
+//  • coroutine_handle-returning await_suspend: eliminates close() vs suspend race
+//
+// Invariants (hold while lock is held):
+//  • count_ > 0        ⟹ recv_head_ == nullptr  (buffer non-empty → no waiting receivers)
+//  • recv_head_ != nil ⟹ count_ == 0            (waiting receivers → buffer empty)
+//  • send_head_ != nil ⟹ count_ == capacity_    (waiting senders → buffer full)
+//  • close() does NOT drain buffer; subsequent receive() can still read remaining data
+//
+// Concurrency note:
+//  The single spinlock is sufficient for coroutine workloads where critical sections
+//  are a few pointer ops + value move.  For extreme MPMC contention (hundreds of
+//  concurrent producers), a slot-based lock-free design (à la crossbeam) would scale
+//  better, but adds significant complexity and per-slot cache-line overhead.
+//
 
 export template <typename T>
 class channel {
+    static_assert(std::is_nothrow_move_constructible_v<T>,
+        "channel<T> requires T to be nothrow move constructible");
+
+    // ---- Aligned slot for ring buffer (no default-construction required) ----
+
+    struct alignas(T) slot_t {
+        std::byte storage[sizeof(T)];
+
+        auto ptr() noexcept -> T* {
+            return std::launder(reinterpret_cast<T*>(storage));
+        }
+
+        template <typename U>
+        void construct(U&& val) {
+            std::construct_at(reinterpret_cast<T*>(storage), std::forward<U>(val));
+        }
+
+        void destroy() noexcept { std::destroy_at(ptr()); }
+    };
+
+    // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
+
+    class spinlock {
+        std::atomic_flag flag_{};
+    public:
+        void lock() noexcept {
+            if (!flag_.test_and_set(std::memory_order_acquire)) return;
+            do {
+                flag_.wait(true, std::memory_order_relaxed);
+            } while (flag_.test_and_set(std::memory_order_acquire));
+        }
+        void unlock() noexcept {
+            flag_.clear(std::memory_order_release);
+            flag_.notify_one();
+        }
+    };
+
+    struct auto_lock {
+        spinlock& lk_;
+        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
+        ~auto_lock() { lk_.unlock(); }
+        auto_lock(const auto_lock&) = delete;
+        auto operator=(const auto_lock&) -> auto_lock& = delete;
+    };
+
+    // ---- Intrusive waiter nodes ----
+
     struct waiter_node {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
@@ -21,77 +87,129 @@ class channel {
 
     struct send_node : waiter_node {
         T value;
+        bool succeeded = false;
+
         template <typename U>
         explicit send_node(U&& v) : value(std::forward<U>(v)) {}
     };
 
     struct recv_node : waiter_node {
-        std::optional<T>* slot = nullptr;  // Write receive result
+        std::optional<T>* slot = nullptr;
     };
+
+    // ---- Queue helpers ----
+
+    static void enqueue(waiter_node*& head, waiter_node*& tail, waiter_node* n) noexcept {
+        n->next = nullptr;
+        if (!tail) { head = tail = n; }
+        else       { tail->next = n; tail = n; }
+    }
+
+    static auto dequeue(waiter_node*& head, waiter_node*& tail) noexcept -> waiter_node* {
+        auto* n = head;
+        if (n) { head = n->next; if (!head) tail = nullptr; }
+        return n;
+    }
+
+    // ---- Ring buffer helpers ----
+
+    void buf_push(T&& v) noexcept {
+        slots_[write_pos_].construct(std::move(v));
+        write_pos_ = next_pos(write_pos_);
+        ++count_;
+    }
+
+    auto buf_pop() noexcept -> T {
+        auto& s = slots_[read_pos_];
+        T v = std::move(*s.ptr());
+        s.destroy();
+        read_pos_ = next_pos(read_pos_);
+        --count_;
+        return v;
+    }
+
+    [[nodiscard]] auto buf_empty() const noexcept -> bool { return count_ == 0; }
+    [[nodiscard]] auto buf_full()  const noexcept -> bool { return count_ == capacity_; }
+
+    [[nodiscard]] auto next_pos(std::size_t pos) const noexcept -> std::size_t {
+        return pos + 1 == capacity_ ? 0 : pos + 1;
+    }
 
 public:
     explicit channel(std::size_t capacity = 1)
-        : capacity_(capacity) {}
+        : capacity_(capacity)
+        , slots_(capacity > 0 ? std::make_unique<slot_t[]>(capacity) : nullptr) {}
 
-    ~channel() { close(); }
+    ~channel() {
+        close();
+        // Destroy remaining items in ring buffer
+        while (count_ > 0) {
+            slots_[read_pos_].destroy();
+            read_pos_ = next_pos(read_pos_);
+            --count_;
+        }
+    }
 
     channel(const channel&) = delete;
     auto operator=(const channel&) -> channel& = delete;
 
-    // ---- send awaitable ----
+    // =========================================================================
+    // send_awaitable
+    // =========================================================================
 
     struct [[nodiscard]] send_awaitable {
         channel& ch_;
-        T value_;
         send_node node_;
-        bool sent_ = false;
 
         send_awaitable(channel& ch, T value)
-            : ch_(ch), value_(std::move(value)), node_(T{}) {}
+            : ch_(ch), node_(std::move(value)) {}
 
         auto await_ready() noexcept -> bool {
             std::coroutine_handle<> to_resume;
             {
-                std::lock_guard lock(ch_.mtx_);
-                if (ch_.closed_) { sent_ = false; return true; }
+                auto_lock g(ch_.lock_);
+                if (ch_.closed_) return true;  // node_.succeeded stays false
 
-                // If there's a waiting receiver, deliver directly
+                // Fast path 1: deliver directly to waiting receiver
+                // Peek → move → commit-dequeue (state unchanged if move were to fail)
                 if (ch_.recv_head_) {
                     auto* w = static_cast<recv_node*>(ch_.recv_head_);
-                    ch_.recv_head_ = w->next;
-                    if (!ch_.recv_head_) ch_.recv_tail_ = nullptr;
-                    *w->slot = std::move(value_);
+                    *w->slot = std::move(node_.value);
+                    dequeue(ch_.recv_head_, ch_.recv_tail_);
                     to_resume = w->handle;
-                    sent_ = true;
-                } else if (ch_.buffer_.size() < ch_.capacity_) {
-                    ch_.buffer_.push_back(std::move(value_));
-                    sent_ = true;
-                } else {
-                    return false;  // Need to suspend
+                    node_.succeeded = true;
+                }
+                // Fast path 2: buffer has space
+                else if (ch_.capacity_ > 0 && !ch_.buf_full()) {
+                    ch_.buf_push(std::move(node_.value));
+                    node_.succeeded = true;
+                }
+                // Slow path: must suspend
+                else {
+                    return false;
                 }
             }
             if (to_resume) to_resume.resume();
             return true;
         }
 
-        void await_suspend(std::coroutine_handle<> h) noexcept {
-            std::lock_guard lock(ch_.mtx_);
-            node_.value = std::move(value_);
+        auto await_suspend(std::coroutine_handle<> h) noexcept
+            -> std::coroutine_handle<>
+        {
+            auto_lock g(ch_.lock_);
+            // Re-check: channel may have been closed between ready() and suspend()
+            if (ch_.closed_) return h;  // resume self immediately
             node_.handle = h;
-            node_.next = nullptr;
-            if (!ch_.send_tail_) {
-                ch_.send_head_ = ch_.send_tail_ = &node_;
-            } else {
-                ch_.send_tail_->next = &node_;
-                ch_.send_tail_ = &node_;
-            }
+            enqueue(ch_.send_head_, ch_.send_tail_, &node_);
+            return std::noop_coroutine();  // stay suspended
         }
 
-        /// Returns true if send succeeded, false if channel is closed
-        auto await_resume() noexcept -> bool { return sent_ || !ch_.closed_; }
+        auto await_resume() noexcept -> bool { return node_.succeeded; }
     };
 
-    // ---- receive awaitable ----
+    // =========================================================================
+    // recv_awaitable
+    // =========================================================================
 
     struct [[nodiscard]] recv_awaitable {
         channel& ch_;
@@ -105,99 +223,116 @@ public:
         auto await_ready() noexcept -> bool {
             std::coroutine_handle<> to_resume;
             {
-                std::lock_guard lock(ch_.mtx_);
-                if (!ch_.buffer_.empty()) {
-                    result_.emplace(std::move(ch_.buffer_.front()));
-                    ch_.buffer_.pop_front();
-                    // Wake up waiting send coroutine, enqueue its value
+                auto_lock g(ch_.lock_);
+
+                // Fast path 1: buffer has data
+                if (!ch_.buf_empty()) {
+                    result_.emplace(ch_.buf_pop());
+                    // Refill buffer from waiting sender (peek → move → commit)
                     if (ch_.send_head_) {
                         auto* w = static_cast<send_node*>(ch_.send_head_);
-                        ch_.send_head_ = w->next;
-                        if (!ch_.send_head_) ch_.send_tail_ = nullptr;
-                        ch_.buffer_.push_back(std::move(w->value));
+                        ch_.buf_push(std::move(w->value));
+                        dequeue(ch_.send_head_, ch_.send_tail_);
+                        w->succeeded = true;
                         to_resume = w->handle;
                     }
-                    // Unlock before resume
-                } else if (ch_.send_head_) {
-                    // Buffer is empty but sender is waiting, take value directly
+                }
+                // Fast path 2: buffer empty but sender waiting → direct handoff
+                else if (ch_.send_head_) {
                     auto* w = static_cast<send_node*>(ch_.send_head_);
-                    ch_.send_head_ = w->next;
-                    if (!ch_.send_head_) ch_.send_tail_ = nullptr;
                     result_.emplace(std::move(w->value));
+                    dequeue(ch_.send_head_, ch_.send_tail_);
+                    w->succeeded = true;
                     to_resume = w->handle;
-                } else if (ch_.closed_) {
-                    return true;  // Closed and no data, result_ is nullopt
-                } else {
-                    return false; // Need to suspend
+                }
+                // Closed and no data → nullopt
+                else if (ch_.closed_) {
+                    return true;
+                }
+                // Slow path: must suspend
+                else {
+                    return false;
                 }
             }
             if (to_resume) to_resume.resume();
             return true;
         }
 
-        void await_suspend(std::coroutine_handle<> h) noexcept {
-            std::lock_guard lock(ch_.mtx_);
+        auto await_suspend(std::coroutine_handle<> h) noexcept
+            -> std::coroutine_handle<>
+        {
+            auto_lock g(ch_.lock_);
+            // Re-check: channel may have been closed between ready() and suspend()
+            if (ch_.closed_) return h;  // resume self, result_ is nullopt
             node_.handle = h;
             node_.slot = &result_;
-            node_.next = nullptr;
-            if (!ch_.recv_tail_) {
-                ch_.recv_head_ = ch_.recv_tail_ = &node_;
-            } else {
-                ch_.recv_tail_->next = &node_;
-                ch_.recv_tail_ = &node_;
-            }
+            enqueue(ch_.recv_head_, ch_.recv_tail_, &node_);
+            return std::noop_coroutine();
         }
 
-        /// Returns value, or nullopt if channel is closed and has no data
         auto await_resume() noexcept -> std::optional<T> {
             return std::move(result_);
         }
     };
 
-    /// co_await ch.send(value) — Suspends when full
+    // =========================================================================
+    // Public API
+    // =========================================================================
+
+    /// co_await ch.send(value) — suspends when buffer is full, returns false if channel closed
     auto send(T value) -> send_awaitable {
         return send_awaitable{*this, std::move(value)};
     }
 
-    /// co_await ch.receive() — Suspends when empty
+    /// co_await ch.receive() — suspends when empty, returns nullopt if closed and drained
     auto receive() -> recv_awaitable {
         return recv_awaitable{*this};
     }
 
-    /// Close channel
+    /// Close channel — wakes all waiting senders/receivers, zero heap allocation
     void close() noexcept {
-        std::vector<std::coroutine_handle<>> to_resume;
+        waiter_node* sends = nullptr;
+        waiter_node* recvs = nullptr;
         {
-            std::lock_guard lock(mtx_);
+            auto_lock g(lock_);
             if (closed_) return;
             closed_ = true;
-            while (send_head_) {
-                auto* w = send_head_;
-                send_head_ = w->next;
-                if (w->handle) to_resume.push_back(w->handle);
-            }
-            send_tail_ = nullptr;
-            while (recv_head_) {
-                auto* w = recv_head_;
-                recv_head_ = w->next;
-                if (w->handle) to_resume.push_back(w->handle);
-            }
-            recv_tail_ = nullptr;
+            // Steal waiter lists (walk them outside the lock)
+            sends = send_head_; send_head_ = send_tail_ = nullptr;
+            recvs = recv_head_; recv_head_ = recv_tail_ = nullptr;
         }
-        for (auto h : to_resume) h.resume();
+        // Resume all senders (succeeded stays false)
+        for (auto* n = sends; n;) {
+            auto* nx = n->next;
+            if (n->handle) n->handle.resume();
+            n = nx;
+        }
+        // Resume all receivers (result_ stays nullopt)
+        for (auto* n = recvs; n;) {
+            auto* nx = n->next;
+            if (n->handle) n->handle.resume();
+            n = nx;
+        }
     }
 
     [[nodiscard]] auto is_closed() const noexcept -> bool {
-        std::lock_guard lock(mtx_);
+        auto_lock g(lock_);
         return closed_;
     }
 
 private:
     std::size_t capacity_;
-    std::deque<T> buffer_;
-    mutable std::mutex mtx_;
+    std::unique_ptr<slot_t[]> slots_;
+
+    mutable spinlock lock_;
     bool closed_ = false;
 
+    // Ring buffer state
+    std::size_t read_pos_  = 0;
+    std::size_t write_pos_ = 0;
+    std::size_t count_     = 0;
+
+    // Intrusive waiter queues
     waiter_node* send_head_ = nullptr;
     waiter_node* send_tail_ = nullptr;
     waiter_node* recv_head_ = nullptr;

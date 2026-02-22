@@ -47,6 +47,14 @@ export namespace logger {
     };
 
     // ============================================================================
+    // Output Format
+    // ============================================================================
+    enum class output_format {
+        text,   // [timestamp] [level] [thread] [source] message
+        json,   // {"timestamp":"...","level":"...","thread":"...","source":"...","message":"..."}
+    };
+
+    // ============================================================================
     // Internal Implementation
     // ============================================================================
     namespace detail {
@@ -78,6 +86,11 @@ export namespace logger {
         inline bool& console_enabled() {
             static bool enabled = true;
             return enabled;
+        }
+
+        inline output_format& current_format() {
+            static output_format fmt = output_format::text;
+            return fmt;
         }
 
         inline const char* level_to_string(level lv) {
@@ -160,6 +173,28 @@ export namespace logger {
             return path;
         }
 
+        /// Escape a string for JSON output (handles \", \\, control chars)
+        inline std::string json_escape(std::string_view sv) {
+            std::string out;
+            out.reserve(sv.size() + 8);
+            for (char c : sv) {
+                switch (c) {
+                    case '"':  out += "\\\""; break;
+                    case '\\': out += "\\\\"; break;
+                    case '\n': out += "\\n"; break;
+                    case '\r': out += "\\r"; break;
+                    case '\t': out += "\\t"; break;
+                    default:
+                        if (static_cast<unsigned char>(c) < 0x20)
+                            out += std::format("\\u{:04x}", static_cast<unsigned>(c));
+                        else
+                            out += c;
+                        break;
+                }
+            }
+            return out;
+        }
+
         inline void write_log(level lv, std::string_view message,
                              const std::source_location& loc = std::source_location::current()) {
             if (lv < current_level()) return;
@@ -170,17 +205,28 @@ export namespace logger {
             
             std::lock_guard<std::mutex> lock(log_mutex());
 
-            // Console output (with color)
-            if (console_enabled()) {
-                std::println(std::cerr, "[{}] [{}] [{}] [{}] {}", 
-                    timestamp, level_colored(lv), thread_id, source, message);
-            }
-
-            // File output (no color)
-            if (file_enabled() && log_file().is_open()) {
-                log_file() << std::format("[{}] [{}] [{}] [{}] {}\n",
-                    timestamp, level_to_string(lv), thread_id, source, message);
-                log_file().flush();
+            if (current_format() == output_format::json) {
+                auto json_line = std::format(
+                    R"({{"timestamp":"{}","level":"{}","thread":"{}","source":"{}","message":"{}"}})",
+                    timestamp, level_to_string(lv), thread_id, source, json_escape(message));
+                if (console_enabled())
+                    std::println(std::cerr, "{}", json_line);
+                if (file_enabled() && log_file().is_open()) {
+                    log_file() << json_line << '\n';
+                    log_file().flush();
+                }
+            } else {
+                // Console output (with color)
+                if (console_enabled()) {
+                    std::println(std::cerr, "[{}] [{}] [{}] [{}] {}", 
+                        timestamp, level_colored(lv), thread_id, source, message);
+                }
+                // File output (no color)
+                if (file_enabled() && log_file().is_open()) {
+                    log_file() << std::format("[{}] [{}] [{}] [{}] {}\n",
+                        timestamp, level_to_string(lv), thread_id, source, message);
+                    log_file().flush();
+                }
             }
         }
 
@@ -194,15 +240,26 @@ export namespace logger {
 
             std::lock_guard<std::mutex> lock(log_mutex());
 
-            if (console_enabled()) {
-                std::println(std::cerr, "[{}] [{}] [{}] {}",
-                    timestamp, level_colored(lv), thread_id, message);
-            }
-
-            if (file_enabled() && log_file().is_open()) {
-                log_file() << std::format("[{}] [{}] [{}] {}\n",
-                    timestamp, level_to_string(lv), thread_id, message);
-                log_file().flush();
+            if (current_format() == output_format::json) {
+                auto json_line = std::format(
+                    R"({{"timestamp":"{}","level":"{}","thread":"{}","message":"{}"}})",
+                    timestamp, level_to_string(lv), thread_id, json_escape(message));
+                if (console_enabled())
+                    std::println(std::cerr, "{}", json_line);
+                if (file_enabled() && log_file().is_open()) {
+                    log_file() << json_line << '\n';
+                    log_file().flush();
+                }
+            } else {
+                if (console_enabled()) {
+                    std::println(std::cerr, "[{}] [{}] [{}] {}",
+                        timestamp, level_colored(lv), thread_id, message);
+                }
+                if (file_enabled() && log_file().is_open()) {
+                    log_file() << std::format("[{}] [{}] [{}] {}\n",
+                        timestamp, level_to_string(lv), thread_id, message);
+                    log_file().flush();
+                }
             }
         }
 
@@ -229,12 +286,14 @@ export namespace logger {
      * @param name Logger name
      * @param lv Log level
      */
-    inline void init(const std::string& name = "cnetmod", level lv = level::info) {
+    inline void init(const std::string& name = "cnetmod", level lv = level::info,
+                     output_format fmt = output_format::text) {
         detail::logger_name() = name;
         detail::current_level() = lv;
+        detail::current_format() = fmt;
         detail::console_enabled() = true;
         detail::file_enabled() = false;
-        detail::ansi_enabled() = detail::try_enable_ansi();
+        detail::ansi_enabled() = (fmt == output_format::text) ? detail::try_enable_ansi() : false;
     }
 
     /**
@@ -245,13 +304,15 @@ export namespace logger {
      */
     inline void init_with_file(const std::string& name,
                                const std::string& filepath,
-                               level lv = level::info) {
+                               level lv = level::info,
+                               output_format fmt = output_format::text) {
         detail::logger_name() = name;
         detail::current_level() = lv;
+        detail::current_format() = fmt;
         detail::console_enabled() = true;
         detail::file_enabled() = true;
         detail::log_file().open(filepath, std::ios::app);
-        detail::ansi_enabled() = detail::try_enable_ansi();
+        detail::ansi_enabled() = (fmt == output_format::text) ? detail::try_enable_ansi() : false;
     }
 
     // ============================================================================
@@ -260,6 +321,15 @@ export namespace logger {
 
     inline void set_level(level lv) {
         detail::current_level() = lv;
+    }
+
+    inline void set_format(output_format fmt) {
+        detail::current_format() = fmt;
+        // Disable ANSI colors in JSON mode
+        if (fmt == output_format::json)
+            detail::ansi_enabled() = false;
+        else
+            detail::ansi_enabled() = detail::try_enable_ansi();
     }
 
     inline void flush() {

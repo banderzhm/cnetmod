@@ -34,6 +34,7 @@ set(EXAMPLE_TARGETS
     multicore_ws
     blocking_bridge_demo
         mqtt_demo
+    tfb_benchmark
 )
 
 # SSL examples (only built when OpenSSL is available)

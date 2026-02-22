@@ -216,6 +216,36 @@ auto socket::apply_options(const socket_options& opts)
 }
 
 // =============================================================================
+// local_endpoint
+// =============================================================================
+
+auto socket::local_endpoint() const -> std::expected<endpoint, std::error_code> {
+    ::sockaddr_storage storage{};
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    int len = sizeof(storage);
+#else
+    ::socklen_t len = sizeof(storage);
+#endif
+    if (::getsockname(handle_,
+            reinterpret_cast<::sockaddr*>(&storage), &len) != 0)
+        return std::unexpected(make_error_code(from_native_error(last_error())));
+
+    if (storage.ss_family == AF_INET) {
+        auto& sa = reinterpret_cast<const ::sockaddr_in&>(storage);
+        char buf[INET_ADDRSTRLEN]{};
+        ::inet_ntop(AF_INET, &sa.sin_addr, buf, sizeof(buf));
+        auto a = ipv4_address::from_string(buf);
+        return endpoint{ip_address{a.value_or(ipv4_address{})}, ntohs(sa.sin_port)};
+    } else {
+        auto& sa = reinterpret_cast<const ::sockaddr_in6&>(storage);
+        char buf[INET6_ADDRSTRLEN]{};
+        ::inet_ntop(AF_INET6, &sa.sin6_addr, buf, sizeof(buf));
+        auto a = ipv6_address::from_string(buf);
+        return endpoint{ip_address{a.value_or(ipv6_address{})}, ntohs(sa.sin6_port)};
+    }
+}
+
+// =============================================================================
 // Close
 // =============================================================================
 

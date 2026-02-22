@@ -409,12 +409,13 @@ set_property(TARGET cnetmod_app PROPERTY
 )
 
 # ==============================================================================
-# Test Configuration
+# Testing, Benchmarks & TFB
 # ==============================================================================
 
-option(CNETMOD_BUILD_TESTS "Build tests" OFF)
-if(CNETMOD_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/CMakeLists.txt")
-    add_subdirectory(tests)
+option(CNETMOD_BUILD_TESTS "Build tests" ON)
+option(CNETMOD_BUILD_BENCH "Build performance benchmarks" ON)
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/testing/CMakeLists.txt")
+    add_subdirectory(testing)
 endif()
 
 # ==============================================================================

@@ -36,6 +36,31 @@ namespace cnetmod {
 /// - lock / unlock: Write lock (exclusive)
 /// - Writer priority: New readers queue when writers waiting, prevents writer starvation
 export class async_shared_mutex {
+    // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
+
+    class spinlock {
+        std::atomic_flag flag_{};
+    public:
+        void lock() noexcept {
+            if (!flag_.test_and_set(std::memory_order_acquire)) return;
+            do {
+                flag_.wait(true, std::memory_order_relaxed);
+            } while (flag_.test_and_set(std::memory_order_acquire));
+        }
+        void unlock() noexcept {
+            flag_.clear(std::memory_order_release);
+            flag_.notify_one();
+        }
+    };
+
+    struct auto_lock {
+        spinlock& lk_;
+        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
+        ~auto_lock() { lk_.unlock(); }
+        auto_lock(const auto_lock&) = delete;
+        auto operator=(const auto_lock&) -> auto_lock& = delete;
+    };
+
     struct waiter_node {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
@@ -59,7 +84,7 @@ public:
         explicit lock_shared_awaitable(async_shared_mutex& rw) noexcept : rw_(rw) {}
 
         auto await_ready() noexcept -> bool {
-            std::lock_guard lock(rw_.mtx_);
+            auto_lock g(rw_.lock_);
             // Can acquire read lock: no writer holding, no writer waiting
             if (rw_.state_ >= 0 && !rw_.write_head_) {
                 ++rw_.state_;
@@ -68,15 +93,16 @@ public:
             return false;
         }
 
-        void await_suspend(std::coroutine_handle<> h) noexcept {
+        auto await_suspend(std::coroutine_handle<> h) noexcept
+            -> std::coroutine_handle<>
+        {
             node_.handle = h;
             node_.next = nullptr;
-            std::lock_guard lock(rw_.mtx_);
-            // Try again
+            auto_lock g(rw_.lock_);
+            // Re-check: state may have changed between ready() and suspend()
             if (rw_.state_ >= 0 && !rw_.write_head_) {
                 ++rw_.state_;
-                h.resume();
-                return;
+                return h;  // auto_lock destructs first, then resume
             }
             // Add to read wait queue
             if (!rw_.read_tail_) {
@@ -85,6 +111,7 @@ public:
                 rw_.read_tail_->next = &node_;
                 rw_.read_tail_ = &node_;
             }
+            return std::noop_coroutine();
         }
 
         void await_resume() noexcept {}
@@ -97,9 +124,8 @@ public:
     /// Release read lock
     void unlock_shared() noexcept {
         std::coroutine_handle<> to_resume;
-        std::vector<std::coroutine_handle<>> readers_to_resume;
         {
-            std::lock_guard lock(mtx_);
+            auto_lock g(lock_);
             --state_;
 
             // Last reader releases → try to wake writer
@@ -125,7 +151,7 @@ public:
         explicit lock_awaitable(async_shared_mutex& rw) noexcept : rw_(rw) {}
 
         auto await_ready() noexcept -> bool {
-            std::lock_guard lock(rw_.mtx_);
+            auto_lock g(rw_.lock_);
             if (rw_.state_ == 0) {
                 rw_.state_ = -1;
                 return true;
@@ -133,15 +159,16 @@ public:
             return false;
         }
 
-        void await_suspend(std::coroutine_handle<> h) noexcept {
+        auto await_suspend(std::coroutine_handle<> h) noexcept
+            -> std::coroutine_handle<>
+        {
             node_.handle = h;
             node_.next = nullptr;
-            std::lock_guard lock(rw_.mtx_);
-            // Try again
+            auto_lock g(rw_.lock_);
+            // Re-check: state may have changed between ready() and suspend()
             if (rw_.state_ == 0) {
                 rw_.state_ = -1;
-                h.resume();
-                return;
+                return h;  // auto_lock destructs first, then resume
             }
             // Add to write wait queue
             if (!rw_.write_tail_) {
@@ -150,6 +177,7 @@ public:
                 rw_.write_tail_->next = &node_;
                 rw_.write_tail_ = &node_;
             }
+            return std::noop_coroutine();
         }
 
         void await_resume() noexcept {}
@@ -161,7 +189,7 @@ public:
 
     /// Non-coroutine context synchronous try to acquire write lock (non-blocking)
     [[nodiscard]] auto try_lock() noexcept -> bool {
-        std::lock_guard lk(mtx_);
+        auto_lock g(lock_);
         if (state_ == 0) {
             state_ = -1;
             return true;
@@ -172,9 +200,9 @@ public:
     /// Release write lock
     void unlock() noexcept {
         std::coroutine_handle<> writer_to_resume;
-        std::vector<std::coroutine_handle<>> readers_to_resume;
+        waiter_node* readers = nullptr;
         {
-            std::lock_guard lock(mtx_);
+            auto_lock g(lock_);
 
             // Prioritize waking next writer (lock handoff)
             if (write_head_) {
@@ -184,16 +212,12 @@ public:
                 if (!write_head_) write_tail_ = nullptr;
                 writer_to_resume = w->handle;
             } else if (read_head_) {
-                // No writer waiting → wake all readers
+                // No writer waiting → wake all readers (steal list, walk outside lock)
                 int count = 0;
-                while (read_head_) {
-                    auto* r = read_head_;
-                    read_head_ = r->next;
-                    readers_to_resume.push_back(r->handle);
-                    ++count;
-                }
-                read_tail_ = nullptr;
+                for (auto* n = read_head_; n; n = n->next) ++count;
                 state_ = count;
+                readers = read_head_;
+                read_head_ = read_tail_ = nullptr;
             } else {
                 state_ = 0;
             }
@@ -202,13 +226,16 @@ public:
         if (writer_to_resume) {
             writer_to_resume.resume();
         } else {
-            for (auto h : readers_to_resume)
-                h.resume();
+            for (auto* n = readers; n;) {
+                auto* nx = n->next;
+                n->handle.resume();
+                n = nx;
+            }
         }
     }
 
 private:
-    std::mutex mtx_;                     // Protect internal state and wait queues
+    mutable spinlock lock_;
     int state_ = 0;                      // 0=free, >0=N readers, -1=writer
 
     waiter_node* write_head_ = nullptr;

@@ -1,6 +1,7 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include <ctime>
 
 export module cnetmod.protocol.http:server;
 
@@ -350,6 +351,39 @@ export auto save_upload(upload_options opts) -> handler_fn {
 // http::server — Advanced HTTP Server
 // =============================================================================
 
+/// Cached HTTP Date header string (re-rendered once per second)
+/// Thread-safe: uses atomic time_t comparison + shared_ptr swap
+class date_cache {
+public:
+    [[nodiscard]] auto get() -> std::string {
+        auto now = std::time(nullptr);
+        auto cached = cached_time_.load(std::memory_order_relaxed);
+        if (now != cached) {
+            // Re-render
+            std::tm gmt{};
+#ifdef CNETMOD_PLATFORM_WINDOWS
+            gmtime_s(&gmt, &now);
+#else
+            gmtime_r(&now, &gmt);
+#endif
+            char buf[30];
+            std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &gmt);
+            auto s = std::string(buf);
+            {
+                std::lock_guard lk(mtx_);
+                cached_str_ = std::move(s);
+            }
+            cached_time_.store(now, std::memory_order_relaxed);
+        }
+        std::lock_guard lk(mtx_);
+        return cached_str_;
+    }
+private:
+    std::atomic<std::time_t> cached_time_{0};
+    mutable std::mutex mtx_;
+    std::string cached_str_;
+};
+
 export class server {
 public:
     /// Single-threaded mode: all connections handled on the same io_context
@@ -383,6 +417,14 @@ public:
     /// Add middleware
     void use(middleware_fn mw) { middlewares_.push_back(std::move(mw)); }
 
+    /// Set max concurrent connections (0 = unlimited)
+    void set_max_connections(std::size_t n) { max_connections_ = n; }
+
+    /// Get current active connection count
+    [[nodiscard]] auto active_connections() const noexcept -> std::size_t {
+        return active_connections_.load(std::memory_order_relaxed);
+    }
+
     /// Run server (accept loop, coroutine)
     auto run() -> task<void> {
         running_ = true;
@@ -392,6 +434,21 @@ public:
                 if (!running_) break;
                 continue;
             }
+
+            // Connection limit check
+            if (max_connections_ > 0 &&
+                active_connections_.load(std::memory_order_relaxed) >= max_connections_) {
+                // Reject: send 503 and close
+                response resp(status::service_unavailable);
+                resp.set_header("Connection", "close");
+                resp.set_body(std::string_view{"503 Service Unavailable: too many connections"});
+                auto data = resp.serialize();
+                (void)co_await async_write(ctx_, *r,
+                    const_buffer{data.data(), data.size()});
+                r->close();
+                continue;
+            }
+
             if (sctx_) {
                 // Multi-core mode: round-robin dispatch to worker io_context
                 auto& worker = sctx_->next_worker_io();
@@ -412,9 +469,23 @@ public:
     }
 
 private:
+    /// RAII guard for active connection counting
+    struct conn_count_guard {
+        std::atomic<std::size_t>& counter;
+        conn_count_guard(std::atomic<std::size_t>& c) noexcept : counter(c) {
+            counter.fetch_add(1, std::memory_order_relaxed);
+        }
+        ~conn_count_guard() {
+            counter.fetch_sub(1, std::memory_order_relaxed);
+        }
+        conn_count_guard(const conn_count_guard&) = delete;
+        auto operator=(const conn_count_guard&) -> conn_count_guard& = delete;
+    };
+
     /// Handle single connection (supports keep-alive)
     /// @param io The io_context bound to this connection (may be worker)
     auto handle_connection(socket client, io_context& io) -> task<void> {
+        conn_count_guard cg(active_connections_);
         bool keep_alive = true;
 
         while (keep_alive) {
@@ -442,6 +513,7 @@ private:
 
             response resp(status::ok);
             resp.set_header("Server", "cnetmod");
+            resp.set_header("Date", date_cache_.get());
 
             route_params rp;
             handler_fn handler;
@@ -506,6 +578,9 @@ private:
     std::string host_;
     std::uint16_t port_ = 0;
     bool running_ = false;
+    std::size_t max_connections_ = 0;   // 0 = unlimited
+    std::atomic<std::size_t> active_connections_{0};
+    date_cache date_cache_;  // Cached Date header (re-rendered once/second)
 };
 
 } // namespace cnetmod::http
