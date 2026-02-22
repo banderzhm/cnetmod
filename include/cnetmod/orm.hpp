@@ -1,10 +1,10 @@
 #pragma once
 
 // =============================================================================
-// CNETMOD_MODEL / CNETMOD_FIELD 宏
+// CNETMOD_MODEL / CNETMOD_FIELD Macros
 // =============================================================================
 //
-// 用法 (在 import cnetmod.protocol.mysql; 之后):
+// Usage (after import cnetmod.protocol.mysql;):
 //
 //   #include <cnetmod/orm.hpp>
 //
@@ -20,22 +20,22 @@
 //       CNETMOD_FIELD(email, "email", varchar, NULLABLE)
 //   )
 
-// 标志别名（供用户使用）
+// Flag aliases (for user convenience)
 #define PK        ::cnetmod::mysql::orm::col_flag::primary_key
 #define AUTO_INC  ::cnetmod::mysql::orm::col_flag::auto_increment
 #define NULLABLE  ::cnetmod::mysql::orm::col_flag::nullable
 
-// ID 策略复合标志别名
-// UUID_PK   — 主键 + uuid 策略 (C++ 类型用 orm::uuid, DDL 生成 CHAR(36))
-// SNOWFLAKE_PK — 主键 + 雪花策略 (C++ 类型用 int64_t, DDL 生成 BIGINT)
+// ID strategy composite flag aliases
+// UUID_PK   — Primary key + UUID strategy (C++ type uses orm::uuid, DDL generates CHAR(36))
+// SNOWFLAKE_PK — Primary key + Snowflake strategy (C++ type uses int64_t, DDL generates BIGINT)
 //
-// 用法:
+// Usage:
 //   CNETMOD_FIELD(id, "id", char_,  UUID_PK)
 //   CNETMOD_FIELD(id, "id", bigint, SNOWFLAKE_PK)
 
-// 内部使用: 复合 flags 携带 strategy tag
-// UUID_PK 展开为 CNETMOD_FIELD_5(member, col, type, PK, id_strategy::uuid)
-// 但为简化用户使用，设计为 4 参数形式，通过宏展开 strategy
+// Internal use: composite flags carrying strategy tag
+// UUID_PK expands to CNETMOD_FIELD_5(member, col, type, PK, id_strategy::uuid)
+// But designed as 4-parameter form for user simplicity, strategy expanded via macro
 #define UUID_PK_FLAGS      ::cnetmod::mysql::orm::col_flag::primary_key
 #define UUID_PK_STRATEGY   ::cnetmod::mysql::orm::id_strategy::uuid
 #define SNOWFLAKE_PK_FLAGS ::cnetmod::mysql::orm::col_flag::primary_key
@@ -80,14 +80,14 @@
         } \
     }
 
-// 简化: UUID_PK / SNOWFLAKE_PK 用作 CNETMOD_FIELD 第 4 参数
-// 实际展开为 CNETMOD_FIELD_5，但对用户透明
+// Simplified: UUID_PK / SNOWFLAKE_PK used as 4th parameter of CNETMOD_FIELD
+// Actually expands to CNETMOD_FIELD_5, but transparent to users
 #define CNETMOD_FIELD_UUID_PK(M, COL, CT) \
     CNETMOD_FIELD_5(M, COL, CT, UUID_PK_FLAGS, UUID_PK_STRATEGY)
 #define CNETMOD_FIELD_SNOWFLAKE_PK(M, COL, CT) \
     CNETMOD_FIELD_5(M, COL, CT, SNOWFLAKE_PK_FLAGS, SNOWFLAKE_PK_STRATEGY)
 
-// 选择 3 / 4 / 5 参数版本
+// Select 3 / 4 / 5 parameter version
 #define CNETMOD_FIELD_SELECT(_1, _2, _3, _4, _5, NAME, ...) NAME
 #define CNETMOD_FIELD(...) \
     CNETMOD_FIELD_SELECT(__VA_ARGS__, CNETMOD_FIELD_5, CNETMOD_FIELD_4, CNETMOD_FIELD_3)(__VA_ARGS__)

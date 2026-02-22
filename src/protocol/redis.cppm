@@ -7,3 +7,4 @@ export import :types;
 export import :request;
 export import :parser;
 export import :client;
+export import :pool;

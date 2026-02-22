@@ -36,7 +36,7 @@ English | [简体中文](README_zh.md)
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, ORM (CRUD / migration / query builder)
-- **Redis**: Async client with RESP protocol
+- **Redis**: Async client with RESP protocol, connection pool
 - **OpenAI**: Async API client (chat completions, etc.)
 
 ### Middleware (HTTP)

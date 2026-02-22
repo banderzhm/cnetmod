@@ -36,7 +36,7 @@
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、ORM（CRUD / 迁移 / 查询构建器）
-- **Redis**: 异步客户端，支持 RESP 协议
+- **Redis**: 异步客户端，支持 RESP 协议、连接池
 - **OpenAI**: 异步 API 客户端（聊天补全等）
 
 ### 中间件（HTTP）
