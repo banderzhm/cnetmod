@@ -32,7 +32,7 @@ English | [简体中文](README_zh.md)
 - **Serial port**: Cross-platform async serial I/O
 
 ### Protocols
-- **HTTP/1.1**: Full server with router, middleware pipeline, chunked transfer, multipart upload
+- **HTTP/1.1 & HTTP/2**: Full server with router, middleware pipeline, chunked transfer, multipart upload; HTTP/2 via TLS + ALPN negotiation with multiplexed streams
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, ORM (CRUD / migration / query builder)
@@ -252,7 +252,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id auto-generated
 ```
 
-See `examples/` for complete demos including `http_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `multicore_http`, `ssl_echo_server`, and more.
+See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `multicore_http`, `ssl_echo_server`, and more.
 
 ## Architecture
 
@@ -265,7 +265,7 @@ cnetmod.io            — io_context + platform backends (iocp, io_uring, epoll,
 cnetmod.executor      — async_op, server_context, scheduler, stdexec bridge
 cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP async I/O
-cnetmod.protocol.http — HTTP/1.1 server, router, middleware pipeline
+cnetmod.protocol.http — HTTP/1.1 + HTTP/2 server, router, middleware pipeline, ALPN negotiation
 cnetmod.protocol.websocket — WebSocket server
 cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
 cnetmod.protocol.mysql — MySQL async client + ORM
@@ -325,7 +325,7 @@ Ensure the module that exports the needed symbol is explicitly imported. Unlike 
 
 ## Project Status
 
-cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of MQTT, MySQL, HTTP/WebSocket, and more, all built with zero-overhead async/await.
+cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1 & HTTP/2, MQTT, MySQL, WebSocket, and more, all built with zero-overhead async/await.
 
 The library demonstrates that C++23 modules are ready for real-world use, with full cross-platform support on Linux, macOS, and Windows.
 

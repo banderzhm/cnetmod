@@ -61,12 +61,16 @@ export constexpr auto string_to_method(std::string_view s) noexcept
 export enum class http_version {
     http_1_0,
     http_1_1,
+    http_2,     // HTTP/2 (RFC 9113)
+    http_3,     // HTTP/3 (RFC 9114) — reserved for future
 };
 
 export constexpr auto version_to_string(http_version v) noexcept -> std::string_view {
     switch (v) {
         case http_version::http_1_0: return "HTTP/1.0";
         case http_version::http_1_1: return "HTTP/1.1";
+        case http_version::http_2:   return "HTTP/2";
+        case http_version::http_3:   return "HTTP/3";
         default:                     return "HTTP/1.1";
     }
 }
@@ -76,6 +80,8 @@ export constexpr auto string_to_version(std::string_view s) noexcept
 {
     if (s == "HTTP/1.0") return http_version::http_1_0;
     if (s == "HTTP/1.1") return http_version::http_1_1;
+    if (s == "HTTP/2" || s == "h2") return http_version::http_2;
+    if (s == "HTTP/3" || s == "h3") return http_version::http_3;
     return std::nullopt;
 }
 

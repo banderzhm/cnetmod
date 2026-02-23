@@ -41,47 +41,58 @@ export struct route_params {
 
 export class request_context {
 public:
+    /// HTTP/1.1 constructor (from request_parser)
     request_context(io_context& ctx, socket& sock,
                     const request_parser& parser,
                     response& resp, route_params params)
-        : ctx_(ctx), sock_(sock), parser_(parser)
-        , resp_(resp), params_(std::move(params))
+        : ctx_(ctx), sock_(sock), resp_(resp), params_(std::move(params))
+        , headers_ptr_(&parser.headers())
+        , method_(parser.method())
+        , body_(parser.body())
     {
-        // Split path and query_string
-        auto uri = parser_.uri();
-        auto qpos = uri.find('?');
-        if (qpos != std::string_view::npos) {
-            path_ = std::string(uri.substr(0, qpos));
-            query_ = std::string(uri.substr(qpos + 1));
-        } else {
-            path_ = std::string(uri);
-        }
+        init_path_query(parser.uri());
+    }
+
+    /// Protocol-neutral constructor (for HTTP/2, future HTTP/3)
+    /// All string_view / pointer parameters must outlive request_context
+    request_context(io_context& ctx, socket& sock,
+                    std::string_view method, std::string_view uri,
+                    const header_map& headers, std::string_view body,
+                    response& resp, route_params params)
+        : ctx_(ctx), sock_(sock), resp_(resp), params_(std::move(params))
+        , headers_ptr_(&headers)
+        , method_(method)
+        , body_(body)
+    {
+        init_path_query(uri);
     }
 
     // --- Request Access ---
 
     [[nodiscard]] auto method() const noexcept -> std::string_view {
-        return parser_.method();
+        return method_;
     }
 
     [[nodiscard]] auto method_enum() const noexcept -> std::optional<http_method> {
-        return parser_.method_enum();
+        return string_to_method(method_);
     }
 
     [[nodiscard]] auto path() const noexcept -> std::string_view { return path_; }
     [[nodiscard]] auto query_string() const noexcept -> std::string_view { return query_; }
-    [[nodiscard]] auto uri() const noexcept -> std::string_view { return parser_.uri(); }
+    [[nodiscard]] auto uri() const noexcept -> std::string_view { return uri_; }
 
     [[nodiscard]] auto headers() const noexcept -> const header_map& {
-        return parser_.headers();
+        return *headers_ptr_;
     }
 
     [[nodiscard]] auto body() const noexcept -> std::string_view {
-        return parser_.body();
+        return body_;
     }
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view {
-        return parser_.get_header(key);
+        auto it = headers_ptr_->find(std::string(key));
+        if (it != headers_ptr_->end()) return it->second;
+        return {};
     }
 
     // --- Route Parameters ---
@@ -157,13 +168,27 @@ public:
     [[nodiscard]] auto raw_socket() noexcept -> socket& { return sock_; }
 
 private:
+    void init_path_query(std::string_view uri) {
+        uri_ = std::string(uri);
+        auto qpos = uri.find('?');
+        if (qpos != std::string_view::npos) {
+            path_ = std::string(uri.substr(0, qpos));
+            query_ = std::string(uri.substr(qpos + 1));
+        } else {
+            path_ = std::string(uri);
+        }
+    }
+
     io_context& ctx_;
     socket& sock_;
-    const request_parser& parser_;
     response& resp_;
     route_params params_;
-    std::string path_;
-    std::string query_;
+    const header_map* headers_ptr_;   // Non-owning, points to parser's or stream's headers
+    std::string_view method_;         // Non-owning, stable for request lifetime
+    std::string_view body_;           // Non-owning, stable for request lifetime
+    std::string uri_;                 // Owned (for uri() accessor)
+    std::string path_;                // Owned
+    std::string query_;               // Owned
     std::optional<form_data> form_cache_;
 };
 

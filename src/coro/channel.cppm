@@ -33,8 +33,8 @@ namespace cnetmod {
 
 export template <typename T>
 class channel {
-    static_assert(std::is_nothrow_move_constructible_v<T>,
-        "channel<T> requires T to be nothrow move constructible");
+    static_assert(std::is_move_constructible_v<T>,
+        "channel<T> requires T to be move constructible");
 
     // ---- Aligned slot for ring buffer (no default-construction required) ----
 
@@ -287,6 +287,39 @@ public:
     /// co_await ch.receive() — suspends when empty, returns nullopt if closed and drained
     auto receive() -> recv_awaitable {
         return recv_awaitable{*this};
+    }
+
+    /// Non-blocking try_receive — returns nullopt immediately if no data available
+    auto try_receive() noexcept -> std::optional<T> {
+        std::coroutine_handle<> to_resume;
+        std::optional<T> result;
+        {
+            auto_lock g(lock_);
+
+            // Fast path 1: buffer has data
+            if (!buf_empty()) {
+                result.emplace(buf_pop());
+                // Refill buffer from waiting sender
+                if (send_head_) {
+                    auto* w = static_cast<send_node*>(send_head_);
+                    buf_push(std::move(w->value));
+                    dequeue(send_head_, send_tail_);
+                    w->succeeded = true;
+                    to_resume = w->handle;
+                }
+            }
+            // Fast path 2: buffer empty but sender waiting → direct handoff
+            else if (send_head_) {
+                auto* w = static_cast<send_node*>(send_head_);
+                result.emplace(std::move(w->value));
+                dequeue(send_head_, send_tail_);
+                w->succeeded = true;
+                to_resume = w->handle;
+            }
+            // No data available — return immediately
+        }
+        if (to_resume) to_resume.resume();
+        return result;
     }
 
     /// Close channel — wakes all waiting senders/receivers, zero heap allocation

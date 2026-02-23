@@ -35,6 +35,7 @@ set(EXAMPLE_TARGETS
     blocking_bridge_demo
         mqtt_demo
     tfb_benchmark
+        http2_demo
 )
 
 # SSL examples (only built when OpenSSL is available)

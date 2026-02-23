@@ -228,6 +228,37 @@ set(NLOHMANN_JSON_MODULE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/j
 
 # Logging module uses pure C++23 std::format implementation, no external dependencies
 
+# nghttp2: HTTP/2 C library (build core library only)
+option(CNETMOD_ENABLE_HTTP2 "Enable HTTP/2 support (requires nghttp2)" ON)
+if(CNETMOD_ENABLE_HTTP2)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/nghttp2/CMakeLists.txt")
+        # Configure nghttp2 build options before add_subdirectory
+        set(ENABLE_LIB_ONLY ON CACHE BOOL "Build libnghttp2 only" FORCE)
+        set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
+        set(ENABLE_DOC OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTING_SAVED ${BUILD_TESTING})
+        set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        set(ENABLE_FAILMALLOC OFF CACHE BOOL "" FORCE)
+
+        add_subdirectory(3rdparty/nghttp2 EXCLUDE_FROM_ALL)
+
+        # Restore parent project settings
+        set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
+        set(BUILD_TESTING ${BUILD_TESTING_SAVED} CACHE BOOL "" FORCE)
+
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        message(STATUS "HTTP/2: Enabled (nghttp2)")
+    else()
+        set(CNETMOD_HAS_NGHTTP2 OFF)
+        message(STATUS "HTTP/2: nghttp2 not found in 3rdparty/, HTTP/2 disabled")
+    endif()
+else()
+    set(CNETMOD_HAS_NGHTTP2 OFF)
+    message(STATUS "HTTP/2: Disabled by user")
+endif()
+
 # ==============================================================================
 # SSL/TLS Support (Optional)
 # ==============================================================================
@@ -309,6 +340,10 @@ endif()
 if(NOT CNETMOD_HAS_SSL)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "core/ssl")
 endif()
+if(NOT CNETMOD_HAS_NGHTTP2)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/h2_")
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/stream_io")
+endif()
 
 # ==============================================================================
 # Core Library Target: cnetmod_core
@@ -334,6 +369,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
+    $<$<BOOL:${CNETMOD_HAS_NGHTTP2}>:CNETMOD_HAS_NGHTTP2>
 )
 
 # Platform-specific linking
@@ -351,6 +387,11 @@ endif()
 # zlib linking
 if(CNETMOD_HAS_ZLIB)
     target_link_libraries(cnetmod_core PUBLIC ZLIB::ZLIB)
+endif()
+
+# nghttp2 linking
+if(CNETMOD_HAS_NGHTTP2)
+    target_link_libraries(cnetmod_core PUBLIC nghttp2_static)
 endif()
 
 # ==============================================================================

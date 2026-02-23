@@ -99,11 +99,23 @@ public:
     auto operator=(const ssl_context&) -> ssl_context& = delete;
 
     // Movable
-    ssl_context(ssl_context&& o) noexcept : ctx_(std::exchange(o.ctx_, nullptr)) {}
+    ssl_context(ssl_context&& o) noexcept
+        : ctx_(std::exchange(o.ctx_, nullptr))
+        , alpn_wire_(std::move(o.alpn_wire_))
+    {
+        // Re-register ALPN callback with new alpn_wire_ address
+        if (ctx_ && !alpn_wire_.empty()) {
+            SSL_CTX_set_alpn_select_cb(ctx_, alpn_select_cb, &alpn_wire_);
+        }
+    }
     auto operator=(ssl_context&& o) noexcept -> ssl_context& {
         if (this != &o) {
             if (ctx_) SSL_CTX_free(ctx_);
             ctx_ = std::exchange(o.ctx_, nullptr);
+            alpn_wire_ = std::move(o.alpn_wire_);
+            if (ctx_ && !alpn_wire_.empty()) {
+                SSL_CTX_set_alpn_select_cb(ctx_, alpn_select_cb, &alpn_wire_);
+            }
         }
         return *this;
     }
@@ -173,12 +185,66 @@ public:
             nullptr);
     }
 
+    // =========================================================================
+    // ALPN (Application-Layer Protocol Negotiation)
+    // =========================================================================
+
+    /// Configure server-side ALPN protocol selection
+    /// @param protos Protocols in server preference order (e.g., {"h2", "http/1.1"})
+    void configure_alpn_server(std::initializer_list<std::string_view> protos) {
+        alpn_wire_.clear();
+        for (auto p : protos) {
+            alpn_wire_.push_back(static_cast<unsigned char>(p.size()));
+            alpn_wire_.insert(alpn_wire_.end(),
+                reinterpret_cast<const unsigned char*>(p.data()),
+                reinterpret_cast<const unsigned char*>(p.data() + p.size()));
+        }
+        SSL_CTX_set_alpn_select_cb(ctx_, alpn_select_cb, &alpn_wire_);
+    }
+
+    /// Configure client-side ALPN protocol offers
+    /// @param protos Protocols the client supports (e.g., {"h2", "http/1.1"})
+    void configure_alpn_client(std::initializer_list<std::string_view> protos) {
+        std::vector<unsigned char> wire;
+        for (auto p : protos) {
+            wire.push_back(static_cast<unsigned char>(p.size()));
+            wire.insert(wire.end(),
+                reinterpret_cast<const unsigned char*>(p.data()),
+                reinterpret_cast<const unsigned char*>(p.data() + p.size()));
+        }
+        SSL_CTX_set_alpn_protos(ctx_, wire.data(),
+            static_cast<unsigned int>(wire.size()));
+    }
+
     /// Get native SSL_CTX pointer
     [[nodiscard]] auto native() const noexcept -> SSL_CTX* { return ctx_; }
 
 private:
     explicit ssl_context(SSL_CTX* ctx) noexcept : ctx_(ctx) {}
+
+    /// ALPN server-side selection callback
+    static auto alpn_select_cb(
+        SSL*, const unsigned char** out, unsigned char* outlen,
+        const unsigned char* in, unsigned int inlen,
+        void* arg) -> int
+    {
+        auto* server_protos = static_cast<std::vector<unsigned char>*>(arg);
+        unsigned char* selected = nullptr;
+        unsigned char selected_len = 0;
+        if (SSL_select_next_proto(
+                &selected, &selected_len,
+                server_protos->data(),
+                static_cast<unsigned int>(server_protos->size()),
+                in, inlen) != OPENSSL_NPN_NEGOTIATED) {
+            return SSL_TLSEXT_ERR_NOACK;
+        }
+        *out = selected;
+        *outlen = selected_len;
+        return SSL_TLSEXT_ERR_OK;
+    }
+
     SSL_CTX* ctx_ = nullptr;
+    std::vector<unsigned char> alpn_wire_;  // Server-side ALPN wire format
 };
 
 // =============================================================================
@@ -381,6 +447,17 @@ public:
             }
         }
         co_return {};
+    }
+
+    /// Get ALPN-negotiated protocol after handshake
+    [[nodiscard]] auto get_alpn_selected() const noexcept -> std::string_view {
+        const unsigned char* data = nullptr;
+        unsigned int len = 0;
+        SSL_get0_alpn_selected(ssl_, &data, &len);
+        if (data && len > 0) {
+            return {reinterpret_cast<const char*>(data), len};
+        }
+        return {};
     }
 
     /// Get native SSL pointer

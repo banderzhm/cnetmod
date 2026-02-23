@@ -32,7 +32,7 @@
 - **串口**: 跨平台异步串口 I/O
 
 ### 协议支持
-- **HTTP/1.1**: 完整服务器，包含路由器、中间件管道、分块传输、多部分上传
+- **HTTP/1.1 & HTTP/2**: 完整服务器，包含路由器、中间件管道、分块传输、多部分上传；HTTP/2 通过 TLS + ALPN 协商，支持多路复用流
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、ORM（CRUD / 迁移 / 查询构建器）
@@ -252,7 +252,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id 自动生成
 ```
 
-查看 `examples/` 获取完整示例，包括 `http_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`multicore_http`、`ssl_echo_server` 等。
+查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`multicore_http`、`ssl_echo_server` 等。
 
 ## 架构
 
@@ -265,7 +265,7 @@ cnetmod.io            — io_context + 平台后端（iocp、io_uring、epoll、
 cnetmod.executor      — async_op、server_context、scheduler、stdexec 桥接
 cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP 异步 I/O
-cnetmod.protocol.http — HTTP/1.1 服务器、路由器、中间件管道
+cnetmod.protocol.http — HTTP/1.1 + HTTP/2 服务器、路由器、中间件管道、ALPN 协商
 cnetmod.protocol.websocket — WebSocket 服务器
 cnetmod.protocol.mqtt — MQTT broker + 客户端（v3.1.1 / v5.0）
 cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
@@ -325,7 +325,7 @@ cnetmod.middleware.*  — HTTP 中间件组件
 
 ## 项目状态
 
-cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 MQTT、MySQL、HTTP/WebSocket 等协议的生产级实现，全部基于零开销的 async/await 构建。
+cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1 & HTTP/2、MQTT、MySQL、WebSocket 等协议的生产级实现，全部基于零开销的 async/await 构建。
 
 该库证明了 C++23 模块已经可以用于实际项目，并在 Linux、macOS 和 Windows 上提供完整的跨平台支持。
 

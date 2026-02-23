@@ -23,6 +23,16 @@ import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.core.ssl;
+#endif
+
+#ifdef CNETMOD_HAS_NGHTTP2
+import :stream_io;
+import :h2_types;
+import :h2_session;
+#endif
+
 namespace cnetmod::http {
 
 // =============================================================================
@@ -394,6 +404,14 @@ public:
     explicit server(server_context& sctx)
         : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
+#ifdef CNETMOD_HAS_SSL
+    /// Configure TLS for this server (enables HTTPS + HTTP/2 via ALPN)
+    /// The ssl_context must outlive the server.
+    void set_ssl_context(ssl_context& ssl_ctx) {
+        ssl_ctx_ = &ssl_ctx;
+    }
+#endif
+
     /// Listen on specified address and port
     auto listen(std::string_view host, std::uint16_t port)
         -> std::expected<void, std::error_code>
@@ -482,33 +500,115 @@ private:
         auto operator=(const conn_count_guard&) -> conn_count_guard& = delete;
     };
 
-    /// Handle single connection (supports keep-alive)
-    /// @param io The io_context bound to this connection (may be worker)
+    // =========================================================================
+    // Connection Entry Point — Protocol Detection + Dispatch
+    // =========================================================================
+
+    /// Handle single connection: TLS handshake (if configured), protocol
+    /// detection (ALPN / client preface), dispatch to HTTP/2 or HTTP/1.1.
     auto handle_connection(socket client, io_context& io) -> task<void> {
         conn_count_guard cg(active_connections_);
+
+#ifdef CNETMOD_HAS_SSL
+        // --- TLS path ---
+        if (ssl_ctx_) {
+            ssl_stream ssl(*ssl_ctx_, io, client);
+            ssl.set_accept_state();
+            auto hr = co_await ssl.async_handshake();
+            if (!hr) { client.close(); co_return; }
+
+#ifdef CNETMOD_HAS_NGHTTP2
+            // Check ALPN-negotiated protocol
+            auto alpn = ssl.get_alpn_selected();
+            if (alpn == "h2") {
+                // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
+                (void)client.apply_options({.non_blocking = false, .no_delay = true});
+
+                stream_io sio(io, client, ssl);
+                http2_session h2(sio, router_, middlewares_, {},
+                    [this]() { return date_cache_.get(); });
+                co_await h2.run();
+                client.close();
+                co_return;
+            }
+#endif
+            // HTTP/1.1 over TLS
+            co_await handle_h1_tls(client, io, ssl);
+            client.close();
+            co_return;
+        }
+#endif
+
+        // --- Cleartext path ---
+#ifdef CNETMOD_HAS_NGHTTP2
+        // Read initial data and check for HTTP/2 client connection preface
+        std::array<std::byte, 8192> peek_buf{};
+        auto peek_rd = co_await async_read(io, client,
+            mutable_buffer{peek_buf.data(), peek_buf.size()});
+        if (!peek_rd || *peek_rd == 0) { client.close(); co_return; }
+
+        if (is_h2_client_preface(peek_buf.data(), *peek_rd)) {
+            // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
+            (void)client.apply_options({.non_blocking = false, .no_delay = true});
+
+            // HTTP/2 cleartext (h2c via direct preface)
+            stream_io sio(io, client);
+            http2_session h2(sio, router_, middlewares_, {},
+                [this]() { return date_cache_.get(); });
+            co_await h2.run(peek_buf.data(), *peek_rd);
+            client.close();
+            co_return;
+        }
+
+        // HTTP/1.1 cleartext — feed already-read bytes to parser
+        co_await handle_h1_clear(client, io,
+            reinterpret_cast<const char*>(peek_buf.data()), *peek_rd);
+#else
+        co_await handle_h1_clear(client, io);
+#endif
+        client.close();
+    }
+
+    // =========================================================================
+    // HTTP/1.1 Keep-Alive Loop (cleartext)
+    // =========================================================================
+
+    /// @param initial_data  Pre-read data to seed parser (from h2 preface detection)
+    /// @param initial_len   Length of initial_data
+    auto handle_h1_clear(socket& client, io_context& io,
+                         const char* initial_data = nullptr,
+                         std::size_t initial_len = 0) -> task<void>
+    {
         bool keep_alive = true;
 
         while (keep_alive) {
-            // Parse request
             request_parser parser;
             std::array<std::byte, 8192> buf{};
 
+            // Feed pre-read data on first iteration
+            if (initial_data && initial_len > 0) {
+                auto consumed = parser.consume(initial_data, initial_len);
+                if (!consumed) co_return;
+                initial_data = nullptr;
+                initial_len = 0;
+            }
+
             while (!parser.ready()) {
-                auto rd = co_await async_read(io, client, mutable_buffer{buf.data(), buf.size()});
-                if (!rd || *rd == 0) { client.close(); co_return; }
+                auto rd = co_await async_read(io, client,
+                    mutable_buffer{buf.data(), buf.size()});
+                if (!rd || *rd == 0) co_return;
 
                 auto consumed = parser.consume(
                     reinterpret_cast<const char*>(buf.data()), *rd);
-                if (!consumed) { client.close(); co_return; }
+                if (!consumed) co_return;
             }
 
-            // Extract path (remove query string)
+            // Route matching
             auto uri = parser.uri();
             auto qpos = uri.find('?');
             auto path = (qpos != std::string_view::npos)
                 ? uri.substr(0, qpos) : uri;
 
-            // Route matching
             auto mr = router_.match(parser.method(), path);
 
             response resp(status::ok);
@@ -522,27 +622,21 @@ private:
                 handler = std::move(mr->handler);
                 rp = std::move(mr->params);
             } else {
-                // 404 — Non-coroutine lambda, delegates to detail::not_found_handler
                 handler = [](request_context& ctx) -> task<void> {
                     return detail::not_found_handler(ctx);
                 };
             }
 
             request_context rctx(io, client, parser, resp, std::move(rp));
-
-            // Execute middleware chain + handler
             co_await execute_chain(rctx, handler);
 
-            // Check if already streamed (X-Streamed marker)
             if (resp.get_header("X-Streamed") != "1") {
-                // Normal response sending
                 auto data = resp.serialize();
                 auto wr = co_await async_write(io, client,
                     const_buffer{data.data(), data.size()});
-                if (!wr) { client.close(); co_return; }
+                if (!wr) co_return;
             }
 
-            // Check keep-alive
             auto conn_hdr = parser.get_header("Connection");
             if (parser.version() == http_version::http_1_1) {
                 keep_alive = (conn_hdr != "close");
@@ -550,9 +644,74 @@ private:
                 keep_alive = false;
             }
         }
-
-        client.close();
     }
+
+#ifdef CNETMOD_HAS_SSL
+    // =========================================================================
+    // HTTP/1.1 Keep-Alive Loop (TLS)
+    // =========================================================================
+
+    auto handle_h1_tls(socket& client, io_context& io,
+                       ssl_stream& ssl) -> task<void>
+    {
+        bool keep_alive = true;
+
+        while (keep_alive) {
+            request_parser parser;
+            std::array<std::byte, 8192> buf{};
+
+            while (!parser.ready()) {
+                auto rd = co_await ssl.async_read(
+                    mutable_buffer{buf.data(), buf.size()});
+                if (!rd || *rd == 0) co_return;
+
+                auto consumed = parser.consume(
+                    reinterpret_cast<const char*>(buf.data()), *rd);
+                if (!consumed) co_return;
+            }
+
+            auto uri = parser.uri();
+            auto qpos = uri.find('?');
+            auto path = (qpos != std::string_view::npos)
+                ? uri.substr(0, qpos) : uri;
+
+            auto mr = router_.match(parser.method(), path);
+
+            response resp(status::ok);
+            resp.set_header("Server", "cnetmod");
+            resp.set_header("Date", date_cache_.get());
+
+            route_params rp;
+            handler_fn handler;
+
+            if (mr) {
+                handler = std::move(mr->handler);
+                rp = std::move(mr->params);
+            } else {
+                handler = [](request_context& ctx) -> task<void> {
+                    return detail::not_found_handler(ctx);
+                };
+            }
+
+            request_context rctx(io, client, parser, resp, std::move(rp));
+            co_await execute_chain(rctx, handler);
+
+            if (resp.get_header("X-Streamed") != "1") {
+                auto data = resp.serialize();
+                auto wr = co_await ssl.async_write(
+                    const_buffer{data.data(), data.size()});
+                if (!wr) co_return;
+            }
+
+            auto conn_hdr = parser.get_header("Connection");
+            if (parser.version() == http_version::http_1_1) {
+                keep_alive = (conn_hdr != "close");
+            } else {
+                keep_alive = false;
+            }
+        }
+    }
+#endif // CNETMOD_HAS_SSL
 
     /// Execute middleware chain, finally call handler
     /// Uses index-based recursive coroutine to avoid MSVC ICE with generic lambda + coroutine + std::function
@@ -581,6 +740,9 @@ private:
     std::size_t max_connections_ = 0;   // 0 = unlimited
     std::atomic<std::size_t> active_connections_{0};
     date_cache date_cache_;  // Cached Date header (re-rendered once/second)
+#ifdef CNETMOD_HAS_SSL
+    ssl_context* ssl_ctx_ = nullptr;   // Non-owning, for TLS support
+#endif
 };
 
 } // namespace cnetmod::http
