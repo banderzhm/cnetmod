@@ -35,7 +35,7 @@ English | [简体中文](README_zh.md)
 - **HTTP/1.1 & HTTP/2**: Full server with router, middleware pipeline, chunked transfer, multipart upload; HTTP/2 via TLS + ALPN negotiation with multiplexed streams
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
-- **MySQL**: Async client with prepared statements, connection pool, pipeline, ORM (CRUD / migration / query builder)
+- **MySQL**: Async client with prepared statements, connection pool, pipeline, ORM (CRUD / migration / query builder / XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool
 - **OpenAI**: Async API client (chat completions, etc.)
 
@@ -174,22 +174,30 @@ task<void> producer(channel<int>& ch) {
 }
 ```
 
-**MySQL ORM** (model mapping + CRUD + migration):
+**MySQL ORM** (model mapping + CRUD + migration + advanced features):
 ```cpp
 import cnetmod.protocol.mysql;
 #include <cnetmod/orm.hpp>
 
-// Define model
+// Define model with advanced features
 struct User {
-    std::int64_t                id    = 0;
+    std::int64_t                id         = 0;
     std::string                 name;
     std::optional<std::string>  email;
+    std::int32_t                version    = 0;  // Optimistic lock
+    std::int32_t                deleted    = 0;  // Soft delete
+    std::time_t                 created_at = 0;  // Auto-fill on insert
+    std::time_t                 updated_at = 0;  // Auto-fill on insert/update
 };
 
 CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id,    "id",    bigint,  PK | AUTO_INC),
-    CNETMOD_FIELD(name,  "name",  varchar),
-    CNETMOD_FIELD(email, "email", varchar, NULLABLE)
+    CNETMOD_FIELD(id,         "id",         bigint,    PK | AUTO_INC),
+    CNETMOD_FIELD(name,       "name",       varchar),
+    CNETMOD_FIELD(email,      "email",      varchar,   NULLABLE),
+    CNETMOD_FIELD(version,    "version",    int_,      VERSION),
+    CNETMOD_FIELD(deleted,    "deleted",    tinyint,   LOGIC_DELETE),
+    CNETMOD_FIELD(created_at, "created_at", timestamp, FILL_INSERT),
+    CNETMOD_FIELD(updated_at, "updated_at", timestamp, FILL_INSERT_UPDATE)
 )
 
 task<void> demo(mysql::client& cli) {
@@ -223,6 +231,41 @@ task<void> demo(mysql::client& cli) {
     co_await db.remove_by_id<User>(param_value::from_int(1));
     co_await db.remove(orm::delete_of<User>()
         .where("`name` = {}", {param_value::from_string("test")}));
+}
+
+// BaseMapper — Generic CRUD interface
+task<void> base_mapper_demo(mysql::client& cli) {
+    base_mapper<User> mapper(cli);
+    
+    // QueryWrapper — Fluent query builder
+    query_wrapper<User> wrapper;
+    wrapper.eq("status", 1)
+           .like("name", "%Alice%")
+           .gt("age", 18)
+           .order_by_desc("created_at")
+           .limit(10);
+    
+    auto users = co_await mapper.select_list(wrapper);
+    
+    // Pagination
+    auto page = co_await mapper.select_page(1, 10, wrapper);
+    std::println("Page {}/{}, Total: {}", 
+        page.current_page, page.total_pages, page.total);
+}
+
+// XML Mapper — MyBatis-style dynamic SQL
+task<void> xml_mapper_demo(mysql::client& cli) {
+    mapper_registry registry;
+    registry.load_file("mappers/user_mapper.xml");
+    
+    mapper_session session(cli, registry);
+    
+    // Execute query with dynamic conditions
+    auto result = co_await session.query<User>("UserMapper.findByCondition",
+        param_context::from_map({
+            {"name", param_value::from_string("Alice")},
+            {"status", param_value::from_int(1)}
+        }));
 }
 ```
 
@@ -291,19 +334,15 @@ When building with MSVC in Debug mode, the compiler may emit:
 
 > **fatal error C1605**: 编译器限制: 对象文件大小不能超过 4 GB
 
-This happens because C++23 modules with heavy template instantiation (especially `std` module + `std::format` + protocol codecs) produce extremely large `.obj` / `.ifc` files in Debug builds. MSVC's COFF object format has a hard 4 GB limit.
+This is a **known MSVC bug** with C++23 modules. Microsoft has acknowledged this issue in their Developer Community: [C1605: C++23 Modules Exceed 4 GB Object File Limit](https://developercommunity.visualstudio.com/t/C1605:-C23-Modules-Exceed-4-GB-Object-/11048477).
 
-**Workarounds already applied in CMakeLists.txt:**
-- `/bigobj` — raises section count limit from 65,536 to 4 billion
-- `/Ob1` — reduces inline expansion (less code duplication in each TU)
-- `/GL-` — disables whole-program optimization (prevents merged object inflation)
-- `/Z7` — uses C7-compatible debug format instead of program database (`/Zi`). This embeds debug symbols in `.obj` files rather than a single huge `.pdb`, bypassing the 4 GB limit.
+The problem occurs because the compiler incorrectly generates oversized object files when processing C++23 modules with heavy template instantiation (especially `std` module + `std::format` + protocol codecs). MSVC's COFF object format has a hard 4 GB limit.
 
-**If you still hit C1605:**
-1. **Split large modules** — break monolithic `.cppm` files into smaller partitions. The protocol modules (`mqtt`, `http`, `mysql`) already use partition interfaces (`:types`, `:codec`, `:parser`, etc.) for this reason.
-2. **Use Release/RelWithDebInfo** — optimized builds produce significantly smaller object files.
-3. **Reduce template instantiation** — avoid `std::format` with many distinct argument types in a single TU.
-4. **Build with clang on WSL** — clang + libc++ uses ELF objects which have no 4 GB limit. This is the recommended development workflow for the full project.
+**Recommended solutions:**
+1. **Use Release/RelWithDebInfo builds** — optimized builds produce significantly smaller object files and avoid this compiler bug.
+2. **Build with clang on WSL/Linux** — clang + libc++ uses ELF objects which have no 4 GB limit. This is the recommended development workflow.
+
+**Note**: This is a compiler bug, not a limitation of C++23 modules or this library. We are waiting for Microsoft to fix this issue. See [MSVC_C1605_Issue.md](MSVC_C1605_Issue.md) for detailed analysis.
 
 ### clang module dependency visibility
 

@@ -701,7 +701,7 @@ export struct connect_options {
     std::string   charset  = "utf8mb4";
 
     // TLS configuration
-    ssl_mode    ssl          = ssl_mode::enable;  // disable / enable / require
+    ssl_mode    ssl          = ssl_mode::disable;  // disable / enable / require
     bool        tls_verify   = true;
     std::string tls_ca_file;
     std::string tls_cert_file;

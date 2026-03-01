@@ -1,3 +1,15 @@
+[submodule "3rdparty/json"]
+	path = 3rdparty/json
+	url = https://github.com/nlohmann/json.git
+[submodule "3rdparty/jwt-cpp"]
+	path = 3rdparty/jwt-cpp
+	url = https://github.com/Thalhammer/jwt-cpp.git
 [submodule "3rdparty/nghttp2"]
 	path = 3rdparty/nghttp2
 	url = https://github.com/nghttp2/nghttp2.git
+[submodule "3rdparty/pugixml"]
+	path = 3rdparty/pugixml
+	url = https://github.com/zeux/pugixml.git
+[submodule "3rdparty/spdlog"]
+	path = 3rdparty/spdlog
+	url = https://github.com/gabime/spdlog.git

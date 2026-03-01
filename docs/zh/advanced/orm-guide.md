@@ -7,10 +7,21 @@ cnetmod 的 MySQL 对象关系映射（ORM）系统综合指南。
 cnetmod ORM 提供：
 - **模型定义**：将 C++ 结构映射到数据库表
 - **CRUD 操作**：创建、读取、更新、删除
-- **查询构建器**：类型安全的查询构造
+- **查询构建器**：类型安全的查询构造（QueryWrapper）
+- **XML 映射器**：MyBatis 风格的 XML 配置与动态 SQL
+- **BaseMapper**：通用 CRUD 操作接口
 - **自动迁移**：自动模式同步
 - **ID 生成**：自动递增、UUID、Snowflake
-- **关系**：一对多、多对多（计划中）
+- **分页**：基于页面的查询结果
+- **逻辑删除**：软删除支持
+- **自动填充**：自动时间戳字段
+- **乐观锁**：基于版本的并发控制
+- **多租户**：租户隔离支持
+- **缓存**：查询结果缓存
+- **枚举处理器**：枚举类型支持
+- **类型处理器**：自定义类型转换
+- **性能分析**：SQL 性能监控
+- **代码生成器**：从数据库表生成代码
 
 ## 快速开始
 
@@ -560,6 +571,487 @@ auto results = co_await db.find(
 );
 ```
 
+## XML 映射器（MyBatis 风格）
+
+cnetmod ORM 支持 MyBatis 风格的 XML 映射器，用于复杂的 SQL 查询和动态条件。
+
+### 基础 XML 映射器
+
+创建 `mappers/user_mapper.xml`：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="UserMapper">
+    <!-- 简单 SELECT -->
+    <select id="findById" resultType="User">
+        SELECT * FROM users WHERE id = #{id}
+    </select>
+    
+    <!-- INSERT -->
+    <insert id="insertUser">
+        INSERT INTO users (name, email, status, created_at)
+        VALUES (#{name}, #{email}, #{status}, #{created_at})
+    </insert>
+    
+    <!-- UPDATE -->
+    <update id="updateUser">
+        UPDATE users SET name = #{name}, email = #{email}
+        WHERE id = #{id}
+    </update>
+    
+    <!-- DELETE -->
+    <delete id="deleteUser">
+        DELETE FROM users WHERE id = #{id}
+    </delete>
+</mapper>
+```
+
+### 使用 XML 映射器
+
+```cpp
+// 加载映射器
+mapper_registry registry;
+registry.load_file("mappers/user_mapper.xml");
+
+// 创建会话
+mapper_session session(cli, registry);
+
+// 查询
+auto result = co_await session.query<User>("UserMapper.findById",
+    param_context::from_map({{"id", param_value::from_int(1)}}));
+
+// 执行（INSERT/UPDATE/DELETE）
+auto exec_result = co_await session.execute("UserMapper.insertUser", user);
+```
+
+### 使用 `<if>` 的动态 SQL
+
+```xml
+<select id="findByCondition" resultType="User">
+    SELECT * FROM users
+    WHERE 1=1
+    <if test="name != null">
+        AND name = #{name}
+    </if>
+    <if test="status != null">
+        AND status = #{status}
+    </if>
+    <if test="email != null">
+        AND email LIKE #{email}
+    </if>
+</select>
+```
+
+### 使用 `<where>` 和 `<trim>` 的动态 SQL
+
+```xml
+<select id="searchUsers" resultType="User">
+    SELECT * FROM users
+    <where>
+        <if test="keyword != null">
+            AND (name LIKE #{keyword} OR email LIKE #{keyword})
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+    </where>
+    <if test="orderBy != null">
+        ORDER BY ${orderBy}
+    </if>
+    <if test="limit != null">
+        LIMIT #{limit}
+    </if>
+</select>
+```
+
+### 使用 `<choose>`、`<when>`、`<otherwise>` 的动态 SQL
+
+```xml
+<select id="findByRole" resultType="User">
+    SELECT * FROM users
+    WHERE 1=1
+    <choose>
+        <when test="role == 'admin'">
+            AND status = 2
+        </when>
+        <when test="role == 'user'">
+            AND status = 1
+        </when>
+        <otherwise>
+            AND status = 0
+        </otherwise>
+    </choose>
+</select>
+```
+
+### 使用 `<foreach>` 的动态 SQL
+
+```xml
+<select id="findByIds" resultType="User">
+    SELECT * FROM users
+    WHERE id IN
+    <foreach collection="ids" item="item" open="(" separator="," close=")">
+        #{item.id}
+    </foreach>
+</select>
+```
+
+使用方法：
+
+```cpp
+param_context ctx = param_context::from_map({});
+std::vector<param_context> id_list;
+for (int id : {1, 2, 3, 4, 5}) {
+    id_list.push_back(param_context::from_map({{"id", param_value::from_int(id)}}));
+}
+ctx.add_collection("ids", std::move(id_list));
+
+auto result = co_await session.query<User>("UserMapper.findByIds", ctx);
+```
+
+### 使用 `<foreach>` 的批量 INSERT
+
+```xml
+<insert id="batchInsert">
+    INSERT INTO users (name, email, status, created_at)
+    VALUES
+    <foreach collection="users" item="user" separator=",">
+        (#{user.name}, #{user.email}, #{user.status}, #{user.created_at})
+    </foreach>
+</insert>
+```
+
+### 使用 CASE WHEN 的批量 UPDATE
+
+```xml
+<update id="batchUpdateStatus">
+    UPDATE users
+    SET status = CASE id
+        <foreach collection="updates" item="item">
+            WHEN #{item.id} THEN #{item.status}
+        </foreach>
+    END,
+    updated_at = #{currentTime}
+    WHERE id IN
+    <foreach collection="updates" item="item" open="(" separator="," close=")">
+        #{item.id}
+    </foreach>
+</update>
+```
+
+### 选择性 UPDATE
+
+```xml
+<update id="updateSelective">
+    UPDATE users
+    <set>
+        <if test="name != null">name = #{name},</if>
+        <if test="email != null">email = #{email},</if>
+        <if test="status != null">status = #{status},</if>
+    </set>
+    WHERE id = #{id}
+</update>
+```
+
+## BaseMapper - 通用 CRUD 接口
+
+BaseMapper 提供通用的 CRUD 操作接口：
+
+```cpp
+base_mapper<User> user_mapper(cli);
+
+// INSERT
+User user{.name = "Alice", .email = "alice@example.com"};
+auto result = co_await user_mapper.insert(user);
+
+// 根据 ID 查询
+auto user_opt = co_await user_mapper.select_by_id(1);
+
+// 查询所有
+auto users = co_await user_mapper.select_list();
+
+// 带条件查询
+query_wrapper<User> wrapper;
+wrapper.eq("status", 1);
+auto active_users = co_await user_mapper.select_list(wrapper);
+
+// 根据 ID 更新
+user.name = "Alice Updated";
+co_await user_mapper.update_by_id(user);
+
+// 根据 ID 删除
+co_await user_mapper.delete_by_id(1);
+
+// 计数
+auto count = co_await user_mapper.select_count();
+```
+
+## QueryWrapper - 流式查询构建器
+
+QueryWrapper 提供流式 API 构建查询：
+
+```cpp
+query_wrapper<User> wrapper;
+
+// 相等
+wrapper.eq("status", 1);
+
+// 比较
+wrapper.gt("age", 18)
+       .lt("age", 65)
+       .ge("score", 60)
+       .le("score", 100);
+
+// LIKE
+wrapper.like("name", "%Alice%")
+       .like_left("email", "@gmail.com")   // %@gmail.com
+       .like_right("phone", "138");         // 138%
+
+// IN / NOT IN
+wrapper.in("id", {1, 2, 3, 4, 5});
+wrapper.not_in("status", {0, -1});
+
+// IS NULL / IS NOT NULL
+wrapper.is_null("deleted_at");
+wrapper.is_not_null("email");
+
+// BETWEEN
+wrapper.between("created_at", 1609459200, 1640995200);
+
+// ORDER BY
+wrapper.order_by_asc("name")
+       .order_by_desc("created_at");
+
+// LIMIT / OFFSET
+wrapper.limit(10).offset(20);
+
+// 逻辑运算符
+wrapper.eq("status", 1)
+       .and_(query_wrapper<User>{}.like("name", "%test%")
+                                   .or_()
+                                   .like("email", "%test%"));
+
+// 执行查询
+auto users = co_await user_mapper.select_list(wrapper);
+```
+
+## 分页
+
+```cpp
+base_mapper<User> user_mapper(cli);
+
+query_wrapper<User> wrapper;
+wrapper.eq("status", 1);
+
+// 第 1 页，每页 10 条记录
+auto page_result = co_await user_mapper.select_page(1, 10, wrapper);
+
+std::println("第 {}/{} 页", page_result.current_page, page_result.total_pages);
+std::println("总记录数: {}", page_result.total);
+std::println("本页记录数: {}", page_result.records.size());
+
+for (auto& user : page_result.records) {
+    std::println("用户: {}", user.name);
+}
+```
+
+## 逻辑删除（软删除）
+
+通过 `LOGIC_DELETE` 标志启用软删除：
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::int32_t deleted = 0;  // 0 = 未删除, 1 = 已删除
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(deleted, "deleted", tinyint, LOGIC_DELETE)
+)
+
+// 全局启用逻辑删除
+global_logical_delete_interceptor().set_enabled(true);
+
+// DELETE 变成 UPDATE users SET deleted = 1
+co_await user_mapper.delete_by_id(1);
+
+// SELECT 自动添加 WHERE deleted = 0
+auto users = co_await user_mapper.select_list();
+```
+
+## 自动填充（自动时间戳）
+
+在 INSERT/UPDATE 时自动填充字段：
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::time_t created_at = 0;  // INSERT 时自动填充
+    std::time_t updated_at = 0;  // INSERT 和 UPDATE 时自动填充
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(created_at, "created_at", timestamp, FILL_INSERT),
+    CNETMOD_FIELD(updated_at, "updated_at", timestamp, FILL_INSERT_UPDATE)
+)
+
+// 注册自动填充
+global_auto_fill_interceptor().register_from_metadata<User>();
+
+// 字段自动填充
+User user{.name = "Alice"};
+co_await user_mapper.insert(user);
+// created_at 和 updated_at 自动设置
+```
+
+## 乐观锁
+
+使用版本字段防止并发更新冲突：
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::int32_t version = 0;  // 版本字段
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(version, "version", int_, VERSION)
+)
+
+// 带版本检查的更新
+auto user = co_await user_mapper.select_by_id(1);
+if (user) {
+    user->name = "Updated";
+    bool success = co_await update_with_version_check(cli, *user);
+    if (success) {
+        std::println("更新成功，新版本: {}", user->version);
+    } else {
+        std::println("更新失败：版本冲突");
+    }
+}
+```
+
+## 多租户支持
+
+自动按租户 ID 过滤查询：
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::int64_t tenant_id = 0;
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)
+)
+
+// 设置租户上下文
+{
+    tenant_guard guard(1001);  // 租户 ID = 1001
+    
+    // 所有查询自动添加 WHERE tenant_id = 1001
+    auto users = co_await user_mapper.select_list();
+}
+// 租户上下文清除
+```
+
+## 查询缓存
+
+启用查询结果的二级缓存：
+
+```cpp
+auto& cache = global_second_level_cache();
+cache.set_enabled(true);
+
+// 第一次查询 - 缓存未命中
+auto users1 = co_await user_mapper.select_list();
+
+// 第二次查询 - 缓存命中（如果是相同查询）
+auto users2 = co_await user_mapper.select_list();
+```
+
+## 枚举处理器
+
+支持枚举类型：
+
+```cpp
+enum class UserStatus {
+    INACTIVE = 0,
+    ACTIVE = 1,
+    BANNED = 2
+};
+
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    UserStatus status = UserStatus::INACTIVE;
+};
+
+// 注册枚举处理器（基于整数）
+global_enum_registry().register_int_enum<UserStatus>();
+
+// 或基于字符串
+global_enum_registry().register_string_enum<UserStatus>({
+    {UserStatus::INACTIVE, "inactive"},
+    {UserStatus::ACTIVE, "active"},
+    {UserStatus::BANNED, "banned"}
+});
+```
+
+## 性能分析
+
+监控 SQL 性能：
+
+```cpp
+auto& perf = global_performance_interceptor();
+perf.set_enabled(true);
+
+// 执行查询
+co_await user_mapper.select_list();
+
+// 获取统计信息
+auto [total_queries, slow_queries, total_time] = perf.get_summary();
+std::println("总数: {}, 慢查询: {}, 平均: {}μs",
+    total_queries, slow_queries, perf.get_average_time().count());
+
+// 获取慢查询列表
+auto slow_list = perf.get_slow_queries();
+for (auto& stat : slow_list) {
+    std::println("慢查询: {} ({}μs)", stat.sql, stat.execution_time.count());
+}
+```
+
+## 代码生成器
+
+从现有数据库表生成模型和映射器代码：
+
+```cpp
+generator_config config;
+config.output_dir = "./generated";
+config.namespace_name = "myapp";
+config.table_prefix = "t_";
+
+code_generator generator(config);
+
+// 为表生成代码
+auto result = co_await generator.generate_all(cli, "users");
+if (result) {
+    std::println("代码已生成到 ./generated/");
+}
+```
+
 ## 性能提示
 
 1. **使用批量插入**：`insert_many()` 比多次 `insert()` 快得多
@@ -580,9 +1072,14 @@ auto results = co_await db.find(
 6. **版本化模式**：跟踪迁移
 7. **测试迁移**：在生产前在暂存环境测试
 
+## 示例
+
+查看完整示例：
+- `examples/mysql_xml_mapper.cpp` - 基础 XML 映射器使用
+- `examples/mysql_xml_complex.cpp` - 高级 XML 特性
+- `examples/mybatis_plus_demo.cpp` - 所有 MyBatis-Plus 风格特性
+
 ## 下一步
 
 - **[MySQL 指南](../protocols/mysql.md)** - MySQL 客户端基础
-- **[查询优化](query-optimization.md)** - 优化数据库查询
-- **[事务](transactions.md)** - 有效使用事务
-- **[测试](testing.md)** - 测试 ORM 代码
+- **[示例](../examples.md)** - 更多 ORM 示例

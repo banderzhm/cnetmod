@@ -226,6 +226,19 @@ include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include)
 set(NLOHMANN_JSON_MODULE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm)
 
+# pugixml: Lightweight XML parser
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pugixml/CMakeLists.txt")
+    set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    add_subdirectory(3rdparty/pugixml EXCLUDE_FROM_ALL)
+    set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
+    set(CNETMOD_HAS_PUGIXML ON)
+    message(STATUS "XML Parser: pugixml enabled")
+else()
+    set(CNETMOD_HAS_PUGIXML OFF)
+    message(STATUS "XML Parser: pugixml not found in 3rdparty/")
+endif()
+
 # Logging module uses pure C++23 std::format implementation, no external dependencies
 
 # nghttp2: HTTP/2 C library (build core library only)
@@ -392,6 +405,11 @@ endif()
 # nghttp2 linking
 if(CNETMOD_HAS_NGHTTP2)
     target_link_libraries(cnetmod_core PUBLIC nghttp2_static)
+endif()
+
+# pugixml linking
+if(CNETMOD_HAS_PUGIXML)
+    target_link_libraries(cnetmod_core PUBLIC pugixml-static)
 endif()
 
 # ==============================================================================

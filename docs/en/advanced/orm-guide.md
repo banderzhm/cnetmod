@@ -7,10 +7,21 @@ Comprehensive guide to cnetmod's Object-Relational Mapping (ORM) system for MySQ
 cnetmod ORM provides:
 - **Model definition**: Map C++ structs to database tables
 - **CRUD operations**: Create, Read, Update, Delete
-- **Query builder**: Type-safe query construction
+- **Query builder**: Type-safe query construction (QueryWrapper)
+- **XML Mappers**: MyBatis-style XML configuration with dynamic SQL
+- **BaseMapper**: Generic CRUD operations interface
 - **Auto-migration**: Automatic schema synchronization
 - **ID generation**: Auto-increment, UUID, Snowflake
-- **Relationships**: One-to-many, many-to-many (planned)
+- **Pagination**: Page-based query results
+- **Logical Delete**: Soft delete support
+- **Auto Fill**: Automatic timestamp fields
+- **Optimistic Lock**: Version-based concurrency control
+- **Multi-Tenant**: Tenant isolation support
+- **Cache**: Query result caching
+- **Enum Handler**: Enum type support
+- **Type Handler**: Custom type conversion
+- **Performance Analysis**: SQL performance monitoring
+- **Code Generator**: Generate code from database tables
 
 ## Quick Start
 
@@ -560,6 +571,487 @@ auto results = co_await db.find(
 );
 ```
 
+## XML Mappers (MyBatis-Style)
+
+cnetmod ORM supports MyBatis-style XML mappers for complex SQL queries with dynamic conditions.
+
+### Basic XML Mapper
+
+Create `mappers/user_mapper.xml`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="UserMapper">
+    <!-- Simple SELECT -->
+    <select id="findById" resultType="User">
+        SELECT * FROM users WHERE id = #{id}
+    </select>
+    
+    <!-- INSERT -->
+    <insert id="insertUser">
+        INSERT INTO users (name, email, status, created_at)
+        VALUES (#{name}, #{email}, #{status}, #{created_at})
+    </insert>
+    
+    <!-- UPDATE -->
+    <update id="updateUser">
+        UPDATE users SET name = #{name}, email = #{email}
+        WHERE id = #{id}
+    </update>
+    
+    <!-- DELETE -->
+    <delete id="deleteUser">
+        DELETE FROM users WHERE id = #{id}
+    </delete>
+</mapper>
+```
+
+### Using XML Mappers
+
+```cpp
+// Load mapper
+mapper_registry registry;
+registry.load_file("mappers/user_mapper.xml");
+
+// Create session
+mapper_session session(cli, registry);
+
+// Query
+auto result = co_await session.query<User>("UserMapper.findById",
+    param_context::from_map({{"id", param_value::from_int(1)}}));
+
+// Execute (INSERT/UPDATE/DELETE)
+auto exec_result = co_await session.execute("UserMapper.insertUser", user);
+```
+
+### Dynamic SQL with `<if>`
+
+```xml
+<select id="findByCondition" resultType="User">
+    SELECT * FROM users
+    WHERE 1=1
+    <if test="name != null">
+        AND name = #{name}
+    </if>
+    <if test="status != null">
+        AND status = #{status}
+    </if>
+    <if test="email != null">
+        AND email LIKE #{email}
+    </if>
+</select>
+```
+
+### Dynamic SQL with `<where>` and `<trim>`
+
+```xml
+<select id="searchUsers" resultType="User">
+    SELECT * FROM users
+    <where>
+        <if test="keyword != null">
+            AND (name LIKE #{keyword} OR email LIKE #{keyword})
+        </if>
+        <if test="status != null">
+            AND status = #{status}
+        </if>
+    </where>
+    <if test="orderBy != null">
+        ORDER BY ${orderBy}
+    </if>
+    <if test="limit != null">
+        LIMIT #{limit}
+    </if>
+</select>
+```
+
+### Dynamic SQL with `<choose>`, `<when>`, `<otherwise>`
+
+```xml
+<select id="findByRole" resultType="User">
+    SELECT * FROM users
+    WHERE 1=1
+    <choose>
+        <when test="role == 'admin'">
+            AND status = 2
+        </when>
+        <when test="role == 'user'">
+            AND status = 1
+        </when>
+        <otherwise>
+            AND status = 0
+        </otherwise>
+    </choose>
+</select>
+```
+
+### Dynamic SQL with `<foreach>`
+
+```xml
+<select id="findByIds" resultType="User">
+    SELECT * FROM users
+    WHERE id IN
+    <foreach collection="ids" item="item" open="(" separator="," close=")">
+        #{item.id}
+    </foreach>
+</select>
+```
+
+Usage:
+
+```cpp
+param_context ctx = param_context::from_map({});
+std::vector<param_context> id_list;
+for (int id : {1, 2, 3, 4, 5}) {
+    id_list.push_back(param_context::from_map({{"id", param_value::from_int(id)}}));
+}
+ctx.add_collection("ids", std::move(id_list));
+
+auto result = co_await session.query<User>("UserMapper.findByIds", ctx);
+```
+
+### Batch INSERT with `<foreach>`
+
+```xml
+<insert id="batchInsert">
+    INSERT INTO users (name, email, status, created_at)
+    VALUES
+    <foreach collection="users" item="user" separator=",">
+        (#{user.name}, #{user.email}, #{user.status}, #{user.created_at})
+    </foreach>
+</insert>
+```
+
+### Batch UPDATE with CASE WHEN
+
+```xml
+<update id="batchUpdateStatus">
+    UPDATE users
+    SET status = CASE id
+        <foreach collection="updates" item="item">
+            WHEN #{item.id} THEN #{item.status}
+        </foreach>
+    END,
+    updated_at = #{currentTime}
+    WHERE id IN
+    <foreach collection="updates" item="item" open="(" separator="," close=")">
+        #{item.id}
+    </foreach>
+</update>
+```
+
+### Selective UPDATE
+
+```xml
+<update id="updateSelective">
+    UPDATE users
+    <set>
+        <if test="name != null">name = #{name},</if>
+        <if test="email != null">email = #{email},</if>
+        <if test="status != null">status = #{status},</if>
+    </set>
+    WHERE id = #{id}
+</update>
+```
+
+## BaseMapper - Generic CRUD Interface
+
+BaseMapper provides a generic interface for common CRUD operations:
+
+```cpp
+base_mapper<User> user_mapper(cli);
+
+// INSERT
+User user{.name = "Alice", .email = "alice@example.com"};
+auto result = co_await user_mapper.insert(user);
+
+// SELECT by ID
+auto user_opt = co_await user_mapper.select_by_id(1);
+
+// SELECT all
+auto users = co_await user_mapper.select_list();
+
+// SELECT with condition
+query_wrapper<User> wrapper;
+wrapper.eq("status", 1);
+auto active_users = co_await user_mapper.select_list(wrapper);
+
+// UPDATE by ID
+user.name = "Alice Updated";
+co_await user_mapper.update_by_id(user);
+
+// DELETE by ID
+co_await user_mapper.delete_by_id(1);
+
+// COUNT
+auto count = co_await user_mapper.select_count();
+```
+
+## QueryWrapper - Fluent Query Builder
+
+QueryWrapper provides a fluent API for building queries:
+
+```cpp
+query_wrapper<User> wrapper;
+
+// Equality
+wrapper.eq("status", 1);
+
+// Comparison
+wrapper.gt("age", 18)
+       .lt("age", 65)
+       .ge("score", 60)
+       .le("score", 100);
+
+// LIKE
+wrapper.like("name", "%Alice%")
+       .like_left("email", "@gmail.com")   // %@gmail.com
+       .like_right("phone", "138");         // 138%
+
+// IN / NOT IN
+wrapper.in("id", {1, 2, 3, 4, 5});
+wrapper.not_in("status", {0, -1});
+
+// IS NULL / IS NOT NULL
+wrapper.is_null("deleted_at");
+wrapper.is_not_null("email");
+
+// BETWEEN
+wrapper.between("created_at", 1609459200, 1640995200);
+
+// ORDER BY
+wrapper.order_by_asc("name")
+       .order_by_desc("created_at");
+
+// LIMIT / OFFSET
+wrapper.limit(10).offset(20);
+
+// Logical operators
+wrapper.eq("status", 1)
+       .and_(query_wrapper<User>{}.like("name", "%test%")
+                                   .or_()
+                                   .like("email", "%test%"));
+
+// Execute query
+auto users = co_await user_mapper.select_list(wrapper);
+```
+
+## Pagination
+
+```cpp
+base_mapper<User> user_mapper(cli);
+
+query_wrapper<User> wrapper;
+wrapper.eq("status", 1);
+
+// Page 1, 10 records per page
+auto page_result = co_await user_mapper.select_page(1, 10, wrapper);
+
+std::println("Page {}/{}", page_result.current_page, page_result.total_pages);
+std::println("Total records: {}", page_result.total);
+std::println("Records on this page: {}", page_result.records.size());
+
+for (auto& user : page_result.records) {
+    std::println("User: {}", user.name);
+}
+```
+
+## Logical Delete (Soft Delete)
+
+Enable soft delete by marking a field with `LOGIC_DELETE` flag:
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::int32_t deleted = 0;  // 0 = not deleted, 1 = deleted
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(deleted, "deleted", tinyint, LOGIC_DELETE)
+)
+
+// Enable logical delete globally
+global_logical_delete_interceptor().set_enabled(true);
+
+// DELETE becomes UPDATE users SET deleted = 1
+co_await user_mapper.delete_by_id(1);
+
+// SELECT automatically adds WHERE deleted = 0
+auto users = co_await user_mapper.select_list();
+```
+
+## Auto Fill (Automatic Timestamps)
+
+Automatically fill fields on INSERT/UPDATE:
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::time_t created_at = 0;  // Auto-fill on INSERT
+    std::time_t updated_at = 0;  // Auto-fill on INSERT and UPDATE
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(created_at, "created_at", timestamp, FILL_INSERT),
+    CNETMOD_FIELD(updated_at, "updated_at", timestamp, FILL_INSERT_UPDATE)
+)
+
+// Register auto-fill
+global_auto_fill_interceptor().register_from_metadata<User>();
+
+// Fields are filled automatically
+User user{.name = "Alice"};
+co_await user_mapper.insert(user);
+// created_at and updated_at are set automatically
+```
+
+## Optimistic Lock
+
+Prevent concurrent update conflicts using version field:
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::int32_t version = 0;  // Version field
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(version, "version", int_, VERSION)
+)
+
+// Update with version check
+auto user = co_await user_mapper.select_by_id(1);
+if (user) {
+    user->name = "Updated";
+    bool success = co_await update_with_version_check(cli, *user);
+    if (success) {
+        std::println("Update successful, new version: {}", user->version);
+    } else {
+        std::println("Update failed: version conflict");
+    }
+}
+```
+
+## Multi-Tenant Support
+
+Automatically filter queries by tenant ID:
+
+```cpp
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    std::int64_t tenant_id = 0;
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)
+)
+
+// Set tenant context
+{
+    tenant_guard guard(1001);  // Tenant ID = 1001
+    
+    // All queries automatically add WHERE tenant_id = 1001
+    auto users = co_await user_mapper.select_list();
+}
+// Tenant context cleared
+```
+
+## Query Cache
+
+Enable second-level cache for query results:
+
+```cpp
+auto& cache = global_second_level_cache();
+cache.set_enabled(true);
+
+// First query - cache miss
+auto users1 = co_await user_mapper.select_list();
+
+// Second query - cache hit (if same query)
+auto users2 = co_await user_mapper.select_list();
+```
+
+## Enum Handler
+
+Support for enum types:
+
+```cpp
+enum class UserStatus {
+    INACTIVE = 0,
+    ACTIVE = 1,
+    BANNED = 2
+};
+
+struct User {
+    std::int64_t id = 0;
+    std::string name;
+    UserStatus status = UserStatus::INACTIVE;
+};
+
+// Register enum handler (int-based)
+global_enum_registry().register_int_enum<UserStatus>();
+
+// Or string-based
+global_enum_registry().register_string_enum<UserStatus>({
+    {UserStatus::INACTIVE, "inactive"},
+    {UserStatus::ACTIVE, "active"},
+    {UserStatus::BANNED, "banned"}
+});
+```
+
+## Performance Analysis
+
+Monitor SQL performance:
+
+```cpp
+auto& perf = global_performance_interceptor();
+perf.set_enabled(true);
+
+// Execute queries
+co_await user_mapper.select_list();
+
+// Get statistics
+auto [total_queries, slow_queries, total_time] = perf.get_summary();
+std::println("Total: {}, Slow: {}, Avg: {}μs",
+    total_queries, slow_queries, perf.get_average_time().count());
+
+// Get slow queries
+auto slow_list = perf.get_slow_queries();
+for (auto& stat : slow_list) {
+    std::println("Slow query: {} ({}μs)", stat.sql, stat.execution_time.count());
+}
+```
+
+## Code Generator
+
+Generate model and mapper code from existing database tables:
+
+```cpp
+generator_config config;
+config.output_dir = "./generated";
+config.namespace_name = "myapp";
+config.table_prefix = "t_";
+
+code_generator generator(config);
+
+// Generate code for a table
+auto result = co_await generator.generate_all(cli, "users");
+if (result) {
+    std::println("Code generated in ./generated/");
+}
+```
+
 ## Performance Tips
 
 1. **Use batch insert**: `insert_many()` is much faster than multiple `insert()`
@@ -580,9 +1072,14 @@ auto results = co_await db.find(
 6. **Version your schema**: Track migrations
 7. **Test migrations**: On staging before production
 
+## Examples
+
+See complete examples:
+- `examples/mysql_xml_mapper.cpp` - Basic XML mapper usage
+- `examples/mysql_xml_complex.cpp` - Advanced XML features
+- `examples/mybatis_plus_demo.cpp` - All MyBatis-Plus style features
+
 ## Next Steps
 
 - **[MySQL Guide](../protocols/mysql.md)** - MySQL client basics
-- **[Query Optimization](query-optimization.md)** - Optimize database queries
-- **[Transactions](transactions.md)** - Use transactions effectively
-- **[Testing](testing.md)** - Test ORM code
+- **[Examples](../examples.md)** - More ORM examples

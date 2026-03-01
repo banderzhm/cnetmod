@@ -22,9 +22,8 @@ set(EXAMPLE_TARGETS
     mutex_demo
     stdexec_bridge
     redis_client
-    mysql_crud
-    mysql_orm
     http_demo
+    http2_demo
     ws_demo
     hight_http
     hight_ws
@@ -33,9 +32,13 @@ set(EXAMPLE_TARGETS
     multicore_http
     multicore_ws
     blocking_bridge_demo
-        mqtt_demo
+    mqtt_demo
     tfb_benchmark
-        http2_demo
+    mysql_crud
+    mysql_orm
+    mysql_xml_mapper
+    mysql_xml_complex
+    mybatis_plus_demo
 )
 
 # SSL examples (only built when OpenSSL is available)
@@ -59,3 +62,19 @@ foreach(example ${EXAMPLE_TARGETS})
         target_link_options(example_${example} PRIVATE /LTCG:OFF /DEBUG:NONE)
     endif()
 endforeach()
+
+# Copy mapper XML files to build directory for mysql_xml_mapper example
+add_custom_command(TARGET example_mysql_xml_mapper POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/mappers
+    $<TARGET_FILE_DIR:example_mysql_xml_mapper>/mappers
+    COMMENT "Copying mapper XML files to build directory"
+)
+
+# Copy mapper XML files for mysql_xml_complex example
+add_custom_command(TARGET example_mysql_xml_complex POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/mappers
+    $<TARGET_FILE_DIR:example_mysql_xml_complex>/mappers
+    COMMENT "Copying mapper XML files for complex example"
+)

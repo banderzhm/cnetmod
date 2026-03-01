@@ -35,7 +35,7 @@
 - **HTTP/1.1 & HTTP/2**: 完整服务器，包含路由器、中间件管道、分块传输、多部分上传；HTTP/2 通过 TLS + ALPN 协商，支持多路复用流
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
-- **MySQL**: 异步客户端，支持预处理语句、连接池、管道、ORM（CRUD / 迁移 / 查询构建器）
+- **MySQL**: 异步客户端，支持预处理语句、连接池、管道、ORM（CRUD / 迁移 / 查询构建器 / XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
 - **OpenAI**: 异步 API 客户端（聊天补全等）
 
@@ -174,22 +174,30 @@ task<void> producer(channel<int>& ch) {
 }
 ```
 
-**MySQL ORM**（模型映射 + CRUD + 迁移）：
+**MySQL ORM**（模型映射 + CRUD + 迁移 + 高级特性）：
 ```cpp
 import cnetmod.protocol.mysql;
 #include <cnetmod/orm.hpp>
 
-// 定义模型
+// 定义带高级特性的模型
 struct User {
-    std::int64_t                id    = 0;
+    std::int64_t                id         = 0;
     std::string                 name;
     std::optional<std::string>  email;
+    std::int32_t                version    = 0;  // 乐观锁
+    std::int32_t                deleted    = 0;  // 软删除
+    std::time_t                 created_at = 0;  // 插入时自动填充
+    std::time_t                 updated_at = 0;  // 插入/更新时自动填充
 };
 
 CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id,    "id",    bigint,  PK | AUTO_INC),
-    CNETMOD_FIELD(name,  "name",  varchar),
-    CNETMOD_FIELD(email, "email", varchar, NULLABLE)
+    CNETMOD_FIELD(id,         "id",         bigint,    PK | AUTO_INC),
+    CNETMOD_FIELD(name,       "name",       varchar),
+    CNETMOD_FIELD(email,      "email",      varchar,   NULLABLE),
+    CNETMOD_FIELD(version,    "version",    int_,      VERSION),
+    CNETMOD_FIELD(deleted,    "deleted",    tinyint,   LOGIC_DELETE),
+    CNETMOD_FIELD(created_at, "created_at", timestamp, FILL_INSERT),
+    CNETMOD_FIELD(updated_at, "updated_at", timestamp, FILL_INSERT_UPDATE)
 )
 
 task<void> demo(mysql::client& cli) {
@@ -223,6 +231,41 @@ task<void> demo(mysql::client& cli) {
     co_await db.remove_by_id<User>(param_value::from_int(1));
     co_await db.remove(orm::delete_of<User>()
         .where("`name` = {}", {param_value::from_string("test")}));
+}
+
+// BaseMapper — 通用 CRUD 接口
+task<void> base_mapper_demo(mysql::client& cli) {
+    base_mapper<User> mapper(cli);
+    
+    // QueryWrapper — 流式查询构建器
+    query_wrapper<User> wrapper;
+    wrapper.eq("status", 1)
+           .like("name", "%Alice%")
+           .gt("age", 18)
+           .order_by_desc("created_at")
+           .limit(10);
+    
+    auto users = co_await mapper.select_list(wrapper);
+    
+    // 分页
+    auto page = co_await mapper.select_page(1, 10, wrapper);
+    std::println("第 {}/{} 页，总数: {}", 
+        page.current_page, page.total_pages, page.total);
+}
+
+// XML 映射器 — MyBatis 风格动态 SQL
+task<void> xml_mapper_demo(mysql::client& cli) {
+    mapper_registry registry;
+    registry.load_file("mappers/user_mapper.xml");
+    
+    mapper_session session(cli, registry);
+    
+    // 执行带动态条件的查询
+    auto result = co_await session.query<User>("UserMapper.findByCondition",
+        param_context::from_map({
+            {"name", param_value::from_string("Alice")},
+            {"status", param_value::from_int(1)}
+        }));
 }
 ```
 
@@ -291,19 +334,15 @@ cnetmod.middleware.*  — HTTP 中间件组件
 
 > **fatal error C1605**: 编译器限制: 对象文件大小不能超过 4 GB
 
-这是因为 C++23 模块 + 大量模板实例化（特别是 `std` 模块 + `std::format` + 协议编解码器）在 Debug 构建中会产生极大的 `.obj` / `.ifc` 文件。MSVC 的 COFF 对象格式有 4 GB 硬限制。
+这是 **MSVC 的已知 bug**。Microsoft 已在开发者社区中承认此问题：[C1605: C++23 Modules Exceed 4 GB Object File Limit](https://developercommunity.visualstudio.com/t/C1605:-C23-Modules-Exceed-4-GB-Object-/11048477)。
 
-**CMakeLists.txt 中已应用的解决方法：**
-- `/bigobj` — 将节数限制从 65,536 提升到 40 亿
-- `/Ob1` — 减少内联展开（减少每个 TU 中的代码重复）
-- `/GL-` — 禁用全程序优化（防止合并对象膨胀）
-- `/Z7` — 使用 C7 兼容调试格式而非程序数据库（`/Zi`）。将调试符号嵌入 `.obj` 文件而非单个巨大的 `.pdb`，绕过 4 GB 限制。
+问题的原因是编译器在处理 C++23 模块 + 大量模板实例化（特别是 `std` 模块 + `std::format` + 协议编解码器）时错误地生成了超大对象文件。MSVC 的 COFF 对象格式有 4 GB 硬限制。
 
-**如果仍然遇到 C1605：**
-1. **拆分大型模块** — 将单体 `.cppm` 文件拆分为更小的分区。协议模块（`mqtt`、`http`、`mysql`）已使用分区接口（`:types`、`:codec`、`:parser` 等）。
-2. **使用 Release/RelWithDebInfo** — 优化构建产生的对象文件要小得多。
-3. **减少模板实例化** — 避免在单个 TU 中使用具有多种不同参数类型的 `std::format`。
-4. **在 WSL 上使用 clang 构建** — clang + libc++ 使用 ELF 对象，没有 4 GB 限制。这是完整项目的推荐开发工作流。
+**推荐的解决方案：**
+1. **使用 Release/RelWithDebInfo 构建** — 优化构建产生的对象文件要小得多，可以避免此编译器 bug。
+2. **在 WSL/Linux 上使用 clang 构建** — clang + libc++ 使用 ELF 对象，没有 4 GB 限制。这是推荐的开发工作流。
+
+**注意**：这是编译器的 bug，不是 C++23 模块或本库的限制。我们正在等待 Microsoft 修复此问题。详细分析请参见 [MSVC_C1605_Issue.md](MSVC_C1605_Issue.md)。
 
 ### clang 模块依赖可见性
 

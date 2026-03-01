@@ -14,23 +14,28 @@ namespace cnetmod::mysql::orm {
 // Column attribute flags
 // =============================================================================
 
-export enum class col_flag : std::uint8_t {
-    none           = 0,
-    primary_key    = 1,
-    auto_increment = 2,
-    nullable       = 4,
+export enum class col_flag : std::uint16_t {
+    none                = 0,
+    primary_key         = 1 << 0,
+    auto_increment      = 1 << 1,
+    nullable            = 1 << 2,
+    version             = 1 << 3,   // Optimistic lock version field
+    logic_delete        = 1 << 4,   // Logical delete flag field
+    fill_insert         = 1 << 5,   // Auto-fill on insert
+    fill_insert_update  = 1 << 6,   // Auto-fill on insert and update
+    tenant_id           = 1 << 7,   // Multi-tenant ID field
 };
 
 export constexpr auto operator|(col_flag a, col_flag b) noexcept -> col_flag {
     return static_cast<col_flag>(
-        static_cast<std::uint8_t>(a) | static_cast<std::uint8_t>(b));
+        static_cast<std::uint16_t>(a) | static_cast<std::uint16_t>(b));
 }
 export constexpr auto operator&(col_flag a, col_flag b) noexcept -> col_flag {
     return static_cast<col_flag>(
-        static_cast<std::uint8_t>(a) & static_cast<std::uint8_t>(b));
+        static_cast<std::uint16_t>(a) & static_cast<std::uint16_t>(b));
 }
 export constexpr auto has_flag(col_flag flags, col_flag f) noexcept -> bool {
-    return (static_cast<std::uint8_t>(flags) & static_cast<std::uint8_t>(f)) != 0;
+    return (static_cast<std::uint16_t>(flags) & static_cast<std::uint16_t>(f)) != 0;
 }
 
 // =============================================================================
@@ -336,6 +341,36 @@ inline auto get_member(const std::optional<std::int64_t>& v) -> param_value {
 
 inline auto get_member(const std::optional<double>& v) -> param_value {
     return v ? param_value::from_double(*v) : param_value::null();
+}
+
+// ── enum set/get ──
+
+template <typename E>
+    requires std::is_enum_v<E>
+inline void set_member(E& m, const field_value& v) {
+    if (v.is_int64()) m = static_cast<E>(v.get_int64());
+    else if (v.is_uint64()) m = static_cast<E>(v.get_uint64());
+}
+
+template <typename E>
+    requires std::is_enum_v<E>
+inline auto get_member(E v) -> param_value {
+    return param_value::from_int(static_cast<std::int64_t>(v));
+}
+
+// ── std::time_t set/get (only if different from int64_t) ──
+
+template <typename T>
+    requires std::same_as<T, std::time_t> && (!std::same_as<std::time_t, std::int64_t>)
+inline void set_member(T& m, const field_value& v) {
+    if (v.is_int64()) m = static_cast<std::time_t>(v.get_int64());
+    else if (v.is_uint64()) m = static_cast<std::time_t>(v.get_uint64());
+}
+
+template <typename T>
+    requires std::same_as<T, std::time_t> && (!std::same_as<std::time_t, std::int64_t>)
+inline auto get_member(T v) -> param_value {
+    return param_value::from_int(static_cast<std::int64_t>(v));
 }
 
 // ── uuid set/get ──

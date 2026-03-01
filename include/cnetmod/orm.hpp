@@ -21,9 +21,15 @@
 //   )
 
 // Flag aliases (for user convenience)
-#define PK        ::cnetmod::mysql::orm::col_flag::primary_key
-#define AUTO_INC  ::cnetmod::mysql::orm::col_flag::auto_increment
-#define NULLABLE  ::cnetmod::mysql::orm::col_flag::nullable
+#define NONE                ::cnetmod::mysql::orm::col_flag::none
+#define PK                  ::cnetmod::mysql::orm::col_flag::primary_key
+#define AUTO_INC            ::cnetmod::mysql::orm::col_flag::auto_increment
+#define NULLABLE            ::cnetmod::mysql::orm::col_flag::nullable
+#define VERSION             ::cnetmod::mysql::orm::col_flag::version
+#define LOGIC_DELETE        ::cnetmod::mysql::orm::col_flag::logic_delete
+#define FILL_INSERT         ::cnetmod::mysql::orm::col_flag::fill_insert
+#define FILL_INSERT_UPDATE  ::cnetmod::mysql::orm::col_flag::fill_insert_update
+#define TENANT_ID           ::cnetmod::mysql::orm::col_flag::tenant_id
 
 // ID strategy composite flag aliases
 // UUID_PK   — Primary key + UUID strategy (C++ type uses orm::uuid, DDL generates CHAR(36))
