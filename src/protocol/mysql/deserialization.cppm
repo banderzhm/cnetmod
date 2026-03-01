@@ -267,14 +267,20 @@ inline auto parse_text_row(
         }
         case field_kind::float_: {
             double tmp = 0;
-            auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), tmp);
-            (void)ptr; (void)ec;
+            try {
+                tmp = std::stod(std::string(raw));
+            } catch (...) {
+                tmp = 0.0;
+            }
             fv.float_val = static_cast<float>(tmp);
             break;
         }
         case field_kind::double_: {
-            auto [ptr, ec] = std::from_chars(raw.data(), raw.data() + raw.size(), fv.double_val);
-            (void)ptr; (void)ec;
+            try {
+                fv.double_val = std::stod(std::string(raw));
+            } catch (...) {
+                fv.double_val = 0.0;
+            }
             break;
         }
         case field_kind::date: {

@@ -162,7 +162,11 @@ export struct resp3_node {
 
     [[nodiscard]] auto as_double() const noexcept -> double {
         double v = 0.0;
-        std::from_chars(value.data(), value.data() + value.size(), v);
+        try {
+            v = std::stod(value);
+        } catch (...) {
+            v = 0.0;
+        }
         return v;
     }
 
