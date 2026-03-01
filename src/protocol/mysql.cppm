@@ -7,6 +7,7 @@ export import :format_sql;
 export import :client;
 export import :pool;
 export import :pipeline;
+export import :transaction;
 export import :orm;
 // Internal partitions (not directly exported, but indirectly available through :client / :types)
 import :protocol;

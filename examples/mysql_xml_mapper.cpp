@@ -40,10 +40,10 @@ auto main() -> int {
     auto work = [&]() -> task<void> {
         // 1. Connect to MySQL
         connect_options opts;
-        opts.host = "1.94.173.250";
+        opts.host = "127.0.0.1";
         opts.port = 3306;
         opts.username = "root";
-        opts.password = "ydc061566";
+        opts.password = "your_password";
         opts.database = "yudao_mall";
 
         client cli(*ctx);

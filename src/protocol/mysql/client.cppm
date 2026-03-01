@@ -469,6 +469,88 @@ public:
 
     auto is_open() const noexcept -> bool { return connected_ && sock_.is_open(); }
 
+    // ── Transaction ──────────────────────────────────────────────
+
+    /// Execute a function within a transaction (auto commit/rollback)
+    template <typename Func>
+        requires std::invocable<Func> && 
+                 requires(Func f) { { f() } -> std::same_as<task<void>>; }
+    auto transaction(Func&& func) -> task<result_set> {
+        result_set err_rs;
+        if (!connected_) { err_rs.error_msg = "not connected"; co_return err_rs; }
+
+        // Start transaction
+        auto start_rs = co_await execute("START TRANSACTION");
+        if (start_rs.is_err()) co_return start_rs;
+
+        // Execute function and handle result
+        bool success = false;
+        std::string error_msg;
+        
+        try {
+            co_await func();
+            success = true;
+        } catch (const std::exception& e) {
+            error_msg = std::string("transaction failed: ") + e.what();
+        } catch (...) {
+            error_msg = "transaction failed: unknown exception";
+        }
+
+        // Commit or rollback based on success
+        if (success) {
+            auto commit_rs = co_await execute("COMMIT");
+            co_return commit_rs;
+        } else {
+            auto rollback_rs = co_await execute("ROLLBACK");
+            (void)rollback_rs;
+            err_rs.error_msg = std::move(error_msg);
+            co_return err_rs;
+        }
+    }
+
+    /// Execute a function within a transaction with specific isolation level
+    template <typename Func>
+        requires std::invocable<Func> && 
+                 requires(Func f) { { f() } -> std::same_as<task<void>>; }
+    auto transaction(Func&& func, isolation_level level) -> task<result_set> {
+        result_set err_rs;
+        if (!connected_) { err_rs.error_msg = "not connected"; co_return err_rs; }
+
+        // Set isolation level
+        std::string sql = "SET TRANSACTION ISOLATION LEVEL ";
+        sql.append(isolation_level_to_str(level));
+        auto set_rs = co_await execute(sql);
+        if (set_rs.is_err()) co_return set_rs;
+
+        // Start transaction
+        auto start_rs = co_await execute("START TRANSACTION");
+        if (start_rs.is_err()) co_return start_rs;
+
+        // Execute function and handle result
+        bool success = false;
+        std::string error_msg;
+        
+        try {
+            co_await func();
+            success = true;
+        } catch (const std::exception& e) {
+            error_msg = std::string("transaction failed: ") + e.what();
+        } catch (...) {
+            error_msg = "transaction failed: unknown exception";
+        }
+
+        // Commit or rollback based on success
+        if (success) {
+            auto commit_rs = co_await execute("COMMIT");
+            co_return commit_rs;
+        } else {
+            auto rollback_rs = co_await execute("ROLLBACK");
+            (void)rollback_rs;
+            err_rs.error_msg = std::move(error_msg);
+            co_return err_rs;
+        }
+    }
+
 private:
     // ── Transport layer ──────────────────────────────────────────────
 

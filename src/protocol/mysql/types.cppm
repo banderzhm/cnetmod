@@ -715,4 +715,25 @@ export struct connect_options {
     std::size_t initial_buffer_size = 8192;
 };
 
+// =============================================================================
+// isolation_level — Transaction isolation level
+// =============================================================================
+
+export enum class isolation_level {
+    read_uncommitted,
+    read_committed,
+    repeatable_read,
+    serializable
+};
+
+export inline auto isolation_level_to_str(isolation_level level) noexcept -> const char* {
+    switch (level) {
+    case isolation_level::read_uncommitted: return "READ UNCOMMITTED";
+    case isolation_level::read_committed:   return "READ COMMITTED";
+    case isolation_level::repeatable_read:  return "REPEATABLE READ";
+    case isolation_level::serializable:     return "SERIALIZABLE";
+    default:                                return "REPEATABLE READ";
+    }
+}
+
 } // namespace cnetmod::mysql

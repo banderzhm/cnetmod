@@ -36,6 +36,7 @@ set(EXAMPLE_TARGETS
     tfb_benchmark
     mysql_crud
     mysql_orm
+    mysql_transaction
     mysql_xml_mapper
     mysql_xml_complex
     mybatis_plus_demo

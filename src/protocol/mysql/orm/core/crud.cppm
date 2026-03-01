@@ -241,6 +241,24 @@ public:
     /// Underlying client access
     auto underlying() noexcept -> client& { return cli_; }
 
+    // ── Transaction ──────────────────────────────────────────────
+
+    /// Execute a function within a transaction (auto commit/rollback)
+    template <typename Func>
+        requires std::invocable<Func> && 
+                 requires(Func f) { { f() } -> std::same_as<task<void>>; }
+    auto transaction(Func&& func) -> task<result_set> {
+        co_return co_await cli_.transaction(std::forward<Func>(func));
+    }
+
+    /// Execute a function within a transaction with specific isolation level
+    template <typename Func>
+        requires std::invocable<Func> && 
+                 requires(Func f) { { f() } -> std::same_as<task<void>>; }
+    auto transaction(Func&& func, isolation_level level) -> task<result_set> {
+        co_return co_await cli_.transaction(std::forward<Func>(func), level);
+    }
+
 private:
     client& cli_;
     snowflake_generator* snowflake_ = nullptr;

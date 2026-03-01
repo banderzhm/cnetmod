@@ -388,10 +388,10 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     mysql::client cli(ctx);
 
     mysql::connect_options opts;
-    opts.host     = "1.94.173.250";
+    opts.host     = "127.0.0.1";
     opts.port     = 3306;
     opts.username = "root";
-    opts.password = "ydc061566";      // ← 按实际修改
+    opts.password = "your_password";      // ← 按实际修改
     opts.database = "mall";
     opts.ssl      = mysql::ssl_mode::disable;
 
