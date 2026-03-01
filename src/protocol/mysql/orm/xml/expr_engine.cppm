@@ -440,7 +440,11 @@ private:
         case token_type::double_lit: {
             auto lexeme = advance().lexeme;
             double val = 0;
-            std::from_chars(lexeme.data(), lexeme.data() + lexeme.size(), val);
+            try {
+                val = std::stod(std::string(lexeme));
+            } catch (...) {
+                val = 0.0;
+            }
             return ast_node::make_literal(expr_value::make_double(val));
         }
         case token_type::string_lit: {

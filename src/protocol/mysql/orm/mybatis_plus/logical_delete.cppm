@@ -73,17 +73,7 @@ public:
             auto insert_pos = where_pos + 7; // After " WHERE "
 
             // Find the end of WHERE clause (before ORDER BY, GROUP BY, LIMIT, etc.)
-            auto order_pos = sql.find(" ORDER BY", insert_pos);
-            auto group_pos = sql.find(" GROUP BY", insert_pos);
-            auto limit_pos = sql.find(" LIMIT", insert_pos);
-            auto having_pos = sql.find(" HAVING", insert_pos);
-
-            auto end_pos = std::min({
-                order_pos != std::string::npos ? order_pos : sql.size(),
-                group_pos != std::string::npos ? group_pos : sql.size(),
-                limit_pos != std::string::npos ? limit_pos : sql.size(),
-                having_pos != std::string::npos ? having_pos : sql.size()
-            });
+            // (Currently not used, but kept for potential future use)
 
             // Insert at the beginning of WHERE clause
             std::string condition = std::format("`{}` = {} AND ", *field,
