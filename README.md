@@ -35,7 +35,7 @@ English | [简体中文](README_zh.md)
 - **HTTP/1.1 & HTTP/2**: Full server with router, middleware pipeline, chunked transfer, multipart upload; HTTP/2 via TLS + ALPN negotiation with multiplexed streams
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
-- **MySQL**: Async client with prepared statements, connection pool, pipeline, ORM (CRUD / migration / query builder / XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
+- **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool
 - **OpenAI**: Async API client (chat completions, etc.)
 
@@ -253,7 +253,7 @@ task<void> base_mapper_demo(mysql::client& cli) {
         page.current_page, page.total_pages, page.total);
 }
 
-// XML Mapper — MyBatis-style dynamic SQL
+// MyBatis-Plus style XML Mapper — Dynamic SQL
 task<void> xml_mapper_demo(mysql::client& cli) {
     mapper_registry registry;
     registry.load_file("mappers/user_mapper.xml");
