@@ -27,11 +27,17 @@ jobs:
         choco install cmake --version=4.1.2 -y --force
         cmake --version
 
+    - name: Setup Visual Studio 2026 Preview
+      uses: microsoft/setup-msbuild@v2
+      with:
+        vs-version: '[18.0,19.0)'
+        vs-prerelease: true
+
     - name: Configure CMake
       shell: pwsh
       run: |
         cmake -B "${{ github.workspace }}/build" `
-          -G "Visual Studio 17 2022" `
+          -G "Visual Studio 18 2026" `
           -A x64 `
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
           -DCNETMOD_BUILD_EXAMPLES=ON `
@@ -71,6 +77,6 @@ jobs:
         Write-Host "Build Summary for Windows MSVC"
         Write-Host "========================================="
         Write-Host "Build Type: ${{ matrix.build_type }}"
-        Write-Host "Generator: Visual Studio 17 2022"
+        Write-Host "Generator: Visual Studio 18 2026 Preview"
         Write-Host "Runner: windows-latest"
         Write-Host "=========================================" 
