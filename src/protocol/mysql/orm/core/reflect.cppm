@@ -15,18 +15,29 @@ export class param_context : public property_resolver {
 public:
     param_context() = default;
 
-    // Construct from explicit key-value map (unordered_map)
-    static auto from_map(std::unordered_map<std::string, param_value> params) -> param_context {
+    // Construct from a braced initializer list — resolves the ambiguity for {}-calls
+    static auto from_map(std::initializer_list<std::pair<const std::string, param_value>> params)
+        -> param_context
+    {
         param_context ctx;
         for (auto& [k, v] : params)
             ctx.values_[k] = expr_value::from_param(v);
         return ctx;
     }
 
-    // Construct from explicit key-value map (flat_map)
-    static auto from_map(std::flat_map<std::string, param_value> params) -> param_context {
+    // Construct from any map-like range (unordered_map, flat_map, map, …)
+    // flat_map::value_type is pair<Key, Value> (key without const),
+    // unordered_map/map::value_type is pair<const Key, Value>.
+    // Use remove_const on the first element type to handle both.
+    template <typename Map>
+        requires std::ranges::input_range<Map> &&
+                 std::same_as<
+                     std::remove_const_t<typename std::ranges::range_value_t<Map>::first_type>,
+                     std::string> &&
+                 std::same_as<typename std::ranges::range_value_t<Map>::second_type, param_value>
+    static auto from_map(Map&& params) -> param_context {
         param_context ctx;
-        for (const auto& [k, v] : params)
+        for (auto&& [k, v] : params)
             ctx.values_[k] = expr_value::from_param(v);
         return ctx;
     }
