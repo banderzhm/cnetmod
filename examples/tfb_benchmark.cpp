@@ -104,14 +104,15 @@ auto handle_plaintext(http::request_context& ctx) -> cn::task<void> {
 /// Requires a mysql::connection_pool* passed via closure
 auto make_db_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
     return [&pool](http::request_context& ctx) -> cn::task<void> {
-        auto conn = co_await pool.async_get_connection();
-        if (!conn.valid()) {
+        auto conn_result = co_await pool.async_get_connection();
+        if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
         }
+        auto& conn = *conn_result;
 
         int id = random_world_id();
-        auto result = co_await conn->query(
+        auto result = co_await conn.query(
             std::format("SELECT id, randomNumber FROM world WHERE id = {}", id));
         if (result.is_err() || result.rows.empty()) {
             ctx.text(http::status::internal_server_error, "Query failed");
@@ -135,16 +136,17 @@ auto make_queries_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
     return [&pool](http::request_context& ctx) -> cn::task<void> {
         int n = parse_queries(ctx.query_string());
 
-        auto conn = co_await pool.async_get_connection();
-        if (!conn.valid()) {
+        auto conn_result = co_await pool.async_get_connection();
+        if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
         }
+        auto& conn = *conn_result;
 
         json arr = json::array();
         for (int i = 0; i < n; ++i) {
             int id = random_world_id();
-            auto result = co_await conn->query(
+            auto result = co_await conn.query(
                 std::format("SELECT id, randomNumber FROM world WHERE id = {}", id));
             if (result.is_err() || result.rows.empty()) continue;
 
@@ -163,13 +165,14 @@ auto make_queries_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
 
 auto make_fortunes_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
     return [&pool](http::request_context& ctx) -> cn::task<void> {
-        auto conn = co_await pool.async_get_connection();
-        if (!conn.valid()) {
+        auto conn_result = co_await pool.async_get_connection();
+        if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
         }
+        auto& conn = *conn_result;
 
-        auto result = co_await conn->query("SELECT id, message FROM fortune");
+        auto result = co_await conn.query("SELECT id, message FROM fortune");
         if (result.is_err()) {
             ctx.text(http::status::internal_server_error, "Query failed");
             co_return;
@@ -218,11 +221,12 @@ auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
     return [&pool](http::request_context& ctx) -> cn::task<void> {
         int n = parse_queries(ctx.query_string());
 
-        auto conn = co_await pool.async_get_connection();
-        if (!conn.valid()) {
+        auto conn_result = co_await pool.async_get_connection();
+        if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
         }
+        auto& conn = *conn_result;
 
         struct world_row { int id; int random_number; };
         std::vector<world_row> worlds;
@@ -231,7 +235,7 @@ auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
         // Read
         for (int i = 0; i < n; ++i) {
             int id = random_world_id();
-            auto result = co_await conn->query(
+            auto result = co_await conn.query(
                 std::format("SELECT id, randomNumber FROM world WHERE id = {}", id));
             if (result.is_err() || result.rows.empty()) continue;
 
@@ -241,7 +245,7 @@ auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
 
         // Update
         for (auto& w : worlds) {
-            co_await conn->query(
+            co_await conn.query(
                 std::format("UPDATE world SET randomNumber = {} WHERE id = {}",
                             w.random_number, w.id));
         }
@@ -260,7 +264,7 @@ auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
 // main
 // =============================================================================
 
-int main(int argc, char* argv[]) {
+int main(int, char**) {
     cn::net_init net;
 
     // Parse DB config from environment or defaults (TFB convention)
@@ -291,6 +295,7 @@ int main(int argc, char* argv[]) {
         .password = db_pass,
         .database = db_name,
         .max_size = workers * 4,
+        .tls_ca_file = {},
     };
     cn::mysql::connection_pool db_pool(sctx.accept_io(), pool_opts);
     cn::spawn(sctx.accept_io(), db_pool.async_run());
