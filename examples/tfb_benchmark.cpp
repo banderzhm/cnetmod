@@ -112,7 +112,7 @@ auto make_db_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
         auto& conn = *conn_result;
 
         int id = random_world_id();
-        auto result = co_await conn.query(
+        auto result = co_await conn->query(
             std::format("SELECT id, randomNumber FROM world WHERE id = {}", id));
         if (result.is_err() || result.rows.empty()) {
             ctx.text(http::status::internal_server_error, "Query failed");
@@ -146,7 +146,7 @@ auto make_queries_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
         json arr = json::array();
         for (int i = 0; i < n; ++i) {
             int id = random_world_id();
-            auto result = co_await conn.query(
+            auto result = co_await conn->query(
                 std::format("SELECT id, randomNumber FROM world WHERE id = {}", id));
             if (result.is_err() || result.rows.empty()) continue;
 
@@ -172,7 +172,7 @@ auto make_fortunes_handler(cn::mysql::connection_pool& pool) -> http::handler_fn
         }
         auto& conn = *conn_result;
 
-        auto result = co_await conn.query("SELECT id, message FROM fortune");
+        auto result = co_await conn->query("SELECT id, message FROM fortune");
         if (result.is_err()) {
             ctx.text(http::status::internal_server_error, "Query failed");
             co_return;
@@ -235,7 +235,7 @@ auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
         // Read
         for (int i = 0; i < n; ++i) {
             int id = random_world_id();
-            auto result = co_await conn.query(
+            auto result = co_await conn->query(
                 std::format("SELECT id, randomNumber FROM world WHERE id = {}", id));
             if (result.is_err() || result.rows.empty()) continue;
 
@@ -245,7 +245,7 @@ auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
 
         // Update
         for (auto& w : worlds) {
-            co_await conn.query(
+            co_await conn->query(
                 std::format("UPDATE world SET randomNumber = {} WHERE id = {}",
                             w.random_number, w.id));
         }
