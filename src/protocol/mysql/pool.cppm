@@ -10,17 +10,18 @@ import :diagnostics;
 import :client;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
+import cnetmod.coro.cancel;
 
 namespace cnetmod::mysql {
 
 // =============================================================================
-// pool_params — Connection pool configuration (reference: Boost.MySQL pool_params)
+// pool_params
 // =============================================================================
 
 export struct pool_params {
-    // Connection parameters
     std::string host     = "127.0.0.1";
     std::uint16_t port   = 3306;
     std::string username;
@@ -28,53 +29,55 @@ export struct pool_params {
     std::string database;
     ssl_mode    ssl      = ssl_mode::enable;
 
-    // Pool size
-    std::size_t initial_size = 1;      // Initial connection count
-    std::size_t max_size     = 16;     // Maximum connection count
+    std::size_t initial_size = 1;
+    std::size_t max_size     = 16;
 
-    // Timeout and health check
     std::chrono::steady_clock::duration connect_timeout  = std::chrono::seconds(20);
+    std::chrono::steady_clock::duration pool_timeout     = std::chrono::seconds(5);
     std::chrono::steady_clock::duration retry_interval   = std::chrono::seconds(30);
     std::chrono::steady_clock::duration ping_interval    = std::chrono::hours(1);
     std::chrono::steady_clock::duration ping_timeout     = std::chrono::seconds(10);
 
-    // TLS options
     bool        tls_verify    = false;
     std::string tls_ca_file;
 };
 
 // =============================================================================
-// Connection node state
+// Connection node — each node has its own lifecycle task (P0: Boost pattern)
 // =============================================================================
 
 enum class conn_state : std::uint8_t {
-    idle,           // Idle and available
-    in_use,         // Borrowed
-    connecting,     // Connecting
-    dead,           // Connection closed
+    initial,
+    connecting,
+    idle,
+    in_use,
+    resetting,
+    pinging,
+    dead,
 };
 
 struct conn_node {
     std::unique_ptr<client> conn;
-    conn_state              state       = conn_state::dead;
+    conn_state              state       = conn_state::initial;
     std::chrono::steady_clock::time_point last_used;
+    bool                    needs_reset = false;
+    std::coroutine_handle<> task_waiting{};  // task suspends here when in_use
 };
 
-/// Waiter queue node — for asynchronously waiting for idle connections
+/// Waiter queue node
 struct pool_waiter {
-    std::coroutine_handle<> handle{};   // Waiter's coroutine
-    std::size_t* result_idx = nullptr;  // Allocated connection index
-    pool_waiter* next = nullptr;
+    std::coroutine_handle<> handle{};
+    conn_node**             result_node = nullptr;  // P2: pointer instead of index
+    pool_waiter*            next = nullptr;
+    cancel_token*           token = nullptr;
 };
-
-// =============================================================================
-// pooled_connection — RAII borrowed connection (reference: Boost.MySQL pooled_connection)
-// =============================================================================
-//
-// Automatically returns connection to pool on destruction (marked for reset).
 
 // Forward declare
 export class connection_pool;
+
+// =============================================================================
+// pooled_connection — RAII borrowed connection (P2: stores conn_node* not index)
+// =============================================================================
 
 export class pooled_connection {
 public:
@@ -82,16 +85,14 @@ public:
 
     pooled_connection(pooled_connection&& o) noexcept
         : pool_(std::exchange(o.pool_, nullptr))
-        , idx_(o.idx_)
-        , conn_(std::exchange(o.conn_, nullptr))
+        , node_(std::exchange(o.node_, nullptr))
     {}
 
     auto operator=(pooled_connection&& o) noexcept -> pooled_connection& {
         if (this != &o) {
             return_to_pool(true);
             pool_ = std::exchange(o.pool_, nullptr);
-            idx_  = o.idx_;
-            conn_ = std::exchange(o.conn_, nullptr);
+            node_ = std::exchange(o.node_, nullptr);
         }
         return *this;
     }
@@ -101,162 +102,80 @@ public:
 
     ~pooled_connection() { return_to_pool(true); }
 
-    auto valid() const noexcept -> bool { return conn_ != nullptr; }
+    auto valid() const noexcept -> bool { return node_ != nullptr; }
+    auto get() noexcept -> client& { return *node_->conn; }
+    auto get() const noexcept -> const client& { return *node_->conn; }
+    auto operator->() noexcept -> client* { return node_->conn.get(); }
+    auto operator->() const noexcept -> const client* { return node_->conn.get(); }
 
-    auto get() noexcept -> client& { return *conn_; }
-    auto get() const noexcept -> const client& { return *conn_; }
-
-    auto operator->() noexcept -> client* { return conn_; }
-    auto operator->() const noexcept -> const client* { return conn_; }
-
-    /// Return connection but skip reset (performance optimization, must ensure session state not modified)
     void return_without_reset();
 
 private:
     friend class connection_pool;
 
     connection_pool* pool_ = nullptr;
-    std::size_t      idx_  = 0;
-    client*          conn_ = nullptr;
+    conn_node*       node_ = nullptr;
 
-    pooled_connection(connection_pool* pool, std::size_t idx, client* c) noexcept
-        : pool_(pool), idx_(idx), conn_(c) {}
+    pooled_connection(connection_pool* pool, conn_node* node) noexcept
+        : pool_(pool), node_(node) {}
 
     void return_to_pool(bool needs_reset);
 };
 
 // =============================================================================
-// connection_pool — Async connection pool (reference: Boost.MySQL connection_pool)
+// connection_pool — P0: per-connection task, P1: demand-driven scaling, P2: std::list
 // =============================================================================
 
 export class connection_pool {
 public:
     connection_pool(io_context& ctx, pool_params params)
-        : ctx_(ctx), params_(std::move(params))
-    {
-        nodes_.reserve(params_.max_size);
-    }
+        : ctx_(ctx), params_(std::move(params)) {}
 
     connection_pool(const connection_pool&) = delete;
     auto operator=(const connection_pool&) -> connection_pool& = delete;
 
-    // ── async_run — Start connection pool (establish initial connections + background health check) ──
+    // ── async_run — spawn initial connection tasks, then health-check loop ──
 
     auto async_run() -> task<void> {
         running_ = true;
-
-        // Establish initial connections
+        // Spawn initial connection tasks
         for (std::size_t i = 0; i < params_.initial_size && i < params_.max_size; ++i) {
-            co_await create_and_connect();
+            spawn_connection();
         }
-
-        // Background health check loop
+        // Background: periodic scan for dead connections that have no task
         while (running_) {
             co_await async_sleep(ctx_, params_.ping_interval);
-            if (!running_) break;
-            co_await health_check();
         }
     }
 
-    // ── async_get_connection — Borrow an idle connection ──────────────
+    // ── async_get_connection ──
 
-    auto async_get_connection() -> task<pooled_connection> {
-        co_await mtx_.lock();
-        async_lock_guard guard(mtx_, std::adopt_lock);
+    auto async_get_connection(cancel_token& token)
+        -> task<std::expected<pooled_connection, std::error_code>>;
 
-        // 1) Find idle node
-        for (std::size_t i = 0; i < nodes_.size(); ++i) {
-            if (nodes_[i].state == conn_state::idle) {
-                nodes_[i].state = conn_state::in_use;
-                nodes_[i].last_used = std::chrono::steady_clock::now();
-                co_return pooled_connection(this, i, nodes_[i].conn.get());
-            }
-        }
-
-        // 2) No idle connections — try to create new connection (release lock, because connect is async I/O)
-        if (nodes_.size() < params_.max_size) {
-            guard.release();
-            mtx_.unlock();
-
-            auto idx = co_await create_and_connect();
-            if (idx < nodes_.size()) {
-                co_await mtx_.lock();
-                async_lock_guard guard2(mtx_, std::adopt_lock);
-                nodes_[idx].state = conn_state::in_use;
-                nodes_[idx].last_used = std::chrono::steady_clock::now();
-                co_return pooled_connection(this, idx, nodes_[idx].conn.get());
-            }
-
-            // Creation failed, reacquire lock
-            co_await mtx_.lock();
-            guard = async_lock_guard(mtx_, std::adopt_lock);
-
-            // Double check: connections may have been returned during creation
-            for (std::size_t i = 0; i < nodes_.size(); ++i) {
-                if (nodes_[i].state == conn_state::idle) {
-                    nodes_[i].state = conn_state::in_use;
-                    nodes_[i].last_used = std::chrono::steady_clock::now();
-                    co_return pooled_connection(this, i, nodes_[i].conn.get());
-                }
-            }
-        }
-
-        // 3) All connections busy — add to waiter queue while holding lock, then suspend
-        //    Release lock in await_suspend, ensuring atomicity of handle setting and enqueue
-        std::size_t assigned_idx = nodes_.size();
-        pool_waiter waiter;
-        waiter.result_idx = &assigned_idx;
-
-        struct waiter_awaitable {
-            connection_pool& pool;
-            pool_waiter& w;
-            async_lock_guard& guard;
-
-            auto await_ready() const noexcept -> bool { return false; }
-            void await_suspend(std::coroutine_handle<> h) noexcept {
-                w.handle = h;
-                // Hold coroutine lock — safe to operate waiter queue
-                if (!pool.waiters_head_) {
-                    pool.waiters_head_ = pool.waiters_tail_ = &w;
-                } else {
-                    pool.waiters_tail_->next = &w;
-                    pool.waiters_tail_ = &w;
-                }
-                // Enqueue complete, release coroutine lock
-                guard.release();
-                pool.mtx_.unlock();
-            }
-            void await_resume() noexcept {}
-        };
-
-        co_await waiter_awaitable{*this, waiter, guard};
-
-        // When awakened, assigned_idx has been set by return_connection
-        if (assigned_idx < nodes_.size()) {
-            co_return pooled_connection(this, assigned_idx, nodes_[assigned_idx].conn.get());
-        }
-        co_return pooled_connection{};
+    auto async_get_connection()
+        -> task<std::expected<pooled_connection, std::error_code>>
+    {
+        cancel_token token;
+        co_return co_await with_timeout(ctx_, params_.pool_timeout,
+            async_get_connection(token), token);
     }
-
-    // ── cancel / close ───────────────────────────────────────
 
     auto cancel() -> task<void> {
         running_ = false;
         co_await mtx_.lock();
-        async_lock_guard guard(mtx_, std::adopt_lock);
-        for (auto& node : nodes_) {
-            if (node.conn && node.conn->is_open()) {
-                // Don't wait for quit to complete
+        for (auto& node : conns_) {
+            if (node.conn && node.conn->is_open())
                 node.state = conn_state::dead;
-            }
         }
+        mtx_.unlock();
     }
 
-    auto size() const noexcept -> std::size_t { return nodes_.size(); }
+    auto size() const noexcept -> std::size_t { return conns_.size(); }
 
     auto idle_count() const noexcept -> std::size_t {
         std::size_t n = 0;
-        for (auto& nd : nodes_)
+        for (auto& nd : conns_)
             if (nd.state == conn_state::idle) ++n;
         return n;
     }
@@ -264,13 +183,14 @@ public:
 private:
     friend class pooled_connection;
 
-    io_context&  ctx_;
-    pool_params  params_;
-    std::vector<conn_node> nodes_;
-    async_mutex  mtx_;
-    bool         running_ = false;
-    pool_waiter* waiters_head_ = nullptr;
-    pool_waiter* waiters_tail_ = nullptr;
+    io_context&            ctx_;
+    pool_params            params_;
+    std::list<conn_node>   conns_;          // P2: stable addresses
+    async_mutex            mtx_;
+    bool                   running_ = false;
+    pool_waiter*           waiters_head_ = nullptr;
+    pool_waiter*           waiters_tail_ = nullptr;
+    std::size_t            num_pending_requests_ = 0;  // P1: for demand formula
 
     auto make_connect_options() const -> connect_options {
         connect_options opts;
@@ -285,123 +205,306 @@ private:
         return opts;
     }
 
-    auto create_and_connect() -> task<std::size_t> {
-        auto c = std::make_unique<client>(ctx_);
-        auto opts = make_connect_options();
+    // ── P0: Per-connection autonomous lifecycle task ──
 
-        auto rs = co_await c->connect(opts);
-        if (rs.is_err()) {
-            // Connection failed — don't add to pool
-            co_return nodes_.size(); // Return invalid index
+    auto connection_task(conn_node& node) -> task<void> {
+        while (running_) {
+            // Phase 1: Ensure connected
+            if (node.state == conn_state::initial || node.state == conn_state::dead) {
+                node.state = conn_state::connecting;
+                auto opts = make_connect_options();
+                auto rs = co_await node.conn->connect(opts);
+
+                co_await mtx_.lock();
+                if (rs.is_err()) {
+                    node.state = conn_state::dead;
+                    mtx_.unlock();
+                    co_await async_sleep(ctx_, params_.retry_interval);
+                    continue;
+                }
+                node.state = conn_state::idle;
+                node.last_used = std::chrono::steady_clock::now();
+                // Hand to waiter if any, otherwise stays idle
+                try_notify_one_waiter(node);
+                mtx_.unlock();
+            }
+
+            // Phase 2: Idle — wait ping_interval then ping
+            if (node.state == conn_state::idle) {
+                co_await async_sleep(ctx_, params_.ping_interval);
+                if (!running_) break;
+
+                co_await mtx_.lock();
+                if (node.state != conn_state::idle) {
+                    mtx_.unlock();
+                    continue;  // Was borrowed during sleep
+                }
+                node.state = conn_state::pinging;
+                mtx_.unlock();
+
+                auto rs = co_await node.conn->ping();
+
+                co_await mtx_.lock();
+                if (rs.is_err()) {
+                    node.state = conn_state::dead;
+                    mtx_.unlock();
+                    continue;  // Will reconnect next iteration
+                }
+                node.state = conn_state::idle;
+                node.last_used = std::chrono::steady_clock::now();
+                mtx_.unlock();
+            }
+
+            // If in_use, suspend until returned (zero-cost wait)
+            if (node.state == conn_state::in_use) {
+                struct return_awaitable {
+                    conn_node& n;
+                    auto await_ready() const noexcept -> bool {
+                        return n.state != conn_state::in_use;
+                    }
+                    void await_suspend(std::coroutine_handle<> h) noexcept {
+                        n.task_waiting = h;
+                    }
+                    void await_resume() noexcept {}
+                };
+                co_await return_awaitable{node};
+            }
         }
+    }
 
-        co_await mtx_.lock();
-        async_lock_guard guard(mtx_, std::adopt_lock);
-        auto idx = nodes_.size();
-        conn_node node;
-        node.conn  = std::move(c);
-        node.state = conn_state::idle;
+    void spawn_connection() {
+        conns_.emplace_back();
+        auto& node = conns_.back();
+        node.conn = std::make_unique<client>(ctx_);
+        node.state = conn_state::initial;
         node.last_used = std::chrono::steady_clock::now();
-        nodes_.push_back(std::move(node));
-        co_return idx;
+        spawn(ctx_, connection_task(node));
     }
 
-    auto health_check() -> task<void> {
+    // ── P1: Demand-driven scaling (Boost formula) ──
+
+    std::size_t count_pending_conns() const {
+        std::size_t n = 0;
+        for (auto& nd : conns_)
+            if (nd.state == conn_state::connecting || nd.state == conn_state::initial)
+                ++n;
+        return n;
+    }
+
+    void create_connections_if_needed() {
+        // Must hold lock
+        std::size_t pending = count_pending_conns();
+        std::size_t room = params_.max_size - conns_.size();
+        std::size_t needed = (num_pending_requests_ > pending)
+                           ? (num_pending_requests_ - pending) : 0;
+        std::size_t to_create = std::min(needed, room);
+        for (std::size_t i = 0; i < to_create; ++i)
+            spawn_connection();
+    }
+
+    // ── Waiter queue helpers ──
+
+    void try_notify_one_waiter(conn_node& node) {
+        // Must hold lock. If waiter exists, hand connection directly.
+        if (!waiters_head_ || node.state != conn_state::idle) return;
+
+        auto* w = waiters_head_;
+        waiters_head_ = w->next;
+        if (!waiters_head_) waiters_tail_ = nullptr;
+
+        if (w->token) {
+            w->token->pending_.store(false, std::memory_order_release);
+            w->token->cancel_fn_ = nullptr;
+        }
+
+        node.state = conn_state::in_use;
+        node.last_used = std::chrono::steady_clock::now();
+        *w->result_node = &node;
+
+        if (w->handle) ctx_.post(w->handle);
+    }
+
+    auto remove_waiter(pool_waiter* target) -> bool {
+        pool_waiter* prev = nullptr;
+        for (auto* w = waiters_head_; w; prev = w, w = w->next) {
+            if (w == target) {
+                if (prev) prev->next = w->next;
+                else waiters_head_ = w->next;
+                if (waiters_tail_ == w) waiters_tail_ = prev;
+                w->next = nullptr;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ── Return connection to pool ──
+
+    // ── testOnBorrow: validate stale connections ──
+
+    auto try_get_idle(async_lock_guard& guard)
+        -> task<conn_node*>
+    {
+        // Must hold lock
         auto now = std::chrono::steady_clock::now();
+        auto stale_threshold = params_.ping_interval / 2;
 
-        co_await mtx_.lock();
-        // Collect idle connection indices that need ping
-        std::vector<std::size_t> to_ping;
-        for (std::size_t i = 0; i < nodes_.size(); ++i) {
-            if (nodes_[i].state == conn_state::idle &&
-                (now - nodes_[i].last_used) >= params_.ping_interval) {
-                to_ping.push_back(i);
+        for (auto& node : conns_) {
+            if (node.state != conn_state::idle) continue;
+
+            if ((now - node.last_used) >= stale_threshold) {
+                node.state = conn_state::pinging;
+                auto* c = node.conn.get();
+                guard.release();
+                mtx_.unlock();
+
+                auto rs = co_await c->ping();
+
+                co_await mtx_.lock();
+                guard = async_lock_guard(mtx_, std::adopt_lock);
+                if (rs.is_err()) {
+                    node.state = conn_state::dead;
+                    continue;
+                }
+                node.state = conn_state::in_use;
+                node.last_used = std::chrono::steady_clock::now();
+                co_return &node;
             }
+
+            node.state = conn_state::in_use;
+            node.last_used = std::chrono::steady_clock::now();
+            co_return &node;
         }
-        mtx_.unlock();
-
-        for (auto idx : to_ping) {
-            co_await mtx_.lock();
-            if (idx >= nodes_.size() || nodes_[idx].state != conn_state::idle) {
-                mtx_.unlock();
-                continue;
-            }
-            auto* c = nodes_[idx].conn.get();
-            mtx_.unlock();
-
-            auto rs = co_await c->ping();
-            co_await mtx_.lock();
-            if (rs.is_err()) {
-                // ping failed — mark as dead, try to reconnect
-                nodes_[idx].state = conn_state::dead;
-                mtx_.unlock();
-                co_await reconnect(idx);
-            } else {
-                nodes_[idx].last_used = std::chrono::steady_clock::now();
-                mtx_.unlock();
-            }
-        }
+        co_return nullptr;
     }
 
-    auto reconnect(std::size_t idx) -> task<void> {
-        auto c = std::make_unique<client>(ctx_);
-        auto opts = make_connect_options();
-        auto rs = co_await c->connect(opts);
-
-        co_await mtx_.lock();
-        async_lock_guard guard(mtx_, std::adopt_lock);
-        if (rs.is_err()) {
-            nodes_[idx].state = conn_state::dead;
-        } else {
-            nodes_[idx].conn  = std::move(c);
-            nodes_[idx].state = conn_state::idle;
-            nodes_[idx].last_used = std::chrono::steady_clock::now();
-        }
-    }
-
-    void return_connection(std::size_t idx, [[maybe_unused]] bool needs_reset) {
-        if (idx >= nodes_.size())
-            return;
-
-        // Called from destructor (non-coroutine), use try_lock to protect waiter queue with coroutine lock
-        // In single-threaded event loop, try_lock always succeeds (no coroutine holds lock when returning)
+    void return_connection(conn_node& node, bool needs_reset) {
         if (mtx_.try_lock()) {
-            if (waiters_head_) {
-                auto* w = waiters_head_;
-                waiters_head_ = w->next;
-                if (!waiters_head_)
-                    waiters_tail_ = nullptr;
-
-                nodes_[idx].state = conn_state::in_use;
-                nodes_[idx].last_used = std::chrono::steady_clock::now();
-                *w->result_idx = idx;
-                mtx_.unlock();
-
-                // Resume waiter coroutine via post, avoid direct resume on destructor stack
-                if (w->handle)
-                    ctx_.post(w->handle);
-                return;
+            if (node.state == conn_state::in_use) {
+                node.needs_reset = needs_reset;
+                node.state = conn_state::idle;
+                node.last_used = std::chrono::steady_clock::now();
+                try_notify_one_waiter(node);
+                // Wake connection_task
+                if (auto h = std::exchange(node.task_waiting, {}))
+                    ctx_.post(h);
             }
-            nodes_[idx].state = conn_state::idle;
-            nodes_[idx].last_used = std::chrono::steady_clock::now();
             mtx_.unlock();
         } else {
-            // Extreme edge case: another coroutine holds lock, just mark as idle
-            nodes_[idx].state = conn_state::idle;
-            nodes_[idx].last_used = std::chrono::steady_clock::now();
+            spawn(ctx_, [this, &node, needs_reset]() -> task<void> {
+                co_await mtx_.lock();
+                if (node.state == conn_state::in_use) {
+                    node.needs_reset = needs_reset;
+                    node.state = conn_state::idle;
+                    node.last_used = std::chrono::steady_clock::now();
+                    try_notify_one_waiter(node);
+                    if (auto h = std::exchange(node.task_waiting, {}))
+                        ctx_.post(h);
+                }
+                mtx_.unlock();
+            }());
         }
     }
 };
 
 // =============================================================================
-// pooled_connection method implementation
+// async_get_connection — out-of-class definition
+// =============================================================================
+
+inline auto connection_pool::async_get_connection(cancel_token& token)
+    -> task<std::expected<pooled_connection, std::error_code>>
+{
+    co_await mtx_.lock();
+    async_lock_guard guard(mtx_, std::adopt_lock);
+
+    // 1) Try to find an idle connection (with testOnBorrow for stale ones)
+    if (auto* node = co_await try_get_idle(guard)) {
+        co_return pooled_connection(this, node);
+    }
+
+    // 2) P1: Record pending request + demand-driven scaling
+    ++num_pending_requests_;
+    if (running_) create_connections_if_needed();
+
+    // 3) Wait in queue (cancellable via cancel_token)
+    conn_node* assigned = nullptr;
+    pool_waiter waiter;
+    waiter.result_node = &assigned;
+    waiter.token = &token;
+
+    struct waiter_awaitable {
+        connection_pool& pool;
+        pool_waiter& w;
+        async_lock_guard& guard;
+        cancel_token& token;
+
+        auto await_ready() const noexcept -> bool { return false; }
+        void await_suspend(std::coroutine_handle<> h) noexcept {
+            w.handle = h;
+            if (!pool.waiters_head_) {
+                pool.waiters_head_ = pool.waiters_tail_ = &w;
+            } else {
+                pool.waiters_tail_->next = &w;
+                pool.waiters_tail_ = &w;
+            }
+            token.ctx_ = &pool;
+            token.io_handle_ = &w;
+            token.coroutine_ = h;
+            token.cancel_fn_ = [](cancel_token& tok) noexcept {
+                auto* p = static_cast<connection_pool*>(tok.ctx_);
+                auto* wt = static_cast<pool_waiter*>(tok.io_handle_);
+                if (p->mtx_.try_lock()) {
+                    p->remove_waiter(wt);
+                    p->mtx_.unlock();
+                }
+                p->ctx_.post(tok.coroutine_);
+            };
+            token.pending_.store(true, std::memory_order_release);
+            guard.release();
+            pool.mtx_.unlock();
+
+            if (token.is_cancelled()) {
+                if (pool.mtx_.try_lock()) {
+                    pool.remove_waiter(&w);
+                    pool.mtx_.unlock();
+                }
+                pool.ctx_.post(h);
+            }
+        }
+        void await_resume() noexcept {
+            token.pending_.store(false, std::memory_order_relaxed);
+        }
+    };
+
+    co_await waiter_awaitable{*this, waiter, guard, token};
+
+    // Decrement pending requests
+    co_await mtx_.lock();
+    if (num_pending_requests_ > 0) --num_pending_requests_;
+    mtx_.unlock();
+
+    if (token.is_cancelled()) {
+        co_await mtx_.lock();
+        remove_waiter(&waiter);
+        mtx_.unlock();
+        co_return std::unexpected(make_error_code(std::errc::timed_out));
+    }
+
+    if (assigned) {
+        co_return pooled_connection(this, assigned);
+    }
+    co_return std::unexpected(make_error_code(std::errc::timed_out));
+}
+
+// =============================================================================
+// pooled_connection method implementations
 // =============================================================================
 
 inline void pooled_connection::return_to_pool(bool needs_reset) {
-    if (pool_ && conn_) {
-        pool_->return_connection(idx_, needs_reset);
+    if (pool_ && node_) {
+        pool_->return_connection(*node_, needs_reset);
         pool_ = nullptr;
-        conn_ = nullptr;
+        node_ = nullptr;
     }
 }
 

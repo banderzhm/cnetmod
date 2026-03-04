@@ -89,8 +89,60 @@ public:
     /// Execute a SELECT with explicit param map
     template <Model T>
     auto query(std::string_view statement_id,
-               std::unordered_map<std::string, param_value> params) -> task<orm_result<T>> {
+               std::flat_map<std::string, param_value> params) -> task<orm_result<T>> {
         co_return co_await query<T>(statement_id, param_context::from_map(std::move(params)));
+    }
+
+    /// Execute a SELECT mapper statement, return tuple results
+    template <typename... Ts>
+    auto query_tuple(std::string_view statement_id,
+                     const param_context& ctx) -> task<orm_result<std::tuple<Ts...>>> {
+        auto sql_result = build_sql(statement_id, ctx);
+        if (!sql_result) {
+            orm_result<std::tuple<Ts...>> r;
+            r.error_msg = sql_result.error();
+            co_return r;
+        }
+
+        auto& [sql, params] = *sql_result;
+        last_sql_ = sql;
+
+        // Execute via format_sql
+        auto final_sql_result = format_sql(cli_.current_format_opts(), sql, params);
+        if (!final_sql_result) {
+            orm_result<std::tuple<Ts...>> r;
+            r.error_msg = "SQL formatting error";
+            co_return r;
+        }
+
+        last_final_sql_ = *final_sql_result;
+
+        // Optional: Log SQL
+        if (log_sql_ && final_sql_result->size() < 500) {
+            logger::detail::write_log_no_src(logger::level::debug,
+                std::format("[SQL] Generated: {}", sql));
+            logger::detail::write_log_no_src(logger::level::debug,
+                std::format("[SQL] Final: {}", *final_sql_result));
+        }
+
+        auto rs = co_await cli_.execute(*final_sql_result);
+        if (rs.is_err()) {
+            orm_result<std::tuple<Ts...>> r;
+            r.error_msg = rs.error_msg;
+            co_return r;
+        }
+
+        orm_result<std::tuple<Ts...>> r;
+        r.data = from_result_set_to_tuple<Ts...>(rs);
+        r.affected_rows = rs.affected_rows;
+        co_return r;
+    }
+
+    /// Execute a SELECT with explicit param map, return tuple results
+    template <typename... Ts>
+    auto query_tuple(std::string_view statement_id,
+                     std::flat_map<std::string, param_value> params) -> task<orm_result<std::tuple<Ts...>>> {
+        co_return co_await query_tuple<Ts...>(statement_id, param_context::from_map(std::move(params)));
     }
 
     /// Execute INSERT/UPDATE/DELETE mapper statement
@@ -141,8 +193,47 @@ public:
 
     /// Execute with explicit param map
     auto execute(std::string_view statement_id,
-                 std::unordered_map<std::string, param_value> params) -> task<exec_result> {
+                 std::flat_map<std::string, param_value> params) -> task<exec_result> {
         co_return co_await execute(statement_id, param_context::from_map(std::move(params)));
+    }
+
+    /// Execute a SELECT mapper statement, return raw result_set
+    auto execute_query(std::string_view statement_id,
+                       const param_context& ctx) -> task<result_set> {
+        auto sql_result = build_sql(statement_id, ctx);
+        if (!sql_result) {
+            result_set rs;
+            rs.error_msg = sql_result.error();
+            co_return rs;
+        }
+
+        auto& [sql, params] = *sql_result;
+        last_sql_ = sql;
+
+        auto final_sql_result = format_sql(cli_.current_format_opts(), sql, params);
+        if (!final_sql_result) {
+            result_set rs;
+            rs.error_msg = "SQL formatting error";
+            co_return rs;
+        }
+
+        last_final_sql_ = *final_sql_result;
+
+        // Optional: Log SQL
+        if (log_sql_ && final_sql_result->size() < 500) {
+            logger::detail::write_log_no_src(logger::level::debug,
+                std::format("[SQL] Generated: {}", sql));
+            logger::detail::write_log_no_src(logger::level::debug,
+                std::format("[SQL] Final: {}", *final_sql_result));
+        }
+
+        co_return co_await cli_.execute(*final_sql_result);
+    }
+
+    /// Execute with explicit param map, return raw result_set
+    auto execute_query(std::string_view statement_id,
+                       std::flat_map<std::string, param_value> params) -> task<result_set> {
+        co_return co_await execute_query(statement_id, param_context::from_map(std::move(params)));
     }
 
     /// Access underlying client

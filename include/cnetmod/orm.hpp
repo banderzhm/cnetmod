@@ -115,3 +115,70 @@
             return m; \
         } \
     };
+
+// Helper macro to define field name constants
+// Usage after CNETMOD_MODEL:
+//   CNETMOD_FIELDS(AiPrompt, id, name, prompt_template, is_default)
+#define CNETMOD_FIELDS(TYPE, ...) \
+    namespace orm_fields { \
+        struct TYPE { \
+            CNETMOD_FIELD_CONSTANTS(__VA_ARGS__) \
+        }; \
+    }
+
+#define CNETMOD_FIELD_CONSTANTS(...) \
+    CNETMOD_FIELD_CONST_EACH(__VA_ARGS__)
+
+// Generate: static constexpr std::string_view field_name = "field_name";
+#define CNETMOD_FIELD_CONST(NAME) \
+    static constexpr std::string_view NAME = #NAME;
+
+// Variadic expansion for up to 20 fields
+#define CNETMOD_FIELD_CONST_EACH(...) \
+    CNETMOD_FIELD_CONST_EXPAND(CNETMOD_FIELD_CONST, __VA_ARGS__)
+
+#define CNETMOD_FIELD_CONST_EXPAND(MACRO, ...) \
+    CNETMOD_FIELD_CONST_IMPL(MACRO, __VA_ARGS__, \
+        ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~, ~)
+
+#define CNETMOD_FIELD_CONST_IMPL(M, \
+    _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, \
+    _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, ...) \
+    CNETMOD_FIELD_CONST_APPLY(M, _1) \
+    CNETMOD_FIELD_CONST_APPLY(M, _2) \
+    CNETMOD_FIELD_CONST_APPLY(M, _3) \
+    CNETMOD_FIELD_CONST_APPLY(M, _4) \
+    CNETMOD_FIELD_CONST_APPLY(M, _5) \
+    CNETMOD_FIELD_CONST_APPLY(M, _6) \
+    CNETMOD_FIELD_CONST_APPLY(M, _7) \
+    CNETMOD_FIELD_CONST_APPLY(M, _8) \
+    CNETMOD_FIELD_CONST_APPLY(M, _9) \
+    CNETMOD_FIELD_CONST_APPLY(M, _10) \
+    CNETMOD_FIELD_CONST_APPLY(M, _11) \
+    CNETMOD_FIELD_CONST_APPLY(M, _12) \
+    CNETMOD_FIELD_CONST_APPLY(M, _13) \
+    CNETMOD_FIELD_CONST_APPLY(M, _14) \
+    CNETMOD_FIELD_CONST_APPLY(M, _15) \
+    CNETMOD_FIELD_CONST_APPLY(M, _16) \
+    CNETMOD_FIELD_CONST_APPLY(M, _17) \
+    CNETMOD_FIELD_CONST_APPLY(M, _18) \
+    CNETMOD_FIELD_CONST_APPLY(M, _19) \
+    CNETMOD_FIELD_CONST_APPLY(M, _20)
+
+#define CNETMOD_FIELD_CONST_APPLY(M, X) \
+    CNETMOD_FIELD_CONST_IF_NOT_TILDE(X, M(X))
+
+#define CNETMOD_FIELD_CONST_IF_NOT_TILDE(X, ...) \
+    CNETMOD_FIELD_CONST_CHECK(CNETMOD_FIELD_CONST_IS_TILDE(X), __VA_ARGS__)
+
+#define CNETMOD_FIELD_CONST_CHECK(COND, ...) \
+    CNETMOD_FIELD_CONST_CHECK_##COND(__VA_ARGS__)
+
+#define CNETMOD_FIELD_CONST_CHECK_0(...) __VA_ARGS__
+#define CNETMOD_FIELD_CONST_CHECK_1(...)
+
+#define CNETMOD_FIELD_CONST_IS_TILDE(X) \
+    CNETMOD_FIELD_CONST_IS_TILDE_##X
+
+#define CNETMOD_FIELD_CONST_IS_TILDE_~ 1
+

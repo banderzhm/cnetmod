@@ -15,10 +15,18 @@ export class param_context : public property_resolver {
 public:
     param_context() = default;
 
-    // Construct from explicit key-value map
+    // Construct from explicit key-value map (unordered_map)
     static auto from_map(std::unordered_map<std::string, param_value> params) -> param_context {
         param_context ctx;
         for (auto& [k, v] : params)
+            ctx.values_[k] = expr_value::from_param(v);
+        return ctx;
+    }
+
+    // Construct from explicit key-value map (flat_map)
+    static auto from_map(std::flat_map<std::string, param_value> params) -> param_context {
+        param_context ctx;
+        for (const auto& [k, v] : params)
             ctx.values_[k] = expr_value::from_param(v);
         return ctx;
     }
