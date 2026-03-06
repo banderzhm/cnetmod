@@ -142,6 +142,16 @@ public:
         return static_cast<unsigned>(workers_.size());
     }
 
+    /// Return all worker io_context pointers
+    [[nodiscard]] auto worker_ios() -> std::vector<io_context*> {
+        std::vector<io_context*> ios;
+        ios.reserve(workers_.size());
+        for (auto& w : workers_) {
+            ios.push_back(w.get());
+        }
+        return ios;
+    }
+
     /// stdexec thread pool
     [[nodiscard]] auto pool() noexcept -> exec::static_thread_pool& {
         return pool_;

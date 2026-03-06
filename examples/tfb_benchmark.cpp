@@ -101,10 +101,10 @@ auto handle_plaintext(http::request_context& ctx) -> cn::task<void> {
 // Test 2: Single Database Query — GET /db
 // =============================================================================
 
-/// Requires a mysql::connection_pool* passed via closure
-auto make_db_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
+/// Requires a mysql::sharded_connection_pool* passed via closure
+auto make_db_handler(cn::mysql::sharded_connection_pool& pool) -> http::handler_fn {
     return [&pool](http::request_context& ctx) -> cn::task<void> {
-        auto conn_result = co_await pool.async_get_connection();
+        auto conn_result = co_await pool.async_get_connection(ctx.io_ctx());
         if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
@@ -132,11 +132,11 @@ auto make_db_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
 // Test 3:
 // =============================================================================
 
-auto make_queries_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
+auto make_queries_handler(cn::mysql::sharded_connection_pool& pool) -> http::handler_fn {
     return [&pool](http::request_context& ctx) -> cn::task<void> {
         int n = parse_queries(ctx.query_string());
 
-        auto conn_result = co_await pool.async_get_connection();
+        auto conn_result = co_await pool.async_get_connection(ctx.io_ctx());
         if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
@@ -163,9 +163,9 @@ auto make_queries_handler(cn::mysql::connection_pool& pool) -> http::handler_fn 
 // Test 4: Fortunes — GET /fortunes
 // =============================================================================
 
-auto make_fortunes_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
+auto make_fortunes_handler(cn::mysql::sharded_connection_pool& pool) -> http::handler_fn {
     return [&pool](http::request_context& ctx) -> cn::task<void> {
-        auto conn_result = co_await pool.async_get_connection();
+        auto conn_result = co_await pool.async_get_connection(ctx.io_ctx());
         if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
@@ -217,11 +217,11 @@ auto make_fortunes_handler(cn::mysql::connection_pool& pool) -> http::handler_fn
 // Test 5: Database Updates — GET /updates?queries=N
 // =============================================================================
 
-auto make_updates_handler(cn::mysql::connection_pool& pool) -> http::handler_fn {
+auto make_updates_handler(cn::mysql::sharded_connection_pool& pool) -> http::handler_fn {
     return [&pool](http::request_context& ctx) -> cn::task<void> {
         int n = parse_queries(ctx.query_string());
 
-        auto conn_result = co_await pool.async_get_connection();
+        auto conn_result = co_await pool.async_get_connection(ctx.io_ctx());
         if (!conn_result) {
             ctx.text(http::status::internal_server_error, "DB connection failed");
             co_return;
@@ -297,7 +297,8 @@ int main(int, char**) {
         .max_size = workers * 4,
         .tls_ca_file = {},
     };
-    cn::mysql::connection_pool db_pool(sctx.accept_io(), pool_opts);
+    auto worker_ios = sctx.worker_ios();
+    cn::mysql::sharded_connection_pool db_pool(std::move(worker_ios), pool_opts);
     cn::spawn(sctx.accept_io(), db_pool.async_run());
 
     // Build router — minimal, no unnecessary middleware for max perf

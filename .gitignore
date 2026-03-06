@@ -37,3 +37,5 @@ build*
 doc
 当前任务.md
 cmake-build*
+*orchids
+*claude
