@@ -126,6 +126,7 @@ public:
 
 private:
     friend class connection_pool;
+    friend class sharded_connection_pool;
 
     connection_pool* pool_ = nullptr;
     conn_node*       node_ = nullptr;
