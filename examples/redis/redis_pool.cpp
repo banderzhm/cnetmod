@@ -112,10 +112,14 @@ auto demo_concurrent(cn::io_context& ctx, connection_pool& pool) -> cn::task<voi
             keys.push_back(std::format("worker:{}:counter", i));
         }
         
-        // 构建 DEL 命令
-        std::vector<std::string> del_cmd = {"DEL"};
-        del_cmd.insert(del_cmd.end(), keys.begin(), keys.end());
-        co_await conn->cmd(del_cmd);
+        // 构建 DEL 命令 - 使用initializer_list
+        std::vector<std::string_view> del_args = {"DEL"};
+        for (const auto& key : keys) {
+            del_args.push_back(key);
+        }
+        
+        // 手动构建命令
+        auto reply = co_await conn->cmd({"DEL", keys[0], keys[1], keys[2], keys[3]});
     }
 }
 

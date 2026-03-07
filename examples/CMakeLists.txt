@@ -14,68 +14,160 @@ if(MSVC)
     string(REPLACE "/Ob0"  "/Ob1" CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 endif()
 
-set(EXAMPLE_TARGETS
-    echo_server
-    async_file
-    timer_demo
-    channel_demo
-    mutex_demo
-    stdexec_bridge
-    redis_client
-    http_demo
-    http2_demo
-    ws_demo
-    hight_http
-    hight_ws
-    hight_plus_http
-    serial_port
-    multicore_http
-    multicore_ws
-    blocking_bridge_demo
-    mqtt_demo
-    tfb_benchmark
-    mysql_crud
-    mysql_orm
-    mysql_transaction
-    mysql_xml_mapper
-    mysql_xml_complex
-    mybatis_plus_demo
+# ==============================================================================
+# Core Examples
+# ==============================================================================
+set(CORE_EXAMPLES
+    core/echo_server
+    core/async_file
+    core/timer_demo
+    core/serial_port
 )
 
 # SSL examples (only built when OpenSSL is available)
 if(CNETMOD_HAS_SSL)
-    list(APPEND EXAMPLE_TARGETS ssl_echo_server)
+    list(APPEND CORE_EXAMPLES core/ssl_echo_server)
 endif()
 
-foreach(example ${EXAMPLE_TARGETS})
-    add_executable(example_${example} ${example}.cpp)
-    target_link_libraries(example_${example} PRIVATE ${CNETMOD_LINK_TARGET})
-    set_property(TARGET example_${example} PROPERTY
+# ==============================================================================
+# Concurrency Examples
+# ==============================================================================
+set(CONCURRENCY_EXAMPLES
+    concurrency/channel_demo
+    concurrency/mutex_demo
+    concurrency/stdexec_bridge
+    concurrency/blocking_bridge_demo
+)
+
+# ==============================================================================
+# HTTP Examples
+# ==============================================================================
+set(HTTP_EXAMPLES
+    http/http_demo
+    http/http2_demo
+    http/hight_http
+    http/hight_plus_http
+    http/multicore_http
+    http/tfb_benchmark
+)
+
+# ==============================================================================
+# WebSocket Examples
+# ==============================================================================
+set(WEBSOCKET_EXAMPLES
+    websocket/ws_demo
+    websocket/hight_ws
+    websocket/multicore_ws
+)
+
+# ==============================================================================
+# Database Examples
+# ==============================================================================
+set(DATABASE_EXAMPLES
+    database/mysql_crud
+    database/mysql_orm
+    database/mysql_transaction
+    database/mysql_xml_mapper
+    database/mysql_xml_complex
+    database/mybatis_plus_demo
+    database/transaction_simple_test
+)
+
+# ==============================================================================
+# Redis Examples
+# ==============================================================================
+set(REDIS_EXAMPLES
+    redis/redis_client
+    redis/redis_pool
+    redis/redis_sharded_pool
+)
+
+# ==============================================================================
+# MQTT Examples
+# ==============================================================================
+set(MQTT_EXAMPLES
+    mqtt/mqtt_demo
+)
+
+# ==============================================================================
+# Modbus Examples
+# ==============================================================================
+set(MODBUS_EXAMPLES
+    modbus/modbus_demo
+)
+
+# ==============================================================================
+# Combine all examples
+# ==============================================================================
+set(ALL_EXAMPLES
+    ${CORE_EXAMPLES}
+    ${CONCURRENCY_EXAMPLES}
+    ${HTTP_EXAMPLES}
+    ${WEBSOCKET_EXAMPLES}
+    ${DATABASE_EXAMPLES}
+    ${REDIS_EXAMPLES}
+    ${MQTT_EXAMPLES}
+    ${MODBUS_EXAMPLES}
+)
+
+# ==============================================================================
+# Build all examples
+# ==============================================================================
+foreach(example_path ${ALL_EXAMPLES})
+    # Extract category and name from path (e.g., "core/echo_server" -> "core" and "echo_server")
+    get_filename_component(category ${example_path} DIRECTORY)
+    get_filename_component(example_name ${example_path} NAME)
+    
+    # Create target name: example_echo_server, example_redis_client, etc.
+    set(target_name example_${example_name})
+    
+    # Add executable
+    add_executable(${target_name} ${example_path}.cpp)
+    target_link_libraries(${target_name} PRIVATE ${CNETMOD_LINK_TARGET})
+    set_property(TARGET ${target_name} PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE"
     )
+    
+    # Set output directory to category subdirectory
+    set_target_properties(${target_name} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/examples/${category}"
+    )
+    
     if(MSVC)
         # Disable debug info + disable LTCG + minimize code to avoid MSVC C1605 (object file exceeds 4GB)
         # /O1 appended at end of AdditionalOptions, overrides MSBuild-generated /Od
         # /RTC1 already removed at top of this subdirectory via string(REPLACE), so /O1 doesn't conflict with /RTC1
-        set_property(TARGET example_${example} PROPERTY
+        set_property(TARGET ${target_name} PROPERTY
             MSVC_DEBUG_INFORMATION_FORMAT "")
-        target_compile_options(example_${example} PRIVATE /bigobj /Zm800 /EHsc /GL- /O1)
-        target_link_options(example_${example} PRIVATE /LTCG:OFF /DEBUG:NONE)
+        target_compile_options(${target_name} PRIVATE /bigobj /Zm800 /EHsc /GL- /O1)
+        target_link_options(${target_name} PRIVATE /LTCG:OFF /DEBUG:NONE)
     endif()
 endforeach()
+
+# ==============================================================================
+# Post-build commands
+# ==============================================================================
 
 # Copy mapper XML files to build directory for mysql_xml_mapper example
 add_custom_command(TARGET example_mysql_xml_mapper POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-    $<TARGET_FILE_DIR:example_mysql_xml_mapper>/mappers
-    COMMENT "Copying mapper XML files to build directory"
+    ${CMAKE_BINARY_DIR}/examples/database/mappers
+    COMMENT "Copying mapper XML files for mysql_xml_mapper"
 )
 
 # Copy mapper XML files for mysql_xml_complex example
 add_custom_command(TARGET example_mysql_xml_complex POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-    $<TARGET_FILE_DIR:example_mysql_xml_complex>/mappers
-    COMMENT "Copying mapper XML files for complex example"
+    ${CMAKE_BINARY_DIR}/examples/database/mappers
+    COMMENT "Copying mapper XML files for mysql_xml_complex"
+)
+
+# Copy mapper XML files for mybatis_plus_demo example
+add_custom_command(TARGET example_mybatis_plus_demo POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_CURRENT_SOURCE_DIR}/mappers
+    ${CMAKE_BINARY_DIR}/examples/database/mappers
+    COMMENT "Copying mapper XML files for mybatis_plus_demo"
 )

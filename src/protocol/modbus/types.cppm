@@ -107,6 +107,8 @@ export struct modbus_response {
 
     static auto parse(std::span<const std::uint8_t> buffer) 
         -> std::expected<modbus_response, std::error_code>;
+    
+    auto serialize() const -> std::vector<std::uint8_t>;
 };
 
 // =============================================================================
@@ -280,6 +282,40 @@ inline auto modbus_response::parse(std::span<const std::uint8_t> buffer)
     }
 
     return response;
+}
+
+// =============================================================================
+// modbus_response::serialize Implementation
+// =============================================================================
+
+inline auto modbus_response::serialize() const -> std::vector<std::uint8_t> {
+    std::vector<std::uint8_t> buffer;
+    
+    // For TCP/UDP: include MBAP header
+    if (header.protocol_id == 0) {  // TCP/UDP uses protocol_id = 0
+        buffer.reserve(12 + data.size());
+        
+        // MBAP Header
+        write_uint16_be(buffer, header.transaction_id);
+        write_uint16_be(buffer, header.protocol_id);
+        write_uint16_be(buffer, static_cast<std::uint16_t>(2 + data.size())); // length = unit_id + func_code + data
+        buffer.push_back(header.unit_id);
+    } else {
+        // RTU: no MBAP header, just unit_id at start
+        buffer.reserve(3 + data.size());
+        buffer.push_back(header.unit_id);
+    }
+
+    // PDU (Protocol Data Unit)
+    if (is_exception) {
+        buffer.push_back(get_exception_function_code(func_code));
+        buffer.push_back(static_cast<std::uint8_t>(exception));
+    } else {
+        buffer.push_back(static_cast<std::uint8_t>(func_code));
+        buffer.insert(buffer.end(), data.begin(), data.end());
+    }
+
+    return buffer;
 }
 
 // =============================================================================

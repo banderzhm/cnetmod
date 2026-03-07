@@ -37,6 +37,7 @@
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、事务管理、ORM（CRUD / 迁移 / 查询构建器 / MyBatis-Plus 风格 XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
+- **Modbus**: 完整协议实现 — TCP/UDP/RTU（串口）客户端和服务端、所有标准功能码、连接池、CRC-16 校验、帧时序控制、数据存储（基于互斥锁和无锁通道）
 - **OpenAI**: 异步 API 客户端（聊天补全等）
 
 ### 中间件（HTTP）
@@ -152,6 +153,32 @@ cli.on_message([](const mqtt::publish_message& msg) {
 });
 co_await cli.publish("sensor/temp", "22.5", mqtt::qos::exactly_once);
 co_await cli.disconnect();
+```
+
+**Modbus 协议**：
+```cpp
+import cnetmod.protocol.modbus;
+
+// TCP 客户端
+modbus::tcp_client client(ctx);
+co_await client.connect("192.168.1.100", 502);
+
+auto req = modbus::request_builder()
+    .unit_id(1)
+    .read_holding_registers(0, 10)
+    .build();
+
+auto resp = co_await client.execute(req);
+
+// RTU 服务端（串口）
+modbus::memory_data_store store;
+modbus::rtu_server_config config;
+config.port_name = "COM3";  // Windows 或 "/dev/ttyUSB0" (Linux)
+config.baudrate = 9600;
+config.unit_id = 1;
+
+modbus::rtu_server server(ctx, store);
+co_await server.start(config);
 ```
 
 **定时器**：
@@ -295,7 +322,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id 自动生成
 ```
 
-查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`multicore_http`、`ssl_echo_server` 等。
+查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`modbus_demo`、`multicore_http`、`ssl_echo_server` 等。
 
 ## 架构
 
@@ -313,6 +340,7 @@ cnetmod.protocol.websocket — WebSocket 服务器
 cnetmod.protocol.mqtt — MQTT broker + 客户端（v3.1.1 / v5.0）
 cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
 cnetmod.protocol.redis — Redis 异步客户端
+cnetmod.protocol.modbus — Modbus TCP/UDP/RTU 客户端 + 服务端
 cnetmod.protocol.openai — OpenAI API 客户端
 cnetmod.middleware.*  — HTTP 中间件组件
 ```
@@ -364,7 +392,7 @@ cnetmod.middleware.*  — HTTP 中间件组件
 
 ## 项目状态
 
-cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1 & HTTP/2、MQTT、MySQL、WebSocket 等协议的生产级实现，全部基于零开销的 async/await 构建。
+cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1 & HTTP/2、MQTT、MySQL、WebSocket、Modbus 等协议的生产级实现，全部基于零开销的 async/await 构建。
 
 该库证明了 C++23 模块已经可以用于实际项目，并在 Linux、macOS 和 Windows 上提供完整的跨平台支持。
 

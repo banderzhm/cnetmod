@@ -12,8 +12,13 @@ import :types;
 import :data_store;
 import :request_handler;
 import cnetmod.io.io_context;
-import cnetmod.io.udp_socket;
+import cnetmod.protocol.udp;
 import cnetmod.coro.task;
+import cnetmod.coro.timer;
+import cnetmod.core.socket;
+import cnetmod.core.address;
+import cnetmod.core.buffer;
+import cnetmod.executor.async_op;
 
 namespace cnetmod::modbus {
 
@@ -24,7 +29,7 @@ namespace cnetmod::modbus {
 export class udp_server {
 public:
     udp_server(io_context& ctx, data_store& store)
-        : ctx_(ctx), socket_(ctx), handler_(store), running_(false) {}
+        : ctx_(ctx), handler_(store), running_(false) {}
 
     udp_server(const udp_server&) = delete;
     auto operator=(const udp_server&) -> udp_server& = delete;
@@ -33,7 +38,39 @@ public:
     auto listen(std::string_view host, std::uint16_t port) -> task<std::error_code> {
         host_ = std::string(host);
         port_ = port;
-        co_return co_await socket_.bind(host, port);
+        
+        // Parse IP address
+        auto addr_result = ip_address::from_string(host);
+        if (!addr_result) {
+            co_return addr_result.error();
+        }
+        
+        // Create UDP socket
+        auto sock_result = socket::create(
+            addr_result->is_v4() ? address_family::ipv4 : address_family::ipv6,
+            socket_type::datagram
+        );
+        if (!sock_result) {
+            co_return sock_result.error();
+        }
+        
+        socket_ = std::move(*sock_result);
+        
+        // Set socket options
+        socket_options opts;
+        opts.reuse_address = true;
+        opts.non_blocking = true;
+        if (auto err = socket_.apply_options(opts); !err) {
+            co_return err.error();
+        }
+        
+        // Bind
+        endpoint ep(*addr_result, port);
+        if (auto err = socket_.bind(ep); !err) {
+            co_return err.error();
+        }
+        
+        co_return std::error_code{};
     }
 
     // ── Start receiving requests ──
@@ -42,13 +79,14 @@ public:
         
         while (running_ && socket_.is_open()) {
             std::vector<std::uint8_t> buffer(512);
-            std::string from_host;
-            std::uint16_t from_port;
+            endpoint from_ep;
             
-            auto recv_result = co_await socket_.receive_from(buffer, from_host, from_port);
+            mutable_buffer recv_buf{reinterpret_cast<std::byte*>(buffer.data()), buffer.size()};
+            auto recv_result = co_await async_recvfrom(ctx_, socket_, recv_buf, from_ep);
             if (!recv_result) {
                 if (running_) {
                     // Log error but continue
+                    co_await async_sleep(ctx_, std::chrono::milliseconds(10));
                 }
                 continue;
             }
@@ -56,7 +94,7 @@ public:
             buffer.resize(*recv_result);
             request_count_.fetch_add(1, std::memory_order_relaxed);
 
-            // Parse request
+            // Parse request (reuse response parser)
             auto request_result = modbus_response::parse(buffer);
             if (!request_result) {
                 continue;
@@ -73,7 +111,11 @@ public:
 
             // Send response
             auto response_data = response.serialize();
-            co_await socket_.send_to(response_data, from_host, from_port);
+            const_buffer send_buf{
+                reinterpret_cast<const std::byte*>(response_data.data()),
+                response_data.size()
+            };
+            co_await async_sendto(ctx_, socket_, send_buf, from_ep);
         }
     }
 
@@ -91,7 +133,7 @@ public:
 
 private:
     io_context& ctx_;
-    udp_socket socket_;
+    socket socket_;
     request_handler handler_;
     bool running_;
     std::string host_;

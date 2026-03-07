@@ -107,7 +107,7 @@ auto demo_batch_write(tcp_client& client) -> cn::task<void> {
     }
 
     // 写入多个线圈
-    std::vector<bool> coil_values = {true, false, true, true, false, false, true, false};
+    std::array<bool, 8> coil_values = {true, false, true, true, false, false, true, false};
     auto coil_write_req = builder.write_multiple_coils(20, coil_values);
     auto coil_write_resp = co_await client.execute(coil_write_req);
     

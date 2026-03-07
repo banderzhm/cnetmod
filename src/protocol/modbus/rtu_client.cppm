@@ -12,50 +12,43 @@ import :types;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
+import cnetmod.core.serial_port;
+import cnetmod.core.buffer;
+import cnetmod.core.file;
+import cnetmod.executor.async_op;
 
 namespace cnetmod::modbus {
 
 // =============================================================================
-// Serial Port Configuration
+// RTU Configuration
 // =============================================================================
 
-export struct serial_config {
+export struct rtu_config {
     std::string port_name;           // e.g., "COM1" (Windows) or "/dev/ttyUSB0" (Linux)
     std::uint32_t baudrate = 9600;   // 9600, 19200, 38400, 57600, 115200
     std::uint8_t data_bits = 8;      // 7 or 8
-    std::uint8_t stop_bits = 1;      // 1 or 2
-    char parity = 'N';               // 'N' (None), 'E' (Even), 'O' (Odd)
+    stop_bits stop = stop_bits::one; // 1 or 2
+    parity par = parity::none;       // None, Even, Odd
     
     // Modbus RTU timing
     std::chrono::microseconds char_timeout = std::chrono::microseconds(1500);  // 1.5 char times
     std::chrono::microseconds frame_delay = std::chrono::microseconds(3500);   // 3.5 char times
-};
-
-// =============================================================================
-// Serial Port Interface (Platform-specific implementation needed)
-// =============================================================================
-
-class serial_port {
-public:
-    explicit serial_port(io_context& ctx) : ctx_(ctx) {}
     
-    virtual ~serial_port() = default;
-    
-    virtual auto open(const serial_config& config) -> task<std::error_code> = 0;
-    virtual auto close() -> void = 0;
-    virtual auto is_open() const -> bool = 0;
-    
-    virtual auto send(std::span<const std::uint8_t> data) 
-        -> task<std::expected<std::size_t, std::error_code>> = 0;
-    
-    virtual auto receive(std::span<std::uint8_t> buffer, 
-                        std::chrono::steady_clock::duration timeout)
-        -> task<std::expected<std::size_t, std::error_code>> = 0;
-    
-    virtual auto flush() -> task<void> = 0;
-
-protected:
-    io_context& ctx_;
+    // Convert to serial_config
+    auto to_serial_config() const -> serial_config {
+        serial_config cfg;
+        cfg.baud_rate = baudrate;
+        cfg.data_bits = data_bits;
+        cfg.stop = stop;
+        cfg.par = par;
+        cfg.flow = flow_control::none;  // Modbus RTU doesn't use flow control
+        cfg.read_timeout_ms = static_cast<std::uint32_t>(
+            std::chrono::duration_cast<std::chrono::milliseconds>(char_timeout).count()
+        );
+        cfg.write_timeout_ms = 1000;
+        return cfg;
+    }
 };
 
 // =============================================================================
@@ -65,43 +58,41 @@ protected:
 export class rtu_client {
 public:
     explicit rtu_client(io_context& ctx) 
-        : ctx_(ctx), serial_(nullptr) {}
+        : ctx_(ctx) {}
 
     rtu_client(const rtu_client&) = delete;
     auto operator=(const rtu_client&) -> rtu_client& = delete;
 
     // ── Open serial port ──
-    auto open(const serial_config& config) -> task<std::error_code> {
+    auto open(const rtu_config& config) -> task<std::error_code> {
         config_ = config;
         
-        // TODO: Create platform-specific serial port implementation
-        // For now, return not_supported
-        co_return std::make_error_code(std::errc::not_supported);
+        // Open serial port using existing implementation
+        auto result = serial_port::open(config.port_name, config.to_serial_config());
+        if (!result) {
+            co_return result.error();
+        }
         
-        // Future implementation:
-        // serial_ = create_serial_port(ctx_);
-        // co_return co_await serial_->open(config);
+        serial_ = std::move(*result);
+        co_return std::error_code{};
     }
 
     // ── Execute request and receive response ──
     auto execute(const modbus_request& request) 
         -> task<std::expected<modbus_response, std::error_code>> 
     {
-        if (!serial_ || !serial_->is_open()) {
+        if (!serial_.is_open()) {
             co_return std::unexpected(std::make_error_code(std::errc::not_connected));
         }
 
         // Serialize RTU frame: [unit_id][func_code][data][crc16_le]
         auto frame = serialize_rtu_frame(request);
         
-        // Flush receive buffer
-        co_await serial_->flush();
-        
-        // Wait for frame delay (3.5 char times)
+        // Wait for frame delay (3.5 char times) before sending
         co_await async_sleep(ctx_, config_.frame_delay);
         
-        // Send request
-        auto send_result = co_await serial_->send(frame);
+        // Send request (using async I/O on io_context)
+        auto send_result = co_await async_write_serial(frame);
         if (!send_result) {
             co_return std::unexpected(send_result.error());
         }
@@ -124,7 +115,9 @@ public:
             std::span<std::uint8_t> buf_span(response_buf.data() + total_received, 
                                             response_buf.size() - total_received);
             
-            auto recv_result = co_await serial_->receive(buf_span, remaining_timeout);
+            // Read with timeout
+            auto recv_result = co_await async_read_with_timeout(buf_span, remaining_timeout);
+            
             if (!recv_result) {
                 if (total_received >= 5) {  // Minimum valid frame
                     break;
@@ -141,8 +134,11 @@ public:
                 
                 // Try to receive more, if nothing comes, frame is complete
                 std::uint8_t dummy;
-                auto check_result = co_await serial_->receive(std::span(&dummy, 1), 
-                                                             config_.char_timeout);
+                auto check_result = co_await async_read_with_timeout(
+                    std::span(&dummy, 1), 
+                    config_.char_timeout
+                );
+                
                 if (!check_result || *check_result == 0) {
                     break;
                 }
@@ -177,25 +173,28 @@ public:
 
     // ── Close serial port ──
     void close() {
-        if (serial_) {
-            serial_->close();
-        }
+        serial_.close();
     }
 
     // ── Check if open ──
     auto is_open() const -> bool {
-        return serial_ && serial_->is_open();
+        return serial_.is_open();
     }
 
     // ── Get configuration ──
-    auto get_config() const -> const serial_config& {
+    auto get_config() const -> const rtu_config& {
         return config_;
+    }
+    
+    // ── Get serial port handle ──
+    auto native_handle() const -> file_handle_t {
+        return serial_.native_handle();
     }
 
 private:
     io_context& ctx_;
-    std::unique_ptr<serial_port> serial_;
-    serial_config config_;
+    serial_port serial_;
+    rtu_config config_;
 
     // Calculate response timeout based on request size and baudrate
     auto calculate_response_timeout(const modbus_request& request) const 
@@ -210,82 +209,39 @@ private:
         
         return transmission_time + processing_time + config_.frame_delay * 2;
     }
-};
-
-// =============================================================================
-// Platform-specific Serial Port Implementations
-// =============================================================================
-
-#ifdef _WIN32
-// Windows serial port implementation
-class windows_serial_port : public serial_port {
-public:
-    using serial_port::serial_port;
     
-    auto open(const serial_config& config) -> task<std::error_code> override {
-        // TODO: Implement Windows serial port using CreateFile/ReadFile/WriteFile
-        co_return std::make_error_code(std::errc::not_supported);
+    // Async write wrapper for serial port (uses io_context scheduler)
+    auto async_write_serial(std::span<const std::uint8_t> data)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+        const_buffer buf{reinterpret_cast<const std::byte*>(data.data()), data.size()};
+        co_return co_await async_serial_write(ctx_, serial_, buf);
     }
     
-    auto close() -> void override {
-        // TODO: Implement
-    }
-    
-    auto is_open() const -> bool override {
-        return false;
-    }
-    
-    auto send(std::span<const std::uint8_t> data) 
-        -> task<std::expected<std::size_t, std::error_code>> override {
-        co_return std::unexpected(std::make_error_code(std::errc::not_supported));
-    }
-    
-    auto receive(std::span<std::uint8_t> buffer, 
-                std::chrono::steady_clock::duration timeout)
-        -> task<std::expected<std::size_t, std::error_code>> override {
-        co_return std::unexpected(std::make_error_code(std::errc::not_supported));
-    }
-    
-    auto flush() -> task<void> override {
-        co_return;
+    // Async read with timeout wrapper for serial port (uses io_context scheduler)
+    auto async_read_with_timeout(std::span<std::uint8_t> buffer,
+                                 std::chrono::steady_clock::duration timeout)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+        // Create cancellation token for timeout
+        cancel_token token;
+        
+        // Start timeout timer
+        auto timeout_task = [](io_context& ctx, std::chrono::steady_clock::duration dur, 
+                              cancel_token& tok) -> task<void> {
+            co_await async_timer_wait(ctx, dur);
+            tok.cancel();
+        }(ctx_, timeout, token);
+        
+        // Start read operation with cancellation support
+        mutable_buffer buf{reinterpret_cast<std::byte*>(buffer.data()), buffer.size()};
+        auto result = co_await async_serial_read(ctx_, serial_, buf, token);
+        
+        // Cancel timeout if read completed first
+        token.cancel();
+        
+        co_return result;
     }
 };
-#endif
-
-#ifdef __linux__
-// Linux serial port implementation
-class linux_serial_port : public serial_port {
-public:
-    using serial_port::serial_port;
-    
-    auto open(const serial_config& config) -> task<std::error_code> override {
-        // TODO: Implement Linux serial port using termios
-        co_return std::make_error_code(std::errc::not_supported);
-    }
-    
-    auto close() -> void override {
-        // TODO: Implement
-    }
-    
-    auto is_open() const -> bool override {
-        return false;
-    }
-    
-    auto send(std::span<const std::uint8_t> data) 
-        -> task<std::expected<std::size_t, std::error_code>> override {
-        co_return std::unexpected(std::make_error_code(std::errc::not_supported));
-    }
-    
-    auto receive(std::span<std::uint8_t> buffer, 
-                std::chrono::steady_clock::duration timeout)
-        -> task<std::expected<std::size_t, std::error_code>> override {
-        co_return std::unexpected(std::make_error_code(std::errc::not_supported));
-    }
-    
-    auto flush() -> task<void> override {
-        co_return;
-    }
-};
-#endif
 
 } // namespace cnetmod::modbus

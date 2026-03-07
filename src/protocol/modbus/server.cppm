@@ -7,4 +7,5 @@ export import :data_store;
 export import :request_handler;
 export import :tcp_server;
 export import :udp_server;
+export import :rtu_server;
 

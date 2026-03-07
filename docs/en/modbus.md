@@ -223,19 +223,129 @@ if (parser.is_exception()) {
 3. **Proper Unit ID** - Set correct slave address
 4. **Timeout Configuration** - Adjust pool_timeout for your network
 5. **Pool Sizing** - Match initial_size to typical load
+6. **RTU Timing** - Configure char_timeout and frame_delay based on baudrate
+7. **Data Store Choice** - Use `channel_data_store` for high-concurrency scenarios
+
+## Data Store Implementations
+
+cnetmod provides two data store implementations:
+
+### memory_data_store (Mutex-based)
+- Simple and straightforward
+- Uses `std::mutex` for synchronization
+- Good for low to medium concurrency
+- Synchronous interface
+
+```cpp
+modbus::memory_data_store store;
+```
+
+### channel_data_store (Lock-free)
+- High-performance lock-free channel operations
+- Dedicated worker coroutine for data access
+- Better cache locality and scalability
+- Async API available for optimal performance
+
+```cpp
+modbus::channel_data_store store(10000, 10000, 10000, 10000, 128);
+store.start_worker();
+
+// Spawn worker coroutine
+spawn(ctx, store.worker());
+
+// Use async API for best performance
+auto result = co_await store.read_holding_register_async(100);
+```
+
+## RTU Client Usage
+
+The RTU client uses the existing `cnetmod.core.serial_port` implementation:
+
+```cpp
+import cnetmod.protocol.modbus;
+
+io_context ctx;
+
+// Configure RTU connection
+modbus::rtu_config config;
+config.port_name = "COM3";        // Windows: "COM1", Linux: "/dev/ttyUSB0"
+config.baudrate = 9600;
+config.data_bits = 8;
+config.stop = stop_bits::one;
+config.par = parity::none;
+config.char_timeout = std::chrono::microseconds(1500);   // 1.5 char times
+config.frame_delay = std::chrono::microseconds(3500);    // 3.5 char times
+
+// Create and open RTU client
+modbus::rtu_client client(ctx);
+auto err = co_await client.open(config);
+if (err) {
+    // Handle error
+}
+
+// Read holding registers
+auto req = modbus::request_builder()
+    .unit_id(1)
+    .read_holding_registers(0, 10)
+    .build();
+
+auto result = co_await client.execute_with_retry(req, 3);
+if (result) {
+    auto& resp = *result;
+    // Process response
+}
+
+client.close();
+```
+
+## RTU Server Usage
+
+The RTU server listens on a serial port and responds to Modbus RTU requests:
+
+```cpp
+import cnetmod.protocol.modbus;
+
+io_context ctx;
+
+// Create data store
+modbus::memory_data_store store;
+
+// Configure RTU server
+modbus::rtu_server_config config;
+config.port_name = "COM3";
+config.baudrate = 9600;
+config.data_bits = 8;
+config.stop = stop_bits::one;
+config.par = parity::none;
+config.unit_id = 1;  // Slave address
+
+// Create and start RTU server
+modbus::rtu_server server(ctx, store);
+auto err = co_await server.start(config);
+if (err) {
+    // Handle error
+}
+
+// Server runs in background, handling requests automatically
+// Stop when done
+server.stop();
+```
 
 ## Examples
 
 See `examples/modbus_demo.cpp` for a complete working example demonstrating:
 - TCP client operations
 - TCP server implementation
+- UDP client operations
+- UDP server implementation
+- RTU client operations
+- RTU server implementation
 - Connection pool usage
 - Batch read/write operations
 - Error handling
 
 ## Limitations
 
-- Modbus RTU (Serial) support is planned but not yet implemented
 - Maximum register count per request: 125 (Modbus specification)
 - Maximum coil count per request: 2000 (Modbus specification)
 

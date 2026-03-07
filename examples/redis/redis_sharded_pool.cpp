@@ -173,29 +173,31 @@ auto demo_sharded_pipeline(sharded_connection_pool& pool) -> cn::task<void> {
 
     auto conn = std::move(*conn_result);
 
-    // 批量操作
-    std::vector<std::vector<std::string>> commands;
-    for (int i = 0; i < 10; ++i) {
-        commands.push_back({"SET", std::format("pipe:{}", i), std::format("value{}", i)});
-    }
-    commands.push_back({"MGET", "pipe:0", "pipe:1", "pipe:2", "pipe:3", "pipe:4"});
-    
+    // 批量操作 - 使用initializer_list
     auto start = std::chrono::steady_clock::now();
-    auto replies = co_await conn->pipe(commands);
+    auto replies = co_await conn->pipe({
+        {"SET", "pipe:0", "value0"},
+        {"SET", "pipe:1", "value1"},
+        {"SET", "pipe:2", "value2"},
+        {"SET", "pipe:3", "value3"},
+        {"SET", "pipe:4", "value4"},
+        {"SET", "pipe:5", "value5"},
+        {"SET", "pipe:6", "value6"},
+        {"SET", "pipe:7", "value7"},
+        {"SET", "pipe:8", "value8"},
+        {"SET", "pipe:9", "value9"},
+        {"MGET", "pipe:0", "pipe:1", "pipe:2", "pipe:3", "pipe:4"}
+    });
     auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - start);
 
     if (replies) {
-        std::println("Pipeline executed {} commands in {} μs", 
-                     commands.size(), elapsed.count());
+        std::println("Pipeline executed 11 commands in {} μs", elapsed.count());
     }
 
     // 清理
-    std::vector<std::string> del_cmd = {"DEL"};
-    for (int i = 0; i < 10; ++i) {
-        del_cmd.push_back(std::format("pipe:{}", i));
-    }
-    co_await conn->cmd(del_cmd);
+    co_await conn->cmd({"DEL", "pipe:0", "pipe:1", "pipe:2", "pipe:3", "pipe:4", 
+                        "pipe:5", "pipe:6", "pipe:7", "pipe:8", "pipe:9"});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,8 +228,8 @@ auto demo_multi_context(std::vector<std::unique_ptr<cn::io_context>>& contexts,
     // 在每个 io_context 上启动工作任务
     std::vector<std::jthread> threads;
     for (std::size_t i = 0; i < contexts.size(); ++i) {
-        threads.emplace_back([&ctx = *contexts[i], &pool, i, ops_per_worker]() {
-            cn::spawn(ctx, worker_on_context(ctx, pool, static_cast<int>(i), ops_per_worker));
+        threads.emplace_back([&ctx = *contexts[i], &pool, i]() {
+            cn::spawn(ctx, worker_on_context(ctx, pool, static_cast<int>(i), 50));
             ctx.run();
         });
     }

@@ -223,19 +223,129 @@ if (parser.is_exception()) {
 3. **正确的单元 ID** - 设置正确的从站地址
 4. **超时配置** - 根据网络调整 pool_timeout
 5. **连接池大小** - 根据典型负载匹配 initial_size
+6. **RTU 时序** - 根据波特率配置 char_timeout 和 frame_delay
+7. **数据存储选择** - 高并发场景使用 `channel_data_store`
+
+## 数据存储实现
+
+cnetmod 提供两种数据存储实现：
+
+### memory_data_store（基于互斥锁）
+- 简单直接
+- 使用 `std::mutex` 同步
+- 适合低到中等并发
+- 同步接口
+
+```cpp
+modbus::memory_data_store store;
+```
+
+### channel_data_store（无锁）
+- 高性能无锁通道操作
+- 专用工作协程处理数据访问
+- 更好的缓存局部性和可扩展性
+- 提供异步 API 以获得最佳性能
+
+```cpp
+modbus::channel_data_store store(10000, 10000, 10000, 10000, 128);
+store.start_worker();
+
+// 启动工作协程
+spawn(ctx, store.worker());
+
+// 使用异步 API 获得最佳性能
+auto result = co_await store.read_holding_register_async(100);
+```
+
+## RTU 客户端使用
+
+RTU 客户端使用现有的 `cnetmod.core.serial_port` 实现：
+
+```cpp
+import cnetmod.protocol.modbus;
+
+io_context ctx;
+
+// 配置 RTU 连接
+modbus::rtu_config config;
+config.port_name = "COM3";        // Windows: "COM1", Linux: "/dev/ttyUSB0"
+config.baudrate = 9600;
+config.data_bits = 8;
+config.stop = stop_bits::one;
+config.par = parity::none;
+config.char_timeout = std::chrono::microseconds(1500);   // 1.5 字符时间
+config.frame_delay = std::chrono::microseconds(3500);    // 3.5 字符时间
+
+// 创建并打开 RTU 客户端
+modbus::rtu_client client(ctx);
+auto err = co_await client.open(config);
+if (err) {
+    // 处理错误
+}
+
+// 读取保持寄存器
+auto req = modbus::request_builder()
+    .unit_id(1)
+    .read_holding_registers(0, 10)
+    .build();
+
+auto result = co_await client.execute_with_retry(req, 3);
+if (result) {
+    auto& resp = *result;
+    // 处理响应
+}
+
+client.close();
+```
+
+## RTU 服务端使用
+
+RTU 服务端监听串口并响应 Modbus RTU 请求：
+
+```cpp
+import cnetmod.protocol.modbus;
+
+io_context ctx;
+
+// 创建数据存储
+modbus::memory_data_store store;
+
+// 配置 RTU 服务端
+modbus::rtu_server_config config;
+config.port_name = "COM3";
+config.baudrate = 9600;
+config.data_bits = 8;
+config.stop = stop_bits::one;
+config.par = parity::none;
+config.unit_id = 1;  // 从站地址
+
+// 创建并启动 RTU 服务端
+modbus::rtu_server server(ctx, store);
+auto err = co_await server.start(config);
+if (err) {
+    // 处理错误
+}
+
+// 服务端在后台运行，自动处理请求
+// 完成后停止
+server.stop();
+```
 
 ## 示例
 
 查看 `examples/modbus_demo.cpp` 获取完整的工作示例，演示：
 - TCP 客户端操作
 - TCP 服务端实现
+- UDP 客户端操作
+- UDP 服务端实现
+- RTU 客户端操作
+- RTU 服务端实现
 - 连接池使用
 - 批量读写操作
 - 错误处理
 
 ## 限制
 
-- Modbus RTU（串口）支持计划中但尚未实现
 - 每次请求最大寄存器数：125（Modbus 规范）
 - 每次请求最大线圈数：2000（Modbus 规范）
 

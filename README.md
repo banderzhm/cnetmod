@@ -37,6 +37,7 @@ English | [简体中文](README_zh.md)
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool
+- **Modbus**: Complete protocol implementation — TCP/UDP/RTU (serial) client and server, all standard function codes, connection pool, CRC-16 validation, frame timing control, data stores (mutex-based and lock-free channel-based)
 - **OpenAI**: Async API client (chat completions, etc.)
 
 ### Middleware (HTTP)
@@ -152,6 +153,32 @@ cli.on_message([](const mqtt::publish_message& msg) {
 });
 co_await cli.publish("sensor/temp", "22.5", mqtt::qos::exactly_once);
 co_await cli.disconnect();
+```
+
+**Modbus Protocol**:
+```cpp
+import cnetmod.protocol.modbus;
+
+// TCP Client
+modbus::tcp_client client(ctx);
+co_await client.connect("192.168.1.100", 502);
+
+auto req = modbus::request_builder()
+    .unit_id(1)
+    .read_holding_registers(0, 10)
+    .build();
+
+auto resp = co_await client.execute(req);
+
+// RTU Server (Serial)
+modbus::memory_data_store store;
+modbus::rtu_server_config config;
+config.port_name = "COM3";  // Windows or "/dev/ttyUSB0" (Linux)
+config.baudrate = 9600;
+config.unit_id = 1;
+
+modbus::rtu_server server(ctx, store);
+co_await server.start(config);
 ```
 
 **Timer**:
@@ -295,7 +322,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id auto-generated
 ```
 
-See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `multicore_http`, `ssl_echo_server`, and more.
+See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `modbus_demo`, `multicore_http`, `ssl_echo_server`, and more.
 
 ## Architecture
 
@@ -313,6 +340,7 @@ cnetmod.protocol.websocket — WebSocket server
 cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
 cnetmod.protocol.mysql — MySQL async client + ORM
 cnetmod.protocol.redis — Redis async client
+cnetmod.protocol.modbus — Modbus TCP/UDP/RTU client + server
 cnetmod.protocol.openai — OpenAI API client
 cnetmod.middleware.*  — HTTP middleware components
 ```
@@ -364,7 +392,7 @@ Ensure the module that exports the needed symbol is explicitly imported. Unlike 
 
 ## Project Status
 
-cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1 & HTTP/2, MQTT, MySQL, WebSocket, and more, all built with zero-overhead async/await.
+cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1 & HTTP/2, MQTT, MySQL, WebSocket, Modbus, and more, all built with zero-overhead async/await.
 
 The library demonstrates that C++23 modules are ready for real-world use, with full cross-platform support on Linux, macOS, and Windows.
 
