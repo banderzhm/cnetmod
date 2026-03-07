@@ -89,6 +89,9 @@ struct pool_waiter {
     cancel_token*           token = nullptr;
 };
 
+export class connection_pool;
+export class sharded_connection_pool;
+
 // =============================================================================
 // pooled_connection — RAII borrowed connection (P2: stores conn_node* not index)
 // =============================================================================
