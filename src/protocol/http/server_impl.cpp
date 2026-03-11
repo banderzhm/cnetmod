@@ -15,6 +15,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
+import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 
 #ifdef CNETMOD_HAS_SSL
