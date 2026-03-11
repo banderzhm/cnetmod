@@ -34,6 +34,7 @@
 ### 协议支持
 - **HTTP/1.1 & HTTP/2**: 完整服务器，包含路由器、中间件管道、分块传输、多部分上传；HTTP/2 通过 TLS + ALPN 协商，支持多路复用流
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
+- **SOCKS5**: 代理协议客户端和服务端 — CONNECT、BIND、UDP ASSOCIATE 命令；认证方法（无认证、用户名/密码）；支持 IPv4、IPv6 和域名
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、事务管理、ORM（CRUD / 迁移 / 查询构建器 / MyBatis-Plus 风格 XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
@@ -153,6 +154,31 @@ cli.on_message([](const mqtt::publish_message& msg) {
 });
 co_await cli.publish("sensor/temp", "22.5", mqtt::qos::exactly_once);
 co_await cli.disconnect();
+```
+
+**SOCKS5 代理**：
+```cpp
+import cnetmod.protocol.socks5;
+
+// SOCKS5 服务端
+socks5::server_config config;
+config.allow_no_auth = true;
+config.allow_username_password = true;
+config.add_user("user", "pass");
+
+socks5::server proxy(ctx, config);
+co_await proxy.listen(1080);
+spawn(ctx, proxy.run());
+
+// SOCKS5 客户端
+socks5::client client(ctx);
+co_await client.connect("127.0.0.1", 1080);
+co_await client.authenticate();  // 无认证或用户名/密码
+co_await client.connect_to("example.com", 80);
+
+// 现在使用隧道连接
+co_await client.send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n");
+auto response = co_await client.recv(4096);
 ```
 
 **Modbus 协议**：
@@ -337,12 +363,14 @@ cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP 异步 I/O
 cnetmod.protocol.http — HTTP/1.1 + HTTP/2 服务器、路由器、中间件管道、ALPN 协商
 cnetmod.protocol.websocket — WebSocket 服务器
+cnetmod.protocol.socks5 — SOCKS5 代理客户端 + 服务端
 cnetmod.protocol.mqtt — MQTT broker + 客户端（v3.1.1 / v5.0）
 cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
 cnetmod.protocol.redis — Redis 异步客户端
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU 客户端 + 服务端
 cnetmod.protocol.openai — OpenAI API 客户端
 cnetmod.protocol.http.middleware.*  — HTTP 中间件组件
+cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、寄存器转换）
 ```
 
 **调度器/执行器**: `io_context` 提供 `post(coroutine_handle<>)` 用于线程安全的任务提交。平台特定的 `wake()` 实现：

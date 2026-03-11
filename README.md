@@ -34,6 +34,7 @@ English | [简体中文](README_zh.md)
 ### Protocols
 - **HTTP/1.1 & HTTP/2**: Full server with router, middleware pipeline, chunked transfer, multipart upload; HTTP/2 via TLS + ALPN negotiation with multiplexed streams
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
+- **SOCKS5**: Proxy protocol client and server — CONNECT, BIND, UDP ASSOCIATE commands; authentication methods (no auth, username/password); IPv4, IPv6, and domain name support
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool
@@ -153,6 +154,31 @@ cli.on_message([](const mqtt::publish_message& msg) {
 });
 co_await cli.publish("sensor/temp", "22.5", mqtt::qos::exactly_once);
 co_await cli.disconnect();
+```
+
+**SOCKS5 Proxy**:
+```cpp
+import cnetmod.protocol.socks5;
+
+// SOCKS5 Server
+socks5::server_config config;
+config.allow_no_auth = true;
+config.allow_username_password = true;
+config.add_user("user", "pass");
+
+socks5::server proxy(ctx, config);
+co_await proxy.listen(1080);
+spawn(ctx, proxy.run());
+
+// SOCKS5 Client
+socks5::client client(ctx);
+co_await client.connect("127.0.0.1", 1080);
+co_await client.authenticate();  // No auth or username/password
+co_await client.connect_to("example.com", 80);
+
+// Now use the tunneled connection
+co_await client.send("GET / HTTP/1.1\r\nHost: example.com\r\n\r\n");
+auto response = co_await client.recv(4096);
 ```
 
 **Modbus Protocol**:
@@ -337,12 +363,14 @@ cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP async I/O
 cnetmod.protocol.http — HTTP/1.1 + HTTP/2 server, router, middleware pipeline, ALPN negotiation
 cnetmod.protocol.websocket — WebSocket server
+cnetmod.protocol.socks5 — SOCKS5 proxy client + server
 cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
 cnetmod.protocol.mysql — MySQL async client + ORM
 cnetmod.protocol.redis — Redis async client
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU client + server
 cnetmod.protocol.openai — OpenAI API client
 cnetmod.protocol.http.middleware.*  — HTTP middleware components
+cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, register conversion)
 ```
 
 **Scheduler/executor**: `io_context` provides `post(coroutine_handle<>)` for thread-safe task submission. Platform-specific `wake()` implementations:
