@@ -8,13 +8,13 @@
  *   3. metrics_handler — Handler, exposes Prometheus text format
  *
  * Usage example:
- *   import cnetmod.middleware.metrics;
+ *   import cnetmod.protocol.http.middleware.metrics;
  *
  *   cnetmod::metrics_collector mc;
  *   svr.use(metrics_middleware(mc));
  *   router.get("/metrics", metrics_handler(mc));
  */
-export module cnetmod.middleware.metrics;
+export module cnetmod.protocol.http.middleware.metrics;
 
 import std;
 import cnetmod.coro.task;

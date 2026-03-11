@@ -49,6 +49,8 @@ set(HTTP_EXAMPLES
     http/hight_plus_http
     http/multicore_http
     http/tfb_benchmark
+    http/client_demo
+    http/cookie_demo
 )
 
 # ==============================================================================
@@ -94,6 +96,7 @@ set(MQTT_EXAMPLES
 # ==============================================================================
 set(MODBUS_EXAMPLES
     modbus/modbus_demo
+    modbus_converter_demo
 )
 
 # ==============================================================================

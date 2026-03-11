@@ -6,7 +6,7 @@
  * Pluggable verification logic: supports jwt-cpp, custom HMAC, API Key, and any other schemes.
  *
  * Usage example:
- *   import cnetmod.middleware.jwt_auth;
+ *   import cnetmod.protocol.http.middleware.jwt_auth;
  *
  *   // Simple API Key verification
  *   svr.use(jwt_auth({
@@ -29,7 +29,7 @@
  *       .skip_paths = {"/", "/login", "/register"},
  *   }));
  */
-export module cnetmod.middleware.jwt_auth;
+export module cnetmod.protocol.http.middleware.jwt_auth;
 
 import std;
 import cnetmod.coro.task;

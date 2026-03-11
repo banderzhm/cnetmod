@@ -6,12 +6,12 @@
  * carries X-Request-ID (reverse proxy chain), reuses that ID for distributed tracing.
  *
  * Usage example:
- *   import cnetmod.middleware.request_id;
+ *   import cnetmod.protocol.http.middleware.request_id;
  *
  *   svr.use(request_id());
  *   // Handler can get current request ID via ctx.resp().get_header("X-Request-ID")
  */
-export module cnetmod.middleware.request_id;
+export module cnetmod.protocol.http.middleware.request_id;
 
 import std;
 import cnetmod.coro.task;

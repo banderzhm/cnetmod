@@ -6,7 +6,7 @@
  * check_fn returns health_status struct, supports custom check logic (database connections, external services, etc.).
  *
  * Usage example:
- *   import cnetmod.middleware.health_check;
+ *   import cnetmod.protocol.http.middleware.health_check;
  *
  *   // Simple liveness check (always OK)
  *   router.get("/health", health_check());
@@ -17,7 +17,7 @@
  *       return {true, "all systems operational"};
  *   }));
  */
-export module cnetmod.middleware.health_check;
+export module cnetmod.protocol.http.middleware.health_check;
 
 import std;
 import cnetmod.coro.task;

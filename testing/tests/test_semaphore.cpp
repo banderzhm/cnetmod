@@ -115,7 +115,7 @@ TEST(sem_concurrent_access_when_all) {
         co_return counter;
     };
 
-    auto [a, b] = sync_wait(when_all(work(), work()));
+    [[maybe_unused]] auto [a, b] = sync_wait(when_all(work(), work()));
     // Both should complete
     ASSERT_EQ(counter, 2);
 }

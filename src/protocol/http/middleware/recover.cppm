@@ -6,14 +6,14 @@
  * Should be placed at outermost layer of middleware chain to catch all exceptions.
  *
  * Usage example:
- *   import cnetmod.middleware.recover;
+ *   import cnetmod.protocol.http.middleware.recover;
  *
  *   svr.use(recover());  // Outermost layer
  *   svr.use(access_log());
  *   svr.use(cors());
  *   // ...
  */
-export module cnetmod.middleware.recover;
+export module cnetmod.protocol.http.middleware.recover;
 
 import std;
 import cnetmod.coro.task;

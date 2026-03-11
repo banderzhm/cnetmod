@@ -47,7 +47,7 @@ CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 
 `mutex`、`shared_mutex`、`semaphore`、`condition_variable`（均支持协程）、`channel<T>`、`wait_group`、`cancel_token`
 
 ### 实用工具
-- **定时器**: `async_sleep()`、`async_sleep_until()`、`with_timeout()` 用于可取消操作
+- **定时器**: `async_sleep()` / `async_sleep_until()` 为便捷封装，`with_timeout()` 用于带 `cancel_token` 的 `task<std::expected<...>>` 操作
 - **缓冲区**: 字节序感知的读写器、缓冲池
 - **日志**: 基于 `std::format` 的日志器（无外部依赖）
 - **崩溃转储**: 平台原生 minidump（Windows）/ 信号处理器（Unix）
@@ -342,7 +342,7 @@ cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
 cnetmod.protocol.redis — Redis 异步客户端
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU 客户端 + 服务端
 cnetmod.protocol.openai — OpenAI API 客户端
-cnetmod.middleware.*  — HTTP 中间件组件
+cnetmod.protocol.http.middleware.*  — HTTP 中间件组件
 ```
 
 **调度器/执行器**: `io_context` 提供 `post(coroutine_handle<>)` 用于线程安全的任务提交。平台特定的 `wake()` 实现：

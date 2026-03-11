@@ -6,7 +6,7 @@
  * Defaults to rate limiting by client IP, customizable key extraction function.
  *
  * Usage example:
- *   import cnetmod.middleware.rate_limiter;
+ *   import cnetmod.protocol.http.middleware.rate_limiter;
  *
  *   // Default: 10 req/s, burst 20
  *   svr.use(rate_limiter());
@@ -18,7 +18,7 @@
  *       .key_fn = [](auto& ctx) { return std::string(ctx.get_header("Authorization")); },
  *   }));
  */
-export module cnetmod.middleware.rate_limiter;
+export module cnetmod.protocol.http.middleware.rate_limiter;
 
 import std;
 import cnetmod.coro.task;

@@ -251,32 +251,45 @@ task<void> concurrent(io_context& ctx) {
 ### Timeout Pattern
 
 ```cpp
-task<void> with_timeout_example(io_context& ctx) {
-    try {
-        auto result = co_await with_timeout(ctx, slow_operation(), 5s);
-        std::println("Success: {}", result);
-    } catch (const timeout_error&) {
-        std::println("Operation timed out");
+task<void> with_timeout_example(io_context& ctx, socket& sock) {
+    std::array<std::byte, 1024> buf{};
+    cancel_token token;
+
+    auto result = co_await with_timeout(
+        ctx, 5s,
+        async_read(ctx, sock, mutable_buffer{buf.data(), buf.size()}, token),
+        token);
+
+    if (!result) {
+        if (result.error() == make_error_code(errc::operation_aborted))
+            std::println("Operation timed out");
+        else
+            std::println("Operation failed: {}", result.error().message());
+        co_return;
     }
+
+    std::println("Read {} bytes", *result);
 }
 ```
 
 ### Retry Pattern
 
 ```cpp
-task<int> retry_operation(io_context& ctx) {
-    retry_policy policy{
+task<std::expected<int, std::error_code>> retry_operation(io_context& ctx) {
+    retry_options opts{
         .max_attempts = 3,
         .initial_delay = 100ms,
         .max_delay = 5s,
-        .backoff_multiplier = 2.0
+        .multiplier = 2.0
     };
-    
-    co_return co_await retry(ctx, policy, []() -> task<int> {
+
+    co_return co_await retry(ctx, opts, []() -> task<std::expected<int, std::error_code>> {
         co_return co_await unreliable_operation();
     });
 }
 ```
+
+If your coroutine reports failure via exceptions, use `retry_throwing()` instead.
 
 ## Performance Considerations
 

@@ -65,7 +65,7 @@ cnetmod.executor      (调度: server_context, stdexec bridge)
     ↓
 cnetmod.protocol.*    (协议: tcp, udp, http, websocket, mqtt, mysql, redis)
     ↓
-cnetmod.middleware.*  (HTTP 中间件组件)
+cnetmod.protocol.http.middleware.*  (HTTP 中间件组件)
 ```
 
 ## 核心组件
@@ -303,10 +303,9 @@ co_await db.update(user);
 ## 错误处理
 
 当前方法：
-- 异常用于不可恢复的错误（OOM、逻辑错误）
-- 返回值用于预期的失败（连接关闭、超时）
-
-**未来**：迁移到 `std::expected<T, E>` 进行显式错误处理。
+- 底层异步 I/O 与较新的公共协程 API 优先返回 `std::expected<T, E>`
+- 构造/配置错误、逻辑错误，以及少量便捷包装仍可能抛出异常（如 `std::invalid_argument`、`std::system_error`）
+- 新增公共异步 API 默认采用显式结果返回；遗留 throwing 接口逐步收敛中
 
 ## 内存管理
 

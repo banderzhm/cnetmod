@@ -35,12 +35,13 @@ task<void> server(io_context& ctx);
 co_await async_sleep(ctx, 2s);
 
 // Timeout an operation
-auto result = co_await with_timeout(ctx, operation(), 5s);
+cancel_token token;
+auto result = co_await with_timeout(ctx, 5s, operation(token), token);
 ```
 
 **Key concepts**:
 - `async_sleep()` and `async_sleep_until()`
-- `with_timeout()` for cancellable operations
+- `with_timeout()` for cancellable `task<std::expected<...>>` operations
 - Timer-based scheduling
 
 **Run**:

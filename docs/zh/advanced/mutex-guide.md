@@ -298,18 +298,28 @@ task<void> safe_lock_multiple() {
 ### 规则 3：使用超时
 
 ```cpp
-task<void> lock_with_timeout(io_context& ctx) {
-    try {
-        co_await with_timeout(ctx, mtx.lock(), 5s);
-        
-        // Got lock
-        // ...
-        
-        mtx.unlock();
-    } catch (const timeout_error&) {
-        // Timeout, possible deadlock
-        std::println("Lock timeout, possible deadlock");
+template<typename Mutex>
+task<bool> try_lock_for(Mutex& mtx,
+                        io_context& ctx,
+                        std::chrono::milliseconds timeout) {
+    auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (!mtx.try_lock()) {
+        if (std::chrono::steady_clock::now() >= deadline)
+            co_return false;
+        co_await async_sleep(ctx, 10ms);
     }
+    co_return true;
+}
+
+task<void> lock_with_timeout(async_mutex& mtx, io_context& ctx) {
+    if (!co_await try_lock_for(mtx, ctx, 5s)) {
+        std::println("Lock timeout, possible deadlock");
+        co_return;
+    }
+
+    async_lock_guard guard(mtx, std::adopt_lock);
+    // Got lock
+    // ...
 }
 ```
 

@@ -7,7 +7,7 @@
  *   upload()     — Middleware, handles parsing and validation; business handler decides how to handle files
  *
  * Usage Example:
- *   import cnetmod.middleware.upload;
+ *   import cnetmod.protocol.http.middleware.upload;
  *
  *   // 1. Mount middleware (global or route level)
  *   svr.use(cnetmod::upload({
@@ -35,7 +35,7 @@
  *           R"({{"url":"/static/{}","size":{}}})", img->filename, img->size()));
  *   });
  */
-export module cnetmod.middleware.upload;
+export module cnetmod.protocol.http.middleware.upload;
 
 import std;
 import cnetmod.coro.task;

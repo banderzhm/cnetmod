@@ -47,7 +47,7 @@ CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log,
 `mutex`, `shared_mutex`, `semaphore`, `condition_variable` (all coroutine-aware), `channel<T>`, `wait_group`, `cancel_token`
 
 ### Utilities
-- **Timers**: `async_sleep()`, `async_sleep_until()`, `with_timeout()` for cancellable operations
+- **Timers**: `async_sleep()` / `async_sleep_until()` are convenience wrappers, `with_timeout()` targets cancellable `task<std::expected<...>>` operations
 - **Buffer**: Endianness-aware readers/writers, buffer pool
 - **Logging**: `std::format`-based logger (no external dependency)
 - **Crash dump**: Platform-native minidump (Windows) / signal handler (Unix)
@@ -342,7 +342,7 @@ cnetmod.protocol.mysql — MySQL async client + ORM
 cnetmod.protocol.redis — Redis async client
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU client + server
 cnetmod.protocol.openai — OpenAI API client
-cnetmod.middleware.*  — HTTP middleware components
+cnetmod.protocol.http.middleware.*  — HTTP middleware components
 ```
 
 **Scheduler/executor**: `io_context` provides `post(coroutine_handle<>)` for thread-safe task submission. Platform-specific `wake()` implementations:

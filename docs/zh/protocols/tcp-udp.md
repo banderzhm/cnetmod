@@ -266,42 +266,48 @@ public:
 ### 连接错误
 
 ```cpp
-task<void> connect_with_error_handling(io_context& ctx) {
-    tcp_socket socket(ctx);
-    
-    try {
-        co_await socket.async_connect(addr);
-        std::println("Connected");
-    } catch (const connection_refused&) {
-        std::println("Connection refused");
-    } catch (const connection_timeout&) {
-        std::println("Connection timed out");
-    } catch (const network_unreachable&) {
-        std::println("Network unreachable");
-    } catch (const std::system_error& e) {
-        std::println("Error: {}", e.what());
+task<void> connect_with_error_handling(io_context& ctx,
+                                       socket& sock,
+                                       const endpoint& ep) {
+    auto result = co_await async_connect(ctx, sock, ep);
+    if (!result) {
+        auto ec = result.error();
+        if (ec == make_error_code(errc::connection_refused)) {
+            std::println("Connection refused");
+        } else if (ec == make_error_code(errc::connection_timed_out)) {
+            std::println("Connection timed out");
+        } else if (ec == make_error_code(errc::network_unreachable)) {
+            std::println("Network unreachable");
+        } else {
+            std::println("Error: {}", ec.message());
+        }
+        co_return;
     }
+
+    std::println("Connected");
 }
 ```
 
 ### I/O 错误
 
 ```cpp
-task<void> recv_with_error_handling(tcp_socket& socket) {
-    char buffer[1024];
-    
-    try {
-        int n = co_await socket.async_recv(buffer, sizeof(buffer));
-        if (n == 0) {
+task<void> recv_with_error_handling(io_context& ctx, socket& sock) {
+    std::array<std::byte, 1024> buffer{};
+
+    auto n = co_await async_read(ctx, sock,
+        mutable_buffer{buffer.data(), buffer.size()});
+    if (!n) {
+        if (n.error() == make_error_code(errc::connection_reset)) {
+            std::println("Connection reset by peer");
+        } else if (n.error() == make_error_code(errc::end_of_file)) {
             std::println("Connection closed by peer");
         } else {
-            std::println("Received {} bytes", n);
+            std::println("I/O error: {}", n.error().message());
         }
-    } catch (const connection_reset&) {
-        std::println("Connection reset by peer");
-    } catch (const std::system_error& e) {
-        std::println("I/O error: {}", e.what());
+        co_return;
     }
+
+    std::println("Received {} bytes", *n);
 }
 ```
 
@@ -346,37 +352,52 @@ public:
 ### 超时模式
 
 ```cpp
-task<void> connect_with_timeout(io_context& ctx, address addr) {
-    tcp_socket socket(ctx);
-    
-    try {
-        co_await with_timeout(ctx, socket.async_connect(addr), 5s);
-        std::println("Connected");
-    } catch (const timeout_error&) {
-        std::println("Connection timed out");
-        socket.close();
+task<void> connect_with_timeout(io_context& ctx,
+                                socket& sock,
+                                const endpoint& ep) {
+    cancel_token token;
+    auto result = co_await with_timeout(
+        ctx, 5s,
+        async_connect(ctx, sock, ep, token),
+        token);
+
+    if (!result) {
+        if (result.error() == make_error_code(errc::operation_aborted))
+            std::println("Connection timed out");
+        else
+            std::println("Connect failed: {}", result.error().message());
+        sock.close();
+        co_return;
     }
+
+    std::println("Connected");
 }
 ```
 
 ### 重试模式
 
 ```cpp
-task<void> connect_with_retry(io_context& ctx, address addr) {
-    retry_policy policy{
+task<std::expected<socket, std::error_code>>
+connect_with_retry(io_context& ctx, address_family family, const endpoint& ep) {
+    retry_options opts{
         .max_attempts = 3,
         .initial_delay = 1s,
         .max_delay = 10s,
-        .backoff_multiplier = 2.0
+        .multiplier = 2.0
     };
-    
-    tcp_socket socket(ctx);
-    
-    co_await retry(ctx, policy, [&]() -> task<void> {
-        co_await socket.async_connect(addr);
+
+    co_return co_await retry(ctx, opts, [&]() -> task<std::expected<socket, std::error_code>> {
+        auto sock_r = socket::create(family, socket_type::stream);
+        if (!sock_r)
+            co_return std::unexpected(sock_r.error());
+
+        auto sock = std::move(*sock_r);
+        auto cr = co_await async_connect(ctx, sock, ep);
+        if (!cr)
+            co_return std::unexpected(cr.error());
+
+        co_return std::move(sock);
     });
-    
-    std::println("Connected after retries");
 }
 ```
 

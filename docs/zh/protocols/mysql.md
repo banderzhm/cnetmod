@@ -245,22 +245,26 @@ co_await db.insert(event);
 ## 事务
 
 ```cpp
-task<void> transaction_example(mysql::client& client) {
-    // Begin transaction
-    co_await client.query("START TRANSACTION");
-    
-    try {
-        // Execute queries
-        co_await client.query("UPDATE accounts SET balance = balance - 100 WHERE id = 1");
-        co_await client.query("UPDATE accounts SET balance = balance + 100 WHERE id = 2");
-        
-        // Commit
-        co_await client.query("COMMIT");
-    } catch (...) {
-        // Rollback on error
-        co_await client.query("ROLLBACK");
-        throw;
+task<mysql::result_set> transaction_example(mysql::client& client) {
+    auto begin = co_await client.query("START TRANSACTION");
+    if (!begin.ok())
+        co_return begin;
+
+    auto debit = co_await client.query(
+        "UPDATE accounts SET balance = balance - 100 WHERE id = 1");
+    if (!debit.ok()) {
+        (void)co_await client.query("ROLLBACK");
+        co_return debit;
     }
+
+    auto credit = co_await client.query(
+        "UPDATE accounts SET balance = balance + 100 WHERE id = 2");
+    if (!credit.ok()) {
+        (void)co_await client.query("ROLLBACK");
+        co_return credit;
+    }
+
+    co_return co_await client.query("COMMIT");
 }
 ```
 
@@ -288,18 +292,15 @@ for (const auto& result : results) {
 ## 错误处理
 
 ```cpp
-try {
-    co_await client.query("SELECT * FROM non_existent_table");
-} catch (const mysql::table_not_found& e) {
-    std::println("Table not found: {}", e.what());
-} catch (const mysql::syntax_error& e) {
-    std::println("SQL syntax error: {}", e.what());
-} catch (const mysql::connection_error& e) {
-    std::println("Connection error: {}", e.what());
-} catch (const std::exception& e) {
-    std::println("Error: {}", e.what());
+auto rs = co_await client.query("SELECT * FROM non_existent_table");
+if (!rs.ok()) {
+    std::println("MySQL error {} (SQLSTATE {}): {}",
+                 rs.error_code, rs.sql_state, rs.error_msg);
+    co_return;
 }
 ```
+
+底层 `mysql::client` 原始接口通过 `result_set::ok()`、`error_msg`、`error_code` 和 `sql_state` 返回执行错误，而不是抛出类型化异常。
 
 ## 性能提示
 

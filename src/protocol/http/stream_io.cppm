@@ -47,7 +47,7 @@ public:
     stream_io(const stream_io&) = delete;
     auto operator=(const stream_io&) -> stream_io& = delete;
     stream_io(stream_io&&) noexcept = default;
-    auto operator=(stream_io&&) noexcept -> stream_io& = default;
+    auto operator=(stream_io&&) noexcept -> stream_io& = delete;
 
     /// Async read into buffer
     auto async_read(mutable_buffer buf)

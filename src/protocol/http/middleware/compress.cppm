@@ -6,7 +6,7 @@
  * Requires zlib support (CNETMOD_HAS_ZLIB), degrades to pass-through when not enabled.
  *
  * Usage example:
- *   import cnetmod.middleware.compress;
+ *   import cnetmod.protocol.http.middleware.compress;
  *
  *   svr.use(compress());                             // Default: 1KB threshold
  *   svr.use(compress({.min_size = 256}));             // Custom threshold
@@ -20,7 +20,7 @@ module;
 #include <zlib.h>
 #endif
 
-export module cnetmod.middleware.compress;
+export module cnetmod.protocol.http.middleware.compress;
 
 import std;
 import cnetmod.coro.task;

@@ -286,6 +286,8 @@ task<void> delayed_task(io_context& ctx) {
 }
 ```
 
+`async_sleep()` is a throwing convenience wrapper; use `async_timer_wait()` or `steady_timer::async_wait()` when you want explicit error handling.
+
 ### `async_sleep_until()`
 
 Sleep until a specific time point:
@@ -300,18 +302,31 @@ task<void> scheduled_task(io_context& ctx) {
 
 ### `with_timeout()`
 
-Add timeout to any operation:
+Add timeout to cancellable operations that take a `cancel_token`:
 
 ```cpp
-task<void> timeout_example(io_context& ctx) {
-    try {
-        auto result = co_await with_timeout(ctx, slow_operation(), 5s);
-        std::println("Success: {}", result);
-    } catch (const timeout_error&) {
-        std::println("Operation timed out");
+task<void> timeout_example(io_context& ctx, socket& sock) {
+    std::array<std::byte, 4096> buf{};
+    cancel_token token;
+
+    auto result = co_await with_timeout(
+        ctx, 5s,
+        async_read(ctx, sock, mutable_buffer{buf.data(), buf.size()}, token),
+        token);
+
+    if (!result) {
+        if (result.error() == make_error_code(errc::operation_aborted))
+            std::println("Operation timed out");
+        else
+            std::println("Operation failed: {}", result.error().message());
+        co_return;
     }
+
+    std::println("Read {} bytes", *result);
 }
 ```
+
+`with_timeout()` does not wrap non-cancellable awaitables such as `async_mutex::lock()`.
 
 ### Timer Implementation
 

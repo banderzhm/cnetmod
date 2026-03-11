@@ -12,13 +12,13 @@
  * so handler's response can be overridden after it returns.
  *
  * Usage Example:
- *   import cnetmod.middleware.timeout;
+ *   import cnetmod.protocol.http.middleware.timeout;
  *
  *   svr.use(recover());
  *   svr.use(request_timeout(std::chrono::seconds{5}));
  *   svr.use(access_log());
  */
-export module cnetmod.middleware.timeout;
+export module cnetmod.protocol.http.middleware.timeout;
 
 import std;
 import cnetmod.coro.task;

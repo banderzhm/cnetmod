@@ -5,7 +5,7 @@
  * Handles browser cross-origin requests: OPTIONS preflight auto-response + CORS headers added to all responses.
  *
  * Usage example:
- *   import cnetmod.middleware.cors;
+ *   import cnetmod.protocol.http.middleware.cors;
  *
  *   // Default: allow all Origins
  *   svr.use(cors());
@@ -17,7 +17,7 @@
  *       .max_age = 3600,
  *   }));
  */
-export module cnetmod.middleware.cors;
+export module cnetmod.protocol.http.middleware.cors;
 
 import std;
 import cnetmod.coro.task;

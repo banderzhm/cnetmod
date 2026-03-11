@@ -7,7 +7,7 @@
  * aspect effects through handler decorators. Supports advanced features like cache grouping (group), conditional caching (condition/unless), and group invalidation.
  *
  * Usage example:
- *   import cnetmod.middleware.cache;
+ *   import cnetmod.protocol.http.middleware.cache;
  *
  *   // Create cache backend + group registry
  *   cnetmod::cache::memory_cache store({.max_entries = 5000});
@@ -53,9 +53,9 @@ module;
 
 #include <cnetmod/config.hpp>
 
-export module cnetmod.middleware.cache;
+export module cnetmod.protocol.http.middleware.cache;
 
-export import cnetmod.middleware.cache_store;  // re-export cache_store interface
+export import cnetmod.protocol.http.middleware.cache_store;  // re-export cache_store interface
 
 import std;
 import cnetmod.coro.task;

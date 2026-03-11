@@ -5,12 +5,12 @@
  * Checks Content-Length and actual body size, rejects oversized requests before handler execution to prevent OOM.
  *
  * Usage example:
- *   import cnetmod.middleware.body_limit;
+ *   import cnetmod.protocol.http.middleware.body_limit;
  *
  *   svr.use(body_limit());                     // Default 1MB
  *   svr.use(body_limit(8 * 1024 * 1024));      // 8MB
  */
-export module cnetmod.middleware.body_limit;
+export module cnetmod.protocol.http.middleware.body_limit;
 
 import std;
 import cnetmod.coro.task;

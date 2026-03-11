@@ -6,7 +6,7 @@
  * Automatically parses X-Forwarded-For / X-Real-IP to get real client IP.
  *
  * Usage example:
- *   import cnetmod.middleware.ip_filter;
+ *   import cnetmod.protocol.http.middleware.ip_filter;
  *
  *   // Whitelist: only allow internal network
  *   svr.use(ip_filter({.allow_list = {"127.0.0.1", "10.0.0.0/8"}}));
@@ -14,7 +14,7 @@
  *   // Blacklist: ban specific IPs
  *   svr.use(ip_filter({.deny_list = {"1.2.3.4", "5.6.7.8"}}));
  */
-export module cnetmod.middleware.ip_filter;
+export module cnetmod.protocol.http.middleware.ip_filter;
 
 import std;
 import cnetmod.coro.task;

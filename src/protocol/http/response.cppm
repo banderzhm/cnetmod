@@ -6,6 +6,7 @@ export module cnetmod.protocol.http:response;
 
 import std;
 import :types;
+import :cookie;
 
 namespace cnetmod::http {
 
@@ -57,6 +58,31 @@ public:
     auto& set_body(std::string body) {
         headers_["Content-Length"] = std::to_string(body.size());
         body_ = std::move(body);
+        return *this;
+    }
+    
+    /// Set cookie (simplified interface)
+    auto& set_cookie(std::string_view name, std::string_view value,
+                    std::string_view domain = {}, std::string_view path = "/",
+                    std::optional<std::chrono::seconds> max_age = std::nullopt,
+                    bool secure = false, bool http_only = false) {
+        cookie c;
+        c.name = std::string(name);
+        c.value = std::string(value);
+        if (!domain.empty()) c.domain = std::string(domain);
+        c.path = std::string(path);
+        c.max_age = max_age;
+        c.secure = secure;
+        c.http_only = http_only;
+        
+        // 添加 Set-Cookie 头
+        append_header("Set-Cookie", c.to_set_cookie_header());
+        return *this;
+    }
+    
+    /// Set cookie (full control)
+    auto& set_cookie(const cookie& c) {
+        append_header("Set-Cookie", c.to_set_cookie_header());
         return *this;
     }
 

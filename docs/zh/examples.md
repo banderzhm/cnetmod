@@ -35,12 +35,13 @@ task<void> server(io_context& ctx);
 co_await async_sleep(ctx, 2s);
 
 // 为操作设置超时
-auto result = co_await with_timeout(ctx, operation(), 5s);
+cancel_token token;
+auto result = co_await with_timeout(ctx, 5s, operation(token), token);
 ```
 
 **关键概念**：
 - `async_sleep()` 和 `async_sleep_until()`
-- `with_timeout()` 用于可取消操作
+- `with_timeout()` 用于带 `cancel_token` 的 `task<std::expected<...>>` 操作
 - 基于定时器的调度
 
 **运行**：

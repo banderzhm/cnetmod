@@ -6,7 +6,7 @@
  * wakes up waiters after receiving signal, works with drain to wait for in-flight requests to complete.
  *
  * Usage example:
- *   import cnetmod.middleware.graceful_shutdown;
+ *   import cnetmod.protocol.http.middleware.graceful_shutdown;
  *
  *   cnetmod::shutdown_handler sh;
  *   sh.install();  // Register signal handler
@@ -35,7 +35,7 @@ module;
 #include <signal.h>
 #endif
 
-export module cnetmod.middleware.graceful_shutdown;
+export module cnetmod.protocol.http.middleware.graceful_shutdown;
 
 import std;
 import cnetmod.coro.task;

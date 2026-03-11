@@ -11,7 +11,9 @@ export import :response;
 export import :multipart;
 export import :router;
 export import :server;
+export import :client;
 export import :utils;
+export import :cookie;
 
 #ifdef CNETMOD_HAS_NGHTTP2
 export import :stream_io;

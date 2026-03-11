@@ -11,7 +11,7 @@
  *    WebSocket connection latency logging wrapper, records path, connection duration.
  *
  * Usage example:
- *   import cnetmod.middleware.aspect;
+ *   import cnetmod.protocol.http.middleware.access_log;
  *
  *   // HTTP
  *   http::server svr(ctx);
@@ -24,7 +24,7 @@
  *       // ...
  *   }));
  */
-export module cnetmod.middleware.access_log;
+export module cnetmod.protocol.http.middleware.access_log;
 
 import std;
 import cnetmod.coro.task;

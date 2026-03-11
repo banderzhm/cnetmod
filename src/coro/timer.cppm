@@ -74,8 +74,9 @@ private:
 // async_sleep — Convenience functions
 // =============================================================================
 
-/// co_await async_sleep(ctx, 100ms);
-/// Implemented via io_context native timer, no extra threads created
+/// Throwing convenience wrapper over `async_timer_wait()`.
+/// Use `async_timer_wait()` or timer objects when you want explicit
+/// `std::expected`-based error handling.
 export inline auto async_sleep(io_context& ctx,
                                std::chrono::steady_clock::duration duration)
     -> task<void>
@@ -128,13 +129,15 @@ auto timeout_op_wrapper(task<std::expected<T, std::error_code>> op,
 
 } // namespace detail
 
-/// Add timeout to cancellable async operation
+/// Add timeout to a cancellable async operation that already returns
+/// `task<std::expected<T, std::error_code>>`.
 /// Usage:
 ///   cancel_token token;
 ///   auto r = co_await with_timeout(ctx, 5s,
 ///       async_read(ctx, sock, buf, token), token);
 ///
-/// After timeout, operation returns errc::operation_aborted
+/// After timeout, the wrapped operation is cancelled via `cancel_token` and
+/// typically returns `errc::operation_aborted`.
 export template<typename T>
 auto with_timeout(io_context& ctx,
                   std::chrono::steady_clock::duration timeout,

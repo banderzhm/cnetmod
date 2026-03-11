@@ -65,7 +65,7 @@ cnetmod.executor      (scheduling: server_context, stdexec bridge)
     ↓
 cnetmod.protocol.*    (protocols: tcp, udp, http, websocket, mqtt, mysql, redis)
     ↓
-cnetmod.middleware.*  (HTTP middleware components)
+cnetmod.protocol.http.middleware.*  (HTTP middleware components)
 ```
 
 ## Core Components
@@ -303,10 +303,9 @@ co_await db.update(user);
 ## Error Handling
 
 Current approach:
-- Exceptions for unrecoverable errors (OOM, logic errors)
-- Return values for expected failures (connection closed, timeout)
-
-**Future**: Migrate to `std::expected<T, E>` for explicit error handling.
+- Low-level async I/O and newer public coroutine APIs prefer `std::expected<T, E>`
+- Construction/configuration failures, logic errors, and a few convenience wrappers may still throw (`std::invalid_argument`, `std::system_error`)
+- New public async APIs should default to explicit result returns while remaining throwing surfaces are converged gradually
 
 ## Memory Management
 

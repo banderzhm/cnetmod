@@ -13,7 +13,7 @@ import cnetmod.io;
 import cnetmod.executor;
 import cnetmod.protocol.tcp;
 import cnetmod.protocol.websocket;
-import cnetmod.middleware.access_log;
+import cnetmod.protocol.http.middleware.access_log;
 
 namespace cn = cnetmod;
 namespace ws = cnetmod::ws;

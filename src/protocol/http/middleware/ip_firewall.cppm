@@ -7,8 +7,8 @@
  * Uses cache_store interface for state storage, seamlessly switchable between memory_cache / redis_cache.
  *
  * Usage example:
- *   import cnetmod.middleware.ip_firewall;
- *   import cnetmod.middleware.cache;
+ *   import cnetmod.protocol.http.middleware.ip_firewall;
+ *   import cnetmod.protocol.http.middleware.cache;
  *
  *   cnetmod::cache::memory_cache store({.max_entries = 50000});
  *
@@ -43,12 +43,12 @@
  *   router.post("/admin/firewall/:ip/ban", cnetmod::firewall_ban_handler(fw));
  *   router.del("/admin/firewall/:ip/ban", cnetmod::firewall_unban_handler(fw));
  */
-export module cnetmod.middleware.ip_firewall;
+export module cnetmod.protocol.http.middleware.ip_firewall;
 
 import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
-import cnetmod.middleware.cache_store;  // Only need abstract interface, avoid heavy dependencies like redis
+import cnetmod.protocol.http.middleware.cache_store;  // Only need abstract interface, avoid heavy dependencies like redis
 // Note: Don't import cnetmod.core.log to avoid MSVC C1605 (object file exceeds 4GB)
 // Use std::println(std::cerr, ...) for direct output
 

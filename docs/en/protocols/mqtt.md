@@ -186,8 +186,8 @@ co_await client.publish("", "data", opts);  // Uses alias 1
 ```cpp
 mqtt::client client(ctx);
 
-client.set_reconnect_options({
-    .enable = true,
+client.set_reconnect({
+    .enabled = true,
     .initial_delay = 1s,
     .max_delay = 60s,
     .backoff_multiplier = 2.0
@@ -197,11 +197,15 @@ client.on_connect([]() {
     std::println("Connected");
 });
 
-client.on_disconnect([]() {
-    std::println("Disconnected, will auto-reconnect");
+client.on_disconnect([](std::string reason) {
+    std::println("Disconnected: {} (will auto-reconnect)", reason);
 });
 
-co_await client.connect(opts);
+auto cr = co_await client.connect(opts);
+if (!cr) {
+    std::println("Connect failed: {}", cr.error());
+    co_return;
+}
 // Client automatically reconnects on connection loss
 ```
 

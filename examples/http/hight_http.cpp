@@ -11,11 +11,11 @@ import cnetmod.io;
 import cnetmod.executor;
 import cnetmod.protocol.tcp;
 import cnetmod.protocol.http;
-import cnetmod.middleware.access_log;
-import cnetmod.middleware.recover;
-import cnetmod.middleware.cors;
-import cnetmod.middleware.request_id;
-import cnetmod.middleware.body_limit;
+import cnetmod.protocol.http.middleware.access_log;
+import cnetmod.protocol.http.middleware.recover;
+import cnetmod.protocol.http.middleware.cors;
+import cnetmod.protocol.http.middleware.request_id;
+import cnetmod.protocol.http.middleware.body_limit;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;

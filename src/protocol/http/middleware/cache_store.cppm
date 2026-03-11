@@ -8,11 +8,11 @@
  * cnetmod.protocol.redis and other heavyweight dependencies, preventing MSVC C1605.
  *
  * Usage example:
- *   import cnetmod.middleware.cache_store;
+ *   import cnetmod.protocol.http.middleware.cache_store;
  *
  *   void foo(cnetmod::cache::cache_store& store) { ... }
  */
-export module cnetmod.middleware.cache_store;
+export module cnetmod.protocol.http.middleware.cache_store;
 
 import std;
 import cnetmod.coro.task;
