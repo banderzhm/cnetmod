@@ -14,6 +14,7 @@ module;
 #include <unistd.h>
 #include <fcntl.h>
 #include <cerrno>
+#include <exec/static_thread_pool.hpp>
 
 #endif
 
@@ -21,6 +22,7 @@ module cnetmod.executor.async_op;
 
 #if defined(CNETMOD_HAS_EPOLL) && !defined(CNETMOD_HAS_IO_URING)
 import cnetmod.io.platform.epoll;
+import cnetmod.executor.pool;
 #endif
 import cnetmod.coro.cancel;
 
@@ -63,6 +65,11 @@ struct epoll_awaiter {
 
 auto last_error() noexcept -> std::error_code {
     return make_error_code(from_native_error(errno));
+}
+
+inline auto& file_pool() {
+    static exec::static_thread_pool pool;
+    return pool;
 }
 
 auto get_socket_family(int fd) -> int {
@@ -190,6 +197,30 @@ auto async_accept(io_context& ctx, socket& listener)
     co_return socket::from_native(fd);
 }
 
+auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
+    -> task<std::expected<socket, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(listener.native_handle()),
+                            EPOLLIN, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    int fd = ::accept4(static_cast<int>(listener.native_handle()),
+                       nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (fd < 0)
+        co_return std::unexpected(last_error());
+
+    co_return socket::from_native(fd);
+}
+
 auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     -> task<std::expected<void, std::error_code>>
 {
@@ -223,6 +254,44 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     co_return std::expected<void, std::error_code>{};
 }
 
+auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
+                   cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(ep, dest);
+
+    int ret = ::connect(static_cast<int>(sock.native_handle()),
+                        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+    if (ret == 0)
+        co_return std::expected<void, std::error_code>{};
+
+    if (errno != EINPROGRESS)
+        co_return std::unexpected(last_error());
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
+                            EPOLLOUT, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    int so_error = 0;
+    ::socklen_t len = sizeof(so_error);
+    ::getsockopt(static_cast<int>(sock.native_handle()),
+                 SOL_SOCKET, SO_ERROR, &so_error, &len);
+    if (so_error != 0)
+        co_return std::unexpected(make_error_code(from_native_error(so_error)));
+
+    co_return std::expected<void, std::error_code>{};
+}
+
 auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
@@ -233,6 +302,33 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
+
+    ssize_t n = ::recv(static_cast<int>(sock.native_handle()),
+                       buf.data, buf.size, 0);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+    if (n == 0)
+        co_return std::unexpected(make_error_code(errc::end_of_file));
+
+    co_return static_cast<std::size_t>(n);
+}
+
+auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
+                cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
+                            EPOLLIN, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     ssize_t n = ::recv(static_cast<int>(sock.native_handle()),
                        buf.data, buf.size, 0);
@@ -263,45 +359,205 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
     co_return static_cast<std::size_t>(n);
 }
 
+auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+                 cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
+                            EPOLLOUT, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    ssize_t n = ::send(static_cast<int>(sock.native_handle()),
+                       buf.data, buf.size, MSG_NOSIGNAL);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    co_return static_cast<std::size_t>(n);
+}
+
 // =============================================================================
-// Async File Operations — epoll (synchronous wrapper)
-// epoll does not support async I/O for regular files, using pread/pwrite synchronously
+// Async File Operations — epoll (thread-pool offload)
+// epoll does not support async I/O for regular files, offload pread/pwrite/fsync to thread pool
 // =============================================================================
+
+auto async_file_open(io_context& ctx,
+                     const std::filesystem::path& path,
+                     open_mode mode)
+    -> task<std::expected<file, std::error_code>>
+{
+    co_await pool_post_awaitable{file_pool()};
+    auto result = file::open(path, mode);
+    co_await post_awaitable{ctx};
+    co_return result;
+}
+
+auto async_file_open(io_context& ctx,
+                     const std::filesystem::path& path,
+                     open_mode mode,
+                     cancel_token& token)
+    -> task<std::expected<file, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_open(ctx, path, mode);
+    if (token.is_cancelled()) {
+        if (result)
+            (void)co_await async_file_close(ctx, *result);
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    }
+    co_return result;
+}
+
+auto async_file_stat(io_context& ctx,
+                     const std::filesystem::path& path)
+    -> task<std::expected<file_stat, std::error_code>>
+{
+    co_await pool_post_awaitable{file_pool()};
+    auto result = file::stat(path);
+    co_await post_awaitable{ctx};
+    co_return result;
+}
+
+auto async_file_stat(io_context& ctx,
+                     const std::filesystem::path& path,
+                     cancel_token& token)
+    -> task<std::expected<file_stat, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_stat(ctx, path);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
+}
+
+auto async_file_close(io_context& ctx, file& f)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_await pool_post_awaitable{file_pool()};
+    f.close();
+    co_await post_awaitable{ctx};
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_file_close(io_context& ctx, file& f, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_close(ctx, f);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
+}
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
                      std::uint64_t offset)
     -> task<std::expected<std::size_t, std::error_code>>
 {
-    (void)ctx;
-    ssize_t n = ::pread(static_cast<int>(f.native_handle()),
-                        buf.data, buf.size, static_cast<off_t>(offset));
-    if (n < 0)
-        co_return std::unexpected(last_error());
+    co_await pool_post_awaitable{file_pool()};
+    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+        ssize_t n = ::pread(static_cast<int>(f.native_handle()),
+                            buf.data, buf.size, static_cast<off_t>(offset));
+        if (n < 0)
+            return std::unexpected(last_error());
+        return static_cast<std::size_t>(n);
+    }();
+    co_await post_awaitable{ctx};
+    co_return result;
+}
 
-    co_return static_cast<std::size_t>(n);
+auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
+                     std::uint64_t offset, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_await pool_post_awaitable{file_pool()};
+    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+        ssize_t n = ::pread(static_cast<int>(f.native_handle()),
+                            buf.data, buf.size, static_cast<off_t>(offset));
+        if (n < 0)
+            return std::unexpected(last_error());
+        return static_cast<std::size_t>(n);
+    }();
+    co_await post_awaitable{ctx};
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
 }
 
 auto async_file_write(io_context& ctx, file& f, const_buffer buf,
                       std::uint64_t offset)
     -> task<std::expected<std::size_t, std::error_code>>
 {
-    (void)ctx;
-    ssize_t n = ::pwrite(static_cast<int>(f.native_handle()),
-                         buf.data, buf.size, static_cast<off_t>(offset));
-    if (n < 0)
-        co_return std::unexpected(last_error());
+    co_await pool_post_awaitable{file_pool()};
+    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+        ssize_t n = ::pwrite(static_cast<int>(f.native_handle()),
+                             buf.data, buf.size, static_cast<off_t>(offset));
+        if (n < 0)
+            return std::unexpected(last_error());
+        return static_cast<std::size_t>(n);
+    }();
+    co_await post_awaitable{ctx};
+    co_return result;
+}
 
-    co_return static_cast<std::size_t>(n);
+auto async_file_write(io_context& ctx, file& f, const_buffer buf,
+                      std::uint64_t offset, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_await pool_post_awaitable{file_pool()};
+    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+        ssize_t n = ::pwrite(static_cast<int>(f.native_handle()),
+                             buf.data, buf.size, static_cast<off_t>(offset));
+        if (n < 0)
+            return std::unexpected(last_error());
+        return static_cast<std::size_t>(n);
+    }();
+    co_await post_awaitable{ctx};
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
 }
 
 auto async_file_flush(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>
 {
-    (void)ctx;
-    if (::fsync(static_cast<int>(f.native_handle())) != 0)
-        co_return std::unexpected(last_error());
+    co_await pool_post_awaitable{file_pool()};
+    auto result = [&]() -> std::expected<void, std::error_code> {
+        if (::fsync(static_cast<int>(f.native_handle())) != 0)
+            return std::unexpected(last_error());
+        return std::expected<void, std::error_code>{};
+    }();
+    co_await post_awaitable{ctx};
+    co_return result;
+}
 
-    co_return std::expected<void, std::error_code>{};
+auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_flush(ctx, f);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
 }
 
 // =============================================================================
@@ -327,6 +583,32 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
     co_return static_cast<std::size_t>(n);
 }
 
+auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
+                       cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(port.native_handle()),
+                            EPOLLIN, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    ssize_t n = ::read(static_cast<int>(port.native_handle()), buf.data, buf.size);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+    if (n == 0)
+        co_return std::unexpected(make_error_code(errc::end_of_file));
+
+    co_return static_cast<std::size_t>(n);
+}
+
 auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
@@ -336,6 +618,30 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
+
+    ssize_t n = ::write(static_cast<int>(port.native_handle()), buf.data, buf.size);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
+    co_return static_cast<std::size_t>(n);
+}
+
+auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
+                        cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_cancel_awaiter aw{epoll, static_cast<int>(port.native_handle()),
+                            EPOLLOUT, token};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     ssize_t n = ::write(static_cast<int>(port.native_handle()), buf.data, buf.size);
     if (n < 0)
@@ -384,214 +690,6 @@ auto async_timer_wait(io_context& ctx,
 
     co_return std::expected<void, std::error_code>{};
 }
-
-// =============================================================================
-// Cancellable Version — Async Network Operations
-// =============================================================================
-
-auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
-    -> task<std::expected<socket, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    epoll_cancel_awaiter aw{epoll, static_cast<int>(listener.native_handle()),
-                            EPOLLIN, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    int fd = ::accept4(static_cast<int>(listener.native_handle()),
-                       nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
-    if (fd < 0)
-        co_return std::unexpected(last_error());
-
-    co_return socket::from_native(fd);
-}
-
-auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
-                   cancel_token& token)
-    -> task<std::expected<void, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    ::sockaddr_storage dest{};
-    ::socklen_t dest_len = fill_sockaddr(ep, dest);
-
-    int ret = ::connect(static_cast<int>(sock.native_handle()),
-                        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-    if (ret == 0)
-        co_return std::expected<void, std::error_code>{};
-
-    if (errno != EINPROGRESS)
-        co_return std::unexpected(last_error());
-
-    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
-                            EPOLLOUT, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    int so_error = 0;
-    ::socklen_t len = sizeof(so_error);
-    ::getsockopt(static_cast<int>(sock.native_handle()),
-                 SOL_SOCKET, SO_ERROR, &so_error, &len);
-    if (so_error != 0)
-        co_return std::unexpected(make_error_code(from_native_error(so_error)));
-
-    co_return std::expected<void, std::error_code>{};
-}
-
-auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
-                cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
-                            EPOLLIN, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    ssize_t n = ::recv(static_cast<int>(sock.native_handle()),
-                       buf.data, buf.size, 0);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-    if (n == 0)
-        co_return std::unexpected(make_error_code(errc::end_of_file));
-
-    co_return static_cast<std::size_t>(n);
-}
-
-auto async_write(io_context& ctx, socket& sock, const_buffer buf,
-                 cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
-                            EPOLLOUT, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    ssize_t n = ::send(static_cast<int>(sock.native_handle()),
-                       buf.data, buf.size, MSG_NOSIGNAL);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-
-    co_return static_cast<std::size_t>(n);
-}
-
-// =============================================================================
-// Cancellable Version — Async File Operations (synchronous wrapper, cancel only pre-checks)
-// =============================================================================
-
-auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                     std::uint64_t offset, cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    (void)ctx;
-    ssize_t n = ::pread(static_cast<int>(f.native_handle()),
-                        buf.data, buf.size, static_cast<off_t>(offset));
-    if (n < 0)
-        co_return std::unexpected(last_error());
-    co_return static_cast<std::size_t>(n);
-}
-
-auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                      std::uint64_t offset, cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    (void)ctx;
-    ssize_t n = ::pwrite(static_cast<int>(f.native_handle()),
-                         buf.data, buf.size, static_cast<off_t>(offset));
-    if (n < 0)
-        co_return std::unexpected(last_error());
-    co_return static_cast<std::size_t>(n);
-}
-
-// =============================================================================
-// Cancellable Version — Async Serial Port Operations
-// =============================================================================
-
-auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
-                       cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    epoll_cancel_awaiter aw{epoll, static_cast<int>(port.native_handle()),
-                            EPOLLIN, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    ssize_t n = ::read(static_cast<int>(port.native_handle()), buf.data, buf.size);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-    if (n == 0)
-        co_return std::unexpected(make_error_code(errc::end_of_file));
-
-    co_return static_cast<std::size_t>(n);
-}
-
-auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
-                        cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    epoll_cancel_awaiter aw{epoll, static_cast<int>(port.native_handle()),
-                            EPOLLOUT, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    ssize_t n = ::write(static_cast<int>(port.native_handle()), buf.data, buf.size);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-
-    co_return static_cast<std::size_t>(n);
-}
-
-// =============================================================================
-// Cancellable Version — Async Timer
-// =============================================================================
 
 auto async_timer_wait(io_context& ctx,
                       std::chrono::steady_clock::duration duration,
@@ -662,32 +760,6 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     co_return static_cast<std::size_t>(n);
 }
 
-auto async_sendto(io_context& ctx, socket& sock,
-                  const_buffer buf, const endpoint& peer)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    auto& epoll = static_cast<epoll_context&>(ctx);
-
-    epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-
-    ::sockaddr_storage dest{};
-    ::socklen_t dest_len = fill_sockaddr(peer, dest);
-    ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-                         buf.data, buf.size, MSG_NOSIGNAL,
-                         reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-
-    co_return static_cast<std::size_t>(n);
-}
-
-// =============================================================================
-// Cancellable Version — Async UDP I/O
-// =============================================================================
-
 auto async_recvfrom(io_context& ctx, socket& sock,
                     mutable_buffer buf, endpoint& peer,
                     cancel_token& token)
@@ -715,6 +787,28 @@ auto async_recvfrom(io_context& ctx, socket& sock,
         co_return std::unexpected(last_error());
 
     peer = endpoint_from_sockaddr(from_addr);
+    co_return static_cast<std::size_t>(n);
+}
+
+auto async_sendto(io_context& ctx, socket& sock,
+                  const_buffer buf, const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+
+    epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
+    co_await aw;
+    if (aw.sync_error)
+        co_return std::unexpected(aw.sync_error);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(peer, dest);
+    ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+                         buf.data, buf.size, MSG_NOSIGNAL,
+                         reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+    if (n < 0)
+        co_return std::unexpected(last_error());
+
     co_return static_cast<std::size_t>(n);
 }
 

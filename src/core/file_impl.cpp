@@ -112,6 +112,39 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
 }
 
 // =============================================================================
+// Stat
+// =============================================================================
+
+auto file::stat(const std::filesystem::path& path)
+    -> std::expected<file_stat, std::error_code>
+{
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    WIN32_FILE_ATTRIBUTE_DATA data{};
+    if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) {
+        int err = static_cast<int>(::GetLastError());
+        return std::unexpected(make_error_code(from_native_error(err)));
+    }
+
+    file_stat st{};
+    st.is_directory = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+    st.is_regular = !st.is_directory;
+    st.size = (static_cast<std::uint64_t>(data.nFileSizeHigh) << 32)
+              | static_cast<std::uint64_t>(data.nFileSizeLow);
+    return st;
+#else
+    struct stat s{};
+    if (::stat(path.c_str(), &s) != 0)
+        return std::unexpected(make_error_code(from_native_error(errno)));
+
+    file_stat st{};
+    st.size = static_cast<std::uint64_t>(s.st_size);
+    st.is_regular = S_ISREG(s.st_mode);
+    st.is_directory = S_ISDIR(s.st_mode);
+    return st;
+#endif
+}
+
+// =============================================================================
 // Close
 // =============================================================================
 

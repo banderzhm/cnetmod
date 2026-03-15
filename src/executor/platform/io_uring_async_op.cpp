@@ -11,6 +11,7 @@ module;
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <cerrno>
+#include <exec/static_thread_pool.hpp>
 
 #endif
 
@@ -18,6 +19,7 @@ module cnetmod.executor.async_op;
 
 #ifdef CNETMOD_HAS_IO_URING
 import cnetmod.io.platform.io_uring;
+import cnetmod.executor.pool;
 #endif
 import cnetmod.coro.cancel;
 
@@ -112,6 +114,11 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
                     ::ntohs(sin.sin_port)};
 }
 
+inline auto& file_pool() {
+    static exec::static_thread_pool pool;
+    return pool;
+}
+
 } // anonymous namespace
 
 // =============================================================================
@@ -138,6 +145,37 @@ auto async_accept(io_context& ctx, socket& listener)
 
     co_await uring_suspend{ov};
 
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return socket::from_native(ov.result);
+}
+
+auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
+    -> task<std::expected<socket, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_accept(sqe, static_cast<int>(listener.native_handle()),
+                           nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (ov.result < 0)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
@@ -173,6 +211,41 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     co_return std::expected<void, std::error_code>{};
 }
 
+auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
+                   cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(ep, dest);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_connect(sqe, static_cast<int>(sock.native_handle()),
+                            reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return std::expected<void, std::error_code>{};
+}
+
 auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
@@ -193,6 +266,40 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
 
     co_await uring_suspend{ov};
 
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+    if (ov.result == 0)
+        co_return std::unexpected(make_error_code(errc::end_of_file));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
+                cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_recv(sqe, static_cast<int>(sock.native_handle()),
+                         buf.data, buf.size, 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (ov.result < 0)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
     if (ov.result == 0)
@@ -227,9 +334,137 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
     co_return static_cast<std::size_t>(ov.result);
 }
 
+auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+                 cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_send(sqe, static_cast<int>(sock.native_handle()),
+                         buf.data, buf.size, MSG_NOSIGNAL);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
 // =============================================================================
-// Async File Operations — io_uring (native async file I/O)
+// Async File Operations — io_uring (native async read/write; open/stat offloaded)
 // =============================================================================
+
+auto async_file_open(io_context& ctx,
+                     const std::filesystem::path& path,
+                     open_mode mode)
+    -> task<std::expected<file, std::error_code>>
+{
+    co_await pool_post_awaitable{file_pool()};
+    auto result = file::open(path, mode);
+    co_await post_awaitable{ctx};
+    co_return result;
+}
+
+auto async_file_open(io_context& ctx,
+                     const std::filesystem::path& path,
+                     open_mode mode,
+                     cancel_token& token)
+    -> task<std::expected<file, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_open(ctx, path, mode);
+    if (token.is_cancelled()) {
+        if (result)
+            (void)co_await async_file_close(ctx, *result);
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    }
+    co_return result;
+}
+
+auto async_file_stat(io_context& ctx,
+                     const std::filesystem::path& path)
+    -> task<std::expected<file_stat, std::error_code>>
+{
+    co_await pool_post_awaitable{file_pool()};
+    auto result = file::stat(path);
+    co_await post_awaitable{ctx};
+    co_return result;
+}
+
+auto async_file_stat(io_context& ctx,
+                     const std::filesystem::path& path,
+                     cancel_token& token)
+    -> task<std::expected<file_stat, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_stat(ctx, path);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
+}
+
+auto async_file_close(io_context& ctx, file& f)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto fd = static_cast<int>(f.native_handle());
+    if (fd == invalid_file_handle)
+        co_return std::expected<void, std::error_code>{};
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_close(sqe, fd);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_suspend{ov};
+
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    // Mark handle closed without double-closing
+    (void)f.release();
+
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_file_close(io_context& ctx, file& f, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_close(ctx, f);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
+}
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
                      std::uint64_t offset)
@@ -252,6 +487,38 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
 
     co_await uring_suspend{ov};
 
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
+                     std::uint64_t offset, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_read(sqe, static_cast<int>(f.native_handle()),
+                         buf.data, static_cast<unsigned>(buf.size), offset);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (ov.result < 0)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
@@ -285,6 +552,38 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
     co_return static_cast<std::size_t>(ov.result);
 }
 
+auto async_file_write(io_context& ctx, file& f, const_buffer buf,
+                      std::uint64_t offset, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_write(sqe, static_cast<int>(f.native_handle()),
+                          buf.data, static_cast<unsigned>(buf.size), offset);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
 auto async_file_flush(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>
 {
@@ -308,6 +607,18 @@ auto async_file_flush(io_context& ctx, file& f)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
     co_return std::expected<void, std::error_code>{};
+}
+
+auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto result = co_await async_file_flush(ctx, f);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
 }
 
 // =============================================================================
@@ -340,6 +651,38 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
     co_return static_cast<std::size_t>(ov.result);
 }
 
+auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
+                       cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_read(sqe, static_cast<int>(port.native_handle()),
+                         buf.data, static_cast<unsigned>(buf.size), 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
 auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
@@ -360,6 +703,38 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 
     co_await uring_suspend{ov};
 
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
+                        cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_write(sqe, static_cast<int>(port.native_handle()),
+                          buf.data, static_cast<unsigned>(buf.size), 0);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_cancel_suspend{ov, token, &uring};
+
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (ov.result < 0)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
@@ -403,282 +778,6 @@ auto async_timer_wait(io_context& ctx,
 
     co_return std::expected<void, std::error_code>{};
 }
-
-// =============================================================================
-// Cancellable Version — Async Network Operations
-// =============================================================================
-
-auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
-    -> task<std::expected<socket, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_accept(sqe, static_cast<int>(listener.native_handle()),
-                           nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return socket::from_native(ov.result);
-}
-
-auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
-                   cancel_token& token)
-    -> task<std::expected<void, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    ::sockaddr_storage dest{};
-    ::socklen_t dest_len = fill_sockaddr(ep, dest);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_connect(sqe, static_cast<int>(sock.native_handle()),
-                            reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return std::expected<void, std::error_code>{};
-}
-
-auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
-                cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_recv(sqe, static_cast<int>(sock.native_handle()),
-                         buf.data, buf.size, 0);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-    if (ov.result == 0)
-        co_return std::unexpected(make_error_code(errc::end_of_file));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-auto async_write(io_context& ctx, socket& sock, const_buffer buf,
-                 cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_send(sqe, static_cast<int>(sock.native_handle()),
-                         buf.data, buf.size, MSG_NOSIGNAL);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-// =============================================================================
-// Cancellable Version — Async File Operations
-// =============================================================================
-
-auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                     std::uint64_t offset, cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_read(sqe, static_cast<int>(f.native_handle()),
-                         buf.data, static_cast<unsigned>(buf.size), offset);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                      std::uint64_t offset, cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_write(sqe, static_cast<int>(f.native_handle()),
-                          buf.data, static_cast<unsigned>(buf.size), offset);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-// =============================================================================
-// Cancellable Version — Async Serial Port Operations
-// =============================================================================
-
-auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
-                       cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_read(sqe, static_cast<int>(port.native_handle()),
-                         buf.data, static_cast<unsigned>(buf.size), 0);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
-                        cancel_token& token)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_write(sqe, static_cast<int>(port.native_handle()),
-                          buf.data, static_cast<unsigned>(buf.size), 0);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_cancel_suspend{ov, token, &uring};
-
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-// =============================================================================
-// Cancellable Version — Async Timer
-// =============================================================================
 
 auto async_timer_wait(io_context& ctx,
                       std::chrono::steady_clock::duration duration,
@@ -760,47 +859,6 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     co_return static_cast<std::size_t>(ov.result);
 }
 
-auto async_sendto(io_context& ctx, socket& sock,
-                  const_buffer buf, const endpoint& peer)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
-    ::sockaddr_storage dest{};
-    ::socklen_t dest_len = fill_sockaddr(peer, dest);
-    struct ::iovec iov{};
-    iov.iov_base = const_cast<void*>(buf.data);
-    iov.iov_len  = buf.size;
-    struct ::msghdr msg{};
-    msg.msg_name    = &dest;
-    msg.msg_namelen = dest_len;
-    msg.msg_iov     = &iov;
-    msg.msg_iovlen  = 1;
-
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_suspend{ov};
-
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
-}
-
-// =============================================================================
-// Cancellable Version — Async UDP I/O
-// =============================================================================
-
 auto async_recvfrom(io_context& ctx, socket& sock,
                     mutable_buffer buf, endpoint& peer,
                     cancel_token& token)
@@ -841,6 +899,43 @@ auto async_recvfrom(io_context& ctx, socket& sock,
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
     peer = endpoint_from_sockaddr(from_addr);
+    co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_sendto(io_context& ctx, socket& sock,
+                  const_buffer buf, const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+    ::sockaddr_storage dest{};
+    ::socklen_t dest_len = fill_sockaddr(peer, dest);
+    struct ::iovec iov{};
+    iov.iov_base = const_cast<void*>(buf.data);
+    iov.iov_len  = buf.size;
+    struct ::msghdr msg{};
+    msg.msg_name    = &dest;
+    msg.msg_namelen = dest_len;
+    msg.msg_iov     = &iov;
+    msg.msg_iovlen  = 1;
+
+    uring_overlapped ov;
+
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
+    ::io_uring_sqe_set_data(sqe, &ov);
+
+    if (auto r = uring.flush(); !r)
+        co_return std::unexpected(r.error());
+
+    co_await uring_suspend{ov};
+
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+
     co_return static_cast<std::size_t>(ov.result);
 }
 

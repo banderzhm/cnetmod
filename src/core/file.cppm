@@ -59,6 +59,16 @@ export constexpr auto has_flag(open_mode mode, open_mode flag) noexcept -> bool 
 }
 
 // =============================================================================
+// File stat
+// =============================================================================
+
+export struct file_stat {
+    std::uint64_t size = 0;
+    bool is_regular = false;
+    bool is_directory = false;
+};
+
+// =============================================================================
 // File class
 // =============================================================================
 
@@ -78,10 +88,17 @@ public:
     auto operator=(file&& other) noexcept -> file&;
 
     /// Open file
+    /// Note: Async version is async_file_open() in cnetmod.executor.async_op
     [[nodiscard]] static auto open(
         const std::filesystem::path& path,
         open_mode mode
     ) -> std::expected<file, std::error_code>;
+
+    /// Stat file by path
+    /// Note: Async version is async_file_stat() in cnetmod.executor.async_op
+    [[nodiscard]] static auto stat(
+        const std::filesystem::path& path
+    ) -> std::expected<file_stat, std::error_code>;
 
     /// Close file
     void close() noexcept;
