@@ -25,9 +25,8 @@ auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task
     // 初始化测试数据
     for (std::uint16_t i = 0; i < 100; ++i) {
         store.write_holding_register(i, 1000 + i);
-        store.write_input_register(i, 2000 + i);
+        // Note: Input registers and discrete inputs are read-only in standard Modbus
         store.write_coil(i, i % 4 == 0);
-        store.write_discrete_input(i, i % 3 == 0);
     }
 
     std::println("Initialized data store with test data");
@@ -37,8 +36,8 @@ auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task
     config.port_name = std::string(port_name);
     config.baudrate = 19200;
     config.data_bits = 8;
-    config.stop = stop_bits::one;
-    config.par = parity::none;
+    config.stop = cn::stop_bits::one;
+    config.par = cn::parity::none;
     config.unit_id = 1;  // Slave address
 
     std::println("RTU Server configuration:");
@@ -79,8 +78,8 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
     config.port_name = std::string(port_name);
     config.baudrate = 19200;
     config.data_bits = 8;
-    config.stop = stop_bits::one;
-    config.par = parity::none;
+    config.stop = cn::stop_bits::one;
+    config.par = cn::parity::none;
 
     std::println("RTU Client configuration:");
     std::println("  Port: {}", config.port_name);
