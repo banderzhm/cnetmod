@@ -290,8 +290,11 @@ inline auto to_double(const mysql::field_value& f) -> double {
     // 字符串/十进制回退解析
     auto sv = f.get_string();
     double v = 0;
+#if defined(__cpp_lib_to_chars) && __cpp_lib_to_chars >= 201611L && !defined(__APPLE__)
+    // std::from_chars for floating point is not available on macOS < 26.0
     auto r = std::from_chars(sv.data(), sv.data() + sv.size(), v);
     if (r.ec == std::errc{}) return v;
+#endif
     try { return std::stod(std::string(sv)); } catch (...) { return 0.0; }
 }
 
