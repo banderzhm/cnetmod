@@ -51,7 +51,7 @@ export struct recover_options {
 
 namespace detail {
 
-inline auto truncate_one_line(std::string_view s, std::size_t max_bytes) -> std::string {
+inline auto truncate_one_line_for_recover(std::string_view s, std::size_t max_bytes) -> std::string {
     std::string out;
     out.reserve(std::min(max_bytes, s.size()));
     for (std::size_t i = 0; i < s.size() && out.size() < max_bytes; ++i) {
@@ -154,7 +154,7 @@ export inline auto recover(recover_options opts = {}) -> http::middleware_fn
                     ctx.uri(), ctx.query_string(),
                     ct, clen, body_len, params,
                     ex_type, e.what(),
-                    detail::truncate_one_line(ctx.body(), opts.max_body_bytes));
+                    detail::truncate_one_line_for_recover(ctx.body(), opts.max_body_bytes));
             } else {
                 logger::error("[recover id={}] {} {} uri={} qs={} ct={} clen={} body_len={} params={} ex={} what={}",
                     error_id,
