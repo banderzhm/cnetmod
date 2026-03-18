@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="FileMapper">
+
+    <sql id="fileColumns">
+        id, project_id, original_filename, stored_filename, filepath, created_at
+    </sql>
+
+    <!-- 查询项目的所有文件 -->
+    <select id="selectByProjectId">
+        SELECT <include refid="fileColumns"/>
+        FROM project_files
+        WHERE project_id = #{project_id}
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 根据 ID 查询文件 -->
+    <select id="selectById">
+        SELECT <include refid="fileColumns"/>
+        FROM project_files
+        WHERE id = #{id}
+    </select>
+
+    <!-- 插入文件记录 -->
+    <insert id="insert">
+        INSERT INTO project_files (
+            project_id, original_filename, stored_filename, filepath, created_at
+        ) VALUES (
+            #{project_id}, #{original_filename}, #{stored_filename}, #{filepath}, NOW()
+        )
+    </insert>
+
+    <!-- 删除文件记录 -->
+    <delete id="delete">
+        DELETE FROM project_files WHERE id = #{id}
+    </delete>
+
+    <!-- 删除项目的所有文件 -->
+    <delete id="deleteByProjectId">
+        DELETE FROM project_files WHERE project_id = #{project_id}
+    </delete>
+
+    <!-- 批量删除文件（根据 ID 列表） -->
+    <delete id="batchDelete">
+        DELETE FROM project_files
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <!-- 批量查询文件（根据 ID 列表） -->
+    <select id="selectByIds">
+        SELECT <include refid="fileColumns"/>
+        FROM project_files
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
+</mapper>

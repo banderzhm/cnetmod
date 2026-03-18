@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="AiMapper">
+
+    <!-- 查询所有 AI 提示词模板 -->
+    <select id="selectAllPrompts">
+        SELECT id, name, prompt_template, is_default, created_at
+        FROM ai_prompts
+        ORDER BY is_default DESC, created_at DESC
+    </select>
+
+    <!-- 查询默认提示词 -->
+    <select id="selectDefaultPrompt">
+        SELECT id, name, prompt_template, is_default, created_at
+        FROM ai_prompts
+        WHERE is_default = 1
+        LIMIT 1
+    </select>
+
+    <!-- 根据 ID 查询提示词 -->
+    <select id="selectPromptById">
+        SELECT id, name, prompt_template, is_default, created_at
+        FROM ai_prompts
+        WHERE id = #{id}
+    </select>
+
+    <!-- 插入提示词 -->
+    <insert id="insertPrompt">
+        INSERT INTO ai_prompts (name, prompt_template, is_default, created_at)
+        VALUES (#{name}, #{prompt_template}, #{is_default}, NOW())
+    </insert>
+
+    <!-- 更新提示词 -->
+    <update id="updatePrompt">
+        UPDATE ai_prompts
+        <set>
+            <if test="name != null">
+                name = #{name},
+            </if>
+            <if test="prompt_template != null">
+                prompt_template = #{prompt_template},
+            </if>
+            <if test="is_default != null">
+                is_default = #{is_default},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 取消所有默认提示词 -->
+    <update id="clearDefaultPrompts">
+        UPDATE ai_prompts SET is_default = 0 WHERE is_default = 1
+    </update>
+
+    <!-- 删除提示词 -->
+    <delete id="deletePrompt">
+        DELETE FROM ai_prompts WHERE id = #{id}
+    </delete>
+
+    <!-- 插入分析历史 -->
+    <insert id="insertAnalysisHistory">
+        INSERT INTO ai_analysis_history (
+            start_date, end_date, prompt_id,
+            analysis_result, project_summary, projects_json, created_at
+        ) VALUES (
+            #{start_date}, #{end_date}, #{prompt_id},
+            #{analysis_result}, #{project_summary}, #{projects_json}, NOW()
+        )
+    </insert>
+
+    <!-- 查询分析历史（带分页） -->
+    <select id="selectAnalysisHistory">
+        SELECT
+            id, start_date, end_date, prompt_id,
+            analysis_result, project_summary, projects_json, created_at
+        FROM ai_analysis_history
+        ORDER BY created_at DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+            <if test="offset != null">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <!-- 根据 ID 查询分析历史 -->
+    <select id="selectAnalysisById">
+        SELECT
+            id, start_date, end_date, prompt_id,
+            analysis_result, project_summary, projects_json, created_at
+        FROM ai_analysis_history
+        WHERE id = #{id}
+    </select>
+
+    <!-- 查询分析历史列表（含提示词名称） -->
+    <select id="selectAnalysisHistoryWithPrompt">
+        SELECT
+            h.id, h.start_date, h.end_date, h.project_summary,
+            h.created_at, p.name AS prompt_name
+        FROM ai_analysis_history h
+        LEFT JOIN ai_prompts p ON h.prompt_id = p.id
+        ORDER BY h.created_at DESC
+        LIMIT 50
+    </select>
+
+    <!-- 查询分析历史详情（含提示词模板） -->
+    <select id="selectAnalysisDetailById">
+        SELECT
+            h.id, h.start_date, h.end_date, h.prompt_id,
+            h.analysis_result, h.project_summary, h.projects_json,
+            h.created_at, p.name AS prompt_name, p.prompt_template
+        FROM ai_analysis_history h
+        LEFT JOIN ai_prompts p ON h.prompt_id = p.id
+        WHERE h.id = #{id}
+    </select>
+
+    <!-- 查询默认提示词模板 -->
+    <select id="selectDefaultPromptTemplate">
+        SELECT id, prompt_template
+        FROM ai_prompts
+        WHERE is_default = TRUE
+        LIMIT 1
+    </select>
+
+    <!-- 根据 ID 查询提示词模板 -->
+    <select id="selectPromptTemplateById">
+        SELECT prompt_template
+        FROM ai_prompts
+        WHERE id = #{id}
+    </select>
+
+    <!-- 保存或更新分析历史 -->
+    <insert id="replaceAnalysisHistory">
+        REPLACE INTO ai_analysis_history
+        (start_date, end_date, prompt_id, analysis_result, project_summary, projects_json)
+        VALUES (#{start_date}, #{end_date}, #{prompt_id}, #{analysis_result}, #{project_summary}, #{projects_json})
+    </insert>
+
+</mapper>

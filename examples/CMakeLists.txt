@@ -15,6 +15,17 @@ if(MSVC)
 endif()
 
 # ==============================================================================
+# Generate embedded mappers header for account_server_demo
+# ==============================================================================
+include(${CMAKE_SOURCE_DIR}/cmake/utils/EmbedMappers.cmake)
+
+cnetmod_embed_mappers(
+    OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/embedded_mappers.hpp
+    MAPPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mappers
+    NAMESPACE embedded_mappers
+)
+
+# ==============================================================================
 # Core Examples
 # ==============================================================================
 set(CORE_EXAMPLES
@@ -51,6 +62,7 @@ set(HTTP_EXAMPLES
     http/tfb_benchmark
     http/client_demo
     http/cookie_demo
+    http/account_server_demo
 )
 
 # ==============================================================================
@@ -146,6 +158,11 @@ foreach(example_path ${ALL_EXAMPLES})
         target_link_options(${target_name} PRIVATE /LTCG:OFF /DEBUG:NONE)
     endif()
 endforeach()
+
+# ==============================================================================
+# Special handling for account_server_demo (needs embedded_mappers.hpp)
+# ==============================================================================
+target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 # ==============================================================================
 # Post-build commands

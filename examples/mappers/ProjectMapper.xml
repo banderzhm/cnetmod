@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//cnetmod.org//DTD Mapper 1.0//EN" "http://cnetmod.org/dtd/mapper.dtd">
+<mapper namespace="ProjectMapper">
+
+    <!-- SQL 片段：项目基础字段 -->
+    <sql id="projectColumns">
+        id, client_id, project_name, start_date, end_date,
+        total_income, status, created_at, updated_at
+    </sql>
+
+    <!-- SQL 片段：项目完整字段（包含客户信息） -->
+    <sql id="projectWithClient">
+        p.id, p.client_id, p.project_name, p.start_date, p.end_date,
+        p.total_income, p.status, p.created_at, p.updated_at,
+        c.name as client_name, c.wechat_id as client_wechat
+    </sql>
+
+    <!-- SQL 片段：日期范围条件 -->
+    <sql id="dateRangeCondition">
+        <if test="start_date != null">
+            AND p.start_date &gt;= #{start_date}
+        </if>
+        <if test="end_date != null">
+            AND p.end_date &lt;= #{end_date}
+        </if>
+    </sql>
+
+    <!-- 查询所有项目（带分页） -->
+    <select id="selectAll">
+        SELECT <include refid="projectColumns"/>
+        FROM projects
+        <where>
+            <if test="status != null">
+                status = #{status}
+            </if>
+            <if test="client_id != null">
+                AND client_id = #{client_id}
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+            <if test="offset != null">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <!-- 根据日期范围查询项目（带客户信息） -->
+    <select id="selectByDateRange">
+        SELECT <include refid="projectWithClient"/>
+        FROM projects p
+        LEFT JOIN clients c ON p.client_id = c.id
+        WHERE 1=1
+        <include refid="dateRangeCondition"/>
+        ORDER BY p.start_date DESC
+    </select>
+
+    <!-- 根据 ID 查询单个项目 -->
+    <select id="selectById">
+        SELECT <include refid="projectColumns"/>
+        FROM projects
+        WHERE id = #{id}
+    </select>
+
+    <!-- 查询项目统计信息 -->
+    <select id="selectStatistics">
+        SELECT
+            COUNT(*) as total_count,
+            SUM(total_income) as total_income,
+            AVG(total_income) as avg_income,
+            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_count,
+            COUNT(CASE WHEN status = 'in_progress' THEN 1 END) as in_progress_count
+        FROM projects
+        WHERE 1=1
+        <include refid="dateRangeCondition"/>
+    </select>
+
+    <!-- 插入新项目-->
+    <insert id="insertFull">
+        INSERT INTO projects (
+            client_id, title, total_amount, commission, status,
+            created_date
+            <if test="delivery_date != null and delivery_date != ''">, delivery_date</if>
+            <if test="remarks != null">, remarks</if>
+        ) VALUES (
+            #{client_id}, #{title}, #{total_amount}, #{commission}, #{status},
+            #{created_date}
+            <if test="delivery_date != null and delivery_date != ''">, #{delivery_date}</if>
+            <if test="remarks != null">, #{remarks}</if>
+        )
+    </insert>
+
+    <!-- 插入新项目 -->
+    <insert id="insert">
+        INSERT INTO projects (
+            client_id, project_name, start_date, end_date,
+            total_income, status, created_at, updated_at
+        ) VALUES (
+            #{client_id}, #{project_name}, #{start_date}, #{end_date},
+            #{total_income}, #{status}, NOW(), NOW()
+        )
+    </insert>
+
+    <!-- 更新项目 -->
+    <update id="updateFull">
+        UPDATE projects
+        <set>
+            <if test="client_id != null">
+                client_id = #{client_id},
+            </if>
+            <if test="title != null">
+                title = #{title},
+            </if>
+            <if test="total_amount != null">
+                total_amount = #{total_amount},
+            </if>
+            <if test="commission != null">
+                commission = #{commission},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            <if test="created_date != null">
+                created_date = #{created_date},
+            </if>
+            <if test="delivery_date != null and delivery_date != ''">
+                delivery_date = #{delivery_date},
+            </if>
+            <if test="delivery_date != null and delivery_date == ''">
+                delivery_date = NULL,
+            </if>
+            <if test="remarks != null">
+                remarks = #{remarks},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 更新项目 -->
+    <update id="update">
+        UPDATE projects
+        <set>
+            <if test="project_name != null">
+                project_name = #{project_name},
+            </if>
+            <if test="start_date != null">
+                start_date = #{start_date},
+            </if>
+            <if test="end_date != null">
+                end_date = #{end_date},
+            </if>
+            <if test="total_income != null">
+                total_income = #{total_income},
+            </if>
+            <if test="status != null">
+                status = #{status},
+            </if>
+            updated_at = NOW()
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除项目 -->
+    <delete id="delete">
+        DELETE FROM projects WHERE id = #{id}
+    </delete>
+
+    <!-- 批量删除项目 -->
+    <delete id="batchDelete">
+        DELETE FROM projects
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <!-- 搜索项目（模糊查询） -->
+    <select id="search">
+        SELECT <include refid="projectWithClient"/>
+        FROM projects p
+        LEFT JOIN clients c ON p.client_id = c.id
+        <where>
+            <if test="keyword != null">
+                (p.project_name LIKE CONCAT('%', #{keyword}, '%')
+                 OR c.name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            <if test="status != null">
+                AND p.status = #{status}
+            </if>
+            <include refid="dateRangeCondition"/>
+        </where>
+        ORDER BY p.created_at DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <!-- 查询所有存在项目的年份 -->
+    <select id="selectDistinctYears">
+        SELECT DISTINCT YEAR(created_date) AS year
+        FROM projects
+        ORDER BY year DESC
+    </select>
+
+    <!-- 按日期范围查询项目（含客户、支出和文件信息 - 单次查询优化） -->
+    <select id="selectWithExpensesAndFilesByDateRange">
+        SELECT
+            p.id, p.title, p.total_amount, p.commission, p.status,
+            p.created_date, p.delivery_date, p.remarks,
+            c.name AS clientName, c.wechat_id AS clientWechatId,
+            e.id AS expenseId, e.item_name AS expenseItem, e.amount AS expenseAmount,
+            f.id AS fileId, f.original_filename AS fileName
+        FROM projects p
+        JOIN clients c ON p.client_id = c.id
+        LEFT JOIN expenses e ON p.id = e.project_id
+        LEFT JOIN project_files f ON p.id = f.project_id
+        WHERE p.created_date &gt;= #{start_date}
+          AND p.created_date &lt;= #{end_date}
+        ORDER BY p.created_date DESC, p.id DESC
+    </select>
+
+    <!-- 按日期范围查询项目（含客户和支出信息） -->
+    <select id="selectWithExpensesByDateRange">
+        SELECT
+            p.id, p.title, p.total_amount, p.commission, p.status,
+            p.created_date, p.delivery_date, p.remarks,
+            c.name AS clientName, c.wechat_id AS clientWechatId,
+            e.id AS expenseId, e.item_name AS expenseItem, e.amount AS expenseAmount
+        FROM projects p
+        JOIN clients c ON p.client_id = c.id
+        LEFT JOIN expenses e ON p.id = e.project_id
+        WHERE p.created_date &gt;= #{start_date}
+          AND p.created_date &lt;= #{end_date}
+        ORDER BY p.created_date DESC, p.id DESC
+    </select>
+
+    <!-- 查询日期范围内的项目文件 -->
+    <select id="selectFilesByDateRange">
+        SELECT id, project_id, original_filename
+        FROM project_files
+        WHERE project_id IN (
+            SELECT id FROM projects
+            WHERE created_date &gt;= #{start_date}
+              AND created_date &lt;= #{end_date}
+        )
+    </select>
+
+    <!-- 根据项目 ID 查询标题 -->
+    <select id="selectTitleById">
+        SELECT title FROM projects WHERE id = #{id}
+    </select>
+
+    <!-- 查询日期范围内的项目统计（总金额、佣金、支出） -->
+    <select id="selectFinancialSummary">
+        SELECT
+            COALESCE(SUM(total_amount), 0) AS total_amount,
+            COALESCE(SUM(commission), 0) AS total_commission
+        FROM projects
+        WHERE created_date &gt;= #{start_date}
+          AND created_date &lt;= #{end_date}
+    </select>
+
+    <!-- 查询日期范围内的总支出 -->
+    <select id="selectTotalExpenses">
+        SELECT COALESCE(SUM(e.amount), 0) AS total_expenses
+        FROM expenses e
+        JOIN projects p ON e.project_id = p.id
+        WHERE p.created_date &gt;= #{start_date}
+          AND p.created_date &lt;= #{end_date}
+    </select>
+
+    <!-- 查询日期范围内的项目统计（数量、金额、佣金） -->
+    <select id="selectProjectStats">
+        SELECT
+            COUNT(*) AS project_count,
+            COALESCE(SUM(total_amount), 0) AS total_amount,
+            COALESCE(SUM(commission), 0) AS total_commission
+        FROM projects
+        WHERE created_date &gt;= #{start_date}
+          AND created_date &lt;= #{end_date}
+    </select>
+
+</mapper>

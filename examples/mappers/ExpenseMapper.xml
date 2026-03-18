@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ExpenseMapper">
+
+    <sql id="expenseColumns">
+        id, project_id, item_name, amount, created_at
+    </sql>
+
+    <!-- 查询项目的所有支出 -->
+    <select id="selectByProjectId">
+        SELECT <include refid="expenseColumns"/>
+        FROM expenses
+        WHERE project_id = #{project_id}
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 批量查询多个项目的支出 -->
+    <select id="selectByProjectIds">
+        SELECT <include refid="expenseColumns"/>
+        FROM expenses
+        WHERE project_id IN
+        <foreach collection="project_ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY project_id, created_at DESC
+    </select>
+
+    <!-- 计算项目总支出 -->
+    <select id="sumByProjectId">
+        SELECT COALESCE(SUM(amount), 0) as total_expense
+        FROM expenses
+        WHERE project_id = #{project_id}
+    </select>
+
+    <!-- 插入支出记录 -->
+    <insert id="insert">
+        INSERT INTO expenses (project_id, item_name, amount, created_at)
+        VALUES (#{project_id}, #{item_name}, #{amount}, NOW())
+    </insert>
+
+    <!-- 批量插入支出 -->
+    <insert id="batchInsert">
+        INSERT INTO expenses (project_id, item_name, amount, created_at)
+        VALUES
+        <foreach collection="expenses" item="exp" separator=",">
+            (#{exp.project_id}, #{exp.item_name}, #{exp.amount}, NOW())
+        </foreach>
+    </insert>
+
+    <!-- 更新支出 -->
+    <update id="update">
+        UPDATE expenses
+        <set>
+            <if test="item_name != null">
+                item_name = #{item_name},
+            </if>
+            <if test="amount != null">
+                amount = #{amount},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除支出 -->
+    <delete id="delete">
+        DELETE FROM expenses WHERE id = #{id}
+    </delete>
+
+    <!-- 删除项目的所有支出 -->
+    <delete id="deleteByProjectId">
+        DELETE FROM expenses WHERE project_id = #{project_id}
+    </delete>
+
+</mapper>

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ClientMapper">
+
+    <sql id="clientColumns">
+        id, wechat_id, name, created_at
+    </sql>
+
+    <!-- 查询所有客户 -->
+    <select id="selectAll">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 根据 ID 查询客户 -->
+    <select id="selectById">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        WHERE id = #{id}
+    </select>
+
+    <!-- 根据微信 ID 查询客户 -->
+    <select id="selectByWechatId">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        WHERE wechat_id = #{wechat_id}
+    </select>
+
+    <!-- 搜索客户 -->
+    <select id="search">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        <where>
+            <if test="keyword != null">
+                (name LIKE CONCAT('%', #{keyword}, '%')
+                 OR wechat_id LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- 插入客户 -->
+    <insert id="insert">
+        INSERT INTO clients (wechat_id, name, created_at)
+        VALUES (#{wechat_id}, #{name}, NOW())
+    </insert>
+
+    <!-- 更新客户 -->
+    <update id="update">
+        UPDATE clients
+        <set>
+            <if test="wechat_id != null">
+                wechat_id = #{wechat_id},
+            </if>
+            <if test="name != null">
+                name = #{name},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- 删除客户 -->
+    <delete id="delete">
+        DELETE FROM clients WHERE id = #{id}
+    </delete>
+
+    <!-- 查询所有不重复的客户（按微信 ID 去重） -->
+    <select id="selectDistinctClients">
+        SELECT DISTINCT wechat_id AS wechatId, name
+        FROM clients
+        ORDER BY name
+    </select>
+
+    <!-- 模糊搜索客户（用于自动完成） -->
+    <select id="searchFuzzy">
+        SELECT DISTINCT wechat_id AS wechatId, name
+        FROM clients
+        WHERE wechat_id LIKE CONCAT('%', #{keyword}, '%')
+           OR name LIKE CONCAT('%', #{keyword}, '%')
+        ORDER BY name
+        LIMIT 10
+    </select>
+
+</mapper>

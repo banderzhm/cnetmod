@@ -16,6 +16,24 @@ set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ==============================================================================
+# Linker Optimization: Use mold if available (Linux only)
+# ==============================================================================
+option(CNETMOD_USE_MOLD "Use mold linker for faster linking (Linux only)" ON)
+if(CNETMOD_USE_MOLD)
+    include(${CMAKE_SOURCE_DIR}/cmake/utils/UseMold.cmake)
+    cnetmod_use_mold()
+endif()
+
+# ==============================================================================
+# Memory Allocator Optimization: Use mimalloc if available
+# ==============================================================================
+option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
+if(CNETMOD_USE_MIMALLOC)
+    include(${CMAKE_SOURCE_DIR}/cmake/utils/UseMimalloc.cmake)
+    cnetmod_use_mimalloc()
+endif()
+
+# ==============================================================================
 # Auto-detect platform-specific standard library module paths
 # ==============================================================================
 
@@ -523,4 +541,32 @@ message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
 if(LIBCXX_MODULE_DIRS)
     message(STATUS "Standard Library Modules: ${LIBCXX_MODULE_DIRS}")
 endif()
+
+# Linker information
+if(CNETMOD_USING_MOLD)
+    message(STATUS "Linker: mold (high-performance)")
+else()
+    message(STATUS "Linker: system default")
+endif()
+
+# Memory allocator information
+if(CNETMOD_USING_MIMALLOC)
+    message(STATUS "Memory Allocator: mimalloc (high-performance)")
+else()
+    message(STATUS "Memory Allocator: system default")
+endif()
+
 message(STATUS "==========================================")
+
+# Print detailed optimization info if enabled
+if(CNETMOD_USING_MOLD OR CNETMOD_USING_MIMALLOC)
+    message(STATUS "")
+    message(STATUS "Performance Optimizations Enabled:")
+    if(CNETMOD_USING_MOLD)
+        message(STATUS "  ✓ mold linker: 10-20x faster linking")
+    endif()
+    if(CNETMOD_USING_MIMALLOC)
+        message(STATUS "  ✓ mimalloc: 2-3x faster memory allocation")
+    endif()
+    message(STATUS "")
+endif()
