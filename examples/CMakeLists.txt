@@ -108,7 +108,9 @@ set(MQTT_EXAMPLES
 # ==============================================================================
 set(MODBUS_EXAMPLES
     modbus/modbus_demo
-    modbus_converter_demo
+    modbus/modbus_converter_demo
+    modbus/modbus_rtu_demo
+    modbus/modbus_udp_demo
 )
 
 # ==============================================================================
