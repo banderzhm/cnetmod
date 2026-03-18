@@ -39,6 +39,41 @@ auto from_result_set(const result_set& rs) -> std::vector<T> {
 // Tuple support — result_set row → std::tuple
 // =============================================================================
 
+namespace detail {
+
+inline auto parse_double_sv(std::string_view s) -> double {
+    // Portable parsing for DECIMAL/NEWDECIMAL (stored as string by design).
+    std::string tmp(s);
+    char* end = nullptr;
+    const double v = std::strtod(tmp.c_str(), &end);
+    if (end == tmp.c_str()) {
+        throw bad_field_access{};
+    }
+    return v;
+}
+
+inline auto field_to_double(const field_value& fv) -> double {
+    if (fv.is_null()) return 0.0;
+    if (fv.is_double()) return fv.as_double();
+    if (fv.is_float()) return static_cast<double>(fv.as_float());
+    if (fv.is_int64()) return static_cast<double>(fv.as_int64());
+    if (fv.is_uint64()) return static_cast<double>(fv.as_uint64());
+    if (fv.is_string()) return parse_double_sv(fv.as_string());
+    throw bad_field_access{};
+}
+
+inline auto field_to_float(const field_value& fv) -> float {
+    if (fv.is_null()) return 0.0f;
+    if (fv.is_float()) return fv.as_float();
+    if (fv.is_double()) return static_cast<float>(fv.as_double());
+    if (fv.is_int64()) return static_cast<float>(fv.as_int64());
+    if (fv.is_uint64()) return static_cast<float>(fv.as_uint64());
+    if (fv.is_string()) return static_cast<float>(parse_double_sv(fv.as_string()));
+    throw bad_field_access{};
+}
+
+} // namespace detail
+
 /// Helper: Convert field_value to tuple element type
 template <typename T>
 auto field_to_tuple_element(const field_value& fv) -> T {
@@ -49,9 +84,10 @@ auto field_to_tuple_element(const field_value& fv) -> T {
     } else if constexpr (std::is_same_v<T, std::int32_t>) {
         return fv.is_null() ? 0 : static_cast<std::int32_t>(fv.as_int64());
     } else if constexpr (std::is_same_v<T, double>) {
-        return fv.is_null() ? 0.0 : fv.as_double();
+        return detail::field_to_double(fv);
     } else if constexpr (std::is_same_v<T, float>) {
-        return fv.is_null() ? 0.0f : fv.as_float();
+        // SUM/AVG over DECIMAL may come back as string.
+        return detail::field_to_float(fv);
     } else if constexpr (std::is_same_v<T, bool>) {
         return fv.is_null() ? false : (fv.as_int64() != 0);
     } else if constexpr (std::is_same_v<T, std::string>) {
@@ -61,7 +97,9 @@ auto field_to_tuple_element(const field_value& fv) -> T {
     } else if constexpr (std::is_same_v<T, std::optional<std::uint64_t>>) {
         return fv.is_null() ? std::nullopt : std::optional<std::uint64_t>(fv.as_uint64());
     } else if constexpr (std::is_same_v<T, std::optional<double>>) {
-        return fv.is_null() ? std::nullopt : std::optional<double>(fv.as_double());
+        return fv.is_null() ? std::nullopt : std::optional<double>(detail::field_to_double(fv));
+    } else if constexpr (std::is_same_v<T, std::optional<float>>) {
+        return fv.is_null() ? std::nullopt : std::optional<float>(detail::field_to_float(fv));
     } else if constexpr (std::is_same_v<T, std::optional<std::string>>) {
         return fv.is_null() ? std::nullopt : std::optional<std::string>(std::string(fv.as_string()));
     } else {

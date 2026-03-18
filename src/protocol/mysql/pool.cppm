@@ -18,6 +18,7 @@ import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
 import cnetmod.coro.cancel;
+import cnetmod.executor.async_op;
 
 namespace cnetmod::mysql {
 
@@ -65,6 +66,7 @@ struct conn_node {
     std::atomic<conn_state> state       = conn_state::initial;  // P4: atomic for lock-free fast path
     std::chrono::steady_clock::time_point last_used;
     std::atomic<bool>       needs_reset = false;
+    cancel_token            ping_sleep_token{};  // interrupt idle ping sleep when we need to reconnect quickly
     std::coroutine_handle<> task_waiting{};  // task suspends here when in_use
     std::size_t             index       = 0;  // P6: index in vector for bitmap
 
@@ -355,7 +357,13 @@ private:
             // Phase 2: Idle — wait ping_interval then ping
             state = node.state.load(std::memory_order_acquire);
             if (state == conn_state::idle) {
-                co_await async_sleep(ctx_, params_.ping_interval);
+                // Make the idle wait cancellable so we can reconnect promptly
+                // when a borrowed connection returns broken.
+                node.ping_sleep_token.reset();
+                auto wait_r = co_await cnetmod::async_timer_wait(ctx_, params_.ping_interval,
+                                                                node.ping_sleep_token);
+                node.ping_sleep_token.reset();
+                if (!wait_r) continue;  // cancelled or timer error
                 if (!running_) break;
 
                 co_await mtx_.lock();
@@ -593,29 +601,46 @@ private:
     // ── P4: Return path ──
 
     void return_connection(conn_node& node, bool needs_reset) {
-        auto mark_idle = [this, &node, needs_reset]() -> bool {
+        enum class ret_kind { failed, idle, dead };
+
+        auto mark_returned = [this, &node, needs_reset]() -> ret_kind {
+            const bool open = node.conn && node.conn->is_open();
+            const conn_state target = open ? conn_state::idle : conn_state::dead;
+
             conn_state expected = conn_state::in_use;
-            if (!node.state.compare_exchange_strong(expected, conn_state::idle,
+            if (!node.state.compare_exchange_strong(expected, target,
                                                     std::memory_order_release,
                                                     std::memory_order_relaxed)) {
-                return false;
+                return ret_kind::failed;
             }
+
             node.needs_reset.store(needs_reset, std::memory_order_relaxed);
             node.last_used = std::chrono::steady_clock::now();
-            set_idle_bit(node.index);
+
+            if (open) {
+                set_idle_bit(node.index);
+            } else {
+                clear_idle_bit(node.index);
+                // Wake the per-connection task if it's waiting in idle sleep,
+                // so it can reconnect immediately.
+                node.ping_sleep_token.cancel();
+            }
+
             if (auto h = std::exchange(node.task_waiting, {}))
                 ctx_.post(h);
-            return true;
+
+            return open ? ret_kind::idle : ret_kind::dead;
         };
 
         // No queued waiters: avoid lock and return immediately.
         if (waiters_count_.load(std::memory_order_acquire) == 0) {
-            if (mark_idle()) return;
+            if (mark_returned() != ret_kind::failed) return;
         }
 
         // Waiters exist: notify under lock.
         if (mtx_.try_lock()) {
-            if (mark_idle() || waiters_head_) {
+            auto r = mark_returned();
+            if (r == ret_kind::idle || waiters_head_) {
                 notify_waiters_with_idle_locked();
             }
             mtx_.unlock();
@@ -626,13 +651,23 @@ private:
         auto* node_ptr = &node;
         spawn(ctx_, [this, node_ptr, needs_reset]() -> task<void> {
             co_await mtx_.lock();
+            const bool open = node_ptr->conn && node_ptr->conn->is_open();
+            const conn_state target = open ? conn_state::idle : conn_state::dead;
+
             conn_state expected = conn_state::in_use;
-            if (node_ptr->state.compare_exchange_strong(expected, conn_state::idle,
+            if (node_ptr->state.compare_exchange_strong(expected, target,
                                                         std::memory_order_release,
                                                         std::memory_order_relaxed)) {
                 node_ptr->needs_reset.store(needs_reset, std::memory_order_relaxed);
                 node_ptr->last_used = std::chrono::steady_clock::now();
-                set_idle_bit(node_ptr->index);
+
+                if (open) {
+                    set_idle_bit(node_ptr->index);
+                } else {
+                    clear_idle_bit(node_ptr->index);
+                    node_ptr->ping_sleep_token.cancel();
+                }
+
                 if (auto h = std::exchange(node_ptr->task_waiting, {}))
                     ctx_.post(h);
             }

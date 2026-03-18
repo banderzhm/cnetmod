@@ -39,6 +39,7 @@ public:
 
     auto connect(connect_options opts = {}) -> task<result_set> {
         result_set err_rs;
+        last_io_ec_.clear();
 
         // TCP connection
         auto addr_r = ip_address::from_string(opts.host);
@@ -176,7 +177,12 @@ public:
         seq_ = 0;
         auto pkt = detail::build_query_command(sql);
         auto wr = co_await write_packet(pkt, seq_++);
-        if (!wr) { err_rs.error_msg = "failed to send query"; co_return err_rs; }
+        if (!wr) {
+            err_rs.error_msg = last_io_ec_
+                ? std::format("failed to send query: {}", last_io_ec_.message())
+                : "failed to send query";
+            co_return err_rs;
+        }
 
         co_return co_await read_result_set(false);
     }
@@ -214,7 +220,12 @@ public:
         seq_ = 0;
         auto pkt = detail::build_query_command(sql);
         auto wr = co_await write_packet(pkt, seq_++);
-        if (!wr) { st.set_error(0, "failed to send query"); co_return; }
+        if (!wr) {
+            st.set_error(0, last_io_ec_
+                ? std::format("failed to send query: {}", last_io_ec_.message())
+                : "failed to send query");
+            co_return;
+        }
 
         co_await read_resultset_head_impl(st, false);
     }
@@ -412,7 +423,12 @@ public:
         seq_ = 0;
         std::vector<std::uint8_t> pkt{COM_PING};
         auto wr = co_await write_packet(pkt, seq_++);
-        if (!wr) { err_rs.error_msg = "failed to send ping"; co_return err_rs; }
+        if (!wr) {
+            err_rs.error_msg = last_io_ec_
+                ? std::format("failed to send ping: {}", last_io_ec_.message())
+                : "failed to send ping";
+            co_return err_rs;
+        }
 
         auto resp = co_await read_packet();
         if (resp.empty()) { err_rs.error_msg = "no ping response"; co_return err_rs; }
@@ -436,7 +452,12 @@ public:
         seq_ = 0;
         std::vector<std::uint8_t> pkt{COM_RESET_CONNECTION};
         auto wr = co_await write_packet(pkt, seq_++);
-        if (!wr) { err_rs.error_msg = "failed to send reset"; co_return err_rs; }
+        if (!wr) {
+            err_rs.error_msg = last_io_ec_
+                ? std::format("failed to send reset: {}", last_io_ec_.message())
+                : "failed to send reset";
+            co_return err_rs;
+        }
 
         auto resp = co_await read_packet();
         if (resp.empty()) { err_rs.error_msg = "no reset response"; co_return err_rs; }
@@ -554,18 +575,43 @@ public:
 private:
     // ── Transport layer ──────────────────────────────────────────────
 
+    void mark_disconnected(std::error_code ec) noexcept {
+        last_io_ec_ = ec;
+        connected_ = false;
+        secure_channel_ = false;
+        rbuf_pos_ = 0;
+        rbuf_len_ = 0;
+#ifdef CNETMOD_HAS_SSL
+        ssl_.reset();
+        ssl_ctx_.reset();
+#endif
+        sock_.close();
+    }
+
     auto do_write(const_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
 #ifdef CNETMOD_HAS_SSL
-        if (ssl_) co_return co_await ssl_->async_write(buf);
+        if (ssl_) {
+            auto r = co_await ssl_->async_write(buf);
+            if (!r) mark_disconnected(r.error());
+            co_return r;
+        }
 #endif
-        co_return co_await async_write(ctx_, sock_, buf);
+        auto r = co_await async_write(ctx_, sock_, buf);
+        if (!r) mark_disconnected(r.error());
+        co_return r;
     }
 
     auto do_read(mutable_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
 #ifdef CNETMOD_HAS_SSL
-        if (ssl_) co_return co_await ssl_->async_read(buf);
+        if (ssl_) {
+            auto r = co_await ssl_->async_read(buf);
+            if (!r) mark_disconnected(r.error());
+            co_return r;
+        }
 #endif
-        co_return co_await async_read(ctx_, sock_, buf);
+        auto r = co_await async_read(ctx_, sock_, buf);
+        if (!r) mark_disconnected(r.error());
+        co_return r;
     }
 
     // ── Read exactly N bytes ─────────────────────────────────────
@@ -582,7 +628,12 @@ private:
                 continue;
             }
             auto r = co_await do_read(mutable_buffer{rbuf_.data(), rbuf_.size()});
-            if (!r || *r == 0) co_return false;
+            if (!r) co_return false;  // do_read() already marked disconnected
+            if (*r == 0) {
+                // Peer closed connection gracefully. Treat as connection lost.
+                mark_disconnected(make_error_code(std::errc::connection_reset));
+                co_return false;
+            }
             rbuf_pos_ = 0;
             rbuf_len_ = *r;
         }
@@ -866,6 +917,7 @@ private:
     socket      sock_;
     bool        connected_      = false;
     bool        secure_channel_ = false;
+    std::error_code last_io_ec_{};
     std::uint8_t  seq_          = 0;
     std::uint32_t server_caps_  = 0;
     std::uint32_t client_caps_  = 0;

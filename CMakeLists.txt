@@ -213,6 +213,22 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
 endif()
 
 # ==============================================================================
+# C++20 Module Scanning Configuration
+# ==============================================================================
+# Workaround: Disable module scanning for files that include stdexec headers
+# stdexec uses digit separators (e.g., 2019'07L) which some module scanners reject
+# Alternative: manually specify module dependencies or patch stdexec
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+    # Option 1: Use a more lenient scanning mode (if available)
+    # Option 2: Disable automatic scanning and manually specify dependencies
+    # For now, we rely on the compiler's normal preprocessing which works fine
+
+    # If the issue persists, consider:
+    # set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+    # and manually specify module dependencies
+endif()
+
+# ==============================================================================
 # Third-party Library Configuration
 # ==============================================================================
 # stdexec: Header-only mode (not using add_subdirectory to avoid CPM dependency)
