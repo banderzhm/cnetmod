@@ -25,9 +25,8 @@ auto run_udp_server(cn::io_context& ctx) -> cn::task<void> {
     // 初始化测试数据
     for (std::uint16_t i = 0; i < 50; ++i) {
         store.write_holding_register(i, i * 100);
-        store.write_input_register(i, i * 50);
+        // Note: Input registers and discrete inputs are read-only in standard Modbus
         store.write_coil(i, i % 3 == 0);
-        store.write_discrete_input(i, i % 2 == 0);
     }
 
     std::println("Initialized data store with test data");
