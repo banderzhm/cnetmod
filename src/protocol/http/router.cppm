@@ -15,6 +15,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.executor.async_op;
 
 namespace cnetmod::http {
 
@@ -140,6 +141,74 @@ public:
         text(status::not_found, "404 Not Found");
     }
 
+    // --- SSE Helpers ---
+
+    auto sse_begin(int status_code = status::ok) -> task<bool> {
+        if (sse_started_) {
+            co_return true;
+        }
+        resp_.set_status(status_code);
+        resp_.set_header("Content-Type", "text/event-stream");
+        resp_.set_header("Cache-Control", "no-cache");
+        resp_.set_header("Connection", "keep-alive");
+        resp_.set_header("X-Accel-Buffering", "no");
+        resp_.set_header("X-Streamed", "1");
+
+        const auto header = resp_.serialize();
+        auto wr = co_await async_write(
+            ctx_, sock_, const_buffer{header.data(), header.size()});
+        if (!wr) {
+            co_return false;
+        }
+
+        sse_started_ = true;
+        co_return true;
+    }
+
+    auto sse_send(std::string_view data,
+                  std::string_view event = {}) -> task<bool>
+    {
+        if (!(co_await sse_begin())) {
+            co_return false;
+        }
+
+        std::string frame;
+        if (!event.empty()) {
+            frame += "event: ";
+            frame += event;
+            frame += '\n';
+        }
+
+        std::size_t begin = 0;
+        while (begin <= data.size()) {
+            const auto nl = data.find('\n', begin);
+            const auto end = (nl == std::string_view::npos) ? data.size() : nl;
+            frame += "data: ";
+            frame.append(data.substr(begin, end - begin));
+            frame += '\n';
+
+            if (nl == std::string_view::npos) {
+                break;
+            }
+            begin = nl + 1;
+        }
+        frame += '\n';
+
+        auto wr = co_await async_write(
+            ctx_, sock_, const_buffer{frame.data(), frame.size()});
+        co_return wr.has_value();
+    }
+
+    auto sse_json(std::string_view json_payload,
+                  std::string_view event = {}) -> task<bool>
+    {
+        co_return co_await sse_send(json_payload, event);
+    }
+
+    auto sse_done() -> task<bool> {
+        co_return co_await sse_json(R"({"done":true})");
+    }
+
     // --- Form Parsing ---
 
     /// Lazily parse multipart/form-data or application/x-www-form-urlencoded body
@@ -190,6 +259,7 @@ private:
     std::string path_;                // Owned
     std::string query_;               // Owned
     std::optional<form_data> form_cache_;
+    bool sse_started_ = false;
 };
 
 // =============================================================================
