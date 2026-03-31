@@ -1,5 +1,9 @@
 /// cnetmod.protocol.mqtt:broker — MQTT Broker Core Implementation
 
+module;
+
+#include <cnetmod/config.hpp>
+
 module cnetmod.protocol.mqtt:broker;
 
 import std;
