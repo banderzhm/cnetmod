@@ -289,7 +289,7 @@ private:
             if (c == '_') {
                 next_upper = true;
             } else if (next_upper) {
-                camel.push_back(std::toupper(static_cast<unsigned char>(c)));
+                camel.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(c))));
                 next_upper = false;
             } else {
                 camel.push_back(c);

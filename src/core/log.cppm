@@ -452,9 +452,9 @@ export namespace logger {
 
                 sink_drop_notice(dropped_count().exchange(0, std::memory_order_acq_rel));
 
-                for (const auto& ev : batch) {
-                    sink_one(ev);
-                    flushed_seq().store(ev.seq, std::memory_order_release);
+                for (const auto& ev_item : batch) {
+                    sink_one(ev_item);
+                    flushed_seq().store(ev_item.seq, std::memory_order_release);
                 }
                 batch.clear();
 

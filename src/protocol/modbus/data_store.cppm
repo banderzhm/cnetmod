@@ -255,7 +255,7 @@ public:
                         resp.result = std::unexpected(exception_code::illegal_data_address);
                     } else {
                         coils_[req.address] = static_cast<bool>(req.value);
-                        resp.result = 0;
+                        resp.result = static_cast<std::uint16_t>(0);
                     }
                     break;
 
@@ -280,7 +280,7 @@ public:
                         resp.result = std::unexpected(exception_code::illegal_data_address);
                     } else {
                         holding_registers_[req.address] = req.value;
-                        resp.result = 0;
+                        resp.result = static_cast<std::uint16_t>(0);
                     }
                     break;
 

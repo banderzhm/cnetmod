@@ -9,28 +9,9 @@ import std;
 namespace cnetmod::mysql::orm {
 
 // =============================================================================
-// xml_node — Parsed XML element (forward declared for xml_content)
+// Forward declaration for pointer member in xml_content
 // =============================================================================
-
-export struct xml_node {
-    std::string tag;
-    std::unordered_map<std::string, std::string> attrs;
-    std::vector<struct xml_content> children;
-
-    auto attr(std::string_view name) const -> std::string_view {
-        auto it = attrs.find(std::string(name));
-        if (it != attrs.end()) return it->second;
-        return {};
-    }
-
-    auto has_attr(std::string_view name) const -> bool {
-        return attrs.contains(std::string(name));
-    }
-};
-
-// =============================================================================
-// xml_content — Text or element child node
-// =============================================================================
+struct xml_node;
 
 export struct xml_content {
     bool        is_text = true;
@@ -49,6 +30,26 @@ export struct xml_content {
         c.is_text = false;
         c.element = std::move(e);
         return c;
+    }
+};
+
+// =============================================================================
+// xml_node — Parsed XML element
+// =============================================================================
+
+export struct xml_node {
+    std::string tag;
+    std::unordered_map<std::string, std::string> attrs;
+    std::vector<xml_content> children;
+
+    auto attr(std::string_view name) const -> std::string_view {
+        auto it = attrs.find(std::string(name));
+        if (it != attrs.end()) return it->second;
+        return {};
+    }
+
+    auto has_attr(std::string_view name) const -> bool {
+        return attrs.contains(std::string(name));
     }
 };
 

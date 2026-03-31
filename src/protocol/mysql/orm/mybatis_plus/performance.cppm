@@ -36,107 +36,29 @@ export struct performance_config {
 
 export class performance_interceptor {
 public:
-    explicit performance_interceptor(performance_config config = {})
-        : config_(std::move(config)) {}
+    explicit performance_interceptor(performance_config config = {});
 
-    /// Start timing for SQL execution
-    auto start_timing() -> std::chrono::steady_clock::time_point {
-        if (!config_.enabled) return {};
-        return std::chrono::steady_clock::now();
-    }
+    auto start_timing() -> std::chrono::steady_clock::time_point;
 
-    /// End timing and record statistics
     void end_timing(std::chrono::steady_clock::time_point start,
-                   std::string_view sql,
-                   std::uint64_t affected_rows = 0) {
-        if (!config_.enabled) return;
+                    std::string_view sql,
+                    std::uint64_t affected_rows = 0);
 
-        auto end = std::chrono::steady_clock::now();
-        auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    auto get_slow_queries() const -> std::vector<sql_stat>;
 
-        sql_stat stat;
-        stat.sql = sql;
-        stat.execution_time = duration;
-        stat.timestamp = std::chrono::system_clock::now();
-        stat.affected_rows = affected_rows;
-        stat.is_slow = duration >= config_.slow_query_threshold;
+    auto get_history() const -> std::vector<sql_stat>;
 
-        // Log if needed
-        if (config_.log_all_queries) {
-            logger::detail::write_log_no_src(logger::level::debug,
-                std::format("[SQL] {} | {}μs | {} rows",
-                    truncate_sql(sql, 100), duration.count(), affected_rows));
-        } else if (stat.is_slow && config_.log_slow_queries) {
-            logger::detail::write_log_no_src(logger::level::warn,
-                std::format("[SLOW SQL] {} | {}μs | {} rows",
-                    truncate_sql(sql, 200), duration.count(), affected_rows));
-        }
+    auto get_summary() const -> std::tuple<std::uint64_t, std::uint64_t, std::chrono::microseconds>;
 
-        // Store in history
-        std::lock_guard lock(mutex_);
-        history_.push_back(std::move(stat));
+    auto get_average_time() const -> std::chrono::microseconds;
 
-        // Limit history size
-        if (history_.size() > config_.max_history) {
-            history_.erase(history_.begin(), history_.begin() + (history_.size() - config_.max_history));
-        }
+    void clear();
 
-        // Update statistics
-        total_queries_++;
-        total_execution_time_ += duration;
-        if (stat.is_slow) {
-            slow_queries_++;
-        }
-    }
+    auto config() const noexcept -> const performance_config&;
 
-    /// Get slow queries
-    auto get_slow_queries() const -> std::vector<sql_stat> {
-        std::lock_guard lock(mutex_);
-        std::vector<sql_stat> slow;
-        for (auto& stat : history_) {
-            if (stat.is_slow) {
-                slow.push_back(stat);
-            }
-        }
-        return slow;
-    }
+    void set_config(performance_config config);
 
-    /// Get all query history
-    auto get_history() const -> std::vector<sql_stat> {
-        std::lock_guard lock(mutex_);
-        return history_;
-    }
-
-    /// Get statistics summary
-    auto get_summary() const -> std::tuple<std::uint64_t, std::uint64_t, std::chrono::microseconds> {
-        std::lock_guard lock(mutex_);
-        return {total_queries_, slow_queries_, total_execution_time_};
-    }
-
-    /// Get average execution time
-    auto get_average_time() const -> std::chrono::microseconds {
-        std::lock_guard lock(mutex_);
-        if (total_queries_ == 0) return {};
-        return total_execution_time_ / total_queries_;
-    }
-
-    /// Clear history and statistics
-    void clear() {
-        std::lock_guard lock(mutex_);
-        history_.clear();
-        total_queries_ = 0;
-        slow_queries_ = 0;
-        total_execution_time_ = {};
-    }
-
-    /// Get configuration
-    auto config() const noexcept -> const performance_config& { return config_; }
-
-    /// Set configuration
-    void set_config(performance_config config) { config_ = std::move(config); }
-
-    /// Enable/disable performance analysis
-    void set_enabled(bool enabled) { config_.enabled = enabled; }
+    void set_enabled(bool enabled);
 
 private:
     performance_config config_;
@@ -146,11 +68,100 @@ private:
     std::chrono::microseconds total_execution_time_{};
     mutable std::mutex mutex_;
 
-    static auto truncate_sql(std::string_view sql, std::size_t max_len) -> std::string {
-        if (sql.size() <= max_len) return std::string(sql);
-        return std::format("{}...", sql.substr(0, max_len - 3));
-    }
+    static auto truncate_sql(std::string_view sql, std::size_t max_len) -> std::string;
 };
+
+performance_interceptor::performance_interceptor(performance_config config)
+    : config_(std::move(config)) {}
+
+auto performance_interceptor::start_timing() -> std::chrono::steady_clock::time_point {
+    if (!config_.enabled) return {};
+    return std::chrono::steady_clock::now();
+}
+
+void performance_interceptor::end_timing(std::chrono::steady_clock::time_point start,
+                                         std::string_view sql,
+                                         std::uint64_t affected_rows) {
+    if (!config_.enabled) return;
+
+    const auto end = std::chrono::steady_clock::now();
+    const auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
+    const bool is_slow = duration >= config_.slow_query_threshold;
+
+    sql_stat stat;
+    stat.sql = sql;
+    stat.execution_time = duration;
+    stat.timestamp = std::chrono::system_clock::now();
+    stat.affected_rows = affected_rows;
+    stat.is_slow = is_slow;
+
+    std::lock_guard lock(mutex_);
+    history_.push_back(std::move(stat));
+
+    if (history_.size() > config_.max_history) {
+        history_.erase(history_.begin(), history_.begin() + (history_.size() - config_.max_history));
+    }
+
+    total_queries_++;
+    total_execution_time_ += duration;
+    if (history_.back().is_slow) {
+        slow_queries_++;
+    }
+}
+
+auto performance_interceptor::get_slow_queries() const -> std::vector<sql_stat> {
+    std::lock_guard lock(mutex_);
+    std::vector<sql_stat> slow;
+    slow.reserve(history_.size());
+    for (const auto& stat : history_) {
+        if (stat.is_slow) {
+            slow.push_back(stat);
+        }
+    }
+    return slow;
+}
+
+auto performance_interceptor::get_history() const -> std::vector<sql_stat> {
+    std::lock_guard lock(mutex_);
+    return history_;
+}
+
+auto performance_interceptor::get_summary() const
+    -> std::tuple<std::uint64_t, std::uint64_t, std::chrono::microseconds> {
+    std::lock_guard lock(mutex_);
+    return {total_queries_, slow_queries_, total_execution_time_};
+}
+
+auto performance_interceptor::get_average_time() const -> std::chrono::microseconds {
+    std::lock_guard lock(mutex_);
+    if (total_queries_ == 0) return {};
+    return total_execution_time_ / total_queries_;
+}
+
+void performance_interceptor::clear() {
+    std::lock_guard lock(mutex_);
+    history_.clear();
+    total_queries_ = 0;
+    slow_queries_ = 0;
+    total_execution_time_ = {};
+}
+
+auto performance_interceptor::config() const noexcept -> const performance_config& {
+    return config_;
+}
+
+void performance_interceptor::set_config(performance_config config) {
+    config_ = std::move(config);
+}
+
+void performance_interceptor::set_enabled(bool enabled) {
+    config_.enabled = enabled;
+}
+
+auto performance_interceptor::truncate_sql(std::string_view sql, std::size_t max_len) -> std::string {
+    if (sql.size() <= max_len) return std::string(sql);
+    return std::format("{}...", sql.substr(0, max_len - 3));
+}
 
 // =============================================================================
 // Global performance interceptor instance
