@@ -43,10 +43,10 @@ auto conn_state::do_write(const std::string& data)
     -> task<std::expected<std::size_t, std::error_code>>
 {
 #ifdef CNETMOD_HAS_SSL
-    if (ssl) co_return co_await ssl->async_write(
+    if (this->ssl) co_return co_await this->ssl->async_write(
         const_buffer{data.data(), data.size()});
 #endif
-    co_return co_await async_write(io, sock,
+    co_return co_await async_write(this->io, this->sock,
         const_buffer{data.data(), data.size()});
 }
 
@@ -54,9 +54,9 @@ auto conn_state::do_read(mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
 #ifdef CNETMOD_HAS_SSL
-    if (ssl) co_return co_await ssl->async_read(buf);
+    if (this->ssl) co_return co_await this->ssl->async_read(buf);
 #endif
-    co_return co_await async_read(io, sock, buf);
+    co_return co_await async_read(this->io, this->sock, buf);
 }
 
 } // namespace detail
