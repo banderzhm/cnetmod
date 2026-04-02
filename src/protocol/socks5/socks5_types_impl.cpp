@@ -3,6 +3,7 @@ module;
 module cnetmod.protocol.socks5;
 
 import std;
+import :types;
 
 namespace cnetmod::socks5 {
 

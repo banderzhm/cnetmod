@@ -11,26 +11,22 @@ namespace cnetmod::mysql::orm {
 // =============================================================================
 // Forward declaration for pointer member in xml_content
 // =============================================================================
-struct xml_node;
+export struct xml_node;
 
 export struct xml_content {
     bool        is_text = true;
     std::string text;
     std::unique_ptr<xml_node> element;
 
-    static auto make_text(std::string t) -> xml_content {
-        xml_content c;
-        c.is_text = true;
-        c.text = std::move(t);
-        return c;
-    }
+    xml_content();
+    ~xml_content();
+    xml_content(xml_content&&) noexcept;
+    xml_content& operator=(xml_content&&) noexcept;
+    xml_content(const xml_content&) = delete;
+    xml_content& operator=(const xml_content&) = delete;
 
-    static auto make_element(std::unique_ptr<xml_node> e) -> xml_content {
-        xml_content c;
-        c.is_text = false;
-        c.element = std::move(e);
-        return c;
-    }
+    static auto make_text(std::string t) -> xml_content;
+    static auto make_element(std::unique_ptr<xml_node> e) -> xml_content;
 };
 
 // =============================================================================
@@ -52,6 +48,26 @@ export struct xml_node {
         return attrs.contains(std::string(name));
     }
 };
+
+// — xml_content members defined after xml_node is complete —
+inline xml_content::xml_content() = default;
+inline xml_content::~xml_content() = default;
+inline xml_content::xml_content(xml_content&&) noexcept = default;
+inline xml_content& xml_content::operator=(xml_content&&) noexcept = default;
+
+inline auto xml_content::make_text(std::string t) -> xml_content {
+    xml_content c;
+    c.is_text = true;
+    c.text = std::move(t);
+    return c;
+}
+
+inline auto xml_content::make_element(std::unique_ptr<xml_node> e) -> xml_content {
+    xml_content c;
+    c.is_text = false;
+    c.element = std::move(e);
+    return c;
+}
 
 // =============================================================================
 // pugixml adapter — Convert pugixml nodes to our xml_node structure

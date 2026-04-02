@@ -49,7 +49,10 @@ detect_stdlib_module_paths()
 # Compiler Flags
 # ==============================================================================
 if(MSVC)
-    add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
+    add_compile_options(/std:c++latest)
+    add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
+
+   #[[ add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
     # Use C7-compatible debug format (/Z7) instead of program database (/Zi)
     # Embeds debug symbols in .obj files instead of a single huge .pdb, bypassing 4GB limit
@@ -61,7 +64,7 @@ if(MSVC)
     add_compile_options(/GL-)
     # Define macro to suppress CRT security warnings (eliminates irrelevant warnings)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
-
+]]
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
         -Wall -Wextra
@@ -213,25 +216,46 @@ file(GLOB_RECURSE MODULE_INTERFACE_FILES
 file(GLOB_RECURSE CPP_SOURCES "src/*.cpp")
 list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
+# Split .cpp sources into regular translation units and module implementation units.
+# Module implementation units (.cpp with 'module X;') are regular sources, NOT CXX_MODULES.
+# Only module interface/partition files (.cppm with 'export module') belong in CXX_MODULES.
+set(MODULE_IMPLEMENTATION_CPP_FILES)
+set(REGULAR_CPP_SOURCES)
+foreach(src ${CPP_SOURCES})
+    file(STRINGS "${src}" module_decl_line REGEX "^[ \t]*(export[ \t]+)?module[ \t]+")
+    if(module_decl_line)
+        list(APPEND MODULE_IMPLEMENTATION_CPP_FILES "${src}")
+    else()
+        list(APPEND REGULAR_CPP_SOURCES "${src}")
+    endif()
+endforeach()
+
 # Filter by platform: Exclude I/O backend modules not needed for current platform
 if(NOT CNETMOD_HAS_IOCP)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/iocp")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/iocp")
 endif()
 if(NOT CNETMOD_HAS_IO_URING)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/io_uring")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/io_uring")
 endif()
 if(NOT CNETMOD_HAS_EPOLL)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/epoll")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/epoll")
 endif()
 if(NOT CNETMOD_HAS_KQUEUE)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/kqueue")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/kqueue")
 endif()
 if(NOT CNETMOD_HAS_SSL)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "core/ssl")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "core/ssl")
 endif()
 if(NOT CNETMOD_HAS_NGHTTP2)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/h2_")
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/stream_io")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "http/h2_")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "http/stream_io")
 endif()
 
 # ==============================================================================
@@ -239,8 +263,8 @@ endif()
 # ==============================================================================
 
 add_library(cnetmod_core STATIC
-    ${CPP_SOURCES}
-    ${MODULE_INTERFACE_FILES}
+    ${REGULAR_CPP_SOURCES}
+    ${MODULE_IMPLEMENTATION_CPP_FILES}
 )
 
 target_include_directories(cnetmod_core PUBLIC

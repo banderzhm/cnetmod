@@ -1,12 +1,13 @@
-/// cnetmod.protocol.mqtt:broker — MQTT Broker Core Implementation
-
 module;
+
+/// cnetmod.protocol.mqtt:broker — MQTT Broker Core Implementation
 
 #include <cnetmod/config.hpp>
 
-module cnetmod.protocol.mqtt:broker;
+module cnetmod.protocol.mqtt;
 
 import std;
+import :broker;
 
 namespace cnetmod::mqtt {
 

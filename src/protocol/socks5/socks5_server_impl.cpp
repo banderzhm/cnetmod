@@ -3,6 +3,8 @@ module;
 module cnetmod.protocol.socks5;
 
 import std;
+import :types;
+import :server;
 import cnetmod.core.socket;
 import cnetmod.core.address;
 import cnetmod.core.buffer;
