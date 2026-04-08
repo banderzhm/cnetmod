@@ -9,6 +9,8 @@ import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
+import cnetmod.io.io_context;
+import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
@@ -19,6 +21,7 @@ import cnetmod.core.dns;
 import cnetmod.core.ssl;
 #endif
 import :client;
+import :types;
 import :codec;
 import :parser;
 import :topic_alias;

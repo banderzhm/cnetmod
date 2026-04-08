@@ -7,7 +7,34 @@ module;
 module cnetmod.protocol.mqtt;
 
 import std;
+import cnetmod.core.error;
+import cnetmod.core.buffer;
+import cnetmod.core.socket;
+import cnetmod.core.address;
+import cnetmod.core.log;
+import cnetmod.io.io_context;
+import cnetmod.coro.task;
+import cnetmod.coro.spawn;
+import cnetmod.coro.timer;
+import cnetmod.coro.channel;
+import cnetmod.coro.shared_mutex;
+import cnetmod.executor.async_op;
+import cnetmod.executor.pool;
+import cnetmod.protocol.tcp;
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.core.ssl;
+#endif
 import :broker;
+import :types;
+import :codec;
+import :parser;
+import :topic_filter;
+import :session;
+import :retained;
+import :subscription_map;
+import :shared_sub;
+import :security;
+import :topic_alias;
 
 namespace cnetmod::mqtt {
 
