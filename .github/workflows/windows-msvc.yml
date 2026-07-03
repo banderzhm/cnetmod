@@ -1,5 +1,8 @@
 name: Windows MSVC Build
 
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
 on:
   push:
     branches: [ "main", "master" ]
@@ -12,7 +15,7 @@ permissions:
 jobs:
   build-msvc:
     runs-on: windows-latest
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -22,15 +25,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install CMake 4.0+
+      - name: Install CMake 4.2.3
         run: |
-          choco install cmake --version=4.1.2 -y --force
+          choco install cmake --version=4.2.3 -y --force
           cmake --version
 
       - name: Setup MSBuild (VS 2026 / VS18)
         uses: microsoft/setup-msbuild@v2
         with:
           vs-version: "18.0"
+          msbuild-architecture: x86
 
       - name: Configure CMake
         shell: pwsh
@@ -73,9 +77,10 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "========================================="
-          Write-Host "Build Summary for Windows MSVC"
+          Write-Host "Build Summary for Windows MSVC VS2026"
           Write-Host "========================================="
           Write-Host "Build Type: ${{ matrix.build_type }}"
           Write-Host "Generator: Visual Studio 18 2026"
+          Write-Host "CMake Version: 4.2.3"
           Write-Host "Runner: windows-latest"
-          Write-Host "========================================="
+          Write-Host "=========================================" 
