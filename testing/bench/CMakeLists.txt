@@ -35,3 +35,5 @@ foreach(bench_name ${BENCH_TARGETS})
         target_compile_options(${bench_name} PRIVATE -O3)
     endif()
 endforeach()
+
+set(CNETMOD_BENCH_TARGETS ${BENCH_TARGETS} PARENT_SCOPE)

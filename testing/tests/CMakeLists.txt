@@ -23,11 +23,14 @@ set(TEST_SOURCES
     test_tfb_compliance.cpp
 )
 
+set(CNETMOD_TEST_TARGETS)
+
 foreach(test_src ${TEST_SOURCES})
     # Extract test name from filename (e.g. test_task.cpp → test_task)
     get_filename_component(test_name ${test_src} NAME_WE)
 
     add_executable(${test_name} ${test_src})
+    list(APPEND CNETMOD_TEST_TARGETS ${test_name})
     target_link_libraries(${test_name} PRIVATE cnetmod_core)
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set_property(TARGET ${test_name} PROPERTY
@@ -36,3 +39,5 @@ foreach(test_src ${TEST_SOURCES})
 
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+set(CNETMOD_TEST_TARGETS ${CNETMOD_TEST_TARGETS} PARENT_SCOPE)

@@ -89,6 +89,12 @@ git submodule update --init --recursive
 # 构建
 cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
+
+# 显式构建全部 cnetmod 目标
+cmake --build build --target cnetmod_build_all
+
+# Visual Studio 生成器构建 C++ modules 时建议使用单节点 MSBuild
+cmake --build build --target cnetmod_build_all --config Debug
 ```
 
 构建系统会自动检测 MSVC 和 libc++ 的标准库模块路径。Windows 安装最新 Visual Studio 2026 后直接使用默认自动检测路径即可。Linux/macOS 如果检测失败，可手动指定：

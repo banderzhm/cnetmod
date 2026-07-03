@@ -40,6 +40,12 @@ sudo apt install clang-21 libc++-21-dev libc++abi-21-dev liburing-dev
 # 构建
 cmake -B build -DCMAKE_CXX_COMPILER=clang++-21 -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
+
+# 显式构建全部 cnetmod 目标
+cmake --build build --target cnetmod_build_all
+
+# Visual Studio 生成器构建 C++ modules 时建议使用单节点 MSBuild
+cmake --build build --target cnetmod_build_all --config Debug -- /m:1
 ```
 
 #### macOS (Homebrew LLVM)

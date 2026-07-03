@@ -73,6 +73,16 @@ public:
         co_return co_await query<T>(statement_id, param_context::from_map(std::move(params)));
     }
 
+    template <Model T, typename Map>
+        requires std::ranges::input_range<Map> &&
+                 std::same_as<
+                     std::remove_const_t<typename std::ranges::range_value_t<Map>::first_type>,
+                     std::string> &&
+                 std::same_as<typename std::ranges::range_value_t<Map>::second_type, param_value>
+    auto query(std::string_view statement_id, Map&& params) -> task<orm_result<T>> {
+        co_return co_await query<T>(statement_id, param_context::from_map(std::forward<Map>(params)));
+    }
+
     template <typename... Ts>
     auto query_tuple(std::string_view statement_id,
                      const param_context& ctx) -> task<orm_result<std::tuple<Ts...>>> {
@@ -115,6 +125,17 @@ public:
         co_return co_await query_tuple<Ts...>(statement_id, param_context::from_map(std::move(params)));
     }
 
+    template <typename... Ts, typename Map>
+        requires std::ranges::input_range<Map> &&
+                 std::same_as<
+                     std::remove_const_t<typename std::ranges::range_value_t<Map>::first_type>,
+                     std::string> &&
+                 std::same_as<typename std::ranges::range_value_t<Map>::second_type, param_value>
+    auto query_tuple(std::string_view statement_id, Map&& params)
+        -> task<orm_result<std::tuple<Ts...>>> {
+        co_return co_await query_tuple<Ts...>(statement_id, param_context::from_map(std::forward<Map>(params)));
+    }
+
     auto execute(std::string_view statement_id,
                  const param_context& ctx) -> task<exec_result>;
 
@@ -127,11 +148,31 @@ public:
     auto execute(std::string_view statement_id,
                  CNETMOD_XML_PARAM_MAP<std::string, param_value> params) -> task<exec_result>;
 
+    template <typename Map>
+        requires std::ranges::input_range<Map> &&
+                 std::same_as<
+                     std::remove_const_t<typename std::ranges::range_value_t<Map>::first_type>,
+                     std::string> &&
+                 std::same_as<typename std::ranges::range_value_t<Map>::second_type, param_value>
+    auto execute(std::string_view statement_id, Map&& params) -> task<exec_result> {
+        co_return co_await execute(statement_id, param_context::from_map(std::forward<Map>(params)));
+    }
+
     auto execute_query(std::string_view statement_id,
                        const param_context& ctx) -> task<result_set>;
 
     auto execute_query(std::string_view statement_id,
                        CNETMOD_XML_PARAM_MAP<std::string, param_value> params) -> task<result_set>;
+
+    template <typename Map>
+        requires std::ranges::input_range<Map> &&
+                 std::same_as<
+                     std::remove_const_t<typename std::ranges::range_value_t<Map>::first_type>,
+                     std::string> &&
+                 std::same_as<typename std::ranges::range_value_t<Map>::second_type, param_value>
+    auto execute_query(std::string_view statement_id, Map&& params) -> task<result_set> {
+        co_return co_await execute_query(statement_id, param_context::from_map(std::forward<Map>(params)));
+    }
 
     auto underlying() noexcept -> client&;
     auto registry() noexcept -> mapper_registry&;

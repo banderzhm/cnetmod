@@ -50,7 +50,8 @@ detect_stdlib_module_paths()
 # ==============================================================================
 if(MSVC)
     add_compile_options(/std:c++latest)
-    add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
+    add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj /FS)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 
    #[[ add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
@@ -367,6 +368,25 @@ endif()
 if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/doc/CMakeLists.txt")
     add_subdirectory(doc)
 endif()
+
+# ==============================================================================
+# Aggregate Build Targets
+# ==============================================================================
+
+set(CNETMOD_ALL_TARGETS
+    cnetmod_core
+    cnetmod_app
+    ${CNETMOD_TEST_TARGETS}
+    ${CNETMOD_BENCH_TARGETS}
+    ${CNETMOD_EXAMPLE_TARGETS}
+)
+
+list(REMOVE_DUPLICATES CNETMOD_ALL_TARGETS)
+
+add_custom_target(cnetmod_build_all
+    DEPENDS ${CNETMOD_ALL_TARGETS}
+    COMMENT "Build cnetmod core, app, tests, benchmarks, and examples"
+)
 
 # ==============================================================================
 # Build Information Summary

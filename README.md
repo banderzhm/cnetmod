@@ -89,6 +89,12 @@ git submodule update --init --recursive
 # Build
 cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
+
+# Build every cnetmod target explicitly
+cmake --build build --target cnetmod_build_all
+
+# Visual Studio generators with C++ modules: use single-node MSBuild
+cmake --build build --target cnetmod_build_all --config Debug
 ```
 
 The build system auto-detects standard library module paths for MSVC and libc++. On Windows, install the latest Visual Studio 2026 and use the default auto-detected MSVC module paths. If detection fails on Linux/macOS, manually specify:

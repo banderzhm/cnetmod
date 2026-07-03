@@ -25,11 +25,7 @@ inline void do_not_optimize(T const& value) {
 }
 
 inline void clobber_memory() {
-#ifdef _MSC_VER
-    _ReadWriteBarrier();
-#else
-    asm volatile("" ::: "memory");
-#endif
+    std::atomic_signal_fence(std::memory_order_seq_cst);
 }
 
 // =============================================================================

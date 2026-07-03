@@ -45,15 +45,17 @@ function(detect_stdlib_module_paths)
             NAMES std.cppm
             PATHS
                 # Linux paths
+                /usr/lib/llvm-19/share/libc++/v1
                 /usr/lib/llvm-22/share/libc++/v1
                 /usr/lib/llvm-21/share/libc++/v1
                 /usr/lib/llvm-20/share/libc++/v1
-                /usr/lib/llvm-19/share/libc++/v1
+                /usr/local/lib/llvm-19/share/libc++/v1
                 /usr/local/lib/llvm-22/share/libc++/v1
                 /usr/local/lib/llvm-21/share/libc++/v1
                 /usr/local/lib/llvm-20/share/libc++/v1
-                /usr/local/lib/llvm-19/share/libc++/v1
                 /opt/llvm/share/libc++/v1
+                # Arch Linux libc++ package
+                /usr/share/libc++/v1
                 # macOS Homebrew paths (Apple Silicon & Intel)
                 /opt/homebrew/opt/llvm/share/libc++/v1
                 /usr/local/opt/llvm/share/libc++/v1

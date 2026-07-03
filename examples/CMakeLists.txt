@@ -130,6 +130,8 @@ set(ALL_EXAMPLES
 # ==============================================================================
 # Build all examples
 # ==============================================================================
+set(CNETMOD_EXAMPLE_TARGETS)
+
 foreach(example_path ${ALL_EXAMPLES})
     # Extract category and name from path (e.g., "core/echo_server" -> "core" and "echo_server")
     get_filename_component(category ${example_path} DIRECTORY)
@@ -140,6 +142,7 @@ foreach(example_path ${ALL_EXAMPLES})
     
     # Add executable
     add_executable(${target_name} ${example_path}.cpp)
+    list(APPEND CNETMOD_EXAMPLE_TARGETS ${target_name})
     target_link_libraries(${target_name} PRIVATE ${CNETMOD_LINK_TARGET})
     set_property(TARGET ${target_name} PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE"
@@ -161,6 +164,8 @@ foreach(example_path ${ALL_EXAMPLES})
     endif()
 endforeach()
 
+set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)
+
 # ==============================================================================
 # Special handling for account_server_demo (needs embedded_mappers.hpp)
 # ==============================================================================
@@ -170,26 +175,35 @@ target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_B
 # Post-build commands
 # ==============================================================================
 
-# Copy mapper XML files to build directory for mysql_xml_mapper example
-add_custom_command(TARGET example_mysql_xml_mapper POST_BUILD
+# Copy mapper XML files once. Keeping this as a single target avoids parallel
+# POST_BUILD copy races when several database examples build at the same time.
+add_custom_command(
+    OUTPUT ${CMAKE_BINARY_DIR}/examples/database/mappers/.cnetmod_mappers_copied
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/examples/database/mappers
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-    ${CMAKE_BINARY_DIR}/examples/database/mappers
-    COMMENT "Copying mapper XML files for mysql_xml_mapper"
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers
+            ${CMAKE_BINARY_DIR}/examples/database/mappers
+    COMMAND ${CMAKE_COMMAND} -E touch
+            ${CMAKE_BINARY_DIR}/examples/database/mappers/.cnetmod_mappers_copied
+    DEPENDS
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/AiMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/ClientMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/ExpenseMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/FileMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/ProjectMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/user_mapper.xml
+    COMMENT "Copying mapper XML files"
+    VERBATIM
 )
 
-# Copy mapper XML files for mysql_xml_complex example
-add_custom_command(TARGET example_mysql_xml_complex POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-    ${CMAKE_BINARY_DIR}/examples/database/mappers
-    COMMENT "Copying mapper XML files for mysql_xml_complex"
+add_custom_target(copy_example_mappers
+    DEPENDS ${CMAKE_BINARY_DIR}/examples/database/mappers/.cnetmod_mappers_copied
 )
 
-# Copy mapper XML files for mybatis_plus_demo example
-add_custom_command(TARGET example_mybatis_plus_demo POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-    ${CMAKE_BINARY_DIR}/examples/database/mappers
-    COMMENT "Copying mapper XML files for mybatis_plus_demo"
-)
+list(APPEND CNETMOD_EXAMPLE_TARGETS copy_example_mappers)
+
+add_dependencies(example_mysql_xml_mapper copy_example_mappers)
+add_dependencies(example_mysql_xml_complex copy_example_mappers)
+add_dependencies(example_mybatis_plus_demo copy_example_mappers)
+
+set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)

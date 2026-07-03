@@ -125,6 +125,33 @@ cmake --build build
 ./build/examples/echo_server
 ```
 
+### Linux (Arch / WSL2 Arch)
+
+```bash
+sudo pacman -S --needed clang llvm libc++ libc++abi cmake ninja mold mimalloc liburing openssl zlib nghttp2
+
+rm -rf cmake-build-debug-arch
+
+cmake -S . -B cmake-build-debug-arch -G Ninja \
+  -DCMAKE_C_COMPILER=/usr/bin/clang \
+  -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DSTDLIB_MODULE_DIRS=/usr/share/libc++/v1 \
+  -DSTDLIB_INCLUDE_DIRS=/usr/include/c++/v1 \
+  -DCNETMOD_BUILD_EXAMPLES=ON \
+  -DCNETMOD_BUILD_TESTS=ON
+
+cmake --build cmake-build-debug-arch --target cnetmod_build_all
+```
+
+If CMake reports `/usr/share/clang: Is a directory`, clear the build directory and make sure `CC`/`CXX` point to compiler executables, not directories:
+
+```bash
+unset CC CXX
+export CC=/usr/bin/clang
+export CXX=/usr/bin/clang++
+```
+
 ### macOS
 
 #### 1. Install Homebrew LLVM
