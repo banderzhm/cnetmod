@@ -12,7 +12,7 @@
 
 | 平台 | I/O 引擎 | 编译器 | 状态 |
 |----------|-----------|----------|--------|
-| Windows | IOCP | MSVC 2022 17.12+ | ✅ |
+| Windows | IOCP | 最新 Visual Studio 2026 (MSVC) | ✅ |
 | Linux | io_uring + epoll | clang-21 + libc++ | ✅ |
 | macOS | kqueue | clang-21 + libc++ | ✅ |
 
@@ -60,7 +60,7 @@ CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 
 
 **CMake 4.0+** 是 C++23 模块支持所必需的。
 
-**Windows**: Visual Studio 2022 17.12+ 并启用 C++23 模块。
+**Windows**: 最新 Visual Studio 2026，并启用 C++23 模块。
 
 **Linux**: clang-21 + libc++ + liburing-dev。
 ```bash
@@ -91,16 +91,12 @@ cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
 ```
 
-构建系统会自动检测 MSVC 和 libc++ 的标准库模块路径。如果检测失败，手动指定：
+构建系统会自动检测 MSVC 和 libc++ 的标准库模块路径。Windows 安装最新 Visual Studio 2026 后直接使用默认自动检测路径即可。Linux/macOS 如果检测失败，可手动指定：
 ```bash
 # Linux/macOS with clang
 cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-21/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-21/include/c++/v1
-
-# Windows MSVC
-cmake -B build \
-  -DLIBCXX_MODULE_DIRS="C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/modules"
 ```
 
 ### 示例
@@ -383,22 +379,6 @@ cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、
 **异步操作**: 基于 RAII 的 async_op 基类，带平台特定的 overlap/submission 跟踪。完成回调通过 `post()` 恢复等待的协程。
 
 ## 已知问题
-
-### MSVC 错误 C1605: 对象文件大小超过 4 GB 限制
-
-在 Debug 模式下使用 MSVC 构建时，编译器可能报错：
-
-> **fatal error C1605**: 编译器限制: 对象文件大小不能超过 4 GB
-
-这是 **MSVC 的已知 bug**。Microsoft 已在开发者社区中承认此问题：[C1605: C++23 Modules Exceed 4 GB Object File Limit](https://developercommunity.visualstudio.com/t/C1605:-C23-Modules-Exceed-4-GB-Object-/11048477)。
-
-问题的原因是编译器在处理 C++23 模块 + 大量模板实例化（特别是 `std` 模块 + `std::format` + 协议编解码器）时错误地生成了超大对象文件。MSVC 的 COFF 对象格式有 4 GB 硬限制。
-
-**推荐的解决方案：**
-1. **使用 Release/RelWithDebInfo 构建** — 优化构建产生的对象文件要小得多，可以避免此编译器 bug。
-2. **在 WSL/Linux 上使用 clang 构建** — clang + libc++ 使用 ELF 对象，没有 4 GB 限制。这是推荐的开发工作流。
-
-**注意**：这是编译器的 bug，不是 C++23 模块或本库的限制。我们正在等待 Microsoft 修复此问题。详细分析请参见 [MSVC_C1605_Issue.md](MSVC_C1605_Issue.md)。
 
 ### clang 模块依赖可见性
 

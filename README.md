@@ -12,7 +12,7 @@ English | [简体中文](README_zh.md)
 
 | Platform | I/O Engine | Compiler | Status |
 |----------|-----------|----------|--------|
-| Windows | IOCP | MSVC 2022 17.12+ | ✅ |
+| Windows | IOCP | Latest Visual Studio 2026 (MSVC) | ✅ |
 | Linux | io_uring + epoll | clang-21 + libc++ | ✅ |
 | macOS | kqueue | clang-21 + libc++ | ✅ |
 
@@ -60,7 +60,7 @@ CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log,
 
 **CMake 4.0+** is required for C++23 module support.
 
-**Windows**: Visual Studio 2022 17.12+ with C++23 modules enabled.
+**Windows**: Latest Visual Studio 2026 with C++23 modules enabled.
 
 **Linux**: clang-21 with libc++ and liburing-dev installed.
 ```bash
@@ -91,16 +91,12 @@ cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
 ```
 
-The build system auto-detects standard library module paths for MSVC and libc++. If detection fails, manually specify:
+The build system auto-detects standard library module paths for MSVC and libc++. On Windows, install the latest Visual Studio 2026 and use the default auto-detected MSVC module paths. If detection fails on Linux/macOS, manually specify:
 ```bash
 # Linux/macOS with clang
 cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-21/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-21/include/c++/v1
-
-# Windows MSVC
-cmake -B build \
-  -DLIBCXX_MODULE_DIRS="C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/modules"
 ```
 
 ### Examples
@@ -383,22 +379,6 @@ cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, regis
 **Async operations**: RAII-based async_op base class with platform-specific overlap/submission tracking. Completion callbacks resume awaiting coroutines via `post()`.
 
 ## Known Issues
-
-### MSVC error C1605: object file size exceeds 4 GB limit
-
-When building with MSVC in Debug mode, the compiler may emit:
-
-> **fatal error C1605**: 编译器限制: 对象文件大小不能超过 4 GB
-
-This is a **known MSVC bug** with C++23 modules. Microsoft has acknowledged this issue in their Developer Community: [C1605: C++23 Modules Exceed 4 GB Object File Limit](https://developercommunity.visualstudio.com/t/C1605:-C23-Modules-Exceed-4-GB-Object-/11048477).
-
-The problem occurs because the compiler incorrectly generates oversized object files when processing C++23 modules with heavy template instantiation (especially `std` module + `std::format` + protocol codecs). MSVC's COFF object format has a hard 4 GB limit.
-
-**Recommended solutions:**
-1. **Use Release/RelWithDebInfo builds** — optimized builds produce significantly smaller object files and avoid this compiler bug.
-2. **Build with clang on WSL/Linux** — clang + libc++ uses ELF objects which have no 4 GB limit. This is the recommended development workflow.
-
-**Note**: This is a compiler bug, not a limitation of C++23 modules or this library. We are waiting for Microsoft to fix this issue. See [MSVC_C1605_Issue.md](MSVC_C1605_Issue.md) for detailed analysis.
 
 ### clang module dependency visibility
 

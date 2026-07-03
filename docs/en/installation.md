@@ -10,7 +10,7 @@ cnetmod requires a C++23 compiler with full module support:
 
 | Platform | Compiler | Minimum Version |
 |----------|----------|-----------------|
-| Windows | MSVC | Visual Studio 2022 17.12+ |
+| Windows | MSVC | Latest Visual Studio 2026 |
 | Linux | Clang + libc++ | clang-21+ |
 | macOS | Homebrew LLVM | llvm@21+ |
 
@@ -23,7 +23,7 @@ cnetmod requires a C++23 compiler with full module support:
 ### Platform-Specific Dependencies
 
 #### Windows
-- Visual Studio 2022 with "Desktop development with C++" workload
+- Latest Visual Studio 2026 with "Desktop development with C++" workload
 - Windows SDK 10.0.22000.0 or later
 
 #### Linux
@@ -40,14 +40,14 @@ cnetmod requires a C++23 compiler with full module support:
 
 ### Windows (MSVC)
 
-#### 1. Install Visual Studio 2022
+#### 1. Install Visual Studio 2026
 
-Download and install [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/) (Community, Professional, or Enterprise).
+Download and install the latest [Visual Studio 2026](https://visualstudio.microsoft.com/downloads/) (Community, Professional, or Enterprise).
 
 During installation, select:
 - "Desktop development with C++"
 - "C++ CMake tools for Windows"
-- "C++ Modules for v143 build tools"
+- C++ module support included with the latest MSVC toolset
 
 #### 2. Clone the Repository
 
@@ -59,10 +59,10 @@ git submodule update --init --recursive
 
 #### 3. Configure and Build
 
-Open "Developer Command Prompt for VS 2022":
+Open "Developer Command Prompt for VS 2026":
 
 ```cmd
-cmake -B build -G "Visual Studio 17 2022" -A x64 ^
+cmake -B build -G "Visual Studio 18 2026" -A x64 ^
   -DCNETMOD_BUILD_EXAMPLES=ON ^
   -DCNETMOD_BUILD_TESTS=ON
 
@@ -207,7 +207,7 @@ cmake -B build \
 
 ## Manual Module Path Configuration
 
-If CMake fails to auto-detect standard library module paths, specify them manually:
+If CMake fails to auto-detect standard library module paths on Linux/macOS, specify them manually. On Windows, install the latest Visual Studio 2026 and use the default auto-detected MSVC module paths.
 
 ### Linux
 
@@ -229,13 +229,6 @@ cmake -B build \
 cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/local/opt/llvm/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/local/opt/llvm/include/c++/v1
-```
-
-### Windows
-
-```cmd
-cmake -B build ^
-  -DLIBCXX_MODULE_DIRS="C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/modules"
 ```
 
 ## Verifying Installation
@@ -276,12 +269,6 @@ cmake -B build -DCMAKE_CXX_COMPILER=clang++-21
 **Problem**: `fatal error: module 'std' not found`
 
 **Solution**: See [Manual Module Path Configuration](#manual-module-path-configuration) above.
-
-### MSVC Error C1605 (Object File Too Large)
-
-**Problem**: `fatal error C1605: object file size exceeds 4 GB limit`
-
-**Solution**: Use Release build or see [MSVC_C1605_Issue.md](../MSVC_C1605_Issue.md) for workarounds.
 
 ### Linux: io_uring Not Found
 

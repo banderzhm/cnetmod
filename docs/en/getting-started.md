@@ -4,10 +4,10 @@ This guide will help you get up and running with cnetmod quickly.
 
 ## Prerequisites
 
-- **C++23 compiler**: MSVC 2022 17.12+, clang-21+, or GCC 14+ (with module support)
+- **C++23 compiler**: Latest Visual Studio 2026 (MSVC), clang-21+, or GCC 14+ (with module support)
 - **CMake 4.0+**: Required for C++23 module build support
 - **Platform-specific dependencies**:
-  - Windows: Visual Studio 2022 with C++23 modules
+  - Windows: Latest Visual Studio 2026 with C++23 modules
   - Linux: liburing-dev (for io_uring support)
   - macOS: Homebrew LLVM
 
@@ -26,8 +26,8 @@ git submodule update --init --recursive
 #### Windows (MSVC)
 
 ```bash
-# Open Visual Studio 2022 Developer Command Prompt
-cmake -B build -G "Visual Studio 17 2022" -DCNETMOD_BUILD_EXAMPLES=ON
+# Open Visual Studio 2026 Developer Command Prompt
+cmake -B build -G "Visual Studio 18 2026" -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build --config Release
 ```
 
@@ -160,7 +160,7 @@ int main() {
 
 ### Module Path Detection Failed
 
-If CMake cannot find standard library modules, manually specify paths:
+If CMake cannot find standard library modules on Linux/macOS, manually specify paths. On Windows, install the latest Visual Studio 2026 and use the default auto-detected MSVC module paths.
 
 ```bash
 # Linux/macOS
@@ -168,14 +168,7 @@ cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-21/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-21/include/c++/v1
 
-# Windows
-cmake -B build \
-  -DLIBCXX_MODULE_DIRS="C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/modules"
 ```
-
-### MSVC Error C1605 (Object File Too Large)
-
-See [MSVC_C1605_Issue.md](../MSVC_C1605_Issue.md) for workarounds. Use Release build or split large modules.
 
 ### Link Errors on Linux
 

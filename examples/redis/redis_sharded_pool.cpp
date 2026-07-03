@@ -11,6 +11,13 @@ import cnetmod.coro;
 import cnetmod.io;
 import cnetmod.protocol.redis;
 
+namespace cnetmod::redis
+{
+    class sharded_connection_pool;
+    struct pool_params;
+    class pooled_connection;
+}
+
 namespace cn = cnetmod;
 using cn::redis::sharded_connection_pool;
 using cn::redis::pool_params;

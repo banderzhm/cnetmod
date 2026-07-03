@@ -10,7 +10,7 @@ cnetmod 需要支持完整模块功能的 C++23 编译器：
 
 | 平台 | 编译器 | 最低版本 |
 |----------|----------|-----------------|
-| Windows | MSVC | Visual Studio 2022 17.12+ |
+| Windows | MSVC | 最新 Visual Studio 2026 |
 | Linux | Clang + libc++ | clang-21+ |
 | macOS | Homebrew LLVM | llvm@21+ |
 
@@ -23,7 +23,7 @@ cnetmod 需要支持完整模块功能的 C++23 编译器：
 ### 平台特定依赖
 
 #### Windows
-- Visual Studio 2022 with "Desktop development with C++" 工作负载
+- 最新 Visual Studio 2026 with "Desktop development with C++" 工作负载
 - Windows SDK 10.0.22000.0 或更高版本
 
 #### Linux
@@ -40,14 +40,14 @@ cnetmod 需要支持完整模块功能的 C++23 编译器：
 
 ### Windows (MSVC)
 
-#### 1. 安装 Visual Studio 2022
+#### 1. 安装 Visual Studio 2026
 
-下载并安装 [Visual Studio 2022](https://visualstudio.microsoft.com/downloads/)（Community、Professional 或 Enterprise）。
+下载并安装最新 [Visual Studio 2026](https://visualstudio.microsoft.com/downloads/)（Community、Professional 或 Enterprise）。
 
 安装时选择：
 - "Desktop development with C++"
 - "C++ CMake tools for Windows"
-- "C++ Modules for v143 build tools"
+- 最新 MSVC 工具集自带的 C++ 模块支持
 
 #### 2. 克隆仓库
 
@@ -59,10 +59,10 @@ git submodule update --init --recursive
 
 #### 3. 配置和构建
 
-打开 "Developer Command Prompt for VS 2022"：
+打开 "Developer Command Prompt for VS 2026"：
 
 ```cmd
-cmake -B build -G "Visual Studio 17 2022" -A x64 ^
+cmake -B build -G "Visual Studio 18 2026" -A x64 ^
   -DCNETMOD_BUILD_EXAMPLES=ON ^
   -DCNETMOD_BUILD_TESTS=ON
 
@@ -207,7 +207,7 @@ cmake -B build \
 
 ## 手动配置模块路径
 
-如果 CMake 无法自动检测标准库模块路径，请手动指定：
+如果 CMake 在 Linux/macOS 上无法自动检测标准库模块路径，请手动指定。Windows 安装最新 Visual Studio 2026 后直接使用默认自动检测路径即可。
 
 ### Linux
 
@@ -229,13 +229,6 @@ cmake -B build \
 cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/local/opt/llvm/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/local/opt/llvm/include/c++/v1
-```
-
-### Windows
-
-```cmd
-cmake -B build ^
-  -DLIBCXX_MODULE_DIRS="C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/modules"
 ```
 
 ## 验证安装
@@ -276,12 +269,6 @@ cmake -B build -DCMAKE_CXX_COMPILER=clang++-21
 **问题**: `fatal error: module 'std' not found`
 
 **解决方案**: 参见上面的[手动配置模块路径](#手动配置模块路径)。
-
-### MSVC 错误 C1605（目标文件过大）
-
-**问题**: `fatal error C1605: object file size exceeds 4 GB limit`
-
-**解决方案**: 使用 Release 构建或参见 [MSVC_C1605_Issue.md](../MSVC_C1605_Issue.md) 了解解决方法。
 
 ### Linux: 找不到 io_uring
 

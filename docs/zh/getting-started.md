@@ -4,10 +4,10 @@
 
 ## 前置条件
 
-- **C++23 编译器**：MSVC 2022 17.12+、clang-21+ 或 GCC 14+（支持模块）
+- **C++23 编译器**：最新 Visual Studio 2026 (MSVC)、clang-21+ 或 GCC 14+（支持模块）
 - **CMake 4.0+**：C++23 模块构建支持所需
 - **平台特定依赖**：
-  - Windows：Visual Studio 2022 with C++23 模块
+  - Windows：最新 Visual Studio 2026，支持 C++23 模块
   - Linux：liburing-dev（用于 io_uring 支持）
   - macOS：Homebrew LLVM
 
@@ -26,8 +26,8 @@ git submodule update --init --recursive
 #### Windows (MSVC)
 
 ```bash
-# 打开 Visual Studio 2022 Developer Command Prompt
-cmake -B build -G "Visual Studio 17 2022" -DCNETMOD_BUILD_EXAMPLES=ON
+# 打开 Visual Studio 2026 Developer Command Prompt
+cmake -B build -G "Visual Studio 18 2026" -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build --config Release
 ```
 
@@ -160,7 +160,7 @@ int main() {
 
 ### 模块路径检测失败
 
-如果 CMake 无法找到标准库模块，手动指定路径：
+如果 CMake 在 Linux/macOS 上无法找到标准库模块，可手动指定路径。Windows 安装最新 Visual Studio 2026 后直接使用默认自动检测路径即可。
 
 ```bash
 # Linux/macOS
@@ -168,14 +168,7 @@ cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-21/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-21/include/c++/v1
 
-# Windows
-cmake -B build \
-  -DLIBCXX_MODULE_DIRS="C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/modules"
 ```
-
-### MSVC 错误 C1605（目标文件过大）
-
-参见 [MSVC_C1605_Issue.md](../MSVC_C1605_Issue.md) 了解解决方法。使用 Release 构建或拆分大型模块。
 
 ### Linux 上的链接错误
 

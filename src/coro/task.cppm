@@ -153,7 +153,7 @@ private:
 // task<void> specialization
 // =============================================================================
 
-export template <>
+template <>
 class task<void> {
 public:
     struct promise_type : promise_base {
