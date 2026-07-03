@@ -89,10 +89,10 @@ jobs:
         ${{ github.workspace }}/build/cnetmod_app || true
         
         echo "=== Running timer_demo ==="
-        timeout 5 ${{ github.workspace }}/build/examples/example_timer_demo || true
+        timeout 5 ${{ github.workspace }}/build/examples/core/example_timer_demo || true
         
         echo "=== Running channel_demo ==="
-        ${{ github.workspace }}/build/examples/example_channel_demo || true
+        ${{ github.workspace }}/build/examples/concurrency/example_channel_demo || true
 
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -102,7 +102,7 @@ jobs:
         path: |
           ${{ github.workspace }}/build/*.a
           ${{ github.workspace }}/build/cnetmod_app
-          ${{ github.workspace }}/build/examples/*
+          ${{ github.workspace }}/build/examples/**
         retention-days: 7
 
     - name: Display build summary
