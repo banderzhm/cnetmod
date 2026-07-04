@@ -69,6 +69,7 @@ if(MSVC)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
         -Wall -Wextra
+        -Wno-unused-command-line-argument
         -Wno-reserved-module-identifier
         -Wno-include-angled-in-module-purview
     )
@@ -112,6 +113,11 @@ set(CNETMOD_JSON_MODULE
 
 # stdexec: Header-only mode (not using add_subdirectory to avoid CPM dependency)
 # Used for upper-layer sender/receiver organization, lower-layer I/O uses native coroutines
+if(NOT EXISTS "${CNETMOD_STDEXEC_INCLUDE_DIR}/exec/static_thread_pool.hpp")
+    message(FATAL_ERROR
+        "stdexec headers were not found at ${CNETMOD_STDEXEC_INCLUDE_DIR}. "
+        "Initialize submodules with: git submodule update --init --recursive")
+endif()
 include_directories(SYSTEM ${CNETMOD_STDEXEC_INCLUDE_DIR})
 
 # jwt-cpp: Header-only JWT library (HS256/RS256, etc.)
