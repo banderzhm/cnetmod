@@ -49,7 +49,7 @@ auto client::connect(std::string_view proxy_host, std::uint16_t proxy_port)
     auth_req.methods = {auth_method::no_auth, auth_method::username_password};
     
     auto auth_data = auth_req.serialize();
-    auto write_r = co_await async_write(ctx_, sock_,
+    auto write_r = co_await async_write_all(ctx_, sock_,
         const_buffer{auth_data.data(), auth_data.size()});
     if (!write_r) {
         co_return std::unexpected(write_r.error());
@@ -91,7 +91,7 @@ auto client::authenticate(std::string_view username, std::string_view password)
     up_req.password = std::string(password);
     
     auto up_data = up_req.serialize();
-    auto write_r = co_await async_write(ctx_, sock_,
+    auto write_r = co_await async_write_all(ctx_, sock_,
         const_buffer{up_data.data(), up_data.size()});
     if (!write_r) {
         co_return std::unexpected(write_r.error());
@@ -139,7 +139,7 @@ auto client::connect_target(std::string_view target_host, std::uint16_t target_p
     
     // Send request
     auto req_data = req.serialize();
-    auto write_r = co_await async_write(ctx_, sock_,
+    auto write_r = co_await async_write_all(ctx_, sock_,
         const_buffer{req_data.data(), req_data.size()});
     if (!write_r) {
         co_return std::unexpected(write_r.error());

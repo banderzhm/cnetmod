@@ -84,7 +84,7 @@ public:
         
         // Send request
         const_buffer send_buf{reinterpret_cast<const std::byte*>(data.data()), data.size()};
-        auto send_result = co_await async_write(ctx_, socket_, send_buf);
+        auto send_result = co_await async_write_all(ctx_, socket_, send_buf);
         if (!send_result) {
             co_return std::unexpected(send_result.error());
         }
@@ -192,7 +192,7 @@ private:
         
         // Send request
         const_buffer send_buf{reinterpret_cast<const std::byte*>(data.data()), data.size()};
-        auto send_result = co_await async_write(ctx_, socket_, send_buf, token);
+        auto send_result = co_await async_write_all(ctx_, socket_, send_buf, token);
         if (!send_result) {
             co_return std::unexpected(send_result.error());
         }

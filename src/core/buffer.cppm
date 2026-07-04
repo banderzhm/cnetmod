@@ -105,6 +105,12 @@ public:
 
     /// Get writable region
     [[nodiscard]] auto prepare(std::size_t n) -> mutable_buffer {
+        if (write_pos_ + n > data_.size() && read_pos_ > 0) {
+            auto readable = write_pos_ - read_pos_;
+            std::memmove(data_.data(), data_.data() + read_pos_, readable);
+            read_pos_ = 0;
+            write_pos_ = readable;
+        }
         if (write_pos_ + n > data_.size()) {
             data_.resize(write_pos_ + n);
         }
@@ -123,6 +129,7 @@ public:
 
     /// Consume n bytes read
     void consume(std::size_t n) noexcept {
+        n = std::min(n, write_pos_ - read_pos_);
         read_pos_ += n;
         if (read_pos_ == write_pos_) {
             read_pos_ = 0;

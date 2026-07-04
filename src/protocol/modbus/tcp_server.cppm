@@ -176,7 +176,7 @@ private:
                 reinterpret_cast<const std::byte*>(response_data.data()),
                 response_data.size()
             };
-            auto send_result = co_await async_write(ctx_, client_socket, send_buf);
+            auto send_result = co_await async_write_all(ctx_, client_socket, send_buf);
             if (!send_result) {
                 break;
             }

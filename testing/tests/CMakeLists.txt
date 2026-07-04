@@ -13,6 +13,7 @@ set(TEST_SOURCES
     test_semaphore.cpp
     test_wait_group.cpp
     test_shared_mutex.cpp
+    test_raft.cpp
     test_log.cpp
     test_http_types.cpp
     test_http_request.cpp

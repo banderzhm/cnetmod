@@ -405,6 +405,28 @@ public:
         }
     }
 
+    /// Async write all plaintext bytes
+    auto async_write_all(const_buffer buf)
+        -> task<std::expected<void, std::error_code>>
+    {
+        auto* data = static_cast<const std::byte*>(buf.data);
+        std::size_t written = 0;
+
+        while (written < buf.size) {
+            auto r = co_await async_write(
+                const_buffer{data + written, buf.size - written});
+            if (!r) {
+                co_return std::unexpected(r.error());
+            }
+            if (*r == 0) {
+                co_return std::unexpected(make_error_code(errc::broken_pipe));
+            }
+            written += *r;
+        }
+
+        co_return {};
+    }
+
     /// Async TLS shutdown
     auto async_shutdown() -> task<std::expected<void, std::error_code>> {
         // SSL_shutdown needs to be called twice: send close_notify + receive close_notify
@@ -478,14 +500,9 @@ private:
             int n = BIO_read(wbio_, tmp, std::min(pending, static_cast<int>(sizeof(tmp))));
             if (n <= 0) break;
 
-            // Write all to socket
-            std::size_t written = 0;
-            while (written < static_cast<std::size_t>(n)) {
-                auto w = co_await cnetmod::async_write(io_ctx_, sock_,
-                    const_buffer{tmp + written, static_cast<std::size_t>(n) - written});
-                if (!w) co_return std::unexpected(w.error());
-                written += *w;
-            }
+            auto w = co_await cnetmod::async_write_all(io_ctx_, sock_,
+                const_buffer{tmp, static_cast<std::size_t>(n)});
+            if (!w) co_return std::unexpected(w.error());
         }
         co_return {};
     }

@@ -54,6 +54,141 @@ export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
                        cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
+namespace detail {
+
+inline auto find_delimiter(const_buffer buf, std::string_view delimiter) noexcept
+    -> std::optional<std::size_t>
+{
+    if (delimiter.empty()) {
+        return std::nullopt;
+    }
+
+    auto* first = static_cast<const std::byte*>(buf.data);
+    auto* last = first + buf.size;
+    auto* d_first = reinterpret_cast<const std::byte*>(delimiter.data());
+    auto* d_last = d_first + delimiter.size();
+
+    auto pos = std::search(first, last, d_first, d_last);
+    if (pos == last) {
+        return std::nullopt;
+    }
+
+    return static_cast<std::size_t>((pos - first) + delimiter.size());
+}
+
+inline auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
+                                  std::string delimiter,
+                                  std::size_t max_bytes,
+                                  std::size_t read_chunk_size)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (delimiter.empty() || read_chunk_size == 0) {
+        co_return std::unexpected(make_error_code(errc::invalid_argument));
+    }
+
+    while (true) {
+        if (auto found = detail::find_delimiter(buf.data(), delimiter)) {
+            co_return *found;
+        }
+
+        if (buf.readable_bytes() >= max_bytes) {
+            co_return std::unexpected(make_error_code(errc::no_buffer_space));
+        }
+
+        auto to_read = std::min(read_chunk_size, max_bytes - buf.readable_bytes());
+        auto dst = buf.prepare(to_read);
+        auto r = co_await async_read(ctx, sock, dst);
+        if (!r) {
+            co_return std::unexpected(r.error());
+        }
+        if (*r == 0) {
+            co_return std::unexpected(make_error_code(errc::end_of_file));
+        }
+
+        buf.commit(*r);
+    }
+}
+
+inline auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
+                                  std::string delimiter, cancel_token& token,
+                                  std::size_t max_bytes,
+                                  std::size_t read_chunk_size)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (delimiter.empty() || read_chunk_size == 0) {
+        co_return std::unexpected(make_error_code(errc::invalid_argument));
+    }
+
+    while (true) {
+        if (auto found = detail::find_delimiter(buf.data(), delimiter)) {
+            co_return *found;
+        }
+
+        if (buf.readable_bytes() >= max_bytes) {
+            co_return std::unexpected(make_error_code(errc::no_buffer_space));
+        }
+
+        auto to_read = std::min(read_chunk_size, max_bytes - buf.readable_bytes());
+        auto dst = buf.prepare(to_read);
+        auto r = co_await async_read(ctx, sock, dst, token);
+        if (!r) {
+            co_return std::unexpected(r.error());
+        }
+        if (*r == 0) {
+            co_return std::unexpected(make_error_code(errc::end_of_file));
+        }
+
+        buf.commit(*r);
+    }
+}
+
+} // namespace detail
+
+/// Async read until delimiter is present in dynamic_buffer.
+/// Returns bytes from buffer readable start through the delimiter; does not consume.
+export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
+                             std::string_view delimiter,
+                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+                             std::size_t read_chunk_size = 4096)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    return detail::async_read_until_impl(
+        ctx, sock, buf, std::string{delimiter}, max_bytes, read_chunk_size);
+}
+
+/// Cancellable async read until delimiter is present in dynamic_buffer.
+export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
+                             std::string_view delimiter, cancel_token& token,
+                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+                             std::size_t read_chunk_size = 4096)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    return detail::async_read_until_impl(
+        ctx, sock, buf, std::string{delimiter}, token, max_bytes, read_chunk_size);
+}
+
+/// Async read until a single byte delimiter is present in dynamic_buffer.
+export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
+                             char delimiter,
+                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+                             std::size_t read_chunk_size = 4096)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    return detail::async_read_until_impl(
+        ctx, sock, buf, std::string{delimiter}, max_bytes, read_chunk_size);
+}
+
+/// Cancellable async read until a single byte delimiter is present in dynamic_buffer.
+export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
+                             char delimiter, cancel_token& token,
+                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+                             std::size_t read_chunk_size = 4096)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    return detail::async_read_until_impl(
+        ctx, sock, buf, std::string{delimiter}, token, max_bytes, read_chunk_size);
+}
+
 /// Async write
 /// Usage: auto n = co_await async_write(ctx, sock, buf);
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf)
@@ -63,6 +198,52 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
                         cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
+
+/// Async write all bytes in a buffer
+/// Usage: co_await async_write_all(ctx, sock, buf);
+export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto* data = static_cast<const std::byte*>(buf.data);
+    std::size_t written = 0;
+
+    while (written < buf.size) {
+        auto r = co_await async_write(ctx, sock,
+            const_buffer{data + written, buf.size - written});
+        if (!r) {
+            co_return std::unexpected(r.error());
+        }
+        if (*r == 0) {
+            co_return std::unexpected(make_error_code(errc::broken_pipe));
+        }
+        written += *r;
+    }
+
+    co_return {};
+}
+
+/// Cancellable async write all bytes in a buffer
+export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
+                            cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto* data = static_cast<const std::byte*>(buf.data);
+    std::size_t written = 0;
+
+    while (written < buf.size) {
+        auto r = co_await async_write(ctx, sock,
+            const_buffer{data + written, buf.size - written}, token);
+        if (!r) {
+            co_return std::unexpected(r.error());
+        }
+        if (*r == 0) {
+            co_return std::unexpected(make_error_code(errc::broken_pipe));
+        }
+        written += *r;
+    }
+
+    co_return {};
+}
 
 /// Async recvfrom — Receive UDP datagram and get sender address
 /// Usage: auto n = co_await async_recvfrom(ctx, sock, buf, peer);

@@ -6,6 +6,7 @@
 ///   int main() { return cnetmod::test::run_all(); }
 
 #include <iostream>
+#include <cstdlib>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -44,10 +45,13 @@ struct registrar {
 inline int run_all() {
     int passed = 0;
     int failed = 0;
+    const char* filter = std::getenv("CNETMOD_TEST_FILTER");
 
     std::cout << "[==========] Running " << registry().size() << " test(s).\n";
 
     for (auto& tc : registry()) {
+        if (filter && *filter && tc.name.find(filter) == std::string::npos)
+            continue;
         std::cout << "[ RUN      ] " << tc.name << "\n";
         failure_count() = 0;
         total_count() = 0;

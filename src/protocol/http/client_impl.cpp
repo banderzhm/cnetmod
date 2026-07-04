@@ -247,32 +247,14 @@ auto client::write_data(std::string_view data)
 
 #ifdef CNETMOD_HAS_SSL
     if (state_->is_ssl && state_->ssl) {
-        std::size_t total = 0;
-        while (total < data.size()) {
-            auto result = co_await state_->ssl->async_write(
-                const_buffer{data.data() + total, data.size() - total});
-            if (!result) {
-                co_return std::unexpected(result.error());
-            }
-            total += *result;
-        }
-        co_return {};
+        co_return co_await state_->ssl->async_write_all(
+            const_buffer{data.data(), data.size()});
     }
 #endif
 
     auto& sock = state_->conn->native_socket();
-    std::size_t total = 0;
-
-    while (total < data.size()) {
-        auto result = co_await async_write(*ctx_, sock,
-            const_buffer{data.data() + total, data.size() - total});
-        if (!result) {
-            co_return std::unexpected(result.error());
-        }
-        total += *result;
-    }
-
-    co_return {};
+    co_return co_await async_write_all(*ctx_, sock,
+        const_buffer{data.data(), data.size()});
 }
 
 auto client::read_data(void* buffer, std::size_t size)

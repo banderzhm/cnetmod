@@ -28,7 +28,7 @@ static auto echo_session(io_context& ctx, socket client) -> task<void> {
     while (true) {
         auto rd = co_await async_read(ctx, client, mutable_buffer{buf.data(), buf.size()});
         if (!rd || *rd == 0) break;
-        auto wr = co_await async_write(ctx, client, const_buffer{buf.data(), *rd});
+        auto wr = co_await async_write_all(ctx, client, const_buffer{buf.data(), *rd});
         if (!wr) break;
     }
     client.close();
@@ -70,7 +70,7 @@ static auto echo_client(io_context& ctx, const endpoint& server_ep,
 
     echo_result result;
     for (std::size_t i = 0; i < count; ++i) {
-        auto wr = co_await async_write(ctx, sock, const_buffer{send_buf.data(), send_buf.size()});
+        auto wr = co_await async_write_all(ctx, sock, const_buffer{send_buf.data(), send_buf.size()});
         if (!wr) break;
 
         // Read exactly msg_size bytes

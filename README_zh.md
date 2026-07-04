@@ -38,8 +38,19 @@
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、事务管理、ORM（CRUD / 迁移 / 查询构建器 / MyBatis-Plus 风格 XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
+- **Raft**: 复制状态机工具集，支持 leader 选举、日志复制、ReadIndex、leader lease / check-quorum、joint consensus 成员变更、snapshot install / compaction、LevelDB 持久化、TCP transport、TLS / mTLS 认证、传输指标、chaos / 重启恢复测试，以及分布式存储示例
 - **Modbus**: 完整协议实现 — TCP/UDP/RTU（串口）客户端和服务端、所有标准功能码、连接池、CRC-16 校验、帧时序控制、数据存储（基于互斥锁和无锁通道）
 - **OpenAI**: 异步 API 客户端（聊天补全等）
+
+### Raft 性能
+Intel Core i9-14900K 上的 Release benchmark 结果：
+
+| 场景 | 吞吐 |
+|----------|------------|
+| 单节点 append + commit | ~5.17M - 5.50M ops/s |
+| 5 节点多数派复制 | ~0.80M - 0.83M ops/s |
+
+可通过 `testing/bench/bench_raft.cpp` 在本地复测。实际结果会受编译器、allocator、存储后端、CPU 频率策略、网络 / loopback 环境影响。
 
 ### 中间件（HTTP）
 CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 ID、访问日志、指标、超时、优雅关闭、IP 防火墙、缓存、健康检查、文件上传、panic 恢复
@@ -350,7 +361,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id 自动生成
 ```
 
-查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`modbus_demo`、`multicore_http`、`ssl_echo_server` 等。
+查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`redis_cluster`、`oss_shared_storage`、`modbus_demo`、`multicore_http`、`ssl_echo_server` 等。
 
 ## 架构
 
@@ -369,6 +380,7 @@ cnetmod.protocol.socks5 — SOCKS5 代理客户端 + 服务端
 cnetmod.protocol.mqtt — MQTT broker + 客户端（v3.1.1 / v5.0）
 cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
 cnetmod.protocol.redis — Redis 异步客户端
+cnetmod.protocol.raft — Raft 复制状态机、存储、传输、运行时、成员变更、快照
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU 客户端 + 服务端
 cnetmod.protocol.openai — OpenAI API 客户端
 cnetmod.protocol.http.middleware.*  — HTTP 中间件组件

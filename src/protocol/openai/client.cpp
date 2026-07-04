@@ -615,10 +615,14 @@ auto client::do_write(const_buffer buf)
 {
 #ifdef CNETMOD_HAS_SSL
     if (ssl_) {
-        co_return co_await ssl_->async_write(buf);
+        auto r = co_await ssl_->async_write_all(buf);
+        if (!r) co_return std::unexpected(r.error());
+        co_return buf.size;
     }
 #endif
-    co_return co_await async_write(ctx_, sock_, buf);
+    auto r = co_await async_write_all(ctx_, sock_, buf);
+    if (!r) co_return std::unexpected(r.error());
+    co_return buf.size;
 }
 
 auto client::do_read(mutable_buffer buf)

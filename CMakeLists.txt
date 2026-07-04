@@ -135,6 +135,16 @@ if(CNETMOD_ENABLE_HTTP2)
         set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
         set(ENABLE_FAILMALLOC OFF CACHE BOOL "" FORCE)
 
+        # nghttp2 configures a few generated files before its subdirectories
+        # are added; pre-create those binary directories for stable reconfigure.
+        set(CNETMOD_NGHTTP2_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/nghttp2")
+        file(MAKE_DIRECTORY
+            "${CNETMOD_NGHTTP2_BINARY_DIR}/lib"
+            "${CNETMOD_NGHTTP2_BINARY_DIR}/lib/includes/nghttp2"
+            "${CNETMOD_NGHTTP2_BINARY_DIR}/integration-tests"
+            "${CNETMOD_NGHTTP2_BINARY_DIR}/doc"
+        )
+
         add_subdirectory(3rdparty/nghttp2 EXCLUDE_FROM_ALL)
 
         # Restore parent project settings
@@ -180,6 +190,49 @@ if(ZLIB_FOUND)
 else()
     set(CNETMOD_HAS_ZLIB OFF)
     message(STATUS "zlib: Not found, gzip compression middleware disabled")
+endif()
+
+# ==============================================================================
+# LevelDB Support (Optional, used by Raft persistent storage)
+# ==============================================================================
+option(CNETMOD_ENABLE_LEVELDB "Enable LevelDB-backed Raft storage when LevelDB is available" ON)
+if(CNETMOD_ENABLE_LEVELDB)
+    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/leveldb/CMakeLists.txt")
+        set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(LEVELDB_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+        set(LEVELDB_INSTALL OFF CACHE BOOL "" FORCE)
+        add_subdirectory(3rdparty/leveldb EXCLUDE_FROM_ALL)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET leveldb)
+        message(STATUS "LevelDB: Enabled (3rdparty/leveldb)")
+    else()
+        find_package(LevelDB QUIET)
+    endif()
+    if(LevelDB_FOUND AND NOT CNETMOD_HAS_LEVELDB)
+        set(CNETMOD_HAS_LEVELDB ON)
+        if(TARGET leveldb::leveldb)
+            set(CNETMOD_LEVELDB_TARGET leveldb::leveldb)
+        elseif(TARGET LevelDB::LevelDB)
+            set(CNETMOD_LEVELDB_TARGET LevelDB::LevelDB)
+        elseif(LevelDB_LIBRARIES)
+            set(CNETMOD_LEVELDB_LIBRARY ${LevelDB_LIBRARIES})
+            set(CNETMOD_LEVELDB_INCLUDE_DIR ${LevelDB_INCLUDE_DIRS})
+        endif()
+        message(STATUS "LevelDB: Enabled (CMake package)")
+    elseif(NOT CNETMOD_HAS_LEVELDB)
+        find_path(CNETMOD_LEVELDB_INCLUDE_DIR leveldb/db.h)
+        find_library(CNETMOD_LEVELDB_LIBRARY NAMES leveldb)
+        if(CNETMOD_LEVELDB_INCLUDE_DIR AND CNETMOD_LEVELDB_LIBRARY)
+            set(CNETMOD_HAS_LEVELDB ON)
+            message(STATUS "LevelDB: Enabled (${CNETMOD_LEVELDB_LIBRARY})")
+        else()
+            set(CNETMOD_HAS_LEVELDB OFF)
+            message(STATUS "LevelDB: Not found, Raft LevelDB storage disabled")
+        endif()
+    endif()
+else()
+    set(CNETMOD_HAS_LEVELDB OFF)
+    message(STATUS "LevelDB: Disabled by user")
 endif()
 
 # ==============================================================================
@@ -284,6 +337,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
     $<$<BOOL:${CNETMOD_HAS_NGHTTP2}>:CNETMOD_HAS_NGHTTP2>
+    $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
 )
 
 # Platform-specific linking
@@ -311,6 +365,16 @@ endif()
 # pugixml linking
 if(CNETMOD_HAS_PUGIXML)
     target_link_libraries(cnetmod_core PUBLIC pugixml-static)
+endif()
+
+# LevelDB linking
+if(CNETMOD_HAS_LEVELDB)
+    if(CNETMOD_LEVELDB_TARGET)
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_LEVELDB_TARGET})
+    else()
+        target_include_directories(cnetmod_core PUBLIC ${CNETMOD_LEVELDB_INCLUDE_DIR})
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_LEVELDB_LIBRARY})
+    endif()
 endif()
 
 # ==============================================================================

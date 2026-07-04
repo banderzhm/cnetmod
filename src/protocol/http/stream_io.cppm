@@ -77,18 +77,12 @@ public:
     auto async_write_all(const void* data, std::size_t len)
         -> task<std::expected<void, std::error_code>>
     {
-        auto* p = static_cast<const std::byte*>(data);
-        std::size_t written = 0;
-        while (written < len) {
-            auto w = co_await async_write(
-                const_buffer{p + written, len - written});
-            if (!w) co_return std::unexpected(w.error());
-            if (*w == 0)
-                co_return std::unexpected(
-                    std::make_error_code(std::errc::connection_reset));
-            written += *w;
+#ifdef CNETMOD_HAS_SSL
+        if (ssl_) {
+            co_return co_await ssl_->async_write_all(const_buffer{data, len});
         }
-        co_return {};
+#endif
+        co_return co_await cnetmod::async_write_all(ctx_, *sock_, const_buffer{data, len});
     }
 
     /// Close underlying transport

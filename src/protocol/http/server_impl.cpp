@@ -171,7 +171,7 @@ auto serve_dir_body(const static_file_options& opts, request_context& ctx) -> ta
     resp.set_header("Accept-Ranges", "bytes");
 
     auto header_data = resp.serialize();
-    auto wr = co_await async_write(ctx.io_ctx(), ctx.raw_socket(),
+    auto wr = co_await async_write_all(ctx.io_ctx(), ctx.raw_socket(),
         const_buffer{header_data.data(), header_data.size()});
     if (!wr) co_return;
 
@@ -187,7 +187,7 @@ auto serve_dir_body(const static_file_options& opts, request_context& ctx) -> ta
             mutable_buffer{buf.data(), to_read}, offset);
         if (!rd || *rd == 0) break;
 
-        auto wf = co_await async_write(ctx.io_ctx(), ctx.raw_socket(),
+        auto wf = co_await async_write_all(ctx.io_ctx(), ctx.raw_socket(),
             const_buffer{buf.data(), *rd});
         if (!wf) break;
 
@@ -455,7 +455,7 @@ auto server::run() -> task<void> {
             resp.set_header("Connection", "close");
             resp.set_body(std::string_view{"503 Service Unavailable: too many connections"});
             auto data = resp.serialize();
-            (void)co_await async_write(ctx_, *r,
+            (void)co_await async_write_all(ctx_, *r,
                 const_buffer{data.data(), data.size()});
             r->close();
             continue;
@@ -617,7 +617,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             } else {
                 // Send normal response
                 auto data = resp.serialize();
-                auto wr = co_await async_write(io, client,
+                auto wr = co_await async_write_all(io, client,
                     const_buffer{data.data(), data.size()});
                 if (!wr) co_return;
             }
@@ -699,7 +699,7 @@ auto server::handle_h1_tls(socket& client, io_context& io,
             } else {
                 // Send normal response
                 auto data = resp.serialize();
-                auto wr = co_await ssl.async_write(
+                auto wr = co_await ssl.async_write_all(
                     const_buffer{data.data(), data.size()});
                 if (!wr) co_return;
             }
@@ -745,7 +745,7 @@ auto server::send_chunked_response(io_context& io, socket& client, response& res
     resp.set_body(std::string{});  // Clear body
     
     auto header_data = resp.serialize();
-    auto wr = co_await async_write(io, client,
+    auto wr = co_await async_write_all(io, client,
         const_buffer{header_data.data(), header_data.size()});
     if (!wr) co_return;
     
@@ -758,17 +758,17 @@ auto server::send_chunked_response(io_context& io, socket& client, response& res
         
         // Send chunk size (hex)
         auto size_str = std::format("{:x}\r\n", chunk_size);
-        auto wr1 = co_await async_write(io, client,
+        auto wr1 = co_await async_write_all(io, client,
             const_buffer{size_str.data(), size_str.size()});
         if (!wr1) co_return;
         
         // Send chunk data
-        auto wr2 = co_await async_write(io, client,
+        auto wr2 = co_await async_write_all(io, client,
             const_buffer{body.data() + offset, chunk_size});
         if (!wr2) co_return;
         
         // Send chunk ending \r\n
-        auto wr3 = co_await async_write(io, client,
+        auto wr3 = co_await async_write_all(io, client,
             const_buffer{"\r\n", 2});
         if (!wr3) co_return;
         
@@ -776,7 +776,7 @@ auto server::send_chunked_response(io_context& io, socket& client, response& res
     }
     
     // Send end chunk (0\r\n\r\n)
-    auto wr_end = co_await async_write(io, client,
+    auto wr_end = co_await async_write_all(io, client,
         const_buffer{"0\r\n\r\n", 5});
     (void)wr_end;
 }
@@ -790,7 +790,7 @@ auto server::send_chunked_response_tls(io_context& io, ssl_stream& ssl, response
     resp.set_body(std::string{});  // Clear body
     
     auto header_data = resp.serialize();
-    auto wr = co_await ssl.async_write(
+    auto wr = co_await ssl.async_write_all(
         const_buffer{header_data.data(), header_data.size()});
     if (!wr) co_return;
     
@@ -803,17 +803,17 @@ auto server::send_chunked_response_tls(io_context& io, ssl_stream& ssl, response
         
         // Send chunk size (hex)
         auto size_str = std::format("{:x}\r\n", chunk_size);
-        auto wr1 = co_await ssl.async_write(
+        auto wr1 = co_await ssl.async_write_all(
             const_buffer{size_str.data(), size_str.size()});
         if (!wr1) co_return;
         
         // Send chunk data
-        auto wr2 = co_await ssl.async_write(
+        auto wr2 = co_await ssl.async_write_all(
             const_buffer{body.data() + offset, chunk_size});
         if (!wr2) co_return;
         
         // Send chunk ending \r\n
-        auto wr3 = co_await ssl.async_write(
+        auto wr3 = co_await ssl.async_write_all(
             const_buffer{"\r\n", 2});
         if (!wr3) co_return;
         
@@ -821,7 +821,7 @@ auto server::send_chunked_response_tls(io_context& io, ssl_stream& ssl, response
     }
     
     // Send end chunk (0\r\n\r\n)
-    auto wr_end = co_await ssl.async_write(
+    auto wr_end = co_await ssl.async_write_all(
         const_buffer{"0\r\n\r\n", 5});
     (void)wr_end;
 }

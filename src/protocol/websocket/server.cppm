@@ -273,7 +273,7 @@ private:
             http::response resp(http::status::not_found);
             resp.set_body(std::string_view{"404 Not Found"});
             auto data = resp.serialize();
-            (void)co_await async_write(io, client,
+            (void)co_await async_write_all(io, client,
                 const_buffer{data.data(), data.size()});
             client.close(); co_return;
         }
@@ -284,7 +284,7 @@ private:
             http::response resp(http::status::bad_request);
             resp.set_body(std::string_view{"Bad WebSocket handshake"});
             auto data = resp.serialize();
-            (void)co_await async_write(io, client,
+            (void)co_await async_write_all(io, client,
                 const_buffer{data.data(), data.size()});
             client.close(); co_return;
         }
@@ -292,7 +292,7 @@ private:
         // 5. Send upgrade response
         auto upgrade_resp = build_upgrade_response(*accept_key);
         auto resp_data = upgrade_resp.serialize();
-        auto wr = co_await async_write(io, client,
+        auto wr = co_await async_write_all(io, client,
             const_buffer{resp_data.data(), resp_data.size()});
         if (!wr) { client.close(); co_return; }
 

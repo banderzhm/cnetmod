@@ -143,8 +143,6 @@ curl --socks5 admin:secret@127.0.0.1:1080 http://www.example.com
 - BIND command not implemented
 - UDP ASSOCIATE command not implemented
 - GSSAPI authentication not implemented
-- DNS resolution in server uses simple IP parsing (no actual DNS lookup)
-- Bidirectional relay is simplified (should use concurrent tasks in production)
 
 ## References
 

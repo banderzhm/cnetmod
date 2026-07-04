@@ -38,8 +38,19 @@ English | [简体中文](README_zh.md)
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool
+- **Raft**: Replicated state machine toolkit with leader election, log replication, ReadIndex, leader lease / check-quorum, joint consensus membership changes, snapshot install / compaction, LevelDB-backed persistence, TCP transport, TLS / mTLS authentication, transport metrics, chaos / restart tests, and distributed storage examples
 - **Modbus**: Complete protocol implementation — TCP/UDP/RTU (serial) client and server, all standard function codes, connection pool, CRC-16 validation, frame timing control, data stores (mutex-based and lock-free channel-based)
 - **OpenAI**: Async API client (chat completions, etc.)
+
+### Raft Performance
+Release benchmark on Intel Core i9-14900K:
+
+| Scenario | Throughput |
+|----------|------------|
+| Single-node append + commit | ~5.17M - 5.50M ops/s |
+| 5-node majority replication | ~0.80M - 0.83M ops/s |
+
+Use `testing/bench/bench_raft.cpp` for reproducible local measurements. Actual results depend on compiler, allocator, storage backend, CPU frequency policy, and network / loopback environment.
 
 ### Middleware (HTTP)
 CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log, metrics, timeout, graceful shutdown, IP firewall, cache, health check, file upload, panic recovery
@@ -350,7 +361,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id auto-generated
 ```
 
-See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `modbus_demo`, `multicore_http`, `ssl_echo_server`, and more.
+See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `redis_cluster`, `oss_shared_storage`, `modbus_demo`, `multicore_http`, `ssl_echo_server`, and more.
 
 ## Architecture
 
@@ -369,6 +380,7 @@ cnetmod.protocol.socks5 — SOCKS5 proxy client + server
 cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
 cnetmod.protocol.mysql — MySQL async client + ORM
 cnetmod.protocol.redis — Redis async client
+cnetmod.protocol.raft — Raft replicated state machine, storage, transport, runtime, membership, snapshots
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU client + server
 cnetmod.protocol.openai — OpenAI API client
 cnetmod.protocol.http.middleware.*  — HTTP middleware components

@@ -41,7 +41,7 @@ static auto http_client_keepalive(io_context& ctx, const endpoint& ep,
     std::size_t completed = 0;
 
     for (std::size_t i = 0; i < requests; ++i) {
-        auto wr = co_await async_write(ctx, sock,
+        auto wr = co_await async_write_all(ctx, sock,
             const_buffer{HTTP_GET_REQUEST.data(), HTTP_GET_REQUEST.size()});
         if (!wr) break;
 

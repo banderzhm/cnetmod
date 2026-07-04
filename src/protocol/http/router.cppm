@@ -155,7 +155,7 @@ public:
         resp_.set_header("X-Streamed", "1");
 
         const auto header = resp_.serialize();
-        auto wr = co_await async_write(
+        auto wr = co_await async_write_all(
             ctx_, sock_, const_buffer{header.data(), header.size()});
         if (!wr) {
             co_return false;
@@ -194,7 +194,7 @@ public:
         }
         frame += '\n';
 
-        auto wr = co_await async_write(
+        auto wr = co_await async_write_all(
             ctx_, sock_, const_buffer{frame.data(), frame.size()});
         co_return wr.has_value();
     }

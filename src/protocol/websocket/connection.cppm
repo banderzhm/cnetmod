@@ -515,30 +515,17 @@ private:
     auto async_write_all(const char* data, std::size_t len)
         -> task<std::expected<void, std::error_code>>
     {
-        std::size_t written = 0;
-        while (written < len) {
 #ifdef CNETMOD_HAS_SSL
-            if (secure_ && ssl_) {
-                auto w = co_await ssl_->async_write(
-                    const_buffer{data + written, len - written});
-                if (!w) co_return std::unexpected(w.error());
-                written += *w;
-                continue;
-            }
-#endif
-            if (cancel_token_) {
-                auto w = co_await cnetmod::async_write(ctx_, sock_,
-                    const_buffer{data + written, len - written}, *cancel_token_);
-                if (!w) co_return std::unexpected(w.error());
-                written += *w;
-            } else {
-                auto w = co_await cnetmod::async_write(ctx_, sock_,
-                    const_buffer{data + written, len - written});
-                if (!w) co_return std::unexpected(w.error());
-                written += *w;
-            }
+        if (secure_ && ssl_) {
+            co_return co_await ssl_->async_write_all(const_buffer{data, len});
         }
-        co_return {};
+#endif
+        if (cancel_token_) {
+            co_return co_await cnetmod::async_write_all(ctx_, sock_,
+                const_buffer{data, len}, *cancel_token_);
+        }
+        co_return co_await cnetmod::async_write_all(ctx_, sock_,
+            const_buffer{data, len});
     }
 
     /// Handle control frames (ping → auto pong, close → auto reply)

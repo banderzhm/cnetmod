@@ -42,11 +42,17 @@ auto detail::conn_state::do_write(const std::string& data)
     -> task<std::expected<std::size_t, std::error_code>>
 {
 #ifdef CNETMOD_HAS_SSL
-    if (ssl) co_return co_await ssl->async_write(
-        const_buffer{data.data(), data.size()});
+    if (ssl) {
+        auto r = co_await ssl->async_write_all(
+            const_buffer{data.data(), data.size()});
+        if (!r) co_return std::unexpected(r.error());
+        co_return data.size();
+    }
 #endif
-    co_return co_await async_write(io, sock,
+    auto r = co_await async_write_all(io, sock,
         const_buffer{data.data(), data.size()});
+    if (!r) co_return std::unexpected(r.error());
+    co_return data.size();
 }
 
 auto detail::conn_state::do_read(mutable_buffer buf)

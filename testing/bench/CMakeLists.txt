@@ -15,6 +15,7 @@ set(BENCH_TARGETS
     bench_sync
     bench_io
     bench_http
+    bench_raft
 )
 
 foreach(bench_name ${BENCH_TARGETS})

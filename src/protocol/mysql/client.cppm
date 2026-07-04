@@ -591,14 +591,20 @@ private:
     auto do_write(const_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
 #ifdef CNETMOD_HAS_SSL
         if (ssl_) {
-            auto r = co_await ssl_->async_write(buf);
-            if (!r) mark_disconnected(r.error());
-            co_return r;
+            auto r = co_await ssl_->async_write_all(buf);
+            if (!r) {
+                mark_disconnected(r.error());
+                co_return std::unexpected(r.error());
+            }
+            co_return buf.size;
         }
 #endif
-        auto r = co_await async_write(ctx_, sock_, buf);
-        if (!r) mark_disconnected(r.error());
-        co_return r;
+        auto r = co_await async_write_all(ctx_, sock_, buf);
+        if (!r) {
+            mark_disconnected(r.error());
+            co_return std::unexpected(r.error());
+        }
+        co_return buf.size;
     }
 
     auto do_read(mutable_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {

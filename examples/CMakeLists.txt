@@ -97,6 +97,14 @@ set(REDIS_EXAMPLES
 )
 
 # ==============================================================================
+# Raft Examples
+# ==============================================================================
+set(RAFT_EXAMPLES
+    raft/redis_cluster
+    raft/oss_shared_storage
+)
+
+# ==============================================================================
 # MQTT Examples
 # ==============================================================================
 set(MQTT_EXAMPLES
@@ -123,6 +131,7 @@ set(ALL_EXAMPLES
     ${WEBSOCKET_EXAMPLES}
     ${DATABASE_EXAMPLES}
     ${REDIS_EXAMPLES}
+    ${RAFT_EXAMPLES}
     ${MQTT_EXAMPLES}
     ${MODBUS_EXAMPLES}
 )

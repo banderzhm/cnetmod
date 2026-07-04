@@ -444,9 +444,15 @@ auto client::impl::version() const noexcept -> protocol_version { return version
 
 auto client::impl::do_write(const_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
 #ifdef CNETMOD_HAS_SSL
-    if (ssl_) co_return co_await ssl_->async_write(buf);
+    if (ssl_) {
+        auto r = co_await ssl_->async_write_all(buf);
+        if (!r) co_return std::unexpected(r.error());
+        co_return buf.size;
+    }
 #endif
-    co_return co_await async_write(ctx_, sock_, buf);
+    auto r = co_await async_write_all(ctx_, sock_, buf);
+    if (!r) co_return std::unexpected(r.error());
+    co_return buf.size;
 }
 
 auto client::impl::do_read(mutable_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
