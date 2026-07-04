@@ -33,6 +33,7 @@
 - **[MQTT](protocols/mqtt.md)** - IoT 消息传递（broker + client）
 - **[MySQL](protocols/mysql.md)** - 带 ORM 的数据库访问
 - **[Redis](protocols/redis.md)** - 内存数据存储客户端
+- **[Raft](protocols/raft.md)** - 复制状态机、成员变更、快照、TCP transport 和存储示例
 
 ## 🚀 高级主题
 
@@ -41,6 +42,7 @@
 - **[协程桥接](advanced/coroutine-bridge.md)** - 与其他框架集成
 - **[互斥锁指南](advanced/mutex-guide.md)** - 线程安全编程
 - **[ORM 指南](advanced/orm-guide.md)** - 数据库 ORM 深入
+- **[第三方依赖集成](advanced/thirdparty-dependency-integration.md)** - 嵌入 cnetmod 时复用宿主已有依赖 target
 
 ## 📖 快速参考
 
@@ -48,6 +50,8 @@
 - [快速开始](getting-started.md)
 - [架构](architecture.md)
 - [示例](examples.md)
+- [Raft](protocols/raft.md)
+- [第三方依赖集成](advanced/thirdparty-dependency-integration.md)
 
 ---
 

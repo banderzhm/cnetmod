@@ -52,6 +52,8 @@ Intel Core i9-14900K 上的 Release benchmark 结果：
 
 可通过 `testing/bench/bench_raft.cpp` 在本地复测。实际结果会受编译器、allocator、存储后端、CPU 频率策略、网络 / loopback 环境影响。
 
+完整说明见：[Raft](docs/zh/protocols/raft.md)。宿主项目存在相同第三方库时的接入方式见：[第三方依赖集成](docs/zh/advanced/thirdparty-dependency-integration.md)。
+
 ### 中间件（HTTP）
 CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 ID、访问日志、指标、超时、优雅关闭、IP 防火墙、缓存、健康检查、文件上传、panic 恢复
 

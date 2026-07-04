@@ -33,6 +33,7 @@ Build networked applications:
 - **[MQTT](protocols/mqtt.md)** - IoT messaging (broker + client)
 - **[MySQL](protocols/mysql.md)** - Database access with ORM
 - **[Redis](protocols/redis.md)** - In-memory data store client
+- **[Raft](protocols/raft.md)** - Replicated state machines, membership, snapshots, TCP transport, and storage examples
 
 ## 🚀 Advanced Topics
 
@@ -41,6 +42,7 @@ Optimize and scale:
 - **[Coroutine Bridge](advanced/coroutine-bridge.md)** - Integrate with other frameworks
 - **[Mutex Guide](advanced/mutex-guide.md)** - Thread-safe programming
 - **[ORM Guide](advanced/orm-guide.md)** - Database ORM in depth
+- **[Third-party Dependency Integration](advanced/thirdparty-dependency-integration.md)** - Reuse host-owned dependency targets when embedding cnetmod
 
 ## 📖 Quick Reference
 
@@ -48,6 +50,8 @@ Optimize and scale:
 - [Quick Start](getting-started.md)
 - [Architecture](architecture.md)
 - [Examples](examples.md)
+- [Raft](protocols/raft.md)
+- [Third-party Dependency Integration](advanced/thirdparty-dependency-integration.md)
 
 ---
 

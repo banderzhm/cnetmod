@@ -20,7 +20,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # ==============================================================================
 option(CNETMOD_USE_MOLD "Use mold linker for faster linking (Linux only)" ON)
 if(CNETMOD_USE_MOLD)
-    include(${CMAKE_SOURCE_DIR}/cmake/utils/UseMold.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils/UseMold.cmake)
     cnetmod_use_mold()
 endif()
 
@@ -29,7 +29,7 @@ endif()
 # ==============================================================================
 option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
 if(CNETMOD_USE_MIMALLOC)
-    include(${CMAKE_SOURCE_DIR}/cmake/utils/UseMimalloc.cmake)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils/UseMimalloc.cmake)
     cnetmod_use_mimalloc()
 endif()
 
@@ -95,25 +95,53 @@ endif()
 # ==============================================================================
 # Third-party Library Configuration
 # ==============================================================================
+# Header-only third-party paths are cache variables so a parent project can
+# reuse its own dependency checkout when cnetmod is added as a subdirectory.
+set(CNETMOD_STDEXEC_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include"
+    CACHE PATH "stdexec include directory used by cnetmod")
+set(CNETMOD_JWT_CPP_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include"
+    CACHE PATH "jwt-cpp include directory used by cnetmod")
+set(CNETMOD_JSON_INCLUDE_DIR
+    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include"
+    CACHE PATH "nlohmann/json include directory used by cnetmod")
+set(CNETMOD_JSON_MODULE
+    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm"
+    CACHE FILEPATH "nlohmann/json C++ module interface used by cnetmod")
+
 # stdexec: Header-only mode (not using add_subdirectory to avoid CPM dependency)
 # Used for upper-layer sender/receiver organization, lower-layer I/O uses native coroutines
-include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include)
+include_directories(SYSTEM ${CNETMOD_STDEXEC_INCLUDE_DIR})
 
 # jwt-cpp: Header-only JWT library (HS256/RS256, etc.)
-include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include)
+include_directories(SYSTEM ${CNETMOD_JWT_CPP_INCLUDE_DIR})
 
 # nlohmann/json: C++ modules support (json.cppm)
-include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include)
-set(NLOHMANN_JSON_MODULE ${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm)
+include_directories(SYSTEM ${CNETMOD_JSON_INCLUDE_DIR})
+set(NLOHMANN_JSON_MODULE ${CNETMOD_JSON_MODULE})
 
 # pugixml: Lightweight XML parser
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pugixml/CMakeLists.txt")
+if(TARGET pugixml::pugixml)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml::pugixml)
+    message(STATUS "XML Parser: pugixml enabled (existing target pugixml::pugixml)")
+elseif(TARGET pugixml-static)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml-static)
+    message(STATUS "XML Parser: pugixml enabled (existing target pugixml-static)")
+elseif(TARGET pugixml)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml)
+    message(STATUS "XML Parser: pugixml enabled (existing target pugixml)")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pugixml/CMakeLists.txt")
     set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/pugixml")
     add_subdirectory(3rdparty/pugixml EXCLUDE_FROM_ALL)
     set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
     set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml-static)
     message(STATUS "XML Parser: pugixml enabled")
 else()
     set(CNETMOD_HAS_PUGIXML OFF)
@@ -125,7 +153,15 @@ endif()
 # nghttp2: HTTP/2 C library (build core library only)
 option(CNETMOD_ENABLE_HTTP2 "Enable HTTP/2 support (requires nghttp2)" ON)
 if(CNETMOD_ENABLE_HTTP2)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/nghttp2/CMakeLists.txt")
+    if(TARGET nghttp2_static)
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET nghttp2_static)
+        message(STATUS "HTTP/2: Enabled (existing target nghttp2_static)")
+    elseif(TARGET nghttp2)
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET nghttp2)
+        message(STATUS "HTTP/2: Enabled (existing target nghttp2)")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/nghttp2/CMakeLists.txt")
         # Configure nghttp2 build options before add_subdirectory
         set(ENABLE_LIB_ONLY ON CACHE BOOL "Build libnghttp2 only" FORCE)
         set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
@@ -153,6 +189,7 @@ if(CNETMOD_ENABLE_HTTP2)
         set(BUILD_TESTING ${BUILD_TESTING_SAVED} CACHE BOOL "" FORCE)
 
         set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET nghttp2_static)
         message(STATUS "HTTP/2: Enabled (nghttp2)")
     else()
         set(CNETMOD_HAS_NGHTTP2 OFF)
@@ -198,7 +235,19 @@ endif()
 # ==============================================================================
 option(CNETMOD_ENABLE_LEVELDB "Enable LevelDB-backed Raft storage when LevelDB is available" ON)
 if(CNETMOD_ENABLE_LEVELDB)
-    if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/leveldb/CMakeLists.txt")
+    if(TARGET leveldb)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET leveldb)
+        message(STATUS "LevelDB: Enabled (existing target leveldb)")
+    elseif(TARGET leveldb::leveldb)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET leveldb::leveldb)
+        message(STATUS "LevelDB: Enabled (existing target leveldb::leveldb)")
+    elseif(TARGET LevelDB::LevelDB)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET LevelDB::LevelDB)
+        message(STATUS "LevelDB: Enabled (existing target LevelDB::LevelDB)")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/leveldb/CMakeLists.txt")
         set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
         set(LEVELDB_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
         set(LEVELDB_INSTALL OFF CACHE BOOL "" FORCE)
@@ -372,12 +421,12 @@ endif()
 
 # nghttp2 linking
 if(CNETMOD_HAS_NGHTTP2)
-    target_link_libraries(cnetmod_core PUBLIC nghttp2_static)
+    target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_TARGET})
 endif()
 
 # pugixml linking
 if(CNETMOD_HAS_PUGIXML)
-    target_link_libraries(cnetmod_core PUBLIC pugixml-static)
+    target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_PUGIXML_TARGET})
 endif()
 
 # LevelDB linking

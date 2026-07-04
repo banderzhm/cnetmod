@@ -14,6 +14,7 @@ examples/
 ├── redis/          # Redis client and connection pools
 ├── mqtt/           # MQTT client with pub/sub
 ├── modbus/         # Modbus protocol (TCP, UDP, RTU)
+├── integration/    # Standalone host-project integration tests
 ├── mappers/        # MyBatis XML mapper files
 └── test_ssl/       # SSL/TLS certificates for testing
 ```
@@ -114,3 +115,7 @@ Industrial protocol implementation:
 - Modbus RTU client/server (serial)
 - Connection pool
 - Data stores (mutex-based and channel-based)
+
+### Integration
+Standalone projects that model real downstream usage:
+- `integration/thirdparty_collision_project`: verifies that cnetmod can be added to a host project that already owns the same third-party libraries. See `docs/en/advanced/thirdparty-dependency-integration.md` and `docs/zh/advanced/thirdparty-dependency-integration.md`.

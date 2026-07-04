@@ -366,6 +366,42 @@ auto name = co_await cli.hget("user:1", "name");
 ./build/examples/redis_client
 ```
 
+## Raft 示例
+
+### Redis 风格 Raft 集群 (`redis_cluster.cpp`)
+
+**演示内容**：使用三节点 TCP Raft 集群承载 Redis 风格业务命令。
+
+**关键概念**：
+- 真实 loopback TCP peer 端口
+- 业务 API 通过 Raft 日志复制提交
+- 复制 `SET`、`DEL`、`INCR` 命令
+- 三个状态机读取一致
+
+**运行**：
+```bash
+cmake --build build --target example_redis_cluster --config Release
+./build/examples/raft/example_redis_cluster
+```
+
+### OSS 共享存储 (`oss_shared_storage.cpp`)
+
+**演示内容**：基于 Raft 的分布式对象存储 metadata。
+
+**关键概念**：
+- primary-backup bucket metadata 复制
+- 两个独立分片，每个分片都是三节点 TCP Raft 集群
+- 按 `bucket/key` 路由对象
+- 可查看每个副本和每个分片的 commit index
+
+**运行**：
+```bash
+cmake --build build --target example_oss_shared_storage --config Release
+./build/examples/raft/example_oss_shared_storage
+```
+
+协议细节见 [Raft](protocols/raft.md)。
+
 ## 高级示例
 
 ### SSL Echo 服务器 (`ssl_echo_server.cpp`)
@@ -498,6 +534,20 @@ int sync_function() {
 ./build/examples/blocking_bridge_demo
 ```
 
+### 第三方依赖碰撞集成项目
+
+**演示内容**：一个独立宿主项目先拥有 `pugixml`、`nghttp2`、`leveldb` 和 header-only 依赖路径，再把 cnetmod 作为子目录加入。
+
+**运行**：
+```bash
+cmake -S examples/integration/thirdparty_collision_project \
+      -B build-thirdparty-collision \
+      -DCNETMOD_SOURCE_DIR=$PWD
+cmake --build build-thirdparty-collision --target thirdparty_collision_app
+```
+
+推荐 CMake 组织方式见 [第三方依赖集成](advanced/thirdparty-dependency-integration.md)。
+
 ## 性能示例
 
 ### TechEmpower 基准测试 (`tfb_benchmark.cpp`)
@@ -567,11 +617,14 @@ examples/
 ├── mysql_crud.cpp
 ├── mysql_orm.cpp
 ├── redis_client.cpp
+├── redis_cluster.cpp
+├── oss_shared_storage.cpp
 ├── ssl_echo_server.cpp
 ├── async_file.cpp
 ├── serial_port.cpp
 ├── stdexec_bridge.cpp
 ├── blocking_bridge_demo.cpp
+├── thirdparty_collision_project/
 └── tfb_benchmark.cpp
 ```
 
@@ -580,4 +633,5 @@ examples/
 - **[快速入门指南](getting-started.md)** - 学习基础知识
 - **[核心概念](core/coroutines.md)** - 理解协程
 - **[协议指南](protocols/http.md)** - 深入了解协议
+- **[Raft](protocols/raft.md)** - 构建复制状态机服务
 - **[API 参考](api/core.md)** - 详细的 API 文档

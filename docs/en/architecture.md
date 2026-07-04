@@ -22,7 +22,7 @@ cnetmod uses a layered architecture with clear separation of concerns:
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   Protocol Layer                         │
-│     HTTP │ WebSocket │ MQTT │ MySQL │ Redis │ TCP/UDP  │
+│ HTTP │ WebSocket │ MQTT │ MySQL │ Redis │ Raft │ TCP/UDP │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@ cnetmod.coro          (coroutine primitives: task, spawn, sync)
     ↓
 cnetmod.executor      (scheduling: server_context, stdexec bridge)
     ↓
-cnetmod.protocol.*    (protocols: tcp, udp, http, websocket, mqtt, mysql, redis)
+cnetmod.protocol.*    (protocols: tcp, udp, http, websocket, mqtt, mysql, redis, raft)
     ↓
 cnetmod.protocol.http.middleware.*  (HTTP middleware components)
 ```
@@ -261,6 +261,19 @@ co_await db.update(user);
 - Pipeline (batch queries)
 - ORM with auto-migration
 - UUID and Snowflake ID generation
+
+#### Raft
+
+Replicated state-machine protocol stack:
+
+- Leader election, PreVote, leader transfer, and check-quorum
+- AppendEntries replication, ReadIndex, leader lease, and commit advancement
+- Joint consensus membership changes with learner promotion and node removal
+- Snapshot install, compaction, retention, and LevelDB-backed restart recovery
+- TCP transport with connection reuse, authentication, TLS / mTLS hooks, metrics,
+  retry, and backpressure
+
+See [Raft](protocols/raft.md) for the detailed protocol guide.
 
 ## Performance Characteristics
 

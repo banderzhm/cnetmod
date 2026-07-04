@@ -52,6 +52,9 @@ Release benchmark on Intel Core i9-14900K:
 
 Use `testing/bench/bench_raft.cpp` for reproducible local measurements. Actual results depend on compiler, allocator, storage backend, CPU frequency policy, and network / loopback environment.
 
+Full guide: [Raft](docs/en/protocols/raft.md). Embedding guide for host projects
+with overlapping dependencies: [Third-party Dependency Integration](docs/en/advanced/thirdparty-dependency-integration.md).
+
 ### Middleware (HTTP)
 CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log, metrics, timeout, graceful shutdown, IP firewall, cache, health check, file upload, panic recovery
 

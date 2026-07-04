@@ -366,6 +366,43 @@ auto name = co_await cli.hget("user:1", "name");
 ./build/examples/redis_client
 ```
 
+## Raft Examples
+
+### Redis-style Raft Cluster (`redis_cluster.cpp`)
+
+**What it demonstrates**: A three-node TCP Raft cluster backing Redis-style
+business commands.
+
+**Key concepts**:
+- Real loopback TCP peer ports
+- Business APIs submitted through Raft log replication
+- Replicated `SET`, `DEL`, and `INCR` commands
+- Consistent reads from all three state machines
+
+**Run**:
+```bash
+cmake --build build --target example_redis_cluster --config Release
+./build/examples/raft/example_redis_cluster
+```
+
+### OSS Shared Storage (`oss_shared_storage.cpp`)
+
+**What it demonstrates**: Raft-backed distributed object-storage metadata.
+
+**Key concepts**:
+- Primary-backup replicated bucket metadata
+- Two independent shards, each backed by a three-node TCP Raft cluster
+- Object routing by `bucket/key`
+- Commit-index visibility per replica and per shard
+
+**Run**:
+```bash
+cmake --build build --target example_oss_shared_storage --config Release
+./build/examples/raft/example_oss_shared_storage
+```
+
+See [Raft](protocols/raft.md) for protocol details.
+
 ## Advanced Examples
 
 ### SSL Echo Server (`ssl_echo_server.cpp`)
@@ -498,6 +535,23 @@ int sync_function() {
 ./build/examples/blocking_bridge_demo
 ```
 
+### Third-party Collision Integration Project
+
+**What it demonstrates**: A standalone host project that owns `pugixml`,
+`nghttp2`, `leveldb`, and header-only dependency paths before adding cnetmod as a
+subdirectory.
+
+**Run**:
+```bash
+cmake -S examples/integration/thirdparty_collision_project \
+      -B build-thirdparty-collision \
+      -DCNETMOD_SOURCE_DIR=$PWD
+cmake --build build-thirdparty-collision --target thirdparty_collision_app
+```
+
+See [Third-party Dependency Integration](advanced/thirdparty-dependency-integration.md)
+for the recommended CMake pattern.
+
 ## Performance Examples
 
 ### TechEmpower Benchmark (`tfb_benchmark.cpp`)
@@ -567,11 +621,14 @@ examples/
 ├── mysql_crud.cpp
 ├── mysql_orm.cpp
 ├── redis_client.cpp
+├── redis_cluster.cpp
+├── oss_shared_storage.cpp
 ├── ssl_echo_server.cpp
 ├── async_file.cpp
 ├── serial_port.cpp
 ├── stdexec_bridge.cpp
 ├── blocking_bridge_demo.cpp
+├── thirdparty_collision_project/
 └── tfb_benchmark.cpp
 ```
 
@@ -580,4 +637,5 @@ examples/
 - **[Quick Start Guide](getting-started.md)** - Learn the basics
 - **[Core Concepts](core/coroutines.md)** - Understand coroutines
 - **[Protocol Guides](protocols/http.md)** - Deep dive into protocols
+- **[Raft](protocols/raft.md)** - Build replicated state-machine services
 - **[API Reference](api/core.md)** - Detailed API documentation

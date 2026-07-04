@@ -22,7 +22,7 @@ cnetmod 使用分层架构，关注点清晰分离：
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   协议层                                  │
-│     HTTP │ WebSocket │ MQTT │ MySQL │ Redis │ TCP/UDP  │
+│ HTTP │ WebSocket │ MQTT │ MySQL │ Redis │ Raft │ TCP/UDP │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@ cnetmod.coro          (协程原语: task, spawn, sync)
     ↓
 cnetmod.executor      (调度: server_context, stdexec bridge)
     ↓
-cnetmod.protocol.*    (协议: tcp, udp, http, websocket, mqtt, mysql, redis)
+cnetmod.protocol.*    (协议: tcp, udp, http, websocket, mqtt, mysql, redis, raft)
     ↓
 cnetmod.protocol.http.middleware.*  (HTTP 中间件组件)
 ```
@@ -261,6 +261,18 @@ co_await db.update(user);
 - 管道（批量查询）
 - ORM 带自动迁移
 - UUID 和雪花 ID 生成
+
+#### Raft
+
+复制状态机协议栈：
+
+- leader 选举、PreVote、leader transfer 和 check-quorum
+- AppendEntries 复制、ReadIndex、leader lease 和 commit 推进
+- joint consensus 成员变更，支持 learner promote 和 remove node
+- snapshot install、compaction、retention 和 LevelDB 重启恢复
+- TCP transport 支持连接复用、认证、TLS / mTLS 钩子、指标、重试和 backpressure
+
+详细协议说明见 [Raft](protocols/raft.md)。
 
 ## 性能特征
 
