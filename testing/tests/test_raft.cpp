@@ -4,6 +4,7 @@
 
 import std;
 import cnetmod.core;
+import cnetmod.core.ssl;
 import cnetmod.io;
 import cnetmod.coro;
 import cnetmod.executor.async_op;
@@ -1265,7 +1266,11 @@ TEST(raft_tcp_transport_tls_requires_configured_context) {
 
     bool done = false;
     auto scenario = [&]() -> cnetmod::task<void> {
-        transport.send_append_entries("n2", append_entries_request{.term = 1, .leader_id = "n1"});
+        transport.send_append_entries("n2", append_entries_request{
+            .term = 1,
+            .leader_id = "n1",
+            .entries = {},
+        });
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{20});
         done = true;
         ctx->stop();
