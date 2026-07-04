@@ -16,3 +16,6 @@
 [submodule "3rdparty/leveldb"]
 	path = 3rdparty/leveldb
 	url = https://github.com/google/leveldb.git
+[submodule "3rdparty/stdexec"]
+	path = 3rdparty/stdexec
+	url = https://github.com/NVIDIA/stdexec.git
