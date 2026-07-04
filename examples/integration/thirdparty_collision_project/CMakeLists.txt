@@ -93,9 +93,12 @@ add_subdirectory(
 )
 
 add_executable(thirdparty_collision_app main.cpp)
+if(NOT CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR)
+    set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR "${CNETMOD_STDEXEC_INCLUDE_DIR}")
+endif()
 target_include_directories(thirdparty_collision_app
     PRIVATE
-        ${CNETMOD_STDEXEC_INCLUDE_DIR}
+        ${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}
 )
 target_link_libraries(thirdparty_collision_app
     PRIVATE

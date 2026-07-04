@@ -119,7 +119,7 @@ TEST_XML(dom_text_as_integer_space, "<node><text1> \t\n1234</text1><text2>\n\t 0
     CHECK(node.child(STR("text4")).text().as_int() == 0);
 }
 
-TEST_XML(dom_text_as_float, "<node><text1>0</text1><text2>1</text2><text3>0.12</text3><text4>-5.1</text4><text5>3e-4</text5><text6>3.14159265358979323846</text6></node>")
+TEST_XML(dom_text_as_float, "<node><text1>0</text1><text2>1</text2><text3>0.12</text3><text4>-5.1</text4><text5>3e-4</text5><text6>3.14159265358979323846</text6><text7> \t\n+2.5</text7></node>")
 {
 	xml_node node = doc.child(STR("node"));
 
@@ -130,9 +130,10 @@ TEST_XML(dom_text_as_float, "<node><text1>0</text1><text2>1</text2><text3>0.12</
 	CHECK_DOUBLE(double(node.child(STR("text4")).text().as_float()), -5.1);
 	CHECK_DOUBLE(double(node.child(STR("text5")).text().as_float()), 3e-4);
 	CHECK_DOUBLE(double(node.child(STR("text6")).text().as_float()), 3.14159265358979323846);
+	CHECK_DOUBLE(double(node.child(STR("text7")).text().as_float()), 2.5);
 }
 
-TEST_XML(dom_text_as_double, "<node><text1>0</text1><text2>1</text2><text3>0.12</text3><text4>-5.1</text4><text5>3e-4</text5><text6>3.14159265358979323846</text6></node>")
+TEST_XML(dom_text_as_double, "<node><text1>0</text1><text2>1</text2><text3>0.12</text3><text4>-5.1</text4><text5>3e-4</text5><text6>3.14159265358979323846</text6><text7> \t\n+2.5</text7></node>")
 {
 	xml_node node = doc.child(STR("node"));
 
@@ -143,6 +144,7 @@ TEST_XML(dom_text_as_double, "<node><text1>0</text1><text2>1</text2><text3>0.12<
 	CHECK_DOUBLE(node.child(STR("text4")).text().as_double(), -5.1);
 	CHECK_DOUBLE(node.child(STR("text5")).text().as_double(), 3e-4);
 	CHECK_DOUBLE(node.child(STR("text6")).text().as_double(), 3.14159265358979323846);
+	CHECK_DOUBLE(node.child(STR("text7")).text().as_double(), 2.5);
 }
 
 TEST_XML(dom_text_as_bool, "<node><text1>0</text1><text2>1</text2><text3>true</text3><text4>True</text4><text5>Yes</text5><text6>yes</text6><text7>false</text7></node>")
@@ -157,6 +159,9 @@ TEST_XML(dom_text_as_bool, "<node><text1>0</text1><text2>1</text2><text3>true</t
 	CHECK(node.child(STR("text5")).text().as_bool());
 	CHECK(node.child(STR("text6")).text().as_bool());
 	CHECK(!node.child(STR("text7")).text().as_bool());
+
+	xml_node text = node.append_child(node_pcdata);
+	CHECK(text.text().as_bool(true) == true);
 }
 
 #ifdef PUGIXML_HAS_LONG_LONG
@@ -236,7 +241,7 @@ TEST_XML(dom_text_set, "<node/>")
 
     t.set(STR(""));
     CHECK(node.first_child().type() == node_pcdata);
-    CHECK_NODE(node, STR("<node></node>"));
+    CHECK_NODE(node, STR("<node/>"));
 
     t.set(STR("boo"));
     CHECK(node.first_child().type() == node_pcdata);
@@ -250,7 +255,7 @@ TEST_XML(dom_text_set, "<node/>")
 
     t.set(STR(""));
     CHECK(node.first_child().type() == node_pcdata);
-    CHECK_NODE(node, STR("<node></node>"));
+    CHECK_NODE(node, STR("<node/>"));
 }
 
 TEST_XML(dom_text_set_with_size, "<node/>")
@@ -260,7 +265,7 @@ TEST_XML(dom_text_set_with_size, "<node/>")
 
     t.set(STR(""), 0);
     CHECK(node.first_child().type() == node_pcdata);
-    CHECK_NODE(node, STR("<node></node>"));
+    CHECK_NODE(node, STR("<node/>"));
 
     t.set(STR("boo"), 3);
     CHECK(node.first_child().type() == node_pcdata);
@@ -274,7 +279,7 @@ TEST_XML(dom_text_set_with_size, "<node/>")
 
     t.set(STR(""), 0);
     CHECK(node.first_child().type() == node_pcdata);
-    CHECK_NODE(node, STR("<node></node>"));
+    CHECK_NODE(node, STR("<node/>"));
 }
 
 TEST_XML(dom_text_set_partially_with_size, "<node/>")
@@ -284,7 +289,7 @@ TEST_XML(dom_text_set_partially_with_size, "<node/>")
 
     t.set(STR("foo"), 0);
     CHECK(node.first_child().type() == node_pcdata);
-    CHECK_NODE(node, STR("<node></node>"));
+    CHECK_NODE(node, STR("<node/>"));
 
     t.set(STR("boofoo"), 3);
     CHECK(node.first_child().type() == node_pcdata);
@@ -298,7 +303,7 @@ TEST_XML(dom_text_set_partially_with_size, "<node/>")
 
     t.set(STR("foo"), 0);
     CHECK(node.first_child().type() == node_pcdata);
-    CHECK_NODE(node, STR("<node></node>"));
+    CHECK_NODE(node, STR("<node/>"));
 }
 
 #ifdef PUGIXML_HAS_STRING_VIEW
@@ -309,7 +314,7 @@ TEST_XML(dom_text_set_with_string_view, "<node/>")
 
 	t.set(string_view_t(STR("")));
 	CHECK(node.first_child().type() == node_pcdata);
-	CHECK_NODE(node, STR("<node></node>"));
+	CHECK_NODE(node, STR("<node/>"));
 
 	t.set(string_view_t(STR("boo")));
 	CHECK(node.first_child().type() == node_pcdata);
@@ -323,7 +328,7 @@ TEST_XML(dom_text_set_with_string_view, "<node/>")
 
 	t.set(string_view_t(STR("")));
 	CHECK(node.first_child().type() == node_pcdata);
-	CHECK_NODE(node, STR("<node></node>"));
+	CHECK_NODE(node, STR("<node/>"));
 
 	t.set(string_view_t(STR("something")));
 	CHECK(node.first_child().type() == node_pcdata);
@@ -332,7 +337,7 @@ TEST_XML(dom_text_set_with_string_view, "<node/>")
 	// empty string view (null data pointer)
 	t.set(string_view_t());
 	CHECK(node.first_child().type() == node_pcdata);
-	CHECK_NODE(node, STR("<node></node>"));
+	CHECK_NODE(node, STR("<node/>"));
 
 	t.set(string_view_t(STR("afternulldata")));
 	CHECK(node.first_child().type() == node_pcdata);
@@ -346,7 +351,7 @@ TEST_XML(dom_text_set_partially_with_string_view, "<node/>")
 
 	t.set(string_view_t(STR("foo"), 0));
 	CHECK(node.first_child().type() == node_pcdata);
-	CHECK_NODE(node, STR("<node></node>"));
+	CHECK_NODE(node, STR("<node/>"));
 
 	t.set(string_view_t(STR("boofoo"), 3));
 	CHECK(node.first_child().type() == node_pcdata);
@@ -360,7 +365,7 @@ TEST_XML(dom_text_set_partially_with_string_view, "<node/>")
 
 	t.set(string_view_t(STR("foo"), 0));
 	CHECK(node.first_child().type() == node_pcdata);
-	CHECK_NODE(node, STR("<node></node>"));
+	CHECK_NODE(node, STR("<node/>"));
 }
 #endif
 

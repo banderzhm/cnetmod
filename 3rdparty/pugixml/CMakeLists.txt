@@ -5,7 +5,7 @@ if(POLICY CMP0091)
     cmake_policy(SET CMP0091 NEW) # Enables use of MSVC_RUNTIME_LIBRARY
 endif()
 
-project(pugixml VERSION 1.15 LANGUAGES CXX)
+project(pugixml VERSION 1.16 LANGUAGES CXX)
 
 include(CMakePackageConfigHelpers)
 include(CMakeDependentOption)
@@ -37,6 +37,8 @@ set(PUGIXML_HEADERS
     ${PROJECT_SOURCE_DIR}/src/pugixml.hpp
 )
 
+set(PUGIXML_SOURCE ${PROJECT_SOURCE_DIR}/src/pugixml.cpp)
+
 # Technically not needed for this file. This is builtin CMAKE global variable.
 option(BUILD_SHARED_LIBS "Build shared instead of static library" OFF)
 
@@ -45,10 +47,15 @@ cmake_dependent_option(PUGIXML_BUILD_SHARED_AND_STATIC_LIBS
   "Build both shared and static libraries" OFF
   "BUILD_SHARED_LIBS" OFF)
 
+option(PUGIXML_INSTALL "Enable installation rules" ON)
+cmake_dependent_option(PUGIXML_INSTALL_SOURCE
+  "Install pugixml.cpp alongside headers" OFF
+  "PUGIXML_INSTALL" OFF)
+
 # Expose options from the pugiconfig.hpp
 option(PUGIXML_WCHAR_MODE "Enable wchar_t mode" OFF)
 option(PUGIXML_COMPACT "Enable compact mode" OFF)
-option(PUGIXML_INSTALL "Enable installation rules" ON)
+option(PUGIXML_CHARCONV_FLOAT "Enable charconv number conversion" OFF)
 
 # Advanced options from pugiconfig.hpp
 option(PUGIXML_NO_XPATH "Disable XPath" OFF)
@@ -63,6 +70,7 @@ endif()
 set(PUGIXML_PUBLIC_DEFINITIONS
   $<$<BOOL:${PUGIXML_WCHAR_MODE}>:PUGIXML_WCHAR_MODE>
   $<$<BOOL:${PUGIXML_COMPACT}>:PUGIXML_COMPACT>
+  $<$<BOOL:${PUGIXML_CHARCONV_FLOAT}>:PUGIXML_CHARCONV_FLOAT>
   $<$<BOOL:${PUGIXML_NO_XPATH}>:PUGIXML_NO_XPATH>
   $<$<BOOL:${PUGIXML_NO_STL}>:PUGIXML_NO_STL>
   $<$<BOOL:${PUGIXML_NO_EXCEPTIONS}>:PUGIXML_NO_EXCEPTIONS>
@@ -112,7 +120,7 @@ set(libs)
 if (BUILD_SHARED_LIBS)
   add_library(pugixml-shared SHARED
     ${PROJECT_SOURCE_DIR}/scripts/pugixml_dll.rc
-    ${PROJECT_SOURCE_DIR}/src/pugixml.cpp
+    ${PUGIXML_SOURCE}
     ${PUGIXML_HEADERS})
   add_library(pugixml::shared ALIAS pugixml-shared)
   list(APPEND libs pugixml-shared)
@@ -138,11 +146,15 @@ if (BUILD_SHARED_LIBS)
       ${msvc-rt-mtd-static}
       ${msvc-rt-mt-shared}
       ${msvc-rt-mt-static})
+  target_compile_features(pugixml-shared
+    PRIVATE
+      $<$<BOOL:${PUGIXML_CHARCONV_FLOAT}>:cxx_std_17>
+  )
 endif()
 
 if (NOT BUILD_SHARED_LIBS OR PUGIXML_BUILD_SHARED_AND_STATIC_LIBS)
   add_library(pugixml-static STATIC
-    ${PROJECT_SOURCE_DIR}/src/pugixml.cpp
+    ${PUGIXML_SOURCE}
     ${PUGIXML_HEADERS})
   add_library(pugixml::static ALIAS pugixml-static)
   list(APPEND libs pugixml-static)
@@ -161,6 +173,10 @@ if (NOT BUILD_SHARED_LIBS OR PUGIXML_BUILD_SHARED_AND_STATIC_LIBS)
       ${msvc-rt-mtd-static}
       ${msvc-rt-mt-shared}
       ${msvc-rt-mt-static})
+  target_compile_features(pugixml-static
+    PRIVATE
+      $<$<BOOL:${PUGIXML_CHARCONV_FLOAT}>:cxx_std_17>
+  )
 endif()
 
 if (BUILD_SHARED_LIBS)
@@ -190,13 +206,13 @@ if (PUGIXML_BUILD_APPLE_FRAMEWORK)
   set_target_properties(${libs} PROPERTIES
     FRAMEWORK TRUE
     FRAMEWORK_VERSION ${PROJECT_VERSION}
-    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "github.com/zeux/pugixml"
+    XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "com.github.zeux.pugixml"
     XCODE_ATTRIBUTE_INSTALL_PATH "@rpath"
     XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY ""
     XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO"
     XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO"
     PUBLIC_HEADER "${PUGIXML_HEADERS}"
-    MACOSX_FRAMEWORK_IDENTIFIER "github.com/zeux/pugixml"
+    MACOSX_FRAMEWORK_IDENTIFIER "com.github.zeux.pugixml"
     MACOSX_FRAMEWORK_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_FRAMEWORK_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}
     MACOSX_RPATH TRUE
@@ -281,6 +297,11 @@ if(PUGIXML_INSTALL)
 
   install(FILES ${PUGIXML_HEADERS}
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}${versioned-dir} COMPONENT ${PUGIXML_DEVELOPMENT_COMPONENT})
+
+  if (PUGIXML_INSTALL_SOURCE)
+    install(FILES ${PUGIXML_SOURCE}
+      DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}${versioned-dir} COMPONENT ${PUGIXML_DEVELOPMENT_COMPONENT})
+  endif()
 endif()
 
 if (PUGIXML_BUILD_TESTS)

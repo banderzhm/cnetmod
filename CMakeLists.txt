@@ -118,7 +118,11 @@ if(NOT EXISTS "${CNETMOD_STDEXEC_INCLUDE_DIR}/exec/static_thread_pool.hpp")
         "stdexec headers were not found at ${CNETMOD_STDEXEC_INCLUDE_DIR}. "
         "Initialize submodules with: git submodule update --init --recursive")
 endif()
-include_directories(SYSTEM ${CNETMOD_STDEXEC_INCLUDE_DIR})
+set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR "${CNETMOD_STDEXEC_INCLUDE_DIR}")
+set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR
+    "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}"
+    CACHE INTERNAL "Effective stdexec include directory after toolchain-specific preparation" FORCE)
+include_directories(SYSTEM ${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR})
 
 # jwt-cpp: Header-only JWT library (HS256/RS256, etc.)
 include_directories(SYSTEM ${CNETMOD_JWT_CPP_INCLUDE_DIR})
