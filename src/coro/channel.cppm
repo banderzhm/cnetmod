@@ -284,6 +284,89 @@ public:
         return send_awaitable{*this, std::move(value)};
     }
 
+    /// Non-blocking send — returns false when the channel is closed or full.
+    auto try_send(T value) -> bool {
+        std::coroutine_handle<> to_resume;
+        bool succeeded = false;
+        {
+            auto_lock g(lock_);
+            if (closed_) return false;
+
+            if (recv_head_) {
+                auto* w = static_cast<recv_node*>(recv_head_);
+                *w->slot = std::move(value);
+                dequeue(recv_head_, recv_tail_);
+                to_resume = w->handle;
+                succeeded = true;
+            } else if (capacity_ > 0 && !buf_full()) {
+                buf_push(std::move(value));
+                succeeded = true;
+            }
+        }
+        if (to_resume) to_resume.resume();
+        return succeeded;
+    }
+
+    /// Non-blocking send from an existing object.
+    /// The value is moved only when the send succeeds, which lets callers
+    /// safely fall back to the suspending send path when the channel is full.
+    auto try_send_move(T& value) -> bool {
+        std::coroutine_handle<> to_resume;
+        bool succeeded = false;
+        {
+            auto_lock g(lock_);
+            if (closed_) return false;
+
+            if (recv_head_) {
+                auto* w = static_cast<recv_node*>(recv_head_);
+                *w->slot = std::move(value);
+                dequeue(recv_head_, recv_tail_);
+                to_resume = w->handle;
+                succeeded = true;
+            } else if (capacity_ > 0 && !buf_full()) {
+                buf_push(std::move(value));
+                succeeded = true;
+            }
+        }
+        if (to_resume) to_resume.resume();
+        return succeeded;
+    }
+
+    /// Non-blocking batch send from existing objects.
+    /// Values are moved in order only while the send succeeds. Returns the
+    /// number of values accepted before the channel became full or closed.
+    auto try_send_many_move(std::span<T*> values) -> std::size_t {
+        std::coroutine_handle<> first_to_resume;
+        std::vector<std::coroutine_handle<>> extra_to_resume;
+        std::size_t sent = 0;
+        {
+            auto_lock g(lock_);
+            if (closed_) return 0;
+
+            while (sent < values.size() && recv_head_) {
+                auto* w = static_cast<recv_node*>(recv_head_);
+                *w->slot = std::move(*values[sent]);
+                dequeue(recv_head_, recv_tail_);
+                if (!first_to_resume) {
+                    first_to_resume = w->handle;
+                } else {
+                    extra_to_resume.push_back(w->handle);
+                }
+                ++sent;
+            }
+
+            while (sent < values.size() && capacity_ > 0 && !buf_full()) {
+                buf_push(std::move(*values[sent]));
+                ++sent;
+            }
+        }
+        if (first_to_resume) first_to_resume.resume();
+        for (auto h : extra_to_resume) {
+            if (h) h.resume();
+        }
+        return sent;
+    }
+
     /// co_await ch.receive() — suspends when empty, returns nullopt if closed and drained
     auto receive() -> recv_awaitable {
         return recv_awaitable{*this};
@@ -321,6 +404,63 @@ public:
         if (to_resume) to_resume.resume();
         return result;
     }
+
+    /// Non-blocking receive from buffered items only.
+    /// This preserves the usual buffer-refill invariant but does not direct
+    /// handoff from a waiting sender when the buffer is empty. It is useful for
+    /// opportunistic batching without pulling producers into the consumer's loop.
+    auto try_receive_buffered_refill() noexcept -> std::optional<T> {
+        std::coroutine_handle<> to_resume;
+        std::optional<T> result;
+        {
+            auto_lock g(lock_);
+
+            if (!buf_empty()) {
+                result.emplace(buf_pop());
+                if (send_head_) {
+                    auto* w = static_cast<send_node*>(send_head_);
+                    buf_push(std::move(w->value));
+                    dequeue(send_head_, send_tail_);
+                    w->succeeded = true;
+                    to_resume = w->handle;
+                }
+            }
+        }
+        if (to_resume) to_resume.resume();
+        return result;
+    }
+
+    /// Drain up to max_items buffered values into out.
+    /// This intentionally does not direct-handoff waiting senders into the
+    /// returned batch. Freed slots are refilled after the drain and resumed
+    /// producers continue in their own turn, which avoids recursive scheduling
+    /// amplification in high-pressure writer actors.
+    auto try_receive_many(std::vector<T>& out, std::size_t max_items) -> std::size_t {
+        std::vector<std::coroutine_handle<>> to_resume;
+        std::size_t received = 0;
+        {
+            auto_lock g(lock_);
+
+            const auto buffered = std::min(max_items, count_);
+            while (received < buffered) {
+                out.push_back(buf_pop());
+                ++received;
+            }
+
+            while (send_head_ && capacity_ > 0 && !buf_full()) {
+                auto* w = static_cast<send_node*>(send_head_);
+                buf_push(std::move(w->value));
+                dequeue(send_head_, send_tail_);
+                w->succeeded = true;
+                to_resume.push_back(w->handle);
+            }
+        }
+        for (auto h : to_resume) {
+            if (h) h.resume();
+        }
+        return received;
+    }
+
 
     /// Close channel — wakes all waiting senders/receivers, zero heap allocation
     void close() noexcept {

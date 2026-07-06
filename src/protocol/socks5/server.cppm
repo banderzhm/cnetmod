@@ -30,6 +30,8 @@ export using auth_handler = std::function<bool(std::string_view username, std::s
 export struct server_config {
     bool allow_no_auth = true;
     bool allow_username_password = false;
+    bool allow_bind = true;
+    bool allow_udp_associate = true;
     auth_handler authenticator;
     std::size_t max_connections = 0;  // 0 = unlimited
 };
@@ -49,7 +51,8 @@ public:
         : ctx_(sctx.accept_io()), sctx_(&sctx), config_(std::move(config)) {}
     
     /// Listen on specified address and port
-    [[nodiscard]] auto listen(std::string_view host, std::uint16_t port)
+    [[nodiscard]] auto listen(std::string_view host, std::uint16_t port,
+                              socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>;
     
     /// Run server (accept loop)
@@ -79,6 +82,14 @@ private:
     auto handle_connection(socket client, io_context& io) -> task<void>;
     auto handle_authentication(socket& client, io_context& io) -> task<std::expected<void, std::error_code>>;
     auto handle_request(socket& client, io_context& io) -> task<std::expected<void, std::error_code>>;
+    auto handle_connect(socket& client, const socks5_request& req, io_context& io)
+        -> task<std::expected<void, std::error_code>>;
+    auto handle_bind(socket& client, const socks5_request& req, io_context& io)
+        -> task<std::expected<void, std::error_code>>;
+    auto handle_udp_associate(socket& client, const socks5_request& req, io_context& io)
+        -> task<std::expected<void, std::error_code>>;
+    auto relay_udp(socket& control, socket udp_sock, io_context& io)
+        -> task<void>;
     auto relay_data(socket& client, socket& target, io_context& io) -> task<void>;
     
     io_context& ctx_;

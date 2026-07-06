@@ -478,6 +478,9 @@ namespace cnetmod::raft
         std::uint64_t send_successes = 0;
         std::uint64_t send_failures = 0;
         std::uint64_t reconnects = 0;
+        std::uint64_t max_queue_depth = 0;
+        std::uint64_t coalesced_sends = 0;
+        std::chrono::steady_clock::duration last_queue_wait_latency{};
         std::chrono::steady_clock::duration last_send_latency{};
         std::chrono::steady_clock::time_point last_send_at{};
         std::chrono::steady_clock::time_point last_receive_at{};
@@ -518,6 +521,7 @@ namespace cnetmod::raft
             peers_.erase(peer);
             if (auto it = connections_.find(peer); it != connections_.end())
             {
+                it->second.outbound.clear();
                 it->second.write_token.cancel();
                 it->second.sock.close();
             }
@@ -840,9 +844,18 @@ namespace cnetmod::raft
 
         struct peer_connection
         {
+            struct queued_message
+            {
+                endpoint ep;
+                raft_rpc_message message;
+                std::chrono::steady_clock::time_point enqueued_at;
+            };
+
             socket sock;
             async_mutex write_lock;
             cancel_token write_token;
+            std::deque<queued_message> outbound;
+            bool writer_running = false;
         };
 
         struct inbound_socket_guard
@@ -905,10 +918,24 @@ namespace cnetmod::raft
                 record_send_failure(peer, std::make_error_code(std::errc::no_buffer_space), {});
                 return;
             }
+
             ++metrics.queued_sends;
             message.auth_token = make_auth_token(message);
-            auto ep = it->second;
-            spawn(ctx_, send_one(peer, ep, std::move(message)));
+            auto& conn = connections_[peer];
+            conn.outbound.push_back(peer_connection::queued_message{
+                .ep = it->second,
+                .message = std::move(message),
+                .enqueued_at = std::chrono::steady_clock::now(),
+            });
+            metrics.max_queue_depth = std::max<std::uint64_t>(
+                metrics.max_queue_depth,
+                static_cast<std::uint64_t>(conn.outbound.size()));
+
+            if (!conn.writer_running)
+            {
+                conn.writer_running = true;
+                spawn(ctx_, send_writer(peer));
+            }
         }
 
         void notify_error(const node_id& peer, std::error_code ec)
@@ -916,17 +943,70 @@ namespace cnetmod::raft
             if (on_error_) on_error_(peer, ec);
         }
 
-        auto send_one(node_id peer, endpoint ep, raft_rpc_message message) -> task<void>
+        auto send_writer(node_id peer) -> task<void>
         {
-            const auto started = std::chrono::steady_clock::now();
-            auto r = co_await send_with_retry(peer, ep, message);
-            auto latency = std::chrono::steady_clock::now() - started;
-            if (auto it = peer_metrics_.find(peer); it != peer_metrics_.end() && it->second.queued_sends != 0)
-                --it->second.queued_sends;
-            if (r)
-                record_send_success(peer, latency);
-            else
-                record_send_failure(peer, r.error(), latency);
+            for (;;)
+            {
+                auto conn_it = connections_.find(peer);
+                if (conn_it == connections_.end())
+                    co_return;
+
+                auto& conn = conn_it->second;
+                if (conn.outbound.empty())
+                {
+                    conn.writer_running = false;
+                    co_return;
+                }
+
+                auto item = std::move(conn.outbound.front());
+                conn.outbound.pop_front();
+                coalesce_append_entries(peer, conn, item);
+
+                auto& metrics = metrics_for(peer);
+                metrics.last_queue_wait_latency =
+                    std::chrono::steady_clock::now() - item.enqueued_at;
+
+                const auto started = std::chrono::steady_clock::now();
+                auto r = co_await send_with_retry(peer, item.ep, item.message);
+                auto latency = std::chrono::steady_clock::now() - started;
+
+                if (auto it = peer_metrics_.find(peer);
+                    it != peer_metrics_.end() && it->second.queued_sends != 0)
+                {
+                    --it->second.queued_sends;
+                }
+
+                if (r)
+                    record_send_success(peer, latency);
+                else
+                    record_send_failure(peer, r.error(), latency);
+            }
+        }
+
+        void coalesce_append_entries(const node_id& peer,
+                                     peer_connection& conn,
+                                     peer_connection::queued_message& item)
+        {
+            if (item.message.type != raft_rpc_type::append_entries)
+                return;
+
+            auto& metrics = metrics_for(peer);
+            while (!conn.outbound.empty() &&
+                   conn.outbound.front().message.type == raft_rpc_type::append_entries &&
+                   droppable_append_entries(item.message.append))
+            {
+                item = std::move(conn.outbound.front());
+                conn.outbound.pop_front();
+                ++metrics.coalesced_sends;
+                if (metrics.queued_sends != 0)
+                    --metrics.queued_sends;
+            }
+        }
+
+        [[nodiscard]] static auto droppable_append_entries(const append_entries_request& request)
+            -> bool
+        {
+            return request.entries.empty() && request.read_contexts.empty();
         }
 
         auto send_with_retry(const node_id& peer, endpoint ep, const raft_rpc_message& message)

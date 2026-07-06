@@ -142,7 +142,7 @@ inline auto sub_entry_from_json(const json& obj) -> subscribe_entry {
 inline auto pub_msg_to_json(const publish_message& m) -> json {
     json obj;
     obj["topic"]   = m.topic;
-    obj["payload"] = m.payload;
+    obj["payload"] = m.payload.str();
     obj["qos"]     = static_cast<std::uint8_t>(m.qos_value);
     obj["retain"]  = m.retain;
     obj["props"]   = props_to_json(m.props);
@@ -380,7 +380,8 @@ public:
             for (auto& obj : root) {
                 auto rm = detail::retained_from_json(obj);
                 if (!rm.topic.empty()) {
-                    store.store(rm.topic, std::move(rm));
+                    auto topic = rm.topic;
+                    store.store(topic, std::move(rm));
                 }
             }
         } catch (const json::exception& e) {

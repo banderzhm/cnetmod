@@ -231,8 +231,19 @@ function(configure_cxx_modules)
                 ${STDLIB_MODULE_DIRS}/std.compat.cppm
                 ${CFG_JSON_MODULE}
         )
+    elseif(WIN32 AND STDLIB_MODULE_DIRS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        # Windows/MSVC: Visual Studio builds the STL modules for import std.
+        # Adding std.ixx/std.compat.ixx to the project file set creates duplicate
+        # STL module outputs and makes MSBuild rebuild module users every time.
+        target_sources(${CFG_TARGET} PUBLIC
+            FILE_SET cxx_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
+            FILES
+                ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_JSON_MODULE}
+        )
     elseif(WIN32 AND STDLIB_MODULE_DIRS)
-        # Windows: MSVC standard library modules
+        # Windows non-MSVC toolchains: keep explicit standard-library modules.
         target_sources(${CFG_TARGET} PUBLIC
             FILE_SET cxx_modules TYPE CXX_MODULES
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${STDLIB_MODULE_DIRS}

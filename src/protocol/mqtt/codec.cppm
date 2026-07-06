@@ -196,7 +196,7 @@ done:
 /// Build complete MQTT packet: fixed_header_byte + remaining_length + payload
 /// When max_packet_size > 0, check if total length exceeds limit, return empty string if exceeded
 export inline auto build_packet(std::uint8_t fixed_header, std::string_view payload,
-                                 std::size_t max_packet_size = 0) -> std::string
+                                  std::size_t max_packet_size = 0) -> std::string
 {
     std::string pkt;
     pkt.reserve(1 + 4 + payload.size());
@@ -208,6 +208,24 @@ export inline auto build_packet(std::uint8_t fixed_header, std::string_view payl
         return {}; // Exceeded limit
     }
     return pkt;
+}
+
+export constexpr auto variable_length_size(std::size_t value) noexcept -> std::size_t {
+    std::size_t bytes = 1;
+    while (value >= 128 && bytes < 4) {
+        value >>= 7;
+        ++bytes;
+    }
+    return bytes;
+}
+
+export inline void append_packet(std::string& out,
+                                 std::uint8_t fixed_header,
+                                 std::string_view payload) {
+    out.reserve(out.size() + 1 + variable_length_size(payload.size()) + payload.size());
+    out.push_back(static_cast<char>(fixed_header));
+    encode_variable_length(out, payload.size());
+    out.append(payload);
 }
 
 } // namespace detail
@@ -351,6 +369,76 @@ export inline auto encode_publish(
     if (retain) fh |= 0x01;
 
     return detail::build_packet(fh, payload);
+}
+
+export inline auto encoded_publish_size(
+    std::string_view topic,
+    std::string_view payload_data,
+    qos q,
+    protocol_version ver,
+    const properties& props = {}
+) -> std::size_t
+{
+    std::size_t remaining = 2 + topic.size() + payload_data.size();
+    if (q != qos::at_most_once) {
+        remaining += 2;
+    }
+    if (ver == protocol_version::v5) {
+        if (props.empty()) {
+            remaining += 1;
+        } else {
+            std::string prop_buf;
+            for (auto& p : props) {
+                detail::encode_property(prop_buf, p);
+            }
+            remaining += detail::variable_length_size(prop_buf.size()) + prop_buf.size();
+        }
+    }
+    return 1 + detail::variable_length_size(remaining) + remaining;
+}
+
+export inline void append_publish(
+    std::string& out,
+    std::string_view topic,
+    std::string_view payload_data,
+    qos q,
+    bool retain,
+    bool dup,
+    std::uint16_t packet_id,
+    protocol_version ver,
+    const properties& props = {}
+) {
+    std::string prop_buf;
+    std::size_t remaining = 2 + topic.size() + payload_data.size();
+    if (q != qos::at_most_once) {
+        remaining += 2;
+    }
+    if (ver == protocol_version::v5) {
+        if (!props.empty()) {
+            for (auto& p : props) {
+                detail::encode_property(prop_buf, p);
+            }
+        }
+        remaining += detail::variable_length_size(prop_buf.size()) + prop_buf.size();
+    }
+
+    std::uint8_t fh = static_cast<std::uint8_t>(control_packet_type::publish);
+    if (dup)    fh |= 0x08;
+    fh |= (static_cast<std::uint8_t>(q) << 1);
+    if (retain) fh |= 0x01;
+
+    out.reserve(out.size() + 1 + detail::variable_length_size(remaining) + remaining);
+    out.push_back(static_cast<char>(fh));
+    detail::encode_variable_length(out, remaining);
+    detail::write_utf8_string(out, topic);
+    if (q != qos::at_most_once) {
+        detail::write_u16(out, packet_id);
+    }
+    if (ver == protocol_version::v5) {
+        detail::encode_variable_length(out, prop_buf.size());
+        out.append(prop_buf);
+    }
+    out.append(payload_data);
 }
 
 /// Decode PUBLISH packet (from frame payload + flags)

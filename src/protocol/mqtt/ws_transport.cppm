@@ -93,7 +93,8 @@ public:
         return listen(opts_.host, opts_.port);
     }
 
-    auto listen(std::string_view host, std::uint16_t port)
+    auto listen(std::string_view host, std::uint16_t port,
+                socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>
     {
         // Register WebSocket route
@@ -102,7 +103,7 @@ public:
         });
 
         logger::info("mqtt ws_broker listening on {}:{}{}", host, port, opts_.path);
-        return ws_server_.listen(host, port);
+        return ws_server_.listen(host, port, opts);
     }
 
     /// Run
@@ -383,9 +384,11 @@ private:
                             wp.qos_value = session->will_msg->qos_value;
                             wp.retain = session->will_msg->retain;
                             wp.props = session->will_msg->props;
-                            if (wp.retain)
-                                retained_.store(wp.topic, retained_message{
-                                    wp.topic, wp.payload, wp.qos_value, wp.props});
+                            if (wp.retain) {
+                                auto topic = wp.topic;
+                                retained_.store(topic, retained_message{
+                                    topic, wp.payload.str(), wp.qos_value, wp.props});
+                            }
                             co_await route_publish(wp, session->client_id);
                             session->will_msg.reset();
                         }
@@ -480,9 +483,11 @@ private:
                     break;
                 }
 
-                if (msg.retain)
-                    retained_.store(msg.topic, retained_message{
-                        msg.topic, msg.payload, msg.qos_value, msg.props});
+                if (msg.retain) {
+                    auto topic = msg.topic;
+                    retained_.store(topic, retained_message{
+                        topic, msg.payload.str(), msg.qos_value, msg.props});
+                }
 
                 co_await route_publish(msg, session ? session->client_id : "");
                 break;
@@ -551,10 +556,12 @@ private:
                     if (it != session->qos2_pending_publish.end()) {
                         auto pending_msg = std::move(it->second);
                         session->qos2_pending_publish.erase(it);
-                        if (pending_msg.retain)
-                            retained_.store(pending_msg.topic, retained_message{
-                                pending_msg.topic, pending_msg.payload,
+                        if (pending_msg.retain) {
+                            auto topic = pending_msg.topic;
+                            retained_.store(topic, retained_message{
+                                topic, pending_msg.payload.str(),
                                 pending_msg.qos_value, pending_msg.props});
+                        }
                         co_await route_publish(pending_msg, session->client_id);
                     }
                 }
@@ -876,8 +883,11 @@ private:
         wp.topic = will_msg.topic;   wp.payload = will_msg.message;
         wp.qos_value = will_msg.qos_value; wp.retain = will_msg.retain;
         wp.props = will_msg.props;
-        if (wp.retain) retained_.store(wp.topic, retained_message{
-            wp.topic, wp.payload, wp.qos_value, wp.props});
+        if (wp.retain) {
+            auto topic = wp.topic;
+            retained_.store(topic, retained_message{
+                topic, wp.payload.str(), wp.qos_value, wp.props});
+        }
         co_await route_publish(wp, client_id);
         logger::info("mqtt ws will delayed published client={}", client_id);
     }

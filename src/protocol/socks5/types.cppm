@@ -120,4 +120,15 @@ export struct socks5_response {
         -> std::optional<socks5_response>;
 };
 
+export struct udp_datagram {
+    std::uint16_t reserved = 0x0000;
+    std::uint8_t fragment = 0x00;
+    socks5_address address;
+    std::vector<std::byte> payload;
+
+    [[nodiscard]] auto serialize() const -> std::vector<std::byte>;
+    [[nodiscard]] static auto parse(const std::byte* data, std::size_t len)
+        -> std::optional<udp_datagram>;
+};
+
 } // namespace cnetmod::socks5

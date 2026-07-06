@@ -19,6 +19,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.channel;
+import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
@@ -36,6 +37,7 @@ import :subscription_map;
 import :shared_sub;
 import :security;
 import :topic_alias;
+import :persistence;
 
 namespace cnetmod::mqtt {
 
@@ -50,7 +52,11 @@ export struct broker_options {
     std::uint32_t default_session_expiry = 0;
     std::uint16_t max_keep_alive         = 600;
     std::size_t   max_inflight_messages  = 100;
+    std::size_t   max_offline_queue      = 1000;
     std::size_t   delivery_channel_size  = 1000;
+    std::size_t   write_channel_size     = 4096;
+    std::size_t   write_batch_messages   = 1;
+    std::size_t   write_batch_bytes      = 8 * 1024;
     std::uint16_t topic_alias_maximum    = 0;
 
     std::uint16_t receive_maximum        = 65535;
@@ -65,6 +71,23 @@ export struct broker_options {
     std::string   tls_cert_file;
     std::string   tls_key_file;
     std::string   tls_ca_file;
+
+    bool          persistence_enabled    = false;
+    persistence_options persistence;
+};
+
+export struct broker_metrics_snapshot {
+    std::uint64_t accepted_connections = 0;
+    std::uint64_t active_connections = 0;
+    std::uint64_t routed_messages = 0;
+    std::uint64_t delivered_messages = 0;
+    std::uint64_t offline_enqueued_messages = 0;
+    std::uint64_t write_failures = 0;
+    std::uint64_t protocol_errors = 0;
+    std::uint64_t socket_writes = 0;
+    std::uint64_t socket_write_bytes = 0;
+    std::uint64_t batch_writes = 0;
+    std::uint64_t batch_messages = 0;
 };
 
 // =============================================================================
@@ -73,6 +96,28 @@ export struct broker_options {
 
 namespace detail {
 
+enum class outbound_priority : std::uint8_t {
+    normal,
+    high,
+};
+
+struct outbound_packet {
+    std::string data;
+    outbound_priority priority = outbound_priority::normal;
+    bool batchable = false;
+    std::size_t logical_size = 0;
+    std::shared_ptr<channel<std::expected<std::size_t, std::error_code>>> completion;
+};
+
+struct write_ticket {
+    std::size_t logical_size = 0;
+    std::shared_ptr<channel<std::expected<std::size_t, std::error_code>>> completion;
+};
+
+struct cross_delivery_item {
+    publish_message msg;
+};
+
 struct conn_state {
     socket           sock;
     io_context&      io;
@@ -80,9 +125,17 @@ struct conn_state {
     session_state*   session    = nullptr;
     protocol_version version   = protocol_version::v3_1_1;
     bool             connected = false;
+    bool             cleanup_done = false;
     std::uint16_t    keep_alive = 0;
 
     channel<publish_message> delivery_ch;
+    channel<outbound_packet> write_ch;
+    channel<std::monostate> write_wake_ch;
+    async_mutex write_mtx;
+    std::mutex cross_delivery_mtx;
+    std::deque<cross_delivery_item> cross_delivery_pending;
+    std::size_t cross_delivery_pending_limit = 0;
+    bool cross_delivery_scheduled = false;
     topic_alias_recv alias_recv{0};
     std::size_t max_packet_size = 0;
 
@@ -93,17 +146,82 @@ struct conn_state {
     std::unique_ptr<ssl_stream> ssl;
 #endif
 
-    conn_state(socket s, io_context& ctx, std::size_t ch_cap)
-        : sock(std::move(s)), io(ctx), delivery_ch(ch_cap) {}
+    conn_state(socket s, io_context& ctx, std::size_t delivery_cap, std::size_t write_cap)
+        : sock(std::move(s)),
+          io(ctx),
+          delivery_ch(delivery_cap),
+          write_ch(write_cap),
+          write_wake_ch(1),
+          cross_delivery_pending_limit(delivery_cap) {}
 
-    auto do_write(const std::string& data)
+    auto do_write(std::string data,
+                  outbound_priority priority = outbound_priority::normal,
+                  bool batchable = false)
+        -> task<std::expected<std::size_t, std::error_code>>;
+
+    auto submit_write(std::string data,
+                      outbound_priority priority = outbound_priority::normal,
+                      bool batchable = false)
+        -> task<std::expected<write_ticket, std::error_code>>;
+
+    auto submit_write_queued(std::string data,
+                             outbound_priority priority = outbound_priority::normal,
+                             bool batchable = false,
+                             std::size_t logical_messages = 1)
+        -> task<std::expected<std::size_t, std::error_code>>;
+
+    auto raw_write(const std::string& data)
         -> task<std::expected<std::size_t, std::error_code>>;
 
     auto do_read(mutable_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
+
 };
 
 } // namespace detail
+
+struct online_delivery_target {
+    std::weak_ptr<detail::conn_state> conn;
+};
+
+using route_cache_value = std::vector<std::pair<std::string, subscribe_entry>>;
+struct string_view_hash {
+    using is_transparent = void;
+
+    auto operator()(std::string_view value) const noexcept -> std::size_t {
+        return std::hash<std::string_view>{}(value);
+    }
+
+    auto operator()(const std::string& value) const noexcept -> std::size_t {
+        return (*this)(std::string_view{value});
+    }
+};
+
+struct string_view_equal {
+    using is_transparent = void;
+
+    auto operator()(std::string_view lhs, std::string_view rhs) const noexcept -> bool {
+        return lhs == rhs;
+    }
+
+    auto operator()(const std::string& lhs, std::string_view rhs) const noexcept -> bool {
+        return std::string_view{lhs} == rhs;
+    }
+
+    auto operator()(std::string_view lhs, const std::string& rhs) const noexcept -> bool {
+        return lhs == std::string_view{rhs};
+    }
+
+    auto operator()(const std::string& lhs, const std::string& rhs) const noexcept -> bool {
+        return lhs == rhs;
+    }
+};
+
+using route_cache_map = std::unordered_map<
+    std::string,
+    route_cache_value,
+    string_view_hash,
+    string_view_equal>;
 
 // =============================================================================
 // MQTT Broker
@@ -116,7 +234,9 @@ public:
     explicit broker(server_context& sctx)
         : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
-    void set_options(broker_options opts) { opts_ = std::move(opts); }
+    void set_options(broker_options opts) {
+        opts_ = std::move(opts);
+    }
     void set_security(security_config cfg) { security_ = std::move(cfg); }
     void set_auth_handler(broker_auth_handler h) { auth_handler_ = std::move(h); }
 
@@ -126,16 +246,19 @@ public:
     [[nodiscard]] auto retained() noexcept -> retained_store& { return retained_; }
     [[nodiscard]] auto retained() const noexcept -> const retained_store& { return retained_; }
     [[nodiscard]] auto subscriptions() noexcept -> subscription_map& { return sub_map_; }
+    [[nodiscard]] auto metrics() const noexcept -> broker_metrics_snapshot;
 
     auto listen() -> std::expected<void, std::error_code> {
         return listen(opts_.host, opts_.port);
     }
 
-    auto listen(std::string_view host, std::uint16_t port)
+    auto listen(std::string_view host, std::uint16_t port,
+                socket_options opts = {.reuse_address = true, .non_blocking = true})
         -> std::expected<void, std::error_code>;
 
 #ifdef CNETMOD_HAS_SSL
-    auto listen_tls(std::string_view host, std::uint16_t port)
+    auto listen_tls(std::string_view host, std::uint16_t port,
+                    socket_options opts = {.reuse_address = true, .non_blocking = true})
         -> std::expected<void, std::error_code>;
 
     auto listen_tls() -> std::expected<void, std::error_code> {
@@ -152,6 +275,10 @@ private:
     auto run_tls_accept() -> task<void>;
 #endif
 
+    void load_persistence_once();
+    auto persistence_flush_loop() -> task<void>;
+    void flush_persistence_blocking();
+
     auto session_expiry_loop() -> task<void>;
     auto keep_alive_watchdog(std::shared_ptr<detail::conn_state> conn) -> task<void>;
 
@@ -159,6 +286,7 @@ private:
         -> task<std::expected<mqtt_frame, std::string>>;
 
     auto handle_connection(socket client, io_context& io, bool use_tls) -> task<void>;
+    auto writer_loop(std::shared_ptr<detail::conn_state> conn) -> task<void>;
     auto delivery_loop(std::shared_ptr<detail::conn_state> conn) -> task<void>;
     auto retry_loop(std::shared_ptr<detail::conn_state> conn) -> task<void>;
 
@@ -191,7 +319,9 @@ private:
     auto publish_will(std::shared_ptr<detail::conn_state> conn) -> task<void>;
     auto cleanup_connection(std::shared_ptr<detail::conn_state> conn) -> task<void>;
 
-    auto route_publish(const publish_message& msg, const std::string& sender_cid)
+    auto route_publish(io_context& origin_io,
+                       const publish_message& msg,
+                       const std::string& sender_cid)
         -> task<void>;
     auto deliver_retained(std::shared_ptr<detail::conn_state> conn,
                           const subscribe_entry& entry,
@@ -205,6 +335,7 @@ private:
     ) -> task<void>;
 
     static auto generate_client_id() -> std::string;
+    void invalidate_route_cache() noexcept;
 
     io_context&      ctx_;
     server_context*  sctx_     = nullptr;
@@ -217,9 +348,25 @@ private:
     broker_auth_handler auth_handler_;
     bool             running_  = false;
     std::unique_ptr<tcp::acceptor> acc_;
+    std::atomic_uint64_t accepted_connections_{0};
+    std::atomic_uint64_t active_connections_{0};
+    std::atomic_uint64_t routed_messages_{0};
+    std::atomic_uint64_t delivered_messages_{0};
+    std::atomic_uint64_t offline_enqueued_messages_{0};
+    std::atomic_uint64_t write_failures_{0};
+    std::atomic_uint64_t protocol_errors_{0};
+    std::atomic_uint64_t socket_writes_{0};
+    std::atomic_uint64_t socket_write_bytes_{0};
+    std::atomic_uint64_t batch_writes_{0};
+    std::atomic_uint64_t batch_messages_{0};
 
+    async_mutex state_mtx_;
+    bool persistence_loaded_ = false;
+    std::shared_ptr<const route_cache_map> route_cache_ =
+        std::make_shared<route_cache_map>();
+    std::atomic_bool shared_subscriptions_present_{false};
     async_shared_mutex channels_rw_;
-    std::map<std::string, channel<publish_message>*> online_channels_;
+    std::unordered_map<std::string, online_delivery_target> online_channels_;
 
 #ifdef CNETMOD_HAS_SSL
     std::unique_ptr<ssl_context>   ssl_ctx_;

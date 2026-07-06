@@ -48,6 +48,9 @@ auto ipv6_address::from_string(std::string_view str)
     -> std::expected<ipv6_address, std::error_code>
 {
     ipv6_address addr;
+    if (str.size() >= 2 && str.front() == '[' && str.back() == ']') {
+        str = str.substr(1, str.size() - 2);
+    }
     std::string s(str);
     if (::inet_pton(AF_INET6, s.c_str(), &addr.addr_) != 1)
         return std::unexpected(make_error_code(errc::invalid_argument));

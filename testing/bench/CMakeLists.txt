@@ -15,6 +15,9 @@ set(BENCH_TARGETS
     bench_sync
     bench_io
     bench_http
+    bench_grpc
+    bench_ws
+    bench_mqtt
     bench_raft
 )
 

@@ -13,6 +13,8 @@ A complete SOCKS5 (RFC 1928) proxy protocol implementation for cnetmod.
   - IPv6
   - Domain names
 - ✅ CONNECT command support
+- ✅ BIND command support
+- ✅ UDP ASSOCIATE relay support
 - ✅ Async/await coroutine-based API
 - ✅ Client and Server implementations
 - ✅ Connection limiting
@@ -84,8 +86,8 @@ auto example(io_context& ctx) -> task<void> {
 ### Commands
 
 - `0x01` - CONNECT (supported)
-- `0x02` - BIND (not implemented)
-- `0x03` - UDP ASSOCIATE (not implemented)
+- `0x02` - BIND (supported)
+- `0x03` - UDP ASSOCIATE (supported)
 
 ### Address Types
 
@@ -109,13 +111,13 @@ auto example(io_context& ctx) -> task<void> {
 
 ```
 src/protocol/socks5/
-├── types.cppm           # Protocol types and structures
-├── types_impl.cpp       # Serialization/parsing implementation
-├── client.cppm          # SOCKS5 client interface
-├── client_impl.cpp      # Client implementation
-├── server.cppm          # SOCKS5 server interface
-├── server_impl.cpp      # Server implementation
-└── README.md            # This file
+├── types.cppm              # Protocol types and structures
+├── socks5_types_impl.cpp   # Serialization/parsing implementation
+├── client.cppm             # SOCKS5 client interface
+├── socks5_client_impl.cpp  # Client implementation
+├── server.cppm             # SOCKS5 server interface
+├── socks5_server_impl.cpp  # Server implementation
+└── README.md               # This file
 
 src/protocol/socks5.cppm # Main module export
 ```
@@ -140,8 +142,6 @@ curl --socks5 admin:secret@127.0.0.1:1080 http://www.example.com
 
 ## Limitations
 
-- BIND command not implemented
-- UDP ASSOCIATE command not implemented
 - GSSAPI authentication not implemented
 
 ## References

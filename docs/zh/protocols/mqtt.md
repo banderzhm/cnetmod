@@ -42,6 +42,30 @@ int main() {
 - **主题别名**：减少带宽（v5.0）
 - **认证**：用户名/密码，自定义认证
 
+## Release 性能测试
+
+最新本地测试使用 Windows Release 构建，硬件为 Intel Core i9-14900K，
+Visual Studio 2026，IOCP，本机 loopback，4 个 broker worker，8 个 publisher，
+MQTT QoS 0，`write_batch=16`。
+
+```powershell
+$env:CNETMOD_MQTT_WRITE_BATCH_MESSAGES = '16'
+$env:CNETMOD_MQTT_WRITE_BATCH_BYTES = '8192'
+$env:CNETMOD_BENCH_SERVER_WORKERS = '4'
+bench_mqtt.exe 20000 8 clientburst multi
+```
+
+| 轮次 | 吞吐 | 结果 | Broker 指标 |
+|-----|------------|--------|----------------|
+| 1 | 125.69K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 2 | 133.78K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 3 | 128.82K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 4 | 125.01K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 5 | 127.59K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+
+平均吞吐约 128.18K msg/s，最高吞吐约 133.78K msg/s。该结果是真实 TCP
+broker/client burst 测试，不是 parser-only benchmark。
+
 ### 代理配置
 
 ```cpp

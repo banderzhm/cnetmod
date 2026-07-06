@@ -35,7 +35,9 @@ public:
     auto operator=(const udp_server&) -> udp_server& = delete;
 
     // ── Bind to address and port ──
-    auto listen(std::string_view host, std::uint16_t port) -> task<std::error_code> {
+    auto listen(std::string_view host, std::uint16_t port,
+                socket_options opts = {.reuse_address = true, .non_blocking = true})
+        -> task<std::error_code> {
         host_ = std::string(host);
         port_ = port;
         
@@ -57,7 +59,6 @@ public:
         socket_ = std::move(*sock_result);
         
         // Set socket options
-        socket_options opts;
         opts.reuse_address = true;
         opts.non_blocking = true;
         if (auto err = socket_.apply_options(opts); !err) {

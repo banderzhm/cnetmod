@@ -9,6 +9,7 @@ import cnetmod.core.socket;
 import cnetmod.core.address;
 import cnetmod.core.buffer;
 import cnetmod.core.error;
+import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
@@ -18,31 +19,11 @@ namespace cnetmod::socks5 {
 auto client::connect(std::string_view proxy_host, std::uint16_t proxy_port)
     -> task<std::expected<void, std::error_code>> {
     
-    // Resolve proxy address
-    auto addr_r = ip_address::from_string(proxy_host);
-    if (!addr_r) {
-        co_return std::unexpected(addr_r.error());
+    auto connect_r = co_await async_connect_happy_eyeballs(ctx_, proxy_host, proxy_port);
+    if (!connect_r) {
+        co_return std::unexpected(connect_r.error());
     }
-    
-    // Create socket
-    auto sock_r = socket::create(address_family::ipv4, socket_type::stream);
-    if (!sock_r) {
-        co_return std::unexpected(sock_r.error());
-    }
-    sock_ = std::move(*sock_r);
-    
-    // Set non-blocking
-    auto nb_r = sock_.set_non_blocking(true);
-    if (!nb_r) {
-        co_return std::unexpected(nb_r.error());
-    }
-    
-    // Connect to proxy
-    endpoint ep{*addr_r, proxy_port};
-    auto conn_r = co_await async_connect(ctx_, sock_, ep);
-    if (!conn_r) {
-        co_return std::unexpected(conn_r.error());
-    }
+    sock_ = std::move(connect_r->sock);
     
     // Send authentication method negotiation
     auth_request auth_req;
@@ -115,13 +96,59 @@ auto client::authenticate(std::string_view username, std::string_view password)
 
 auto client::connect_target(std::string_view target_host, std::uint16_t target_port)
     -> task<std::expected<void, std::error_code>> {
-    
+    auto resp = co_await request(command::connect, target_host, target_port);
+    if (!resp) {
+        co_return std::unexpected(resp.error());
+    }
+    co_return {};
+}
+
+auto client::bind(std::string_view target_host, std::uint16_t target_port)
+    -> task<std::expected<socks5_address, std::error_code>> {
+    auto resp = co_await request(command::bind, target_host, target_port);
+    if (!resp) {
+        co_return std::unexpected(resp.error());
+    }
+    co_return resp->bind_address;
+}
+
+auto client::wait_bind_peer()
+    -> task<std::expected<socks5_address, std::error_code>> {
+    std::array<std::byte, 512> resp_buf;
+    auto read_r = co_await async_read(ctx_, sock_,
+        mutable_buffer{resp_buf.data(), resp_buf.size()});
+    if (!read_r || *read_r < 4) {
+        co_return std::unexpected(make_error_code(std::errc::protocol_error));
+    }
+
+    auto resp = socks5_response::parse(resp_buf.data(), *read_r);
+    if (!resp) {
+        co_return std::unexpected(make_error_code(std::errc::protocol_error));
+    }
+    if (resp->rep != reply::succeeded) {
+        co_return std::unexpected(make_error_code(std::errc::protocol_error));
+    }
+
+    co_return resp->bind_address;
+}
+
+auto client::udp_associate(std::string_view client_host, std::uint16_t client_port)
+    -> task<std::expected<socks5_address, std::error_code>> {
+    auto resp = co_await request(command::udp_associate, client_host, client_port);
+    if (!resp) {
+        co_return std::unexpected(resp.error());
+    }
+    co_return resp->bind_address;
+}
+
+auto client::request(command cmd, std::string_view host, std::uint16_t port)
+    -> task<std::expected<socks5_response, std::error_code>> {
     // Build SOCKS5 request
     socks5_request req;
-    req.cmd = command::connect;
+    req.cmd = cmd;
     
     // Determine address type
-    auto addr_r = ip_address::from_string(target_host);
+    auto addr_r = ip_address::from_string(host);
     if (addr_r) {
         // It's an IP address
         if (addr_r->is_v4()) {
@@ -129,13 +156,13 @@ auto client::connect_target(std::string_view target_host, std::uint16_t target_p
         } else {
             req.address.type = address_type::ipv6;
         }
-        req.address.host = std::string(target_host);
+        req.address.host = std::string(host);
     } else {
         // It's a domain name
         req.address.type = address_type::domain_name;
-        req.address.host = std::string(target_host);
+        req.address.host = std::string(host);
     }
-    req.address.port = target_port;
+    req.address.port = port;
     
     // Send request
     auto req_data = req.serialize();
@@ -172,7 +199,7 @@ auto client::connect_target(std::string_view target_host, std::uint16_t target_p
         }
     }
     
-    co_return {};
+    co_return *resp;
 }
 
 } // namespace cnetmod::socks5

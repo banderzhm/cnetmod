@@ -166,6 +166,70 @@ TEST(router_priority_param_over_wildcard) {
     ASSERT_TRUE(m->params.wildcard.empty());
 }
 
+TEST(router_priority_method_specific_over_any) {
+    router r;
+    r.any("/items/:id", make_handler("any"));
+    r.get("/items/:name", make_handler("get"));
+
+    auto m = r.match(http_method::GET, "/items/42");
+    ASSERT_TRUE(m.has_value());
+    ASSERT_TRUE(m->params.get("id").empty());
+    ASSERT_EQ(m->params.get("name"), std::string_view("42"));
+}
+
+TEST(router_indexed_exact_over_dynamic_registered_late) {
+    router r;
+    r.any("/*path", make_handler("grpc-catch-all"));
+    r.get("/:tenant/users", make_handler("tenant-users"));
+    r.get("/grpc.health.v1.Health/Check", make_handler("health"));
+
+    auto m = r.match(http_method::GET, "/grpc.health.v1.Health/Check");
+    ASSERT_TRUE(m.has_value());
+    ASSERT_TRUE(m->params.wildcard.empty());
+    ASSERT_TRUE(m->params.get("tenant").empty());
+}
+
+TEST(router_generic_first_segment_routes_still_match) {
+    router r;
+    r.get("/api/users/:id", make_handler("api-user"));
+    r.get("/:service/:method", make_handler("generic-rpc"));
+
+    auto generic = r.match(http_method::GET, "/Greeter/SayHello");
+    ASSERT_TRUE(generic.has_value());
+    ASSERT_EQ(generic->params.get("service"), std::string_view("Greeter"));
+    ASSERT_EQ(generic->params.get("method"), std::string_view("SayHello"));
+
+    auto api = r.match(http_method::GET, "/api/users/7");
+    ASSERT_TRUE(api.has_value());
+    ASSERT_EQ(api->params.get("id"), std::string_view("7"));
+    ASSERT_TRUE(api->params.get("service").empty());
+}
+
+TEST(request_body_stream_receives_chunks_in_order) {
+    request_body_stream stream;
+
+    request_body_chunk a(2);
+    a[0] = static_cast<std::byte>('h');
+    a[1] = static_cast<std::byte>('i');
+    request_body_chunk b(1);
+    b[0] = static_cast<std::byte>('!');
+
+    ASSERT_TRUE(stream.push(std::move(a)));
+    ASSERT_TRUE(stream.push(std::move(b)));
+    stream.close();
+
+    auto read_all = [&stream]() -> cnetmod::task<std::string> {
+        std::string out;
+        while (auto chunk = co_await stream.receive()) {
+            out.append(reinterpret_cast<const char*>(chunk->data()), chunk->size());
+        }
+        co_return out;
+    };
+
+    auto body = cnetmod::sync_wait(read_all());
+    ASSERT_EQ(body, std::string("hi!"));
+}
+
 // =============================================================================
 // String method overload
 // =============================================================================

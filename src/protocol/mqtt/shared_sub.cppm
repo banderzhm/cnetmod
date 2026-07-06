@@ -250,7 +250,7 @@ private:
         std::size_t rr_index = 0;
     };
 
-    std::map<std::string, group_state> groups_;
+    std::unordered_map<std::string, group_state> groups_;
 };
 
 } // namespace cnetmod::mqtt

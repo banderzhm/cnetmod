@@ -5,8 +5,45 @@ module;
 export module cnetmod.protocol.http:types;
 
 import std;
+import cnetmod.coro.task;
+import cnetmod.coro.channel;
 
 namespace cnetmod::http {
+
+// =============================================================================
+// Request Body Streaming
+// =============================================================================
+
+export using request_body_chunk = std::vector<std::byte>;
+
+export class request_body_stream {
+public:
+    explicit request_body_stream(std::size_t chunk_capacity = 1024)
+        : chunks_(chunk_capacity) {}
+
+    [[nodiscard]] auto receive() -> task<std::optional<request_body_chunk>> {
+        co_return co_await chunks_.receive();
+    }
+
+    [[nodiscard]] auto try_receive() -> std::optional<request_body_chunk> {
+        return chunks_.try_receive();
+    }
+
+    [[nodiscard]] auto push(request_body_chunk chunk) -> bool {
+        return chunks_.try_send(std::move(chunk));
+    }
+
+    void close() noexcept {
+        chunks_.close();
+    }
+
+    [[nodiscard]] auto is_closed() const noexcept -> bool {
+        return chunks_.is_closed();
+    }
+
+private:
+    cnetmod::channel<request_body_chunk> chunks_;
+};
 
 // =============================================================================
 // HTTP Method
@@ -275,6 +312,29 @@ export struct url {
         return u;
     }
 };
+
+export inline auto format_authority_host(std::string_view host) -> std::string {
+    if (host.empty())
+        return {};
+    if (host.front() == '[')
+        return std::string(host);
+    if (host.find(':') != std::string_view::npos)
+        return std::format("[{}]", host);
+    return std::string(host);
+}
+
+export inline auto format_authority(std::string_view host,
+                                    std::uint16_t port,
+                                    bool use_ssl) -> std::string
+{
+    auto authority = format_authority_host(host);
+    const bool default_port = (use_ssl && port == 443) || (!use_ssl && port == 80);
+    if (!default_port) {
+        authority += ":";
+        authority += std::to_string(port);
+    }
+    return authority;
+}
 
 // =============================================================================
 // HTTP Limit Constants

@@ -54,6 +54,30 @@ Intel Core i9-14900K 上的 Release benchmark 结果：
 
 完整说明见：[Raft](docs/zh/protocols/raft.md)。宿主项目存在相同第三方库时的接入方式见：[第三方依赖集成](docs/zh/advanced/thirdparty-dependency-integration.md)。
 
+### HTTP / gRPC 性能
+Windows Release benchmark，硬件为 Intel Core i9-14900K，Visual Studio 2026，IOCP，本机 loopback，多核模式（`mc:16/16`）：
+
+| Benchmark | 命令 | 吞吐 |
+|----------|---------|------------|
+| HTTP/1.1 cleartext | `bench_http.exe 1000 16` | ~117.69K req/s |
+| HTTP/2 h2c | `bench_http.exe 1000 16` | ~100.66K req/s |
+| HTTPS/1.1 | `bench_http.exe 1000 16` | ~41.54K req/s |
+| HTTPS/2 | `bench_http.exe 1000 16` | ~41.24K req/s |
+| WebSocket echo | `bench_ws.exe 1000 16` | ~290.00K msg/s |
+| WebSocket Secure echo | `bench_ws.exe 1000 16` | ~73.52K msg/s |
+| gRPC unary over HTTP/2 h2c | `bench_grpc.exe 5000 16` | ~112.92K req/s |
+
+gRPC 正确性测试包含 Python `grpcio` 跨进程双向互操作测试。以上为本机 loopback 结果，实际性能会受 CPU 电源策略、TLS 库、worker 数和系统并发负载影响。
+
+### MQTT 性能
+Windows Release benchmark，硬件为 Intel Core i9-14900K，Visual Studio 2026，IOCP，本机 loopback，4 个 broker worker，8 个 publisher，QoS 0，`write_batch=16`：
+
+| Benchmark | 命令 | 结果 |
+|----------|---------|--------|
+| MQTT QoS0 broker/client burst | `bench_mqtt.exe 20000 8 clientburst multi` | 平均约 128.18K msg/s，最高约 133.78K msg/s |
+
+连续 5 轮均为 `160000 ok, 0 failed`。Broker 指标每轮均达到 `routed=160000`、`delivered=160000`。
+
 ### 中间件（HTTP）
 CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 ID、访问日志、指标、超时、优雅关闭、IP 防火墙、缓存、健康检查、文件上传、panic 恢复
 

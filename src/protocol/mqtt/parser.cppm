@@ -102,7 +102,10 @@ public:
 
 private:
     void compact() {
-        if (pos_ > 8192) {
+        if (pos_ == buf_.size()) {
+            buf_.clear();
+            pos_ = 0;
+        } else if (pos_ > 64 * 1024 && pos_ * 2 > buf_.size()) {
             buf_.erase(0, pos_);
             pos_ = 0;
         }

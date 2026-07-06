@@ -85,7 +85,9 @@ public:
 #endif
     }
 
-    ~client() = default;
+    ~client() {
+        close();
+    }
 
     // Non-copyable
     client(const client&) = delete;
@@ -205,6 +207,9 @@ private:
         std::uint16_t port = 0;
         bool is_ssl = false;
         protocol_type protocol = protocol_type::http1;
+        std::string request_buffer;
+        std::string read_buffer;
+        std::string body_buffer;
         
 #ifdef CNETMOD_HAS_SSL
         std::optional<ssl_stream> ssl;
@@ -212,12 +217,14 @@ private:
 
 #ifdef CNETMOD_HAS_NGHTTP2
         nghttp2_session* h2_session = nullptr;
-        std::int32_t next_stream_id = 1;
         
         struct h2_stream_data {
             int status_code = 0;
             header_map headers;
+            header_map trailers;
             std::string body;
+            std::string request_body;
+            std::size_t request_body_offset = 0;
             bool complete = false;
         };
         std::unordered_map<std::int32_t, h2_stream_data> h2_streams;
@@ -273,6 +280,11 @@ private:
     static auto h2_on_stream_close_callback(
         nghttp2_session* session, int32_t stream_id,
         uint32_t error_code, void* user_data) -> int;
+
+    static auto h2_request_body_read_callback(
+        nghttp2_session* session, int32_t stream_id,
+        uint8_t* buf, size_t length, uint32_t* data_flags,
+        nghttp2_data_source* source, void* user_data) -> nghttp2_ssize;
 #endif
 
     /// Low-level I/O helpers (async)

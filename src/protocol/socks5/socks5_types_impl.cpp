@@ -1,11 +1,37 @@
 module;
 
+#include <cnetmod/config.hpp>
+
+#ifdef CNETMOD_PLATFORM_WINDOWS
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#endif
+
 module cnetmod.protocol.socks5;
 
 import std;
 import :types;
 
 namespace cnetmod::socks5 {
+
+namespace {
+
+auto put_network_port(std::vector<std::byte>& out, std::uint16_t port) -> void {
+    out.push_back(static_cast<std::byte>((port >> 8) & 0xFF));
+    out.push_back(static_cast<std::byte>(port & 0xFF));
+}
+
+auto byte_to_u8(std::byte b) noexcept -> std::uint8_t {
+    return std::to_integer<std::uint8_t>(b);
+}
+
+} // namespace
 
 // =============================================================================
 // socks5_address Implementation
@@ -18,12 +44,14 @@ auto socks5_address::serialize() const -> std::vector<std::byte> {
     
     switch (type) {
     case address_type::ipv4: {
-        // Parse IPv4 address (e.g., "192.168.1.1")
-        std::istringstream iss(host);
-        std::string segment;
-        while (std::getline(iss, segment, '.')) {
-            result.push_back(static_cast<std::byte>(std::stoi(segment)));
+        ::in_addr addr{};
+        if (::inet_pton(AF_INET, host.c_str(), &addr) != 1) {
+            addr.s_addr = 0;
         }
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(&addr);
+        result.insert(result.end(),
+            reinterpret_cast<const std::byte*>(bytes),
+            reinterpret_cast<const std::byte*>(bytes + 4));
         break;
     }
     case address_type::domain_name: {
@@ -35,19 +63,19 @@ auto socks5_address::serialize() const -> std::vector<std::byte> {
         break;
     }
     case address_type::ipv6: {
-        // IPv6 address (16 bytes)
-        // Simplified: assume host is already in binary format or needs parsing
-        // For now, just copy the bytes
-        for (std::size_t i = 0; i < 16 && i < host.size(); ++i) {
-            result.push_back(static_cast<std::byte>(host[i]));
+        ::in6_addr addr{};
+        if (::inet_pton(AF_INET6, host.c_str(), &addr) != 1) {
+            addr = {};
         }
+        const auto* bytes = reinterpret_cast<const std::uint8_t*>(&addr);
+        result.insert(result.end(),
+            reinterpret_cast<const std::byte*>(bytes),
+            reinterpret_cast<const std::byte*>(bytes + 16));
         break;
     }
     }
     
-    // Port (big-endian)
-    result.push_back(static_cast<std::byte>(port >> 8));
-    result.push_back(static_cast<std::byte>(port & 0xFF));
+    put_network_port(result, port);
     
     return result;
 }
@@ -67,10 +95,10 @@ auto socks5_address::parse(const std::byte* data, std::size_t len)
         if (len < offset + 4 + 2) return std::nullopt;
         
         addr.host = std::format("{}.{}.{}.{}",
-            static_cast<int>(data[offset]),
-            static_cast<int>(data[offset + 1]),
-            static_cast<int>(data[offset + 2]),
-            static_cast<int>(data[offset + 3]));
+            static_cast<int>(byte_to_u8(data[offset])),
+            static_cast<int>(byte_to_u8(data[offset + 1])),
+            static_cast<int>(byte_to_u8(data[offset + 2])),
+            static_cast<int>(byte_to_u8(data[offset + 3])));
         offset += 4;
         break;
     }
@@ -89,16 +117,13 @@ auto socks5_address::parse(const std::byte* data, std::size_t len)
     case address_type::ipv6: {
         if (len < offset + 16 + 2) return std::nullopt;
         
-        // Format IPv6 address
-        std::ostringstream oss;
-        for (int i = 0; i < 16; i += 2) {
-            if (i > 0) oss << ":";
-            oss << std::hex << std::setw(2) << std::setfill('0')
-                << static_cast<int>(data[offset + i])
-                << std::setw(2) << std::setfill('0')
-                << static_cast<int>(data[offset + i + 1]);
+        char buf[INET6_ADDRSTRLEN]{};
+        ::in6_addr native{};
+        std::memcpy(&native, data + offset, sizeof(native));
+        if (::inet_ntop(AF_INET6, &native, buf, sizeof(buf)) == nullptr) {
+            return std::nullopt;
         }
-        addr.host = oss.str();
+        addr.host = buf;
         offset += 16;
         break;
     }
@@ -108,8 +133,8 @@ auto socks5_address::parse(const std::byte* data, std::size_t len)
     
     // Parse port (big-endian)
     if (len < offset + 2) return std::nullopt;
-    addr.port = (static_cast<std::uint16_t>(data[offset]) << 8) |
-                 static_cast<std::uint16_t>(data[offset + 1]);
+    addr.port = (static_cast<std::uint16_t>(byte_to_u8(data[offset])) << 8) |
+                 static_cast<std::uint16_t>(byte_to_u8(data[offset + 1]));
     offset += 2;
     
     return std::make_pair(addr, offset);
@@ -321,6 +346,41 @@ auto socks5_response::parse(const std::byte* data, std::size_t len)
     resp.bind_address = addr_result->first;
     
     return resp;
+}
+
+// =============================================================================
+// udp_datagram Implementation
+// =============================================================================
+
+auto udp_datagram::serialize() const -> std::vector<std::byte> {
+    std::vector<std::byte> result;
+    put_network_port(result, reserved);
+    result.push_back(static_cast<std::byte>(fragment));
+
+    auto addr_bytes = address.serialize();
+    result.insert(result.end(), addr_bytes.begin(), addr_bytes.end());
+    result.insert(result.end(), payload.begin(), payload.end());
+
+    return result;
+}
+
+auto udp_datagram::parse(const std::byte* data, std::size_t len)
+    -> std::optional<udp_datagram> {
+    if (len < 4) return std::nullopt;
+
+    udp_datagram result;
+    result.reserved = (static_cast<std::uint16_t>(byte_to_u8(data[0])) << 8) |
+                       static_cast<std::uint16_t>(byte_to_u8(data[1]));
+    result.fragment = byte_to_u8(data[2]);
+
+    auto addr_result = socks5_address::parse(data + 3, len - 3);
+    if (!addr_result) return std::nullopt;
+
+    result.address = addr_result->first;
+    auto payload_offset = 3 + addr_result->second;
+    if (payload_offset > len) return std::nullopt;
+    result.payload.assign(data + payload_offset, data + len);
+    return result;
 }
 
 } // namespace cnetmod::socks5

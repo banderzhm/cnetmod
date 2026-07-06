@@ -775,6 +775,7 @@ auto async_timer_wait(io_context& ctx,
     struct timer_ctx {
         iocp_overlapped ov;
         iocp_context* iocp_ptr;
+        std::atomic<bool> completed{false};
     };
 
     timer_ctx tc{};
@@ -786,7 +787,9 @@ auto async_timer_wait(io_context& ctx,
     HANDLE timer = nullptr;
     auto callback = [](PVOID param, BOOLEAN /*fired*/) {
         auto* p = static_cast<timer_ctx*>(param);
-        p->iocp_ptr->post_completion(&p->ov);
+        if (!p->completed.exchange(true, std::memory_order_acq_rel)) {
+            p->iocp_ptr->post_completion(&p->ov);
+        }
     };
 
     if (!::CreateTimerQueueTimer(&timer, nullptr, callback, &tc,
@@ -796,11 +799,23 @@ auto async_timer_wait(io_context& ctx,
                             std::system_category()));
     }
 
-    // Timer completes via post_completion, cannot use CancelIoEx
-    // Set cancel_fn_ to nullptr, cancel only sets flag
+    auto cancel_timer = [](cancel_token& tk) noexcept {
+        auto* p = static_cast<timer_ctx*>(tk.ctx_);
+        if (p && !p->completed.exchange(true, std::memory_order_acq_rel)) {
+            p->iocp_ptr->post_completion(&p->ov);
+        }
+    };
+
     token.pending_.store(true, std::memory_order_release);
+    token.ctx_ = &tc;
+    token.cancel_fn_ = cancel_timer;
+    if (token.is_cancelled()) {
+        cancel_timer(token);
+    }
     co_await iocp_suspend{tc.ov};
     token.pending_.store(false, std::memory_order_relaxed);
+    token.cancel_fn_ = nullptr;
+    token.ctx_ = nullptr;
 
     ::DeleteTimerQueueTimer(nullptr, timer, INVALID_HANDLE_VALUE);
 

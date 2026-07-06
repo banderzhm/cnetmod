@@ -44,6 +44,22 @@ public:
         return *this;
     }
 
+    auto& set_trailer(std::string_view key, std::string_view value) {
+        trailers_[std::string(key)] = std::string(value);
+        return *this;
+    }
+
+    auto& append_trailer(std::string_view key, std::string_view value) {
+        auto it = trailers_.find(std::string(key));
+        if (it != trailers_.end()) {
+            it->second += ", ";
+            it->second += value;
+        } else {
+            trailers_[std::string(key)] = std::string(value);
+        }
+        return *this;
+    }
+
     auto& remove_header(std::string_view key) {
         headers_.erase(std::string(key));
         return *this;
@@ -57,6 +73,11 @@ public:
 
     auto& set_body(std::string body) {
         headers_["Content-Length"] = std::to_string(body.size());
+        body_ = std::move(body);
+        return *this;
+    }
+
+    auto& set_body_preserve_headers(std::string body) {
         body_ = std::move(body);
         return *this;
     }
@@ -91,7 +112,10 @@ public:
     [[nodiscard]] auto status_code() const noexcept -> int { return status_code_; }
     [[nodiscard]] auto version() const noexcept -> http_version { return version_; }
     [[nodiscard]] auto headers() const noexcept -> const header_map& { return headers_; }
+    [[nodiscard]] auto trailers() const noexcept -> const header_map& { return trailers_; }
     [[nodiscard]] auto body() const noexcept -> std::string_view { return body_; }
+
+    [[nodiscard]] auto take_body() noexcept -> std::string { return std::move(body_); }
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view {
         auto it = headers_.find(std::string(key));
@@ -142,6 +166,7 @@ private:
     std::string status_msg_;
     http_version version_ = http_version::http_1_1;
     header_map headers_;
+    header_map trailers_;
     std::string body_;
 };
 

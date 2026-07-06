@@ -55,6 +55,30 @@ Use `testing/bench/bench_raft.cpp` for reproducible local measurements. Actual r
 Full guide: [Raft](docs/en/protocols/raft.md). Embedding guide for host projects
 with overlapping dependencies: [Third-party Dependency Integration](docs/en/advanced/thirdparty-dependency-integration.md).
 
+### HTTP / gRPC Performance
+Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, local loopback, multicore mode (`mc:16/16`):
+
+| Benchmark | Command | Throughput |
+|----------|---------|------------|
+| HTTP/1.1 cleartext | `bench_http.exe 1000 16` | ~117.69K req/s |
+| HTTP/2 h2c | `bench_http.exe 1000 16` | ~100.66K req/s |
+| HTTPS/1.1 | `bench_http.exe 1000 16` | ~41.54K req/s |
+| HTTPS/2 | `bench_http.exe 1000 16` | ~41.24K req/s |
+| WebSocket echo | `bench_ws.exe 1000 16` | ~290.00K msg/s |
+| WebSocket Secure echo | `bench_ws.exe 1000 16` | ~73.52K msg/s |
+| gRPC unary over HTTP/2 h2c | `bench_grpc.exe 5000 16` | ~112.92K req/s |
+
+The gRPC correctness suite includes Python `grpcio` cross-process interoperability tests in both directions. Results are local-loopback numbers and vary with CPU power policy, TLS library, worker count, and concurrent system load.
+
+### MQTT Performance
+Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, local loopback, 4 broker workers, 8 publishers, QoS 0, `write_batch=16`:
+
+| Benchmark | Command | Result |
+|----------|---------|--------|
+| MQTT QoS0 broker/client burst | `bench_mqtt.exe 20000 8 clientburst multi` | avg ~128.18K msg/s, peak ~133.78K msg/s |
+
+Five consecutive runs completed with `160000 ok, 0 failed` each. Broker metrics reached `routed=160000` and `delivered=160000` on every run.
+
 ### Middleware (HTTP)
 CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log, metrics, timeout, graceful shutdown, IP firewall, cache, health check, file upload, panic recovery
 

@@ -36,7 +36,9 @@ public:
     auto operator=(const tcp_server&) -> tcp_server& = delete;
 
     // ── Listen on address and port ──
-    auto listen(std::string_view host, std::uint16_t port) -> task<std::error_code> {
+    auto listen(std::string_view host, std::uint16_t port,
+                socket_options opts = {.reuse_address = true, .non_blocking = true})
+        -> task<std::error_code> {
         host_ = std::string(host);
         port_ = port;
         
@@ -58,7 +60,6 @@ public:
         acceptor_ = std::move(*sock_result);
         
         // Set socket options
-        socket_options opts;
         opts.reuse_address = true;
         opts.non_blocking = true;
         if (auto err = acceptor_.apply_options(opts); !err) {
@@ -119,6 +120,25 @@ private:
     std::uint16_t port_ = 502;
     std::atomic<std::size_t> client_count_{0};
 
+    auto read_exact(socket& client_socket, mutable_buffer buf)
+        -> task<std::expected<void, std::error_code>>
+    {
+        auto* data = static_cast<std::byte*>(buf.data);
+        std::size_t got = 0;
+        while (got < buf.size) {
+            auto r = co_await async_read(ctx_, client_socket,
+                mutable_buffer{data + got, buf.size - got});
+            if (!r) {
+                co_return std::unexpected(r.error());
+            }
+            if (*r == 0) {
+                co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+            }
+            got += *r;
+        }
+        co_return {};
+    }
+
     // ── Handle individual client connection ──
     auto handle_client(socket client_socket) -> task<void> {
         client_count_.fetch_add(1, std::memory_order_relaxed);
@@ -127,8 +147,8 @@ private:
             // Read MBAP header (7 bytes)
             std::vector<std::uint8_t> header_buf(7);
             mutable_buffer header_mbuf{reinterpret_cast<std::byte*>(header_buf.data()), 7};
-            auto header_result = co_await async_read(ctx_, client_socket, header_mbuf);
-            if (!header_result || *header_result < 7) {
+            auto header_result = co_await read_exact(client_socket, header_mbuf);
+            if (!header_result) {
                 break;
             }
 
@@ -149,8 +169,8 @@ private:
                     reinterpret_cast<std::byte*>(full_buf.data() + 7),
                     static_cast<std::size_t>(length - 1)
                 };
-                auto data_result = co_await async_read(ctx_, client_socket, data_mbuf);
-                if (!data_result || *data_result < static_cast<std::size_t>(length - 1)) {
+                auto data_result = co_await read_exact(client_socket, data_mbuf);
+                if (!data_result) {
                     break;
                 }
             }

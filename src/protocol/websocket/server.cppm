@@ -21,6 +21,10 @@ import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
 
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.core.ssl;
+#endif
+
 namespace cnetmod::ws {
 
 // =============================================================================
@@ -191,13 +195,21 @@ public:
     explicit server(server_context& sctx)
         : ctx_(sctx.accept_io()), sctx_(&sctx) {}
 
-    auto listen(std::string_view host, std::uint16_t port)
+#ifdef CNETMOD_HAS_SSL
+    void set_ssl_context(ssl_context& ssl_ctx) {
+        ssl_ctx_ = &ssl_ctx;
+    }
+#endif
+
+    auto listen(std::string_view host, std::uint16_t port,
+                socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>
     {
         auto addr_r = ip_address::from_string(host);
         if (!addr_r) return std::unexpected(addr_r.error());
         acc_ = std::make_unique<tcp::acceptor>(ctx_);
-        auto r = acc_->open(endpoint{*addr_r, port});
+        opts.reuse_address = true;
+        auto r = acc_->open(endpoint{*addr_r, port}, opts);
         if (!r) return std::unexpected(r.error());
         return {};
     }
@@ -233,6 +245,44 @@ private:
     };
 
     auto handle_connection(socket client, io_context& io) -> task<void> {
+#ifdef CNETMOD_HAS_SSL
+        if (ssl_ctx_) {
+            connection conn(io);
+            auto ar = co_await conn.async_accept_tls(std::move(client), *ssl_ctx_);
+            if (!ar) co_return;
+
+            std::string path(conn.handshake_path());
+            std::string query(conn.handshake_query());
+
+            detail::ws_route_params rp;
+            const route_entry* matched = nullptr;
+            auto parts = detail::split_ws_path(path);
+            for (auto& entry : routes_) {
+                detail::ws_route_params tmp;
+                if (detail::try_ws_match(entry.segments, parts, tmp)) {
+                    matched = &entry;
+                    rp = std::move(tmp);
+                    break;
+                }
+            }
+
+            if (!matched) {
+                (void)co_await conn.async_close(close_code::policy_violation, "no websocket route");
+                co_return;
+            }
+
+            ws_context wctx(conn, std::move(path),
+                            conn.handshake_headers(), std::move(query),
+                            std::move(rp));
+            co_await matched->handler(wctx);
+
+            if (conn.is_open()) {
+                (void)co_await conn.async_close();
+            }
+            co_return;
+        }
+#endif
+
         // 1. Read HTTP upgrade request
         http::request_parser req_parser;
         std::array<std::byte, 4096> buf{};
@@ -317,6 +367,9 @@ private:
     std::unique_ptr<tcp::acceptor> acc_;
     std::vector<route_entry> routes_;
     bool running_ = false;
+#ifdef CNETMOD_HAS_SSL
+    ssl_context* ssl_ctx_ = nullptr;
+#endif
 };
 
 } // namespace cnetmod::ws

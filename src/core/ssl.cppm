@@ -15,6 +15,7 @@ import std;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
+import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
@@ -288,12 +289,23 @@ public:
         , wbio_(std::exchange(o.wbio_, nullptr))
     {}
 
-    /// Set SNI hostname (must be called before handshake)
+    /// Set TLS peer identity (must be called before handshake).
+    /// DNS names use SNI + hostname verification; IP literals skip SNI and verify IP SAN.
     void set_hostname(std::string_view hostname) {
         std::string h(hostname);
-        SSL_set_tlsext_host_name(ssl_, h.c_str());
-        // Also set hostname for certificate verification
         auto* param = SSL_get0_param(ssl_);
+
+        if (auto ip = ip_address::from_string(h)) {
+            auto literal = ip->to_string();
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+            X509_VERIFY_PARAM_set1_ip_asc(param, literal.c_str());
+#else
+            X509_VERIFY_PARAM_set1_host(param, literal.c_str(), literal.size());
+#endif
+            return;
+        }
+
+        SSL_set_tlsext_host_name(ssl_, h.c_str());
         X509_VERIFY_PARAM_set1_host(param, h.c_str(), h.size());
     }
 

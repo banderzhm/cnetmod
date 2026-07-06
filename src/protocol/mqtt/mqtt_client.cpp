@@ -14,6 +14,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
+import cnetmod.coro.mutex;
 import cnetmod.executor.async_op;
 import cnetmod.core.log;
 import cnetmod.core.dns;
@@ -54,10 +55,22 @@ struct client::impl {
     auto dispatch_frame(const mqtt_frame& frame) -> task<void>;
     auto handle_publish(const mqtt_frame& frame) -> task<void>;
     auto alloc_packet_id() -> std::uint16_t;
-    struct pending_ack { control_packet_type expected_type; std::string payload; bool completed = false; };
-    struct pending_suback_entry { suback_result result; bool completed = false; };
+    struct pending_ack {
+        control_packet_type expected_type = control_packet_type::puback;
+        std::string payload;
+        bool completed = false;
+        std::coroutine_handle<> waiter{};
+    };
+    struct pending_suback_entry {
+        suback_result result;
+        bool completed = false;
+        std::coroutine_handle<> waiter{};
+    };
+    void prepare_pending_ack(std::uint16_t pid, control_packet_type expected_type);
+    void prepare_pending_suback(std::uint16_t pid);
     void complete_pending(std::uint16_t pid, control_packet_type type, std::string_view payload);
     void complete_suback(std::uint16_t pid, suback_result result);
+    void resume_pending_waiters() noexcept;
     auto wait_for_ack(std::uint16_t pid) -> task<std::expected<ack_result, std::string>>;
     auto wait_for_suback(std::uint16_t pid) -> task<std::expected<suback_result, std::string>>;
     auto send_ping() -> task<void>;
@@ -68,7 +81,7 @@ struct client::impl {
     auto auto_reconnect_loop() -> task<void>;
     auto resend_inflight() -> task<void>;
     auto sleep_while_connected(std::chrono::milliseconds duration) -> task<void>;
-    io_context& ctx_; socket sock_; mqtt_parser parser_; protocol_version version_ = protocol_version::v3_1_1; bool connected_ = false; bool session_present_ = false; std::uint16_t keep_alive_sec_ = 60; std::uint16_t next_packet_id_ = 1; bool ping_outstanding_ = false; properties connack_props_; topic_alias_send alias_send_{0}; topic_alias_recv alias_recv_{0}; std::uint16_t receive_maximum_ = 65535; std::size_t max_packet_size_ = 0; std::vector<inflight_message> inflight_out_; std::set<std::uint16_t> qos2_received_; std::chrono::seconds retry_interval_{20}; std::uint8_t max_retries_ = 5; message_callback msg_cb_; disconnect_callback disconnect_cb_; auth_callback auth_cb_; reconnect_options reconnect_opts_; connect_options last_connect_opts_; std::vector<subscribe_entry> saved_subscriptions_; bool reconnecting_ = false; int active_loops_ = 0; std::map<std::uint16_t, pending_ack> pending_acks_; std::map<std::uint16_t, pending_suback_entry> pending_subacks_;
+    io_context& ctx_; socket sock_; mqtt_parser parser_; protocol_version version_ = protocol_version::v3_1_1; bool connected_ = false; bool session_present_ = false; std::uint16_t keep_alive_sec_ = 60; std::uint16_t next_packet_id_ = 1; bool ping_outstanding_ = false; properties connack_props_; topic_alias_send alias_send_{0}; topic_alias_recv alias_recv_{0}; std::uint16_t receive_maximum_ = 65535; std::size_t max_packet_size_ = 0; std::vector<inflight_message> inflight_out_; std::set<std::uint16_t> qos2_received_; std::map<std::uint16_t, publish_message> qos2_pending_publish_; std::chrono::seconds retry_interval_{20}; std::uint8_t max_retries_ = 5; message_callback msg_cb_; disconnect_callback disconnect_cb_; auth_callback auth_cb_; reconnect_options reconnect_opts_; connect_options last_connect_opts_; std::vector<subscribe_entry> saved_subscriptions_; bool reconnecting_ = false; int active_loops_ = 0; async_mutex write_mtx_; std::map<std::uint16_t, pending_ack> pending_acks_; std::map<std::uint16_t, pending_suback_entry> pending_subacks_;
 #ifdef CNETMOD_HAS_SSL
     std::unique_ptr<ssl_context> ssl_ctx_; std::unique_ptr<ssl_stream> ssl_;
 #endif
@@ -82,44 +95,16 @@ auto client::impl::connect(connect_options opts) -> task<std::expected<void, std
     version_ = opts.version;
     keep_alive_sec_ = opts.keep_alive_sec;
 
-    auto addr_r = ip_address::from_string(opts.host);
-    if (!addr_r) {
-        auto dns_r = co_await async_resolve(ctx_, opts.host, std::to_string(opts.port));
-        if (!dns_r || dns_r->empty()) {
-            logger::error("mqtt client connect: cannot resolve host {}", opts.host);
-            co_return std::unexpected(std::string("cannot resolve host: ") + opts.host);
-        }
-        addr_r = ip_address::from_string(dns_r->front());
-        if (!addr_r) {
-            co_return std::unexpected(std::string("resolved address invalid: ") + dns_r->front());
-        }
+    auto connect_r = co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port,
+        cnetmod::happy_eyeballs_options{
+            .connect_timeout = opts.connect_timeout,
+        });
+    if (!connect_r) {
+        logger::error("mqtt client connect: {}:{} failed: {}",
+            opts.host, opts.port, connect_r.error().message());
+        co_return std::unexpected(std::string("connect failed: ") + connect_r.error().message());
     }
-
-    auto family = addr_r->is_v4() ? address_family::ipv4 : address_family::ipv6;
-    auto sock_r = socket::create(family, socket_type::stream);
-    if (!sock_r)
-        co_return std::unexpected(std::string("socket create failed"));
-    sock_ = std::move(*sock_r);
-
-    if (opts.connect_timeout.count() > 0) {
-        cancel_token conn_token;
-        auto cr = co_await with_timeout(ctx_, opts.connect_timeout,
-            async_connect(ctx_, sock_, endpoint{*addr_r, opts.port}, conn_token),
-            conn_token);
-        if (!cr) {
-            sock_.close();
-            auto ec = cr.error();
-            if (ec == std::errc::operation_canceled)
-                co_return std::unexpected(std::string("connect timeout"));
-            co_return std::unexpected(std::string("connect failed: ") + ec.message());
-        }
-    } else {
-        auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, opts.port});
-        if (!cr) {
-            sock_.close();
-            co_return std::unexpected(std::string("connect failed: ") + cr.error().message());
-        }
-    }
+    sock_ = std::move(connect_r->sock);
 
 #ifdef CNETMOD_HAS_SSL
     if (opts.tls) {
@@ -238,6 +223,7 @@ auto client::impl::connack_properties() const noexcept -> const properties& { re
 
 void client::impl::close() noexcept {
     connected_ = false;
+    resume_pending_waiters();
 #ifdef CNETMOD_HAS_SSL
     ssl_.reset();
     ssl_ctx_.reset();
@@ -273,6 +259,8 @@ auto client::impl::publish(
     std::uint16_t pid = 0;
     if (q != qos::at_most_once) {
         pid = alloc_packet_id();
+        prepare_pending_ack(pid, q == qos::at_least_once
+            ? control_packet_type::puback : control_packet_type::pubrec);
     }
 
     properties pub_props = props;
@@ -291,14 +279,7 @@ auto client::impl::publish(
     if (max_packet_size_ > 0 && pkt.size() > max_packet_size_)
         co_return std::unexpected(std::string("packet exceeds server maximum_packet_size"));
 
-    auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
-    if (!wr)
-        co_return std::unexpected(wr.error().message());
-
-    if (q == qos::at_most_once)
-        co_return std::expected<void, std::string>{};
-
-    {
+    if (q != qos::at_most_once) {
         inflight_message im;
         im.packet_id = pid;
         im.msg.topic = std::string(topic);
@@ -311,6 +292,20 @@ auto client::impl::publish(
         im.send_time = std::chrono::steady_clock::now();
         inflight_out_.push_back(std::move(im));
     }
+
+    auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
+    if (!wr) {
+        if (pid != 0) {
+            pending_acks_.erase(pid);
+            std::erase_if(inflight_out_, [&](const inflight_message& im) {
+                return im.packet_id == pid;
+            });
+        }
+        co_return std::unexpected(wr.error().message());
+    }
+
+    if (q == qos::at_most_once)
+        co_return std::expected<void, std::string>{};
 
     if (q == qos::at_least_once) {
         auto ack_r = co_await wait_for_ack(pid);
@@ -327,9 +322,13 @@ auto client::impl::publish(
             break;
         }
 
+    prepare_pending_ack(pid, control_packet_type::pubcomp);
     auto pubrel_pkt = encode_pubrel(pid, version_);
     auto wr2 = co_await do_write(const_buffer{pubrel_pkt.data(), pubrel_pkt.size()});
-    if (!wr2) co_return std::unexpected(wr2.error().message());
+    if (!wr2) {
+        pending_acks_.erase(pid);
+        co_return std::unexpected(wr2.error().message());
+    }
 
     auto comp_r = co_await wait_for_ack(pid);
     if (!comp_r) co_return std::unexpected(comp_r.error());
@@ -346,10 +345,13 @@ auto client::impl::subscribe(
         co_return std::unexpected(std::string("not connected"));
 
     auto pid = alloc_packet_id();
+    prepare_pending_suback(pid);
     auto pkt = encode_subscribe(pid, entries, version_, props);
     auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
-    if (!wr)
+    if (!wr) {
+        pending_subacks_.erase(pid);
         co_return std::unexpected(wr.error().message());
+    }
 
     auto ack_r = co_await wait_for_suback(pid);
     if (!ack_r) co_return std::unexpected(ack_r.error());
@@ -380,10 +382,13 @@ auto client::impl::unsubscribe(
         co_return std::unexpected(std::string("not connected"));
 
     auto pid = alloc_packet_id();
+    prepare_pending_ack(pid, control_packet_type::unsuback);
     auto pkt = encode_unsubscribe(pid, topic_filters, version_, props);
     auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
-    if (!wr)
+    if (!wr) {
+        pending_acks_.erase(pid);
         co_return std::unexpected(wr.error().message());
+    }
 
     auto ack_r = co_await wait_for_ack(pid);
     if (!ack_r) co_return std::unexpected(ack_r.error());
@@ -408,9 +413,18 @@ auto client::impl::disconnect(
     auto pkt = encode_disconnect(version_, reason_code, props);
     auto wr = co_await do_write(const_buffer{pkt.data(), pkt.size()});
     connected_ = false;
-    close();
+    resume_pending_waiters();
+#ifdef CNETMOD_HAS_SSL
+    if (ssl_) {
+        (void)co_await ssl_->async_shutdown();
+    } else
+#endif
+    {
+        sock_.shutdown_send();
+    }
     while (active_loops_ > 0)
         co_await async_sleep(ctx_, std::chrono::milliseconds{10});
+    close();
     if (!wr)
         co_return std::unexpected(wr.error().message());
     co_return std::expected<void, std::string>{};
@@ -443,6 +457,8 @@ auto client::impl::send_auth(
 auto client::impl::version() const noexcept -> protocol_version { return version_; }
 
 auto client::impl::do_write(const_buffer buf) -> task<std::expected<std::size_t, std::error_code>> {
+    co_await write_mtx_.lock();
+    async_lock_guard wg(write_mtx_, std::adopt_lock);
 #ifdef CNETMOD_HAS_SSL
     if (ssl_) {
         auto r = co_await ssl_->async_write_all(buf);
@@ -483,6 +499,7 @@ auto client::impl::read_loop() -> task<void> {
         if (!frame_r) {
             if (!connected_) break;
             connected_ = false;
+            resume_pending_waiters();
             logger::warn("mqtt client read_loop error: {}", frame_r.error());
             if (disconnect_cb_) disconnect_cb_(frame_r.error());
             if (reconnect_opts_.enabled) {
@@ -524,6 +541,12 @@ auto client::impl::dispatch_frame(const mqtt_frame& frame) -> task<void> {
         auto ack_r = decode_ack(frame.payload, version_);
         if (ack_r) {
             qos2_received_.erase(ack_r->packet_id);
+            auto pending = qos2_pending_publish_.find(ack_r->packet_id);
+            if (pending != qos2_pending_publish_.end()) {
+                auto msg = std::move(pending->second);
+                qos2_pending_publish_.erase(pending);
+                if (msg_cb_) msg_cb_(msg);
+            }
             auto pkt = encode_pubcomp(ack_r->packet_id, version_);
             (void)co_await do_write(const_buffer{pkt.data(), pkt.size()});
         }
@@ -561,6 +584,7 @@ auto client::impl::dispatch_frame(const mqtt_frame& frame) -> task<void> {
             if (disconnect_cb_)
                 disconnect_cb_("server disconnect");
         }
+        resume_pending_waiters();
         break;
     }
 
@@ -612,10 +636,16 @@ auto client::impl::handle_publish(const mqtt_frame& frame) -> task<void> {
     }
 
     if (msg.qos_value == qos::exactly_once && msg.packet_id != 0) {
+        auto [_, inserted] = qos2_received_.insert(msg.packet_id);
+        if (!inserted) {
+            auto pkt = encode_pubrec(msg.packet_id, version_);
+            (void)co_await do_write(const_buffer{pkt.data(), pkt.size()});
+            co_return;
+        }
+        qos2_pending_publish_[msg.packet_id] = msg;
         auto pkt = encode_pubrec(msg.packet_id, version_);
         (void)co_await do_write(const_buffer{pkt.data(), pkt.size()});
-        auto [_, inserted] = qos2_received_.insert(msg.packet_id);
-        if (!inserted) co_return;
+        co_return;
     }
 
     if (msg_cb_) msg_cb_(msg);
@@ -636,12 +666,30 @@ auto client::impl::alloc_packet_id() -> std::uint16_t {
     return next_packet_id_++;
 }
 
+void client::impl::prepare_pending_ack(std::uint16_t pid, control_packet_type expected_type) {
+    pending_acks_[pid] = pending_ack{
+        .expected_type = expected_type,
+        .payload = {},
+        .completed = false,
+        .waiter = {},
+    };
+}
+
+void client::impl::prepare_pending_suback(std::uint16_t pid) {
+    pending_subacks_[pid] = {};
+}
+
 void client::impl::complete_pending(std::uint16_t pid, control_packet_type type, std::string_view payload) {
     auto it = pending_acks_.find(pid);
     if (it != pending_acks_.end()) {
-        it->second.expected_type = type;
+        if (it->second.expected_type != type) {
+            return;
+        }
         it->second.payload = std::string(payload);
         it->second.completed = true;
+        auto waiter = it->second.waiter;
+        it->second.waiter = {};
+        if (waiter) waiter.resume();
     }
 }
 
@@ -650,60 +698,106 @@ void client::impl::complete_suback(std::uint16_t pid, suback_result result) {
     if (it != pending_subacks_.end()) {
         it->second.result = std::move(result);
         it->second.completed = true;
+        auto waiter = it->second.waiter;
+        it->second.waiter = {};
+        if (waiter) waiter.resume();
+    }
+}
+
+void client::impl::resume_pending_waiters() noexcept {
+    for (auto& [_, ack] : pending_acks_) {
+        auto waiter = ack.waiter;
+        ack.waiter = {};
+        if (waiter) waiter.resume();
+    }
+    for (auto& [_, suback] : pending_subacks_) {
+        auto waiter = suback.waiter;
+        suback.waiter = {};
+        if (waiter) waiter.resume();
     }
 }
 
 auto client::impl::wait_for_ack(std::uint16_t pid)
     -> task<std::expected<ack_result, std::string>>
 {
-    pending_acks_[pid] = {};
+    if (pending_acks_.find(pid) == pending_acks_.end()) {
+        prepare_pending_ack(pid, control_packet_type::puback);
+    }
 
-    for (int retry = 0; retry < 3000; ++retry) {
-        auto it = pending_acks_.find(pid);
-        if (it != pending_acks_.end() && it->second.completed) {
-            auto ack = decode_ack(it->second.payload, version_);
-            pending_acks_.erase(it);
-            if (!ack) co_return std::unexpected(ack.error());
-            co_return *ack;
+    struct ack_awaitable {
+        client::impl& self;
+        std::uint16_t pid;
+
+        auto await_ready() noexcept -> bool {
+            auto it = self.pending_acks_.find(pid);
+            return !self.connected_ || it == self.pending_acks_.end() || it->second.completed;
         }
 
-        if (!connected_) {
-            pending_acks_.erase(pid);
-            co_return std::unexpected(std::string("disconnected while waiting for ACK"));
+        auto await_suspend(std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
+            auto it = self.pending_acks_.find(pid);
+            if (!self.connected_ || it == self.pending_acks_.end() || it->second.completed) {
+                return h;
+            }
+            it->second.waiter = h;
+            return std::noop_coroutine();
         }
 
-        co_await async_sleep(ctx_, std::chrono::milliseconds(10));
+        void await_resume() noexcept {}
+    };
+
+    co_await ack_awaitable{*this, pid};
+
+    auto it = pending_acks_.find(pid);
+    if (it != pending_acks_.end() && it->second.completed) {
+        auto ack = decode_ack(it->second.payload, version_);
+        pending_acks_.erase(it);
+        if (!ack) co_return std::unexpected(ack.error());
+        co_return *ack;
     }
 
     pending_acks_.erase(pid);
-    co_return std::unexpected(std::string("ACK timeout for packet_id=") +
-                              std::to_string(pid));
+    co_return std::unexpected(std::string("disconnected while waiting for ACK"));
 }
 
 auto client::impl::wait_for_suback(std::uint16_t pid)
     -> task<std::expected<suback_result, std::string>>
 {
-    pending_subacks_[pid] = {};
+    if (pending_subacks_.find(pid) == pending_subacks_.end()) {
+        prepare_pending_suback(pid);
+    }
 
-    for (int retry = 0; retry < 3000; ++retry) {
-        auto it = pending_subacks_.find(pid);
-        if (it != pending_subacks_.end() && it->second.completed) {
-            auto result = std::move(it->second.result);
-            pending_subacks_.erase(it);
-            co_return result;
+    struct suback_awaitable {
+        client::impl& self;
+        std::uint16_t pid;
+
+        auto await_ready() noexcept -> bool {
+            auto it = self.pending_subacks_.find(pid);
+            return !self.connected_ || it == self.pending_subacks_.end() || it->second.completed;
         }
 
-        if (!connected_) {
-            pending_subacks_.erase(pid);
-            co_return std::unexpected(std::string("disconnected while waiting for SUBACK"));
+        auto await_suspend(std::coroutine_handle<> h) noexcept -> std::coroutine_handle<> {
+            auto it = self.pending_subacks_.find(pid);
+            if (!self.connected_ || it == self.pending_subacks_.end() || it->second.completed) {
+                return h;
+            }
+            it->second.waiter = h;
+            return std::noop_coroutine();
         }
 
-        co_await async_sleep(ctx_, std::chrono::milliseconds(10));
+        void await_resume() noexcept {}
+    };
+
+    co_await suback_awaitable{*this, pid};
+
+    auto it = pending_subacks_.find(pid);
+    if (it != pending_subacks_.end() && it->second.completed) {
+        auto result = std::move(it->second.result);
+        pending_subacks_.erase(it);
+        co_return result;
     }
 
     pending_subacks_.erase(pid);
-    co_return std::unexpected(std::string("SUBACK timeout for packet_id=") +
-                              std::to_string(pid));
+    co_return std::unexpected(std::string("disconnected while waiting for SUBACK"));
 }
 
 auto client::impl::send_ping() -> task<void> {

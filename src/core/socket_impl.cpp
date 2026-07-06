@@ -84,15 +84,19 @@ socket::~socket() {
     close();
 }
 
-socket::socket(socket&& other) noexcept : handle_(other.handle_) {
+socket::socket(socket&& other) noexcept
+    : handle_(other.handle_), family_(other.family_) {
     other.handle_ = invalid_handle;
+    other.family_ = address_family::unspecified;
 }
 
 auto socket::operator=(socket&& other) noexcept -> socket& {
     if (this != &other) {
         close();
         handle_ = other.handle_;
+        family_ = other.family_;
         other.handle_ = invalid_handle;
+        other.family_ = address_family::unspecified;
     }
     return *this;
 }
@@ -119,7 +123,7 @@ auto socket::create(address_family family, socket_type type)
         return std::unexpected(make_error_code(from_native_error(last_error())));
 #endif
 
-    return socket{fd};
+    return socket{fd, family};
 }
 
 // =============================================================================
@@ -191,6 +195,14 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
+    // IPV6_V6ONLY: explicit dual-stack control for IPv6 listeners/sockets.
+    if (opts.ipv6_only.has_value() && family_ == address_family::ipv6) {
+        int val = *opts.ipv6_only ? 1 : 0;
+        if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_V6ONLY,
+                         reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+    }
+
     // Non-blocking
     if (opts.non_blocking) {
         if (auto r = set_non_blocking(true); !r) return r;
@@ -246,8 +258,57 @@ auto socket::local_endpoint() const -> std::expected<endpoint, std::error_code> 
 }
 
 // =============================================================================
+// remote_endpoint
+// =============================================================================
+
+auto socket::remote_endpoint() const -> std::expected<endpoint, std::error_code> {
+    ::sockaddr_storage storage{};
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    int len = sizeof(storage);
+#else
+    ::socklen_t len = sizeof(storage);
+#endif
+
+    if (::getpeername(handle_,
+            reinterpret_cast<::sockaddr*>(&storage), &len) != 0)
+        return std::unexpected(make_error_code(from_native_error(last_error())));
+
+    if (storage.ss_family == AF_INET) {
+        auto& sa = reinterpret_cast<const ::sockaddr_in&>(storage);
+        char buf[INET_ADDRSTRLEN]{};
+        ::inet_ntop(AF_INET, &sa.sin_addr, buf, sizeof(buf));
+        auto a = ipv4_address::from_string(buf);
+        return endpoint{ip_address{a.value_or(ipv4_address{})}, ntohs(sa.sin_port)};
+    } else {
+        auto& sa = reinterpret_cast<const ::sockaddr_in6&>(storage);
+        char buf[INET6_ADDRSTRLEN]{};
+        ::inet_ntop(AF_INET6, &sa.sin6_addr, buf, sizeof(buf));
+        auto a = ipv6_address::from_string(buf);
+        return endpoint{ip_address{a.value_or(ipv6_address{})}, ntohs(sa.sin6_port)};
+    }
+}
+
+// =============================================================================
 // Close
 // =============================================================================
+
+void socket::shutdown_send() noexcept {
+    if (handle_ == invalid_handle) return;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    ::shutdown(handle_, SD_SEND);
+#else
+    ::shutdown(handle_, SHUT_WR);
+#endif
+}
+
+void socket::shutdown_both() noexcept {
+    if (handle_ == invalid_handle) return;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    ::shutdown(handle_, SD_BOTH);
+#else
+    ::shutdown(handle_, SHUT_RDWR);
+#endif
+}
 
 void socket::close() noexcept {
     if (handle_ == invalid_handle) return;

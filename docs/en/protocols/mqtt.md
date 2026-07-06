@@ -42,6 +42,30 @@ int main() {
 - **Topic aliases**: Reduce bandwidth (v5.0)
 - **Authentication**: Username/password, custom auth
 
+## Release Benchmark
+
+Latest local benchmark used the Windows Release build on Intel Core i9-14900K,
+Visual Studio 2026, IOCP, local loopback, 4 broker workers, 8 publishers,
+MQTT QoS 0, and `write_batch=16`.
+
+```powershell
+$env:CNETMOD_MQTT_WRITE_BATCH_MESSAGES = '16'
+$env:CNETMOD_MQTT_WRITE_BATCH_BYTES = '8192'
+$env:CNETMOD_BENCH_SERVER_WORKERS = '4'
+bench_mqtt.exe 20000 8 clientburst multi
+```
+
+| Run | Throughput | Result | Broker metrics |
+|-----|------------|--------|----------------|
+| 1 | 125.69K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 2 | 133.78K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 3 | 128.82K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 4 | 125.01K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+| 5 | 127.59K msg/s | `160000 ok, 0 failed` | `routed=160000`, `delivered=160000` |
+
+Average throughput: ~128.18K msg/s. Peak throughput: ~133.78K msg/s.
+The run is a real TCP broker/client burst test, not a parser-only benchmark.
+
 ### Broker Configuration
 
 ```cpp

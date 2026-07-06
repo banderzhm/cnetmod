@@ -30,6 +30,21 @@ auto make_any_address_response(reply rep) -> socks5_response {
     return resp;
 }
 
+auto address_from_endpoint(const endpoint& ep) -> socks5_address {
+    return socks5_address{
+        .type = ep.address().is_v4() ? address_type::ipv4 : address_type::ipv6,
+        .host = ep.address().to_string(),
+        .port = ep.port(),
+    };
+}
+
+auto make_endpoint_response(reply rep, const endpoint& ep) -> socks5_response {
+    socks5_response resp;
+    resp.rep = rep;
+    resp.bind_address = address_from_endpoint(ep);
+    return resp;
+}
+
 auto make_success_response(socket& target) -> socks5_response {
     auto resp = make_any_address_response(reply::succeeded);
 
@@ -42,6 +57,20 @@ auto make_success_response(socket& target) -> socks5_response {
     }
 
     return resp;
+}
+
+auto make_bound_response(socket& bound, socket& control) -> socks5_response {
+    if (auto local = bound.local_endpoint()) {
+        auto ep = *local;
+        if ((ep.address().is_v4() && ep.address().to_string() == "0.0.0.0") ||
+            (ep.address().is_v6() && ep.address().to_string() == "::")) {
+            if (auto control_local = control.local_endpoint()) {
+                ep.set_address(control_local->address());
+            }
+        }
+        return make_endpoint_response(reply::succeeded, ep);
+    }
+    return make_any_address_response(reply::succeeded);
 }
 
 auto send_response(io_context& io, socket& client, const socks5_response& resp)
@@ -65,35 +94,40 @@ auto map_connect_error(const std::error_code& ec) noexcept -> reply {
 }
 
 auto resolve_target(io_context& io, const socks5_address& address)
-    -> task<std::expected<endpoint, std::error_code>> {
+    -> task<std::expected<std::vector<endpoint>, std::error_code>> {
     if (address.type != address_type::domain_name) {
         auto addr = ip_address::from_string(address.host);
         if (!addr) {
             co_return std::unexpected(addr.error());
         }
-        co_return endpoint{*addr, address.port};
+        co_return std::vector<endpoint>{endpoint{*addr, address.port}};
     }
 
-    auto resolved = co_await async_resolve(io, address.host, std::to_string(address.port));
+    auto resolved = co_await async_resolve_addresses(io, address.host, std::to_string(address.port));
     if (!resolved) {
         co_return std::unexpected(make_error_code(errc::host_not_found));
     }
 
-    for (const auto& host : *resolved) {
-        auto addr = ip_address::from_string(host);
-        if (addr) {
-            co_return endpoint{*addr, address.port};
-        }
+    std::vector<endpoint> endpoints;
+    endpoints.reserve(resolved->size());
+    for (const auto& addr : *resolved) {
+        endpoints.emplace_back(addr, address.port);
     }
-
-    co_return std::unexpected(make_error_code(errc::host_not_found));
+    if (endpoints.empty()) {
+        co_return std::unexpected(make_error_code(errc::host_not_found));
+    }
+    co_return endpoints;
 }
 
-auto create_stream_socket(const ip_address& address)
+auto create_datagram_socket(const ip_address& address)
     -> std::expected<socket, std::error_code> {
     return socket::create(
         address.is_v4() ? address_family::ipv4 : address_family::ipv6,
-        socket_type::stream);
+        socket_type::datagram);
+}
+
+auto endpoint_key(const endpoint& ep) -> std::string {
+    return ep.to_string();
 }
 
 auto relay_one_direction(io_context& io, socket& from, socket& to) -> task<void> {
@@ -119,7 +153,7 @@ auto relay_one_direction(io_context& io, socket& from, socket& to) -> task<void>
 
 } // namespace
 
-auto server::listen(std::string_view host, std::uint16_t port)
+auto server::listen(std::string_view host, std::uint16_t port, socket_options opts)
     -> std::expected<void, std::error_code> {
     
     auto addr_r = ip_address::from_string(host);
@@ -127,7 +161,8 @@ auto server::listen(std::string_view host, std::uint16_t port)
     
     acceptor_ = std::make_unique<tcp::acceptor>(ctx_);
     auto ep = endpoint{*addr_r, port};
-    auto r = acceptor_->open(ep, {.reuse_address = true});
+    opts.reuse_address = true;
+    auto r = acceptor_->open(ep, opts);
     if (!r) return std::unexpected(r.error());
     
     return {};
@@ -283,69 +318,208 @@ auto server::handle_request(socket& client, io_context& io)
         co_return std::unexpected(make_error_code(std::errc::protocol_error));
     }
     
-    // Only support CONNECT command
-    if (req->cmd != command::connect) {
+    switch (req->cmd) {
+    case command::connect:
+        co_return co_await handle_connect(client, *req, io);
+    case command::bind:
+        if (config_.allow_bind) {
+            co_return co_await handle_bind(client, *req, io);
+        }
+        break;
+    case command::udp_associate:
+        if (config_.allow_udp_associate) {
+            co_return co_await handle_udp_associate(client, *req, io);
+        }
+        break;
+    }
+
+    {
         auto resp = make_any_address_response(reply::command_not_supported);
         if (auto r = co_await send_response(io, client, resp); !r) {
             co_return std::unexpected(r.error());
         }
-        
-        co_return std::unexpected(make_error_code(std::errc::not_supported));
     }
-    
-    // Resolve target address
-    auto target_ep_r = co_await resolve_target(io, req->address);
-    if (!target_ep_r) {
-        auto resp = make_any_address_response(map_connect_error(target_ep_r.error()));
-        if (auto r = co_await send_response(io, client, resp); !r) {
-            co_return std::unexpected(r.error());
-        }
-        co_return std::unexpected(target_ep_r.error());
-    }
+    co_return std::unexpected(make_error_code(std::errc::not_supported));
+}
 
-    // Connect to target
-    auto target_r = create_stream_socket(target_ep_r->address());
+auto server::handle_connect(socket& client, const socks5_request& req, io_context& io)
+    -> task<std::expected<void, std::error_code>> {
+    auto target_r = co_await async_connect_happy_eyeballs(
+        io, req.address.host, req.address.port);
     if (!target_r) {
-        auto resp = make_any_address_response(reply::general_failure);
+        auto resp = make_any_address_response(map_connect_error(target_r.error()));
         if (auto r = co_await send_response(io, client, resp); !r) {
             co_return std::unexpected(r.error());
         }
         co_return std::unexpected(target_r.error());
     }
-    socket target = std::move(*target_r);
-    
-    auto nb_r = target.set_non_blocking(true);
-    if (!nb_r) {
-        auto resp = make_any_address_response(reply::general_failure);
-        if (auto r = co_await send_response(io, client, resp); !r) {
-            co_return std::unexpected(r.error());
-        }
-        co_return std::unexpected(nb_r.error());
-    }
 
-    auto conn_r = co_await async_connect(io, target, *target_ep_r);
-    
-    // Send response
-    socks5_response resp;
-    if (conn_r) {
-        resp = make_success_response(target);
-    } else {
-        resp = make_any_address_response(map_connect_error(conn_r.error()));
-    }
-    
+    socket target = std::move(target_r->sock);
+    auto resp = make_success_response(target);
     auto write_r = co_await send_response(io, client, resp);
     if (!write_r) {
         co_return std::unexpected(write_r.error());
     }
-    
-    if (!conn_r) {
-        co_return std::unexpected(conn_r.error());
-    }
-    
+
     // Start bidirectional relay
     co_await relay_data(client, target, io);
-    
+
     co_return {};
+}
+
+auto server::handle_bind(socket& client, const socks5_request& req, io_context& io)
+    -> task<std::expected<void, std::error_code>> {
+    auto target_ep_r = co_await resolve_target(io, req.address);
+    ip_address bind_addr = ipv4_address::any();
+    if (target_ep_r) {
+        bind_addr = target_ep_r->front().address().is_v4()
+            ? ip_address{ipv4_address::any()}
+            : ip_address{ipv6_address::any()};
+    } else if (auto control_local = client.local_endpoint()) {
+        bind_addr = control_local->address().is_v4()
+            ? ip_address{ipv4_address::any()}
+            : ip_address{ipv6_address::any()};
+    }
+
+    tcp::acceptor bind_acceptor{io};
+    auto opened = bind_acceptor.open(endpoint{bind_addr, 0}, socket_options{.reuse_address = true});
+    if (!opened) {
+        auto resp = make_any_address_response(reply::general_failure);
+        if (auto r = co_await send_response(io, client, resp); !r) {
+            co_return std::unexpected(r.error());
+        }
+        co_return std::unexpected(opened.error());
+    }
+
+    auto first = make_bound_response(bind_acceptor.native_socket(), client);
+    if (auto r = co_await send_response(io, client, first); !r) {
+        co_return std::unexpected(r.error());
+    }
+
+    auto accepted = co_await async_accept(io, bind_acceptor.native_socket());
+    if (!accepted) {
+        auto resp = make_any_address_response(reply::general_failure);
+        if (auto r = co_await send_response(io, client, resp); !r) {
+            co_return std::unexpected(r.error());
+        }
+        co_return std::unexpected(accepted.error());
+    }
+
+    socket target = std::move(*accepted);
+    auto remote = target.remote_endpoint();
+    auto second = remote
+        ? make_endpoint_response(reply::succeeded, *remote)
+        : make_bound_response(target, client);
+    if (auto r = co_await send_response(io, client, second); !r) {
+        co_return std::unexpected(r.error());
+    }
+
+    co_await relay_data(client, target, io);
+    co_return {};
+}
+
+auto server::handle_udp_associate(socket& client, const socks5_request& req, io_context& io)
+    -> task<std::expected<void, std::error_code>> {
+    auto control_local = client.local_endpoint();
+    ip_address bind_addr = control_local
+        ? control_local->address()
+        : ip_address{ipv4_address::any()};
+
+    if (req.address.type == address_type::ipv6) {
+        bind_addr = ipv6_address::any();
+    } else if (req.address.type == address_type::ipv4) {
+        bind_addr = ipv4_address::any();
+    }
+
+    auto udp_r = create_datagram_socket(bind_addr);
+    if (!udp_r) {
+        auto resp = make_any_address_response(reply::general_failure);
+        if (auto r = co_await send_response(io, client, resp); !r) {
+            co_return std::unexpected(r.error());
+        }
+        co_return std::unexpected(udp_r.error());
+    }
+
+    socket udp_sock = std::move(*udp_r);
+    if (auto r = udp_sock.apply_options(socket_options{.reuse_address = true}); !r) {
+        auto resp = make_any_address_response(reply::general_failure);
+        if (auto wr = co_await send_response(io, client, resp); !wr) {
+            co_return std::unexpected(wr.error());
+        }
+        co_return std::unexpected(r.error());
+    }
+    if (auto r = udp_sock.bind(endpoint{bind_addr, 0}); !r) {
+        auto resp = make_any_address_response(reply::general_failure);
+        if (auto wr = co_await send_response(io, client, resp); !wr) {
+            co_return std::unexpected(wr.error());
+        }
+        co_return std::unexpected(r.error());
+    }
+
+    auto resp = make_bound_response(udp_sock, client);
+    if (auto r = co_await send_response(io, client, resp); !r) {
+        co_return std::unexpected(r.error());
+    }
+
+    co_await relay_udp(client, std::move(udp_sock), io);
+    co_return {};
+}
+
+auto server::relay_udp(socket& control, socket udp_sock, io_context& io) -> task<void> {
+    std::optional<endpoint> client_udp;
+    std::string client_key;
+    std::array<std::byte, 65535> buf;
+    std::array<std::byte, 1> control_buf;
+
+    auto control_wait = [&]() -> task<void> {
+        (void)co_await async_read(io, control,
+            mutable_buffer{control_buf.data(), control_buf.size()});
+        udp_sock.close();
+    };
+
+    auto udp_loop = [&]() -> task<void> {
+        while (udp_sock.is_open()) {
+            endpoint peer;
+            auto n = co_await async_recvfrom(io, udp_sock,
+                mutable_buffer{buf.data(), buf.size()}, peer);
+            if (!n || *n == 0) {
+                break;
+            }
+
+            auto key = endpoint_key(peer);
+            if (!client_udp) {
+                auto parsed = udp_datagram::parse(buf.data(), *n);
+                if (!parsed || parsed->fragment != 0 || parsed->reserved != 0) {
+                    continue;
+                }
+                client_udp = peer;
+                client_key = key;
+            }
+
+            if (key == client_key) {
+                auto parsed = udp_datagram::parse(buf.data(), *n);
+                if (!parsed || parsed->fragment != 0 || parsed->reserved != 0) {
+                    continue;
+                }
+                auto target = co_await resolve_target(io, parsed->address);
+                if (!target) {
+                    continue;
+                }
+                (void)co_await async_sendto(io, udp_sock,
+                    const_buffer{parsed->payload.data(), parsed->payload.size()}, target->front());
+            } else if (client_udp) {
+                udp_datagram out;
+                out.address = address_from_endpoint(peer);
+                out.payload.assign(buf.data(), buf.data() + *n);
+                auto frame = out.serialize();
+                (void)co_await async_sendto(io, udp_sock,
+                    const_buffer{frame.data(), frame.size()}, *client_udp);
+            }
+        }
+    };
+
+    co_await when_all(control_wait(), udp_loop());
+    udp_sock.close();
 }
 
 auto server::relay_data(socket& client, socket& target, io_context& io) -> task<void> {

@@ -14,6 +14,7 @@ import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
+import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
@@ -89,24 +90,11 @@ public:
         }
 #endif
 
-        // TCP connection
-        auto addr_r = ip_address::from_string(u.host);
-        if (!addr_r)
-            co_return std::unexpected(make_error_code(errc::host_not_found));
-
-        auto family = addr_r->is_v4() ? address_family::ipv4 : address_family::ipv6;
-        auto sock_r = socket::create(family, socket_type::stream);
-        if (!sock_r) co_return std::unexpected(sock_r.error());
-        sock_ = std::move(*sock_r);
-
-        std::expected<void, std::error_code> cr;
-        if (cancel_token_)
-            cr = co_await cnetmod::async_connect(ctx_, sock_,
-                endpoint{*addr_r, u.port}, *cancel_token_);
-        else
-            cr = co_await cnetmod::async_connect(ctx_, sock_,
-                endpoint{*addr_r, u.port});
-        if (!cr) { close_socket(); co_return std::unexpected(cr.error()); }
+        auto connect_r = co_await async_connect_happy_eyeballs(ctx_, u.host, u.port);
+        if (!connect_r) {
+            co_return std::unexpected(connect_r.error());
+        }
+        sock_ = std::move(connect_r->sock);
 
         // SSL/TLS
 #ifdef CNETMOD_HAS_SSL
@@ -136,11 +124,8 @@ public:
         auto expected_accept = compute_accept_key(sec_key);
 
         // Host header with port (for non-default ports)
-        std::string host_header = u.host;
-        if ((u.scheme == "ws" && u.port != 80) ||
-            (u.scheme == "wss" && u.port != 443)) {
-            host_header += ":" + std::to_string(u.port);
-        }
+        auto host_header = http::format_authority(
+            u.host, u.port, u.scheme == "wss" || u.scheme == "https");
 
         auto req = build_upgrade_request(host_header, u.path, sec_key,
                                          opts.subprotocol, opts.origin);
@@ -188,6 +173,7 @@ public:
         -> task<std::expected<void, std::error_code>>
     {
         sock_ = std::move(client_sock);
+        reset_server_request_metadata();
 
         // Read client HTTP upgrade request
         http::request_parser req_parser;
@@ -208,8 +194,10 @@ public:
                 close_socket();
                 co_return std::unexpected(consumed.error());
             }
-            recv_buf_.consume(*consumed);
+                recv_buf_.consume(*consumed);
         }
+
+        store_server_request_metadata(req_parser);
 
         auto accept_key = validate_upgrade_request(req_parser);
         if (!accept_key) {
@@ -234,6 +222,7 @@ public:
         -> task<std::expected<void, std::error_code>>
     {
         sock_ = std::move(client_sock);
+        reset_server_request_metadata();
 
         ssl_ = std::make_unique<ssl_stream>(ssl_ctx, ctx_, sock_);
         ssl_->set_accept_state();
@@ -261,8 +250,10 @@ public:
                 close_socket();
                 co_return std::unexpected(consumed.error());
             }
-            recv_buf_.consume(*consumed);
+                recv_buf_.consume(*consumed);
         }
+
+        store_server_request_metadata(req_parser);
 
         auto accept_key = validate_upgrade_request(req_parser);
         if (!accept_key) {
@@ -318,9 +309,9 @@ public:
             co_return std::unexpected(make_error_code(ws_errc::already_closed));
 
         bool do_mask = !is_server_; // Client must mask
-        auto frame_data = build_frame(op, payload, do_mask);
+        build_frame_into(send_buf_, op, payload, do_mask);
         co_return co_await async_write_all(
-            reinterpret_cast<const char*>(frame_data.data()), frame_data.size());
+            reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size());
     }
 
     // =========================================================================
@@ -403,6 +394,10 @@ public:
             if (first_frame) {
                 msg.op = hdr.op;
                 first_frame = false;
+                if (hdr.fin) {
+                    msg.payload = std::move(payload_data);
+                    co_return msg;
+                }
             }
 
             msg.payload.insert(msg.payload.end(),
@@ -485,6 +480,9 @@ public:
 
     [[nodiscard]] auto is_open() const noexcept -> bool { return connected_; }
     [[nodiscard]] auto is_server() const noexcept -> bool { return is_server_; }
+    [[nodiscard]] auto handshake_path() const noexcept -> std::string_view { return handshake_path_; }
+    [[nodiscard]] auto handshake_query() const noexcept -> std::string_view { return handshake_query_; }
+    [[nodiscard]] auto handshake_headers() const noexcept -> const http::header_map& { return handshake_headers_; }
 #ifdef CNETMOD_HAS_SSL
     [[nodiscard]] auto is_secure() const noexcept -> bool { return secure_; }
 #endif
@@ -559,6 +557,25 @@ private:
         sock_.close();
     }
 
+    void reset_server_request_metadata() {
+        handshake_path_.clear();
+        handshake_query_.clear();
+        handshake_headers_.clear();
+    }
+
+    void store_server_request_metadata(const http::request_parser& req_parser) {
+        auto uri = req_parser.uri();
+        auto qpos = uri.find('?');
+        if (qpos != std::string_view::npos) {
+            handshake_path_ = std::string(uri.substr(0, qpos));
+            handshake_query_ = std::string(uri.substr(qpos + 1));
+        } else {
+            handshake_path_ = std::string(uri);
+            handshake_query_.clear();
+        }
+        handshake_headers_ = req_parser.headers();
+    }
+
     io_context& ctx_;
     socket sock_;
     bool is_server_ = false;
@@ -566,7 +583,11 @@ private:
     bool close_sent_ = false;
     bool close_received_ = false;
     dynamic_buffer recv_buf_{8192};
+    std::vector<std::byte> send_buf_;
     cancel_token* cancel_token_{nullptr};
+    std::string handshake_path_;
+    std::string handshake_query_;
+    http::header_map handshake_headers_;
 
 #ifdef CNETMOD_HAS_SSL
     std::unique_ptr<ssl_context> ssl_ctx_;

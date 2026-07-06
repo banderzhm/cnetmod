@@ -18,6 +18,7 @@ import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
+import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
@@ -40,22 +41,16 @@ public:
     auto connect(connect_options opts = {}) -> task<result_set> {
         result_set err_rs;
         last_io_ec_.clear();
+        last_opts_ = opts;
 
         // TCP connection
-        auto addr_r = ip_address::from_string(opts.host);
-        if (!addr_r) { err_rs.error_msg = "invalid host"; co_return err_rs; }
-
-        auto family = addr_r->is_v4() ? address_family::ipv4 : address_family::ipv6;
-        auto sock_r = socket::create(family, socket_type::stream);
-        if (!sock_r) { err_rs.error_msg = "socket create failed"; co_return err_rs; }
-        sock_ = std::move(*sock_r);
-
-        auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, opts.port});
-        if (!cr) {
-            sock_.close();
-            err_rs.error_msg = "connect: " + cr.error().message();
+        auto connect_r = co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port);
+        if (!connect_r) {
+            err_rs.error_msg = "connect: " + connect_r.error().message();
+            err_rs.diag.assign_client(err_rs.error_msg);
             co_return err_rs;
         }
+        sock_ = std::move(connect_r->sock);
 
         // Server Greeting
         auto greeting_pkt = co_await read_packet();
@@ -489,6 +484,20 @@ public:
     }
 
     auto is_open() const noexcept -> bool { return connected_ && sock_.is_open(); }
+
+    auto reconnect() -> task<result_set> {
+        auto opts = last_opts_;
+        co_await quit();
+        co_return co_await connect(std::move(opts));
+    }
+
+    [[nodiscard]] auto last_error() const noexcept -> std::error_code {
+        return last_io_ec_;
+    }
+
+    [[nodiscard]] auto secure_channel() const noexcept -> bool {
+        return secure_channel_;
+    }
 
     // ── Transaction ──────────────────────────────────────────────
 
@@ -931,6 +940,7 @@ private:
     std::string   auth_plugin_;
     std::vector<std::uint8_t> auth_scramble_;
     format_options format_opts_;
+    connect_options last_opts_;
 
     // Read buffer
     std::array<std::uint8_t, 8192> rbuf_{};

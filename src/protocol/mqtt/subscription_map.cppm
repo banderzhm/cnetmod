@@ -47,19 +47,18 @@ public:
         auto* node = &root_;
 
         for (auto& seg : segments) {
-            auto it = node->children.find(std::string(seg));
-            if (it == node->children.end()) {
-                auto [new_it, _] = node->children.emplace(
-                    std::string(seg), std::make_unique<trie_node>());
-                node = new_it->second.get();
-            } else {
-                node = it->second.get();
+            auto key = std::string(seg);
+            auto [it, inserted] = node->children.try_emplace(std::move(key));
+            if (inserted) {
+                it->second = std::make_unique<trie_node>();
             }
+            node = it->second.get();
         }
 
-        // Store subscriber at leaf node
-        node->subscribers[client_id] = entry;
-        ++total_subscriptions_;
+        auto [_, inserted] = node->subscribers.insert_or_assign(client_id, entry);
+        if (inserted) {
+            ++total_subscriptions_;
+        }
     }
 
     /// Remove subscription
@@ -132,13 +131,14 @@ public:
 
 private:
     struct trie_node {
-        std::map<std::string, std::unique_ptr<trie_node>> children;
-        std::map<std::string, subscribe_entry> subscribers; // client_id → entry
+        std::unordered_map<std::string, std::unique_ptr<trie_node>> children;
+        std::unordered_map<std::string, subscribe_entry> subscribers; // client_id -> entry
     };
 
     /// Split topic path
     static auto split(std::string_view topic) -> std::vector<std::string_view> {
         std::vector<std::string_view> segments;
+        segments.reserve(1 + static_cast<std::size_t>(std::ranges::count(topic, '/')));
         std::size_t start = 0;
         while (start <= topic.size()) {
             auto pos = topic.find('/', start);

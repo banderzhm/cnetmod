@@ -97,6 +97,13 @@ set(REDIS_EXAMPLES
 )
 
 # ==============================================================================
+# gRPC Examples
+# ==============================================================================
+set(GRPC_EXAMPLES
+    grpc/security_interceptor
+)
+
+# ==============================================================================
 # Raft Examples
 # ==============================================================================
 set(RAFT_EXAMPLES
@@ -131,6 +138,7 @@ set(ALL_EXAMPLES
     ${WEBSOCKET_EXAMPLES}
     ${DATABASE_EXAMPLES}
     ${REDIS_EXAMPLES}
+    ${GRPC_EXAMPLES}
     ${RAFT_EXAMPLES}
     ${MQTT_EXAMPLES}
     ${MODBUS_EXAMPLES}

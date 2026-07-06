@@ -16,10 +16,12 @@ import :response;
 import :parser;
 import :cookie;
 import :client;
+import :h2_types;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
+import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.protocol.tcp;
 import cnetmod.coro.task;
@@ -134,40 +136,12 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
     state_->port = port;
     state_->is_ssl = use_ssl;
 
-    // Parse host to endpoint (simple IP parsing, TODO: DNS resolution)
-    auto addr_result = ip_address::from_string(host);
-    endpoint ep;
-    
-    if (addr_result) {
-        ep = endpoint{*addr_result, port};
-    } else {
-        // Fallback to loopback for now (TODO: implement DNS)
-        ep = endpoint{ip_address{ipv4_address::loopback()}, port};
+    auto connect_r = co_await async_connect_happy_eyeballs(*ctx_, host, port);
+    if (!connect_r) {
+        co_return std::unexpected(connect_r.error());
     }
 
-    // Create socket
-    auto family = ep.address().is_v6() ? address_family::ipv6 : address_family::ipv4;
-    auto sock_result = socket::create(family, socket_type::stream);
-    if (!sock_result) {
-        co_return std::unexpected(sock_result.error());
-    }
-    
-    auto sock = std::move(*sock_result);
-
-    // Set socket options
-    socket_options opts;
-    opts.reuse_address = true;
-    opts.non_blocking = true;
-    auto opts_result = sock.apply_options(opts);
-    if (!opts_result) {
-        co_return std::unexpected(opts_result.error());
-    }
-
-    // Async connect
-    auto connect_result = co_await async_connect(*ctx_, sock, ep);
-    if (!connect_result) {
-        co_return std::unexpected(connect_result.error());
-    }
+    auto sock = std::move(connect_r->sock);
 
     state_->conn.emplace(*ctx_, std::move(sock));
 
@@ -285,9 +259,6 @@ auto client::send_http1(const request& req)
         co_return std::unexpected(make_error_code(std::errc::not_connected));
     }
 
-    // Build request with proper headers
-    request modified_req = req;
-    
     // Extract path from URI
     auto uri = req.uri();
     std::string path = "/";
@@ -305,46 +276,70 @@ auto client::send_http1(const request& req)
     } else {
         path = std::string(uri);
     }
-    
-    modified_req.set_uri(path);
-    
-    // Set required headers
-    if (modified_req.get_header("Host").empty()) {
-        if (state_->port == 80 || state_->port == 443) {
-            modified_req.set_header("Host", state_->host);
-        } else {
-            modified_req.set_header("Host", 
-                state_->host + ":" + std::to_string(state_->port));
-        }
-    }
-    
-    if (modified_req.get_header("User-Agent").empty()) {
-        modified_req.set_header("User-Agent", options_.user_agent);
-    }
-    
-    if (modified_req.get_header("Connection").empty()) {
-        modified_req.set_header("Connection", 
-            options_.keep_alive ? "keep-alive" : "close");
-    }
-    
-    // 添加 Cookies
-    if (options_.enable_cookies && modified_req.get_header("Cookie").empty()) {
-        auto cookie_header = cookies_.to_cookie_header(
+
+    std::string cookie_header;
+    if (options_.enable_cookies && req.get_header("Cookie").empty()) {
+        auto generated_cookie = cookies_.to_cookie_header(
             state_->host, path, state_->is_ssl);
-        if (!cookie_header.empty()) {
-            modified_req.set_header("Cookie", cookie_header);
-        }
+        if (!generated_cookie.empty()) cookie_header = std::move(generated_cookie);
+    }
+
+    // Serialize directly instead of copying request and mutating its header map.
+    auto& request_data = state_->request_buffer;
+    request_data.clear();
+    request_data.reserve(256 + path.size() + req.body().size());
+    request_data += method_to_string(req.method());
+    request_data += ' ';
+    request_data += path;
+    request_data += ' ';
+    request_data += version_to_string(req.version());
+    request_data += "\r\n";
+
+    for (const auto& [key, value] : req.headers()) {
+        request_data += key;
+        request_data += ": ";
+        request_data += value;
+        request_data += "\r\n";
+    }
+
+    if (req.get_header("Host").empty()) {
+        request_data += "Host: ";
+        request_data += format_authority(state_->host, state_->port, state_->is_ssl);
+        request_data += "\r\n";
+    }
+
+    if (req.get_header("User-Agent").empty()) {
+        request_data += "User-Agent: ";
+        request_data += options_.user_agent;
+        request_data += "\r\n";
+    }
+
+    if (req.get_header("Connection").empty()) {
+        request_data += "Connection: ";
+        request_data += options_.keep_alive ? "keep-alive" : "close";
+        request_data += "\r\n";
+    }
+
+    if (!cookie_header.empty()) {
+        request_data += "Cookie: ";
+        request_data += cookie_header;
+        request_data += "\r\n";
+    }
+
+    request_data += "\r\n";
+    if (!req.body().empty()) {
+        request_data += req.body();
     }
 
     // Send request
-    auto request_data = modified_req.serialize();
     auto send_result = co_await write_data(request_data);
     if (!send_result) {
         co_return std::unexpected(send_result.error());
     }
 
     // Receive response - read until we have complete headers
-    std::string buffer;
+    auto& buffer = state_->read_buffer;
+    buffer.clear();
     buffer.reserve(4096);
     std::size_t header_end = std::string::npos;
     
@@ -444,7 +439,8 @@ auto client::send_http1(const request& req)
     }
 
     // Read body
-    std::string body;
+    auto& body = state_->body_buffer;
+    body.clear();
     auto content_length_str = resp.get_header("Content-Length");
     
     if (!content_length_str.empty()) {
@@ -573,7 +569,7 @@ auto client::send_http1(const request& req)
         }
     }
 
-    resp.set_body(std::move(body));
+    resp.set_body_preserve_headers(std::move(body));
 
     // 处理 Set-Cookie 头
     if (options_.enable_cookies) {
@@ -644,7 +640,8 @@ auto client::init_h2_session() -> task<std::expected<void, std::error_code>> {
         co_return std::unexpected(make_error_code(h2_errc::internal_error));
     }
 
-    // Flush settings
+    // Flush client connection preface and settings. nghttp2 emits the
+    // cleartext client magic for client sessions on the first send.
     std::string buffer;
     for (;;) {
         const uint8_t* data = nullptr;
@@ -712,16 +709,25 @@ auto client::send_http2(const request& req)
         path = std::string(uri);
     }
 
-    // Allocate stream ID
-    std::int32_t stream_id = state_->next_stream_id;
-    state_->next_stream_id += 2;
+    auto stream_id = nghttp2_session_get_next_stream_id(state_->h2_session);
+    if (stream_id <= 0) {
+        co_return std::unexpected(make_error_code(h2_errc::internal_error));
+    }
 
-    // Create stream data
-    state_->h2_streams[stream_id] = connection_state::h2_stream_data{};
+    // Create request stream data before submit so nghttp2's data provider
+    // always points at stable storage, including flow-control delayed sends.
+    auto [stream_it, inserted] = state_->h2_streams.emplace(
+        stream_id, connection_state::h2_stream_data{});
+    if (!inserted) {
+        co_return std::unexpected(make_error_code(h2_errc::internal_error));
+    }
+    stream_it->second.request_body = std::string(req.body());
 
     // Build HTTP/2 headers
     std::vector<nghttp2_nv> nva;
     nva.reserve(req.headers().size() + 5);
+    std::vector<std::string> header_names;
+    header_names.reserve(req.headers().size());
 
     // Pseudo-headers
     auto method_str = std::string(method_to_string(req.method()));
@@ -753,12 +759,7 @@ auto client::send_http2(const request& req)
     if (!host_header.empty()) {
         authority = std::string(host_header);
     } else {
-        authority = state_->host;
-        if ((state_->is_ssl && state_->port != 443) || 
-            (!state_->is_ssl && state_->port != 80)) {
-            authority += ":";
-            authority += std::to_string(state_->port);
-        }
+        authority = format_authority(state_->host, state_->port, state_->is_ssl);
     }
 
     nva.push_back({
@@ -779,13 +780,23 @@ auto client::send_http2(const request& req)
         std::string lower_key(key);
         std::ranges::transform(lower_key, lower_key.begin(),
             [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        header_names.push_back(std::move(lower_key));
+        auto& stored_key = header_names.back();
 
         nva.push_back({
-            const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(lower_key.data())),
+            const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(stored_key.data())),
             const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(value.data())),
-            lower_key.size(), value.size(),
+            stored_key.size(), value.size(),
             NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE
         });
+    }
+
+    nghttp2_data_provider2 data_provider{};
+    nghttp2_data_provider2* data_provider_ptr = nullptr;
+    if (!stream_it->second.request_body.empty()) {
+        data_provider.source.ptr = &stream_it->second;
+        data_provider.read_callback = h2_request_body_read_callback;
+        data_provider_ptr = &data_provider;
     }
 
     // Submit request
@@ -794,11 +805,15 @@ auto client::send_http2(const request& req)
         nullptr,
         nva.data(),
         nva.size(),
-        nullptr,
+        data_provider_ptr,
         nullptr
     );
 
     if (rv < 0) {
+        state_->h2_streams.erase(stream_id);
+        co_return std::unexpected(make_error_code(h2_errc::internal_error));
+    }
+    if (rv != stream_id) {
         state_->h2_streams.erase(stream_id);
         co_return std::unexpected(make_error_code(h2_errc::internal_error));
     }
@@ -878,9 +893,15 @@ auto client::send_http2(const request& req)
     for (const auto& [key, value] : stream.headers) {
         resp.set_header(key, value);
     }
-    resp.set_body(std::move(stream.body));
+    for (const auto& [key, value] : stream.trailers) {
+        resp.set_trailer(key, value);
+    }
+    resp.set_body_preserve_headers(std::move(stream.body));
 
     state_->h2_streams.erase(stream_id);
+    if (!options_.keep_alive) {
+        close();
+    }
     co_return resp;
 }
 
@@ -919,7 +940,11 @@ auto client::h2_on_header_callback(
             return NGHTTP2_ERR_CALLBACK_FAILURE;
         }
     } else if (!name_sv.empty() && name_sv[0] != ':') {
-        stream.headers[std::string(name_sv)] = std::string(value_sv);
+        if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE) {
+            stream.headers[std::string(name_sv)] = std::string(value_sv);
+        } else {
+            stream.trailers[std::string(name_sv)] = std::string(value_sv);
+        }
     }
 
     return 0;
@@ -992,6 +1017,33 @@ auto client::h2_on_stream_close_callback(
     return 0;
 }
 
+auto client::h2_request_body_read_callback(
+    nghttp2_session* /*session*/,
+    int32_t /*stream_id*/,
+    uint8_t* buf,
+    size_t length,
+    uint32_t* data_flags,
+    nghttp2_data_source* source,
+    void* /*user_data*/) -> nghttp2_ssize
+{
+    auto* stream = static_cast<connection_state::h2_stream_data*>(source->ptr);
+    if (!stream) {
+        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+        return 0;
+    }
+
+    auto remaining = stream->request_body.size() - stream->request_body_offset;
+    auto n = std::min<std::size_t>(length, remaining);
+    if (n > 0) {
+        std::memcpy(buf, stream->request_body.data() + stream->request_body_offset, n);
+        stream->request_body_offset += n;
+    }
+    if (stream->request_body_offset >= stream->request_body.size()) {
+        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
+    }
+    return static_cast<nghttp2_ssize>(n);
+}
+
 #endif // CNETMOD_HAS_NGHTTP2
 
 // =============================================================================
@@ -1028,11 +1080,21 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
         use_ssl = state_->is_ssl;
     }
 
-    // Connect if needed
+    // Connect if needed. A request with an absolute URL should still reuse the
+    // existing keep-alive / HTTP/2 connection when it targets the same origin.
     if (!host.empty()) {
-        auto connect_result = co_await connect(host, port, use_ssl);
-        if (!connect_result) {
-            co_return std::unexpected(connect_result.error());
+        const bool need_connect =
+            !state_ ||
+            !state_->conn ||
+            !state_->conn->is_open() ||
+            state_->host != host ||
+            state_->port != port ||
+            state_->is_ssl != use_ssl;
+        if (need_connect) {
+            auto connect_result = co_await connect(host, port, use_ssl);
+            if (!connect_result) {
+                co_return std::unexpected(connect_result.error());
+            }
         }
     }
 
@@ -1087,16 +1149,14 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
                     redirect_url = std::string(location);
                 } else if (location.starts_with("/")) {
                     std::string scheme = use_ssl ? "https" : "http";
-                    redirect_url = scheme + "://" + host;
-                    if ((use_ssl && port != 443) || (!use_ssl && port != 80)) {
-                        redirect_url += ":" + std::to_string(port);
-                    }
+                    redirect_url = scheme + "://" + format_authority(host, port, use_ssl);
                     redirect_url += std::string(location);
                 } else {
                     auto current_url = url::parse(uri);
                     if (current_url) {
                         std::string scheme = current_url->scheme;
-                        redirect_url = scheme + "://" + current_url->host;
+                        redirect_url = scheme + "://" +
+                            format_authority_host(current_url->host);
                         if (current_url->port != 0 && 
                             ((scheme == "https" && current_url->port != 443) ||
                              (scheme == "http" && current_url->port != 80))) {

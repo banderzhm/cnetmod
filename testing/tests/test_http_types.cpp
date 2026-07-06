@@ -177,6 +177,22 @@ TEST(url_parse_ipv6) {
     ASSERT_EQ(r->path, std::string("/test"));
 }
 
+TEST(format_authority_ipv6_non_default_port) {
+    ASSERT_EQ(format_authority("::1", 8080, false), std::string("[::1]:8080"));
+}
+
+TEST(format_authority_ipv6_default_port) {
+    ASSERT_EQ(format_authority("2001:db8::10", 443, true), std::string("[2001:db8::10]"));
+}
+
+TEST(format_authority_keeps_bracketed_ipv6) {
+    ASSERT_EQ(format_authority("[::1]", 80, false), std::string("[::1]"));
+}
+
+TEST(format_authority_hostname) {
+    ASSERT_EQ(format_authority("example.com", 8443, true), std::string("example.com:8443"));
+}
+
 TEST(url_parse_missing_scheme) {
     auto r = url::parse("example.com/path");
     ASSERT_FALSE(r.has_value());

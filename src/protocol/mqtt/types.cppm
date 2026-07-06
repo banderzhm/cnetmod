@@ -4,6 +4,7 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include <cstring>
 
 export module cnetmod.protocol.mqtt:types;
 
@@ -397,10 +398,170 @@ export struct subscribe_entry {
     }
 };
 
+/// Immutable MQTT publish data.
+///
+/// Common MQTT topics and small payloads stay inline so routing copies do not
+/// allocate or touch an atomic refcount. Larger payloads use shared immutable
+/// storage to avoid copying the same body once per subscriber.
+export class binary_data {
+public:
+    binary_data() = default;
+    binary_data(std::string_view data) { assign(data); }
+    binary_data(const char* data) { assign(data == nullptr ? std::string_view{} : std::string_view{data}); }
+    binary_data(const std::string& data) { assign(std::string_view{data}); }
+    binary_data(const binary_data& other) { copy_from(other); }
+    binary_data(binary_data&& other) noexcept { move_from(std::move(other)); }
+    ~binary_data() { destroy_shared(); }
+
+    auto operator=(const binary_data& other) -> binary_data& {
+        if (this != &other) {
+            destroy_shared();
+            size_ = 0;
+            shared_ = false;
+            copy_from(other);
+        }
+        return *this;
+    }
+
+    auto operator=(binary_data&& other) noexcept -> binary_data& {
+        if (this != &other) {
+            destroy_shared();
+            size_ = 0;
+            shared_ = false;
+            move_from(std::move(other));
+        }
+        return *this;
+    }
+
+    auto operator=(std::string_view data) -> binary_data& {
+        assign(data);
+        return *this;
+    }
+
+    auto operator=(const std::string& data) -> binary_data& {
+        assign(std::string_view{data});
+        return *this;
+    }
+
+    auto operator=(const char* data) -> binary_data& {
+        assign(data == nullptr ? std::string_view{} : std::string_view{data});
+        return *this;
+    }
+
+    [[nodiscard]] auto data() const noexcept -> const char* {
+        if (size_ == 0) return "";
+        if (shared_) return reinterpret_cast<const char*>(storage_.bytes->data());
+        return reinterpret_cast<const char*>(storage_.inline_bytes);
+    }
+
+    [[nodiscard]] auto size() const noexcept -> std::size_t {
+        return size_;
+    }
+
+    [[nodiscard]] auto empty() const noexcept -> bool { return size() == 0; }
+
+    [[nodiscard]] auto view() const noexcept -> std::string_view {
+        return {data(), size()};
+    }
+
+    [[nodiscard]] auto str() const -> std::string {
+        return std::string(view());
+    }
+
+    operator std::string_view() const noexcept { return view(); }
+
+    friend auto operator==(const binary_data& lhs, std::string_view rhs) noexcept -> bool {
+        return lhs.view() == rhs;
+    }
+
+    friend auto operator==(std::string_view lhs, const binary_data& rhs) noexcept -> bool {
+        return lhs == rhs.view();
+    }
+
+    friend auto operator==(const binary_data& lhs, const std::string& rhs) noexcept -> bool {
+        return lhs.view() == std::string_view{rhs};
+    }
+
+    friend auto operator==(const std::string& lhs, const binary_data& rhs) noexcept -> bool {
+        return std::string_view{lhs} == rhs.view();
+    }
+
+    friend auto operator<<(std::ostream& os, const binary_data& data) -> std::ostream& {
+        return os << data.view();
+    }
+
+private:
+    static constexpr std::size_t inline_capacity = 24;
+    using byte_storage = std::vector<std::byte>;
+
+    union storage {
+        std::byte inline_bytes[inline_capacity];
+        std::shared_ptr<const byte_storage> bytes;
+
+        storage() noexcept {}
+        ~storage() noexcept {}
+    };
+
+    void assign(std::string_view data) {
+        if (data.empty()) {
+            destroy_shared();
+            size_ = 0;
+            shared_ = false;
+            return;
+        }
+        if (data.size() <= inline_capacity) {
+            destroy_shared();
+            size_ = data.size();
+            shared_ = false;
+            std::memcpy(storage_.inline_bytes, data.data(), data.size());
+            return;
+        }
+        auto next = std::make_shared<byte_storage>(data.size());
+        std::memcpy(next->data(), data.data(), data.size());
+        if (shared_) {
+            storage_.bytes = std::move(next);
+        } else {
+            std::construct_at(&storage_.bytes, std::move(next));
+        }
+        size_ = data.size();
+        shared_ = true;
+    }
+
+    void copy_from(const binary_data& other) {
+        size_ = other.size_;
+        shared_ = other.shared_;
+        if (other.shared_) {
+            std::construct_at(&storage_.bytes, other.storage_.bytes);
+        } else if (other.size_ > 0) {
+            std::memcpy(storage_.inline_bytes, other.storage_.inline_bytes, other.size_);
+        }
+    }
+
+    void move_from(binary_data&& other) noexcept {
+        size_ = other.size_;
+        shared_ = other.shared_;
+        if (other.shared_) {
+            std::construct_at(&storage_.bytes, std::move(other.storage_.bytes));
+        } else if (other.size_ > 0) {
+            std::memcpy(storage_.inline_bytes, other.storage_.inline_bytes, other.size_);
+        }
+    }
+
+    void destroy_shared() noexcept {
+        if (shared_) {
+            std::destroy_at(&storage_.bytes);
+        }
+    }
+
+    storage storage_{};
+    std::uint32_t size_ = 0;
+    bool shared_ = false;
+};
+
 /// Received PUBLISH message
 export struct publish_message {
     std::string      topic;
-    std::string      payload;
+    binary_data      payload;
     qos              qos_value  = qos::at_most_once;
     bool             retain     = false;
     bool             dup        = false;

@@ -214,3 +214,231 @@ export inline auto metrics_handler(metrics_collector& mc) -> http::handler_fn
 }
 
 } // namespace cnetmod
+
+namespace cnetmod::metrics {
+
+export enum class metric_type {
+    counter,
+    gauge,
+    histogram,
+};
+
+export using labels = std::map<std::string, std::string>;
+
+namespace detail {
+
+inline auto escape_label(std::string_view value) -> std::string {
+    std::string out;
+    out.reserve(value.size());
+    for (char ch : value) {
+        switch (ch) {
+        case '\\': out += "\\\\"; break;
+        case '"': out += "\\\""; break;
+        case '\n': out += "\\n"; break;
+        default: out.push_back(ch); break;
+        }
+    }
+    return out;
+}
+
+inline auto labels_key(const labels& ls) -> std::string {
+    std::string key;
+    for (const auto& [k, v] : ls) {
+        key += k;
+        key.push_back('=');
+        key += v;
+        key.push_back('\xff');
+    }
+    return key;
+}
+
+inline auto labels_text(const labels& ls) -> std::string {
+    if (ls.empty()) return {};
+    std::string out = "{";
+    bool first = true;
+    for (const auto& [k, v] : ls) {
+        if (!first) out += ",";
+        first = false;
+        out += k;
+        out += "=\"";
+        out += escape_label(v);
+        out += "\"";
+    }
+    out += "}";
+    return out;
+}
+
+} // namespace detail
+
+struct metric_sample {
+    labels sample_labels;
+    double value = 0.0;
+};
+
+struct histogram_sample {
+    labels sample_labels;
+    std::vector<double> buckets;
+    std::vector<std::uint64_t> counts;
+    double sum = 0.0;
+    std::uint64_t total = 0;
+};
+
+struct metric_family {
+    metric_type type = metric_type::counter;
+    std::string name;
+    std::string help;
+    std::map<std::string, metric_sample> samples;
+    std::map<std::string, histogram_sample> histograms;
+};
+
+export class registry {
+public:
+    void counter_add(std::string_view name, double delta = 1.0,
+                     labels ls = {}, std::string_view help = {}) {
+        std::scoped_lock lock(mutex_);
+        auto& family = families_[std::string(name)];
+        family.type = metric_type::counter;
+        family.name = std::string(name);
+        if (!help.empty()) family.help = std::string(help);
+        auto key = detail::labels_key(ls);
+        auto& sample = family.samples[key];
+        sample.sample_labels = std::move(ls);
+        sample.value += delta;
+    }
+
+    void gauge_set(std::string_view name, double value,
+                   labels ls = {}, std::string_view help = {}) {
+        std::scoped_lock lock(mutex_);
+        auto& family = families_[std::string(name)];
+        family.type = metric_type::gauge;
+        family.name = std::string(name);
+        if (!help.empty()) family.help = std::string(help);
+        auto key = detail::labels_key(ls);
+        auto& sample = family.samples[key];
+        sample.sample_labels = std::move(ls);
+        sample.value = value;
+    }
+
+    void histogram_observe(std::string_view name, double value,
+                           std::vector<double> buckets,
+                           labels ls = {}, std::string_view help = {}) {
+        std::ranges::sort(buckets);
+        std::scoped_lock lock(mutex_);
+        auto& family = families_[std::string(name)];
+        family.type = metric_type::histogram;
+        family.name = std::string(name);
+        if (!help.empty()) family.help = std::string(help);
+        auto key = detail::labels_key(ls);
+        auto& h = family.histograms[key];
+        h.sample_labels = std::move(ls);
+        if (h.buckets.empty()) {
+            h.buckets = std::move(buckets);
+            h.counts.assign(h.buckets.size(), 0);
+        }
+        for (std::size_t i = 0; i < h.buckets.size(); ++i) {
+            if (value <= h.buckets[i]) ++h.counts[i];
+        }
+        h.sum += value;
+        ++h.total;
+    }
+
+    [[nodiscard]] auto render_openmetrics() const -> std::string {
+        std::scoped_lock lock(mutex_);
+        std::string out;
+        for (const auto& [_, family] : families_) {
+            if (!family.help.empty()) {
+                out += "# HELP ";
+                out += family.name;
+                out.push_back(' ');
+                out += family.help;
+                out.push_back('\n');
+            }
+            out += "# TYPE ";
+            out += family.name;
+            out.push_back(' ');
+            switch (family.type) {
+            case metric_type::counter: out += "counter"; break;
+            case metric_type::gauge: out += "gauge"; break;
+            case metric_type::histogram: out += "histogram"; break;
+            }
+            out.push_back('\n');
+
+            if (family.type == metric_type::histogram) {
+                for (const auto& [__, h] : family.histograms) {
+                    for (std::size_t i = 0; i < h.buckets.size(); ++i) {
+                        auto ls = h.sample_labels;
+                        ls["le"] = std::format("{}", h.buckets[i]);
+                        out += family.name + "_bucket" + detail::labels_text(ls);
+                        out += " " + std::to_string(h.counts[i]) + "\n";
+                    }
+                    auto ls = h.sample_labels;
+                    ls["le"] = "+Inf";
+                    out += family.name + "_bucket" + detail::labels_text(ls);
+                    out += " " + std::to_string(h.total) + "\n";
+                    out += family.name + "_sum" + detail::labels_text(h.sample_labels);
+                    out += " " + std::format("{}", h.sum) + "\n";
+                    out += family.name + "_count" + detail::labels_text(h.sample_labels);
+                    out += " " + std::to_string(h.total) + "\n";
+                }
+            } else {
+                for (const auto& [__, sample] : family.samples) {
+                    out += family.name;
+                    out += detail::labels_text(sample.sample_labels);
+                    out += " ";
+                    out += std::format("{}", sample.value);
+                    out += "\n";
+                }
+            }
+        }
+        out += "# EOF\n";
+        return out;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::map<std::string, metric_family> families_;
+};
+
+export inline auto global_registry() -> registry& {
+    static registry r;
+    return r;
+}
+
+export inline auto openmetrics_handler(registry& reg = global_registry())
+    -> http::handler_fn
+{
+    return [&reg](http::request_context& ctx) -> task<void> {
+        auto body = reg.render_openmetrics();
+        ctx.resp().set_status(http::status::ok);
+        ctx.resp().set_header("Content-Type", "application/openmetrics-text; version=1.0.0; charset=utf-8");
+        ctx.resp().set_body(std::move(body));
+        co_return;
+    };
+}
+
+export inline auto openmetrics_middleware(registry& reg = global_registry(),
+                                          std::vector<double> buckets = {
+                                              0.001, 0.005, 0.01, 0.025, 0.05,
+                                              0.1, 0.25, 0.5, 1.0, 2.5, 5.0})
+    -> http::middleware_fn
+{
+    return [&reg, buckets = std::move(buckets)](
+               http::request_context& ctx, http::next_fn next) -> task<void> {
+        const auto started = std::chrono::steady_clock::now();
+        co_await next();
+        const auto seconds = std::chrono::duration<double>(
+            std::chrono::steady_clock::now() - started).count();
+
+        labels ls{
+            {"method", std::string(ctx.method())},
+            {"path", std::string(ctx.path())},
+            {"status", std::to_string(ctx.resp().status_code())},
+        };
+        reg.counter_add("http_requests_total", 1.0, ls, "Total HTTP requests.");
+        reg.histogram_observe("http_request_duration_seconds", seconds, buckets, std::move(ls),
+            "HTTP request duration in seconds.");
+        co_return;
+    };
+}
+
+} // namespace cnetmod::metrics

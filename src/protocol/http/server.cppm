@@ -95,7 +95,8 @@ public:
 #endif
 
     /// Listen on specified address and port
-    auto listen(std::string_view host, std::uint16_t port)
+    auto listen(std::string_view host, std::uint16_t port,
+                socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>;
 
     /// Set router

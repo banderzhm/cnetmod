@@ -100,54 +100,59 @@ public:
         auto fr = co_await flush();
         if (!fr) co_return;
 
-        // Feed pre-read data (cleartext h2c: client preface + possibly SETTINGS)
+        // Feed pre-read data (cleartext h2c: client preface + possibly SETTINGS).
+        // TLS h2 has no pre-read bytes here, but still sends the same HTTP/2
+        // client connection preface as the first application data.
         if (initial_data && initial_len > 0) {
-            auto consumed = nghttp2_session_mem_recv2(
-                session_,
-                reinterpret_cast<const uint8_t*>(initial_data),
-                initial_len);
-            if (consumed < 0) {
-                co_await send_goaway(h2_errc::protocol_error);
+            auto fed = feed_received(initial_data, initial_len);
+            if (!fed) {
+                co_await send_goaway(fed.error());
                 co_return;
             }
 
-            // Spawn handlers for any requests completed in initial data
-            spawn_pending_handlers();
-
             auto f = co_await flush();
             if (!f) co_return;
+
+            // Start handlers after nghttp2's protocol-level output is flushed.
+            spawn_pending_handlers();
         }
 
         // Start response consumer loop (reads from channel, submits to nghttp2)
         spawn(io_.io_ctx(), response_consumer_loop());
 
-        // Main recv loop
+        // Main recv loop. Do not use nghttp2_session_want_read() as the
+        // connection lifetime condition on the server: an idle keep-alive
+        // connection may have no active streams but must still accept the next
+        // client frame.
         std::array<std::byte, 16384> buf{};
-        while (nghttp2_session_want_read(session_) ||
-               nghttp2_session_want_write(session_)) {
-
-            if (nghttp2_session_want_read(session_)) {
-                auto rd = co_await io_.async_read(
-                    mutable_buffer{buf.data(), buf.size()});
-                if (!rd || *rd == 0) break;
-
-                auto consumed = nghttp2_session_mem_recv2(
-                    session_,
-                    reinterpret_cast<const uint8_t*>(buf.data()),
-                    *rd);
-                if (consumed < 0) {
-                    // Protocol error — send GOAWAY and drain
-                    co_await send_goaway(h2_errc::protocol_error);
-                    break;
-                }
+        while (true) {
+            if (nghttp2_session_want_write(session_)) {
+                auto wf = co_await flush();
+                if (!wf) break;
             }
 
-            // Spawn handler coroutines for newly completed requests
-            spawn_pending_handlers();
+            if (shutting_down_ && active_stream_count_ == 0) {
+                break;
+            }
+
+            auto rd = co_await io_.async_read(
+                mutable_buffer{buf.data(), buf.size()});
+            if (!rd || *rd == 0) break;
+
+            auto fed = feed_received(buf.data(), *rd);
+            if (!fed) {
+                // Protocol error — send GOAWAY and drain
+                co_await send_goaway(fed.error());
+                break;
+            }
 
             // Flush any pending outbound frames (SETTINGS ACK, PING, WINDOW_UPDATE)
             auto f = co_await flush();
             if (!f) break;
+
+            // Start handlers only after nghttp2 has finished processing and
+            // any protocol-level ACK/WINDOW_UPDATE frames have been flushed.
+            spawn_pending_handlers();
 
             // If shutting down and no more active streams, we're done
             if (shutting_down_ && active_stream_count_ == 0) break;
@@ -173,6 +178,7 @@ private:
         std::int32_t stream_id;
         int          status_code;
         header_map   headers;
+        header_map   trailers;
         std::string  body;
     };
 
@@ -300,6 +306,47 @@ private:
         co_return {};
     }
 
+    auto feed_received(const std::byte* data, std::size_t len)
+        -> std::expected<void, h2_errc>
+    {
+        while (len > 0) {
+            if (!client_preface_consumed_) {
+                auto need = h2_client_magic.size() - client_preface_buf_.size();
+                auto take = std::min(need, len);
+                client_preface_buf_.append(
+                    reinterpret_cast<const char*>(data), take);
+                data += take;
+                len -= take;
+
+                if (client_preface_buf_.size() < h2_client_magic.size()) {
+                    return {};
+                }
+                if (client_preface_buf_ != h2_client_magic) {
+                    return std::unexpected(h2_errc::protocol_error);
+                }
+
+                client_preface_buf_.clear();
+                client_preface_consumed_ = true;
+                continue;
+            }
+
+            auto consumed = nghttp2_session_mem_recv2(
+                session_,
+                reinterpret_cast<const uint8_t*>(data),
+                len);
+            if (consumed < 0) {
+                return std::unexpected(h2_errc::protocol_error);
+            }
+            if (consumed == 0) {
+                break;
+            }
+            data += static_cast<std::size_t>(consumed);
+            len -= static_cast<std::size_t>(consumed);
+        }
+
+        return {};
+    }
+
     // =========================================================================
     // GOAWAY — Graceful Shutdown
     // =========================================================================
@@ -332,10 +379,16 @@ private:
         }
     }
 
+    void queue_handler_start(h2_stream& stream) {
+        if (stream.handler_started()) return;
+        stream.mark_handler_started();
+        pending_handlers_.push_back(stream.stream_id());
+    }
+
     // =========================================================================
     // Handler Coroutine — Runs concurrently, sends result via channel
     // =========================================================================
-    // Spawned as fire-and-forget for each complete request.
+    // Spawned as fire-and-forget once request headers are complete.
     // Copies all needed data from h2_stream at spawn time (stream may be
     // closed/erased by nghttp2 before handler completes).
     // Does NOT touch nghttp2 — sends result through submit channel.
@@ -346,12 +399,12 @@ private:
         if (it == streams_.end()) co_return;
 
         auto& stream = it->second;
-        auto method_sv = stream.method();
+        auto method    = std::string(stream.method());
         auto method_e  = stream.method_enum();
-        auto path_sv   = stream.path();
+        auto path      = std::string(stream.path());
         auto full_path = std::string(stream.full_path());
         auto headers   = stream.headers();    // copy
-        auto body      = std::string(stream.body());
+        auto body_stream = stream.body_stream();
 
         // --- Invalid method → 400 (no need to run router) ---
         if (!method_e) {
@@ -365,7 +418,7 @@ private:
         }
 
         // --- Route matching ---
-        auto mr = router_.match(*method_e, path_sv);
+        auto mr = router_.match(*method_e, path);
 
         response resp(status::ok);
         resp.set_header("server", "cnetmod");
@@ -389,9 +442,10 @@ private:
         // --- Execute middleware + handler ---
         // request_context references local copies (all on coroutine frame, stable)
         request_context rctx(io_.io_ctx(), io_.raw_socket(),
-                             method_sv, full_path,
-                             headers, body,
-                             resp, std::move(rp));
+                             method, full_path,
+                             headers, std::string_view{},
+                             resp, std::move(rp),
+                             std::move(body_stream));
 
         co_await execute_chain(rctx, handler, 0);
 
@@ -400,7 +454,8 @@ private:
         item.stream_id   = stream_id;
         item.status_code = resp.status_code();
         item.headers     = normalize_headers(resp.headers());
-        item.body        = std::string(resp.body());
+        item.trailers    = normalize_headers(resp.trailers());
+        item.body        = resp.take_body();
 
         co_await submit_ch_.send(std::move(item));
     }
@@ -428,6 +483,7 @@ private:
             // Single flush for all batched responses
             auto f = co_await flush();
             if (!f) break;
+            cleanup_closed_streams();
         }
     }
 
@@ -439,11 +495,26 @@ private:
         auto& stream = it->second;
         stream.resp().status_code = item.status_code;
         stream.resp().headers     = std::move(item.headers);
+        stream.resp().trailers    = std::move(item.trailers);
         stream.resp().body        = std::move(item.body);
         stream.resp().body_offset = 0;
 
         submit_response(stream);
         stream.mark_response_ready();
+    }
+
+    void cleanup_closed_streams() {
+        for (auto it = streams_.begin(); it != streams_.end();) {
+            if (it->second.state() == h2_stream_state::closed &&
+                it->second.response_ready()) {
+                it = streams_.erase(it);
+                if (active_stream_count_ > 0) {
+                    --active_stream_count_;
+                }
+            } else {
+                ++it;
+            }
+        }
     }
 
     // =========================================================================
@@ -482,7 +553,7 @@ private:
             });
         }
 
-        if (!resp.body.empty()) {
+        if (!resp.body.empty() || !resp.trailers.empty()) {
             // Add content-length if not already present
             if (resp.headers.find("content-length") == resp.headers.end()) {
                 resp.headers["content-length"] = std::to_string(resp.body.size());
@@ -495,7 +566,7 @@ private:
                 });
             }
 
-            // Set up data provider for response body
+            // Set up data provider for response body and optional trailing HEADERS.
             nghttp2_data_provider2 prd;
             prd.source.ptr = &stream;
             prd.read_callback = data_source_read;
@@ -518,8 +589,8 @@ private:
     // to take effect for large response bodies.
 
     static auto data_source_read(
-        nghttp2_session* /*session*/,
-        int32_t /*stream_id*/,
+        nghttp2_session* session,
+        int32_t stream_id,
         uint8_t* buf,
         size_t length,
         uint32_t* data_flags,
@@ -536,8 +607,24 @@ private:
         std::memcpy(buf, body.data() + offset, to_copy);
         offset += to_copy;
 
-        // Signal EOF only when entire body has been consumed
+        // Signal EOF only when entire body has been consumed. With trailers,
+        // submit trailing HEADERS and leave END_STREAM to that header block.
         if (offset >= body.size()) {
+            if (!resp.trailers.empty()) {
+                std::vector<nghttp2_nv> nva;
+                nva.reserve(resp.trailers.size());
+                for (auto& [k, v] : resp.trailers) {
+                    nva.push_back({
+                        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(k.data())),
+                        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(v.data())),
+                        k.size(), v.size(),
+                        NGHTTP2_NV_FLAG_NONE
+                    });
+                }
+                nghttp2_submit_trailer(session, stream_id, nva.data(), nva.size());
+                resp.trailers.clear();
+                *data_flags |= NGHTTP2_DATA_FLAG_NO_END_STREAM;
+            }
             *data_flags |= NGHTTP2_DATA_FLAG_EOF;
         }
 
@@ -665,6 +752,9 @@ private:
         auto it = self->streams_.find(stream_id);
         if (it != self->streams_.end()) {
             it->second.append_body(data, len);
+            if (!it->second.push_body_chunk(data, len)) {
+                return NGHTTP2_ERR_TEMPORAL_CALLBACK_FAILURE;
+            }
         }
 
         // Manual flow control: consume received data for both connection and stream.
@@ -686,13 +776,12 @@ private:
         case NGHTTP2_HEADERS: {
             if (frame->headers.cat != NGHTTP2_HCAT_REQUEST) break;
 
-            // Check if END_STREAM is set (no body)
-            if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-                auto it = self->streams_.find(frame->hd.stream_id);
-                if (it != self->streams_.end()) {
+            auto it = self->streams_.find(frame->hd.stream_id);
+            if (it != self->streams_.end()) {
+                if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
                     it->second.mark_request_complete();
                     it->second.set_state(h2_stream_state::half_closed_remote);
-                    self->pending_handlers_.push_back(frame->hd.stream_id);
+                    self->queue_handler_start(it->second);
                 }
             }
             break;
@@ -703,7 +792,7 @@ private:
                 if (it != self->streams_.end()) {
                     it->second.mark_request_complete();
                     it->second.set_state(h2_stream_state::half_closed_remote);
-                    self->pending_handlers_.push_back(frame->hd.stream_id);
+                    self->queue_handler_start(it->second);
                 }
             }
             break;
@@ -722,9 +811,16 @@ private:
         void* user_data) -> int
     {
         auto* self = static_cast<http2_session*>(user_data);
-        self->streams_.erase(stream_id);
-        if (self->active_stream_count_ > 0) {
-            --self->active_stream_count_;
+        auto it = self->streams_.find(stream_id);
+        if (it != self->streams_.end()) {
+            it->second.mark_request_complete();
+            it->second.set_state(h2_stream_state::closed);
+            if (!it->second.handler_started()) {
+                self->streams_.erase(it);
+                if (self->active_stream_count_ > 0) {
+                    --self->active_stream_count_;
+                }
+            }
         }
         return 0;
     }
@@ -748,6 +844,8 @@ private:
 
     // Write coalescing buffer — accumulates mem_send2 chunks for single syscall
     std::string flush_buf_;
+    std::string client_preface_buf_;
+    bool client_preface_consumed_ = false;
 
     // Graceful shutdown state
     bool shutting_down_ = false;

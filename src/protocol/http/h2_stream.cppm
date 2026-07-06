@@ -1,6 +1,7 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include <cstring>
 
 #ifdef CNETMOD_HAS_NGHTTP2
 #define NGHTTP2_NO_SSIZE_T
@@ -28,7 +29,8 @@ namespace cnetmod::http {
 export class h2_stream {
 public:
     explicit h2_stream(std::int32_t id) noexcept
-        : stream_id_(id) {}
+        : stream_id_(id)
+        , body_stream_(std::make_shared<request_body_stream>()) {}
 
     // --- Request Building (called by nghttp2 callbacks) ---
 
@@ -50,8 +52,17 @@ public:
         body_.append(reinterpret_cast<const char*>(data), len);
     }
 
+    [[nodiscard]] auto push_body_chunk(const std::uint8_t* data, std::size_t len) -> bool {
+        request_body_chunk chunk(len);
+        std::memcpy(chunk.data(), data, len);
+        return body_stream_->push(std::move(chunk));
+    }
+
     /// Mark request as complete (all headers + body received)
-    void mark_request_complete() noexcept { request_complete_ = true; }
+    void mark_request_complete() noexcept {
+        request_complete_ = true;
+        body_stream_->close();
+    }
 
     // --- Request Access ---
 
@@ -78,6 +89,11 @@ public:
     [[nodiscard]] auto headers() const noexcept -> const header_map& { return headers_; }
     [[nodiscard]] auto body() const noexcept -> std::string_view { return body_; }
     [[nodiscard]] auto request_complete() const noexcept -> bool { return request_complete_; }
+    [[nodiscard]] auto handler_started() const noexcept -> bool { return handler_started_; }
+    void mark_handler_started() noexcept { handler_started_ = true; }
+    [[nodiscard]] auto body_stream() const noexcept -> std::shared_ptr<request_body_stream> {
+        return body_stream_;
+    }
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view {
         auto it = headers_.find(std::string(key));
@@ -94,6 +110,7 @@ public:
     struct response_data {
         int status_code = 200;
         header_map headers;
+        header_map trailers;
         std::string body;
         std::size_t body_offset = 0;  // Read position for DATA frame chunking
         bool sent = false;            // Has response been submitted to nghttp2?
@@ -122,7 +139,9 @@ private:
     std::string authority_;
     header_map headers_;
     std::string body_;
+    std::shared_ptr<request_body_stream> body_stream_;
     bool request_complete_ = false;
+    bool handler_started_ = false;
 
     // Response
     response_data response_;

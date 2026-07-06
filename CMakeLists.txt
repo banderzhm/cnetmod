@@ -356,6 +356,20 @@ foreach(src ${CPP_SOURCES})
     endif()
 endforeach()
 
+# MSVC's module scanner defaults ordinary .cpp scan output to "$(IntDir)/.d.json".
+# Multiple module implementation units then share the same dependency output and
+# make the Visual Studio target permanently out of date. Give every .cpp source a
+# stable per-file dependency path so repeated builds can be true no-ops.
+if(MSVC)
+    foreach(src ${CPP_SOURCES})
+        file(RELATIVE_PATH src_rel "${CMAKE_CURRENT_SOURCE_DIR}" "${src}")
+        string(MAKE_C_IDENTIFIER "${src_rel}" src_dep_name)
+        set_source_files_properties("${src}" PROPERTIES
+            VS_SETTINGS "ModuleDependenciesFile=$(IntDir)/${src_dep_name}.module.json"
+        )
+    endforeach()
+endif()
+
 # Filter by platform: Exclude I/O backend modules not needed for current platform
 if(NOT CNETMOD_HAS_IOCP)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/iocp")
@@ -484,6 +498,9 @@ set_property(TARGET cnetmod_app PROPERTY
 
 option(CNETMOD_BUILD_TESTS "Build tests" ON)
 option(CNETMOD_BUILD_BENCH "Build performance benchmarks" ON)
+if(CNETMOD_BUILD_TESTS)
+    enable_testing()
+endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/testing/CMakeLists.txt")
     add_subdirectory(testing)
 endif()

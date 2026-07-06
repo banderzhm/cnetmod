@@ -52,6 +52,7 @@ export struct socket_options {
     bool reuse_port = false;
     bool non_blocking = true;
     bool no_delay = false;        // TCP_NODELAY
+    std::optional<bool> ipv6_only = std::nullopt;  // IPV6_V6ONLY; nullopt keeps OS default
     int recv_buffer_size = 0;     // 0 = system default
     int send_buffer_size = 0;     // 0 = system default
 };
@@ -101,12 +102,23 @@ public:
     /// Get local endpoint (getsockname)
     [[nodiscard]] auto local_endpoint() const -> std::expected<endpoint, std::error_code>;
 
+    /// Get remote endpoint (getpeername)
+    [[nodiscard]] auto remote_endpoint() const -> std::expected<endpoint, std::error_code>;
+
     /// Close socket
     void close() noexcept;
+
+    /// Shutdown socket directions without releasing the handle.
+    void shutdown_send() noexcept;
+    void shutdown_both() noexcept;
 
     /// Get native handle
     [[nodiscard]] auto native_handle() const noexcept -> native_handle_t {
         return handle_;
+    }
+
+    [[nodiscard]] auto family() const noexcept -> address_family {
+        return family_;
     }
 
     /// Release ownership (does not close)
@@ -124,9 +136,12 @@ public:
     explicit operator bool() const noexcept { return is_open(); }
 
 private:
-    explicit socket(native_handle_t handle) noexcept : handle_(handle) {}
+    explicit socket(native_handle_t handle,
+                    address_family family = address_family::unspecified) noexcept
+        : handle_(handle), family_(family) {}
 
     native_handle_t handle_ = invalid_handle;
+    address_family family_ = address_family::unspecified;
 };
 
 } // namespace cnetmod

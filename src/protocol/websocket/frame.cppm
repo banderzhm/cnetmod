@@ -111,8 +111,11 @@ export void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept {
 
 /// Build WebSocket frame (header + payload)
 /// When mask=true, automatically generates random masking key and masks payload
-export auto build_frame(opcode op, std::span<const std::byte> payload,
-                        bool mask, bool fin = true) -> std::vector<std::byte>
+export void build_frame_into(std::vector<std::byte>& frame,
+                             opcode op,
+                             std::span<const std::byte> payload,
+                             bool mask,
+                             bool fin = true)
 {
     std::size_t header_size = 2;
     std::uint8_t basic_size;
@@ -129,7 +132,8 @@ export auto build_frame(opcode op, std::span<const std::byte> payload,
 
     if (mask) header_size += 4;
 
-    std::vector<std::byte> frame(header_size + payload.size());
+    frame.clear();
+    frame.resize(header_size + payload.size());
 
     // Byte 0: FIN + opcode
     std::uint8_t b0 = static_cast<std::uint8_t>(op);
@@ -171,6 +175,13 @@ export auto build_frame(opcode op, std::span<const std::byte> payload,
     } else {
         std::memcpy(frame.data() + offset, payload.data(), payload.size());
     }
+}
+
+export auto build_frame(opcode op, std::span<const std::byte> payload,
+                        bool mask, bool fin = true) -> std::vector<std::byte>
+{
+    std::vector<std::byte> frame;
+    build_frame_into(frame, op, payload, mask, fin);
 
     return frame;
 }

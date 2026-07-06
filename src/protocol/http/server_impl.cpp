@@ -397,7 +397,7 @@ void server::set_ssl_context(ssl_context& ssl_ctx) {
 }
 #endif
 
-auto server::listen(std::string_view host, std::uint16_t port)
+auto server::listen(std::string_view host, std::uint16_t port, socket_options opts)
     -> std::expected<void, std::error_code>
 {
     auto addr_r = ip_address::from_string(host);
@@ -405,7 +405,8 @@ auto server::listen(std::string_view host, std::uint16_t port)
 
     acc_ = std::make_unique<tcp::acceptor>(ctx_);
     auto ep = endpoint{*addr_r, port};
-    auto r = acc_->open(ep, {.reuse_address = true});
+    opts.reuse_address = true;
+    auto r = acc_->open(ep, opts);
     if (!r) return std::unexpected(r.error());
 
     host_ = std::string(host);
@@ -518,8 +519,25 @@ auto server::handle_connection(socket client, io_context& io) -> task<void> {
     auto peek_rd = co_await async_read(io, client,
         mutable_buffer{peek_buf.data(), peek_buf.size()});
     if (!peek_rd || *peek_rd == 0) { client.close(); co_return; }
+    auto peek_len = *peek_rd;
 
-    if (is_h2_client_preface(peek_buf.data(), *peek_rd)) {
+    auto matches_h2_preface_prefix = [&]() -> bool {
+        if (peek_len > h2_client_magic.size()) return false;
+        auto view = std::string_view{
+            reinterpret_cast<const char*>(peek_buf.data()),
+            peek_len,
+        };
+        return h2_client_magic.starts_with(view);
+    };
+
+    while (peek_len < h2_client_magic.size() && matches_h2_preface_prefix()) {
+        auto rd = co_await async_read(io, client,
+            mutable_buffer{peek_buf.data() + peek_len, peek_buf.size() - peek_len});
+        if (!rd || *rd == 0) { client.close(); co_return; }
+        peek_len += *rd;
+    }
+
+    if (is_h2_client_preface(peek_buf.data(), peek_len)) {
         // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
@@ -527,14 +545,14 @@ auto server::handle_connection(socket client, io_context& io) -> task<void> {
         stream_io sio(io, client);
         http2_session h2(sio, router_, middlewares_, {},
             [this]() { return date_cache_.get(); });
-        co_await h2.run(peek_buf.data(), *peek_rd);
+        co_await h2.run(peek_buf.data(), peek_len);
         client.close();
         co_return;
     }
 
     // HTTP/1.1 cleartext — feed already-read bytes to parser
     co_await handle_h1_clear(client, io,
-        reinterpret_cast<const char*>(peek_buf.data()), *peek_rd);
+        reinterpret_cast<const char*>(peek_buf.data()), peek_len);
 #else
     co_await handle_h1_clear(client, io);
 #endif

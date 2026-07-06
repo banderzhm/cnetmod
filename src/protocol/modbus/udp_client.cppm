@@ -15,6 +15,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
+import cnetmod.core.dns;
 import cnetmod.core.buffer;
 import cnetmod.executor.async_op;
 
@@ -37,17 +38,17 @@ public:
         remote_host_ = std::string(host);
         remote_port_ = port;
         
-        // Parse remote IP address
-        auto addr_result = ip_address::from_string(host);
-        if (!addr_result) {
-            co_return addr_result.error();
+        auto addrs = co_await async_resolve_addresses(ctx_, host, std::to_string(port));
+        if (!addrs || addrs->empty()) {
+            co_return std::make_error_code(std::errc::host_unreachable);
         }
+        auto addr_result = addrs->front();
         
-        remote_endpoint_ = endpoint(*addr_result, port);
+        remote_endpoint_ = endpoint(addr_result, port);
         
         // Create UDP socket
         auto sock_result = socket::create(
-            addr_result->is_v4() ? address_family::ipv4 : address_family::ipv6,
+            addr_result.is_v4() ? address_family::ipv4 : address_family::ipv6,
             socket_type::datagram
         );
         if (!sock_result) {
@@ -63,7 +64,7 @@ public:
         
         // Bind to any local address
         endpoint local_ep(
-            addr_result->is_v4() ? ip_address(ipv4_address::any()) : ip_address(ipv6_address::any()),
+            addr_result.is_v4() ? ip_address(ipv4_address::any()) : ip_address(ipv6_address::any()),
             0
         );
         if (auto err = socket_.bind(local_ep); !err) {

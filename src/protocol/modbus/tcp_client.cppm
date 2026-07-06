@@ -16,6 +16,7 @@ import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
 import cnetmod.core.socket;
 import cnetmod.core.address;
+import cnetmod.core.dns;
 import cnetmod.core.buffer;
 import cnetmod.executor.async_op;
 
@@ -38,35 +39,11 @@ public:
         host_ = std::string(host);
         port_ = port;
         
-        // Parse IP address
-        auto addr_result = ip_address::from_string(host);
-        if (!addr_result) {
-            co_return addr_result.error();
+        auto connect_r = co_await async_connect_happy_eyeballs(ctx_, host, port);
+        if (!connect_r) {
+            co_return connect_r.error();
         }
-        
-        // Create TCP socket
-        auto sock_result = socket::create(
-            addr_result->is_v4() ? address_family::ipv4 : address_family::ipv6,
-            socket_type::stream
-        );
-        if (!sock_result) {
-            co_return sock_result.error();
-        }
-        
-        socket_ = std::move(*sock_result);
-        
-        // Set non-blocking
-        if (auto err = socket_.set_non_blocking(true); !err) {
-            co_return err.error();
-        }
-        
-        // Connect
-        endpoint ep(*addr_result, port);
-        auto connect_result = co_await async_connect(ctx_, socket_, ep);
-        if (!connect_result) {
-            socket_.close();
-            co_return connect_result.error();
-        }
+        socket_ = std::move(connect_r->sock);
         
         co_return std::error_code{};
     }
@@ -92,9 +69,9 @@ public:
         // Receive MBAP header first (7 bytes)
         std::vector<std::uint8_t> header_buf(7);
         mutable_buffer header_mbuf{reinterpret_cast<std::byte*>(header_buf.data()), 7};
-        auto header_result = co_await async_read(ctx_, socket_, header_mbuf);
-        if (!header_result || *header_result < 7) {
-            co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+        auto header_result = co_await read_exact(header_mbuf);
+        if (!header_result) {
+            co_return std::unexpected(header_result.error());
         }
 
         // Parse length from header
@@ -114,9 +91,9 @@ public:
                 reinterpret_cast<std::byte*>(full_buf.data() + 7), 
                 static_cast<std::size_t>(length - 1)
             };
-            auto data_result = co_await async_read(ctx_, socket_, data_mbuf);
-            if (!data_result || *data_result < static_cast<std::size_t>(length - 1)) {
-                co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+            auto data_result = co_await read_exact(data_mbuf);
+            if (!data_result) {
+                co_return std::unexpected(data_result.error());
             }
         }
 
@@ -130,21 +107,8 @@ public:
         -> task<std::expected<modbus_response, std::error_code>>
     {
         cancel_token token;
-        
-        // Start timeout timer
-        auto timeout_task = [](io_context& ctx, std::chrono::steady_clock::duration dur, 
-                              cancel_token& tok) -> task<void> {
-            co_await async_timer_wait(ctx, dur);
-            tok.cancel();
-        }(ctx_, timeout, token);
-        
-        // Execute with cancellation support
-        auto result = co_await execute_with_cancel(request, token);
-        
-        // Cancel timeout if execute completed first
-        token.cancel();
-        
-        co_return result;
+        co_return co_await with_timeout(
+            ctx_, timeout, execute_with_cancel(request, token), token);
     }
 
     // ── Reconnect ──
@@ -179,6 +143,44 @@ private:
     std::uint16_t port_ = 502;
     std::uint16_t transaction_id_;
 
+    auto read_exact(mutable_buffer buf)
+        -> task<std::expected<void, std::error_code>>
+    {
+        auto* data = static_cast<std::byte*>(buf.data);
+        std::size_t got = 0;
+        while (got < buf.size) {
+            auto r = co_await async_read(ctx_, socket_,
+                mutable_buffer{data + got, buf.size - got});
+            if (!r) {
+                co_return std::unexpected(r.error());
+            }
+            if (*r == 0) {
+                co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+            }
+            got += *r;
+        }
+        co_return {};
+    }
+
+    auto read_exact(mutable_buffer buf, cancel_token& token)
+        -> task<std::expected<void, std::error_code>>
+    {
+        auto* data = static_cast<std::byte*>(buf.data);
+        std::size_t got = 0;
+        while (got < buf.size) {
+            auto r = co_await async_read(ctx_, socket_,
+                mutable_buffer{data + got, buf.size - got}, token);
+            if (!r) {
+                co_return std::unexpected(r.error());
+            }
+            if (*r == 0) {
+                co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+            }
+            got += *r;
+        }
+        co_return {};
+    }
+
     // ── Execute with cancellation support ──
     auto execute_with_cancel(const modbus_request& request, cancel_token& token) 
         -> task<std::expected<modbus_response, std::error_code>> 
@@ -200,9 +202,9 @@ private:
         // Receive MBAP header first (7 bytes)
         std::vector<std::uint8_t> header_buf(7);
         mutable_buffer header_mbuf{reinterpret_cast<std::byte*>(header_buf.data()), 7};
-        auto header_result = co_await async_read(ctx_, socket_, header_mbuf, token);
-        if (!header_result || *header_result < 7) {
-            co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+        auto header_result = co_await read_exact(header_mbuf, token);
+        if (!header_result) {
+            co_return std::unexpected(header_result.error());
         }
 
         // Parse length from header
@@ -222,9 +224,9 @@ private:
                 reinterpret_cast<std::byte*>(full_buf.data() + 7), 
                 static_cast<std::size_t>(length - 1)
             };
-            auto data_result = co_await async_read(ctx_, socket_, data_mbuf, token);
-            if (!data_result || *data_result < static_cast<std::size_t>(length - 1)) {
-                co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+            auto data_result = co_await read_exact(data_mbuf, token);
+            if (!data_result) {
+                co_return std::unexpected(data_result.error());
             }
         }
 
