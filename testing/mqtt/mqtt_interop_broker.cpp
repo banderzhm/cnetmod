@@ -22,7 +22,7 @@ auto parse_port(std::string_view text) -> std::optional<std::uint16_t> {
 
 int main(int argc, char** argv) {
     if (argc != 2 && argc != 5) {
-        std::println(stderr, "usage: mqtt_interop_broker <port> [--tls <cert.pem> <key.pem>]");
+        std::fputs("usage: mqtt_interop_broker <port> [--tls <cert.pem> <key.pem>]\n", stderr);
         return 2;
     }
 
@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
     const bool use_tls = argc == 5;
     if (use_tls) {
         if (std::string_view{argv[2]} != "--tls") {
-            std::println(stderr, "usage: mqtt_interop_broker <port> [--tls <cert.pem> <key.pem>]");
+            std::fputs("usage: mqtt_interop_broker <port> [--tls <cert.pem> <key.pem>]\n", stderr);
             return 2;
         }
         opts.tls_port = *port;
@@ -58,7 +58,7 @@ int main(int argc, char** argv) {
     auto lr = use_tls ? broker.listen_tls() : broker.listen();
 #else
     if (use_tls) {
-        std::println(stderr, "TLS requested but SSL support is disabled");
+        std::fputs("TLS requested but SSL support is disabled\n", stderr);
         return 77;
     }
     auto lr = broker.listen();

@@ -141,7 +141,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
             co_return fail(error, "timeout waiting for " + payload);
         }
     }
-    std::println("ok cnetmod client qos0/qos1/qos2");
+    std::puts("ok cnetmod client qos0/qos1/qos2");
 
     std::vector<received_message> wildcard_messages;
     mqtt::client wildcard_sub(ctx);
@@ -178,7 +178,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     if (find_payload(wildcard_messages, "wild-miss")) {
         co_return fail(error, "wildcard subscription received non-matching publish");
     }
-    std::println("ok cnetmod client wildcard");
+    std::puts("ok cnetmod client wildcard");
 
     const auto retained_topic = prefix + "/retain/item";
     if (!co_await publish_client(pub, retained_topic, "retained-value",
@@ -215,7 +215,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     if (!co_await publish_client(pub, retained_topic, "", mqtt::qos::at_least_once, true, error)) {
         co_return false;
     }
-    std::println("ok cnetmod client retained");
+    std::puts("ok cnetmod client retained");
 
     const auto unsub_topic = prefix + "/unsub/item";
     if (!co_await subscribe_client(sub, unsub_topic, mqtt::qos::at_least_once, error)) {
@@ -233,7 +233,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     if (find_payload(qos_messages, "after-unsub")) {
         co_return fail(error, "message arrived after unsubscribe");
     }
-    std::println("ok cnetmod client unsubscribe");
+    std::puts("ok cnetmod client unsubscribe");
 
     const auto will_topic = prefix + "/will/client";
     std::vector<received_message> will_messages;
@@ -269,7 +269,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     if (!will_ok) {
         co_return fail(error, "timeout waiting for will message");
     }
-    std::println("ok cnetmod client will");
+    std::puts("ok cnetmod client will");
 
     (void)co_await will_sub.disconnect();
     (void)co_await retained_sub.disconnect();
@@ -283,7 +283,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
 
 int main(int argc, char** argv) {
     if (argc != 4) {
-        std::println(stderr, "usage: mqtt_interop_client <host> <port> <topic-prefix>");
+        std::fputs("usage: mqtt_interop_client <host> <port> <topic-prefix>\n", stderr);
         return 2;
     }
 
@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
     if (exit_code != 0) {
         std::println(stderr, "FAIL {}", error.empty() ? "unknown error" : error);
     } else {
-        std::println("PASS cnetmod mqtt client interop");
+        std::puts("PASS cnetmod mqtt client interop");
     }
     logger::shutdown();
     return exit_code;
