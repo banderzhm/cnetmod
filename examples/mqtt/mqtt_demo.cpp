@@ -81,7 +81,7 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     // 注册消息回调
     sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [Subscriber] topic={} payload={} qos={} retain={}",
-            msg.topic, msg.payload, mqtt::to_string(msg.qos_value), msg.retain);
+            msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value), msg.retain);
         msg_count.fetch_add(1);
     });
 
@@ -201,7 +201,7 @@ auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     mqtt::client will_sub(ctx);
     will_sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [WillSub] got will: topic={} payload={}",
-            msg.topic, msg.payload);
+            msg.topic, msg.payload.str());
         msg_count.fetch_add(1);
     });
 
@@ -263,7 +263,7 @@ void run_sync_demo(std::atomic<bool>& broker_ready) {
     logger::info("  [Sync] Connected");
 
     sc.on_message([](const mqtt::publish_message& msg) {
-        logger::info("  [Sync] recv: topic={} payload={}", msg.topic, msg.payload);
+        logger::info("  [Sync] recv: topic={} payload={}", msg.topic, msg.payload.str());
     });
 
     sc.subscribe_sync("test/sync", mqtt::qos::at_least_once);
@@ -302,7 +302,7 @@ auto run_reconnect_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     });
 
     rc.on_message([](const mqtt::publish_message& msg) {
-        logger::info("  [Reconnect] recv: {}", msg.payload);
+        logger::info("  [Reconnect] recv: {}", msg.payload.str());
     });
     rc.on_disconnect([](std::string reason) {
         logger::info("  [Reconnect] disconnected: {} (auto-reconnect will retry)",
@@ -406,7 +406,7 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     mqtt::client c(ctx);
     c.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Unsub] recv: topic={} payload={}", msg.topic, msg.payload);
+        logger::info("  [Unsub] recv: topic={} payload={}", msg.topic, msg.payload.str());
         recv_count.fetch_add(1);
     });
 
@@ -481,7 +481,7 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     mqtt::client sub(ctx);
     sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [Retained] new sub recv: topic={} payload={} retain={}",
-            msg.topic, msg.payload, msg.retain);
+            msg.topic, msg.payload.str(), msg.retain);
         retained_count.fetch_add(1);
     });
 
@@ -570,7 +570,7 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
         mqtt::client c(ctx);
         c.on_message([&](const mqtt::publish_message& msg) {
             logger::info("  [Session] recv offline: topic={} payload={}",
-                msg.topic, msg.payload);
+                msg.topic, msg.payload.str());
             recv_count.fetch_add(1);
         });
 
@@ -610,11 +610,11 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     mqtt::client s1(ctx), s2(ctx);
 
     s1.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Shared-S1] recv: {}", msg.payload);
+        logger::info("  [Shared-S1] recv: {}", msg.payload.str());
         sub1_count.fetch_add(1);
     });
     s2.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Shared-S2] recv: {}", msg.payload);
+        logger::info("  [Shared-S2] recv: {}", msg.payload.str());
         sub2_count.fetch_add(1);
     });
 
@@ -670,7 +670,7 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     mqtt::client sub(ctx);
     sub.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [v5Props] recv: topic={} payload={}", msg.topic, msg.payload);
+        logger::info("  [v5Props] recv: topic={} payload={}", msg.topic, msg.payload.str());
         // 打印 user properties
         for (auto& p : msg.props) {
             if (p.id == mqtt::property_id::user_property) {
@@ -754,7 +754,7 @@ auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     mqtt::client sub(ctx);
     sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [v3.1.1] recv: topic={} payload={} qos={}",
-            msg.topic, msg.payload, mqtt::to_string(msg.qos_value));
+            msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value));
         recv_count.fetch_add(1);
     });
 

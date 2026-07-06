@@ -109,7 +109,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     sub.on_message([&](const mqtt::publish_message& msg) {
         qos_messages.push_back(received_message{
             .topic = msg.topic,
-            .payload = msg.payload,
+            .payload = msg.payload.str(),
             .qos_value = msg.qos_value,
             .retain = msg.retain,
         });
@@ -148,7 +148,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     wildcard_sub.on_message([&](const mqtt::publish_message& msg) {
         wildcard_messages.push_back(received_message{
             .topic = msg.topic,
-            .payload = msg.payload,
+            .payload = msg.payload.str(),
             .qos_value = msg.qos_value,
             .retain = msg.retain,
         });
@@ -191,7 +191,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     retained_sub.on_message([&](const mqtt::publish_message& msg) {
         retained_messages.push_back(received_message{
             .topic = msg.topic,
-            .payload = msg.payload,
+            .payload = msg.payload.str(),
             .qos_value = msg.qos_value,
             .retain = msg.retain,
         });
@@ -241,7 +241,7 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     will_sub.on_message([&](const mqtt::publish_message& msg) {
         will_messages.push_back(received_message{
             .topic = msg.topic,
-            .payload = msg.payload,
+            .payload = msg.payload.str(),
             .qos_value = msg.qos_value,
             .retain = msg.retain,
         });
