@@ -30,7 +30,7 @@ import cnetmod.core.ssl;
 #endif
 
 #ifdef CNETMOD_HAS_NGHTTP2
-// HTTP/2 相关导入在 server.cppm 中已处理
+// HTTP/2 server.cppm
 #endif
 
 namespace cnetmod::http {

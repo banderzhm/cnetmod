@@ -1,6 +1,6 @@
 /// cnetmod example — Async Redis Client (RESP3)
-/// 演示 redis::client 的 HELLO 3 / AUTH / 基础命令 / pipeline / request builder / stdexec 桥接
-/// 需要本地 Redis 运行在 127.0.0.1:6379
+/// Demonstrates redis::client HELLO 3 / AUTH / basic / pipeline / request builder / stdexec bridge
+/// Redis run 127.0.0.1:6379
 
 #include <cnetmod/config.hpp>
 
@@ -22,7 +22,7 @@ using cn::redis::is_ok;
 using cn::redis::has_error;
 using cn::redis::error_message;
 
-/// 打印响应节点列表
+/// Response
 void print_nodes(std::string_view label, const std::vector<resp3_node>& nodes) {
     std::print("  {:<20} -> ", label);
     if (nodes.empty()) { std::println("(empty)"); return; }
@@ -43,7 +43,7 @@ void print_nodes(std::string_view label, const std::vector<resp3_node>& nodes) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 1: 基础命令 (使用 cmd initializer_list)
+// Demo 1: basic ( cmd initializer_list)
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_basic(redis_client& r) -> cn::task<void> {
@@ -84,13 +84,13 @@ auto demo_basic(redis_client& r) -> cn::task<void> {
 auto demo_request_builder(redis_client& r) -> cn::task<void> {
     std::println("\n── Request Builder ──");
 
-    // 单条命令 via request
+    // Via request
     request req;
     req.push("SET", "rb:key", "value123");
     auto set_r = co_await r.exec(req);
     std::println("  SET rb:key      -> {}", is_ok(*set_r) ? "OK" : "FAIL");
 
-    // 多命令 request (pipeline 风格)
+    // Request (pipeline )
     request multi;
     multi.push("SET", "rb:a", "alpha");
     multi.push("SET", "rb:b", "beta");
@@ -105,7 +105,7 @@ auto demo_request_builder(redis_client& r) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 3: Pipeline — 多条命令单次往返
+// Demo 3: Pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_pipeline(redis_client& r) -> cn::task<void> {
@@ -131,7 +131,7 @@ auto demo_pipeline(redis_client& r) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 4: stdexec sender 桥接
+// Demo 4: stdexec sender bridge
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_sender(cn::io_context& ctx, redis_client& r) -> cn::task<void> {
@@ -152,17 +152,17 @@ auto demo_sender(cn::io_context& ctx, redis_client& r) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口
+// Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run(cn::io_context& ctx) -> cn::task<void> {
     redis_client r(ctx);
 
-    // 连接 Redis（HELLO 3 + AUTH + SELECT）
+    // Redis(HELLO 3 + AUTH + SELECT)
     auto result = co_await r.connect({
         .host     = "127.0.0.1",
         .port     = 6379,
-        .password = "ydc888888",  // 按实际修改，留空则跳过 AUTH
+        .password = "ydc888888",  // Real, AUTH
         .username = {},
         .db       = 9,
     });

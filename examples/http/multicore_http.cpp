@@ -1,9 +1,9 @@
 /// cnetmod example — Multi-core HTTP Server
-/// 演示功能：
-///   1. server_context 多核架构（accept 线程 + N 个 worker 线程）
-///   2. 连接自动 round-robin 分发到 worker io_context
-///   3. pool_post_awaitable 将 CPU 密集型工作卸载到 stdexec 线程池
-///   4. 完全兼容原有 http::router / middleware
+/// Demonstratesfeatures
+/// 1. server_context multicore(accept thread + N worker thread)
+/// 2. round-robin worker io_context
+/// 3. pool_post_awaitable CPU stdexec thread
+/// 4. http::router / middleware
 
 #include <cnetmod/config.hpp>
 
@@ -29,10 +29,10 @@ constexpr std::uint16_t PORT = 19100;
 constexpr unsigned WORKER_THREADS = 4;
 
 // =============================================================================
-// CPU 密集型 handler — 通过 pool_post_awaitable 卸载到线程池
+// CPU handler - pool_post_awaitable thread
 // =============================================================================
 
-/// 模拟 CPU 密集计算
+/// Simulate CPU
 auto compute_fibonacci(int n) -> std::uint64_t {
     if (n <= 1) return static_cast<std::uint64_t>(n);
     std::uint64_t a = 0, b = 1;
@@ -44,7 +44,7 @@ auto compute_fibonacci(int n) -> std::uint64_t {
     return b;
 }
 
-/// 需要 server_context 的 handler，演示 pool 卸载
+/// Server_context handler, Demonstrates pool
 auto handle_compute(cn::server_context& sctx)
     -> http::handler_fn
 {
@@ -57,13 +57,13 @@ auto handle_compute(cn::server_context& sctx)
 
         auto io_tid = std::this_thread::get_id();
 
-        // 切换到 stdexec 线程池执行 CPU 密集计算
+        // Stdexec thread CPU
         co_await cn::pool_post_awaitable{sctx.pool()};
 
         auto pool_tid = std::this_thread::get_id();
         auto result = compute_fibonacci(n);
 
-        // 切回 io_context（通过 handler 返回后自动在 io 线程写响应）
+        // Io_context( handler return io threadresponse)
         co_await cn::post_awaitable{ctx.io_ctx()};
 
         auto back_tid = std::this_thread::get_id();
@@ -76,7 +76,7 @@ auto handle_compute(cn::server_context& sctx)
 }
 
 // =============================================================================
-// 客户端：发送请求并打印响应
+// Client: requestresponse
 // =============================================================================
 
 auto send_request(cn::io_context& ctx, http::http_method method,
@@ -130,7 +130,7 @@ auto send_request(cn::io_context& ctx, http::http_method method,
 }
 
 // =============================================================================
-// 客户端协程
+// Client coroutine
 // =============================================================================
 
 auto run_client(cn::server_context& sctx, http::server& srv) -> cn::task<void> {
@@ -139,7 +139,7 @@ auto run_client(cn::server_context& sctx, http::server& srv) -> cn::task<void> {
 
     std::println("\n========== Client: Testing Multi-core HTTP ==========\n");
 
-    // 1. 简单路由 — 不同请求分发到不同 worker 线程
+    // 1. simpleroute - request worker thread
     std::println("  [1] GET / (should go to worker thread)");
     co_await send_request(ctx, http::http_method::GET, "/");
 
@@ -149,23 +149,23 @@ auto run_client(cn::server_context& sctx, http::server& srv) -> cn::task<void> {
     std::println("\n  [3] GET /api/users/7 (another worker)");
     co_await send_request(ctx, http::http_method::GET, "/api/users/7");
 
-    // 2. CPU 密集计算 — 卸载到 stdexec pool
+    // 2. CPU - stdexec pool
     std::println("\n  [4] GET /compute/35 (CPU work on pool thread)");
     co_await send_request(ctx, http::http_method::GET, "/compute/35");
 
     std::println("\n  [5] GET /compute/40 (CPU work on pool thread)");
     co_await send_request(ctx, http::http_method::GET, "/compute/40");
 
-    // 3. 并发请求 — 验证多核并行处理
+    // 3. concurrentrequest - verifymulticore
     std::println("\n  [6-9] 4 concurrent requests (should use different workers)");
-    // 发 4 个快速请求
+    // 4 request
     for (int i = 0; i < 4; ++i) {
         std::println("\n    --- request #{} ---", i + 1);
         co_await send_request(ctx, http::http_method::GET,
             std::format("/api/users/{}", i + 100));
     }
 
-    // 4. JWT 认证测试
+    // 4. JWT authenticationTest
     std::println("\n  [10] GET /api/secret (no auth → 401)");
     co_await send_request(ctx, http::http_method::GET, "/api/secret");
 
@@ -194,13 +194,13 @@ int main() {
 
     cn::net_init net;
 
-    // 创建多核服务器上下文
+    // Createmulticore
     cn::server_context sctx(WORKER_THREADS, WORKER_THREADS);
 
-    // 构建路由
+    // Buildroute
     http::router router;
 
-    // GET / — 欢迎页
+    // Implementation note: GET.
     router.get("/", [](http::request_context& ctx) -> cn::task<void> {
         ctx.json(http::status::ok, std::format(
             R"({{"message":"Hello from multi-core cnetmod!","thread":"{}"}})",
@@ -217,17 +217,17 @@ int main() {
         co_return;
     });
 
-    // GET /compute/:n — CPU 密集计算（卸载到 pool）
+    // GET /compute/:n - CPU ( pool)
     router.get("/compute/:n", handle_compute(sctx));
 
-    // GET /api/secret — JWT 保护路由
+    // GET /api/secret - JWT protectroute
     router.get("/api/secret", [](http::request_context& ctx) -> cn::task<void> {
         ctx.json(http::status::ok,
             R"({"data":"top secret payload","access":"authorized"})");
         co_return;
     });
 
-    // 构建多核 HTTP 服务器
+    // Buildmulticore HTTP
     http::server srv(sctx);
     auto listen_r = srv.listen("0.0.0.0", PORT);
     if (!listen_r) {
@@ -235,13 +235,13 @@ int main() {
         return 1;
     }
 
-    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → rate_limiter → jwt_auth → handler）
+    // Registermiddleware(: recover -> access_log -> cors -> request_id -> body_limit -> rate_limiter -> jwt_auth -> handler)
     srv.use(cn::recover());
     srv.use(cn::access_log());
     srv.use(cn::cors());
     srv.use(cn::request_id());
     srv.use(cn::body_limit(2 * 1024 * 1024));  // 2MB
-    srv.use(cn::rate_limiter({.rate = 100.0, .burst = 200.0}));  // 宽松限流
+    srv.use(cn::rate_limiter({.rate = 100.0, .burst = 200.0}));  // Rate limiting
     srv.use(cn::jwt_auth({
         .verify = [](std::string_view token) { return token == "demo-secret"; },
         .skip_paths = {"/", "/api/users", "/compute"},
@@ -251,11 +251,11 @@ int main() {
     std::println("  Server listening on 0.0.0.0:{}", PORT);
     std::println("  Accept thread: {}", std::this_thread::get_id());
 
-    // 启动服务器和客户端
+    // StartClient
     cn::spawn(sctx.accept_io(), srv.run());
     cn::spawn(sctx.accept_io(), run_client(sctx, srv));
 
-    // 运行（阻塞：当前线程 accept_io + worker 线程）
+    // Run(blocking: thread accept_io + worker thread)
     sctx.run();
     std::println("Done.");
     return 0;

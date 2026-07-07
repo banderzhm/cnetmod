@@ -7,9 +7,6 @@
 [submodule "3rdparty/nghttp2"]
 	path = 3rdparty/nghttp2
 	url = https://github.com/nghttp2/nghttp2.git
-[submodule "3rdparty/pugixml"]
-	path = 3rdparty/pugixml
-	url = https://github.com/zeux/pugixml.git
 [submodule "3rdparty/spdlog"]
 	path = 3rdparty/spdlog
 	url = https://github.com/gabime/spdlog.git
@@ -19,3 +16,6 @@
 [submodule "3rdparty/stdexec"]
 	path = 3rdparty/stdexec
 	url = https://github.com/NVIDIA/stdexec.git
+[submodule "3rdparty/pugixml"]
+	path = 3rdparty/pugixml
+	url = https://github.com/zeux/pugixml.git

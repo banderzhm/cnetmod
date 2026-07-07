@@ -1,7 +1,7 @@
 /// cnetmod example — Redis Sharded Connection Pool
-/// 演示 redis::sharded_connection_pool 的多核优化特性
-/// 通过分片减少锁竞争，提升多线程并发性能
-/// 需要本地 Redis 运行在 127.0.0.1:6379
+/// Demonstrates redis::sharded_connection_pool multicore
+/// Threadconcurrent
+/// Redis run 127.0.0.1:6379
 
 #include <cnetmod/config.hpp>
 
@@ -17,7 +17,7 @@ using cn::redis::pool_params;
 using cn::redis::pooled_connection;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 1: 基础分片池操作
+// Demo 1: basic
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_basic_sharded(sharded_connection_pool& pool) -> cn::task<void> {
@@ -26,7 +26,7 @@ auto demo_basic_sharded(sharded_connection_pool& pool) -> cn::task<void> {
     std::println("Total connections: {}", pool.size());
     std::println("Total idle: {}", pool.idle_count());
 
-    // 获取连接（自动选择分片）
+    // Implementation note.
     auto conn_result = co_await pool.async_get_connection();
     if (!conn_result) {
         std::println("Failed to get connection: {}", conn_result.error().message());
@@ -36,7 +36,7 @@ auto demo_basic_sharded(sharded_connection_pool& pool) -> cn::task<void> {
     auto conn = std::move(*conn_result);
     std::println("Got connection from sharded pool");
 
-    // 执行命令
+    // Implementation note.
     auto pong = co_await conn->cmd({"PING"});
     if (pong && !pong->empty()) {
         std::println("PING -> {}", (*pong)[0].value);
@@ -52,7 +52,7 @@ auto demo_basic_sharded(sharded_connection_pool& pool) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 2: 高并发压力测试 - 对比分片池的性能优势
+// Demo 2: concurrentTest
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto worker_task(sharded_connection_pool& pool, int worker_id, int num_ops, 
@@ -63,7 +63,7 @@ auto worker_task(sharded_connection_pool& pool, int worker_id, int num_ops,
 
         auto conn = std::move(*conn_result);
         
-        // 执行操作
+        // Implementation note.
         auto key = std::format("bench:worker:{}:{}", worker_id, i);
         auto set_result = co_await conn->cmd({"SET", key, "value", "EX", "60"});
         if (set_result) {
@@ -75,20 +75,20 @@ auto worker_task(sharded_connection_pool& pool, int worker_id, int num_ops,
 auto demo_high_concurrency(sharded_connection_pool& pool) -> cn::task<void> {
     std::println("\n── High Concurrency Benchmark ──");
     
-    const int num_workers = 20;      // 20 个并发工作线程
-    const int ops_per_worker = 100;  // 每个线程 100 次操作
+    const int num_workers = 20;      // 20 concurrentthread
+    const int ops_per_worker = 100;  // Thread 100
     const int total_ops = num_workers * ops_per_worker;
 
     std::atomic<int> success_count{0};
     auto start = std::chrono::steady_clock::now();
 
-    // 启动所有工作任务
+    // Starttask
     std::vector<cn::task<void>> tasks;
     for (int i = 0; i < num_workers; ++i) {
         tasks.push_back(worker_task(pool, i, ops_per_worker, success_count));
     }
 
-    // 等待完成
+    // Wait forcomplete
     for (auto& t : tasks) {
         co_await t;
     }
@@ -106,13 +106,13 @@ auto demo_high_concurrency(sharded_connection_pool& pool) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 3: 绑定 io_context 的分片选择
+// Demo 3: io_context
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_context_binding(cn::io_context& ctx, sharded_connection_pool& pool) -> cn::task<void> {
     std::println("\n── Context-Bound Shard Selection ──");
 
-    // 使用特定 io_context 获取连接（会优先选择绑定的分片）
+    // Io_context ()
     auto conn_result = co_await pool.async_get_connection(ctx);
     if (!conn_result) {
         std::println("Failed to get connection");
@@ -122,7 +122,7 @@ auto demo_context_binding(cn::io_context& ctx, sharded_connection_pool& pool) ->
     auto conn = std::move(*conn_result);
     std::println("Got connection bound to io_context");
 
-    // 执行一些操作
+    // Implementation note.
     co_await conn->cmd({"SET", "ctx:bound", "value"});
     auto val = co_await conn->cmd({"GET", "ctx:bound"});
     if (val && !val->empty()) {
@@ -133,13 +133,13 @@ auto demo_context_binding(cn::io_context& ctx, sharded_connection_pool& pool) ->
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 4: 分片间负载均衡
+// Demo 4: load balancing
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_load_balancing(sharded_connection_pool& pool) -> cn::task<void> {
     std::println("\n── Load Balancing Across Shards ──");
 
-    // 快速借用多个连接，观察分片分布
+    // Implementation note.
     std::vector<pooled_connection> conns;
     
     std::println("Borrowing {} connections...", pool.shard_count() * 2);
@@ -153,13 +153,13 @@ auto demo_load_balancing(sharded_connection_pool& pool) -> cn::task<void> {
     std::println("Borrowed {} connections", conns.size());
     std::println("Pool stats: size={}, idle={}", pool.size(), pool.idle_count());
 
-    // 归还连接
+    // Implementation note.
     conns.clear();
     std::println("After returning: size={}, idle={}", pool.size(), pool.idle_count());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 5: Pipeline 批量操作（分片池）
+// Demo 5: Pipeline batch()
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_sharded_pipeline(sharded_connection_pool& pool) -> cn::task<void> {
@@ -173,7 +173,7 @@ auto demo_sharded_pipeline(sharded_connection_pool& pool) -> cn::task<void> {
 
     auto conn = std::move(*conn_result);
 
-    // 批量操作 - 使用initializer_list
+    // Batch - initializer_list
     auto start = std::chrono::steady_clock::now();
     auto replies = co_await conn->pipe({
         {"SET", "pipe:0", "value0"},
@@ -195,19 +195,19 @@ auto demo_sharded_pipeline(sharded_connection_pool& pool) -> cn::task<void> {
         std::println("Pipeline executed 11 commands in {} μs", elapsed.count());
     }
 
-    // 清理
+    // Implementation note.
     co_await conn->cmd({"DEL", "pipe:0", "pipe:1", "pipe:2", "pipe:3", "pipe:4", 
                         "pipe:5", "pipe:6", "pipe:7", "pipe:8", "pipe:9"});
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 6: 多 io_context 模式（真正的多线程）
+// Demo 6: io_context (thread)
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto worker_on_context(cn::io_context& ctx, sharded_connection_pool& pool, 
                        int worker_id, int num_ops) -> cn::task<void> {
     for (int i = 0; i < num_ops; ++i) {
-        // 使用当前 io_context 获取连接（亲和性优化）
+        // Io_context ()
         auto conn_result = co_await pool.async_get_connection(ctx);
         if (!conn_result) continue;
 
@@ -225,7 +225,7 @@ auto demo_multi_context(std::vector<std::unique_ptr<cn::io_context>>& contexts,
     const int ops_per_worker = 50;
     auto start = std::chrono::steady_clock::now();
 
-    // 在每个 io_context 上启动工作任务
+    // Io_context starttask
     std::vector<std::jthread> threads;
     for (std::size_t i = 0; i < contexts.size(); ++i) {
         threads.emplace_back([&ctx = *contexts[i], &pool, i]() {
@@ -234,7 +234,7 @@ auto demo_multi_context(std::vector<std::unique_ptr<cn::io_context>>& contexts,
         });
     }
 
-    // 等待所有线程完成
+    // Wait forthreadcomplete
     threads.clear();
 
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -248,23 +248,23 @@ auto demo_multi_context(std::vector<std::unique_ptr<cn::io_context>>& contexts,
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口
+// Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run_single_context(cn::io_context& ctx) -> cn::task<void> {
     std::println("=== Single Context Mode ===\n");
 
-    // 配置分片池参数
+    // Configure
     pool_params params;
     params.host = "127.0.0.1";
     params.port = 6379;
-    params.password = "ydc888888";  // 按实际修改
+    params.password = "ydc888888";  // Implementation note.
     params.db = 9;
-    params.initial_size = 8;        // 总初始连接数
-    params.max_size = 32;           // 总最大连接数
+    params.initial_size = 8;        // Implementation note.
+    params.max_size = 32;           // Implementation note.
     params.pool_timeout = std::chrono::seconds(5);
 
-    const std::size_t num_shards = 4;  // 4 个分片
+    const std::size_t num_shards = 4;  // Implementation note: 4 .
     std::println("Creating sharded pool with {} shards", num_shards);
     std::println("  Total initial size: {}", params.initial_size);
     std::println("  Total max size:     {}", params.max_size);
@@ -273,7 +273,7 @@ auto run_single_context(cn::io_context& ctx) -> cn::task<void> {
 
     sharded_connection_pool pool(ctx, params, num_shards);
 
-    // 启动连接池
+    // Startconnection pool
     co_await pool.async_run();
     co_await cn::async_sleep(ctx, std::chrono::milliseconds(500));
 
@@ -282,14 +282,14 @@ auto run_single_context(cn::io_context& ctx) -> cn::task<void> {
     std::println("  Total connections: {}", pool.size());
     std::println("  Total idle: {}", pool.idle_count());
 
-    // 运行演示
+    // RunDemonstrates
     co_await demo_basic_sharded(pool);
     co_await demo_context_binding(ctx, pool);
     co_await demo_load_balancing(pool);
     co_await demo_sharded_pipeline(pool);
     co_await demo_high_concurrency(pool);
 
-    // 关闭
+    // Implementation note.
     co_await pool.cancel();
     std::println("\nPool closed.");
     ctx.stop();

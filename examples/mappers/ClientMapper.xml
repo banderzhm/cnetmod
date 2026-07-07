@@ -5,28 +5,28 @@
         id, wechat_id, name, created_at
     </sql>
 
-    <!-- 查询所有客户 -->
+    <!-- Query all clients -->
     <select id="selectAll">
         SELECT <include refid="clientColumns"/>
         FROM clients
         ORDER BY created_at DESC
     </select>
 
-    <!-- 根据 ID 查询客户 -->
+    <!-- Query client by ID -->
     <select id="selectById">
         SELECT <include refid="clientColumns"/>
         FROM clients
         WHERE id = #{id}
     </select>
 
-    <!-- 根据微信 ID 查询客户 -->
+    <!-- Query client by WeChat ID -->
     <select id="selectByWechatId">
         SELECT <include refid="clientColumns"/>
         FROM clients
         WHERE wechat_id = #{wechat_id}
     </select>
 
-    <!-- 搜索客户 -->
+    <!-- Search clients -->
     <select id="search">
         SELECT <include refid="clientColumns"/>
         FROM clients
@@ -39,13 +39,13 @@
         ORDER BY created_at DESC
     </select>
 
-    <!-- 插入客户 -->
+    <!-- Insert client -->
     <insert id="insert">
         INSERT INTO clients (wechat_id, name, created_at)
         VALUES (#{wechat_id}, #{name}, NOW())
     </insert>
 
-    <!-- 更新客户 -->
+    <!-- Update client -->
     <update id="update">
         UPDATE clients
         <set>
@@ -59,19 +59,19 @@
         WHERE id = #{id}
     </update>
 
-    <!-- 删除客户 -->
+    <!-- Delete client -->
     <delete id="delete">
         DELETE FROM clients WHERE id = #{id}
     </delete>
 
-    <!-- 查询所有不重复的客户（按微信 ID 去重） -->
+    <!-- Query distinct clients by WeChat ID -->
     <select id="selectDistinctClients">
         SELECT DISTINCT wechat_id AS wechatId, name
         FROM clients
         ORDER BY name
     </select>
 
-    <!-- 模糊搜索客户（用于自动完成） -->
+    <!-- Fuzzy search clients for autocomplete -->
     <select id="searchFuzzy">
         SELECT DISTINCT wechat_id AS wechatId, name
         FROM clients

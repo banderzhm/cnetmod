@@ -7,6 +7,7 @@ module;
 #include <openssl/err.h>
 #include <openssl/bio.h>
 #include <openssl/x509.h>
+#include <cstring>
 #endif
 
 export module cnetmod.core.ssl;
@@ -140,6 +141,26 @@ public:
         return ssl_context{ctx};
     }
 
+    /// Create DTLS client context for datagram protocols such as CoAPS.
+    [[nodiscard]] static auto dtls_client() -> std::expected<ssl_context, std::error_code> {
+        detail::ssl_global_init();
+        auto* ctx = SSL_CTX_new(DTLS_client_method());
+        if (!ctx) return std::unexpected(make_ssl_error());
+        SSL_CTX_set_min_proto_version(ctx, DTLS1_2_VERSION);
+        return ssl_context{ctx};
+    }
+
+    /// Create DTLS server context for datagram protocols such as CoAPS.
+    [[nodiscard]] static auto dtls_server() -> std::expected<ssl_context, std::error_code> {
+        detail::ssl_global_init();
+        auto* ctx = SSL_CTX_new(DTLS_server_method());
+        if (!ctx) return std::unexpected(make_ssl_error());
+        SSL_CTX_set_min_proto_version(ctx, DTLS1_2_VERSION);
+        SSL_CTX_set_cookie_generate_cb(ctx, dtls_generate_cookie);
+        SSL_CTX_set_cookie_verify_cb(ctx, dtls_verify_cookie);
+        return ssl_context{ctx};
+    }
+
     /// Load certificate file (PEM)
     [[nodiscard]] auto load_cert_file(std::string_view path)
         -> std::expected<void, std::error_code>
@@ -242,6 +263,23 @@ private:
         *out = selected;
         *outlen = selected_len;
         return SSL_TLSEXT_ERR_OK;
+    }
+
+    static auto dtls_generate_cookie(SSL*, unsigned char* cookie,
+                                     unsigned int* cookie_len) -> int
+    {
+        static constexpr std::string_view value = "cnetmod-dtls-cookie";
+        std::memcpy(cookie, value.data(), value.size());
+        *cookie_len = static_cast<unsigned int>(value.size());
+        return 1;
+    }
+
+    static auto dtls_verify_cookie(SSL*, const unsigned char* cookie,
+                                   unsigned int cookie_len) -> int
+    {
+        static constexpr std::string_view value = "cnetmod-dtls-cookie";
+        return cookie_len == value.size() &&
+               std::memcmp(cookie, value.data(), value.size()) == 0;
     }
 
     SSL_CTX* ctx_ = nullptr;

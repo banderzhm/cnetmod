@@ -1,5 +1,5 @@
 /// cnetmod example — stdexec Bridge Demo
-/// 演示 task<T> -> sender 的桥接与同步等待
+/// Demonstrates task<T> -> sender bridgewait for
 
 import std;
 import cnetmod.coro.task;

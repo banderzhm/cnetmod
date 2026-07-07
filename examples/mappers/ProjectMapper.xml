@@ -2,20 +2,20 @@
 <!DOCTYPE mapper PUBLIC "-//cnetmod.org//DTD Mapper 1.0//EN" "http://cnetmod.org/dtd/mapper.dtd">
 <mapper namespace="ProjectMapper">
 
-    <!-- SQL 片段：项目基础字段 -->
+    <!-- SQL fragment: basic project fields -->
     <sql id="projectColumns">
         id, client_id, project_name, start_date, end_date,
         total_income, status, created_at, updated_at
     </sql>
 
-    <!-- SQL 片段：项目完整字段（包含客户信息） -->
+    <!-- SQL fragment: complete project fields with client information -->
     <sql id="projectWithClient">
         p.id, p.client_id, p.project_name, p.start_date, p.end_date,
         p.total_income, p.status, p.created_at, p.updated_at,
         c.name as client_name, c.wechat_id as client_wechat
     </sql>
 
-    <!-- SQL 片段：日期范围条件 -->
+    <!-- SQL fragment: date range condition -->
     <sql id="dateRangeCondition">
         <if test="start_date != null">
             AND p.start_date &gt;= #{start_date}
@@ -25,7 +25,7 @@
         </if>
     </sql>
 
-    <!-- 查询所有项目（带分页） -->
+    <!-- Query all projects with pagination -->
     <select id="selectAll">
         SELECT <include refid="projectColumns"/>
         FROM projects
@@ -46,7 +46,7 @@
         </if>
     </select>
 
-    <!-- 根据日期范围查询项目（带客户信息） -->
+    <!-- Query projects by date range with client information -->
     <select id="selectByDateRange">
         SELECT <include refid="projectWithClient"/>
         FROM projects p
@@ -56,14 +56,14 @@
         ORDER BY p.start_date DESC
     </select>
 
-    <!-- 根据 ID 查询单个项目 -->
+    <!-- Query one project by ID -->
     <select id="selectById">
         SELECT <include refid="projectColumns"/>
         FROM projects
         WHERE id = #{id}
     </select>
 
-    <!-- 查询项目统计信息 -->
+    <!-- Query project statistics -->
     <select id="selectStatistics">
         SELECT
             COUNT(*) as total_count,
@@ -76,7 +76,7 @@
         <include refid="dateRangeCondition"/>
     </select>
 
-    <!-- 插入新项目-->
+    <!-- Insert new project -->
     <insert id="insertFull">
         INSERT INTO projects (
             client_id, title, total_amount, commission, status,
@@ -91,7 +91,7 @@
         )
     </insert>
 
-    <!-- 插入新项目 -->
+    <!-- Insert new project -->
     <insert id="insert">
         INSERT INTO projects (
             client_id, project_name, start_date, end_date,
@@ -102,7 +102,7 @@
         )
     </insert>
 
-    <!-- 更新项目 -->
+    <!-- Update project -->
     <update id="updateFull">
         UPDATE projects
         <set>
@@ -137,7 +137,7 @@
         WHERE id = #{id}
     </update>
 
-    <!-- 更新项目 -->
+    <!-- Update project -->
     <update id="update">
         UPDATE projects
         <set>
@@ -161,12 +161,12 @@
         WHERE id = #{id}
     </update>
 
-    <!-- 删除项目 -->
+    <!-- Delete project -->
     <delete id="delete">
         DELETE FROM projects WHERE id = #{id}
     </delete>
 
-    <!-- 批量删除项目 -->
+    <!-- Batch delete projects -->
     <delete id="batchDelete">
         DELETE FROM projects
         WHERE id IN
@@ -175,7 +175,7 @@
         </foreach>
     </delete>
 
-    <!-- 搜索项目（模糊查询） -->
+    <!-- Search projects with fuzzy matching -->
     <select id="search">
         SELECT <include refid="projectWithClient"/>
         FROM projects p
@@ -196,14 +196,14 @@
         </if>
     </select>
 
-    <!-- 查询所有存在项目的年份 -->
+    <!-- Query years that have projects -->
     <select id="selectDistinctYears">
         SELECT DISTINCT YEAR(created_date) AS year
         FROM projects
         ORDER BY year DESC
     </select>
 
-    <!-- 按日期范围查询项目（含客户、支出和文件信息 - 单次查询优化） -->
+    <!-- Query projects by date range with client, expense, and file information in one optimized query -->
     <select id="selectWithExpensesAndFilesByDateRange">
         SELECT
             p.id, p.title, p.total_amount, p.commission, p.status,
@@ -220,7 +220,7 @@
         ORDER BY p.created_date DESC, p.id DESC
     </select>
 
-    <!-- 按日期范围查询项目（含客户和支出信息） -->
+    <!-- Query projects by date range with client and expense information -->
     <select id="selectWithExpensesByDateRange">
         SELECT
             p.id, p.title, p.total_amount, p.commission, p.status,
@@ -235,7 +235,7 @@
         ORDER BY p.created_date DESC, p.id DESC
     </select>
 
-    <!-- 查询日期范围内的项目文件 -->
+    <!-- Query project files within a date range -->
     <select id="selectFilesByDateRange">
         SELECT id, project_id, original_filename
         FROM project_files
@@ -246,12 +246,12 @@
         )
     </select>
 
-    <!-- 根据项目 ID 查询标题 -->
+    <!-- Query title by project ID -->
     <select id="selectTitleById">
         SELECT title FROM projects WHERE id = #{id}
     </select>
 
-    <!-- 查询日期范围内的项目统计（总金额、佣金、支出） -->
+    <!-- Query project statistics within a date range: total amount, commission, and expenses -->
     <select id="selectFinancialSummary">
         SELECT
             COALESCE(SUM(total_amount), 0) AS total_amount,
@@ -261,7 +261,7 @@
           AND created_date &lt;= #{end_date}
     </select>
 
-    <!-- 查询日期范围内的总支出 -->
+    <!-- Query total expenses within a date range -->
     <select id="selectTotalExpenses">
         SELECT COALESCE(SUM(e.amount), 0) AS total_expenses
         FROM expenses e
@@ -270,7 +270,7 @@
           AND p.created_date &lt;= #{end_date}
     </select>
 
-    <!-- 查询日期范围内的项目统计（数量、金额、佣金） -->
+    <!-- Query project statistics within a date range: count, amount, and commission -->
     <select id="selectProjectStats">
         SELECT
             COUNT(*) AS project_count,

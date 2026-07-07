@@ -1,5 +1,5 @@
 /// cnetmod example — Async Mutex Demo
-/// 演示多个协程通过 async_mutex 保护共享资源
+/// Demonstrates async_mutex protectshared
 
 import std;
 import cnetmod.coro.task;
@@ -26,10 +26,10 @@ auto increment(shared_state& state, int id, int times) -> task<void> {
 auto run_demo() -> task<void> {
     shared_state state;
 
-    constexpr int N = 3;   // 协程数
-    constexpr int M = 3;   // 每个协程递增次数
+    constexpr int N = 3;   // Coroutine flow.
+    constexpr int M = 3;   // Coroutine flow.
 
-    // mutex 内部互相唤醒，无需 io_context
+    // Mutex , does not require io_context
     co_await increment(state, 0, M);
     co_await increment(state, 1, M);
     co_await increment(state, 2, M);

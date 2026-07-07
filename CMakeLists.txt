@@ -50,8 +50,9 @@ detect_stdlib_module_paths()
 # ==============================================================================
 if(MSVC)
     add_compile_options(/std:c++latest)
-    add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj /FS)
-    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
+    add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj /FS /wd4737)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+        "$<$<CONFIG:Debug>:Embedded>$<$<NOT:$<CONFIG:Debug>>:ProgramDatabase>")
 
    #[[ add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
@@ -96,27 +97,155 @@ endif()
 # ==============================================================================
 # Third-party Library Configuration
 # ==============================================================================
-# Header-only third-party paths are cache variables so a parent project can
-# reuse its own dependency checkout when cnetmod is added as a subdirectory.
+option(CNETMOD_USE_SYSTEM_DEPS
+    "Prefer dependencies provided by the active toolchain/package manager before bundled 3rdparty copies"
+    ON)
+
+# Header-only third-party paths are cache variables so a parent project or vcpkg
+# toolchain can provide dependency locations when cnetmod is added as a subdirectory.
 set(CNETMOD_STDEXEC_INCLUDE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include"
+    ""
     CACHE PATH "stdexec include directory used by cnetmod")
 set(CNETMOD_JWT_CPP_INCLUDE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include"
+    ""
     CACHE PATH "jwt-cpp include directory used by cnetmod")
 set(CNETMOD_JSON_INCLUDE_DIR
-    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include"
+    ""
     CACHE PATH "nlohmann/json include directory used by cnetmod")
 set(CNETMOD_JSON_MODULE
-    "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm"
+    ""
     CACHE FILEPATH "nlohmann/json C++ module interface used by cnetmod")
+
+set(CNETMOD_VENDORED_STDEXEC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include")
+set(CNETMOD_VENDORED_JWT_CPP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include")
+set(CNETMOD_VENDORED_JSON_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include")
+set(CNETMOD_VENDORED_JSON_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm")
+
+function(cnetmod_get_target_include_dir OUT_VAR TARGET_NAME HEADER_NAME)
+    if(NOT TARGET "${TARGET_NAME}")
+        return()
+    endif()
+
+    get_target_property(CNETMOD_TARGET_INCLUDE_DIRS
+        "${TARGET_NAME}" INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(CNETMOD_INCLUDE_DIR IN LISTS CNETMOD_TARGET_INCLUDE_DIRS)
+        set(CNETMOD_CANDIDATE_INCLUDE_DIR "${CNETMOD_INCLUDE_DIR}")
+
+        if(CNETMOD_CANDIDATE_INCLUDE_DIR MATCHES "^\\$<BUILD_INTERFACE:(.*)>$")
+            set(CNETMOD_CANDIDATE_INCLUDE_DIR "${CMAKE_MATCH_1}")
+        elseif(CNETMOD_CANDIDATE_INCLUDE_DIR MATCHES "^\\$<\\$<CONFIG:[^>]+>:(.*)>$")
+            set(CNETMOD_CANDIDATE_INCLUDE_DIR "${CMAKE_MATCH_1}")
+        elseif(CNETMOD_CANDIDATE_INCLUDE_DIR MATCHES "^\\$<INSTALL_INTERFACE:(.*)>$")
+            continue()
+        endif()
+
+        if(IS_ABSOLUTE "${CNETMOD_CANDIDATE_INCLUDE_DIR}" AND
+           EXISTS "${CNETMOD_CANDIDATE_INCLUDE_DIR}/${HEADER_NAME}")
+            set("${OUT_VAR}" "${CNETMOD_CANDIDATE_INCLUDE_DIR}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+endfunction()
+
+if(CNETMOD_USE_SYSTEM_DEPS)
+    find_package(P2300 CONFIG QUIET)
+    find_package(jwt-cpp CONFIG QUIET)
+    find_package(nlohmann_json CONFIG QUIET)
+endif()
+
+if(NOT CNETMOD_STDEXEC_INCLUDE_DIR)
+    cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+        STDEXEC::stdexec exec/static_thread_pool.hpp)
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+            STDEXEC::stdexec stdexec/execution.hpp)
+    endif()
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+            P2300::P2300 exec/static_thread_pool.hpp)
+    endif()
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+            P2300::P2300 stdexec/execution.hpp)
+    endif()
+    if(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        set(CNETMOD_STDEXEC_INCLUDE_DIR "${CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET}" CACHE PATH "" FORCE)
+    endif()
+    if((NOT CNETMOD_STDEXEC_INCLUDE_DIR OR NOT EXISTS "${CNETMOD_STDEXEC_INCLUDE_DIR}") AND CNETMOD_USE_SYSTEM_DEPS)
+        set(CNETMOD_STDEXEC_INCLUDE_DIR "" CACHE PATH "stdexec include directory used by cnetmod" FORCE)
+        find_path(CNETMOD_STDEXEC_INCLUDE_DIR
+            NAMES exec/static_thread_pool.hpp stdexec/execution.hpp
+            DOC "stdexec include directory used by cnetmod")
+    endif()
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR AND EXISTS "${CNETMOD_VENDORED_STDEXEC_INCLUDE_DIR}/exec/static_thread_pool.hpp")
+        set(CNETMOD_STDEXEC_INCLUDE_DIR "${CNETMOD_VENDORED_STDEXEC_INCLUDE_DIR}" CACHE PATH "" FORCE)
+    endif()
+endif()
+
+if(NOT CNETMOD_JWT_CPP_INCLUDE_DIR)
+    cnetmod_get_target_include_dir(CNETMOD_JWT_CPP_INCLUDE_DIR_FROM_TARGET
+        jwt-cpp::jwt-cpp jwt-cpp/jwt.h)
+    if(CNETMOD_JWT_CPP_INCLUDE_DIR_FROM_TARGET)
+        set(CNETMOD_JWT_CPP_INCLUDE_DIR "${CNETMOD_JWT_CPP_INCLUDE_DIR_FROM_TARGET}" CACHE PATH "" FORCE)
+    endif()
+    if((NOT CNETMOD_JWT_CPP_INCLUDE_DIR OR NOT EXISTS "${CNETMOD_JWT_CPP_INCLUDE_DIR}") AND CNETMOD_USE_SYSTEM_DEPS)
+        set(CNETMOD_JWT_CPP_INCLUDE_DIR "" CACHE PATH "jwt-cpp include directory used by cnetmod" FORCE)
+        find_path(CNETMOD_JWT_CPP_INCLUDE_DIR
+            NAMES jwt-cpp/jwt.h
+            DOC "jwt-cpp include directory used by cnetmod")
+    endif()
+    if(NOT CNETMOD_JWT_CPP_INCLUDE_DIR AND EXISTS "${CNETMOD_VENDORED_JWT_CPP_INCLUDE_DIR}/jwt-cpp/jwt.h")
+        set(CNETMOD_JWT_CPP_INCLUDE_DIR "${CNETMOD_VENDORED_JWT_CPP_INCLUDE_DIR}" CACHE PATH "" FORCE)
+    endif()
+endif()
+
+if(NOT CNETMOD_JSON_INCLUDE_DIR)
+    cnetmod_get_target_include_dir(CNETMOD_JSON_INCLUDE_DIR_FROM_TARGET
+        nlohmann_json::nlohmann_json nlohmann/json.hpp)
+    if(CNETMOD_JSON_INCLUDE_DIR_FROM_TARGET)
+        set(CNETMOD_JSON_INCLUDE_DIR "${CNETMOD_JSON_INCLUDE_DIR_FROM_TARGET}" CACHE PATH "" FORCE)
+    endif()
+    if((NOT CNETMOD_JSON_INCLUDE_DIR OR NOT EXISTS "${CNETMOD_JSON_INCLUDE_DIR}") AND CNETMOD_USE_SYSTEM_DEPS)
+        set(CNETMOD_JSON_INCLUDE_DIR "" CACHE PATH "nlohmann/json include directory used by cnetmod" FORCE)
+        find_path(CNETMOD_JSON_INCLUDE_DIR
+            NAMES nlohmann/json.hpp
+            DOC "nlohmann/json include directory used by cnetmod")
+    endif()
+    if(NOT CNETMOD_JSON_INCLUDE_DIR AND EXISTS "${CNETMOD_VENDORED_JSON_INCLUDE_DIR}/nlohmann/json.hpp")
+        set(CNETMOD_JSON_INCLUDE_DIR "${CNETMOD_VENDORED_JSON_INCLUDE_DIR}" CACHE PATH "" FORCE)
+    endif()
+endif()
+
+if(NOT CNETMOD_JSON_MODULE OR NOT EXISTS "${CNETMOD_JSON_MODULE}")
+    if(CNETMOD_USE_SYSTEM_DEPS)
+        find_file(CNETMOD_JSON_MODULE_FROM_PACKAGE
+            NAMES json.cppm
+            PATHS
+                "${CNETMOD_JSON_INCLUDE_DIR}/../src/modules"
+                "${CNETMOD_JSON_INCLUDE_DIR}/../../src/modules"
+            PATH_SUFFIXES src/modules
+            DOC "nlohmann/json C++ module interface")
+        if(CNETMOD_JSON_MODULE_FROM_PACKAGE)
+            set(CNETMOD_JSON_MODULE "${CNETMOD_JSON_MODULE_FROM_PACKAGE}" CACHE FILEPATH "" FORCE)
+        endif()
+    endif()
+    if((NOT CNETMOD_JSON_MODULE OR NOT EXISTS "${CNETMOD_JSON_MODULE}") AND EXISTS "${CNETMOD_VENDORED_JSON_MODULE}")
+        set(CNETMOD_JSON_MODULE "${CNETMOD_VENDORED_JSON_MODULE}" CACHE FILEPATH "" FORCE)
+    endif()
+endif()
+
+if(NOT CNETMOD_JSON_MODULE OR NOT EXISTS "${CNETMOD_JSON_MODULE}")
+    set(CNETMOD_JSON_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/nlohmann_json.cppm"
+        CACHE FILEPATH "Fallback nlohmann/json C++ module interface used by cnetmod" FORCE)
+endif()
 
 # stdexec: Header-only mode (not using add_subdirectory to avoid CPM dependency)
 # Used for upper-layer sender/receiver organization, lower-layer I/O uses native coroutines
 if(NOT EXISTS "${CNETMOD_STDEXEC_INCLUDE_DIR}/exec/static_thread_pool.hpp")
     message(FATAL_ERROR
         "stdexec headers were not found at ${CNETMOD_STDEXEC_INCLUDE_DIR}. "
-        "Initialize submodules with: git submodule update --init --recursive")
+        "Install dependencies with vcpkg manifest mode or initialize submodules with: "
+        "git submodule update --init --recursive")
 endif()
 set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR "${CNETMOD_STDEXEC_INCLUDE_DIR}")
 set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR
@@ -125,13 +254,26 @@ set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR
 include_directories(SYSTEM ${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR})
 
 # jwt-cpp: Header-only JWT library (HS256/RS256, etc.)
+if(NOT EXISTS "${CNETMOD_JWT_CPP_INCLUDE_DIR}/jwt-cpp/jwt.h")
+    message(FATAL_ERROR
+        "jwt-cpp headers were not found. Install dependencies with vcpkg manifest mode, "
+        "set CNETMOD_JWT_CPP_INCLUDE_DIR, or initialize submodules.")
+endif()
 include_directories(SYSTEM ${CNETMOD_JWT_CPP_INCLUDE_DIR})
 
 # nlohmann/json: C++ modules support (json.cppm)
+if(NOT EXISTS "${CNETMOD_JSON_INCLUDE_DIR}/nlohmann/json.hpp")
+    message(FATAL_ERROR
+        "nlohmann/json headers were not found. Install dependencies with vcpkg manifest mode, "
+        "set CNETMOD_JSON_INCLUDE_DIR, or initialize submodules.")
+endif()
 include_directories(SYSTEM ${CNETMOD_JSON_INCLUDE_DIR})
 set(NLOHMANN_JSON_MODULE ${CNETMOD_JSON_MODULE})
 
 # pugixml: Lightweight XML parser
+if(CNETMOD_USE_SYSTEM_DEPS)
+    find_package(pugixml CONFIG QUIET)
+endif()
 if(TARGET pugixml::pugixml)
     set(CNETMOD_HAS_PUGIXML ON)
     set(CNETMOD_PUGIXML_TARGET pugixml::pugixml)
@@ -163,7 +305,28 @@ endif()
 # nghttp2: HTTP/2 C library (build core library only)
 option(CNETMOD_ENABLE_HTTP2 "Enable HTTP/2 support (requires nghttp2)" ON)
 if(CNETMOD_ENABLE_HTTP2)
-    if(TARGET nghttp2_static)
+    if(CNETMOD_USE_SYSTEM_DEPS)
+        find_package(nghttp2 CONFIG QUIET)
+        find_package(unofficial-nghttp2 CONFIG QUIET)
+        find_package(libnghttp2 CONFIG QUIET)
+    endif()
+    if(TARGET libnghttp2::libnghttp2)
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET libnghttp2::libnghttp2)
+        message(STATUS "HTTP/2: Enabled (libnghttp2::libnghttp2)")
+    elseif(TARGET libnghttp2::nghttp2)
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET libnghttp2::nghttp2)
+        message(STATUS "HTTP/2: Enabled (libnghttp2::nghttp2)")
+    elseif(TARGET unofficial::nghttp2::nghttp2)
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET unofficial::nghttp2::nghttp2)
+        message(STATUS "HTTP/2: Enabled (unofficial::nghttp2::nghttp2)")
+    elseif(TARGET nghttp2::nghttp2)
+        set(CNETMOD_HAS_NGHTTP2 ON)
+        set(CNETMOD_NGHTTP2_TARGET nghttp2::nghttp2)
+        message(STATUS "HTTP/2: Enabled (nghttp2::nghttp2)")
+    elseif(TARGET nghttp2_static)
         set(CNETMOD_HAS_NGHTTP2 ON)
         set(CNETMOD_NGHTTP2_TARGET nghttp2_static)
         message(STATUS "HTTP/2: Enabled (existing target nghttp2_static)")
@@ -202,8 +365,15 @@ if(CNETMOD_ENABLE_HTTP2)
         set(CNETMOD_NGHTTP2_TARGET nghttp2_static)
         message(STATUS "HTTP/2: Enabled (nghttp2)")
     else()
-        set(CNETMOD_HAS_NGHTTP2 OFF)
-        message(STATUS "HTTP/2: nghttp2 not found in 3rdparty/, HTTP/2 disabled")
+        find_path(CNETMOD_NGHTTP2_INCLUDE_DIR nghttp2/nghttp2.h)
+        find_library(CNETMOD_NGHTTP2_LIBRARY NAMES nghttp2 nghttp2_static)
+        if(CNETMOD_NGHTTP2_INCLUDE_DIR AND CNETMOD_NGHTTP2_LIBRARY)
+            set(CNETMOD_HAS_NGHTTP2 ON)
+            message(STATUS "HTTP/2: Enabled (${CNETMOD_NGHTTP2_LIBRARY})")
+        else()
+            set(CNETMOD_HAS_NGHTTP2 OFF)
+            message(STATUS "HTTP/2: nghttp2 not found, HTTP/2 disabled")
+        endif()
     endif()
 else()
     set(CNETMOD_HAS_NGHTTP2 OFF)
@@ -245,6 +415,10 @@ endif()
 # ==============================================================================
 option(CNETMOD_ENABLE_LEVELDB "Enable LevelDB-backed Raft storage when LevelDB is available" ON)
 if(CNETMOD_ENABLE_LEVELDB)
+    if(CNETMOD_USE_SYSTEM_DEPS)
+        find_package(leveldb CONFIG QUIET)
+        find_package(LevelDB QUIET)
+    endif()
     if(TARGET leveldb)
         set(CNETMOD_HAS_LEVELDB ON)
         set(CNETMOD_LEVELDB_TARGET leveldb)
@@ -368,6 +542,13 @@ if(MSVC)
             VS_SETTINGS "ModuleDependenciesFile=$(IntDir)/${src_dep_name}.module.json"
         )
     endforeach()
+
+    # MSVC 19.44 can fail required coroutine tail-call codegen (C4737) in this
+    # large Release translation unit. Keep the workaround scoped to the file.
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/http/client_impl.cpp"
+        PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
+    )
 endif()
 
 # Filter by platform: Exclude I/O backend modules not needed for current platform
@@ -445,7 +626,26 @@ endif()
 
 # nghttp2 linking
 if(CNETMOD_HAS_NGHTTP2)
-    target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_TARGET})
+    if(CNETMOD_NGHTTP2_TARGET)
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_TARGET})
+    else()
+        target_include_directories(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_INCLUDE_DIR})
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_LIBRARY})
+    endif()
+endif()
+
+if(TARGET nlohmann_json::nlohmann_json)
+    target_link_libraries(cnetmod_core PUBLIC nlohmann_json::nlohmann_json)
+endif()
+
+if(TARGET jwt-cpp::jwt-cpp)
+    target_link_libraries(cnetmod_core PUBLIC jwt-cpp::jwt-cpp)
+endif()
+
+if(TARGET STDEXEC::stdexec)
+    target_link_libraries(cnetmod_core PUBLIC STDEXEC::stdexec)
+elseif(TARGET P2300::P2300)
+    target_link_libraries(cnetmod_core PUBLIC P2300::P2300)
 endif()
 
 # pugixml linking

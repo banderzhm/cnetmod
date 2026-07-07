@@ -1,5 +1,5 @@
 /// cnetmod example — Async File I/O
-/// 演示异步文件写入、读取、刷新
+/// Demonstratesasyncfilewrite, read, flush
 
 #include <cnetmod/config.hpp>
 
@@ -14,7 +14,7 @@ using namespace cnetmod;
 auto run_file_demo(io_context& ctx) -> task<void> {
     constexpr auto path = "cnetmod_test_file.bin";
 
-    // ---- 写入 ----
+    // Write data.
     std::println("  [1] Writing file...");
     {
         auto f = file::open(path, open_mode::write | open_mode::create | open_mode::truncate);
@@ -31,7 +31,7 @@ auto run_file_demo(io_context& ctx) -> task<void> {
         else
             std::println("  write error: {}", wr.error().message());
 
-        // 刷新
+        // Implementation note.
         auto fr = co_await async_file_flush(ctx, *f);
         if (fr)
             std::println("  flush OK");
@@ -39,13 +39,13 @@ auto run_file_demo(io_context& ctx) -> task<void> {
             std::println("  flush error: {}", fr.error().message());
     }
 
-    // ---- 追加写入 ----
+    // Write data.
     std::println("  [2] Appending...");
     {
         auto f = file::open(path, open_mode::write | open_mode::create);
         if (!f) { std::println("  open(append) failed"); co_return; }
 
-        // 获取文件大小以确定追加偏移
+        // File handling.
         auto sz = f->size();
         std::uint64_t offset = sz ? *sz : 0;
 
@@ -58,7 +58,7 @@ auto run_file_demo(io_context& ctx) -> task<void> {
         (void)co_await async_file_flush(ctx, *f);
     }
 
-    // ---- 读取全部 ----
+    // Read data.
     std::println("  [3] Reading back...");
     {
         auto f = file::open(path, open_mode::read);
@@ -75,7 +75,7 @@ auto run_file_demo(io_context& ctx) -> task<void> {
         }
     }
 
-    // 清理临时文件
+    // Cleanupfile
     std::filesystem::remove(path);
     std::println("  Temp file removed.");
 }

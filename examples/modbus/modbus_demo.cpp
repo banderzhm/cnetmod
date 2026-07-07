@@ -1,6 +1,6 @@
 /// cnetmod example — Modbus TCP Client/Server Demo
-/// 演示 Modbus TCP 协议的客户端和服务端功能
-/// 包括读写线圈、寄存器等操作
+/// Demonstrates Modbus TCP ClientServerfeatures
+/// Implementation note.
 
 #include <cnetmod/config.hpp>
 
@@ -14,7 +14,7 @@ namespace cn = cnetmod;
 using namespace cn::modbus;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 1: 基础客户端操作
+// Demo 1: basicClient
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_basic_client(tcp_client& client) -> cn::task<void> {
@@ -23,7 +23,7 @@ auto demo_basic_client(tcp_client& client) -> cn::task<void> {
     request_builder builder;
     builder.set_unit_id(1).set_transport(transport_type::tcp);
 
-    // 读取保持寄存器
+    // Readholding registers
     auto read_req = builder.read_holding_registers(0, 10);
     auto read_resp = co_await client.execute(read_req);
     
@@ -43,7 +43,7 @@ auto demo_basic_client(tcp_client& client) -> cn::task<void> {
         }
     }
 
-    // 写入单个寄存器
+    // Writesingle register
     auto write_req = builder.write_single_register(0, 1234);
     auto write_resp = co_await client.execute(write_req);
     
@@ -51,7 +51,7 @@ auto demo_basic_client(tcp_client& client) -> cn::task<void> {
         std::println("Successfully wrote value 1234 to register 0");
     }
 
-    // 读取线圈
+    // Readcoils
     auto coil_req = builder.read_coils(0, 16);
     auto coil_resp = co_await client.execute(coil_req);
     
@@ -70,7 +70,7 @@ auto demo_basic_client(tcp_client& client) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 2: 批量写入操作
+// Demo 2: batchwrite
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_batch_write(tcp_client& client) -> cn::task<void> {
@@ -79,7 +79,7 @@ auto demo_batch_write(tcp_client& client) -> cn::task<void> {
     request_builder builder;
     builder.set_unit_id(1).set_transport(transport_type::tcp);
 
-    // 写入多个寄存器
+    // Write data.
     std::vector<std::uint16_t> values = {100, 200, 300, 400, 500};
     auto write_req = builder.write_multiple_registers(10, values);
     auto write_resp = co_await client.execute(write_req);
@@ -88,7 +88,7 @@ auto demo_batch_write(tcp_client& client) -> cn::task<void> {
         std::println("Successfully wrote {} registers starting at address 10", values.size());
     }
 
-    // 读回验证
+    // Read back to verify
     auto read_req = builder.read_holding_registers(10, static_cast<std::uint16_t>(values.size()));
     auto read_resp = co_await client.execute(read_req);
     
@@ -106,7 +106,7 @@ auto demo_batch_write(tcp_client& client) -> cn::task<void> {
         }
     }
 
-    // 写入多个线圈
+    // Writecoils
     std::array<bool, 8> coil_values = {true, false, true, true, false, false, true, false};
     auto coil_write_req = builder.write_multiple_coils(20, coil_values);
     auto coil_write_resp = co_await client.execute(coil_write_req);
@@ -117,7 +117,7 @@ auto demo_batch_write(tcp_client& client) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 3: 连接池操作
+// Demo 3: connection pool
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_connection_pool(cn::io_context& ctx) -> cn::task<void> {
@@ -131,13 +131,13 @@ auto demo_connection_pool(cn::io_context& ctx) -> cn::task<void> {
 
     connection_pool pool(ctx, params);
     
-    // 启动连接池
+    // Startconnection pool
     cn::spawn(ctx, pool.async_run());
     co_await cn::async_sleep(ctx, std::chrono::milliseconds(500));
 
     std::println("Pool initialized: size={}, idle={}", pool.size(), pool.idle_count());
 
-    // 从池中获取连接
+    // Implementation note.
     auto conn_result = co_await pool.async_get_connection();
     if (!conn_result) {
         std::println("Failed to get connection from pool");
@@ -147,7 +147,7 @@ auto demo_connection_pool(cn::io_context& ctx) -> cn::task<void> {
     auto conn = std::move(*conn_result);
     std::println("Got connection from pool");
 
-    // 使用连接执行操作
+    // Implementation note.
     request_builder builder;
     builder.set_unit_id(1).set_transport(transport_type::tcp);
     
@@ -164,7 +164,7 @@ auto demo_connection_pool(cn::io_context& ctx) -> cn::task<void> {
         }
     }
 
-    // 连接自动归还到池
+    // Implementation note.
     conn = pooled_connection{};
     std::println("Connection returned to pool: idle={}", pool.idle_count());
 
@@ -172,16 +172,16 @@ auto demo_connection_pool(cn::io_context& ctx) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 4: 服务端
+// Demo 4: Server
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run_server(cn::io_context& ctx) -> cn::task<void> {
     std::println("\n── Starting Modbus TCP Server ──");
 
-    // 创建数据存储
+    // Createdata store
     memory_data_store store;
     
-    // 初始化一些测试数据
+    // Implementation note.
     for (std::uint16_t i = 0; i < 100; ++i) {
         store.write_holding_register(i, i * 10);
         store.write_coil(i, i % 2 == 0);
@@ -189,7 +189,7 @@ auto run_server(cn::io_context& ctx) -> cn::task<void> {
 
     std::println("Initialized data store with test data");
 
-    // 创建并启动服务器
+    // Createstart
     tcp_server server(ctx, store);
     auto listen_result = co_await server.listen("0.0.0.0", 5020);
     
@@ -200,16 +200,16 @@ auto run_server(cn::io_context& ctx) -> cn::task<void> {
 
     std::println("Server listening on 0.0.0.0:5020");
     
-    // 运行服务器（会一直运行直到停止）
+    // Run(run)
     co_await server.async_run();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 5: 客户端连接到服务端
+// Demo 5: ClientServer
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run_client(cn::io_context& ctx) -> cn::task<void> {
-    // 等待服务器启动
+    // Wait forstart
     co_await cn::async_sleep(ctx, std::chrono::milliseconds(500));
 
     std::println("\n── Starting Modbus TCP Client ──");
@@ -224,7 +224,7 @@ auto run_client(cn::io_context& ctx) -> cn::task<void> {
 
     std::println("Connected to server at 127.0.0.1:5020");
 
-    // 运行演示
+    // RunDemonstrates
     co_await demo_basic_client(client);
     co_await demo_batch_write(client);
 
@@ -235,7 +235,7 @@ auto run_client(cn::io_context& ctx) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口
+// Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto main() -> int {
@@ -249,7 +249,7 @@ auto main() -> int {
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 启动服务器和客户端
+    // StartClient
     cn::spawn(*ctx, run_server(*ctx));
     cn::spawn(*ctx, run_client(*ctx));
 

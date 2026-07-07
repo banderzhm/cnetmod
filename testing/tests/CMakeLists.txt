@@ -25,6 +25,7 @@ set(TEST_SOURCES
     test_http_utils.cpp
     test_http_ip_filter.cpp
     test_dns.cpp
+    test_coap.cpp
     test_grpc.cpp
     test_grpc_proto.cpp
     test_mqtt.cpp
@@ -50,6 +51,10 @@ foreach(test_src ${TEST_SOURCES})
 
     add_test(NAME ${test_name} COMMAND ${test_name})
 endforeach()
+
+if(MSVC AND TARGET test_raft)
+    target_compile_options(test_raft PRIVATE /Od /Ob0)
+endif()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND AND TARGET test_grpc_proto)

@@ -99,6 +99,26 @@ public:
     /// Apply options
     [[nodiscard]] auto apply_options(const socket_options& opts) -> std::expected<void, std::error_code>;
 
+    /// Join an IPv4/IPv6 multicast group on this datagram socket.
+    [[nodiscard]] auto join_multicast_group(
+        const ip_address& group,
+        std::optional<ip_address> local_address = std::nullopt,
+        unsigned int interface_index = 0) -> std::expected<void, std::error_code>;
+
+    /// Leave an IPv4/IPv6 multicast group.
+    [[nodiscard]] auto leave_multicast_group(
+        const ip_address& group,
+        std::optional<ip_address> local_address = std::nullopt,
+        unsigned int interface_index = 0) -> std::expected<void, std::error_code>;
+
+    /// Configure outbound multicast hop limit / TTL.
+    [[nodiscard]] auto set_multicast_hops(address_family family, int hops)
+        -> std::expected<void, std::error_code>;
+
+    /// Configure whether outbound multicast datagrams are looped back locally.
+    [[nodiscard]] auto set_multicast_loopback(address_family family, bool enabled)
+        -> std::expected<void, std::error_code>;
+
     /// Get local endpoint (getsockname)
     [[nodiscard]] auto local_endpoint() const -> std::expected<endpoint, std::error_code>;
 

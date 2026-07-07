@@ -40,6 +40,7 @@ English | [简体中文](README_zh.md)
 - **Redis**: Async client with RESP protocol, connection pool
 - **Raft**: Replicated state machine toolkit with leader election, log replication, ReadIndex, leader lease / check-quorum, joint consensus membership changes, snapshot install / compaction, LevelDB-backed persistence, TCP transport, TLS / mTLS authentication, transport metrics, chaos / restart tests, and distributed storage examples
 - **Modbus**: Complete protocol implementation — TCP/UDP/RTU (serial) client and server, all standard function codes, connection pool, CRC-16 validation, frame timing control, data stores (mutex-based and lock-free channel-based)
+- **CoAP**: CoAP for constrained devices — RFC 7252 message/option codec, confirmable request retransmission, Observe subscriptions/notifications, token/message-id matching, resource router, Block1/Block2 helpers, CoAPS/DTLS context support
 - **OpenAI**: Async API client (chat completions, etc.)
 
 ### Raft Performance
@@ -116,6 +117,12 @@ export PATH="/usr/local/opt/llvm/bin:$PATH"      # Intel Mac
 
 ### Clone and Build
 
+The repository supports three common build paths:
+
+- **Submodule/local build**: best for developing this repository with the Git submodules under `3rdparty`.
+- **vcpkg manifest build**: lets vcpkg own the dependencies; on Windows + VS 2026 use the included `x64-windows-vs2026` overlay triplet.
+- **Conan build/package**: supports Conan-based distribution and reuse; `conan create` validates recipe export, isolated build, and packaging.
+
 ```bash
 # Clone the repository
 git clone https://github.com/banderzhm/cnetmod.git
@@ -134,6 +141,88 @@ cmake --build build --target cnetmod_build_all
 # Visual Studio generators with C++ modules: use single-node MSBuild
 cmake --build build --target cnetmod_build_all --config Debug
 ```
+
+### Build with vcpkg
+
+The repository includes `vcpkg.json`, so a user with vcpkg can let manifest mode
+install the supported third-party dependencies:
+
+```bash
+cmake -B build-vcpkg \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DCNETMOD_BUILD_EXAMPLES=ON
+cmake --build build-vcpkg --target cnetmod_build_all
+```
+
+On Windows with multiple Visual Studio versions installed, force Visual Studio
+2026 with the included overlay triplet:
+
+```bat
+set VCPKG_ROOT=<path-to-vcpkg>
+set VCPKG_VISUAL_STUDIO_PATH=<path-to-Visual-Studio-2026>
+
+:: Optional: move vcpkg caches off the C drive when space is limited.
+set X_VCPKG_REGISTRIES_CACHE=%USERPROFILE%\.cache\vcpkg\registries
+set VCPKG_DOWNLOADS=%USERPROFILE%\.cache\vcpkg\downloads
+
+%VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows-vs2026 ^
+  --overlay-triplets=cmake\vcpkg-triplets
+
+cmake -S . -B build-vcpkg-vs2026 -G"Visual Studio 18 2026" ^
+  -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
+  -DVCPKG_TARGET_TRIPLET=x64-windows-vs2026 ^
+  -DVCPKG_OVERLAY_TRIPLETS=cmake/vcpkg-triplets
+
+cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
+```
+
+cnetmod first reuses dependencies exposed by the active toolchain or parent
+project, then falls back to bundled `3rdparty` copies when they exist. `pugixml`
+is kept as a normal Git submodule; package-manager builds should prefer the
+package target and only fall back to that submodule when no system package is
+available.
+
+### Build with Conan
+
+The repository also includes a Conan 2 recipe:
+
+```bash
+conan install . --output-folder=build-conan --build=missing \
+  -s build_type=Release -s compiler.cppstd=23
+cmake --preset conan-default
+cmake --build --preset conan-release --target cnetmod_core
+```
+
+For Visual Studio 2026, use Conan 2.30+ and CMake 4.2+ so MSVC 195 and the
+`Visual Studio 18 2026` generator are recognized:
+
+```bat
+:: Optional: move Conan cache and temp files off the C drive when space is limited.
+set CONAN_HOME=%USERPROFILE%\.conan2-vs2026
+set TEMP=%USERPROFILE%\.cache\build-tmp
+set TMP=%USERPROFILE%\.cache\build-tmp
+
+conan --version
+conan install . --output-folder=build-conan-vs2026 --build=missing ^
+  -s build_type=Release ^
+  -s compiler=msvc -s compiler.version=195 ^
+  -s compiler.runtime=dynamic -s compiler.runtime_type=Release ^
+  -s compiler.cppstd=23 ^
+  -c tools.cmake.cmaketoolchain:generator="Visual Studio 18 2026"
+
+cmake --preset conan-default
+cmake --build --preset conan-release --target cnetmod_core
+
+:: Optional: validate recipe export, isolated build, and packaging
+conan create . --build=missing -pr:h vs2026 -pr:b vs2026
+```
+
+The default Conan recipe installs ConanCenter packages for `jwt-cpp`,
+`nlohmann_json`, `pugixml`, `libnghttp2`, `leveldb`, `openssl`, and `zlib`.
+`mimalloc` is enabled by default and can be disabled with
+`-o cnetmod/*:with_mimalloc=False`. `stdexec` is normally taken from
+`3rdparty/stdexec`; if your Conan remote provides the upstream `p2300` package,
+enable `-o cnetmod/*:with_stdexec_package=True`.
 
 The build system auto-detects standard library module paths for MSVC and libc++. On Windows, install the latest Visual Studio 2026 and use the default auto-detected MSVC module paths. If detection fails on Linux/macOS, manually specify:
 ```bash
@@ -245,6 +334,37 @@ config.unit_id = 1;
 
 modbus::rtu_server server(ctx, store);
 co_await server.start(config);
+```
+
+**CoAP over UDP**:
+```cpp
+import cnetmod.protocol.coap;
+
+using namespace cnetmod;
+
+coap::udp_server server(ctx);
+auto listen = server.listen("0.0.0.0", coap::default_port);
+if (!listen) {
+    throw std::system_error(listen.error());
+}
+
+server.route(coap::method::get, "/sensors/temp",
+    [](const coap::inbound_request& req, const endpoint&) -> task<coap::message> {
+        auto resp = coap::make_response(req.request, coap::response_code::content);
+        resp.add_uint_option(coap::option_number::content_format,
+            static_cast<std::uint16_t>(coap::content_format::text_plain));
+        std::string body = "22.5";
+        resp.payload.assign(reinterpret_cast<const std::byte*>(body.data()),
+            reinterpret_cast<const std::byte*>(body.data() + body.size()));
+        co_return resp;
+    });
+spawn(ctx, server.run());
+
+coap::udp_client client(ctx);
+auto remote = co_await client.resolve_endpoint("127.0.0.1");
+if (remote) {
+    auto response = co_await client.get(*remote, "/sensors/temp");
+}
 ```
 
 **Timer**:
@@ -409,6 +529,7 @@ cnetmod.protocol.mysql — MySQL async client + ORM
 cnetmod.protocol.redis — Redis async client
 cnetmod.protocol.raft — Raft replicated state machine, storage, transport, runtime, membership, snapshots
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU client + server
+cnetmod.protocol.coap — CoAP UDP client + server, datagram codec, resource router
 cnetmod.protocol.openai — OpenAI API client
 cnetmod.protocol.http.middleware.*  — HTTP middleware components
 cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, register conversion)
@@ -445,7 +566,7 @@ Ensure the module that exports the needed symbol is explicitly imported. Unlike 
 
 ## Project Status
 
-cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1 & HTTP/2, MQTT, MySQL, WebSocket, Modbus, and more, all built with zero-overhead async/await.
+cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1 & HTTP/2, MQTT, MySQL, WebSocket, Modbus, CoAP, and more, all built with zero-overhead async/await.
 
 The library demonstrates that C++23 modules are ready for real-world use, with full cross-platform support on Linux, macOS, and Windows.
 

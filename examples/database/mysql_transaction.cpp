@@ -1,6 +1,6 @@
-/// cnetmod example — MySQL Transaction (事务管理演示)
-/// 演示 client::transaction 和 db_session::transaction 的使用
-/// 需要本地 MySQL 运行，数据库: mall
+/// Cnetmod example - MySQL Transaction (Demonstrates)
+/// Demonstrates client::transaction db_session::transaction
+/// MySQL run, : mall
 
 #include <cnetmod/config.hpp>
 #include <cstdio>
@@ -18,7 +18,7 @@ namespace mysql = cn::mysql;
 namespace orm = mysql::orm;
 
 // =============================================================================
-// 模型定义
+// Implementation note.
 // =============================================================================
 
 struct User {
@@ -52,26 +52,26 @@ CNETMOD_MODEL(Order, "tx_orders",
 )
 
 // =============================================================================
-// Demo 1: 使用 client::transaction (原始 SQL)
+// Demo 1: client::transaction ( SQL)
 // =============================================================================
 
 auto demo_client_transaction(mysql::client& cli) -> cn::task<void> {
     std::println("\n=== Demo 1: client::transaction (原始 SQL) ===");
 
-    // 使用 lambda 执行事务
+    // Implementation note: lambda.
     auto rs = co_await cli.transaction([&]() -> cn::task<void> {
-        // 插入用户
+        // Implementation note.
         co_await cli.execute(
             "INSERT INTO tx_users (name, email, balance) VALUES ('Alice', 'alice@example.com', 1000.0)"
         );
 
-        // 插入订单
+        // Implementation note.
         co_await cli.execute(
             "INSERT INTO tx_orders (user_id, product, amount, status) "
             "VALUES (LAST_INSERT_ID(), 'Laptop', 800.0, 'pending')"
         );
 
-        // 更新用户余额
+        // Update data.
         co_await cli.execute(
             "UPDATE tx_users SET balance = balance - 800.0 WHERE id = LAST_INSERT_ID()"
         );
@@ -88,13 +88,13 @@ auto demo_client_transaction(mysql::client& cli) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 2: 使用 db_session::transaction (ORM 风格)
+// Demo 2: db_session::transaction (ORM )
 // =============================================================================
 
 auto demo_session_transaction(orm::db_session& db) -> cn::task<void> {
     std::println("\n=== Demo 2: db_session::transaction (ORM 风格) ===");
 
-    // 准备数据
+    // Implementation note.
     User user;
     user.name    = "Bob";
     user.email   = "bob@example.com";
@@ -105,26 +105,26 @@ auto demo_session_transaction(orm::db_session& db) -> cn::task<void> {
     order.amount  = 500.0;
     order.status  = "pending";
 
-    // 使用事务
+    // Implementation note.
     auto rs = co_await db.transaction([&]() -> cn::task<void> {
-        // 插入用户
+        // Implementation note.
         auto user_rs = co_await db.insert(user);
         if (user_rs.is_err()) {
             throw std::runtime_error(user_rs.error_msg);
         }
         std::println("  插入用户: id={}, name={}", user.id, user.name);
 
-        // 设置订单的 user_id
+        // Implementation note: user_id.
         order.user_id = user.id;
 
-        // 插入订单
+        // Implementation note.
         auto order_rs = co_await db.insert(order);
         if (order_rs.is_err()) {
             throw std::runtime_error(order_rs.error_msg);
         }
         std::println("  插入订单: id={}, product={}", order.id, order.product);
 
-        // 更新用户余额
+        // Update data.
         user.balance -= order.amount;
         auto update_rs = co_await db.update(user);
         if (update_rs.is_err()) {
@@ -143,7 +143,7 @@ auto demo_session_transaction(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 3: 带隔离级别的事务
+// Implementation note: Demo, 3.
 // =============================================================================
 
 auto demo_transaction_with_isolation(orm::db_session& db) -> cn::task<void> {
@@ -154,7 +154,7 @@ auto demo_transaction_with_isolation(orm::db_session& db) -> cn::task<void> {
     user.email   = "charlie@example.com";
     user.balance = 3000.0;
 
-    // 使用 SERIALIZABLE 隔离级别
+    // SERIALIZABLE
     auto rs = co_await db.transaction([&]() -> cn::task<void> {
         auto user_rs = co_await db.insert(user);
         if (user_rs.is_err()) {
@@ -172,7 +172,7 @@ auto demo_transaction_with_isolation(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 4: 事务回滚演示
+// Demo 4: Demonstrates
 // =============================================================================
 
 auto demo_transaction_rollback(orm::db_session& db) -> cn::task<void> {
@@ -183,7 +183,7 @@ auto demo_transaction_rollback(orm::db_session& db) -> cn::task<void> {
     user.email   = "david@example.com";
     user.balance = 100.0;
 
-    // 故意在事务中抛出异常，触发回滚
+    // Implementation note.
     auto rs = co_await db.transaction([&]() -> cn::task<void> {
         auto user_rs = co_await db.insert(user);
         if (user_rs.is_err()) {
@@ -191,7 +191,7 @@ auto demo_transaction_rollback(orm::db_session& db) -> cn::task<void> {
         }
         std::println("  插入用户: id={}, name={}", user.id, user.name);
 
-        // 模拟业务逻辑错误
+        // Simulateerror
         if (user.balance < 500.0) {
             std::println("  余额不足，触发回滚");
             throw std::runtime_error("insufficient balance");
@@ -206,7 +206,7 @@ auto demo_transaction_rollback(orm::db_session& db) -> cn::task<void> {
         std::println("  事务成功提交");
     }
 
-    // 验证回滚：查询用户是否存在
+    // Verify: query
     auto find_rs = co_await db.find_all<User>();
     if (find_rs.ok()) {
         bool found = false;
@@ -225,7 +225,7 @@ auto demo_transaction_rollback(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// 入口
+// Entry point
 // =============================================================================
 
 auto run(cn::io_context& ctx) -> cn::task<void> {
@@ -247,25 +247,25 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     }
     std::println("已连接 MySQL (mall)");
 
-    // 创建 ORM 会话
+    // Create ORM session
     orm::db_session db(cli);
 
-    // 清理旧表
+    // Implementation note.
     co_await db.drop_table<User>();
     co_await db.drop_table<Order>();
 
-    // 创建表
+    // Create resources.
     co_await db.create_table<User>();
     co_await db.create_table<Order>();
     std::println("表已创建");
 
-    // 运行演示
+    // RunDemonstrates
     co_await demo_client_transaction(cli);
     co_await demo_session_transaction(db);
     co_await demo_transaction_with_isolation(db);
     co_await demo_transaction_rollback(db);
 
-    // 查看最终结果
+    // Implementation note.
     std::println("\n=== 最终数据 ===");
     auto users = co_await db.find_all<User>();
     if (users.ok()) {

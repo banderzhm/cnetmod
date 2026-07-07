@@ -5,7 +5,7 @@
         id, project_id, item_name, amount, created_at
     </sql>
 
-    <!-- 查询项目的所有支出 -->
+    <!-- Query all expenses for a project -->
     <select id="selectByProjectId">
         SELECT <include refid="expenseColumns"/>
         FROM expenses
@@ -13,7 +13,7 @@
         ORDER BY created_at DESC
     </select>
 
-    <!-- 批量查询多个项目的支出 -->
+    <!-- Batch query expenses for multiple projects -->
     <select id="selectByProjectIds">
         SELECT <include refid="expenseColumns"/>
         FROM expenses
@@ -24,20 +24,20 @@
         ORDER BY project_id, created_at DESC
     </select>
 
-    <!-- 计算项目总支出 -->
+    <!-- Calculate total project expenses -->
     <select id="sumByProjectId">
         SELECT COALESCE(SUM(amount), 0) as total_expense
         FROM expenses
         WHERE project_id = #{project_id}
     </select>
 
-    <!-- 插入支出记录 -->
+    <!-- Insert an expense record -->
     <insert id="insert">
         INSERT INTO expenses (project_id, item_name, amount, created_at)
         VALUES (#{project_id}, #{item_name}, #{amount}, NOW())
     </insert>
 
-    <!-- 批量插入支出 -->
+    <!-- Batch insert expenses -->
     <insert id="batchInsert">
         INSERT INTO expenses (project_id, item_name, amount, created_at)
         VALUES
@@ -46,7 +46,7 @@
         </foreach>
     </insert>
 
-    <!-- 更新支出 -->
+    <!-- Update expense -->
     <update id="update">
         UPDATE expenses
         <set>
@@ -60,12 +60,12 @@
         WHERE id = #{id}
     </update>
 
-    <!-- 删除支出 -->
+    <!-- Delete expense -->
     <delete id="delete">
         DELETE FROM expenses WHERE id = #{id}
     </delete>
 
-    <!-- 删除项目的所有支出 -->
+    <!-- Delete all expenses for a project -->
     <delete id="deleteByProjectId">
         DELETE FROM expenses WHERE project_id = #{project_id}
     </delete>

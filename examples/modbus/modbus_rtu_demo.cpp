@@ -1,5 +1,5 @@
 /// cnetmod example — Modbus RTU (Serial) Client/Server Demo
-/// 演示 Modbus RTU 串口协议的客户端和服务端功能
+/// Demonstrates Modbus RTU serial portClientServerfeatures
 
 #include <cnetmod/config.hpp>
 
@@ -19,10 +19,10 @@ using namespace cn::modbus;
 auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task<void> {
     std::println("\n── Starting Modbus RTU Server (Slave) ──");
 
-    // 创建数据存储
+    // Createdata store
     memory_data_store store;
     
-    // 初始化测试数据
+    // Implementation note.
     for (std::uint16_t i = 0; i < 100; ++i) {
         store.write_holding_register(i, 1000 + i);
         // Note: Input registers and discrete inputs are read-only in standard Modbus
@@ -31,7 +31,7 @@ auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task
 
     std::println("Initialized data store with test data");
 
-    // 配置RTU服务器
+    // ConfigureRTU
     rtu_server_config config;
     config.port_name = std::string(port_name);
     config.baudrate = 19200;
@@ -46,7 +46,7 @@ auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task
     std::println("  Data bits: {}", config.data_bits);
     std::println("  Unit ID: {}", config.unit_id);
 
-    // 创建并启动RTU服务器
+    // CreatestartRTU
     rtu_server server(ctx, store);
     auto start_result = co_await server.start(config);
     
@@ -57,7 +57,7 @@ auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task
 
     std::println("RTU Server started and listening on {}", config.port_name);
     
-    // 服务器会一直运行
+    // Implementation note.
     while (server.is_running()) {
         co_await cn::async_sleep(ctx, std::chrono::seconds(1));
     }
@@ -68,12 +68,12 @@ auto run_rtu_server(cn::io_context& ctx, std::string_view port_name) -> cn::task
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task<void> {
-    // 等待服务器启动
+    // Wait forstart
     co_await cn::async_sleep(ctx, std::chrono::seconds(1));
 
     std::println("\n── Starting Modbus RTU Client (Master) ──");
 
-    // 配置RTU客户端
+    // ConfigureRTUClient
     rtu_config config;
     config.port_name = std::string(port_name);
     config.baudrate = 19200;
@@ -98,7 +98,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
     request_builder builder;
     builder.set_unit_id(1).set_transport(transport_type::rtu);
 
-    // 1. 读取保持寄存器
+    // 1. readholding registers
     std::println("\n1. Reading holding registers...");
     auto read_req = builder.read_holding_registers(0, 10);
     auto read_resp = co_await client.execute(read_req);
@@ -120,7 +120,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
         std::println("   Failed: {}", read_resp.error().message());
     }
 
-    // 2. 写入单个寄存器
+    // 2. writesingle register
     std::println("\n2. Writing single register...");
     auto write_req = builder.write_single_register(10, 5555);
     auto write_resp = co_await client.execute(write_req);
@@ -129,7 +129,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
         std::println("   Successfully wrote value 5555 to register 10");
     }
 
-    // 3. 读回验证
+    // 3. read back to verify
     std::println("\n3. Verifying write...");
     auto verify_req = builder.read_holding_registers(10, 1);
     auto verify_resp = co_await client.execute(verify_req);
@@ -144,7 +144,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
         }
     }
 
-    // 4. 批量写入
+    // 4. batchwrite
     std::println("\n4. Writing multiple registers...");
     std::vector<std::uint16_t> values = {111, 222, 333, 444, 555};
     auto batch_write_req = builder.write_multiple_registers(20, values);
@@ -154,7 +154,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
         std::println("   Successfully wrote {} registers starting at address 20", values.size());
     }
 
-    // 5. 读取线圈
+    // 5. readcoils
     std::println("\n5. Reading coils...");
     auto coil_req = builder.read_coils(0, 16);
     auto coil_resp = co_await client.execute(coil_req);
@@ -172,7 +172,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
         }
     }
 
-    // 6. 使用重试机制
+    // 6. retry
     std::println("\n6. Testing retry mechanism...");
     auto retry_req = builder.read_input_registers(0, 5);
     auto retry_resp = co_await client.execute_with_retry(retry_req, 3);
@@ -197,7 +197,7 @@ auto run_rtu_client(cn::io_context& ctx, std::string_view port_name) -> cn::task
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口
+// Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto main(int argc, char* argv[]) -> int {
@@ -208,7 +208,7 @@ auto main(int argc, char* argv[]) -> int {
     std::println("  - Serial communication with CRC16");
     std::println("  - Frame timing and character timeout");
 
-    // 获取串口名称
+    // Serial port
     std::string port_name;
     if (argc > 1) {
         port_name = argv[1];
@@ -226,10 +226,10 @@ auto main(int argc, char* argv[]) -> int {
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 注意：在实际应用中，客户端和服务端通常在不同的设备上
-    // 这里为了演示，使用同一个串口（需要硬件回环或虚拟串口对）
+    // Note: real, ClientServerusually
+    // HereforDemonstrates, serial port(loopbackserial port)
     
-    // 启动服务器和客户端
+    // StartClient
     cn::spawn(*ctx, run_rtu_server(*ctx, port_name));
     cn::spawn(*ctx, run_rtu_client(*ctx, port_name));
 

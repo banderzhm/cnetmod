@@ -1,9 +1,9 @@
-/// ssl_echo_server — TLS echo server 示例
+/// Ssl_echo_server - TLS echo server
 ///
-/// 用法:
+/// Implementation note.
 ///   ssl_echo_server <cert.pem> <key.pem> [port]
 ///
-/// 测试:
+/// Implementation note.
 ///   openssl s_client -connect 127.0.0.1:8443
 
 #include <cnetmod/config.hpp>
@@ -26,11 +26,11 @@ using namespace cnetmod;
 auto handle_client(io_context& ctx, socket client_sock, ssl_context& ssl_ctx)
     -> task<void>
 {
-    // 创建 SSL 流
+    // Create SSL
     ssl_stream stream(ssl_ctx, ctx, client_sock);
     stream.set_accept_state();
 
-    // TLS 握手
+    // Implementation note: TLS.
     auto hs = co_await stream.async_handshake();
     if (!hs) {
         logger::error("TLS handshake failed: {}", hs.error().message());
@@ -39,7 +39,7 @@ auto handle_client(io_context& ctx, socket client_sock, ssl_context& ssl_ctx)
     }
     logger::info("TLS handshake OK");
 
-    // Echo 循环
+    // Implementation note: Echo.
     std::array<std::byte, 4096> buf{};
     for (;;) {
         auto rd = co_await stream.async_read(mutable_buffer{buf.data(), buf.size()});
@@ -50,7 +50,7 @@ auto handle_client(io_context& ctx, socket client_sock, ssl_context& ssl_ctx)
         if (!wr) break;
     }
 
-    // 优雅关闭
+    // Gracefulclose
     (void)co_await stream.async_shutdown();
     client_sock.close();
     logger::info("client disconnected");
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
     std::string_view key_path  = argv[2];
     std::uint16_t port = argc > 3 ? static_cast<std::uint16_t>(std::atoi(argv[3])) : 8443;
 
-    // 创建 SSL 服务器上下文
+    // Create SSL
     auto ssl_ctx_r = ssl_context::server();
     if (!ssl_ctx_r) {
         logger::error("ssl_context::server() failed: {}", ssl_ctx_r.error().message());
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 创建监听 socket
+    // Create socket
     auto sock_r = socket::create(address_family::ipv4, socket_type::stream);
     if (!sock_r) {
         logger::error("socket create failed");

@@ -1,5 +1,5 @@
 /// cnetmod example — Channel Demo
-/// 演示协程 channel<T> 的 producer/consumer 模型
+/// Demonstrates channel<T> producer/consumer
 
 import std;
 import cnetmod.coro.task;
@@ -30,7 +30,7 @@ auto consumer(channel<int>& ch) -> task<void> {
 auto run_demo() -> task<void> {
     channel<int> ch(2);  // capacity = 2
 
-    // 直接 co_await 两个子任务（channel 内部互相唤醒，无需 io_context）
+    // Co_await task(channel , does not require io_context)
     co_await when_all(
         producer(ch, 5),
         consumer(ch)

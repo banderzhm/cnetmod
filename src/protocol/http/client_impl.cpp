@@ -477,14 +477,14 @@ auto client::send_http1(const request& req)
         }
     } else if (resp.get_header("Transfer-Encoding").find("chunked") != 
                std::string_view::npos) {
-        // Handle chunked encoding - 完整实现
+        // Handle chunked encoding - complete
         std::string remaining_data(view);
         
         while (true) {
-            // 查找 chunk size 行
+            // Chunk size
             auto crlf_pos = remaining_data.find("\r\n");
             
-            // 如果没有完整的行，读取更多数据
+            // Complete, read
             while (crlf_pos == std::string::npos) {
                 char temp[4096];
                 auto result = co_await read_data(temp, sizeof(temp));
@@ -498,10 +498,10 @@ auto client::send_http1(const request& req)
                 crlf_pos = remaining_data.find("\r\n");
             }
             
-            // 解析 chunk size (十六进制)
+            // Parse chunk size ()
             auto size_str = remaining_data.substr(0, crlf_pos);
             
-            // 移除可能的扩展（分号后的内容）
+            // Implementation note.
             auto semicolon = size_str.find(';');
             if (semicolon != std::string::npos) {
                 size_str = size_str.substr(0, semicolon);
@@ -511,18 +511,18 @@ auto client::send_http1(const request& req)
             auto [ptr, ec] = std::from_chars(
                 size_str.data(), 
                 size_str.data() + size_str.size(), 
-                chunk_size, 16);  // 十六进制
+                chunk_size, 16);  // Implementation note.
             
             if (ec != std::errc{}) {
                 co_return std::unexpected(make_error_code(http_errc::invalid_chunk));
             }
             
-            // chunk size 为 0 表示结束
+            // Chunk size 0
             if (chunk_size == 0) {
-                // 读取 trailer headers（如果有）
+                // Read trailer headers()
                 remaining_data = remaining_data.substr(crlf_pos + 2);
                 
-                // 跳过 trailer 直到遇到空行
+                // Implementation note: trailer.
                 while (true) {
                     auto trailer_crlf = remaining_data.find("\r\n");
                     if (trailer_crlf == std::string::npos) {
@@ -534,21 +534,21 @@ auto client::send_http1(const request& req)
                     }
                     
                     if (trailer_crlf == 0) {
-                        // 空行，结束
+                        // Implementation note.
                         break;
                     }
                     
-                    // 跳过这一行
+                    // Implementation note.
                     remaining_data = remaining_data.substr(trailer_crlf + 2);
                 }
                 
-                break;  // 所有 chunks 读取完毕
+                break;  // Chunks read
             }
             
-            // 移除 size 行
+            // Implementation note: size.
             remaining_data = remaining_data.substr(crlf_pos + 2);
             
-            // 确保有足够的数据（chunk data + \r\n）
+            // (chunk data + \r\n)
             while (remaining_data.size() < chunk_size + 2) {
                 char temp[4096];
                 auto result = co_await read_data(temp, sizeof(temp));
@@ -561,17 +561,17 @@ auto client::send_http1(const request& req)
                 remaining_data.append(temp, *result);
             }
             
-            // 提取 chunk 数据
+            // Implementation note: chunk.
             body.append(remaining_data.substr(0, chunk_size));
             
-            // 移除 chunk 数据和结尾的 \r\n
+            // Chunk \r\n
             remaining_data = remaining_data.substr(chunk_size + 2);
         }
     }
 
     resp.set_body_preserve_headers(std::move(body));
 
-    // 处理 Set-Cookie 头
+    // Set-Cookie
     if (options_.enable_cookies) {
         for (const auto& [key, value] : resp.headers()) {
             if (key == "Set-Cookie" || key == "set-cookie") {

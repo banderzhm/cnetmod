@@ -31,6 +31,7 @@
 - **[HTTP 服务器](protocols/http.md)** - 构建 REST API 和 Web 服务
 - **[WebSocket](protocols/websocket.md)** - 实时双向通信
 - **[MQTT](protocols/mqtt.md)** - IoT 消息传递（broker + client）
+- **[CoAP](protocols/coap.md)** - 面向受限设备的 UDP CoAP 客户端/服务端
 - **[MySQL](protocols/mysql.md)** - 带 ORM 的数据库访问
 - **[Redis](protocols/redis.md)** - 内存数据存储客户端
 - **[Raft](protocols/raft.md)** - 复制状态机、成员变更、快照、TCP transport 和存储示例
@@ -51,6 +52,7 @@
 - [架构](architecture.md)
 - [示例](examples.md)
 - [Raft](protocols/raft.md)
+- [CoAP](protocols/coap.md)
 - [第三方依赖集成](advanced/thirdparty-dependency-integration.md)
 
 ---

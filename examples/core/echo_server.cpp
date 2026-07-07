@@ -1,6 +1,6 @@
 /// cnetmod example — TCP Echo Server/Client
-/// 演示异步 accept / connect / read / write
-/// 服务端接受多个连接，每个连接独立回显
+/// Demonstratesasync accept / connect / read / write
+/// Server, echo
 
 #include <cnetmod/config.hpp>
 
@@ -17,7 +17,7 @@ constexpr std::uint16_t PORT = 54321;
 constexpr int NUM_CLIENTS = 3;
 
 // =============================================================================
-// 服务端：单连接处理协程
+// Server-side flow.
 // =============================================================================
 
 auto handle_client(cn::io_context& ctx, cn::socket client, int id,
@@ -42,7 +42,7 @@ auto handle_client(cn::io_context& ctx, cn::socket client, int id,
 }
 
 // =============================================================================
-// 服务端：accept 循环
+// Server: accept loop
 // =============================================================================
 
 auto accept_loop(cn::io_context& ctx, cn::tcp::acceptor& acc,
@@ -58,19 +58,19 @@ auto accept_loop(cn::io_context& ctx, cn::tcp::acceptor& acc,
 
         std::println("  [Server] Client {} connected", id);
 
-        // spawn 火并忘处理协程，生命周期由 detached_task 管理
+        // Spawn , lifetime detached_task
         cn::spawn(ctx, handle_client(ctx, std::move(*r), id, done));
     }
 }
 
 // =============================================================================
-// 客户端协程
+// Client coroutine
 // =============================================================================
 
 auto run_client(cn::io_context& ctx, std::atomic<bool>& ready,
                 std::atomic<int>& done, int id) -> cn::task<void>
 {
-    // 等待服务端就绪
+    // Wait forServer
     while (!ready.load()) {}
 
     auto sock_r = cn::socket::create(cn::address_family::ipv4, cn::socket_type::stream);
@@ -85,7 +85,7 @@ auto run_client(cn::io_context& ctx, std::atomic<bool>& ready,
         co_return;
     }
 
-    // 发送消息
+    // Send messages
     auto msg = std::format("Hello from client {}", id);
     auto wr = co_await cn::async_write(ctx, sock, cn::buffer(std::string_view{msg}));
     if (wr)
@@ -93,7 +93,7 @@ auto run_client(cn::io_context& ctx, std::atomic<bool>& ready,
 
     co_await cnetmod::async_sleep(ctx, std::chrono::milliseconds{100});
 
-    // 接收回显
+    // Receive echoed data
     std::array<std::byte, 256> buf{};
     auto rr = co_await cn::async_read(ctx, sock, cn::buffer(buf));
     if (rr) {
@@ -106,7 +106,7 @@ auto run_client(cn::io_context& ctx, std::atomic<bool>& ready,
 }
 
 // =============================================================================
-// 主协程
+// Main coroutine
 // =============================================================================
 
 auto run_demo(cn::io_context& ctx) -> cn::task<void> {
@@ -120,15 +120,15 @@ auto run_demo(cn::io_context& ctx) -> cn::task<void> {
     std::atomic<bool> server_ready{false};
     std::atomic<int> done{0};
 
-    // spawn accept 循环
+    // Spawn accept loop
     cn::spawn(ctx, accept_loop(ctx, acc, server_ready, done, NUM_CLIENTS));
 
-    // spawn 多个客户端
+    // Spawn Client
     for (int i = 0; i < NUM_CLIENTS; ++i) {
         cn::spawn(ctx, run_client(ctx, server_ready, done, i));
     }
 
-    // 等待所有客户端 + 服务端 handler 完成
+    // Wait forClient + Server handler complete
     while (done.load() < NUM_CLIENTS * 2) {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{10});
     }
@@ -145,11 +145,11 @@ auto run_demo(cn::io_context& ctx) -> cn::task<void> {
 auto main() -> int {
     std::println("=== cnetmod: TCP Echo Server/Client ===");
 
-    cn::net_init net;  // RAII: 跨平台网络初始化/清理
+    cn::net_init net;  // RAII: cross-platformnetwork initialization/cleanup
 
     auto ctx = cn::make_io_context();
     cn::spawn(*ctx, run_demo(*ctx));
-    ctx->run();  // 事件循环驱动所有协程，直到 run_demo 调用 ctx.stop()
+    ctx->run();  // Run_demo ctx.stop()
 
     std::println("Done.");
     return 0;

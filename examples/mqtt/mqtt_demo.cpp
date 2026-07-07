@@ -1,19 +1,19 @@
-/// cnetmod example — MQTT Broker + Client 完整功能演示
-/// 演示：
-///   1. Broker 启动（带 security/ACL）
-///   2. 异步 Client: connect → subscribe → publish (QoS 0/1/2) → 收消息
-///   3. Retained 消息
-///   4. Will 消息 (遗嘱)
-///   5. 同步 Client (sync_client) 简易 pub/sub
+/// Cnetmod example - MQTT Broker + Client completefeaturesDemonstrates
+/// Demonstrates
+/// 1. Broker start( security/ACL)
+/// 2. async Client: connect -> subscribe -> publish (QoS 0/1/2) ->
+/// 3. Retained
+/// 4. Will ()
+/// 5. Client (sync_client) pub/sub
 ///   6. Auto-Reconnect
-///   7. Security/ACL — 认证失败 + 授权拒绝
-///   8. Unsubscribe — 取消订阅后不再收到消息
-///   9. Retained 消息检索 — 新订阅者收到已有 retained
-///  10. Session 恢复 + 离线队列 — clean_session=false
-///  11. Shared Subscription — $share/group/ 负载均衡
+/// 7. Security/ACL - authenticationfailure + authorization
+/// 8. Unsubscribe
+/// 9. Retained - retained
+/// 10. Session restore + offline queue - clean_session=false
+/// 11. Shared Subscription - $share/group/ load balancing
 ///  12. v5 Properties — User Property / Message Expiry / Response Topic
-///  13. v3.1.1 客户端 — 向后兼容
-/// 全部在单进程内通过协程完成
+/// 13. v3.1.1 Client - backward compatibility
+/// Complete
 
 #include <cnetmod/config.hpp>
 #include <exec/static_thread_pool.hpp>
@@ -33,7 +33,7 @@ namespace mqtt = cnetmod::mqtt;
 constexpr std::uint16_t MQTT_PORT = 11883;
 
 // =============================================================================
-// 1. Broker 启动协程
+// 1. Broker start
 // =============================================================================
 
 auto run_broker(cn::io_context& ctx, mqtt::broker& brk,
@@ -47,12 +47,12 @@ auto run_broker(cn::io_context& ctx, mqtt::broker& brk,
         .receive_maximum     = 100,
     });
 
-    // 配置安全：添加用户 + ACL
+    // Configuresecurity: + ACL
     auto& sec = brk.security();
     sec.add_user("alice", "pass123", {"admin"});
     sec.add_user("bob",   "pass456", {"viewer"});
-    sec.allow_all("#", {"admin"});              // admin 可读写所有
-    sec.allow_subscribe("sensor/#", {"viewer"}); // viewer 只能订阅 sensor/
+    sec.allow_all("#", {"admin"});              // Implementation note: admin.
+    sec.allow_subscribe("sensor/#", {"viewer"}); // Viewer sensor/
 
     auto r = brk.listen("127.0.0.1", MQTT_PORT);
     if (!r) {
@@ -66,7 +66,7 @@ auto run_broker(cn::io_context& ctx, mqtt::broker& brk,
 }
 
 // =============================================================================
-// 2. 异步 Client — Subscriber
+// 2. async Client - Subscriber
 // =============================================================================
 
 auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
@@ -78,7 +78,7 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
 
     mqtt::client sub(ctx);
 
-    // 注册消息回调
+    // Register
     sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [Subscriber] topic={} payload={} qos={} retain={}",
             msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value), msg.retain);
@@ -89,7 +89,7 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
         logger::info("  [Subscriber] disconnected: {}", reason);
     });
 
-    // 连接
+    // Implementation note.
     mqtt::connect_options opts;
     opts.host           = "127.0.0.1";
     opts.port           = MQTT_PORT;
@@ -107,7 +107,7 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     }
     logger::info("  [Subscriber] Connected (v5)");
 
-    // 订阅多个 topic
+    // Implementation note: topic.
     std::vector<mqtt::subscribe_entry> entries = {
         {"sensor/temperature", mqtt::qos::exactly_once},
         {"sensor/humidity",    mqtt::qos::at_least_once},
@@ -121,7 +121,7 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     logger::info("  [Subscriber] Subscribed to {} topics", entries.size());
     sub_ready.store(true);
 
-    // 等待消息（publisher 会发 6 条）
+    // Wait for(publisher 6 )
     while (msg_count.load() < 6)
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
 
@@ -130,7 +130,7 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
 }
 
 // =============================================================================
-// 3. 异步 Client — Publisher (QoS 0/1/2 + retained)
+// 3. async Client - Publisher (QoS 0/1/2 + retained)
 // =============================================================================
 
 auto run_publisher(cn::io_context& ctx, std::atomic<bool>& sub_ready)
@@ -173,12 +173,12 @@ auto run_publisher(cn::io_context& ctx, std::atomic<bool>& sub_ready)
     if (r2)
         logger::info("  [Publisher] sent sensor/temperature (QoS 2) — complete");
 
-    // Retained 消息
+    // Retained
     co_await pub.publish("device/thermostat/status", "online",
                          mqtt::qos::at_least_once, true);
     logger::info("  [Publisher] sent device/thermostat/status (retained)");
 
-    // 多条消息
+    // Implementation note.
     co_await pub.publish("sensor/temperature", "23.5°C", mqtt::qos::at_most_once);
     co_await pub.publish("sensor/humidity",    "62%",    mqtt::qos::at_most_once);
 
@@ -188,7 +188,7 @@ auto run_publisher(cn::io_context& ctx, std::atomic<bool>& sub_ready)
 }
 
 // =============================================================================
-// 4. Will 消息演示
+// 4. Will Demonstrates
 // =============================================================================
 
 auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
@@ -197,7 +197,7 @@ auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     while (!broker_ready.load())
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{5});
 
-    // Subscriber 订阅 will topic
+    // Subscriber will topic
     mqtt::client will_sub(ctx);
     will_sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [WillSub] got will: topic={} payload={}",
@@ -213,7 +213,7 @@ auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     co_await will_sub.connect(sub_opts);
     co_await will_sub.subscribe("device/sensor-1/will", mqtt::qos::at_least_once);
 
-    // 带 Will 的客户端
+    // Will Client
     mqtt::client will_client(ctx);
     mqtt::connect_options wc_opts;
     wc_opts.host = "127.0.0.1"; wc_opts.port = MQTT_PORT;
@@ -229,21 +229,21 @@ auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     co_await will_client.connect(wc_opts);
     logger::info("  [WillClient] Connected with will message");
 
-    // 模拟异常断连（直接 close 不发 DISCONNECT → broker 发布 will）
+    // Simulate( close DISCONNECT -> broker will)
     will_client.close();
     logger::info("  [WillClient] Abrupt close (will should be published)");
 
-    // 等待 will 到达
+    // Wait for will
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{500});
     co_await will_sub.disconnect();
 }
 
 // =============================================================================
-// 5. 同步 Client 演示
+// 5. Client Demonstrates
 // =============================================================================
 
 void run_sync_demo(std::atomic<bool>& broker_ready) {
-    // 避免占满 CPU：自旋等待时稍作休眠
+    // CPU: wait for
     while (!broker_ready.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
@@ -269,7 +269,7 @@ void run_sync_demo(std::atomic<bool>& broker_ready) {
     sc.subscribe_sync("test/sync", mqtt::qos::at_least_once);
     sc.publish_sync("test/sync", "hello from sync_client", mqtt::qos::at_least_once);
 
-    // poll 一下让回调触发
+    // Implementation note: poll.
     for (int i = 0; i < 50; ++i) {
         sc.poll();
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
@@ -280,7 +280,7 @@ void run_sync_demo(std::atomic<bool>& broker_ready) {
 }
 
 // =============================================================================
-// 6. Auto-Reconnect 演示
+// 6. Auto-Reconnect Demonstrates
 // =============================================================================
 
 auto run_reconnect_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -291,7 +291,7 @@ auto run_reconnect_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     mqtt::client rc(ctx);
 
-    // 配置自动重连
+    // Configure
     rc.set_reconnect({
         .enabled              = true,
         .max_retries          = 3,
@@ -331,7 +331,7 @@ auto run_reconnect_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 }
 
 // =============================================================================
-// 7. Security/ACL 演示 — 认证失败 + 授权拒绝
+// 7. Security/ACL Demonstrates - authenticationfailure + authorization
 // =============================================================================
 
 auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -340,7 +340,7 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     while (!broker_ready.load())
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{5});
 
-    // --- 7a: 错误密码连接 → 应被拒绝 ---
+    // 7a: error ->
     {
         mqtt::client c(ctx);
         mqtt::connect_options opts;
@@ -357,7 +357,7 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
             logger::error("  [Security] ERROR: should have been rejected!");
     }
 
-    // --- 7b: bob 尝试发布到 device/# → ACL 拒绝 ---
+    // 7b: bob device/# -> ACL
     {
         mqtt::client bob(ctx);
         mqtt::connect_options opts;
@@ -374,13 +374,13 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
         }
         logger::info("  [Security] bob connected (viewer group)");
 
-        // bob 订阅 sensor/# → 应成功 (viewer 有 sensor/# 订阅权限)
+        // Bob sensor/# -> success (viewer sensor/# )
         auto sr = co_await bob.subscribe("sensor/temperature", mqtt::qos::at_most_once);
         if (sr)
             logger::info("  [Security] bob subscribed sensor/temperature — OK");
 
-        // bob 发布到 device/cmd → ACL 应拒绝 (viewer 无发布权限)
-        // 注意: broker 侧拒绝发布不会给 QoS 0 返回错误
+        // Bob device/cmd -> ACL (viewer )
+        // Note: broker QoS 0 returnerror
         auto pr = co_await bob.publish("device/cmd", "reboot", mqtt::qos::at_least_once);
         if (pr)
             logger::info("  [Security] bob publish device/cmd — broker accepted (ACL checked server-side)");
@@ -393,7 +393,7 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 }
 
 // =============================================================================
-// 8. Unsubscribe 演示 — 取消订阅后不再收消息
+// 8. Unsubscribe Demonstrates
 // =============================================================================
 
 auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -418,11 +418,11 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     opts.version = mqtt::protocol_version::v5;
     co_await c.connect(opts);
 
-    // 订阅
+    // Implementation note.
     co_await c.subscribe("unsub/test", mqtt::qos::at_least_once);
     logger::info("  [Unsub] Subscribed to unsub/test");
 
-    // 用另一个 client 发消息
+    // Implementation note: client.
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
     pub_opts.host = "127.0.0.1"
@@ -432,17 +432,17 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     pub_opts.version = mqtt::protocol_version::v5;
     co_await pub.connect(pub_opts);
 
-    // 发第 1 条 → 应收到
+    // Implementation note: 1 .
     co_await pub.publish("unsub/test", "msg-before-unsub", mqtt::qos::at_most_once);
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{100});
     logger::info("  [Unsub] recv_count after 1st publish: {}", recv_count.load());
 
-    // 取消订阅
+    // Implementation note.
     auto ur = co_await c.unsubscribe({"unsub/test"});
     if (ur)
         logger::info("  [Unsub] Unsubscribed from unsub/test");
 
-    // 发第 2 条 → 不应收到
+    // Implementation note: 2 .
     co_await pub.publish("unsub/test", "msg-after-unsub", mqtt::qos::at_most_once);
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{100});
     logger::info("  [Unsub] recv_count after 2nd publish: {} (should still be 1)",
@@ -453,7 +453,7 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 }
 
 // =============================================================================
-// 9. Retained 消息检索 — 新订阅者收到已有 retained
+// 9. Retained - retained
 // =============================================================================
 
 auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -462,7 +462,7 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     while (!broker_ready.load())
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{5});
 
-    // 先发布 retained 消息
+    // Retained
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
     pub_opts.host = "127.0.0.1"
@@ -476,7 +476,7 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     logger::info("  [Retained] Published retained: status/server=running");
     co_await pub.disconnect();
 
-    // 新订阅者连接 → 订阅后应收到 retained 消息
+    // > retained
     std::atomic<int> retained_count{0};
     mqtt::client sub(ctx);
     sub.on_message([&](const mqtt::publish_message& msg) {
@@ -497,7 +497,7 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{200});
     logger::info("  [Retained] retained_count={} (should be >=1)", retained_count.load());
 
-    // 删除 retained 消息（空 payload）
+    // Delete retained ( payload)
     mqtt::client del(ctx);
     mqtt::connect_options del_opts;
     del_opts.host = "127.0.0.1"
@@ -514,7 +514,7 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
 }
 
 // =============================================================================
-// 10. Session 恢复 + 离线队列 (clean_session=false)
+// 10. Session restore + offline queue (clean_session=false)
 // =============================================================================
 
 auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -525,7 +525,7 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
 
     std::atomic<int> recv_count{0};
 
-    // 第一次连接: clean_session=false, 订阅, 然后断开
+    // Clean_session=false
     {
         mqtt::client c(ctx);
         mqtt::connect_options opts;
@@ -547,7 +547,7 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
         logger::info("  [Session] 1st disconnect (session persisted on broker)");
     }
 
-    // 在 client 离线期间发布消息
+    // Implementation note: client.
     {
         mqtt::client pub(ctx);
         mqtt::connect_options opts;
@@ -565,7 +565,7 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
         co_await pub.disconnect();
     }
 
-    // 第二次连接: clean_session=false → 恢复会话 → 收到离线消息
+    // Clean_session=false -> restoresession ->
     {
         mqtt::client c(ctx);
         c.on_message([&](const mqtt::publish_message& msg) {
@@ -594,7 +594,7 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
 }
 
 // =============================================================================
-// 11. Shared Subscription — $share/group/ 负载均衡
+// 11. Shared Subscription - $share/group/ load balancing
 // =============================================================================
 
 auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -606,7 +606,7 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     std::atomic<int> sub1_count{0};
     std::atomic<int> sub2_count{0};
 
-    // 两个订阅者使用 shared subscription
+    // Shared subscription
     mqtt::client s1(ctx), s2(ctx);
 
     s1.on_message([&](const mqtt::publish_message& msg) {
@@ -631,12 +631,12 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     co_await s1.connect(make_opts("shared-s1"));
     co_await s2.connect(make_opts("shared-s2"));
 
-    // 共享订阅: $share/workers/job/+
+    // Shared: $share/workers/job/+
     co_await s1.subscribe("$share/workers/job/+", mqtt::qos::at_least_once);
     co_await s2.subscribe("$share/workers/job/+", mqtt::qos::at_least_once);
     logger::info("  [Shared] Both subscribers joined $share/workers/job/+");
 
-    // 发布多条消息
+    // Implementation note.
     mqtt::client pub(ctx);
     co_await pub.connect(make_opts("shared-pub"));
 
@@ -657,7 +657,7 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 }
 
 // =============================================================================
-// 12. v5 Properties 演示
+// 12. v5 Properties Demonstrates
 // =============================================================================
 
 auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -671,7 +671,7 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     mqtt::client sub(ctx);
     sub.on_message([&](const mqtt::publish_message& msg) {
         logger::info("  [v5Props] recv: topic={} payload={}", msg.topic, msg.payload.str());
-        // 打印 user properties
+        // User properties
         for (auto& p : msg.props) {
             if (p.id == mqtt::property_id::user_property) {
                 if (auto* kv = std::get_if<std::pair<std::string, std::string>>(&p.value))
@@ -709,7 +709,7 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     mqtt::client pub(ctx);
     co_await pub.connect(make_opts("v5props-pub"));
 
-    // 带 User Property + Content-Type + Response Topic + Correlation Data
+    // User Property + Content-Type + Response Topic + Correlation Data
     mqtt::properties pub_props;
     pub_props.push_back(mqtt::mqtt_property::string_pair_prop(
         mqtt::property_id::user_property, "trace-id", "abc-123"));
@@ -724,7 +724,7 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
         mqtt::qos::at_least_once, false, pub_props);
     logger::info("  [v5Props] Published with user_property + content_type + response_topic");
 
-    // 带 Message Expiry Interval
+    // Message Expiry Interval
     mqtt::properties expiry_props;
     expiry_props.push_back(mqtt::mqtt_property::u32_prop(
         mqtt::property_id::message_expiry_interval, 60));
@@ -740,7 +740,7 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 }
 
 // =============================================================================
-// 13. v3.1.1 客户端 — 向后兼容
+// 13. v3.1.1 Client - backward compatibility
 // =============================================================================
 
 auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
@@ -758,7 +758,7 @@ auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
         recv_count.fetch_add(1);
     });
 
-    // v3.1.1 连接
+    // Implementation note: v3.1.1.
     mqtt::connect_options sub_opts;
     sub_opts.host = "127.0.0.1"; sub_opts.port = MQTT_PORT;
     sub_opts.client_id = "v311-sub";
@@ -797,7 +797,7 @@ auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 }
 
 // =============================================================================
-// 主协程 — 编排全部演示
+// Main coroutine - Demonstrates
 // =============================================================================
 
 auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void> {
@@ -807,7 +807,7 @@ auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void> {
     std::atomic<int>  msg_count{0};
     std::atomic<int>  will_count{0};
 
-    // 启动 Broker
+    // Start Broker
     cn::spawn(ctx, run_broker(ctx, brk, broker_ready));
 
     // === Demo 1: Pub/Sub with QoS ===

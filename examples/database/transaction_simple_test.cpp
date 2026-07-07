@@ -1,5 +1,5 @@
 /// Simple test for transaction functionality
-/// 简单的事务功能测试
+/// SimplefeaturesTest
 
 #include <cnetmod/config.hpp>
 #include <cstdio>

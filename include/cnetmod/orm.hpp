@@ -47,7 +47,7 @@
 #define SNOWFLAKE_PK_FLAGS ::cnetmod::mysql::orm::col_flag::primary_key
 #define SNOWFLAKE_PK_STRATEGY ::cnetmod::mysql::orm::id_strategy::snowflake
 
-// CNETMOD_FIELD(member, "col_name", column_type_suffix) — 3 参数
+// CNETMOD_FIELD(member, "col_name", column_type_suffix) - 3
 #define CNETMOD_FIELD_3(M, COL, CT) \
     ::cnetmod::mysql::orm::field_mapping<_cnetmod_model_type>{ \
         {#M, COL, ::cnetmod::mysql::column_type::CT, \
@@ -61,7 +61,7 @@
         } \
     }
 
-// CNETMOD_FIELD(member, "col_name", column_type_suffix, flags) — 4 参数
+// CNETMOD_FIELD(member, "col_name", column_type_suffix, flags) - 4
 #define CNETMOD_FIELD_4(M, COL, CT, FLAGS) \
     ::cnetmod::mysql::orm::field_mapping<_cnetmod_model_type>{ \
         {#M, COL, ::cnetmod::mysql::column_type::CT, FLAGS, \
@@ -74,7 +74,7 @@
         } \
     }
 
-// CNETMOD_FIELD(member, "col_name", column_type_suffix, flags, strategy) — 5 参数
+// CNETMOD_FIELD(member, "col_name", column_type_suffix, flags, strategy) - 5
 #define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY) \
     ::cnetmod::mysql::orm::field_mapping<_cnetmod_model_type>{ \
         {#M, COL, ::cnetmod::mysql::column_type::CT, FLAGS, STRATEGY}, \

@@ -17,12 +17,12 @@ cnetmod uses a layered architecture with clear separation of concerns:
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    Application Layer                     │
-│              (HTTP Server, MQTT Broker, etc.)           │
+│          (HTTP Server, MQTT Broker, CoAP Gateway, etc.) │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   Protocol Layer                         │
-│ HTTP │ WebSocket │ MQTT │ MySQL │ Redis │ Raft │ TCP/UDP │
+│ HTTP │ WebSocket │ MQTT │ CoAP │ MySQL │ Redis │ Raft │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@ cnetmod.coro          (coroutine primitives: task, spawn, sync)
     ↓
 cnetmod.executor      (scheduling: server_context, stdexec bridge)
     ↓
-cnetmod.protocol.*    (protocols: tcp, udp, http, websocket, mqtt, mysql, redis, raft)
+cnetmod.protocol.*    (protocols: tcp, udp, http, websocket, mqtt, coap, mysql, redis, raft)
     ↓
 cnetmod.protocol.http.middleware.*  (HTTP middleware components)
 ```

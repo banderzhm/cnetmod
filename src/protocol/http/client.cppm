@@ -69,7 +69,7 @@ export struct client_options {
     std::uint32_t h2_initial_window_size = 1 * 1024 * 1024;  // 1MB
     
     // Cookie options
-    bool enable_cookies = true;  // 自动管理 cookies
+    bool enable_cookies = true;  // Implementation note: cookies.
 };
 
 // =============================================================================
@@ -234,7 +234,7 @@ private:
     io_context* ctx_;
     client_options options_;
     std::optional<connection_state> state_;
-    cookie_jar cookies_;  // Cookie 存储
+    cookie_jar cookies_;  // Implementation note: Cookie.
     
 #ifdef CNETMOD_HAS_SSL
     std::optional<ssl_context> ssl_ctx_;

@@ -1,6 +1,6 @@
-/// cnetmod example — MySQL CRUD (cms_help 表增删改查)
-/// 演示 mysql::client 的连接 / query / with_params / prepared statement / pipeline
-/// 需要本地 MySQL 运行，数据库: mall
+/// Cnetmod example - MySQL CRUD (cms_help )
+/// Demonstrates mysql::client / query / with_params / prepared statement / pipeline
+/// MySQL run, : mall
 
 #include <cnetmod/config.hpp>
 #include <cstdio>
@@ -15,7 +15,7 @@ namespace cn = cnetmod;
 namespace mysql = cn::mysql;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 辅助：打印结果集
+// Implementation note.
 // ─────────────────────────────────────────────────────────────────────────────
 
 void print_result(const mysql::result_set& rs, std::string_view label = {}) {
@@ -33,7 +33,7 @@ void print_result(const mysql::result_set& rs, std::string_view label = {}) {
         return;
     }
 
-    // 打印列头
+    // Implementation note.
     std::print("  ");
     for (std::size_t i = 0; i < rs.columns.size(); ++i) {
         if (i > 0) std::print(" | ");
@@ -47,7 +47,7 @@ void print_result(const mysql::result_set& rs, std::string_view label = {}) {
     }
     std::println("");
 
-    // 打印行
+    // Implementation note.
     for (auto& row : rs.rows) {
         std::print("  ");
         for (std::size_t i = 0; i < row.size(); ++i) {
@@ -60,7 +60,7 @@ void print_result(const mysql::result_set& rs, std::string_view label = {}) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 1: 建表 (CREATE TABLE IF NOT EXISTS)
+// Demo 1: (CREATE TABLE IF NOT EXISTS)
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_create_table(mysql::client& db) -> cn::task<void> {
@@ -81,13 +81,13 @@ auto demo_create_table(mysql::client& db) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 2: 插入 — with_params（客户端格式化 SQL，自动转义）
+// Demo 2: insert - with_params(Client SQL, )
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_insert(mysql::client& db) -> cn::task<void> {
     using P = mysql::param_value;
 
-    // 插入单条
+    // Implementation note.
     auto rs1 = co_await db.execute(mysql::with_params(
         "INSERT INTO cms_help (category_id, icon, title, show_status, create_time, read_count, content) "
         "VALUES ({}, {}, {}, {}, NOW(), {}, {})",
@@ -102,7 +102,7 @@ auto demo_insert(mysql::client& db) -> cn::task<void> {
     ));
     print_result(rs1, "INSERT 1");
 
-    // 插入多条
+    // Implementation note.
     auto rs2 = co_await db.execute(mysql::with_params(
         "INSERT INTO cms_help (category_id, icon, title, show_status, create_time, read_count, content) VALUES "
         "({}, {}, {}, {}, NOW(), {}, {}), "
@@ -126,17 +126,17 @@ auto demo_insert(mysql::client& db) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 3: 查询 — SELECT 全量 / 条件查询
+// Demo 3: query - SELECT / query
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_select(mysql::client& db) -> cn::task<void> {
-    // 全量查询
+    // Query data.
     auto rs1 = co_await db.query(
         "SELECT id, category_id, title, show_status, create_time, read_count FROM cms_help ORDER BY id"
     );
     print_result(rs1, "SELECT ALL");
 
-    // 条件查询：按 category_id
+    // Query: category_id
     using P = mysql::param_value;
     auto rs2 = co_await db.execute(mysql::with_params(
         "SELECT id, title, content FROM cms_help WHERE category_id = {} AND show_status = {}",
@@ -144,7 +144,7 @@ auto demo_select(mysql::client& db) -> cn::task<void> {
     ));
     print_result(rs2, "SELECT WHERE category_id=1 AND show_status=1");
 
-    // 模糊查询：LIKE
+    // Query: LIKE
     auto rs3 = co_await db.execute(mysql::with_params(
         "SELECT id, title FROM cms_help WHERE title LIKE {}",
         {P::from_string("%订单%")}
@@ -153,20 +153,20 @@ auto demo_select(mysql::client& db) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 4: 更新 — UPDATE
+// Demo 4: update - UPDATE
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_update(mysql::client& db) -> cn::task<void> {
     using P = mysql::param_value;
 
-    // 更新 read_count
+    // Update read_count
     auto rs1 = co_await db.execute(mysql::with_params(
         "UPDATE cms_help SET read_count = read_count + {}, show_status = {} WHERE title = {}",
         {P::from_int(1), P::from_int(1), P::from_string("退款流程说明")}
     ));
     print_result(rs1, "UPDATE read_count+1, show_status=1");
 
-    // 验证更新
+    // Verifyupdate
     auto rs2 = co_await db.execute(mysql::with_params(
         "SELECT id, title, show_status, read_count FROM cms_help WHERE title = {}",
         {P::from_string("退款流程说明")}
@@ -175,7 +175,7 @@ auto demo_update(mysql::client& db) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 5: Prepared Statement — 参数化查询 + 执行
+// Demo 5: Prepared Statement - query +
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_prepared_stmt(mysql::client& db) -> cn::task<void> {
@@ -203,7 +203,7 @@ auto demo_prepared_stmt(mysql::client& db) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 6: Pipeline — 批量操作单次往返
+// Demo 6: Pipeline - batch
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_pipeline(mysql::client& db) -> cn::task<void> {
@@ -241,30 +241,30 @@ auto demo_pipeline(mysql::client& db) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 7: 删除 — DELETE
+// Demo 7: delete - DELETE
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_delete(mysql::client& db) -> cn::task<void> {
     using P = mysql::param_value;
 
-    // 按条件删除
+    // Delete data.
     auto rs1 = co_await db.execute(mysql::with_params(
         "DELETE FROM cms_help WHERE category_id = {} AND show_status = {}",
         {P::from_int(2), P::from_int(0)}
     ));
     print_result(rs1, "DELETE WHERE category_id=2 AND show_status=0");
 
-    // 全部删除（清理测试数据）
+    // Delete(cleanupTest)
     auto rs2 = co_await db.query("DELETE FROM cms_help");
     print_result(rs2, "DELETE ALL (cleanup)");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 8: 元数据检查 — column metadata
+// Demo 8: - column metadata
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto demo_metadata(mysql::client& db) -> cn::task<void> {
-    // 先插入一条确保有数据
+    // Implementation note.
     co_await db.query(
         "INSERT INTO cms_help (category_id, title, show_status, create_time, read_count, content) "
         "VALUES (1, 'metadata test', 1, NOW(), 42, 'hello')"
@@ -281,7 +281,7 @@ auto demo_metadata(mysql::client& db) -> cn::task<void> {
                      !col.is_not_null(), col.is_auto_increment(), col.is_primary_key());
     }
 
-    // 演示 field_value 类型安全访问
+    // Demonstrates field_value security
     if (!rs.rows.empty()) {
         auto& row = rs.rows[0];
         std::println("\n  field_kind of each column:");
@@ -293,12 +293,12 @@ auto demo_metadata(mysql::client& db) -> cn::task<void> {
         }
     }
 
-    // 清理
+    // Implementation note.
     co_await db.query("DELETE FROM cms_help");
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口
+// Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run(cn::io_context& ctx) -> cn::task<void> {
@@ -308,7 +308,7 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     opts.host     = "127.0.0.1";
     opts.port     = 3306;
     opts.username = "root";
-    opts.password = "123456";      // ← 按实际修改
+    opts.password = "123456";      // Implementation note.
     opts.database = "mall";
     opts.ssl      = mysql::ssl_mode::disable;
     auto rs = co_await db.connect(std::move(opts));

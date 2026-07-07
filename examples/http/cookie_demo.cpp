@@ -11,19 +11,19 @@ using namespace cnetmod;
 using namespace cnetmod::http;
 
 // =============================================================================
-// Cookie 管理示例
+// Implementation note: Cookie.
 // =============================================================================
 
 auto demo_cookies(client& http_client) -> task<void> {
     std::println("\n=== Cookie Management Demo ===");
     
-    // 第一次请求 - 服务器设置 cookie
+    // Request - cookie
     std::println("1. First request - server sets cookies");
     auto result1 = co_await http_client.get("http://httpbin.org/cookies/set?name=value");
     if (result1) {
         std::println("   Status: {}", result1->status_code());
         
-        // 查看存储的 cookies
+        // Implementation note: cookies.
         const auto& jar = http_client.cookies();
         std::println("   Stored cookies: {}", jar.cookies().size());
         for (const auto& cookie : jar.cookies()) {
@@ -31,7 +31,7 @@ auto demo_cookies(client& http_client) -> task<void> {
         }
     }
     
-    // 第二次请求 - 自动发送 cookies
+    // Request - cookies
     std::println("\n2. Second request - cookies sent automatically");
     auto result2 = co_await http_client.get("http://httpbin.org/cookies");
     if (result2) {
@@ -39,7 +39,7 @@ auto demo_cookies(client& http_client) -> task<void> {
         std::println("   Response: {}", result2->body().substr(0, 200));
     }
     
-    // 手动管理 cookies
+    // Implementation note: cookies.
     std::println("\n3. Manual cookie management");
     cookie custom_cookie;
     custom_cookie.name = "custom";
@@ -51,23 +51,23 @@ auto demo_cookies(client& http_client) -> task<void> {
     http_client.cookies().add(custom_cookie);
     std::println("   Added custom cookie: {}={}", custom_cookie.name, custom_cookie.value);
     
-    // 清除 cookies
+    // Implementation note: cookies.
     std::println("\n4. Clear cookies");
     http_client.cookies().clear();
     std::println("   All cookies cleared");
 }
 
 // =============================================================================
-// 高级特性组合示例
+// Implementation note.
 // =============================================================================
 
 auto demo_advanced_features(client& http_client) -> task<void> {
     std::println("\n=== Advanced Features Combined ===");
     
-    // 1. 带 Cookie 的认证流程
+    // 1. Cookie authentication
     std::println("1. Authentication flow with cookies");
     
-    // 模拟登录（设置 session cookie）
+    // Simulate( session cookie)
     request login_req(http_method::POST, "http://httpbin.org/cookies/set?session=abc123");
     login_req.set_header("Content-Type", "application/json");
     
@@ -76,13 +76,13 @@ auto demo_advanced_features(client& http_client) -> task<void> {
         std::println("   ✓ Login successful, session cookie stored");
     }
     
-    // 使用 session cookie 访问受保护资源
+    // Session cookie protect
     auto protected_result = co_await http_client.get("http://httpbin.org/cookies");
     if (protected_result) {
         std::println("   ✓ Accessed protected resource with session");
     }
     
-    // 2. 自定义请求头 + Cookies
+    // 2. request + Cookies
     std::println("\n2. Custom headers with automatic cookies");
     request custom_req(http_method::GET, "http://httpbin.org/headers");
     custom_req.set_header("X-Custom-Header", "MyValue");
@@ -97,17 +97,17 @@ auto demo_advanced_features(client& http_client) -> task<void> {
 }
 
 // =============================================================================
-// 主函数
+// Main function
 // =============================================================================
 
 auto run_demos(client& http_client) -> task<void> {
     std::println("=== HTTP Client Advanced Features Demo ===");
     std::println("Demonstrating: Cookie Management\n");
     
-    // Cookie 管理
+    // Implementation note: Cookie.
     co_await demo_cookies(http_client);
     
-    // 高级特性组合
+    // Implementation note.
     co_await demo_advanced_features(http_client);
     
     std::println("\n=== Demo Complete ===");
@@ -130,7 +130,7 @@ auto main() -> int {
     opts.request_timeout = std::chrono::seconds(30);
     opts.follow_redirects = true;
     opts.keep_alive = true;
-    opts.enable_cookies = true;  // 启用 Cookie 管理
+    opts.enable_cookies = true;  // Enable Cookie
     opts.user_agent = "cnetmod-advanced-demo/1.0";
     opts.verify_peer = true;
     

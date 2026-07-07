@@ -1,5 +1,5 @@
 /// cnetmod example — Modbus UDP Client/Server Demo
-/// 演示 Modbus UDP 协议的客户端和服务端功能
+/// Demonstrates Modbus UDP ClientServerfeatures
 
 #include <cnetmod/config.hpp>
 
@@ -19,10 +19,10 @@ using namespace cn::modbus;
 auto run_udp_server(cn::io_context& ctx) -> cn::task<void> {
     std::println("\n── Starting Modbus UDP Server ──");
 
-    // 创建数据存储
+    // Createdata store
     memory_data_store store;
     
-    // 初始化测试数据
+    // Implementation note.
     for (std::uint16_t i = 0; i < 50; ++i) {
         store.write_holding_register(i, i * 100);
         // Note: Input registers and discrete inputs are read-only in standard Modbus
@@ -31,7 +31,7 @@ auto run_udp_server(cn::io_context& ctx) -> cn::task<void> {
 
     std::println("Initialized data store with test data");
 
-    // 创建并启动UDP服务器
+    // CreatestartUDP
     udp_server server(ctx, store);
     auto listen_result = co_await server.listen("0.0.0.0", 5021);
     
@@ -43,7 +43,7 @@ auto run_udp_server(cn::io_context& ctx) -> cn::task<void> {
     std::println("UDP Server listening on 0.0.0.0:5021");
     std::println("Request count: {}", server.get_request_count());
     
-    // 运行服务器
+    // Implementation note.
     co_await server.async_run();
 }
 
@@ -52,7 +52,7 @@ auto run_udp_server(cn::io_context& ctx) -> cn::task<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
-    // 等待服务器启动
+    // Wait forstart
     co_await cn::async_sleep(ctx, std::chrono::milliseconds(500));
 
     std::println("\n── Starting Modbus UDP Client ──");
@@ -70,7 +70,7 @@ auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
     request_builder builder;
     builder.set_unit_id(1).set_transport(transport_type::udp);
 
-    // 读取保持寄存器
+    // Readholding registers
     std::println("\n1. Reading holding registers...");
     auto read_req = builder.read_holding_registers(0, 10);
     auto read_resp = co_await client.execute(read_req);
@@ -88,7 +88,7 @@ auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
         }
     }
 
-    // 读取输入寄存器
+    // Readinput registers
     std::println("\n2. Reading input registers...");
     auto input_req = builder.read_input_registers(0, 8);
     auto input_resp = co_await client.execute(input_req);
@@ -106,7 +106,7 @@ auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
         }
     }
 
-    // 写入单个寄存器
+    // Writesingle register
     std::println("\n3. Writing single register...");
     auto write_req = builder.write_single_register(5, 9999);
     auto write_resp = co_await client.execute(write_req);
@@ -115,7 +115,7 @@ auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
         std::println("   Successfully wrote value 9999 to register 5");
     }
 
-    // 读回验证
+    // Read back to verify
     auto verify_req = builder.read_holding_registers(5, 1);
     auto verify_resp = co_await client.execute(verify_req);
     
@@ -129,7 +129,7 @@ auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
         }
     }
 
-    // 使用重试机制
+    // Implementation note.
     std::println("\n4. Testing retry mechanism...");
     auto retry_req = builder.read_coils(0, 16);
     auto retry_resp = co_await client.execute_with_retry(retry_req, 3);
@@ -154,7 +154,7 @@ auto run_udp_client(cn::io_context& ctx) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 入口
+// Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
 auto main() -> int {
@@ -168,7 +168,7 @@ auto main() -> int {
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 启动服务器和客户端
+    // StartClient
     cn::spawn(*ctx, run_udp_server(*ctx));
     cn::spawn(*ctx, run_udp_client(*ctx));
 

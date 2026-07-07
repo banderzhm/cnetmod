@@ -96,7 +96,7 @@ public:
         c.secure = secure;
         c.http_only = http_only;
         
-        // 添加 Set-Cookie 头
+        // Set-Cookie
         append_header("Set-Cookie", c.to_set_cookie_header());
         return *this;
     }

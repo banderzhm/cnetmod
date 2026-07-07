@@ -1,6 +1,6 @@
 /// cnetmod example — High-level HTTP Server + Client
-/// 演示 http::server / http::router / 中间件 / 静态文件 / 文件上传
-/// Server 端注册多条路由，Client 端发送多个请求验证
+/// Demonstrates http::server / http::router / middleware / file / fileupload
+/// Server registerroute, Client requestverify
 
 #include <cnetmod/config.hpp>
 
@@ -23,7 +23,7 @@ namespace http = cnetmod::http;
 constexpr std::uint16_t PORT = 19080;
 
 // =============================================================================
-// 客户端：发送一个 HTTP 请求并打印响应
+// Client: HTTP requestresponse
 // =============================================================================
 
 auto send_request(cn::io_context& ctx, http::http_method method,
@@ -51,7 +51,7 @@ auto send_request(cn::io_context& ctx, http::http_method method,
         cn::const_buffer{req_data.data(), req_data.size()});
     if (!wr) { sock.close(); co_return; }
 
-    // 读响应
+    // Response
     http::response_parser rp;
     std::array<std::byte, 8192> buf{};
     while (!rp.ready()) {
@@ -72,7 +72,7 @@ auto send_request(cn::io_context& ctx, http::http_method method,
 }
 
 // =============================================================================
-// 客户端：发送 multipart/form-data 请求
+// Client: multipart/form-data request
 // =============================================================================
 
 auto send_multipart_request(cn::io_context& ctx, std::string_view path,
@@ -120,11 +120,11 @@ auto send_multipart_request(cn::io_context& ctx, std::string_view path,
 }
 
 // =============================================================================
-// 客户端协程：依次发送多个请求
+// Client coroutine: request
 // =============================================================================
 
 auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
-    // 等待服务端启动
+    // Wait forServerstart
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
 
     std::println("\n--- Client: Testing routes ---");
@@ -141,7 +141,7 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     std::println("  [3] GET /api/users/7/posts/99");
     co_await send_request(ctx, http::http_method::GET, "/api/users/7/posts/99");
 
-    // 4. POST /api/echo  (带 body)
+    // 4. POST /api/echo ( body)
     std::println("  [4] POST /api/echo");
     co_await send_request(ctx, http::http_method::POST, "/api/echo",
                           "Hello cnetmod!");
@@ -155,7 +155,7 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     co_await send_request(ctx, http::http_method::POST,
                           "/upload?name=test.txt", "file content here");
 
-    // 7. POST /upload (multipart/form-data: 2 字段 + 2 文件)
+    // 7. POST /upload (multipart/form-data: 2 + 2 file)
     std::println("  [7] POST /upload (multipart/form-data)");
     {
         http::multipart_builder mp;
@@ -184,10 +184,10 @@ int main() {
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 构建路由
+    // Buildroute
     http::router router;
 
-    // GET / — 欢迎页
+    // Implementation note: GET.
     router.get("/", [](http::request_context& ctx) -> cn::task<void> {
         ctx.html(http::status::ok,
             "<h1>Welcome to cnetmod HTTP Server!</h1>"
@@ -196,7 +196,7 @@ int main() {
         co_return;
     });
 
-    // GET /api/users/:id — 用户信息 (JSON)
+    // GET /api/users/:id - (JSON)
     router.get("/api/users/:id", [](http::request_context& ctx) -> cn::task<void> {
         auto id = ctx.param("id");
         ctx.json(http::status::ok,
@@ -204,7 +204,7 @@ int main() {
         co_return;
     });
 
-    // GET /api/users/:id/posts/:pid — 多参数路由
+    // GET /api/users/:id/posts/:pid - route
     router.get("/api/users/:id/posts/:pid",
         [](http::request_context& ctx) -> cn::task<void> {
             auto uid = ctx.param("id");
@@ -215,20 +215,20 @@ int main() {
             co_return;
         });
 
-    // POST /api/echo — 回传请求 body
+    // POST /api/echo - echo backrequest body
     router.post("/api/echo", [](http::request_context& ctx) -> cn::task<void> {
         ctx.text(http::status::ok,
             std::format("Echo: {}", ctx.body()));
         co_return;
     });
 
-    // POST /upload — 文件上传
+    // POST /upload - fileupload
     router.post("/upload", http::save_upload({
         .save_dir = "uploads",
         .default_filename = "upload.bin",
     }));
 
-    // 构建服务器
+    // Implementation note.
     http::server srv(*ctx);
     auto listen_r = srv.listen("127.0.0.1", PORT);
     if (!listen_r) {
@@ -236,7 +236,7 @@ int main() {
         return 1;
     }
 
-    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → handler）
+    // Registermiddleware(: recover -> access_log -> cors -> request_id -> body_limit -> handler)
     srv.use(cn::recover());
     srv.use(cn::access_log());
     srv.use(cn::cors());
@@ -246,7 +246,7 @@ int main() {
 
     std::println("  Server listening on 127.0.0.1:{}", PORT);
 
-    // 启动服务器和客户端
+    // StartClient
     cn::spawn(*ctx, srv.run());
     cn::spawn(*ctx, run_client(*ctx, srv));
 

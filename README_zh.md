@@ -40,6 +40,7 @@
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
 - **Raft**: 复制状态机工具集，支持 leader 选举、日志复制、ReadIndex、leader lease / check-quorum、joint consensus 成员变更、snapshot install / compaction、LevelDB 持久化、TCP transport、TLS / mTLS 认证、传输指标、chaos / 重启恢复测试，以及分布式存储示例
 - **Modbus**: 完整协议实现 — TCP/UDP/RTU（串口）客户端和服务端、所有标准功能码、连接池、CRC-16 校验、帧时序控制、数据存储（基于互斥锁和无锁通道）
+- **CoAP**: 面向受限设备的 CoAP 协议栈 — RFC 7252 消息/选项编解码、confirmable 请求重传、Observe 订阅/通知、token/message-id 匹配、资源路由、Block1/Block2 辅助函数、CoAPS/DTLS context 支持
 - **OpenAI**: 异步 API 客户端（聊天补全等）
 
 ### Raft 性能
@@ -115,6 +116,12 @@ export PATH="/usr/local/opt/llvm/bin:$PATH"      # Intel Mac
 
 ### 克隆和构建
 
+支持三种常用构建方式：
+
+- **子模块/本地构建**：适合开发本仓库，使用 `3rdparty` 里的 Git submodule。
+- **vcpkg manifest 构建**：适合让 vcpkg 统一安装依赖，Windows + VS 2026 推荐使用仓库自带的 `x64-windows-vs2026` overlay triplet。
+- **Conan 构建/打包**：适合通过 Conan 分发和复用，`conan create` 可验证 recipe 的导出、隔离构建和打包流程。
+
 ```bash
 # 克隆仓库
 git clone https://github.com/banderzhm/cnetmod.git
@@ -133,6 +140,85 @@ cmake --build build --target cnetmod_build_all
 # Visual Studio 生成器构建 C++ modules 时建议使用单节点 MSBuild
 cmake --build build --target cnetmod_build_all --config Debug
 ```
+
+### 使用 vcpkg 构建
+
+仓库已包含 `vcpkg.json`，安装了 vcpkg 的用户可以直接使用 manifest
+mode 安装受支持的第三方依赖：
+
+```bash
+cmake -B build-vcpkg \
+  -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DCNETMOD_BUILD_EXAMPLES=ON
+cmake --build build-vcpkg --target cnetmod_build_all
+```
+
+Windows 上如果同时安装了多个 Visual Studio，可以用仓库自带的 overlay
+triplet 强制使用 Visual Studio 2026：
+
+```bat
+set VCPKG_ROOT=<path-to-vcpkg>
+set VCPKG_VISUAL_STUDIO_PATH=<path-to-Visual-Studio-2026>
+
+:: 可选：C 盘空间不足时，把 vcpkg 缓存放到其它盘
+set X_VCPKG_REGISTRIES_CACHE=%USERPROFILE%\.cache\vcpkg\registries
+set VCPKG_DOWNLOADS=%USERPROFILE%\.cache\vcpkg\downloads
+
+%VCPKG_ROOT%\vcpkg.exe install --triplet x64-windows-vs2026 ^
+  --overlay-triplets=cmake\vcpkg-triplets
+
+cmake -S . -B build-vcpkg-vs2026 -G"Visual Studio 18 2026" ^
+  -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
+  -DVCPKG_TARGET_TRIPLET=x64-windows-vs2026 ^
+  -DVCPKG_OVERLAY_TRIPLETS=cmake/vcpkg-triplets
+
+cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
+```
+
+cnetmod 会先复用当前 toolchain 或宿主项目暴露的依赖，再回退到已有的
+`3rdparty` 副本。`pugixml` 在本仓库里保持为正常 Git submodule；包管理器
+构建应优先使用 package target，只在没有系统包时回退到该 submodule。
+
+### 使用 Conan 构建
+
+仓库也包含 Conan 2 recipe：
+
+```bash
+conan install . --output-folder=build-conan --build=missing \
+  -s build_type=Release -s compiler.cppstd=23
+cmake --preset conan-default
+cmake --build --preset conan-release --target cnetmod_core
+```
+
+Visual Studio 2026 需要 Conan 2.30+ 和 CMake 4.2+，这样才能识别 MSVC
+195 和 `Visual Studio 18 2026` 生成器：
+
+```bat
+:: 可选：C 盘空间不足时，把 Conan cache 和临时目录放到其它盘
+set CONAN_HOME=%USERPROFILE%\.conan2-vs2026
+set TEMP=%USERPROFILE%\.cache\build-tmp
+set TMP=%USERPROFILE%\.cache\build-tmp
+
+conan --version
+conan install . --output-folder=build-conan-vs2026 --build=missing ^
+  -s build_type=Release ^
+  -s compiler=msvc -s compiler.version=195 ^
+  -s compiler.runtime=dynamic -s compiler.runtime_type=Release ^
+  -s compiler.cppstd=23 ^
+  -c tools.cmake.cmaketoolchain:generator="Visual Studio 18 2026"
+
+cmake --preset conan-default
+cmake --build --preset conan-release --target cnetmod_core
+
+:: 可选：验证 recipe 的导出、隔离构建和打包流程
+conan create . --build=missing -pr:h vs2026 -pr:b vs2026
+```
+
+默认 Conan recipe 会从 ConanCenter 安装 `jwt-cpp`、`nlohmann_json`、
+`pugixml`、`libnghttp2`、`leveldb`、`openssl` 和 `zlib`。`mimalloc`
+默认启用；如需关闭可传 `-o cnetmod/*:with_mimalloc=False`。`stdexec`
+默认使用 `3rdparty/stdexec`；如果你的 Conan remote 提供上游 `p2300` 包，可以开启
+`-o cnetmod/*:with_stdexec_package=True`。
 
 构建系统会自动检测 MSVC 和 libc++ 的标准库模块路径。Windows 安装最新 Visual Studio 2026 后直接使用默认自动检测路径即可。Linux/macOS 如果检测失败，可手动指定：
 ```bash
@@ -244,6 +330,37 @@ config.unit_id = 1;
 
 modbus::rtu_server server(ctx, store);
 co_await server.start(config);
+```
+
+**CoAP over UDP**：
+```cpp
+import cnetmod.protocol.coap;
+
+using namespace cnetmod;
+
+coap::udp_server server(ctx);
+auto listen = server.listen("0.0.0.0", coap::default_port);
+if (!listen) {
+    throw std::system_error(listen.error());
+}
+
+server.route(coap::method::get, "/sensors/temp",
+    [](const coap::inbound_request& req, const endpoint&) -> task<coap::message> {
+        auto resp = coap::make_response(req.request, coap::response_code::content);
+        resp.add_uint_option(coap::option_number::content_format,
+            static_cast<std::uint16_t>(coap::content_format::text_plain));
+        std::string body = "22.5";
+        resp.payload.assign(reinterpret_cast<const std::byte*>(body.data()),
+            reinterpret_cast<const std::byte*>(body.data() + body.size()));
+        co_return resp;
+    });
+spawn(ctx, server.run());
+
+coap::udp_client client(ctx);
+auto remote = co_await client.resolve_endpoint("127.0.0.1");
+if (remote) {
+    auto response = co_await client.get(*remote, "/sensors/temp");
+}
 ```
 
 **定时器**：
@@ -408,6 +525,7 @@ cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
 cnetmod.protocol.redis — Redis 异步客户端
 cnetmod.protocol.raft — Raft 复制状态机、存储、传输、运行时、成员变更、快照
 cnetmod.protocol.modbus — Modbus TCP/UDP/RTU 客户端 + 服务端
+cnetmod.protocol.coap — CoAP UDP 客户端 + 服务端、数据报编解码、资源路由
 cnetmod.protocol.openai — OpenAI API 客户端
 cnetmod.protocol.http.middleware.*  — HTTP 中间件组件
 cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、寄存器转换）
@@ -444,7 +562,7 @@ cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、
 
 ## 项目状态
 
-cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1 & HTTP/2、MQTT、MySQL、WebSocket、Modbus 等协议的生产级实现，全部基于零开销的 async/await 构建。
+cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1 & HTTP/2、MQTT、MySQL、WebSocket、Modbus、CoAP 等协议的生产级实现，全部基于零开销的 async/await 构建。
 
 该库证明了 C++23 模块已经可以用于实际项目，并在 Linux、macOS 和 Windows 上提供完整的跨平台支持。
 

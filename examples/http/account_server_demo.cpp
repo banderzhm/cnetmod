@@ -1,16 +1,20 @@
 /// cnetmod example — Freelance Accounting REST Server
-/// 结构化并发实现的自由职业记账系统（从 Python Flask 版移植）
+/// Concurrent( Python Flask )
 ///
-/// 亮点:
-///   1. when_all 并行查询 — 同时查 projects + files 两条 SQL，替代 Python ThreadPoolExecutor
-///   2. sharded_connection_pool — 分片异步 MySQL 连接池，降低锁竞争
-///   3. spawn 每连接 — http::server 自动为每个 TCP 连接 spawn 独立协程
-///   4. 内置中间件 — cors() + access_log() + jwt_auth() 洋葱模型
-///   5. cancel_token + with_timeout — I/O 超时保护
+/// Implementation note.
+/// 1. when_all query - projects + files SQL, Python ThreadPoolExecutor
+/// 2. sharded_connection_pool - async MySQL connection pool
+/// 3. spawn - http::server TCP spawn
+/// 4. middleware - cors() + access_log() + jwt_auth()
+/// 5. cancel_token + with_timeout - I/O protect
 
 #include <cnetmod/config.hpp>
 #include <cstdio>
+#ifndef JWT_DISABLE_PICOJSON
+#define JWT_DISABLE_PICOJSON
+#endif
 #include <jwt-cpp/jwt.h>
+#include <jwt-cpp/traits/nlohmann-json/defaults.h>
 #include <cnetmod/orm.hpp>
 #include "embedded_mappers.hpp"
 
@@ -46,13 +50,13 @@ namespace openai = cnetmod::openai;
 namespace orm    = mysql::orm;
 
 // =============================================================================
-// 配置（对应 Python 版 DB_CONFIG / AUTH_CONFIG / LLM_CONFIG）
+// Configure( Python DB_CONFIG / AUTH_CONFIG / LLM_CONFIG)
 // =============================================================================
 
 constexpr std::uint16_t SERVER_PORT = 8086;
 
 struct app_config {
-    // 数据库
+    // Database handling.
     std::string db_host     = "114.66.62.23";
     std::uint16_t db_port   = 3306;
     std::string db_user     = "root";
@@ -63,26 +67,26 @@ struct app_config {
     std::string jwt_secret  = "cnetmod_demo_secret_key_2025";
     int jwt_expiry_seconds  = 24 * 3600;
 
-    // 管理员（密码: admin123 的 SHA256）
+    // (: admin123 SHA256)
     std::string admin_user      = "admin";
     std::string admin_pass_hash = "240be518fabd2724ddb6f04eeb1da5967448d7e831c08c8fa822809f74c720a9";
 
-    // 文件上传目录
+    // Fileuploaddirectory
     std::string upload_dir  = "project_uploads";
 
-    // 大模型配置 (OpenAI协议兼容)
+    // Configure (OpenAI)
     std::string llm_api_base    = "https://dashscope.aliyuncs.com/compatible-mode/v1";
-    std::string llm_api_key     = "YOUR_API_KEY_HERE";  // 请设置环境变量或通过 API 配置
+    std::string llm_api_key     = "YOUR_API_KEY_HERE";  // API configure
     std::string llm_model       = "qwen3-max";
     int         llm_max_tokens  = 9999;
     double      llm_temperature = 0.7;
 };
 
 static app_config g_cfg;
-static orm::mapper_registry g_mapper_registry;  // XML Mapper 注册表
+static orm::mapper_registry g_mapper_registry;  // XML Mapper register
 
 // =============================================================================
-// ORM 模型定义
+// Implementation note: ORM.
 // =============================================================================
 
 struct Client {
@@ -165,7 +169,7 @@ CNETMOD_MODEL(AiAnalysisHistory, "ai_analysis_history",
     CNETMOD_FIELD(created_at,      "created_at",      datetime, NULLABLE)
 )
 
-/// 辅助: 生成当前时间 MySQL datetime 字符串
+/// Generate MySQL datetime
 auto now_datetime() -> std::string {
     auto t = std::time(nullptr);
     std::tm tm{};
@@ -180,7 +184,7 @@ auto now_datetime() -> std::string {
 }
 
 // =============================================================================
-// 辅助: SHA256（密码哈希 — 使用 OpenSSL EVP）
+// SHA256( - OpenSSL EVP)
 // =============================================================================
 
 auto sha256_hex(std::string_view input) -> std::string {
@@ -195,7 +199,7 @@ auto sha256_hex(std::string_view input) -> std::string {
 }
 
 // =============================================================================
-// 辅助: JWT 生成与验证（jwt-cpp + HS256）
+// JWT generateverify(jwt-cpp + HS256)
 // =============================================================================
 
 auto generate_jwt(std::string_view username) -> std::string {
@@ -227,22 +231,22 @@ auto get_bearer_token(const http::request_context& ctx) -> std::string_view {
 }
 
 // =============================================================================
-// 辅助: JSON 响应构建
+// JSON responsebuild
 // =============================================================================
 
-/// 构建错误响应 JSON 字符串
+/// Builderrorresponse JSON
 inline auto json_error(std::string_view message) -> std::string {
     nlohmann::json j{{"error", message}};
     return j.dump();
 }
 
-/// 构建成功响应 JSON 字符串
+/// Buildsuccessresponse JSON
 inline auto json_success(std::string_view message) -> std::string {
     nlohmann::json j{{"message", message}};
     return j.dump();
 }
 
-/// 构建成功响应 JSON 字符串 (带额外字段)
+/// Buildsuccessresponse JSON ()
 template<typename... Args>
 inline auto json_success_with(std::string_view message, Args&&... args) -> std::string {
     nlohmann::json j{{"message", message}};
@@ -251,7 +255,7 @@ inline auto json_success_with(std::string_view message, Args&&... args) -> std::
 }
 
 // =============================================================================
-// 辅助: JSON 字符串转义 (保留用于特殊场景)
+// Implementation note: JSON.
 // =============================================================================
 
 auto json_escape(std::string_view s) -> std::string {
@@ -270,7 +274,7 @@ auto json_escape(std::string_view s) -> std::string {
     return out;
 }
 
-/// field_value → nlohmann::json 值
+/// Field_value -> nlohmann::json
 inline auto field_to_json(const mysql::field_value& f) -> nlohmann::json {
     if (f.is_null()) return nullptr;
     if (f.is_int64()) return f.get_int64();
@@ -282,13 +286,13 @@ inline auto field_to_json(const mysql::field_value& f) -> nlohmann::json {
     return f.to_string();
 }
 
-/// 安全地将 field_value 转换为 double（处理 DECIMAL/字符串类型）
+/// Security field_value double( DECIMAL/)
 inline auto to_double(const mysql::field_value& f) -> double {
     if (f.is_double()) return f.get_double();
     if (f.is_float())  return static_cast<double>(f.get_float());
     if (f.is_int64())  return static_cast<double>(f.get_int64());
     if (f.is_uint64()) return static_cast<double>(f.get_uint64());
-    // 字符串/十进制回退解析
+    // Implementation note.
     auto sv = f.get_string();
     double v = 0;
     if (cn::from_chars_double(sv, v) == std::errc{}) {
@@ -297,7 +301,7 @@ inline auto to_double(const mysql::field_value& f) -> double {
     return 0.0;
 }
 
-/// 清理字符串为安全的目录名（对齐 Python sanitize_directory_name）
+/// Cleanupsecuritydirectory( Python sanitize_directory_name)
 auto sanitize_directory_name(std::string_view name) -> std::string {
     std::string out;
     out.reserve(name.size());
@@ -307,7 +311,7 @@ auto sanitize_directory_name(std::string_view name) -> std::string {
             continue;
         out += c;
     }
-    // 连续空格替换为下划线
+    // Implementation note.
     std::string result;
     bool prev_space = false;
     for (char c : out) {
@@ -323,7 +327,7 @@ auto sanitize_directory_name(std::string_view name) -> std::string {
     return result;
 }
 
-/// 生成随机 hex 字符串（用于存储文件名，模拟 uuid4().hex）
+/// Generate hex (file, simulate uuid4().hex)
 auto generate_hex_id(std::size_t bytes = 16) -> std::string {
     static thread_local std::random_device rd;
     static constexpr char hex[] = "0123456789abcdef";
@@ -337,14 +341,14 @@ auto generate_hex_id(std::size_t bytes = 16) -> std::string {
     return out;
 }
 
-/// 解析 JSON body（带缓存，避免重复解析）
+/// Parse JSON body(, parse)
 auto parse_json(std::string_view body) -> nlohmann::json {
-    // 约定: API body 必须是 JSON object。为了避免未捕获异常导致进程退出，
-    // 这里对解析失败/非 object 的情况统一降级为空对象。
+    // API body JSON object.for
+    // Hereparsefailure/ object .
     if (body.empty())
         return nlohmann::json::object();
 
-    // parse(..., allow_exceptions=false) -> 解析失败返回 discarded，不抛异常
+    // Parse(..., allow_exceptions=false) -> parsefailurereturn discarded
     auto j = nlohmann::json::parse(std::string(body), nullptr, false);
     if (j.is_discarded() || !j.is_object())
         return nlohmann::json::object();
@@ -376,20 +380,20 @@ static inline auto json_int64(const nlohmann::json& j, const char* key, std::int
 
 
 // =============================================================================
-// 全局: 连接池指针（在 main 中初始化）
+// Connection pool( main )
 // =============================================================================
 
 static mysql::sharded_connection_pool* g_pool = nullptr;
 static openai::client* g_openai = nullptr;
 
 // =============================================================================
-// 数据库辅助: 获取连接并执行查询
+// Database handling.
 // =============================================================================
 
-// 慢查询阈值（毫秒）
+// Query data.
 constexpr int SLOW_QUERY_THRESHOLD_MS = 500;
 
-constexpr int DB_MAX_RETRY = 2;  // MySQL gone away 时最多重试次数
+constexpr int DB_MAX_RETRY = 2;  // MySQL gone away retry
 
 static auto db_should_retry(const mysql::result_set& rs) -> bool {
     if (!rs.is_err()) return false;
@@ -422,7 +426,7 @@ auto db_query(std::string_view sql) -> cn::task<mysql::result_set> {
         auto rs = co_await conn->execute(sql);
         auto t2 = std::chrono::steady_clock::now();
 
-        // 连接断开 / 写失败 / 协议层断开 — 换连接重试
+        // / failure / - retry
         if (db_should_retry(rs) && attempt < DB_MAX_RETRY) {
             logger::warn("[DB RETRY] code={} msg={} attempt {}", rs.error_code, rs.error_msg, attempt + 1);
             continue;
@@ -449,7 +453,7 @@ auto db_query(std::string_view sql) -> cn::task<mysql::result_set> {
 }
 
 auto db_execute(mysql::with_params_t wp) -> cn::task<mysql::result_set> {
-    auto sql_template = wp.query;  // 保存模板用于日志
+    auto sql_template = wp.query;  // Implementation note.
 
     for (int attempt = 0; attempt <= DB_MAX_RETRY; ++attempt) {
         auto t0 = std::chrono::steady_clock::now();
@@ -492,7 +496,7 @@ auto db_execute(mysql::with_params_t wp) -> cn::task<mysql::result_set> {
     co_return rs;
 }
 
-/// ORM 辅助: 从池获取连接并创建 db_session
+/// ORM : create db_session
 auto db_orm(cn::io_context* io = nullptr)
     -> cn::task<std::optional<std::pair<mysql::pooled_connection, orm::db_session>>>
 {
@@ -509,7 +513,7 @@ auto db_orm(cn::io_context* io = nullptr)
 }
 
 // =============================================================================
-// GET /api/years — 获取所有存在项目记录的年份
+// GET /api/years
 // =============================================================================
 
 auto handle_get_years(http::request_context& ctx) -> cn::task<void> {
@@ -521,7 +525,7 @@ auto handle_get_years(http::request_context& ctx) -> cn::task<void> {
 
     orm::mapper_session session(conn->get(), g_mapper_registry);
 
-    // 使用 ProjectMapper.selectDistinctYears
+    // ProjectMapper.selectDistinctYears
     auto result = co_await session.query_tuple<std::int64_t>(
         "ProjectMapper.selectDistinctYears",
         std::flat_map<std::string, mysql::param_value>{}
@@ -540,10 +544,10 @@ auto handle_get_years(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/projects — 按日期范围查询（★ when_all 并行查询 ★）
+// GET /api/projects - query(* when_all query *)
 // =============================================================================
 
-/// 查询 projects 主数据（协程 A）- 使用 XML Mapper
+/// Query projects ( A)- XML Mapper
 auto query_projects(mysql::client& conn, std::string_view start_date, std::string_view end_date)
     -> cn::task<mysql::result_set>
 {
@@ -556,7 +560,7 @@ auto query_projects(mysql::client& conn, std::string_view start_date, std::strin
     co_return co_await session.execute_query("ProjectMapper.selectWithExpensesByDateRange", std::move(params));
 }
 
-/// 查询 project_files（协程 B）- 使用 XML Mapper
+/// Query project_files( B)- XML Mapper
 auto query_files(mysql::client& conn, std::string_view start_date, std::string_view end_date)
     -> cn::task<mysql::result_set>
 {
@@ -569,18 +573,18 @@ auto query_files(mysql::client& conn, std::string_view start_date, std::string_v
     co_return co_await session.execute_query("ProjectMapper.selectFilesByDateRange", std::move(params));
 }
 
-/// 合并 projects + files 为 JSON 字符串
+/// Projects + files JSON
 auto build_projects_json(const mysql::result_set& proj_rs,
                          const mysql::result_set& file_rs) -> std::string
 {
-    // 构建 files_map: project_id → [{id, name}, ...]
+    // Build files_map: project_id -> [{id, name}, ...]
     std::unordered_map<std::int64_t, std::vector<std::pair<std::int64_t, std::string>>> files_map;
     for (auto& row : file_rs.rows) {
         auto pid = row[1].get_int64();  // project_id
         files_map[pid].emplace_back(row[0].get_int64(), row[2].to_string());
     }
 
-    // 构建 projects（去重 + 聚合 expenses）
+    // Build projects( + expenses)
     struct project_data {
         std::int64_t id;
         std::string title, status, created_date, delivery_date, remarks;
@@ -607,14 +611,14 @@ auto build_projects_json(const mysql::result_set& proj_rs,
             p.client_name = row[8].to_string();
             p.client_wechat = row[9].to_string();
         }
-        // expense (可能为 NULL — LEFT JOIN)
+        // Expense ( NULL - LEFT JOIN)
         if (!row[10].is_null()) {
             projects[pid].expenses.emplace_back(
                 row[11].to_string(), to_double(row[12]));
         }
     }
 
-    // 序列化为 JSON
+    // Implementation note: JSON.
     nlohmann::json result = nlohmann::json::array();
     for (auto pid : order) {
         auto& p = projects[pid];
@@ -672,7 +676,7 @@ auto handle_get_projects(http::request_context& ctx) -> cn::task<void> {
     }
     auto conn = std::move(*conn_r);
 
-    // 顺序查询 — 每个请求只占1个连接，高并发下吞吐翻倍
+    // Query - request1, concurrent
     auto proj_rs = co_await query_projects(conn.get(), start_date, end_date);
     auto file_rs = co_await query_files(conn.get(), start_date, end_date);
 
@@ -686,7 +690,7 @@ auto handle_get_projects(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/projects — 创建项目（事务）
+// POST /api/projects - create()
 // =============================================================================
 
 auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
@@ -698,12 +702,12 @@ auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
     auto delivery    = j.value("deliveryDate", std::string{});
     auto remarks     = j.value("remarks", std::string{});
 
-    // 嵌套 client 对象: data.client.{name, wechatId}
+    // Client : data.client.{name, wechatId}
     auto client_obj    = j.value("client", nlohmann::json::object());
     auto client_name   = client_obj.value("name", std::string{});
     auto client_wechat = client_obj.value("wechatId", std::string{});
 
-    // 嵌套 financials 对象: data.financials.{totalAmount, commission}
+    // Financials : data.financials.{totalAmount, commission}
     auto fin_obj    = j.value("financials", nlohmann::json::object());
     auto amount     = fin_obj.value("totalAmount", 0.0);
     auto commission = fin_obj.value("commission", 0.0);
@@ -718,9 +722,9 @@ auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
 
     std::uint64_t project_id = 0;
 
-    // 使用事务
+    // Implementation note.
     auto tx_result = co_await db.transaction([&]() -> cn::task<void> {
-        // 查找或创建 client（ORM）
+        // Create client(ORM)
         auto client_qb = orm::select<Client>()
             .where("`wechat_id` = {}", {mysql::param_value::from_string(client_wechat)})
             .limit(1);
@@ -740,7 +744,7 @@ auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
             client_id = client.id;
         }
 
-        // 插入 project（使用 XML Mapper）
+        // Insert project( XML Mapper)
         orm::mapper_session session(conn.get(), g_mapper_registry);
 
         std::flat_map<std::string, mysql::param_value> params;
@@ -751,7 +755,7 @@ auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
         params["status"] = mysql::param_value::from_string(status);
         params["created_date"] = mysql::param_value::from_string(created);
 
-        // 可选字段
+        // Implementation note.
         if (!delivery.empty()) {
             params["delivery_date"] = mysql::param_value::from_string(delivery);
         }
@@ -765,7 +769,7 @@ auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
         }
         project_id = proj_result.last_insert_id;
 
-        // 插入 expenses 数组（ORM）
+        // Insert expenses (ORM)
         if (j.contains("expenses") && j["expenses"].is_array()) {
             for (auto& exp : j["expenses"]) {
                 auto item       = exp.value("item", std::string{});
@@ -796,7 +800,7 @@ auto handle_create_project(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// PUT /api/projects/:id — 更新项目
+// PUT /api/projects/:id - update
 // =============================================================================
 
 auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
@@ -811,12 +815,12 @@ auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
     auto delivery    = j.value("deliveryDate", std::string{});
     auto remarks     = j.value("remarks", std::string{});
 
-    // 嵌套 client 对象: data.client.{name, wechatId}
+    // Client : data.client.{name, wechatId}
     auto client_obj    = j.value("client", nlohmann::json::object());
     auto client_name   = client_obj.value("name", std::string{});
     auto client_wechat = client_obj.value("wechatId", std::string{});
 
-    // 嵌套 financials 对象: data.financials.{totalAmount, commission}
+    // Financials : data.financials.{totalAmount, commission}
     auto fin_obj    = j.value("financials", nlohmann::json::object());
     auto amount     = fin_obj.value("totalAmount", 0.0);
     auto commission = fin_obj.value("commission", 0.0);
@@ -830,7 +834,7 @@ auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
     orm::db_session db(conn.get());
 
     auto tx_result = co_await db.transaction([&]() -> cn::task<void> {
-        // 查找或创建 client（ORM）
+        // Create client(ORM)
         auto client_qb = orm::select<Client>()
             .where("`wechat_id` = {}", {mysql::param_value::from_string(client_wechat)})
             .limit(1);
@@ -850,7 +854,7 @@ auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
             client_id = client.id;
         }
 
-        // 更新 project（使用 XML Mapper）
+        // Update project( XML Mapper)
         orm::mapper_session session(conn.get(), g_mapper_registry);
 
         std::flat_map<std::string, mysql::param_value> params;
@@ -862,11 +866,11 @@ auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
         params["status"] = mysql::param_value::from_string(status);
         params["created_date"] = mysql::param_value::from_string(created);
 
-        // 可选字段
+        // Implementation note.
         if (!delivery.empty()) {
             params["delivery_date"] = mysql::param_value::from_string(delivery);
         } else {
-            params["delivery_date"] = mysql::param_value::from_string("");  // 触发 NULL
+            params["delivery_date"] = mysql::param_value::from_string("");  // Implementation note: NULL.
         }
         if (!remarks.empty()) {
             params["remarks"] = mysql::param_value::from_string(remarks);
@@ -877,7 +881,7 @@ auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
             throw std::runtime_error(upd_result.error_msg);
         }
 
-        // 重建 expenses（ORM 先删后插）
+        // Expenses(ORM )
         auto del_exp = co_await db.remove(orm::delete_of<Expense>()
             .where("`project_id` = {}", {mysql::param_value::from_int(project_id)}));
         if (del_exp.is_err()) {
@@ -915,7 +919,7 @@ auto handle_update_project(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// DELETE /api/projects/:id — 删除项目及文件
+// DELETE /api/projects/:id - deletefile
 // =============================================================================
 
 auto handle_delete_project(http::request_context& ctx) -> cn::task<void> {
@@ -933,7 +937,7 @@ auto handle_delete_project(http::request_context& ctx) -> cn::task<void> {
 
     std::string project_dir;
     auto tx_result = co_await db.transaction([&]() -> cn::task<void> {
-        // 查询文件路径，用于清理物理目录（ORM）
+        // Queryfile, cleanupdirectory(ORM)
         auto file_qb = orm::select<ProjectFile>()
             .where("`project_id` = {}", {mysql::param_value::from_int(project_id)})
             .limit(1);
@@ -948,7 +952,7 @@ auto handle_delete_project(http::request_context& ctx) -> cn::task<void> {
             }
         }
 
-        // 删除关联数据（ORM）
+        // Delete(ORM)
         auto del_exp = co_await db.remove(orm::delete_of<Expense>()
             .where("`project_id` = {}", {mysql::param_value::from_int(project_id)}));
         if (del_exp.is_err()) {
@@ -961,7 +965,7 @@ auto handle_delete_project(http::request_context& ctx) -> cn::task<void> {
             throw std::runtime_error(del_file.error_msg);
         }
 
-        // 删除 project（使用 XML Mapper）
+        // Delete project( XML Mapper)
         orm::mapper_session session(conn.get(), g_mapper_registry);
         std::flat_map<std::string, mysql::param_value> params;
         params["id"] = mysql::param_value::from_int(project_id);
@@ -976,7 +980,7 @@ auto handle_delete_project(http::request_context& ctx) -> cn::task<void> {
 
     conn.return_without_reset();
 
-    // 清理物理文件目录
+    // Cleanupfiledirectory
     if (!project_dir.empty()) {
         std::error_code ec;
         std::filesystem::remove_all(project_dir, ec);
@@ -989,7 +993,7 @@ auto handle_delete_project(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/projects/:id/files — 上传文件（multipart/form-data）
+// POST /api/projects/:id/files - uploadfile(multipart/form-data)
 // =============================================================================
 
 auto handle_upload_files(http::request_context& ctx) -> cn::task<void> {
@@ -997,7 +1001,7 @@ auto handle_upload_files(http::request_context& ctx) -> cn::task<void> {
     std::int64_t project_id = 0;
     std::from_chars(id_str.data(), id_str.data() + id_str.size(), project_id);
 
-    // 解析 multipart body
+    // Parse multipart body
     auto form_r = ctx.parse_form();
     if (!form_r) {
         ctx.json(400, R"({"error":"没有文件部分"})");
@@ -1010,7 +1014,7 @@ auto handle_upload_files(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 查询项目标题
+    // Query data.
     auto conn_r = co_await g_pool->async_get_connection(ctx.io_ctx());
     if (!conn_r) {
         ctx.json(500, R"({"error":"数据库连接失败"})");
@@ -1040,14 +1044,14 @@ auto handle_upload_files(http::request_context& ctx) -> cn::task<void> {
         auto original_name = ff->filename;
         if (original_name.empty()) continue;
 
-        // 生成存储文件名: uuid_hex + 扩展名
+        // Generatefile: uuid_hex +
         auto ext_pos = original_name.rfind('.');
         auto ext = (ext_pos != std::string::npos) ? original_name.substr(ext_pos) : "";
         auto stored_name = generate_hex_id() + ext;
         auto rel_path = dir_name + "/" + stored_name;
         auto full_path = project_dir / stored_name;
 
-        // 写入文件
+        // Writefile
         auto f = co_await cn::async_file_open(ctx.io_ctx(), full_path,
             cn::open_mode::write | cn::open_mode::create | cn::open_mode::truncate);
         if (!f) continue;
@@ -1055,11 +1059,11 @@ auto handle_upload_files(http::request_context& ctx) -> cn::task<void> {
             cn::const_buffer{ff->data.data(), ff->data.size()});
         if (!wr) continue;
 
-        // 异步刷新和关闭文件
+        // Asyncflushclosefile
         co_await cn::async_file_flush(ctx.io_ctx(), *f);
         co_await cn::async_file_close(ctx.io_ctx(), *f);
 
-        // 插入 DB 记录（ORM）
+        // Insert DB (ORM)
         ProjectFile file_model;
         file_model.project_id        = project_id;
         file_model.original_filename = original_name;
@@ -1074,7 +1078,7 @@ auto handle_upload_files(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// DELETE /api/files/:id — 删除单个文件
+// DELETE /api/files/:id - deletefile
 // =============================================================================
 
 auto handle_delete_file(http::request_context& ctx) -> cn::task<void> {
@@ -1106,7 +1110,7 @@ auto handle_delete_file(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/files/batch-delete — 批量删除文件
+// POST /api/files/batch-delete - batchdeletefile
 // =============================================================================
 
 auto handle_batch_delete_files(http::request_context& ctx) -> cn::task<void> {
@@ -1126,7 +1130,7 @@ auto handle_batch_delete_files(http::request_context& ctx) -> cn::task<void> {
 
     std::int64_t affected = 0;
     auto tx_result = co_await db.transaction([&]() -> cn::task<void> {
-        // 构建 IN 列表并查询文件路径（ORM）
+        // Build IN queryfile(ORM)
         std::string id_list;
         for (auto& fid : j["file_ids"]) {
             if (!id_list.empty()) id_list += ",";
@@ -1136,14 +1140,14 @@ auto handle_batch_delete_files(http::request_context& ctx) -> cn::task<void> {
         auto file_rs = co_await db.find(
             orm::select<ProjectFile>().where(std::format("`id` IN ({})", id_list)));
 
-        // 删除物理文件
+        // Deletefile
         for (auto& pf : file_rs.data) {
             auto full_path = std::filesystem::path(g_cfg.upload_dir) / pf.filepath;
             std::error_code ec;
             std::filesystem::remove(full_path, ec);
         }
 
-        // 删除 DB 记录（ORM）
+        // Delete DB (ORM)
         auto del = co_await db.remove(
             orm::delete_of<ProjectFile>().where(std::format("`id` IN ({})", id_list)));
         if (del.is_err()) {
@@ -1165,13 +1169,13 @@ auto handle_batch_delete_files(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/files/download/:id — 下载文件
+// GET /api/files/download/:id - downloadfile
 // =============================================================================
 
 auto handle_download_file(http::request_context& ctx) -> cn::task<void> {
     auto id_str = ctx.param("id");
 
-    // ORM 查询文件记录
+    // ORM queryfile
     auto orm_r = co_await db_orm(&ctx.io_ctx());
     if (!orm_r) {
         ctx.text(500, "数据库连接失败");
@@ -1180,7 +1184,7 @@ auto handle_download_file(http::request_context& ctx) -> cn::task<void> {
     auto& [conn, db] = *orm_r;
     auto rs = co_await db.find_by_id<ProjectFile>(
         mysql::param_value::from_string(std::string(id_str)));
-    conn.return_without_reset();  // 早期释放连接，后续是流式发送
+    conn.return_without_reset();  // Implementation note.
     if (rs.empty()) {
         ctx.text(404, "文件未找到");
         co_return;
@@ -1207,7 +1211,7 @@ auto handle_download_file(http::request_context& ctx) -> cn::task<void> {
     }
     auto file_size = *file_size_r;
 
-    // URL 编码文件名（RFC 5987）
+    // URL file(RFC 5987)
     auto encoded_name = http::url_encode(pf.original_filename);
 
     auto& resp = ctx.resp();
@@ -1217,7 +1221,7 @@ auto handle_download_file(http::request_context& ctx) -> cn::task<void> {
     resp.set_header("Content-Disposition",
         std::format("attachment; filename*=UTF-8''{}", encoded_name));
 
-    // 流式发送: 先发响应头，再分块发送文件内容
+    // Response, file
     auto header_data = resp.serialize();
     auto wr = co_await cn::async_write(ctx.io_ctx(), ctx.raw_socket(),
         cn::const_buffer{header_data.data(), header_data.size()});
@@ -1243,14 +1247,14 @@ auto handle_download_file(http::request_context& ctx) -> cn::task<void> {
         remaining -= *rd;
     }
 
-    // 异步关闭文件
+    // Asyncclosefile
     co_await cn::async_file_close(ctx.io_ctx(), *f);
 
     resp.set_header("X-Streamed", "1");
 }
 
 // =============================================================================
-// POST /api/login — 登录
+// POST /api/login
 // =============================================================================
 
 auto handle_login(http::request_context& ctx) -> cn::task<void> {
@@ -1277,7 +1281,7 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/check-auth — 验证认证状态
+// GET /api/check-auth - verifyauthenticationstate
 // =============================================================================
 
 auto handle_check_auth(http::request_context& ctx) -> cn::task<void> {
@@ -1297,7 +1301,7 @@ auto handle_check_auth(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/statistics — 图表统计数据
+// POST /api/statistics - statistics
 // =============================================================================
 
 auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
@@ -1310,8 +1314,8 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 注意: 同一个 MySQL 连接不能并发执行两条 query（会导致 packets out of order）。
-    // 这里为了保留并行性能，借两条连接分别执行。
+    // Note: MySQL concurrent query( packets out of order).
+    // Herefor, .
     auto [conn_a_r, conn_b_r] = co_await cn::when_all(
         g_pool->async_get_connection(ctx.io_ctx()),
         g_pool->async_get_connection(ctx.io_ctx()));
@@ -1324,7 +1328,7 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
     auto conn_a = std::move(*conn_a_r);
     auto conn_b = std::move(*conn_b_r);
 
-    // ★ 并行查询（不同连接）★
+    // * query()*
     auto [proj_rs, file_rs] = co_await cn::when_all(
         query_projects(conn_a.get(), start_date, end_date),
         query_files(conn_b.get(), start_date, end_date));
@@ -1334,11 +1338,11 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 聚合统计（对齐 Python 逻辑：基于去重后的项目求和）
+    // Statistics( Python : )
     struct monthly_info { double total = 0; double comm = 0; };
     std::map<std::string, monthly_info> monthly;       // key: YYYY-MM
-    std::map<std::string, double> client_contrib;      // 客户 -> 金额
-    std::map<std::string, int> status_dist;            // 状态 -> 数量
+    std::map<std::string, double> client_contrib;      // Implementation note.
+    std::map<std::string, int> status_dist;            // State ->
 
     auto to_month = [](const mysql::field_value& f) -> std::string {
         if (f.is_date())     { auto s = f.get_date().to_string();     return s.substr(0, 7); }
@@ -1351,7 +1355,7 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
     std::unordered_set<std::int64_t> seen;
     for (auto& row : proj_rs.rows) {
         auto pid = row[0].get_int64();
-        if (seen.count(pid)) continue; // 每个项目只计一次
+        if (seen.count(pid)) continue; // Implementation note.
         seen.insert(pid);
 
         auto month = to_month(row[5]);
@@ -1365,7 +1369,7 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
         status_dist[row[4].to_string()]++;
     }
 
-    // 构建 JSON 响应
+    // Build JSON response
     nlohmann::json result;
 
     // monthlyIncome
@@ -1374,7 +1378,7 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
     nlohmann::json commissions = nlohmann::json::array();
     for (auto& [month, info] : monthly) {
         months.push_back(month);
-        totalAmounts.push_back(std::round(info.total * 100) / 100);  // 保留2位小数
+        totalAmounts.push_back(std::round(info.total * 100) / 100);  // Implementation note: 2.
         commissions.push_back(std::round(info.comm * 100) / 100);
     }
     result["monthlyIncome"] = {
@@ -1407,7 +1411,7 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/overall-stats — 总计数据
+// POST /api/overall-stats
 // =============================================================================
 
 auto handle_overall_stats(http::request_context& ctx) -> cn::task<void> {
@@ -1420,7 +1424,7 @@ auto handle_overall_stats(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 同一连接并发查询会导致 packets out of order，这里借两条连接并行跑两条统计 SQL。
+    // Concurrentquery packets out of order, herestatistics SQL.
     auto [conn_a_r, conn_b_r] = co_await cn::when_all(
         g_pool->async_get_connection(ctx.io_ctx()),
         g_pool->async_get_connection(ctx.io_ctx()));
@@ -1471,7 +1475,7 @@ auto handle_overall_stats(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/clients/search — 精确搜索
+// GET /api/clients/search
 // =============================================================================
 
 auto handle_client_search(http::request_context& ctx) -> cn::task<void> {
@@ -1505,7 +1509,7 @@ auto handle_client_search(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/clients/search-fuzzy — 模糊搜索
+// GET /api/clients/search-fuzzy
 // =============================================================================
 
 auto handle_client_fuzzy(http::request_context& ctx) -> cn::task<void> {
@@ -1553,7 +1557,7 @@ auto handle_logout(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/ai/prompts — 获取所有提示词
+// GET /api/ai/prompts
 // =============================================================================
 
 auto handle_get_prompts(http::request_context& ctx) -> cn::task<void> {
@@ -1587,7 +1591,7 @@ auto handle_get_prompts(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/ai/prompts — 创建提示词
+// POST /api/ai/prompts - create
 // =============================================================================
 
 auto handle_create_prompt(http::request_context& ctx) -> cn::task<void> {
@@ -1619,7 +1623,7 @@ auto handle_create_prompt(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// PUT /api/ai/prompts/:id — 更新提示词
+// PUT /api/ai/prompts/:id - update
 // =============================================================================
 
 auto handle_update_prompt(http::request_context& ctx) -> cn::task<void> {
@@ -1637,7 +1641,7 @@ auto handle_update_prompt(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
     auto& [conn, db] = *orm_r;
-    // 加载现有记录，保留 is_default / created_at
+    // Is_default / created_at
     auto existing = co_await db.find_by_id<AiPrompt>(
         mysql::param_value::from_string(std::string(id_str)));
     if (existing.empty()) {
@@ -1657,7 +1661,7 @@ auto handle_update_prompt(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// DELETE /api/ai/prompts/:id — 删除提示词（不可删默认）
+// DELETE /api/ai/prompts/:id - delete()
 // =============================================================================
 
 auto handle_delete_prompt(http::request_context& ctx) -> cn::task<void> {
@@ -1684,7 +1688,7 @@ auto handle_delete_prompt(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// PUT /api/ai/prompts/:id/default — 设置默认提示词
+// PUT /api/ai/prompts/:id/default
 // =============================================================================
 
 auto handle_set_default_prompt(http::request_context& ctx) -> cn::task<void> {
@@ -1697,13 +1701,13 @@ auto handle_set_default_prompt(http::request_context& ctx) -> cn::task<void> {
     auto tx_result = co_await db.transaction([&]() -> cn::task<void> {
         orm::mapper_session session(conn.get(), g_mapper_registry);
 
-        // 批量重置（使用 XML Mapper）
+        // Batch( XML Mapper)
         auto reset_rs = co_await session.execute("AiMapper.clearDefaultPrompts", std::flat_map<std::string, mysql::param_value>{});
         if (reset_rs.is_err()) {
             throw std::runtime_error(reset_rs.error_msg);
         }
 
-        // ORM 加载 + 更新
+        // ORM + update
         auto existing = co_await db.find_by_id<AiPrompt>(
             mysql::param_value::from_string(std::string(id_str)));
         if (!existing.empty()) {
@@ -1728,7 +1732,7 @@ auto handle_set_default_prompt(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/ai/history — 分析历史列表
+// GET /api/ai/history
 // =============================================================================
 
 auto handle_ai_history(http::request_context& ctx) -> cn::task<void> {
@@ -1769,7 +1773,7 @@ auto handle_ai_history(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/ai/history/:id — 分析详情
+// GET /api/ai/history/:id
 // =============================================================================
 
 auto handle_ai_history_detail(http::request_context& ctx) -> cn::task<void> {
@@ -1814,7 +1818,7 @@ auto handle_ai_history_detail(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// GET /api/ai/cache — 检查缓存分析结果
+// GET /api/ai/cache
 // =============================================================================
 
 auto handle_ai_cache(http::request_context& ctx) -> cn::task<void> {
@@ -1849,10 +1853,10 @@ auto handle_ai_cache(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// POST /api/ai/analyze — AI分析（SSE 流式输出）
+// POST /api/ai/analyze - AI(SSE )
 // =============================================================================
 
-/// SSE 流式发送辅助
+/// Implementation note: SSE.
 auto sse_send(cn::io_context& ctx, cn::socket& sock, std::string_view event_data)
     -> cn::task<bool>
 {
@@ -1874,7 +1878,7 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 检查缓存（ORM）
+    // Implementation note: ORM.
     if (!no_cache) {
         auto cache_orm = co_await db_orm(&ctx.io_ctx());
         if (cache_orm) {
@@ -1897,7 +1901,7 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
         }
     }
 
-    // 检查 OpenAI 配置 (返回 JSON 响应)
+    // OpenAI configure (return JSON response)
     if (!g_openai || g_cfg.llm_api_key.empty()) {
         ctx.json(200, R"({"cached":false,"error":"未配置LLM API密钥，请通过 PUT /api/ai/config 设置 api_key"})");
         co_return;
@@ -1909,15 +1913,15 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 同一连接并发 query 会导致 packets out of order。
-    // 这里额外借一条连接来并行获取 files，主连接继续用于后续 ORM 查询。
+    // Concurrent query packets out of order.
+    // Here files, ORM query.
     auto conn_files = co_await g_pool->async_get_connection(ctx.io_ctx());
     if (!conn_files) {
         ctx.json(503, json_error("数据库连接失败"));
         co_return;
     }
 
-    // ★ 并行获取项目数据（不同连接）★
+    // Implementation note.
     auto [proj_rs, file_rs] = co_await cn::when_all(
         query_projects(conn->get(), start_date, end_date),
         query_files(conn_files->get(), start_date, end_date));
@@ -1929,7 +1933,7 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
 
     auto projects_json = build_projects_json(proj_rs, file_rs);
 
-    // 获取提示词
+    // Implementation note.
     std::string prompt_template;
     std::int64_t final_prompt_id = prompt_id;
 
@@ -1963,7 +1967,7 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 构建数据摘要
+    // Implementation note.
     std::flat_map<std::string, mysql::param_value> params;
     params["start_date"] = mysql::param_value::from_string(std::string(start_date));
     params["end_date"] = mysql::param_value::from_string(std::string(end_date));
@@ -1987,32 +1991,32 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
             total_income, total_commission, total_income - total_commission);
     }
 
-    // 填充提示词模板
+    // Implementation note.
     std::string final_prompt = prompt_template;
     if (auto pos = final_prompt.find("{data_summary}"); pos != std::string::npos)
         final_prompt.replace(pos, 14, data_summary);
     if (auto pos = final_prompt.find("{projects_json}"); pos != std::string::npos)
         final_prompt.replace(pos, 15, projects_json);
 
-    // ★ 发送 SSE 响应头 ★
+    // * SSE response *
     auto& resp = ctx.resp();
     resp.set_status(200);
     resp.set_header("Content-Type", "text/event-stream");
     resp.set_header("Cache-Control", "no-cache");
     resp.set_header("Connection", "keep-alive");
-    resp.set_header("X-Accel-Buffering", "no");  // Nginx 禁用缓冲
+    resp.set_header("X-Accel-Buffering", "no");  // Nginx disable
 
     auto header_data = resp.serialize();
     auto wr = co_await cn::async_write(ctx.io_ctx(), ctx.raw_socket(),
         cn::const_buffer{header_data.data(), header_data.size()});
     if (!wr) co_return;
 
-    // 流式调用 OpenAI API
+    // OpenAI API
     openai::chat_request ai_req;
     ai_req.model       = g_cfg.llm_model;
     ai_req.max_tokens  = g_cfg.llm_max_tokens;
     ai_req.temperature = g_cfg.llm_temperature;
-    ai_req.stream      = true;  // 启用流式
+    ai_req.stream      = true;  // Implementation note.
     ai_req.messages.push_back(openai::message{
         .role = "user", .content = final_prompt, .content_parts = {}, .name = {}, .tool_calls = {}, .tool_call_id = {}});
 
@@ -2022,20 +2026,20 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
     auto stream_result = co_await g_openai->chat_stream_async(
         std::move(ai_req),
         [&](const openai::chat_chunk& chunk) -> cn::task<bool> {
-            // 每收到一个 chunk 就发送 SSE 事件
+            // Chunk SSE
             if (!chunk.delta_content.empty()) {
                 full_content += chunk.delta_content;
-                // 发送给前端: {"content": "..."}
+                // {"content": "..."}
                 auto event_json = std::format(
                     R"({{"content":"{}"}})",
                     json_escape(chunk.delta_content));
                 auto line = std::format("data: {}\n\n", event_json);
-                // 异步发送 SSE 事件
+                // Async SSE
                 auto wr = co_await cn::async_write(ctx.io_ctx(), ctx.raw_socket(),
                     cn::const_buffer{line.data(), line.size()});
-                if (!wr) co_return false;  // 写入失败，中止流
+                if (!wr) co_return false;  // Writefailure
             }
-            co_return true;  // 继续接收
+            co_return true;  // Implementation note.
         });
 
     if (!stream_result) {
@@ -2046,10 +2050,10 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
 
     logger::info("[AI] Stream completed ({} chars)", full_content.size());
 
-    // 发送完成事件
+    // Complete
     co_await sse_send(ctx.io_ctx(), ctx.raw_socket(), R"({"done":true})");
 
-    // 保存到数据库
+    // Database handling.
     std::flat_map<std::string, mysql::param_value> save_params;
     save_params["start_date"] = mysql::param_value::from_string(std::string(start_date));
     save_params["end_date"] = mysql::param_value::from_string(std::string(end_date));
@@ -2060,12 +2064,12 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void> {
 
     co_await session.execute("AiMapper.replaceAnalysisHistory", save_params);
 
-    // 标记响应已流式发送，跳过框架的正常响应发送
+    // Response, response
     resp.set_header("X-Streamed", "1");
 }
 
 // =============================================================================
-// GET /api/ai/config — 获取大模型配置
+// GET /api/ai/config - configure
 // =============================================================================
 
 auto handle_ai_config_get(http::request_context& ctx) -> cn::task<void> {
@@ -2080,7 +2084,7 @@ auto handle_ai_config_get(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// PUT /api/ai/config — 更新大模型配置
+// PUT /api/ai/config - updateconfigure
 // =============================================================================
 
 auto handle_ai_config_update(http::request_context& ctx) -> cn::task<void> {
@@ -2098,7 +2102,7 @@ auto handle_ai_config_update(http::request_context& ctx) -> cn::task<void> {
     auto temp = j.value("temperature", 0.0);
     if (temp > 0) g_cfg.llm_temperature = temp;
 
-    // 用新配置重新连接 OpenAI
+    // Configure OpenAI
     if (g_openai && !g_cfg.llm_api_key.empty()) {
         openai::connect_options opts;
         opts.api_base = g_cfg.llm_api_base;
@@ -2112,7 +2116,7 @@ auto handle_ai_config_update(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// main — 启动服务器 + 连接池
+// Main - start + connection pool
 // =============================================================================
 
 auto run_server(cn::server_context& sctx, mysql::sharded_connection_pool& pool,
@@ -2120,14 +2124,14 @@ auto run_server(cn::server_context& sctx, mysql::sharded_connection_pool& pool,
     auto& ctx = sctx.accept_io();
     logger::info("[INIT] run_server coroutine started");
 
-    // 后台启动连接池（spawn: 建立初始连接 + 健康检查循环）
+    // Backgroundstartconnection pool(spawn: + )
     cn::spawn(ctx, pool.async_run());
 
-    // 等待连接池初始化
+    // Wait forconnection pool
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{500});
     logger::info("[DB] Connection pool ready (size={})", pool.size());
 
-    // 连接 OpenAI
+    // Implementation note: OpenAI.
     if (!g_cfg.llm_api_key.empty()) {
         openai::connect_options ai_opts;
         ai_opts.api_base = g_cfg.llm_api_base;
@@ -2137,60 +2141,60 @@ auto run_server(cn::server_context& sctx, mysql::sharded_connection_pool& pool,
         else    logger::warn("[AI] Connect deferred: {}", cr.error());
     }
 
-    // 构建路由
+    // Buildroute
     http::router router;
 
-    // --- 查询接口（GET）---
+    // Query(GET)
     router.get("/api/years", handle_get_years);
     router.get("/api/projects", handle_get_projects);
     router.get("/api/check-auth", handle_check_auth);
     router.get("/api/clients/search", handle_client_search);
     router.get("/api/clients/search-fuzzy", handle_client_fuzzy);
 
-    // --- 写操作接口（需认证）---
+    // (authentication)
     router.post("/api/projects", handle_create_project);
     router.put("/api/projects/:id", handle_update_project);
     router.del("/api/projects/:id", handle_delete_project);
 
-    // --- 文件管理 ---
+    // File handling.
     router.post("/api/projects/:id/files", handle_upload_files);
     router.del("/api/files/:id", handle_delete_file);
     router.post("/api/files/batch-delete", handle_batch_delete_files);
     router.get("/api/files/download/:id", handle_download_file);
 
-    // --- 认证 ---
+    // Authentication
     router.post("/api/login", handle_login);
     router.post("/api/logout", handle_logout);
 
-    // --- 统计 ---
+    // Statistics
     router.post("/api/statistics", handle_statistics);
     router.post("/api/overall-stats", handle_overall_stats);
 
-    // --- AI 提示词 ---
+    // Implementation note: AI.
     router.get("/api/ai/prompts", handle_get_prompts);
     router.post("/api/ai/prompts", handle_create_prompt);
     router.put("/api/ai/prompts/:id", handle_update_prompt);
     router.del("/api/ai/prompts/:id", handle_delete_prompt);
     router.put("/api/ai/prompts/:id/default", handle_set_default_prompt);
 
-    // --- AI 分析 ---
+    // Implementation note: AI.
     router.get("/api/ai/history", handle_ai_history);
     router.get("/api/ai/history/:id", handle_ai_history_detail);
     router.get("/api/ai/cache", handle_ai_cache);
     router.post("/api/ai/analyze", handle_ai_analyze);
 
-    // --- AI 配置 ---
+    // AI configure
     router.get("/api/ai/config", handle_ai_config_get);
     router.put("/api/ai/config", handle_ai_config_update);
 
-    // --- 静态站点（前端）---
-    // 将未命中 /api/* 的 GET 请求交给静态文件服务，根目录取自 Python 版路径
+    // Implementation note.
+    // /api/* GET requestfile, directory Python
     {
-        std::filesystem::path static_root = "H:/study/python/account"; // 与 Flask 版保持一致
+        std::filesystem::path static_root = "H:/study/python/account"; // Implementation note: Flask.
         router.get("/*filepath", http::serve_dir({.root = static_root, .index_file = "index.html"}));
     }
 
-    // 构建 HTTP 服务器
+    // Build HTTP
     http::server srv(sctx);
     auto listen_r = srv.listen("0.0.0.0", SERVER_PORT);
     if (!listen_r) {
@@ -2199,11 +2203,11 @@ auto run_server(cn::server_context& sctx, mysql::sharded_connection_pool& pool,
         co_return;
     }
 
-    // 注册中间件（洋葱模型: recover → cors → jwt_auth → handler）
-    // recover() 必须放最外层，避免 handler 抛异常导致进程直接终止。
+    // Registermiddleware(: recover -> cors -> jwt_auth -> handler)
+    // Recover() , handler .
     srv.use(cn::recover());
     srv.use(cn::cors());
-    // access_log 支持完整 HTTP 打印模式（请求/响应头 + body 预览），调试时可打开：
+    // Access_log complete HTTP (request/response + body )
     constexpr bool ACCESS_LOG_HTTP_DUMP = true;
     if (ACCESS_LOG_HTTP_DUMP) {
         srv.use(cn::access_log(cn::access_log_options{
@@ -2247,7 +2251,7 @@ auto run_server(cn::server_context& sctx, mysql::sharded_connection_pool& pool,
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
-    // 初始化日志系统
+    // Implementation note.
     logger::init("account_server", logger::level::info);
 
     try {
@@ -2255,7 +2259,7 @@ int main() {
         logger::info("=== Freelance Accounting Server (cnetmod) ===");
         logger::info("  Build: {} {}", __DATE__, __TIME__);
 
-        // 加载嵌入的 XML Mapper 文件
+        // XML Mapper file
         for (const auto& [name, content] : embedded_mappers::all_mappers) {
             auto result = g_mapper_registry.load_xml(content);
             if (!result) {
@@ -2280,10 +2284,10 @@ int main() {
         }
         cn::server_context sctx(workers, workers);
 
-        // 确保上传目录存在
+        // Uploaddirectory
         std::filesystem::create_directories(g_cfg.upload_dir);
 
-        // 在 main 中创建连接池和 AI 客户端，确保生命周期覆盖所有协程
+        // Main createconnection pool AI Client, lifetime
         mysql::pool_params db_params;
         db_params.host     = g_cfg.db_host;
         db_params.port     = g_cfg.db_port;
@@ -2291,9 +2295,9 @@ int main() {
         db_params.password = g_cfg.db_password;
         db_params.database = g_cfg.db_name;
         db_params.ssl      = mysql::ssl_mode::disable;
-        db_params.initial_size = 20;   // 初始连接数
-        db_params.max_size     = 100;   // 最大连接数（需小于 MySQL max_connections）
-        db_params.pool_timeout = std::chrono::seconds(3);  // 等连接超时，快速失败
+        db_params.initial_size = 20;   // Implementation note.
+        db_params.max_size     = 100;   // ( MySQL max_connections)
+        db_params.pool_timeout = std::chrono::seconds(3);  // Implementation note.
 
         logger::info("[Pool Config] initial_size={}, max_size={}, workers={}, shards={}, host={}:{}",
             db_params.initial_size, db_params.max_size, workers, shards, db_params.host, db_params.port);
@@ -2308,7 +2312,7 @@ int main() {
         cn::spawn(sctx.accept_io(), run_server(sctx, pool, ai_client));
         sctx.run();
 
-        // 清理全局指针
+        // Implementation note.
         g_pool = nullptr;
         g_openai = nullptr;
 

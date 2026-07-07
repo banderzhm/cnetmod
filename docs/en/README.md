@@ -31,6 +31,7 @@ Build networked applications:
 - **[HTTP Server](protocols/http.md)** - Build REST APIs and web services
 - **[WebSocket](protocols/websocket.md)** - Real-time bidirectional communication
 - **[MQTT](protocols/mqtt.md)** - IoT messaging (broker + client)
+- **[CoAP](protocols/coap.md)** - UDP CoAP client/server for constrained devices
 - **[MySQL](protocols/mysql.md)** - Database access with ORM
 - **[Redis](protocols/redis.md)** - In-memory data store client
 - **[Raft](protocols/raft.md)** - Replicated state machines, membership, snapshots, TCP transport, and storage examples
@@ -51,6 +52,7 @@ Optimize and scale:
 - [Architecture](architecture.md)
 - [Examples](examples.md)
 - [Raft](protocols/raft.md)
+- [CoAP](protocols/coap.md)
 - [Third-party Dependency Integration](advanced/thirdparty-dependency-integration.md)
 
 ---

@@ -5,7 +5,7 @@
         id, project_id, original_filename, stored_filename, filepath, created_at
     </sql>
 
-    <!-- 查询项目的所有文件 -->
+    <!-- Query all files for a project -->
     <select id="selectByProjectId">
         SELECT <include refid="fileColumns"/>
         FROM project_files
@@ -13,14 +13,14 @@
         ORDER BY created_at DESC
     </select>
 
-    <!-- 根据 ID 查询文件 -->
+    <!-- Query file by ID -->
     <select id="selectById">
         SELECT <include refid="fileColumns"/>
         FROM project_files
         WHERE id = #{id}
     </select>
 
-    <!-- 插入文件记录 -->
+    <!-- Insert file record -->
     <insert id="insert">
         INSERT INTO project_files (
             project_id, original_filename, stored_filename, filepath, created_at
@@ -29,17 +29,17 @@
         )
     </insert>
 
-    <!-- 删除文件记录 -->
+    <!-- Delete file record -->
     <delete id="delete">
         DELETE FROM project_files WHERE id = #{id}
     </delete>
 
-    <!-- 删除项目的所有文件 -->
+    <!-- Delete all files for a project -->
     <delete id="deleteByProjectId">
         DELETE FROM project_files WHERE project_id = #{project_id}
     </delete>
 
-    <!-- 批量删除文件（根据 ID 列表） -->
+    <!-- Batch delete files by ID list -->
     <delete id="batchDelete">
         DELETE FROM project_files
         WHERE id IN
@@ -48,7 +48,7 @@
         </foreach>
     </delete>
 
-    <!-- 批量查询文件（根据 ID 列表） -->
+    <!-- Batch query files by ID list -->
     <select id="selectByIds">
         SELECT <include refid="fileColumns"/>
         FROM project_files

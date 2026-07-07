@@ -38,6 +38,8 @@ set(CORE_EXAMPLES
 # SSL examples (only built when OpenSSL is available)
 if(CNETMOD_HAS_SSL)
     list(APPEND CORE_EXAMPLES core/ssl_echo_server)
+    list(APPEND CORE_EXAMPLES core/dtls_echo_server)
+    list(APPEND CORE_EXAMPLES core/dtls_echo_client)
 endif()
 
 # ==============================================================================
@@ -129,6 +131,21 @@ set(MODBUS_EXAMPLES
 )
 
 # ==============================================================================
+# CoAP Examples
+# ==============================================================================
+set(COAP_EXAMPLES
+    coap/coap_interop_server
+    coap/coap_interop_client
+    coap/coap_multicast_server
+    coap/coap_multicast_client
+)
+
+if(CNETMOD_HAS_SSL)
+    list(APPEND COAP_EXAMPLES coap/coaps_interop_server)
+    list(APPEND COAP_EXAMPLES coap/coaps_interop_client)
+endif()
+
+# ==============================================================================
 # Combine all examples
 # ==============================================================================
 set(ALL_EXAMPLES
@@ -142,6 +159,7 @@ set(ALL_EXAMPLES
     ${RAFT_EXAMPLES}
     ${MQTT_EXAMPLES}
     ${MODBUS_EXAMPLES}
+    ${COAP_EXAMPLES}
 )
 
 # ==============================================================================
@@ -187,6 +205,18 @@ set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)
 # Special handling for account_server_demo (needs embedded_mappers.hpp)
 # ==============================================================================
 target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
+if(MSVC)
+    foreach(target_name
+        example_async_file
+        example_coap_multicast_server
+        example_coap_multicast_client
+    )
+        if(TARGET ${target_name})
+            target_compile_options(${target_name} PRIVATE /Od /Ob0)
+        endif()
+    endforeach()
+endif()
 
 # ==============================================================================
 # Post-build commands

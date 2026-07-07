@@ -1,14 +1,14 @@
 /// cnetmod example — High-level HTTP Server (Plus)
-/// 演示功能：
-///   1. 踢人下线（kick）— 管理员通过 /admin/kick/:token 踢掉指定会话
-///   2. 请求统计（stats）— /admin/stats 返回实时请求统计 JSON
-///   3. 限流（rate limit）— Token Bucket 算法，O(1) 判定，支持突发，带 Retry-After
-///   4. 会话管理 — CSPRNG 令牌、TTL 过期、同 IP 会话限制、后台 GC 清理
-///   5. 协程锁（async_mutex）— 保护共享数据的并发安全
-///   6. channel 异步任务队列 — 用户提交耗时任务，后台 worker 消费处理，轮询查状态
-///   7. 反向代理 IP 解析 — 支持 X-Forwarded-For / X-Real-IP
+/// Demonstratesfeatures
+/// 1. (kick)- /admin/kick/:token session
+/// 2. requeststatistics(stats)- /admin/stats returnrequeststatistics JSON
+/// 3. rate limiting(rate limit)- Token Bucket , O(1) , , Retry-After
+/// 4. session - CSPRNG , TTL expired, IP session, background GC cleanup
+/// 5. (async_mutex)- protectsharedconcurrentsecurity
+/// 6. channel asynctask - task, background worker , state
+/// 7. IP parse - X-Forwarded-For / X-Real-IP
 ///
-/// Server 端注册多条路由，Client 端发送多个请求验证各功能
+/// Server registerroute, Client requestverifyfeatures
 
 #include <cnetmod/config.hpp>
 
@@ -34,14 +34,14 @@ namespace http = cnetmod::http;
 constexpr std::uint16_t PORT = 19090;
 
 // =============================================================================
-// 通用 enum ↔ string 映射模板（traits 特化模式）
+// Enum ↔ string (traits )
 // =============================================================================
 
-/// 主模板 — 每个 enum 特化提供 static constexpr map
+/// Enum static constexpr map
 template <typename E>
 struct enum_traits;
 
-/// 泛型 to_string / from_string — 通过 enum_traits 自动查表
+/// To_string / from_string - enum_traits
 template <typename E>
 constexpr auto to_string(E val, std::string_view fallback = "unknown") -> std::string_view {
     for (auto& [k, v] : enum_traits<E>::map)
@@ -57,7 +57,7 @@ constexpr auto from_string(std::string_view s) -> std::optional<E> {
 }
 
 // =============================================================================
-// 异步任务 — 通过 channel 传递给后台 worker 处理
+// Asynctask - channel background worker
 // =============================================================================
 
 enum class task_type {
@@ -74,14 +74,14 @@ template <> struct enum_traits<task_type> {
     };
 };
 
-/// 提交到 channel 的任务载荷
+/// Channel task
 struct task_job {
     std::string task_id;
     task_type   type;
-    std::string params;   // 任务参数（如 "user_id=42&month=2026-01"）
+    std::string params;   // Task( "user_id=42&month=2026-01")
 };
 
-/// 任务状态记录（存储在 shared_state 中，worker 更新，handler 查询）
+/// Taskstate( shared_state , worker update, handler query)
 enum class task_status { pending, processing, done, failed };
 
 template <> struct enum_traits<task_status> {
@@ -108,26 +108,26 @@ struct task_record {
     task_type   type;
     std::string params;
     task_status status = task_status::pending;
-    std::string result;   // 完成后的结果
-    std::string submitted_by;  // 提交者 token
+    std::string result;   // Complete
+    std::string submitted_by;  // Implementation note: token.
 };
 
-/// 全局任务 channel（生产者：HTTP handler，消费者：后台 worker）
+/// Task channel(producer: HTTP handler, consumer: background worker)
 static cn::channel<task_job>* g_task_ch = nullptr;
 
 // =============================================================================
-// 服务器配置
+// Configure
 // =============================================================================
 
 struct server_config {
-    // 会话
-    std::chrono::seconds session_ttl{1800};          // 空闲超时（默认 30 分钟）
-    std::chrono::seconds session_gc_interval{60};    // GC 扫描间隔
-    std::size_t max_sessions_per_ip = 10;            // 同一 IP 最大并发会话数
+    // Session handling.
+    std::chrono::seconds session_ttl{1800};          // Implementation note: 30 .
+    std::chrono::seconds session_gc_interval{60};    // Implementation note: GC.
+    std::size_t max_sessions_per_ip = 10;            // IP concurrentsession
 };
 
 // =============================================================================
-// 会话管理
+// Session handling.
 // =============================================================================
 
 struct session_info {
@@ -140,41 +140,41 @@ struct session_info {
 };
 
 // =============================================================================
-// 共享状态 — 跨路由共享，用 async_mutex 保护
+// Sharedstate - routeshared, async_mutex protect
 // =============================================================================
 
 struct shared_state {
     server_config config;
 
-    // --- HTTP 指标收集器（与此 server 实例绑定，由 metrics_middleware 自动更新）---
+    // HTTP metrics( server , metrics_middleware update)
     cn::metrics_collector metrics;
 
-    // --- 会话专属统计（atomic 计数器，无锁读写）---
+    // Sessionstatistics(atomic , )
     std::atomic<std::uint64_t> total_kicked{0};
     std::atomic<std::uint64_t> sessions_created{0};
     std::atomic<std::uint64_t> sessions_expired{0};
-    std::atomic<std::uint64_t> active_sessions{0};  // 实时活跃会话数，login++ kick/expire--
+    std::atomic<std::uint64_t> active_sessions{0};  // Session, login++ kick/expire
 
-    // --- 会话域（session_mtx 保护）---
+    // Session(session_mtx protect)
     cn::async_mutex session_mtx;
     std::unordered_map<std::string, session_info> sessions;
-    std::unordered_map<std::string, std::size_t>  sessions_per_ip;  // O(1) IP 会话计数
+    std::unordered_map<std::string, std::size_t>  sessions_per_ip;  // O(1) IP session
 
-    // --- 任务域（task_mtx 保护）---
+    // Task(task_mtx protect)
     cn::async_mutex task_mtx;
     std::unordered_map<std::string, task_record> tasks;
     std::uint64_t next_task_id = 1;
 };
 
-/// 全局共享状态（server 和 handler 都通过指针引用它）
+/// Sharedstate(server handler )
 static shared_state* g_state = nullptr;
 
 
 // =============================================================================
-// 会话 GC — 定期扫描清理过期会话 + 限流条目
+// Session GC - cleanupexpiredsession + rate limiting
 // =============================================================================
 
-/// 后台 GC 协程：周期性清理过期 / 已踢会话，回收不活跃的限流桶
+/// Background GC : cleanupexpired / session, rate limiting
 auto session_gc(cn::io_context& io) -> cn::task<void> {
     constexpr std::size_t batch_size = 128;
 
@@ -184,7 +184,7 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
         auto now = std::chrono::steady_clock::now();
         auto ttl = g_state->config.session_ttl;
 
-        // 清理会话（session_mtx）— 分批释放锁
+        // Cleanupsession(session_mtx)
         std::size_t swept = 0;
         {
             co_await g_state->session_mtx.lock();
@@ -206,7 +206,7 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
                 }
 
                 if (remove) {
-                    // 维护 sessions_per_ip
+                    // Sessions_per_ip
                     auto& cnt = g_state->sessions_per_ip[s.client_ip];
                     if (cnt > 0) --cnt;
                     if (cnt == 0) g_state->sessions_per_ip.erase(s.client_ip);
@@ -217,13 +217,13 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
                     ++it;
                 }
 
-                // 分批释放锁，避免长时间阻塞其他协程
+                // Blocking
                 if (++count % batch_size == 0) {
                     guard.~async_lock_guard();
                     co_await cn::async_sleep(io, std::chrono::milliseconds{0});
                     co_await g_state->session_mtx.lock();
                     new (&guard) cn::async_lock_guard(g_state->session_mtx, std::adopt_lock);
-                    now = std::chrono::steady_clock::now();  // 刷新时间
+                    now = std::chrono::steady_clock::now();  // Implementation note.
                 }
             }
         }
@@ -234,25 +234,25 @@ auto session_gc(cn::io_context& io) -> cn::task<void> {
 }
 
 // =============================================================================
-// 任务 worker — 后台消费者协程（channel 的核心使用场景）
+// Task worker - backgroundconsumer(channel )
 // =============================================================================
 
-/// 从 channel 持续接收任务，模拟耗时处理，更新 shared_state 中的任务状态
-/// 典型生产者-消费者：HTTP handler 提交任务（生产），worker 异步执行（消费）
+/// Channel task, simulate, update shared_state taskstate
+/// Producer-consumer: HTTP handler task(), worker async()
 auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void> {
     logger::info("[task-worker] started, waiting for jobs...");
     int count = 0;
 
     while (true) {
-        // 1. 阻塞等待 channel 中的新任务
+        // 1. blockingwait for channel task
         auto job = co_await ch.receive();
-        if (!job) break;  // channel closed → 优雅退出
+        if (!job) break;  // Channel closed -> graceful
 
         ++count;
         logger::info("[task-worker] #{} picked up task={} type={} params={}",
             count, job->task_id, to_string(job->type), job->params);
 
-        // 2. 更新状态为 processing（task_mtx）
+        // 2. updatestate processing(task_mtx)
         {
             co_await g_state->task_mtx.lock();
             cn::async_lock_guard guard(g_state->task_mtx, std::adopt_lock);
@@ -261,7 +261,7 @@ auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void
                 it->second.status = task_status::processing;
         }
 
-        // 3. 模拟耗时处理（不同任务类型耗时不同）
+        // 3. simulate(task)
         auto process_time = std::chrono::milliseconds{200};
         switch (job->type) {
             case task_type::generate_report: process_time = std::chrono::milliseconds{500}; break;
@@ -270,7 +270,7 @@ auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void
         }
         co_await cn::async_sleep(io, process_time);
 
-        // 4. 生成结果，更新状态为 done
+        // 4. generate, updatestate done
         auto result = std::format("completed in {}ms, output=/{}_result.csv",
             process_time.count(), job->task_id);
 
@@ -292,7 +292,7 @@ auto task_worker(cn::io_context& io, cn::channel<task_job>& ch) -> cn::task<void
 
 
 // =============================================================================
-// 路由 handler：POST /login — 模拟登录，创建会话
+// Route handler: POST /login - simulate, createsession
 // =============================================================================
 
 auto handle_login(http::request_context& ctx) -> cn::task<void> {
@@ -304,7 +304,7 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
         co_await g_state->session_mtx.lock();
         cn::async_lock_guard guard(g_state->session_mtx, std::adopt_lock);
 
-        // O(1) IP 会话数检查
+        // O(1) IP session
         auto ip_it = g_state->sessions_per_ip.find(client_ip);
         std::size_t ip_sessions = (ip_it != g_state->sessions_per_ip.end()) ? ip_it->second : 0;
 
@@ -330,7 +330,7 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
         g_state->active_sessions.fetch_add(1, std::memory_order_relaxed);
     }
 
-    // 日志仅输出 token 前 16 字符（安全考量）
+    // Token 16 (security)
     auto short_tok = token.substr(0, 16) + "...";
     logger::info("[handler] /login → token={} ip={}", short_tok, client_ip);
     ctx.json(http::status::ok,
@@ -339,7 +339,7 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 路由 handler：GET /api/data — 需要有效 token，被踢下线的无法访问
+// Route handler: GET /api/data - token
 // =============================================================================
 
 auto handle_data(http::request_context& ctx) -> cn::task<void> {
@@ -364,7 +364,7 @@ auto handle_data(http::request_context& ctx) -> cn::task<void> {
         auto& sess = it->second;
         auto now = std::chrono::steady_clock::now();
 
-        // 检查会话状态
+        // Sessionstate
         if (sess.status == session_status::kicked) {
             ctx.json(http::status::forbidden,
                 R"({"error":"session terminated by administrator"})");
@@ -379,7 +379,7 @@ auto handle_data(http::request_context& ctx) -> cn::task<void> {
             co_return;
         }
 
-        // 刷新活跃时间
+        // Implementation note.
         sess.last_activity = now;
     }
 
@@ -389,7 +389,7 @@ auto handle_data(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 路由 handler：POST /admin/kick/:token — 踢人下线
+// Route handler: POST /admin/kick/:token
 // =============================================================================
 
 auto handle_kick(http::request_context& ctx) -> cn::task<void> {
@@ -428,11 +428,11 @@ auto handle_kick(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 路由 handler：GET /admin/stats — 查看统计信息
+// Route handler: GET /admin/stats - statistics
 // =============================================================================
 
 auto handle_stats(http::request_context& ctx) -> cn::task<void> {
-    // HTTP 统计读自 shared_state 内的 metrics_collector（全 atomic，无锁）
+    // HTTP statistics shared_state metrics_collector( atomic, )
     auto& mc     = g_state->metrics;
     auto uptime  = mc.uptime_seconds();
     auto req     = mc.requests_total.load(std::memory_order_relaxed);
@@ -441,7 +441,7 @@ auto handle_stats(http::request_context& ctx) -> cn::task<void> {
     auto r4xx    = mc.responses_4xx.load(std::memory_order_relaxed);
     auto r5xx    = mc.responses_5xx.load(std::memory_order_relaxed);
 
-    // 会话专属统计读自 shared_state
+    // Sessionstatistics shared_state
     auto kicked  = g_state->total_kicked.load(std::memory_order_relaxed);
     auto created = g_state->sessions_created.load(std::memory_order_relaxed);
     auto expired = g_state->sessions_expired.load(std::memory_order_relaxed);
@@ -457,7 +457,7 @@ auto handle_stats(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 路由 handler：POST /api/task — 提交异步任务（生产者 → channel）
+// Route handler: POST /api/task - asynctask(producer -> channel)
 // =============================================================================
 
 auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
@@ -468,7 +468,7 @@ auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 从 query string 解析任务类型：/api/task?type=generate_report&params=month=2026-01
+    // Query string parsetask: /api/task?type=generate_report&params=month=2026-01
     auto qs = ctx.query_string();
     auto type_str   = http::parse_query_param(qs, "type");
     auto params_str = http::parse_query_param(qs, "params");
@@ -480,7 +480,7 @@ auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // 创建任务记录并立即返回 task_id（非阻塞）
+    // Createtaskreturn task_id(blocking)
     std::string task_id;
     {
         co_await g_state->task_mtx.lock();
@@ -497,7 +497,7 @@ auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
         };
     }
 
-    // 投递到 channel → 后台 worker 会异步消费处理
+    // Channel -> background worker async
     co_await g_task_ch->send(task_job{
         .task_id = task_id,
         .type    = *tt,
@@ -512,7 +512,7 @@ auto handle_submit_task(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 路由 handler：GET /api/task/:id — 查询任务状态（轮询）
+// Route handler: GET /api/task/:id - querytaskstate()
 // =============================================================================
 
 auto handle_task_status(http::request_context& ctx) -> cn::task<void> {
@@ -540,7 +540,7 @@ auto handle_task_status(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 路由 handler：GET /admin/sessions — 查看所有会话
+// Route handler: GET /admin/sessions - session
 // =============================================================================
 
 auto handle_sessions(http::request_context& ctx) -> cn::task<void> {
@@ -560,7 +560,7 @@ auto handle_sessions(http::request_context& ctx) -> cn::task<void> {
             auto age_secs = std::chrono::duration_cast<std::chrono::seconds>(
                 now - sess.created_at).count();
 
-            // token 仅暴露前 16 字符（安全考量）
+            // Token 16 (security)
             auto short_tok = tok.substr(0, 16) + "...";
             json += std::format(
                 R"({{"token":"{}","ip":"{}","user_agent":"{}","status":"{}","idle_seconds":{},"age_seconds":{}}})",
@@ -576,14 +576,14 @@ auto handle_sessions(http::request_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 客户端：发送一个 HTTP 请求并打印响应
+// Client: HTTP requestresponse
 // =============================================================================
 
 auto send_request(cn::io_context& ctx, http::http_method method,
                   std::string_view path,
                   std::vector<std::pair<std::string, std::string>> extra_headers = {},
                   std::string_view body = {})
-    -> cn::task<std::string>  // 返回响应 body
+    -> cn::task<std::string>  // Returnresponse body
 {
     auto sock_r = cn::socket::create(cn::address_family::ipv4,
                                      cn::socket_type::stream);
@@ -609,7 +609,7 @@ auto send_request(cn::io_context& ctx, http::http_method method,
         cn::const_buffer{req_data.data(), req_data.size()});
     if (!wr) { sock.close(); co_return ""; }
 
-    // 读响应
+    // Response
     http::response_parser rp;
     std::array<std::byte, 8192> buf{};
     while (!rp.ready()) {
@@ -633,7 +633,7 @@ auto send_request(cn::io_context& ctx, http::http_method method,
 }
 
 // =============================================================================
-// 辅助：从 JSON 中提取 token 值（简单字符串查找）
+// JSON token (simple)
 // =============================================================================
 
 auto extract_token(const std::string& json) -> std::string {
@@ -646,7 +646,7 @@ auto extract_token(const std::string& json) -> std::string {
 }
 
 // =============================================================================
-// 客户端协程：依次验证各功能
+// Client coroutine: verifyfeatures
 // =============================================================================
 
 auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
@@ -655,7 +655,7 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     logger::info("========== Client: Testing All Features ==========");
 
     // -------------------------------------------------------
-    // 1. 登录获取 token
+    // 1. token
     // -------------------------------------------------------
     logger::info("[1] POST /login (user A)");
     auto resp1 = co_await send_request(ctx, http::http_method::POST, "/login",
@@ -670,7 +670,7 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     logger::info("  → token_b = {}...", token_b.substr(0, 16));
 
     // -------------------------------------------------------
-    // 2. 用 token 访问受保护数据
+    // 2. token protect
     // -------------------------------------------------------
     logger::info("[3] GET /api/data (user A, valid token)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
@@ -684,30 +684,30 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
         {{"Authorization", "fake_token"}});
 
     // -------------------------------------------------------
-    // 3. 查看当前会话列表
+    // 3. session
     // -------------------------------------------------------
     logger::info("[6] GET /admin/sessions");
     co_await send_request(ctx, http::http_method::GET, "/admin/sessions");
 
     // -------------------------------------------------------
-    // 4. 踢人下线
+    // Implementation note: 4.
     // -------------------------------------------------------
     logger::info("[7] POST /admin/kick/{} (kick user A)", token_a);
     co_await send_request(ctx, http::http_method::POST,
         std::format("/admin/kick/{}", token_a));
 
-    // 被踢后访问受保护资源 → 403
+    // Protect -> 403
     logger::info("[8] GET /api/data (user A after kicked → 403)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
         {{"Authorization", token_a}});
 
-    // user B 仍可访问
+    // Implementation note: user.
     logger::info("[9] GET /api/data (user B still valid)");
     co_await send_request(ctx, http::http_method::GET, "/api/data",
         {{"Authorization", token_b}});
 
     // -------------------------------------------------------
-    // 5. 限流测试：同一 IP 快速发 6 次请求
+    // 5. rate limitingTest: IP 6 request
     // -------------------------------------------------------
     logger::info("[10] Rate limit test: 6 rapid requests from same IP");
     for (int i = 1; i <= 6; ++i) {
@@ -717,7 +717,7 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     }
 
     // -------------------------------------------------------
-    // 6. 异步任务队列（channel 生产-消费）
+    // 6. asynctask(channel -)
     // -------------------------------------------------------
     logger::info("[11] POST /api/task — submit report generation");
     auto task_resp1 = co_await send_request(ctx, http::http_method::POST,
@@ -734,8 +734,8 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
         "/api/task?type=send_email&params=to=test@example.com",
         {{"Authorization", token_b}});
 
-    // 立即查询 → 应该是 pending 或 processing
-    // 从响应中提取 task_id
+    // Query -> pending processing
+    // Response task_id
     auto extract_task_id = [](const std::string& json) -> std::string {
         auto pos = json.find("\"task_id\":\"");
         if (pos == std::string::npos) return "";
@@ -752,11 +752,11 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
     co_await send_request(ctx, http::http_method::GET,
         std::format("/api/task/{}", tid1));
 
-    // 等待 worker 处理完成
+    // Wait for worker complete
     logger::info("... waiting 800ms for worker to finish ...");
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{800});
 
-    // 再次轮询 → 应该是 done
+    // Implementation note: done.
     logger::info("[15] GET /api/task/{} — poll again (should be done)", tid1);
     co_await send_request(ctx, http::http_method::GET,
         std::format("/api/task/{}", tid1));
@@ -766,14 +766,14 @@ auto run_client(cn::io_context& ctx, http::server& srv) -> cn::task<void> {
         std::format("/api/task/{}", tid2));
 
     // -------------------------------------------------------
-    // 7. 查看统计信息
+    // 7. statistics
     // -------------------------------------------------------
     logger::info("[17] GET /admin/stats");
     co_await send_request(ctx, http::http_method::GET, "/admin/stats");
 
     logger::info("========== Client: All Tests Done ==========");
 
-    // 关闭任务 channel，让 worker 优雅退出
+    // Closetask channel, worker graceful
     g_task_ch->close();
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
 
@@ -794,24 +794,24 @@ int main() {
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 初始化共享状态
+    // Sharedstate
     shared_state state;
-    state.config.session_ttl          = std::chrono::seconds{60};  // demo: 60s 空闲超时
-    state.config.session_gc_interval  = std::chrono::seconds{5};   // demo: 5s GC 间隔
+    state.config.session_ttl          = std::chrono::seconds{60};  // Demo: 60s
+    state.config.session_gc_interval  = std::chrono::seconds{5};   // Demo: 5s GC
     state.config.max_sessions_per_ip  = 5;
     g_state = &state;
 
-    // 初始化任务 channel（容量 16，带背压：满时提交方会挂起等待）
+    // Task channel( 16, : wait for)
     cn::channel<task_job> task_ch(16);
     g_task_ch = &task_ch;
 
-    // 构建路由
+    // Buildroute
     http::router router;
 
-    // GET /metrics — Prometheus 指标端点（与此 server 绑定）
+    // GET /metrics - Prometheus metrics( server )
     router.get("/metrics", cn::metrics_handler(state.metrics));
 
-    // GET / — 欢迎页
+    // Implementation note: GET.
     router.get("/", [](http::request_context& ctx) -> cn::task<void> {
         ctx.html(http::status::ok,
             "<h1>cnetmod HTTP Plus Demo</h1>"
@@ -828,28 +828,28 @@ int main() {
         co_return;
     });
 
-    // POST /login — 模拟登录
+    // POST /login - simulate
     router.post("/login", handle_login);
 
-    // GET /api/data — 受保护数据
+    // GET /api/data - protect
     router.get("/api/data", handle_data);
 
-    // POST /admin/kick/:token — 踢人下线
+    // POST /admin/kick/:token
     router.post("/admin/kick/:token", handle_kick);
 
-    // GET /admin/stats — 统计信息
+    // GET /admin/stats - statistics
     router.get("/admin/stats", handle_stats);
 
-    // GET /admin/sessions — 会话列表
+    // GET /admin/sessions - session
     router.get("/admin/sessions", handle_sessions);
 
-    // POST /api/task — 提交异步任务（→ channel → worker）
+    // POST /api/task - asynctask(-> channel -> worker)
     router.post("/api/task", handle_submit_task);
 
-    // GET /api/task/:id — 查询任务状态（轮询）
+    // GET /api/task/:id - querytaskstate()
     router.get("/api/task/:id", handle_task_status);
 
-    // 构建服务器
+    // Implementation note.
     http::server srv(*ctx);
     auto listen_r = srv.listen("127.0.0.1", PORT);
     if (!listen_r) {
@@ -857,13 +857,13 @@ int main() {
         return 1;
     }
 
-    // 注册中间件（洋葱模型：recover → access_log → cors → request_id → body_limit → rate_limiter → metrics → handler）
+    // Registermiddleware(: recover -> access_log -> cors -> request_id -> body_limit -> rate_limiter -> metrics -> handler)
     srv.use(cn::recover());
     srv.use(cn::access_log());
     srv.use(cn::cors());
     srv.use(cn::request_id());
     srv.use(cn::body_limit(2 * 1024 * 1024));  // 2MB
-    srv.use(cn::rate_limiter({.rate = 2.0, .burst = 5.0}));   // 2 req/s, 突发 5
+    srv.use(cn::rate_limiter({.rate = 2.0, .burst = 5.0}));   // 2 req/s, 5
     srv.use(cn::metrics_middleware(state.metrics));
     srv.set_router(std::move(router));
 
@@ -874,11 +874,11 @@ int main() {
                  state.config.session_gc_interval.count(),
                  state.config.max_sessions_per_ip);
 
-    // 启动后台协程
-    cn::spawn(*ctx, session_gc(*ctx));         // 会话 GC
-    cn::spawn(*ctx, task_worker(*ctx, task_ch)); // 任务 worker
+    // Startbackground
+    cn::spawn(*ctx, session_gc(*ctx));         // Session GC
+    cn::spawn(*ctx, task_worker(*ctx, task_ch)); // Task worker
 
-    // 启动服务器和客户端
+    // StartClient
     cn::spawn(*ctx, srv.run());
     cn::spawn(*ctx, run_client(*ctx, srv));
 

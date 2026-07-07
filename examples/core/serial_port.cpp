@@ -1,5 +1,5 @@
 /// cnetmod example — Serial Port Communication
-/// 演示异步串口读写：打开 COM 口，发送数据，读取响应
+/// Demonstratesasyncserial port: COM , , readresponse
 
 #include <cnetmod/config.hpp>
 
@@ -12,8 +12,8 @@ import cnetmod.executor;
 using namespace cnetmod;
 
 // =============================================================================
-// 串口回环测试 (loopback)
-// 将 TX/RX 短接，发送的数据会被自己接收
+// Serial portloopbackTest (loopback)
+// Implementation note: TX/RX.
 // =============================================================================
 
 auto run_loopback_test(io_context& ctx, serial_port& port) -> task<void> {
@@ -29,7 +29,7 @@ auto run_loopback_test(io_context& ctx, serial_port& port) -> task<void> {
     }
     std::println("  sent {} bytes", *wr);
 
-    // 读取回环数据
+    // Readloopback
     std::array<char, 256> rx_buf{};
     auto rr = co_await async_serial_read(ctx, port,
         mutable_buffer{rx_buf.data(), rx_buf.size()});
@@ -48,7 +48,7 @@ auto run_loopback_test(io_context& ctx, serial_port& port) -> task<void> {
 }
 
 // =============================================================================
-// AT 命令交互 (适用于调制解调器 / GSM 模块)
+// AT ( / GSM )
 // =============================================================================
 
 auto run_at_command(io_context& ctx, serial_port& port,
@@ -56,7 +56,7 @@ auto run_at_command(io_context& ctx, serial_port& port,
 {
     std::println("  >> {}", command);
 
-    // 发送 AT 命令 (追加 \r\n)
+    // AT ( \r\n)
     std::string cmd = std::string(command) + "\r\n";
     auto wr = co_await async_serial_write(ctx, port,
         const_buffer{cmd.data(), cmd.size()});
@@ -66,7 +66,7 @@ auto run_at_command(io_context& ctx, serial_port& port,
         co_return;
     }
 
-    // 读取响应
+    // Readresponse
     std::array<char, 1024> rx_buf{};
     auto rr = co_await async_serial_read(ctx, port,
         mutable_buffer{rx_buf.data(), rx_buf.size()});
@@ -85,7 +85,7 @@ auto run_at_command(io_context& ctx, serial_port& port,
 }
 
 // =============================================================================
-// 连续读取 (监听串口数据)
+// Read (serial port)
 // =============================================================================
 
 auto run_continuous_read(io_context& ctx, serial_port& port,
@@ -114,11 +114,11 @@ auto run_continuous_read(io_context& ctx, serial_port& port,
 }
 
 // =============================================================================
-// 主协程
+// Main coroutine
 // =============================================================================
 
 auto run_serial_demo(io_context& ctx) -> task<void> {
-    // 修改为你的串口名称
+    // Serial port
     constexpr auto port_name = "COM3";
 
     serial_config cfg;
@@ -151,16 +151,16 @@ auto run_serial_demo(io_context& ctx) -> task<void> {
             cfg.flow == flow_control::hardware ? "hw" : "sw"
     );
 
-    // --- 测试 1: 回环测试 ---
+    // Test 1: loopbackTest
     std::println("\n  === Test 1: Loopback ===");
     co_await run_loopback_test(ctx, port);
 
-    // --- 测试 2: AT 命令 ---
+    // Test 2: AT
     std::println("\n  === Test 2: AT Commands ===");
     co_await run_at_command(ctx, port, "AT");
     co_await run_at_command(ctx, port, "AT+GMR");
 
-    // --- 测试 3: 连续读取 ---
+    // Test 3: read
     std::println("\n  === Test 3: Continuous Read ===");
     co_await run_continuous_read(ctx, port, 3);
 

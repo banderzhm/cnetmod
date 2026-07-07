@@ -1,8 +1,8 @@
 /// cnetmod example — Multi-core WebSocket Server
-/// 演示功能：
-///   1. server_context 多核 WS 架构
-///   2. 连接自动 round-robin 分发到 worker io_context
-///   3. 每个 WS 连接在独立 worker 线程上处理
+/// Demonstratesfeatures
+/// 1. server_context multicore WS
+/// 2. round-robin worker io_context
+/// 3. WS worker thread
 
 #include <cnetmod/config.hpp>
 
@@ -22,7 +22,7 @@ constexpr std::uint16_t PORT = 19101;
 constexpr unsigned WORKER_THREADS = 4;
 
 // =============================================================================
-// /echo 端点：回传消息 + 打印线程信息
+// /echo : echo back + thread
 // =============================================================================
 
 auto echo_handler(ws::ws_context& ctx) -> cn::task<void> {
@@ -47,7 +47,7 @@ auto echo_handler(ws::ws_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// /chat/:room 端点
+// /chat/:room
 // =============================================================================
 
 auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
@@ -73,7 +73,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 客户端：连接到 WS 端点，发消息并打印回复
+// Client: WS
 // =============================================================================
 
 auto ws_client(cn::io_context& ctx, std::string url,
@@ -109,7 +109,7 @@ auto ws_client(cn::io_context& ctx, std::string url,
 }
 
 // =============================================================================
-// 客户端编排
+// Client-side flow.
 // =============================================================================
 
 auto run_clients(cn::server_context& sctx, ws::server& srv) -> cn::task<void> {
@@ -118,7 +118,7 @@ auto run_clients(cn::server_context& sctx, ws::server& srv) -> cn::task<void> {
 
     std::println("\n--- Client: Testing /echo (3 connections to different workers) ---");
 
-    // 3 个 echo 客户端 — 应该分发到不同 worker 线程
+    // 3 echo Client - worker thread
     co_await ws_client(ctx,
         std::format("ws://127.0.0.1:{}/echo", PORT),
         {"Hello from client 1", "Multi-core!"});
@@ -157,10 +157,10 @@ int main() {
 
     cn::net_init net;
 
-    // 创建多核服务器上下文
+    // Createmulticore
     cn::server_context sctx(WORKER_THREADS, WORKER_THREADS);
 
-    // 构建 WS 服务器
+    // Build WS
     ws::server srv(sctx);
     auto lr = srv.listen("0.0.0.0", PORT);
     if (!lr) {
@@ -168,7 +168,7 @@ int main() {
         return 1;
     }
 
-    // 注册端点（包裹访问日志）
+    // Register()
     srv.on("/echo", cn::ws_access_log(echo_handler));
     srv.on("/chat/:room", cn::ws_access_log(chat_handler));
 
@@ -176,7 +176,7 @@ int main() {
     std::println("  Accept thread: {}", std::this_thread::get_id());
     std::println("  Endpoints: /echo, /chat/:room");
 
-    // 启动
+    // Start components.
     cn::spawn(sctx.accept_io(), srv.run());
     cn::spawn(sctx.accept_io(), run_clients(sctx, srv));
 

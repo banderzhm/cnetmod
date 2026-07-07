@@ -1,5 +1,5 @@
 /// cnetmod example — High-level WebSocket Server + Client
-/// 演示 ws::server 路由端点注册 + 路径参数 + 多端点客户端交互
+/// Demonstrates ws::server routeregister + + Client
 
 #include <cnetmod/config.hpp>
 
@@ -18,7 +18,7 @@ namespace ws = cnetmod::ws;
 constexpr std::uint16_t PORT = 19081;
 
 // =============================================================================
-// /echo 端点：收到消息原样回传
+// /echo : echo back
 // =============================================================================
 
 auto echo_handler(ws::ws_context& ctx) -> cn::task<void> {
@@ -40,7 +40,7 @@ auto echo_handler(ws::ws_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// /chat/:room 端点：读取路径参数 room，带 room 名前缀回传
+// /chat/:room : read room, room echo back
 // =============================================================================
 
 auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
@@ -65,7 +65,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 }
 
 // =============================================================================
-// 客户端：连接到某个 WS 端点，发 N 条消息并打印回复
+// Client: WS , N
 // =============================================================================
 
 auto ws_client(cn::io_context& ctx, std::string url,
@@ -100,11 +100,11 @@ auto ws_client(cn::io_context& ctx, std::string url,
 }
 
 // =============================================================================
-// 客户端编排：依次测试两个端点
+// Client: Test
 // =============================================================================
 
 auto run_clients(cn::io_context& ctx, ws::server& srv) -> cn::task<void> {
-    // 等待服务端启动
+    // Wait forServerstart
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
 
     std::println("\n--- Client: Testing /echo ---");
@@ -138,7 +138,7 @@ int main() {
     cn::net_init net;
     auto ctx = cn::make_io_context();
 
-    // 构建 WS 服务器
+    // Build WS
     ws::server srv(*ctx);
     auto lr = srv.listen("127.0.0.1", PORT);
     if (!lr) {
@@ -146,14 +146,14 @@ int main() {
         return 1;
     }
 
-    // 注册端点（包裹访问日志）
+    // Register()
     srv.on("/echo", cn::ws_access_log(echo_handler));
     srv.on("/chat/:room", cn::ws_access_log(chat_handler));
 
     std::println("  WS Server listening on 127.0.0.1:{}", PORT);
     std::println("  Endpoints: /echo, /chat/:room");
 
-    // 启动
+    // Start components.
     cn::spawn(*ctx, srv.run());
     cn::spawn(*ctx, run_clients(*ctx, srv));
 

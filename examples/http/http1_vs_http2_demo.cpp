@@ -17,7 +17,7 @@ using namespace cnetmod::http;
 auto demo_http1_chunked(client& http_client) -> task<void> {
     std::println("\n=== HTTP/1.1 Chunked Transfer ===");
     
-    // 强制使用 HTTP/1.1
+    // HTTP/1.1
     client_options opts;
     opts.version_pref = http_version_preference::http1_only;
     client http1_client(*http_client.options().ctx_, opts);
@@ -30,7 +30,7 @@ auto demo_http1_chunked(client& http_client) -> task<void> {
         std::println("  Protocol: HTTP/1.1");
         std::println("  Status: {}", result->status_code());
         
-        // 检查 Transfer-Encoding 头
+        // Transfer-Encoding
         auto transfer_encoding = result->get_header("Transfer-Encoding");
         if (!transfer_encoding.empty()) {
             std::println("  Transfer-Encoding: {}", transfer_encoding);
@@ -67,7 +67,7 @@ auto demo_http2_frames() -> task<void> {
 #ifdef CNETMOD_HAS_NGHTTP2
     auto ctx = make_io_context();
     
-    // 强制使用 HTTP/2
+    // Implementation note: HTTP/2.
     client_options opts;
     opts.version_pref = http_version_preference::http2_only;
     client http2_client(*ctx, opts);
@@ -80,7 +80,7 @@ auto demo_http2_frames() -> task<void> {
         std::println("  Protocol: HTTP/2");
         std::println("  Status: {}", result->status_code());
         
-        // HTTP/2 不会有 Transfer-Encoding 头
+        // HTTP/2 Transfer-Encoding
         auto transfer_encoding = result->get_header("Transfer-Encoding");
         if (transfer_encoding.empty()) {
             std::println("  Transfer-Encoding: (none)");
@@ -106,7 +106,7 @@ auto demo_http2_frames() -> task<void> {
 }
 
 // =============================================================================
-// 协议自动协商 Demo
+// Implementation note: Demo.
 // =============================================================================
 
 auto demo_auto_negotiation() -> task<void> {
@@ -114,7 +114,7 @@ auto demo_auto_negotiation() -> task<void> {
     
     auto ctx = make_io_context();
     
-    // 使用默认设置（优先 HTTP/2）
+    // ( HTTP/2)
     client_options opts;
     opts.version_pref = http_version_preference::http2_preferred;
     client http_client(*ctx, opts);
@@ -147,7 +147,7 @@ auto demo_auto_negotiation() -> task<void> {
 }
 
 // =============================================================================
-// 性能对比
+// Implementation note.
 // =============================================================================
 
 auto demo_performance_comparison() -> task<void> {
@@ -177,7 +177,7 @@ auto demo_performance_comparison() -> task<void> {
 }
 
 // =============================================================================
-// Nginx 行为说明
+// Implementation note: Nginx.
 // =============================================================================
 
 auto explain_nginx_behavior() -> task<void> {
@@ -215,7 +215,7 @@ auto explain_nginx_behavior() -> task<void> {
 }
 
 // =============================================================================
-// 主函数
+// Main function
 // =============================================================================
 
 auto run_demos() -> task<void> {
@@ -230,13 +230,13 @@ auto run_demos() -> task<void> {
     // HTTP/2 frames
     co_await demo_http2_frames();
     
-    // 自动协商
+    // Implementation note.
     co_await demo_auto_negotiation();
     
-    // 性能对比
+    // Implementation note.
     co_await demo_performance_comparison();
     
-    // Nginx 行为
+    // Implementation note: Nginx.
     co_await explain_nginx_behavior();
     
     std::println("\n=== Demo Complete ===");

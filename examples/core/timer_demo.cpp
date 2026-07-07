@@ -1,5 +1,5 @@
 /// cnetmod example — Timer Demo
-/// 演示 steady_timer (低精度) 和 high_resolution_timer (高精度)
+/// Demonstrates steady_timer () high_resolution_timer ()
 
 import std;
 import cnetmod.coro;

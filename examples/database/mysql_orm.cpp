@@ -1,6 +1,6 @@
-/// cnetmod example — MySQL ORM (持久化框架演示)
-/// 演示 orm::db_session 的 create_table / insert / find / update / remove
-/// 需要本地 MySQL 运行，数据库: mall
+/// Cnetmod example - MySQL ORM (Demonstrates)
+/// Demonstrates orm::db_session create_table / insert / find / update / remove
+/// MySQL run, : mall
 
 #include <cnetmod/config.hpp>
 #include <cstdio>
@@ -18,7 +18,7 @@ namespace mysql = cn::mysql;
 namespace orm = mysql::orm;
 
 // =============================================================================
-// 模型定义
+// Implementation note.
 // =============================================================================
 
 struct Article {
@@ -40,11 +40,11 @@ CNETMOD_MODEL(Article, "orm_articles",
 )
 
 // =============================================================================
-// UUID 主键模型: Tag
+// UUID : Tag
 // =============================================================================
 
 struct Tag {
-    orm::uuid    id;      ///< UUID v4 主键
+    orm::uuid    id;      /// < UUID v4
     std::string  name;
     std::string  color;
 };
@@ -56,11 +56,11 @@ CNETMOD_MODEL(Tag, "orm_tags",
 )
 
 // =============================================================================
-// 雪花算法主键模型: Event
+// Implementation note: Event.
 // =============================================================================
 
 struct Event {
-    std::int64_t  id     = 0;   ///< 雪花 ID
+    std::int64_t  id     = 0;   /// Implementation note: ID.
     std::string   title;
     int           level  = 0;
 };
@@ -72,14 +72,14 @@ CNETMOD_MODEL(Event, "orm_events",
 )
 
 // =============================================================================
-// sync_schema 演示用模型: Product (V1 → V2 动态迁移)
+// Sync_schema Demonstrates: Product (V1 -> V2 )
 // =============================================================================
 
 struct Product {
     std::int64_t                id    = 0;
     std::string                 name;
     double                      price = 0.0;
-    std::optional<std::string>  desc;   ///< V2 新增字段
+    std::optional<std::string>  desc;   /// Implementation note: V2.
 };
 
 CNETMOD_MODEL(Product, "orm_products",
@@ -90,7 +90,7 @@ CNETMOD_MODEL(Product, "orm_products",
 )
 
 // =============================================================================
-// 辅助：打印文章列表
+// Implementation note.
 // =============================================================================
 
 void print_articles(std::span<const Article> articles, std::string_view label = {}) {
@@ -111,11 +111,11 @@ void print_articles(std::span<const Article> articles, std::string_view label = 
 }
 
 // =============================================================================
-// Demo 1: DDL — 建表 / 删表
+// Demo 1: DDL - /
 // =============================================================================
 
 auto demo_ddl(orm::db_session& db) -> cn::task<void> {
-    // 先删除旧表（如果存在）
+    // Delete()
     auto drop = co_await db.drop_table<Article>();
     if (drop.is_err()) {
         std::println("  DROP TABLE error: {}", drop.error_msg);
@@ -123,7 +123,7 @@ auto demo_ddl(orm::db_session& db) -> cn::task<void> {
     }
     std::println("\n── DROP TABLE (cleanup) ── OK");
 
-    // 创建表
+    // Create resources.
     auto create = co_await db.create_table<Article>();
     if (create.is_err()) {
         std::println("  CREATE TABLE error: {}", create.error_msg);
@@ -133,11 +133,11 @@ auto demo_ddl(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 2: INSERT — 单条 + 批量
+// Demo 2: INSERT - + batch
 // =============================================================================
 
 auto demo_insert(orm::db_session& db) -> cn::task<void> {
-    // 单条插入
+    // Implementation note.
     Article a1;
     a1.title      = "C++23 Modules 入门";
     a1.content    = "本文介绍 C++23 模块系统的基本用法。";
@@ -149,7 +149,7 @@ auto demo_insert(orm::db_session& db) -> cn::task<void> {
     if (r1.is_err()) { std::println("  INSERT error: {}", r1.error_msg); co_return; }
     std::println("\n── INSERT 1 ── id={}, affected={}", a1.id, r1.affected_rows);
 
-    // 批量插入
+    // Batchinsert
     std::array<Article, 3> batch = {{
         {0, "协程异步 I/O 实战",   "深入讲解 C++20 协程 + IOCP/epoll 异步编程。",     1, 10, "李四"},
         {0, "MySQL 连接池设计",    "如何设计高性能的 MySQL 连接池。",                  1, 5,  "王五"},
@@ -162,16 +162,16 @@ auto demo_insert(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 3: SELECT — 全量 / 按 ID / 自定义条件
+// Demo 3: SELECT - / ID /
 // =============================================================================
 
 auto demo_select(orm::db_session& db) -> cn::task<void> {
-    // 全量
+    // Implementation note.
     auto all = co_await db.find_all<Article>();
     if (all.is_err()) { std::println("  find_all error: {}", all.error_msg); co_return; }
     print_articles(all.data, "SELECT ALL");
 
-    // 按 ID 查询（取第一条的 id）
+    // ID query( id)
     if (!all.data.empty()) {
         auto first_id = all.data.front().id;
         auto by_id = co_await db.find_by_id<Article>(mysql::param_value::from_int(first_id));
@@ -179,7 +179,7 @@ auto demo_select(orm::db_session& db) -> cn::task<void> {
             print_articles(by_id.data, std::format("SELECT BY ID ({})", first_id));
     }
 
-    // 自定义条件查询: status=1, 按 view_count 降序, 取前 2 条
+    // Query: status=1, view_count , 2
     auto qb = orm::select<Article>()
         .where("`status` = {}", {mysql::param_value::from_int(1)})
         .order_by("`view_count` DESC")
@@ -191,15 +191,15 @@ auto demo_select(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 4: UPDATE — 按 PK 更新
+// Demo 4: UPDATE - PK update
 // =============================================================================
 
 auto demo_update(orm::db_session& db) -> cn::task<void> {
-    // 先查全部
+    // Implementation note.
     auto all = co_await db.find_all<Article>();
     if (all.is_err() || all.empty()) co_return;
 
-    // 修改第一条
+    // Implementation note.
     auto& a = all.data.front();
     a.title      = a.title + " (updated)";
     a.view_count = a.view_count + 100;
@@ -208,40 +208,40 @@ auto demo_update(orm::db_session& db) -> cn::task<void> {
     if (r.is_err()) { std::println("  UPDATE error: {}", r.error_msg); co_return; }
     std::println("\n── UPDATE ── affected={}", r.affected_rows);
 
-    // 验证
+    // Implementation note.
     auto updated = co_await db.find_by_id<Article>(mysql::param_value::from_int(a.id));
     if (updated.ok())
         print_articles(updated.data, "VERIFY UPDATE");
 }
 
 // =============================================================================
-// Demo 5: DELETE — 按模型 / 按 ID
+// Demo 5: DELETE - / ID
 // =============================================================================
 
 auto demo_delete(orm::db_session& db) -> cn::task<void> {
     auto all = co_await db.find_all<Article>();
     if (all.is_err() || all.data.size() < 2) co_return;
 
-    // 按模型删除最后一条
+    // Delete data.
     auto& last = all.data.back();
     auto r1 = co_await db.remove(last);
     if (r1.is_err()) { std::println("  REMOVE error: {}", r1.error_msg); co_return; }
     std::println("\n── DELETE (by model, id={}) ── affected={}", last.id, r1.affected_rows);
 
-    // 按 ID 删除第一条
+    // ID delete
     auto first_id = all.data.front().id;
     auto r2 = co_await db.remove_by_id<Article>(mysql::param_value::from_int(first_id));
     if (r2.is_err()) { std::println("  REMOVE_BY_ID error: {}", r2.error_msg); co_return; }
     std::println("── DELETE (by id={}) ── affected={}", first_id, r2.affected_rows);
 
-    // 查看剩余
+    // Implementation note.
     auto remaining = co_await db.find_all<Article>();
     if (remaining.ok())
         print_articles(remaining.data, "REMAINING AFTER DELETE");
 }
 
 // =============================================================================
-// Demo 6: 自定义 delete builder — 条件删除
+// Demo 6: delete builder - delete
 // =============================================================================
 
 auto demo_delete_builder(orm::db_session& db) -> cn::task<void> {
@@ -258,7 +258,7 @@ auto demo_delete_builder(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 7: UUID 主键 CRUD
+// Demo 7: UUID CRUD
 // =============================================================================
 
 auto demo_uuid(orm::db_session& db) -> cn::task<void> {
@@ -278,18 +278,18 @@ auto demo_uuid(orm::db_session& db) -> cn::task<void> {
     std::println("  inserted t2.id = {}", t2.id.to_string());
     std::println("  inserted t3.id = {}", t3.id.to_string());
 
-    // 按 UUID 查询
+    // UUID query
     auto r = co_await db.find_by_id<Tag>(mysql::param_value::from_string(t1.id.to_string()));
     if (r.ok() && !r.data.empty())
         std::println("  find_by_id: name={}, color={}", r.data[0].name, r.data[0].color);
 
-    // 保留表供 Navicat 查看
+    // Implementation note: Navicat.
     // co_await db.drop_table<Tag>();
     std::println("  Tag table kept.");
 }
 
 // =============================================================================
-// Demo 8: 雪花算法主键 CRUD
+// Demo 8: CRUD
 // =============================================================================
 
 auto demo_snowflake(orm::db_session& db) -> cn::task<void> {
@@ -320,16 +320,16 @@ auto demo_snowflake(orm::db_session& db) -> cn::task<void> {
 }
 
 // =============================================================================
-// Demo 9: Schema 迁移 — sync_schema
+// Demo 9: Schema - sync_schema
 // =============================================================================
 
 auto demo_sync_schema(mysql::client& cli) -> cn::task<void> {
     std::println("\n── SYNC SCHEMA: Product ──");
 
-    // 1) 先清理旧表
+    // 1) cleanup
     co_await cli.execute("DROP TABLE IF EXISTS `orm_products`");
 
-    // 2) 手动创建 V1 表（没有 description 列，有一个多余列 old_col）
+    // 2) create V1 ( description , old_col)
     co_await cli.execute(
         "CREATE TABLE `orm_products` ("
         "  `id` BIGINT NOT NULL AUTO_INCREMENT,"
@@ -340,7 +340,7 @@ auto demo_sync_schema(mysql::client& cli) -> cn::task<void> {
         ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     std::println("  V1 table created (id, name, price, old_col)");
 
-    // 3) sync_schema: 检测差异并应用
+    // 3) sync_schema
     auto result = co_await orm::sync_schema<Product>(cli);
     if (result.is_err()) {
         std::println("  sync_schema error: {}", result.error_msg);
@@ -359,7 +359,7 @@ auto demo_sync_schema(mysql::client& cli) -> cn::task<void> {
         }
     }
 
-    // 4) 验证: 插入一条并查询
+    // 4) verify: insertquery
     orm::db_session db(cli);
     Product p;
     p.name  = "测试商品";
@@ -375,13 +375,13 @@ auto demo_sync_schema(mysql::client& cli) -> cn::task<void> {
                          pp.id, pp.name, pp.price, pp.desc.value_or("(null)"));
     }
 
-    // 保留表供 Navicat 查看
+    // Implementation note: Navicat.
     // co_await db.drop_table<Product>();
     std::println("  Product table kept.");
 }
 
 // =============================================================================
-// 入口
+// Entry point
 // =============================================================================
 
 auto run(cn::io_context& ctx) -> cn::task<void> {
@@ -391,7 +391,7 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     opts.host     = "127.0.0.1";
     opts.port     = 3306;
     opts.username = "root";
-    opts.password = "your_password";      // ← 按实际修改
+    opts.password = "your_password";      // Implementation note.
     opts.database = "mall";
     opts.ssl      = mysql::ssl_mode::disable;
 
@@ -403,10 +403,10 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     }
     std::println("已连接 MySQL (mall)");
 
-    // 雪花生成器 (machine_id=1)
+    // Generate (machine_id=1)
     orm::snowflake_generator snowflake(1);
 
-    // 创建 ORM 会话（带雪花生成器）
+    // Create ORM session(generate)
     orm::db_session db(cli, snowflake);
 
     // Article (auto_increment PK) CRUD
@@ -416,7 +416,7 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     co_await demo_update(db);
     co_await demo_delete(db);
     co_await demo_delete_builder(db);
-    // co_await db.drop_table<Article>();  // 保留表供 Navicat 查看
+    // Co_await db.drop_table<Article>(); // Navicat
 
     // UUID PK CRUD
     co_await demo_uuid(db);
@@ -424,7 +424,7 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     // Snowflake PK CRUD
     co_await demo_snowflake(db);
 
-    // Schema 迁移
+    // Implementation note: Schema.
     co_await demo_sync_schema(cli);
 
     co_await cli.quit();

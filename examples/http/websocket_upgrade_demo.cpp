@@ -13,7 +13,7 @@ using namespace cnetmod::http;
 using namespace cnetmod::ws;
 
 // =============================================================================
-// WebSocket 升级示例
+// WebSocket
 // =============================================================================
 
 auto demo_websocket_upgrade() -> task<void> {
@@ -21,7 +21,7 @@ auto demo_websocket_upgrade() -> task<void> {
     
     auto ctx = make_io_context();
     
-    // 方法 1: 直接使用 WebSocket 连接（推荐）
+    // 1: WebSocket ()
     std::println("Method 1: Direct WebSocket Connection");
     {
         connection ws_conn(*ctx);
@@ -36,17 +36,17 @@ auto demo_websocket_upgrade() -> task<void> {
         if (result) {
             std::println("✓ WebSocket connected directly");
             
-            // 发送消息
+            // Send messages
             co_await ws_conn.async_send_text("Hello WebSocket!");
             std::println("  Sent: Hello WebSocket!");
             
-            // 接收消息
+            // Implementation note.
             auto msg = co_await ws_conn.async_recv();
             if (msg) {
                 std::println("  Received: {}", msg->as_string());
             }
             
-            // 关闭连接
+            // Implementation note.
             co_await ws_conn.async_close();
             std::println("✓ WebSocket closed\n");
         } else {
@@ -54,25 +54,25 @@ auto demo_websocket_upgrade() -> task<void> {
         }
     }
     
-    // 方法 2: 从 HTTP Client 升级（适用于需要先发送 HTTP 请求的场景）
+    // 2: HTTP Client ( HTTP request)
     std::println("Method 2: Upgrade from HTTP Client");
     {
-        // 注意：这个方法适用于需要先进行 HTTP 认证等操作的场景
-        // 大多数情况下，方法 1 更简单直接
+        // Note: HTTP authentication
+        // 1 simple
         
         client_options http_opts;
         http_opts.keep_alive = true;
         
         client http_client(*ctx, http_opts);
         
-        // 1. 先进行 HTTP 认证（示例）
+        // 1. HTTP authentication()
         std::println("  Step 1: HTTP authentication");
         auto auth_result = co_await http_client.get("https://example.com/auth");
         if (auth_result) {
             std::println("  ✓ Authenticated");
         }
         
-        // 2. 发送 WebSocket 升级请求
+        // 2. WebSocket request
         std::println("  Step 2: Send WebSocket upgrade request");
         
         auto sec_key = generate_sec_key();
@@ -86,12 +86,12 @@ auto demo_websocket_upgrade() -> task<void> {
         if (upgrade_result && upgrade_result->status_code() == 101) {
             std::println("  ✓ Upgrade response received (101)");
             
-            // 3. 验证升级响应
+            // 3. verifyresponse
             http::response_parser resp_parser;
-            // 将 response 转换为 response_parser 进行验证
-            // （实际使用中，可以直接在 send 中处理）
+            // Response response_parser verify
+            // (real, send )
             
-            // 4. 释放底层连接并转交给 WebSocket
+            // 4. WebSocket
             if (auto sock = http_client.release_connection()) {
                 std::println("  ✓ Connection released from HTTP client");
                 
@@ -100,7 +100,7 @@ auto demo_websocket_upgrade() -> task<void> {
                 
                 std::println("  ✓ Connection attached to WebSocket");
                 
-                // 现在可以使用 WebSocket 连接
+                // WebSocket
                 co_await ws_conn.async_send_text("Hello from upgraded connection!");
                 std::println("  Sent: Hello from upgraded connection!");
                 
@@ -133,7 +133,7 @@ auto demo_websocket_upgrade() -> task<void> {
 }
 
 // =============================================================================
-// 实际使用场景示例
+// Implementation note.
 // =============================================================================
 
 auto practical_example() -> task<void> {
@@ -141,9 +141,9 @@ auto practical_example() -> task<void> {
     
     auto ctx = make_io_context();
     
-    // 场景：需要先通过 HTTP 获取认证 token，然后建立 WebSocket 连接
+    // HTTP authentication token, WebSocket
     
-    // 1. HTTP 认证获取 token
+    // 1. HTTP authentication token
     std::println("Step 1: Get authentication token via HTTP");
     {
         client http_client(*ctx);
@@ -155,18 +155,18 @@ auto practical_example() -> task<void> {
         auto result = co_await http_client.send(auth_req);
         if (result) {
             std::println("✓ Got auth token (simulated)");
-            // 实际应用中，从响应中提取 token
+            // Real, response token
             // std::string token = extract_token(result->body());
         }
     }
     
-    // 2. 使用 token 建立 WebSocket 连接
+    // 2. token WebSocket
     std::println("\nStep 2: Connect to WebSocket with token");
     {
         connection ws_conn(*ctx);
         
-        // 注意：实际的 token 认证通常在 WebSocket 握手的自定义头中
-        // 或者在连接后的第一条消息中发送
+        // Note: real token authenticationusually WebSocket
+        // Implementation note.
         
         connect_options opts;
         opts.origin = "https://api.example.com";
@@ -177,17 +177,17 @@ auto practical_example() -> task<void> {
         if (result) {
             std::println("✓ WebSocket connected");
             
-            // 发送认证消息
+            // Authentication
             co_await ws_conn.async_send_text(R"({"type":"auth","token":"xxx"})");
             std::println("✓ Auth message sent");
             
-            // 接收认证确认
+            // Authentication
             auto msg = co_await ws_conn.async_recv();
             if (msg) {
                 std::println("✓ Auth confirmed: {}", msg->as_string());
             }
             
-            // 正常通信
+            // Implementation note.
             co_await ws_conn.async_send_text(R"({"type":"message","data":"Hello"})");
             
             co_await ws_conn.async_close();
@@ -199,7 +199,7 @@ auto practical_example() -> task<void> {
 }
 
 // =============================================================================
-// 主函数
+// Main function
 // =============================================================================
 
 auto main() -> int {

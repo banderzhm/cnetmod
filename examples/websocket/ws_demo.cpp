@@ -1,7 +1,7 @@
 /// cnetmod example — WebSocket Server + Client
-/// 演示 ws::connection + exec::async_scope 结构化并发
-/// 服务端 accept 后与客户端进行多轮消息交换
-/// async_scope.spawn() 管理子任务，scope.on_empty() 等待全部完成
+/// Demonstrates ws::connection + exec::async_scope concurrent
+/// Server accept Client
+/// Async_scope.spawn() task, scope.on_empty() wait forcomplete
 
 #include <cnetmod/config.hpp>
 #include <new>
@@ -22,14 +22,14 @@ namespace ws = cnetmod::ws;
 constexpr std::uint16_t PORT = 18081;
 
 // =============================================================================
-// WebSocket 服务端：处理单个连接
+// WebSocket Server: handle one connection
 // =============================================================================
 
 auto ws_session(cn::io_context& ctx, cn::socket client_sock,
                 std::atomic<int>& done) -> cn::task<void> {
     ws::connection conn(ctx);
 
-    // WebSocket 握手
+    // WebSocket
     auto r = co_await conn.async_accept(std::move(client_sock));
     if (!r) {
         std::println(stderr, "  [WS Server] handshake failed: {}",
@@ -38,7 +38,7 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
     }
     std::println("  [WS Server] Client connected (WebSocket handshake OK)");
 
-    // Echo 循环：收到消息后回传（10秒超时）
+    // Echo : echo back(10)
     for (int i = 0; i < 3; ++i) {
         cn::cancel_token recv_token;
         conn.set_cancel_token(&recv_token);
@@ -61,7 +61,7 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
             msg->payload.size());
         std::println("  [WS Server] recv: {}", text);
 
-        // 回传 echo
+        // Echo back echo
         auto echo = std::format("[echo] {}", text);
         auto sr = co_await conn.async_send_text(echo);
         if (!sr) break;
@@ -73,7 +73,7 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
 }
 
 // =============================================================================
-// WebSocket 服务端：accept（处理 1 个连接后退出）
+// WebSocket Server: accept( 1 )
 // =============================================================================
 
 auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
@@ -92,7 +92,7 @@ auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
         co_return;
     }
 
-    // 用 async_scope.spawn 管理 session 子任务生命周期
+    // Async_scope.spawn session tasklifetime
     cn::io_scheduler sch(ctx);
     scope.spawn(
         stdexec::starts_on(sch,
@@ -100,13 +100,13 @@ auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
 }
 
 // =============================================================================
-// WebSocket 客户端
+// WebSocket Client
 // =============================================================================
 
 auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
                std::atomic<int>& done) -> cn::task<void>
 {
-    // 等待服务端就绪
+    // Wait forServer
     while (!server_ready.load()) {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{1});
     }
@@ -126,7 +126,7 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
     }
     std::println("  [WS Client] Connected to {}", url);
 
-    // 发送 3 条消息
+    // Implementation note: 3 .
     for (int i = 1; i <= 3; ++i) {
         auto text = std::format("Hello #{} from cnetmod", i);
         auto sr = co_await conn.async_send_text(text);
@@ -154,7 +154,7 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
 }
 
 // =============================================================================
-// 主协程：使用 async_scope 编排全部任务
+// Main coroutine: async_scope task
 // =============================================================================
 
 auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
@@ -166,14 +166,14 @@ auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // exec::async_scope — 结构化并发
-    // server_task, session_task, client_task 三个子任务全部由 scope 管理
+    // Exec::async_scope - concurrent
+    // Server_task, session_task, client_task task scope
     exec::async_scope scope;
     cn::io_scheduler sch(ctx);
     std::atomic<bool> server_ready{false};
     std::atomic<int>  done{0}; // session + client = 2
 
-    // scope.spawn + starts_on + as_sender：协程 → sender → scope 生命周期管理
+    // Scope.spawn + starts_on + as_sender: -> sender -> scope lifetime
     scope.spawn(
         stdexec::starts_on(sch,
             cn::as_sender(ws_server(ctx, acc, scope, done, server_ready))));
@@ -182,7 +182,7 @@ auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
         stdexec::starts_on(sch,
             cn::as_sender(ws_client(ctx, server_ready, done))));
 
-    // 等待 session + client 完成 (server 本身只 accept 后就结束)
+    // Wait for session + client complete (server accept )
     while (done.load() < 2) {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
     }

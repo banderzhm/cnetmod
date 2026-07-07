@@ -17,12 +17,12 @@ cnetmod 使用分层架构，关注点清晰分离：
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    应用层                                 │
-│              (HTTP 服务器、MQTT 代理等)                   │
+│              (HTTP 服务器、MQTT 代理、CoAP 网关等)         │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   协议层                                  │
-│ HTTP │ WebSocket │ MQTT │ MySQL │ Redis │ Raft │ TCP/UDP │
+│ HTTP │ WebSocket │ MQTT │ CoAP │ MySQL │ Redis │ Raft │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -63,7 +63,7 @@ cnetmod.coro          (协程原语: task, spawn, sync)
     ↓
 cnetmod.executor      (调度: server_context, stdexec bridge)
     ↓
-cnetmod.protocol.*    (协议: tcp, udp, http, websocket, mqtt, mysql, redis, raft)
+cnetmod.protocol.*    (协议: tcp, udp, http, websocket, mqtt, coap, mysql, redis, raft)
     ↓
 cnetmod.protocol.http.middleware.*  (HTTP 中间件组件)
 ```

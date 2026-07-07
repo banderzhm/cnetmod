@@ -21,6 +21,7 @@ module;
 
 module cnetmod.core.socket;
 
+import std;
 import cnetmod.core.error;
 
 namespace cnetmod {
@@ -224,6 +225,110 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
+    return {};
+}
+
+auto socket::join_multicast_group(const ip_address& group,
+                                  std::optional<ip_address> local_address,
+                                  unsigned int interface_index)
+    -> std::expected<void, std::error_code>
+{
+    if (group.is_v4()) {
+        ::ip_mreq mreq{};
+        mreq.imr_multiaddr = group.to_v4().native();
+        mreq.imr_interface = local_address && local_address->is_v4()
+            ? local_address->to_v4().native()
+            : ipv4_address::any().native();
+        if (::setsockopt(handle_, IPPROTO_IP, IP_ADD_MEMBERSHIP,
+                         reinterpret_cast<const char*>(&mreq), sizeof(mreq)) != 0) {
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+        }
+        return {};
+    }
+
+    ::ipv6_mreq mreq6{};
+    mreq6.ipv6mr_multiaddr = group.to_v6().native();
+    mreq6.ipv6mr_interface = interface_index;
+    if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+                     reinterpret_cast<const char*>(&mreq6), sizeof(mreq6)) != 0) {
+        return std::unexpected(make_error_code(from_native_error(last_error())));
+    }
+    return {};
+}
+
+auto socket::leave_multicast_group(const ip_address& group,
+                                   std::optional<ip_address> local_address,
+                                   unsigned int interface_index)
+    -> std::expected<void, std::error_code>
+{
+    if (group.is_v4()) {
+        ::ip_mreq mreq{};
+        mreq.imr_multiaddr = group.to_v4().native();
+        mreq.imr_interface = local_address && local_address->is_v4()
+            ? local_address->to_v4().native()
+            : ipv4_address::any().native();
+        if (::setsockopt(handle_, IPPROTO_IP, IP_DROP_MEMBERSHIP,
+                         reinterpret_cast<const char*>(&mreq), sizeof(mreq)) != 0) {
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+        }
+        return {};
+    }
+
+    ::ipv6_mreq mreq6{};
+    mreq6.ipv6mr_multiaddr = group.to_v6().native();
+    mreq6.ipv6mr_interface = interface_index;
+    if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
+                     reinterpret_cast<const char*>(&mreq6), sizeof(mreq6)) != 0) {
+        return std::unexpected(make_error_code(from_native_error(last_error())));
+    }
+    return {};
+}
+
+auto socket::set_multicast_hops(address_family family, int hops)
+    -> std::expected<void, std::error_code>
+{
+    if (family == address_family::ipv4) {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        DWORD value = static_cast<DWORD>(std::max(hops, 0));
+#else
+        unsigned char value = static_cast<unsigned char>(std::clamp(hops, 0, 255));
+#endif
+        if (::setsockopt(handle_, IPPROTO_IP, IP_MULTICAST_TTL,
+                         reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+        }
+        return {};
+    }
+
+    int value = std::max(hops, 0);
+    if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_MULTICAST_HOPS,
+                     reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+        return std::unexpected(make_error_code(from_native_error(last_error())));
+    }
+    return {};
+}
+
+auto socket::set_multicast_loopback(address_family family, bool enabled)
+    -> std::expected<void, std::error_code>
+{
+    if (family == address_family::ipv4) {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        DWORD value = enabled ? 1u : 0u;
+#else
+        unsigned char value = enabled ? 1u : 0u;
+#endif
+        if (::setsockopt(handle_, IPPROTO_IP, IP_MULTICAST_LOOP,
+                         reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+        }
+        return {};
+    }
+
+    int value = enabled ? 1 : 0;
+    if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
+                     reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+        return std::unexpected(make_error_code(from_native_error(last_error())));
+    }
     return {};
 }
 

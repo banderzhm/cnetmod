@@ -1,8 +1,8 @@
 /// cnetmod example — HTTP Server + Client
-/// 演示 http::request/response 解析构建 + 异步 TCP I/O
-/// 使用 exec::async_scope + io_scheduler 进行结构化并发
-/// 服务端监听端口，返回 "Hello from cnetmod!"
-/// 客户端连接后发送 GET 请求，打印响应
+/// Demonstrates http::request/response parsebuild + async TCP I/O
+/// Exec::async_scope + io_scheduler concurrent
+/// Server, return "Hello from cnetmod!"
+/// Client GET request, response
 
 #include <cnetmod/config.hpp>
 #include <new>
@@ -23,13 +23,13 @@ namespace http = cnetmod::http;
 constexpr std::uint16_t PORT = 18080;
 
 // =============================================================================
-// HTTP 服务端：处理单个连接
+// HTTP Server: handle one connection
 // =============================================================================
 
 auto handle_http_client(cn::io_context& ctx, cn::socket client)
     -> cn::task<void>
 {
-    // 读取请求
+    // Readrequest
     http::request_parser parser;
     std::array<std::byte, 4096> buf{};
 
@@ -53,7 +53,7 @@ auto handle_http_client(cn::io_context& ctx, cn::socket client)
                  parser.method(), parser.uri(),
                  parser.get_header("Host"));
 
-    // 构建响应
+    // Buildresponse
     http::response resp(http::status::ok);
     resp.set_header("Server", "cnetmod/0.1");
     resp.set_header("Content-Type", "text/plain; charset=utf-8");
@@ -70,7 +70,7 @@ auto handle_http_client(cn::io_context& ctx, cn::socket client)
 }
 
 // =============================================================================
-// HTTP 服务端：accept 循环（处理 1 个请求后停止）
+// HTTP Server: accept loop( 1 request)
 // =============================================================================
 
 auto http_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
@@ -94,19 +94,19 @@ auto http_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
 }
 
 // =============================================================================
-// HTTP 客户端
+// HTTP Client
 // =============================================================================
 
 auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
                  std::atomic<int>& done)
     -> cn::task<void>
 {
-    // 等待服务端就绪
+    // Wait forServer
     while (!server_ready.load()) {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{1});
     }
 
-    // TCP 连接
+    // Implementation note: TCP.
     auto sock_r = cn::socket::create(cn::address_family::ipv4,
                                      cn::socket_type::stream);
     if (!sock_r) { done.fetch_add(1); co_return; }
@@ -123,7 +123,7 @@ auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
         co_return;
     }
 
-    // 构建并发送 HTTP 请求
+    // Buildconcurrent HTTP request
     http::request req(http::http_method::GET, "/hello");
     req.set_header("Host", std::format("127.0.0.1:{}", PORT));
     req.set_header("User-Agent", "cnetmod-example/0.1");
@@ -136,7 +136,7 @@ auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
         cn::const_buffer{req_data.data(), req_data.size()});
     if (!wr) { sock.close(); done.fetch_add(1); co_return; }
 
-    // 读取并解析响应
+    // Readparseresponse
     http::response_parser resp_parser;
     std::array<std::byte, 4096> buf{};
 
@@ -164,7 +164,7 @@ auto http_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
 }
 
 // =============================================================================
-// 主协程：编排 server + client
+// Main coroutine: server + client
 // =============================================================================
 
 auto run_http_demo(cn::io_context& ctx) -> cn::task<void> {
@@ -176,14 +176,14 @@ auto run_http_demo(cn::io_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // exec::async_scope — 结构化并发：管理 server/client 生命周期
+    // Exec::async_scope - concurrent: server/client lifetime
     exec::async_scope scope;
     cn::io_scheduler sch(ctx);
 
     std::atomic<bool> server_ready{false};
     std::atomic<int>  done{0};
 
-    // 通过 async_scope.spawn + starts_on + as_sender 桥接协程到 stdexec
+    // Async_scope.spawn + starts_on + as_sender bridge stdexec
     scope.spawn(
         stdexec::starts_on(sch,
             cn::as_sender(http_server(ctx, acc, server_ready, done))));
@@ -192,7 +192,7 @@ auto run_http_demo(cn::io_context& ctx) -> cn::task<void> {
         stdexec::starts_on(sch,
             cn::as_sender(http_client(ctx, server_ready, done))));
 
-    // 等待 server + client 都完成
+    // Wait for server + client complete
     while (done.load() < 2) {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{10});
     }
