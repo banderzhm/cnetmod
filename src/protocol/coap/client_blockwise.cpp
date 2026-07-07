@@ -10,6 +10,8 @@ import std;
 import :types;
 import :codec;
 import :client;
+import cnetmod.core.address;
+import cnetmod.coro.task;
 
 namespace cnetmod::coap {
 

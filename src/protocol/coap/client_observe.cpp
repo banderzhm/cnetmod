@@ -13,6 +13,7 @@ import :client;
 import cnetmod.core.address;
 import cnetmod.core.buffer;
 import cnetmod.coro.cancel;
+import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 

@@ -9,6 +9,8 @@ import :server_router;
 import std;
 import :types;
 import :server;
+import cnetmod.core.address;
+import cnetmod.coro.task;
 
 namespace cnetmod::coap {
 

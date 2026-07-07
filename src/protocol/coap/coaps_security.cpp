@@ -9,6 +9,7 @@ module cnetmod.protocol.coap;
 import :coaps_security;
 
 import std;
+import cnetmod.core.address;
 
 namespace cnetmod::coap {
 

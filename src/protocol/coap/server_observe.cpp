@@ -10,7 +10,9 @@ import std;
 import :types;
 import :codec;
 import :server;
+import cnetmod.core.address;
 import cnetmod.core.buffer;
+import cnetmod.coro.task;
 import cnetmod.executor.async_op;
 
 namespace cnetmod::coap {

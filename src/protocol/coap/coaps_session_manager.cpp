@@ -10,7 +10,9 @@ import :coaps_session_manager;
 
 import std;
 import :coaps_session;
+import cnetmod.core.address;
 import cnetmod.coro.spawn;
+import cnetmod.coro.task;
 
 namespace cnetmod::coap {
 
