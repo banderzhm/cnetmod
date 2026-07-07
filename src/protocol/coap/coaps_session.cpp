@@ -14,6 +14,7 @@ import cnetmod.core.address;
 import cnetmod.core.buffer;
 import cnetmod.core.dtls;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 

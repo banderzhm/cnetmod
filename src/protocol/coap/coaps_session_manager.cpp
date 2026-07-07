@@ -13,6 +13,7 @@ import :coaps_session;
 import cnetmod.core.address;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 

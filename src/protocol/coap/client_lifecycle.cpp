@@ -13,6 +13,7 @@ import :client;
 import cnetmod.core.address;
 import cnetmod.core.dns;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 import cnetmod.protocol.udp;
 
 namespace cnetmod::coap {

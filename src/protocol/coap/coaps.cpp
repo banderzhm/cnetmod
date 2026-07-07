@@ -17,6 +17,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.dtls;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
+import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 

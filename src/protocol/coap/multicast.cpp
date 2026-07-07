@@ -15,6 +15,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
+import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 
