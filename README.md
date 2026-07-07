@@ -367,6 +367,23 @@ if (remote) {
 }
 ```
 
+**CoAPS over DTLS**:
+```cpp
+import cnetmod.core.ssl;
+import cnetmod.protocol.coap;
+
+auto client_ssl = ssl_context::dtls_client();
+coap::secure_client_config cfg;
+cfg.security = coap::coaps_security_config::verified_peer("device.example");
+
+coap::secure_client client(ctx, *client_ssl, cfg);
+auto response = co_await client.get(remote, "/secure");
+```
+
+DTLS requires OpenSSL support (`CNETMOD_HAS_SSL`). Full CoAPS and raw DTLS
+examples are documented in [CoAP](docs/en/protocols/coap.md) and under
+`examples/coap` / `examples/core`.
+
 **Timer**:
 ```cpp
 task<void> delayed_task(io_context& ctx) {

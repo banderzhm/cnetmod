@@ -10,6 +10,8 @@ import :coaps_security;
 
 import std;
 import cnetmod.core.address;
+import cnetmod.core.dtls;
+import cnetmod.core.ssl;
 
 namespace cnetmod::coap {
 
