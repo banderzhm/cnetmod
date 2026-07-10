@@ -21,6 +21,7 @@ export struct post_node {
     std::coroutine_handle<> coroutine{};       // Mode 1
     void (*callback)(void*) = nullptr;         // Mode 2
     void* callback_arg = nullptr;
+    void (*callback_cleanup)(void*) = nullptr; // Releases callback_arg if never dispatched
     bool heap_owned = false;                   // true = delete after drain
 
     void dispatch() noexcept {
@@ -39,7 +40,7 @@ export struct post_node {
 /// Encapsulates platform-specific I/O multiplexing mechanisms (IOCP/io_uring/epoll/kqueue)
 export class io_context {
 public:
-    virtual ~io_context() = default;
+    virtual ~io_context() { discard_post_queue(); }
 
     // Non-copyable or movable (base class)
     io_context(const io_context&) = delete;
@@ -77,10 +78,11 @@ public:
     }
 
     /// Post a callback to event loop for execution (thread-safe, lock-free, zero coroutine overhead)
-    void post(void (*fn)(void*), void* arg) {
+    void post(void (*fn)(void*), void* arg, void (*cleanup)(void*) = nullptr) {
         auto* node = new post_node{};
         node->callback = fn;
         node->callback_arg = arg;
+        node->callback_cleanup = cleanup;
         node->heap_owned = true;
         push_node(node);
         wake();
@@ -126,6 +128,21 @@ protected:
             ++count;
         }
         return count;
+    }
+
+    /// Releases queued, heap-owned callbacks during context destruction.
+    /// Coroutines and raw nodes remain caller-owned and are deliberately not resumed/destroyed.
+    void discard_post_queue() noexcept {
+        auto* node = post_head_.exchange(nullptr, std::memory_order_acq_rel);
+        while (node) {
+            auto* next = node->next.load(std::memory_order_relaxed);
+            if (node->heap_owned) {
+                if (node->callback_cleanup)
+                    node->callback_cleanup(node->callback_arg);
+                delete node;
+            }
+            node = next;
+        }
     }
 
 private:

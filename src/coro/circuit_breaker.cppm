@@ -65,26 +65,15 @@ namespace detail {
 
 class cb_error_category_impl : public std::error_category {
 public:
-    auto name() const noexcept -> const char* override { return "circuit_breaker"; }
-    auto message(int ev) const -> std::string override {
-        switch (static_cast<circuit_breaker_errc>(ev)) {
-            case circuit_breaker_errc::success:      return "success";
-            case circuit_breaker_errc::circuit_open:  return "circuit breaker is open";
-            default:                                  return "unknown circuit breaker error";
-        }
-    }
+    auto name() const noexcept -> const char* override;
+    auto message(int ev) const -> std::string override;
 };
 
-inline auto cb_category_instance() -> const std::error_category& {
-    static const cb_error_category_impl instance;
-    return instance;
-}
+auto cb_category_instance() -> const std::error_category&;
 
 } // namespace detail
 
-export inline auto make_error_code(circuit_breaker_errc e) noexcept -> std::error_code {
-    return {static_cast<int>(e), detail::cb_category_instance()};
-}
+export auto make_error_code(circuit_breaker_errc e) noexcept -> std::error_code;
 
 // =============================================================================
 // circuit_breaker — Three-state circuit breaker
@@ -92,8 +81,7 @@ export inline auto make_error_code(circuit_breaker_errc e) noexcept -> std::erro
 
 export class circuit_breaker {
 public:
-    explicit circuit_breaker(circuit_breaker_options opts = {}) noexcept
-        : opts_(opts) {}
+    explicit circuit_breaker(circuit_breaker_options opts = {}) noexcept;
 
     circuit_breaker(const circuit_breaker&) = delete;
     auto operator=(const circuit_breaker&) -> circuit_breaker& = delete;
@@ -146,109 +134,32 @@ public:
     }
 
     /// Query current state
-    [[nodiscard]] auto state() const noexcept -> circuit_breaker_state {
-        std::lock_guard lock(mtx_);
-        return maybe_transition_state();
-    }
+    [[nodiscard]] auto state() const noexcept -> circuit_breaker_state;
 
     /// Get failure count
-    [[nodiscard]] auto failure_count() const noexcept -> std::uint32_t {
-        std::lock_guard lock(mtx_);
-        return failure_count_;
-    }
+    [[nodiscard]] auto failure_count() const noexcept -> std::uint32_t;
 
     /// Get success count (in half_open state)
-    [[nodiscard]] auto success_count() const noexcept -> std::uint32_t {
-        std::lock_guard lock(mtx_);
-        return success_count_;
-    }
+    [[nodiscard]] auto success_count() const noexcept -> std::uint32_t;
 
     /// Manually reset to closed state
-    void reset() noexcept {
-        std::lock_guard lock(mtx_);
-        state_ = circuit_breaker_state::closed;
-        failure_count_ = 0;
-        success_count_ = 0;
-    }
+    void reset() noexcept;
 
     /// Manually trip the circuit breaker to open state
-    void trip() noexcept {
-        std::lock_guard lock(mtx_);
-        state_ = circuit_breaker_state::open;
-        open_time_ = std::chrono::steady_clock::now();
-    }
+    void trip() noexcept;
 
 private:
     enum class execute_action { allow, reject };
 
-    auto pre_execute() noexcept -> execute_action {
-        std::lock_guard lock(mtx_);
-        auto effective = maybe_transition_state();
+    auto pre_execute() noexcept -> execute_action;
 
-        switch (effective) {
-            case circuit_breaker_state::closed:
-                return execute_action::allow;
+    void on_success() noexcept;
 
-            case circuit_breaker_state::open:
-                return execute_action::reject;
-
-            case circuit_breaker_state::half_open:
-                // Allow probe request
-                return execute_action::allow;
-        }
-        return execute_action::reject;
-    }
-
-    void on_success() noexcept {
-        std::lock_guard lock(mtx_);
-        auto effective = maybe_transition_state();
-
-        if (effective == circuit_breaker_state::half_open) {
-            ++success_count_;
-            if (success_count_ >= opts_.success_threshold) {
-                // Recovery confirmed — close circuit
-                state_ = circuit_breaker_state::closed;
-                failure_count_ = 0;
-                success_count_ = 0;
-            }
-        } else if (effective == circuit_breaker_state::closed) {
-            // Reset failure count on success
-            failure_count_ = 0;
-        }
-    }
-
-    void on_failure() noexcept {
-        std::lock_guard lock(mtx_);
-        auto effective = maybe_transition_state();
-
-        if (effective == circuit_breaker_state::half_open) {
-            // Probe failed — back to open
-            state_ = circuit_breaker_state::open;
-            open_time_ = std::chrono::steady_clock::now();
-            success_count_ = 0;
-        } else if (effective == circuit_breaker_state::closed) {
-            ++failure_count_;
-            if (failure_count_ >= opts_.failure_threshold) {
-                // Threshold exceeded — open circuit
-                state_ = circuit_breaker_state::open;
-                open_time_ = std::chrono::steady_clock::now();
-            }
-        }
-    }
+    void on_failure() noexcept;
 
     /// Check if open → half_open transition should occur (based on timeout)
     /// Must be called with mtx_ held
-    auto maybe_transition_state() const noexcept -> circuit_breaker_state {
-        if (state_ == circuit_breaker_state::open) {
-            auto elapsed = std::chrono::steady_clock::now() - open_time_;
-            if (elapsed >= opts_.timeout) {
-                // Transition to half_open
-                state_ = circuit_breaker_state::half_open;
-                success_count_ = 0;
-            }
-        }
-        return state_;
-    }
+    auto maybe_transition_state() const noexcept -> circuit_breaker_state;
 
     circuit_breaker_options opts_;
     mutable std::mutex mtx_;
@@ -259,6 +170,7 @@ private:
 };
 
 } // namespace cnetmod
+
 
 template <>
 struct std::is_error_code_enum<cnetmod::circuit_breaker_errc> : std::true_type {};

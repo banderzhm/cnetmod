@@ -97,15 +97,17 @@ auto run_http_client(cn::io_context& ctx,
     opts.version_pref = cfg.version;
     opts.follow_redirects = false;
     opts.enable_cookies = false;
-    opts.keep_alive = true;
+    const bool keep_alive = env_u32("CNETMOD_BENCH_HTTP_SHORT_CONNECTIONS", 0) == 0;
+    opts.keep_alive = keep_alive;
     opts.verify_peer = false;
 
     http::client client(ctx, std::move(opts));
     std::size_t completed = 0;
 
     for (std::size_t i = 0; i < requests; ++i) {
-        auto resp = co_await client.get(i == 0 ? std::string_view{url}
-                                               : std::string_view{"/hello"});
+        auto resp = co_await client.get((i == 0 || !keep_alive)
+                                            ? std::string_view{url}
+                                            : std::string_view{"/hello"});
         if (!resp || resp->status_code() != http::status::ok ||
             resp->body() != "Hello, World!") {
             break;
@@ -354,6 +356,7 @@ int main(int argc, char** argv)
     logger::info("  Build     : Debug (results not representative!)");
 #endif
     logger::info("  Handler   : GET /hello -> 'Hello, World!' (13 bytes)");
+    logger::info("  Keep-alive: {}", env_u32("CNETMOD_BENCH_HTTP_SHORT_CONNECTIONS", 0) == 0 ? "on" : "off");
     logger::info("  Matrix    : HTTP/1.1, HTTP/2, HTTPS/1.1, HTTPS/2");
     logger::info("  Mode      : single-loop or multicore; env CNETMOD_BENCH_*_WORKERS overrides");
     logger::info("================================================================");

@@ -28,31 +28,14 @@ public:
     /// Request cancellation. Thread-safe, can be called from any thread.
     /// If there's a pending operation, will cancel it via platform-specific mechanism.
     /// Safe to call multiple times (only first call takes effect).
-    void cancel() noexcept {
-        if (cancelled_.exchange(true, std::memory_order_acq_rel))
-            return;  // Already cancelled
-        if (pending_.load(std::memory_order_acquire) && cancel_fn_)
-            cancel_fn_(*this);
-    }
+    void cancel() noexcept;
 
     /// Whether cancellation has been requested
-    [[nodiscard]] auto is_cancelled() const noexcept -> bool {
-        return cancelled_.load(std::memory_order_acquire);
-    }
+    [[nodiscard]] auto is_cancelled() const noexcept -> bool;
 
     /// Reset token (reuse for next operation)
     /// Prerequisite: no pending operation currently
-    void reset() noexcept {
-        cancelled_.store(false, std::memory_order_relaxed);
-        pending_.store(false, std::memory_order_relaxed);
-        cancel_fn_ = nullptr;
-        ctx_ = nullptr;
-        io_handle_ = nullptr;
-        overlapped_ = nullptr;
-        fd_ = -1;
-        filter_ = 0;
-        coroutine_ = {};
-    }
+    void reset() noexcept;
 
     // =================================================================
     // Following fields are set internally by platform awaiter, users should not manipulate directly

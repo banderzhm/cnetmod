@@ -64,55 +64,16 @@ public:
 
     /// Install crash handler
     /// @param dump_dir Dump file output directory (auto-created)
-    static void install(std::string dump_dir = "crash") {
-        state().dump_dir = std::move(dump_dir);
-
-        // Ensure directory exists
-        std::filesystem::create_directories(state().dump_dir);
-
-#ifdef CNETMOD_PLATFORM_WINDOWS
-        SetUnhandledExceptionFilter(win_exception_handler);
-#else
-        // Allow core dump generation
-        enable_core_dump();
-
-        // Register signal handlers
-        struct sigaction sa{};
-        sa.sa_sigaction = unix_signal_handler;
-        sa.sa_flags     = SA_SIGINFO | SA_RESETHAND; // One-shot, prevent recursion
-        sigemptyset(&sa.sa_mask);
-
-        sigaction(SIGSEGV, &sa, nullptr);
-        sigaction(SIGABRT, &sa, nullptr);
-        sigaction(SIGFPE,  &sa, nullptr);
-        sigaction(SIGILL,  &sa, nullptr);
-        sigaction(SIGBUS,  &sa, nullptr);
-#endif
-        state().installed = true;
-    }
+    static void install(std::string dump_dir = "crash");
 
     /// Set crash callback (called after dump completes, before process exits)
-    static void set_callback(callback_fn fn) {
-        state().callback = std::move(fn);
-    }
+    static void set_callback(callback_fn fn);
 
     /// Set application name (for report header)
-    static void set_app_name(std::string name) {
-        state().app_name = std::move(name);
-    }
+    static void set_app_name(std::string name);
 
     /// Manually trigger crash report (for fatal error scenarios)
-    static void trigger_crash_report(std::string_view reason) {
-        crash_info info;
-        info.signal_name = std::string(reason);
-        info.timestamp   = make_timestamp();
-        info.stack_trace = capture_stack_trace();
-
-        auto path = write_text_report(info);
-        info.dump_file_path = path;
-
-        invoke_callback(info);
-    }
+    static void trigger_crash_report(std::string_view reason);
 
 private:
     struct internal_state {

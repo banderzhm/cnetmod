@@ -5,8 +5,6 @@ module;
 export module cnetmod.coro.awaitable;
 
 import std;
-import cnetmod.core.error;
-import cnetmod.core.buffer;
 
 namespace cnetmod {
 
@@ -25,33 +23,17 @@ public:
 
     io_awaitable() noexcept = default;
 
-    auto await_ready() const noexcept -> bool { return ready_; }
+    auto await_ready() const noexcept -> bool;
 
-    void await_suspend(std::coroutine_handle<> caller) noexcept {
-        caller_ = caller;
-    }
+    void await_suspend(std::coroutine_handle<> caller) noexcept;
 
-    auto await_resume() noexcept -> result_type {
-        if (error_)
-            return std::unexpected(error_);
-        return bytes_transferred_;
-    }
+    auto await_resume() noexcept -> result_type;
 
     /// Called by I/O completion notification, resumes coroutine
-    void complete(std::error_code ec, std::size_t bytes) noexcept {
-        error_ = ec;
-        bytes_transferred_ = bytes;
-        ready_ = true;
-        if (caller_)
-            caller_.resume();
-    }
+    void complete(std::error_code ec, std::size_t bytes) noexcept;
 
     /// Set immediate completion (no suspension needed)
-    void set_ready(std::error_code ec, std::size_t bytes) noexcept {
-        error_ = ec;
-        bytes_transferred_ = bytes;
-        ready_ = true;
-    }
+    void set_ready(std::error_code ec, std::size_t bytes) noexcept;
 
 protected:
     std::coroutine_handle<> caller_;
@@ -67,26 +49,14 @@ public:
 
     accept_awaitable() noexcept = default;
 
-    auto await_ready() const noexcept -> bool { return ready_; }
+    auto await_ready() const noexcept -> bool;
 
-    void await_suspend(std::coroutine_handle<> caller) noexcept {
-        caller_ = caller;
-    }
+    void await_suspend(std::coroutine_handle<> caller) noexcept;
 
-    auto await_resume() noexcept -> result_type {
-        if (error_)
-            return std::unexpected(error_);
-        return accepted_fd_;
-    }
+    auto await_resume() noexcept -> result_type;
 
     /// Called by I/O completion notification
-    void complete(std::error_code ec, int fd) noexcept {
-        error_ = ec;
-        accepted_fd_ = fd;
-        ready_ = true;
-        if (caller_)
-            caller_.resume();
-    }
+    void complete(std::error_code ec, int fd) noexcept;
 
 protected:
     std::coroutine_handle<> caller_;
@@ -102,25 +72,14 @@ public:
 
     connect_awaitable() noexcept = default;
 
-    auto await_ready() const noexcept -> bool { return ready_; }
+    auto await_ready() const noexcept -> bool;
 
-    void await_suspend(std::coroutine_handle<> caller) noexcept {
-        caller_ = caller;
-    }
+    void await_suspend(std::coroutine_handle<> caller) noexcept;
 
-    auto await_resume() noexcept -> result_type {
-        if (error_)
-            return std::unexpected(error_);
-        return {};
-    }
+    auto await_resume() noexcept -> result_type;
 
     /// Called by I/O completion notification
-    void complete(std::error_code ec) noexcept {
-        error_ = ec;
-        ready_ = true;
-        if (caller_)
-            caller_.resume();
-    }
+    void complete(std::error_code ec) noexcept;
 
 protected:
     std::coroutine_handle<> caller_;

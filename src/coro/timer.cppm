@@ -21,17 +21,14 @@ namespace cnetmod {
 /// Uses platform-native timers (timerfd / EVFILT_TIMER / IOCP timer / io_uring timeout)
 export class steady_timer {
 public:
-    explicit steady_timer(io_context& ctx) noexcept
-        : ctx_(&ctx) {}
+    explicit steady_timer(io_context& ctx) noexcept;
 
     /// Async wait for specified duration
     auto async_wait(std::chrono::steady_clock::duration duration)
         -> task<std::expected<void, std::error_code>>
-    {
-        co_return co_await async_timer_wait(*ctx_, duration);
-    }
+        ;
 
-    [[nodiscard]] auto context() noexcept -> io_context& { return *ctx_; }
+    [[nodiscard]] auto context() noexcept -> io_context&;
 
 private:
     io_context* ctx_;
@@ -44,27 +41,19 @@ private:
 /// High-precision timer, supports time_point waiting
 export class high_resolution_timer {
 public:
-    explicit high_resolution_timer(io_context& ctx) noexcept
-        : ctx_(&ctx) {}
+    explicit high_resolution_timer(io_context& ctx) noexcept;
 
     /// Async wait until specified time point
     auto async_wait_until(std::chrono::steady_clock::time_point deadline)
         -> task<std::expected<void, std::error_code>>
-    {
-        auto now = std::chrono::steady_clock::now();
-        if (now >= deadline)
-            co_return std::expected<void, std::error_code>{};
-        co_return co_await async_timer_wait(*ctx_, deadline - now);
-    }
+        ;
 
     /// Async wait for specified duration
     auto async_wait(std::chrono::steady_clock::duration duration)
         -> task<std::expected<void, std::error_code>>
-    {
-        co_return co_await async_timer_wait(*ctx_, duration);
-    }
+        ;
 
-    [[nodiscard]] auto context() noexcept -> io_context& { return *ctx_; }
+    [[nodiscard]] auto context() noexcept -> io_context&;
 
 private:
     io_context* ctx_;
@@ -77,25 +66,14 @@ private:
 /// Throwing convenience wrapper over `async_timer_wait()`.
 /// Use `async_timer_wait()` or timer objects when you want explicit
 /// `std::expected`-based error handling.
-export inline auto async_sleep(io_context& ctx,
-                               std::chrono::steady_clock::duration duration)
-    -> task<void>
-{
-    auto r = co_await async_timer_wait(ctx, duration);
-    if (!r)
-        throw std::system_error(r.error());
-}
+export auto async_sleep(io_context& ctx,
+                        std::chrono::steady_clock::duration duration)
+    -> task<void>;
 
 /// Convenience: async_sleep until specified time point
-export inline auto async_sleep_until(io_context& ctx,
-                                     std::chrono::steady_clock::time_point tp)
-    -> task<void>
-{
-    auto now = std::chrono::steady_clock::now();
-    if (now >= tp)
-        co_return;
-    co_await async_sleep(ctx, tp - now);
-}
+export auto async_sleep_until(io_context& ctx,
+                              std::chrono::steady_clock::time_point tp)
+    -> task<void>;
 
 // =============================================================================
 // with_timeout — Add timeout to cancellable async operations
@@ -104,17 +82,11 @@ export inline auto async_sleep_until(io_context& ctx,
 namespace detail {
 
 /// Timer side: cancel operation after timeout
-inline auto timeout_timer_task(io_context& ctx,
-                               std::chrono::steady_clock::duration dur,
-                               cancel_token& timer_token,
-                               cancel_token& op_token)
-    -> task<int>
-{
-    (void)co_await async_timer_wait(ctx, dur, timer_token);
-    if (!timer_token.is_cancelled())
-        op_token.cancel();
-    co_return 0;
-}
+auto timeout_timer_task(io_context& ctx,
+                        std::chrono::steady_clock::duration dur,
+                        cancel_token& timer_token,
+                        cancel_token& op_token)
+    -> task<int>;
 
 /// Operation side: cancel timer after completion
 template<typename T>

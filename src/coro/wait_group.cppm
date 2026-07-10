@@ -37,22 +37,14 @@ export class async_wait_group {
     class spinlock {
         std::atomic_flag flag_{};
     public:
-        void lock() noexcept {
-            if (!flag_.test_and_set(std::memory_order_acquire)) return;
-            do {
-                flag_.wait(true, std::memory_order_relaxed);
-            } while (flag_.test_and_set(std::memory_order_acquire));
-        }
-        void unlock() noexcept {
-            flag_.clear(std::memory_order_release);
-            flag_.notify_one();
-        }
+        void lock() noexcept;
+        void unlock() noexcept;
     };
 
     struct auto_lock {
         spinlock& lk_;
-        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
-        ~auto_lock() { lk_.unlock(); }
+        explicit auto_lock(spinlock& lk) noexcept;
+        ~auto_lock();
         auto_lock(const auto_lock&) = delete;
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
@@ -70,27 +62,10 @@ public:
     auto operator=(const async_wait_group&) -> async_wait_group& = delete;
 
     /// Increase pending task count
-    void add(int n = 1) noexcept {
-        count_.fetch_add(n, std::memory_order_relaxed);
-    }
+    void add(int n = 1) noexcept;
 
     /// Mark one task complete, wakes all wait() waiters when reaching zero
-    void done() noexcept {
-        if (count_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-            // Count reached zero, wake all waiters (steal list, walk outside lock)
-            waiter_node* waiters = nullptr;
-            {
-                auto_lock g(lock_);
-                waiters = head_;
-                head_ = tail_ = nullptr;
-            }
-            for (auto* n = waiters; n;) {
-                auto* nx = n->next;
-                n->handle.resume();
-                n = nx;
-            }
-        }
-    }
+    void done() noexcept;
 
     // =========================================================================
     // wait — Wait for count to reach zero
@@ -100,43 +75,20 @@ public:
         async_wait_group& wg_;
         waiter_node node_;
 
-        explicit wait_awaitable(async_wait_group& wg) noexcept : wg_(wg) {}
+        explicit wait_awaitable(async_wait_group& wg) noexcept;
 
-        auto await_ready() noexcept -> bool {
-            return wg_.count_.load(std::memory_order_acquire) <= 0;
-        }
+        auto await_ready() noexcept -> bool;
 
         auto await_suspend(std::coroutine_handle<> h) noexcept
-            -> std::coroutine_handle<>
-        {
-            node_.handle = h;
-            node_.next = nullptr;
-            auto_lock g(wg_.lock_);
-            // Re-check: may have reached zero between ready() and suspend()
-            if (wg_.count_.load(std::memory_order_acquire) <= 0) {
-                return h;  // auto_lock destructs first, then resume
-            }
-            // Add to wait queue
-            if (!wg_.tail_) {
-                wg_.head_ = wg_.tail_ = &node_;
-            } else {
-                wg_.tail_->next = &node_;
-                wg_.tail_ = &node_;
-            }
-            return std::noop_coroutine();
-        }
+            -> std::coroutine_handle<>;
 
-        void await_resume() noexcept {}
+        void await_resume() noexcept;
     };
 
-    auto wait() noexcept -> wait_awaitable {
-        return wait_awaitable{*this};
-    }
+    auto wait() noexcept -> wait_awaitable;
 
     /// Current remaining count (for monitoring only)
-    [[nodiscard]] auto count() const noexcept -> int {
-        return count_.load(std::memory_order_relaxed);
-    }
+    [[nodiscard]] auto count() const noexcept -> int;
 
 private:
     std::atomic<int> count_{0};

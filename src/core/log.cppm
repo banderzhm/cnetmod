@@ -25,29 +25,9 @@ module;
 export module cnetmod.core.log;
 
 import std;
+export import :config;
 
 export namespace logger {
-
-    // =========================================================================
-    // Log Level
-    // =========================================================================
-    enum class level {
-        trace    = 0,
-        debug    = 1,
-        info     = 2,
-        warn     = 3,
-        error    = 4,
-        critical = 5,
-        off      = 6
-    };
-
-    // =========================================================================
-    // Output Format
-    // =========================================================================
-    enum class output_format {
-        text,   // [timestamp] [level] [thread] [source] message
-        json,   // {"timestamp":"...","level":"...","thread":"...","source":"...","message":"..."}
-    };
 
     // =========================================================================
     // Internal Implementation
@@ -318,9 +298,13 @@ export namespace logger {
         }
 
         inline std::string get_thread_id() {
-            std::ostringstream oss;
-            oss << std::this_thread::get_id();
-            return oss.str();
+            // Keep TLS trivially destructible: MSVC module consumers otherwise
+            // require the internal __tlregdtor helper at link time.
+            thread_local const std::uint64_t cached = [] {
+                return static_cast<std::uint64_t>(
+                    std::hash<std::thread::id>{}(std::this_thread::get_id()));
+            }();
+            return std::to_string(cached);
         }
 
         inline std::string_view extract_filename(std::string_view path) {
@@ -407,10 +391,14 @@ export namespace logger {
             sink_one(ev);
         }
 
-        inline void worker_loop() {
+        inline void worker_loop(std::stop_token stop_token) {
             init_ring_if_needed();
+            std::stop_callback on_stop{stop_token, [] {
+                wake_cv().notify_all();
+            }};
             std::vector<log_event> batch;
             batch.reserve(256);
+            auto last_file_flush = std::chrono::steady_clock::now();
             log_event ev;
 
             while (true) {
@@ -439,11 +427,13 @@ export namespace logger {
 
                 if (batch.empty()) {
                     std::unique_lock<std::mutex> lock(wake_mutex());
-                    wake_cv().wait_for(lock, std::chrono::milliseconds(50), [] {
-                        return worker_stop().load(std::memory_order_acquire) ||
+                    wake_cv().wait_for(lock, std::chrono::milliseconds(50), [&stop_token] {
+                        return stop_token.stop_requested() ||
+                               worker_stop().load(std::memory_order_acquire) ||
                                queued_count().load(std::memory_order_acquire) > 0;
                     });
-                    if (worker_stop().load(std::memory_order_acquire) &&
+                    if ((stop_token.stop_requested() ||
+                         worker_stop().load(std::memory_order_acquire)) &&
                         queued_count().load(std::memory_order_acquire) == 0) {
                         break;
                     }
@@ -457,6 +447,14 @@ export namespace logger {
                     flushed_seq().store(ev_item.seq, std::memory_order_release);
                 }
                 batch.clear();
+
+                // Keep buffered file output durable for low-volume services without
+                // paying an fsync-equivalent cost for every event.
+                if (std::chrono::steady_clock::now() - last_file_flush >= std::chrono::seconds(1)) {
+                    std::lock_guard<std::mutex> lock(output_mutex());
+                    if (file_enabled() && log_file().is_open()) log_file().flush();
+                    last_file_flush = std::chrono::steady_clock::now();
+                }
 
                 flush_cv().notify_all();
             }
@@ -482,8 +480,8 @@ export namespace logger {
             }
 
             worker_stop().store(false, std::memory_order_release);
-            worker_thread() = std::jthread([](std::stop_token) {
-                worker_loop();
+            worker_thread() = std::jthread([](std::stop_token stop_token) {
+                worker_loop(stop_token);
             });
         }
 
@@ -500,12 +498,30 @@ export namespace logger {
             }
         }
 
+        // Registered after logger resources are created, so it runs before their
+        // function-local static destructors.  Normal applications should still
+        // call logger::shutdown() explicitly, especially before DLL unload.
+        inline void install_exit_hook() {
+            static std::once_flag once;
+            std::call_once(once, [] {
+                std::atexit([] {
+                    stop_worker();
+                    std::lock_guard<std::mutex> lock(output_mutex());
+                    if (log_file().is_open()) {
+                        log_file().flush();
+                        log_file().close();
+                    }
+                });
+            });
+        }
+
         inline void enqueue(log_event&& ev) {
             init_ring_if_needed();
             start_worker_if_needed();
 
             auto& q = ring();
             auto pos = q.enqueue_pos.load(std::memory_order_relaxed);
+            unsigned contention = 0;
             for (;;) {
                 auto& slot = q.slots[pos & q.mask];
                 auto seq = slot.seq.load(std::memory_order_acquire);
@@ -524,6 +540,10 @@ export namespace logger {
                         wake_cv().notify_one();
                         return;
                     }
+                    if (++contention >= 16) {
+                        std::this_thread::yield();
+                        contention = 0;
+                    }
                     continue;
                 }
 
@@ -533,6 +553,10 @@ export namespace logger {
                 }
 
                 pos = q.enqueue_pos.load(std::memory_order_relaxed);
+                if (++contention >= 16) {
+                    std::this_thread::yield();
+                    contention = 0;
+                }
             }
         }
 
@@ -598,6 +622,7 @@ export namespace logger {
 
         detail::init_ring_if_needed();
         detail::start_worker_if_needed();
+        detail::install_exit_hook();
     }
 
     inline void init_with_file(const std::string& name,
@@ -624,6 +649,7 @@ export namespace logger {
 
         detail::init_ring_if_needed();
         detail::start_worker_if_needed();
+        detail::install_exit_hook();
     }
 
     // =========================================================================

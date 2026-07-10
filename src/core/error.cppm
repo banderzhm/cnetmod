@@ -68,58 +68,15 @@ export enum class errc {
 /// cnetmod error category
 export class network_error_category : public std::error_category {
 public:
-    [[nodiscard]] auto name() const noexcept -> const char* override {
-        return "cnetmod";
-    }
-
-    [[nodiscard]] auto message(int ev) const -> std::string override {
-        switch (static_cast<errc>(ev)) {
-            case errc::success:                    return "success";
-            case errc::connection_refused:          return "connection refused";
-            case errc::connection_reset:            return "connection reset";
-            case errc::connection_aborted:          return "connection aborted";
-            case errc::connection_timed_out:        return "connection timed out";
-            case errc::not_connected:               return "not connected";
-            case errc::already_connected:           return "already connected";
-            case errc::address_in_use:              return "address in use";
-            case errc::address_not_available:       return "address not available";
-            case errc::address_family_not_supported: return "address family not supported";
-            case errc::operation_aborted:           return "operation aborted";
-            case errc::operation_in_progress:       return "operation in progress";
-            case errc::operation_not_supported:     return "operation not supported";
-            case errc::operation_would_block:       return "operation would block";
-            case errc::too_many_files_open:         return "too many files open";
-            case errc::no_buffer_space:             return "no buffer space";
-            case errc::out_of_memory:               return "out of memory";
-            case errc::network_down:                return "network down";
-            case errc::network_unreachable:         return "network unreachable";
-            case errc::host_unreachable:            return "host unreachable";
-            case errc::host_not_found:              return "host not found";
-            case errc::broken_pipe:                 return "broken pipe";
-            case errc::end_of_file:                 return "end of file";
-            case errc::bad_descriptor:              return "bad descriptor";
-            case errc::permission_denied:           return "permission denied";
-            case errc::invalid_argument:            return "invalid argument";
-            case errc::unknown_error:               return "unknown error";
-            default:                                return "unrecognized error";
-        }
-    }
+    [[nodiscard]] auto name() const noexcept -> const char* override;
+    [[nodiscard]] auto message(int ev) const -> std::string override;
 };
 
 /// Get global network_error_category instance
-export [[nodiscard]] inline auto network_category() noexcept
-    -> const std::error_category&
-{
-    static const network_error_category instance;
-    return instance;
-}
+export [[nodiscard]] auto network_category() noexcept -> const std::error_category&;
 
 /// Create std::error_code
-export [[nodiscard]] inline auto make_error_code(errc e) noexcept
-    -> std::error_code
-{
-    return {static_cast<int>(e), network_category()};
-}
+export [[nodiscard]] auto make_error_code(errc e) noexcept -> std::error_code;
 
 /// Convert platform native error code to cnetmod::errc
 export [[nodiscard]] auto from_native_error(int native_error) noexcept -> errc;

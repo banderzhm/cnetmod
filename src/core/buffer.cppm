@@ -1,7 +1,6 @@
 module;
 
 #include <cnetmod/config.hpp>
-#include <cstring>
 
 export module cnetmod.core.buffer;
 
@@ -72,18 +71,10 @@ export constexpr auto buffer(std::string_view sv) noexcept
 }
 
 /// Create mutable_buffer from vector<byte>
-export inline auto buffer(std::vector<std::byte>& v) noexcept
-    -> mutable_buffer
-{
-    return {v.data(), v.size()};
-}
+export auto buffer(std::vector<std::byte>& v) noexcept -> mutable_buffer;
 
 /// Create const_buffer from vector<byte>
-export inline auto buffer(const std::vector<std::byte>& v) noexcept
-    -> const_buffer
-{
-    return {v.data(), v.size()};
-}
+export auto buffer(const std::vector<std::byte>& v) noexcept -> const_buffer;
 
 /// Create mutable_buffer from array<byte, N>
 export template <std::size_t N>
@@ -100,47 +91,22 @@ constexpr auto buffer(std::array<std::byte, N>& a) noexcept
 /// Growable dynamic buffer for receiving variable-length data
 export class dynamic_buffer {
 public:
-    explicit dynamic_buffer(std::size_t initial_capacity = 4096)
-        : data_(initial_capacity) {}
+    explicit dynamic_buffer(std::size_t initial_capacity = 4096);
 
     /// Get writable region
-    [[nodiscard]] auto prepare(std::size_t n) -> mutable_buffer {
-        if (write_pos_ + n > data_.size() && read_pos_ > 0) {
-            auto readable = write_pos_ - read_pos_;
-            std::memmove(data_.data(), data_.data() + read_pos_, readable);
-            read_pos_ = 0;
-            write_pos_ = readable;
-        }
-        if (write_pos_ + n > data_.size()) {
-            data_.resize(write_pos_ + n);
-        }
-        return {data_.data() + write_pos_, n};
-    }
+    [[nodiscard]] auto prepare(std::size_t n) -> mutable_buffer;
 
     /// Confirm n bytes written
-    void commit(std::size_t n) noexcept {
-        write_pos_ += n;
-    }
+    void commit(std::size_t n) noexcept;
 
     /// Get readable data
-    [[nodiscard]] auto data() const noexcept -> const_buffer {
-        return {data_.data() + read_pos_, write_pos_ - read_pos_};
-    }
+    [[nodiscard]] auto data() const noexcept -> const_buffer;
 
     /// Consume n bytes read
-    void consume(std::size_t n) noexcept {
-        n = std::min(n, write_pos_ - read_pos_);
-        read_pos_ += n;
-        if (read_pos_ == write_pos_) {
-            read_pos_ = 0;
-            write_pos_ = 0;
-        }
-    }
+    void consume(std::size_t n) noexcept;
 
     /// Number of readable bytes
-    [[nodiscard]] auto readable_bytes() const noexcept -> std::size_t {
-        return write_pos_ - read_pos_;
-    }
+    [[nodiscard]] auto readable_bytes() const noexcept -> std::size_t;
 
 private:
     std::vector<std::byte> data_;
@@ -245,95 +211,39 @@ export constexpr auto byte_swap(std::uint64_t v) noexcept -> std::uint64_t { ret
 
 export class buffer_reader {
 public:
-    explicit buffer_reader(const_buffer buf) noexcept
-        : data_(static_cast<const std::byte*>(buf.data))
-        , size_(buf.size) {}
+    explicit buffer_reader(const_buffer buf) noexcept;
 
-    explicit buffer_reader(std::span<const std::byte> s) noexcept
-        : data_(s.data()), size_(s.size()) {}
+    explicit buffer_reader(std::span<const std::byte> s) noexcept;
 
     /// Remaining readable bytes
-    [[nodiscard]] auto remaining() const noexcept -> std::size_t {
-        return size_ - pos_;
-    }
+    [[nodiscard]] auto remaining() const noexcept -> std::size_t;
 
     /// Current offset
-    [[nodiscard]] auto position() const noexcept -> std::size_t {
-        return pos_;
-    }
+    [[nodiscard]] auto position() const noexcept -> std::size_t;
 
     /// Skip n bytes
-    auto skip(std::size_t n) noexcept -> bool {
-        if (remaining() < n) return false;
-        pos_ += n;
-        return true;
-    }
+    auto skip(std::size_t n) noexcept -> bool;
 
     /// Read raw bytes
-    auto read_bytes(void* dst, std::size_t n) noexcept -> bool {
-        if (remaining() < n) return false;
-        std::memcpy(dst, data_ + pos_, n);
-        pos_ += n;
-        return true;
-    }
+    auto read_bytes(void* dst, std::size_t n) noexcept -> bool;
 
     // --- Big-endian (network byte order) ---
 
-    auto read_u8() noexcept -> std::optional<std::uint8_t> {
-        if (remaining() < 1) return std::nullopt;
-        auto v = static_cast<std::uint8_t>(data_[pos_++]);
-        return v;
-    }
+    auto read_u8() noexcept -> std::optional<std::uint8_t>;
 
-    auto read_u16_be() noexcept -> std::optional<std::uint16_t> {
-        if (remaining() < 2) return std::nullopt;
-        std::uint16_t v;
-        std::memcpy(&v, data_ + pos_, 2);
-        pos_ += 2;
-        return ntoh(v);
-    }
+    auto read_u16_be() noexcept -> std::optional<std::uint16_t>;
 
-    auto read_u32_be() noexcept -> std::optional<std::uint32_t> {
-        if (remaining() < 4) return std::nullopt;
-        std::uint32_t v;
-        std::memcpy(&v, data_ + pos_, 4);
-        pos_ += 4;
-        return ntoh(v);
-    }
+    auto read_u32_be() noexcept -> std::optional<std::uint32_t>;
 
-    auto read_u64_be() noexcept -> std::optional<std::uint64_t> {
-        if (remaining() < 8) return std::nullopt;
-        std::uint64_t v;
-        std::memcpy(&v, data_ + pos_, 8);
-        pos_ += 8;
-        return ntoh(v);
-    }
+    auto read_u64_be() noexcept -> std::optional<std::uint64_t>;
 
     // --- Little-endian ---
 
-    auto read_u16_le() noexcept -> std::optional<std::uint16_t> {
-        if (remaining() < 2) return std::nullopt;
-        std::uint16_t v;
-        std::memcpy(&v, data_ + pos_, 2);
-        pos_ += 2;
-        return letoh(v);
-    }
+    auto read_u16_le() noexcept -> std::optional<std::uint16_t>;
 
-    auto read_u32_le() noexcept -> std::optional<std::uint32_t> {
-        if (remaining() < 4) return std::nullopt;
-        std::uint32_t v;
-        std::memcpy(&v, data_ + pos_, 4);
-        pos_ += 4;
-        return letoh(v);
-    }
+    auto read_u32_le() noexcept -> std::optional<std::uint32_t>;
 
-    auto read_u64_le() noexcept -> std::optional<std::uint64_t> {
-        if (remaining() < 8) return std::nullopt;
-        std::uint64_t v;
-        std::memcpy(&v, data_ + pos_, 8);
-        pos_ += 8;
-        return letoh(v);
-    }
+    auto read_u64_le() noexcept -> std::optional<std::uint64_t>;
 
 private:
     const std::byte* data_;
@@ -347,88 +257,36 @@ private:
 
 export class buffer_writer {
 public:
-    explicit buffer_writer(mutable_buffer buf) noexcept
-        : data_(static_cast<std::byte*>(buf.data))
-        , capacity_(buf.size) {}
+    explicit buffer_writer(mutable_buffer buf) noexcept;
 
-    explicit buffer_writer(std::span<std::byte> s) noexcept
-        : data_(s.data()), capacity_(s.size()) {}
+    explicit buffer_writer(std::span<std::byte> s) noexcept;
 
     /// Remaining writable bytes
-    [[nodiscard]] auto remaining() const noexcept -> std::size_t {
-        return capacity_ - pos_;
-    }
+    [[nodiscard]] auto remaining() const noexcept -> std::size_t;
 
     /// Number of bytes written
-    [[nodiscard]] auto written() const noexcept -> std::size_t {
-        return pos_;
-    }
+    [[nodiscard]] auto written() const noexcept -> std::size_t;
 
     /// Write raw bytes
-    auto write_bytes(const void* src, std::size_t n) noexcept -> bool {
-        if (remaining() < n) return false;
-        std::memcpy(data_ + pos_, src, n);
-        pos_ += n;
-        return true;
-    }
+    auto write_bytes(const void* src, std::size_t n) noexcept -> bool;
 
     // --- Big-endian (network byte order) ---
 
-    auto write_u8(std::uint8_t v) noexcept -> bool {
-        if (remaining() < 1) return false;
-        data_[pos_++] = static_cast<std::byte>(v);
-        return true;
-    }
+    auto write_u8(std::uint8_t v) noexcept -> bool;
 
-    auto write_u16_be(std::uint16_t v) noexcept -> bool {
-        if (remaining() < 2) return false;
-        auto net = hton(v);
-        std::memcpy(data_ + pos_, &net, 2);
-        pos_ += 2;
-        return true;
-    }
+    auto write_u16_be(std::uint16_t v) noexcept -> bool;
 
-    auto write_u32_be(std::uint32_t v) noexcept -> bool {
-        if (remaining() < 4) return false;
-        auto net = hton(v);
-        std::memcpy(data_ + pos_, &net, 4);
-        pos_ += 4;
-        return true;
-    }
+    auto write_u32_be(std::uint32_t v) noexcept -> bool;
 
-    auto write_u64_be(std::uint64_t v) noexcept -> bool {
-        if (remaining() < 8) return false;
-        auto net = hton(v);
-        std::memcpy(data_ + pos_, &net, 8);
-        pos_ += 8;
-        return true;
-    }
+    auto write_u64_be(std::uint64_t v) noexcept -> bool;
 
     // --- Little-endian ---
 
-    auto write_u16_le(std::uint16_t v) noexcept -> bool {
-        if (remaining() < 2) return false;
-        auto le = htole(v);
-        std::memcpy(data_ + pos_, &le, 2);
-        pos_ += 2;
-        return true;
-    }
+    auto write_u16_le(std::uint16_t v) noexcept -> bool;
 
-    auto write_u32_le(std::uint32_t v) noexcept -> bool {
-        if (remaining() < 4) return false;
-        auto le = htole(v);
-        std::memcpy(data_ + pos_, &le, 4);
-        pos_ += 4;
-        return true;
-    }
+    auto write_u32_le(std::uint32_t v) noexcept -> bool;
 
-    auto write_u64_le(std::uint64_t v) noexcept -> bool {
-        if (remaining() < 8) return false;
-        auto le = htole(v);
-        std::memcpy(data_ + pos_, &le, 8);
-        pos_ += 8;
-        return true;
-    }
+    auto write_u64_le(std::uint64_t v) noexcept -> bool;
 
 private:
     std::byte* data_;

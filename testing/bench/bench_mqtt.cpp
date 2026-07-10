@@ -206,7 +206,7 @@ auto configure_broker(mqtt::broker& broker, const bench_case& cfg) -> bool {
     opts.host = "127.0.0.1";
     opts.delivery_channel_size = 65536;
     opts.receive_maximum = 65535;
-    opts.write_batch_messages = env_u32("CNETMOD_MQTT_WRITE_BATCH_MESSAGES", 1);
+    opts.write_batch_messages = env_u32("CNETMOD_MQTT_WRITE_BATCH_MESSAGES", 16);
     opts.write_batch_bytes = env_u32("CNETMOD_MQTT_WRITE_BATCH_BYTES", 8192);
 #ifdef CNETMOD_HAS_SSL
     if (cfg.tls) {
@@ -252,7 +252,7 @@ void print_result(const bench_case& cfg,
     const auto failed = expected > ok ? expected - ok : 0;
     const double mps = elapsed > 0.0 ? static_cast<double>(ok) / elapsed : 0.0;
 
-    const auto write_batch = env_u32("CNETMOD_MQTT_WRITE_BATCH_MESSAGES", 1);
+    const auto write_batch = env_u32("CNETMOD_MQTT_WRITE_BATCH_MESSAGES", 16);
     logger::info("  {:<10} {:<6} loopback:{} weaknet:no write_batch:{} pub:{:<3} {:>7} each {:>14} msg/sec  ({} ok, {} failed, {:.3f}s)",
                  cfg.name,
                  mode,

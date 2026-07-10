@@ -113,14 +113,18 @@ namespace cnetmod::raft
                         }
 
                         auto* posted_state = new std::shared_ptr<state>(std::move(st));
-                        (*posted_state)->ctx->post(&resume_on_context, posted_state);
+                        (*posted_state)->ctx->post(&resume_on_context, posted_state, [](void* p) {
+                            delete static_cast<std::shared_ptr<state>*>(p);
+                        });
                     }).detach();
                 }
                 catch (...)
                 {
                     state_->exception = std::current_exception();
                     auto* posted_state = new std::shared_ptr<state>(state_);
-                    state_->ctx->post(&resume_on_context, posted_state);
+                    state_->ctx->post(&resume_on_context, posted_state, [](void* p) {
+                        delete static_cast<std::shared_ptr<state>*>(p);
+                    });
                 }
             }
 

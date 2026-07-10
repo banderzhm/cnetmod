@@ -29,13 +29,14 @@ struct detached_task {
 // spawn — Start fire-and-forget coroutine on io_context
 // =============================================================================
 
-/// spawn(ctx, task) — Post task to io_context event loop for execution
-/// detached_task owns task's co_await, frame auto-destroys after task completes
-export void spawn(io_context& ctx, task<void> t) {
-    [](io_context& c, task<void> inner) -> detached_task {
-        co_await post_awaitable{c};     // Switch to event loop thread
-        co_await std::move(inner);      // Drive task execution
-    }(ctx, std::move(t));
+/// Post a fire-and-forget task to an io_context.
+/// Kept in the interface unit: current MSVC module codegen emits an invalid
+/// COFF object when this coroutine's detached promise lives in a .cpp unit.
+export void spawn(io_context& ctx, task<void> task_to_run) {
+    [](io_context& context, task<void> inner) -> detached_task {
+        co_await post_awaitable{context};
+        co_await std::move(inner);
+    }(ctx, std::move(task_to_run));
 }
 
 } // namespace cnetmod

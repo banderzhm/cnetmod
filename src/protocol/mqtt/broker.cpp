@@ -67,7 +67,9 @@ void finish_cross_worker_delivery(const std::shared_ptr<detail::conn_state>& tar
     }
     if (should_reschedule) {
         auto* next_box = new std::shared_ptr<detail::conn_state>(target);
-        target->io.post(flush_cross_worker_delivery, next_box);
+        target->io.post(flush_cross_worker_delivery, next_box, [](void* p) {
+            delete static_cast<std::shared_ptr<detail::conn_state>*>(p);
+        });
     }
 }
 
@@ -143,7 +145,9 @@ auto deliver_to_connection(io_context& origin,
     }
     if (should_schedule) {
         auto* target_box = new std::shared_ptr<detail::conn_state>(target);
-        target->io.post(flush_cross_worker_delivery, target_box);
+        target->io.post(flush_cross_worker_delivery, target_box, [](void* p) {
+            delete static_cast<std::shared_ptr<detail::conn_state>*>(p);
+        });
     }
     co_return true;
 }

@@ -2248,11 +2248,18 @@ auto run_server(cn::server_context& sctx, mysql::sharded_connection_pool& pool,
     co_await srv.run();
 }
 
+struct logger_shutdown_guard {
+    ~logger_shutdown_guard() {
+        logger::shutdown();
+    }
+};
+
 int main() {
     std::setvbuf(stdout, nullptr, _IONBF, 0);
 
     // Implementation note.
     logger::init("account_server", logger::level::info);
+    const logger_shutdown_guard shutdown_logger;
 
     try {
         std::fprintf(stderr, "[account_server] starting...\n");

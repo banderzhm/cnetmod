@@ -24,21 +24,8 @@ namespace cnetmod {
 /// Linux/macOS: no-op
 export class net_init {
 public:
-    net_init() {
-#ifdef CNETMOD_PLATFORM_WINDOWS
-        WSADATA wsa{};
-        int err = ::WSAStartup(MAKEWORD(2, 2), &wsa);
-        if (err != 0)
-            throw std::runtime_error(
-                std::format("WSAStartup failed: {}", err));
-#endif
-    }
-
-    ~net_init() {
-#ifdef CNETMOD_PLATFORM_WINDOWS
-        ::WSACleanup();
-#endif
-    }
+    net_init();
+    ~net_init();
 
     net_init(const net_init&) = delete;
     auto operator=(const net_init&) -> net_init& = delete;

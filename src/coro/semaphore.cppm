@@ -33,22 +33,14 @@ export class async_semaphore {
     class spinlock {
         std::atomic_flag flag_{};
     public:
-        void lock() noexcept {
-            if (!flag_.test_and_set(std::memory_order_acquire)) return;
-            do {
-                flag_.wait(true, std::memory_order_relaxed);
-            } while (flag_.test_and_set(std::memory_order_acquire));
-        }
-        void unlock() noexcept {
-            flag_.clear(std::memory_order_release);
-            flag_.notify_one();
-        }
+        void lock() noexcept;
+        void unlock() noexcept;
     };
 
     struct auto_lock {
         spinlock& lk_;
-        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
-        ~auto_lock() { lk_.unlock(); }
+        explicit auto_lock(spinlock& lk) noexcept;
+        ~auto_lock();
         auto_lock(const auto_lock&) = delete;
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
@@ -59,8 +51,7 @@ export class async_semaphore {
     };
 
 public:
-    explicit async_semaphore(std::size_t initial_count) noexcept
-        : count_(initial_count) {}
+    explicit async_semaphore(std::size_t initial_count) noexcept;
 
     ~async_semaphore() = default;
 
@@ -75,101 +66,36 @@ public:
         async_semaphore& sem_;
         waiter_node node_;
 
-        explicit acquire_awaitable(async_semaphore& sem) noexcept : sem_(sem) {}
+        explicit acquire_awaitable(async_semaphore& sem) noexcept;
 
-        auto await_ready() noexcept -> bool {
-            // Lock-free fast path: CAS decrement
-            auto cur = sem_.count_.load(std::memory_order_acquire);
-            while (cur > 0) {
-                if (sem_.count_.compare_exchange_weak(
-                        cur, cur - 1,
-                        std::memory_order_acquire,
-                        std::memory_order_relaxed))
-                    return true;
-            }
-            return false;
-        }
+        auto await_ready() noexcept -> bool;
 
         auto await_suspend(std::coroutine_handle<> h) noexcept
-            -> std::coroutine_handle<>
-        {
-            node_.handle = h;
-            node_.next = nullptr;
-            auto_lock g(sem_.lock_);
-            // Re-check: permit may have been released between ready() and suspend()
-            auto cur = sem_.count_.load(std::memory_order_acquire);
-            while (cur > 0) {
-                if (sem_.count_.compare_exchange_weak(
-                        cur, cur - 1,
-                        std::memory_order_acquire,
-                        std::memory_order_relaxed))
-                    return h;  // auto_lock destructs first, then resume
-            }
-            // Add to wait queue (FIFO)
-            if (!sem_.tail_) {
-                sem_.head_ = sem_.tail_ = &node_;
-            } else {
-                sem_.tail_->next = &node_;
-                sem_.tail_ = &node_;
-            }
-            return std::noop_coroutine();
-        }
+            -> std::coroutine_handle<>;
 
-        void await_resume() noexcept {}
+        void await_resume() noexcept;
     };
 
-    auto acquire() noexcept -> acquire_awaitable {
-        return acquire_awaitable{*this};
-    }
+    auto acquire() noexcept -> acquire_awaitable;
 
     // =========================================================================
     // release — Release a permit
     // =========================================================================
 
     /// Release a permit, wake up next coroutine in wait queue
-    void release() noexcept {
-        std::coroutine_handle<> to_resume;
-        {
-            auto_lock g(lock_);
-            if (head_) {
-                // Has waiters: directly transfer permit (don't increment count_)
-                auto* w = head_;
-                head_ = w->next;
-                if (!head_) tail_ = nullptr;
-                to_resume = w->handle;
-            } else {
-                count_.fetch_add(1, std::memory_order_release);
-            }
-        }
-        if (to_resume) to_resume.resume();
-    }
+    void release() noexcept;
 
     /// Release n permits
-    void release(std::size_t n) noexcept {
-        for (std::size_t i = 0; i < n; ++i)
-            release();
-    }
+    void release(std::size_t n) noexcept;
 
     // =========================================================================
     // try_acquire — Non-blocking attempt
     // =========================================================================
 
-    [[nodiscard]] auto try_acquire() noexcept -> bool {
-        auto cur = count_.load(std::memory_order_acquire);
-        while (cur > 0) {
-            if (count_.compare_exchange_weak(
-                    cur, cur - 1,
-                    std::memory_order_acquire,
-                    std::memory_order_relaxed))
-                return true;
-        }
-        return false;
-    }
+    [[nodiscard]] auto try_acquire() noexcept -> bool;
 
     /// Current available permits (for monitoring only, not thread-safe snapshot)
-    [[nodiscard]] auto available() const noexcept -> std::size_t {
-        return count_.load(std::memory_order_relaxed);
-    }
+    [[nodiscard]] auto available() const noexcept -> std::size_t;
 
 private:
     mutable spinlock lock_;

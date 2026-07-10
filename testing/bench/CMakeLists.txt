@@ -19,6 +19,7 @@ set(BENCH_TARGETS
     bench_ws
     bench_mqtt
     bench_raft
+    bench_uring_recv
 )
 
 foreach(bench_name ${BENCH_TARGETS})

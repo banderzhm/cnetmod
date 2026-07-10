@@ -41,22 +41,14 @@ export class async_shared_mutex {
     class spinlock {
         std::atomic_flag flag_{};
     public:
-        void lock() noexcept {
-            if (!flag_.test_and_set(std::memory_order_acquire)) return;
-            do {
-                flag_.wait(true, std::memory_order_relaxed);
-            } while (flag_.test_and_set(std::memory_order_acquire));
-        }
-        void unlock() noexcept {
-            flag_.clear(std::memory_order_release);
-            flag_.notify_one();
-        }
+        void lock() noexcept;
+        void unlock() noexcept;
     };
 
     struct auto_lock {
         spinlock& lk_;
-        explicit auto_lock(spinlock& lk) noexcept : lk_(lk) { lk_.lock(); }
-        ~auto_lock() { lk_.unlock(); }
+        explicit auto_lock(spinlock& lk) noexcept;
+        ~auto_lock();
         auto_lock(const auto_lock&) = delete;
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
@@ -81,64 +73,20 @@ public:
         async_shared_mutex& rw_;
         waiter_node node_;
 
-        explicit lock_shared_awaitable(async_shared_mutex& rw) noexcept : rw_(rw) {}
+        explicit lock_shared_awaitable(async_shared_mutex& rw) noexcept;
 
-        auto await_ready() noexcept -> bool {
-            auto_lock g(rw_.lock_);
-            // Can acquire read lock: no writer holding, no writer waiting
-            if (rw_.state_ >= 0 && !rw_.write_head_) {
-                ++rw_.state_;
-                return true;
-            }
-            return false;
-        }
+        auto await_ready() noexcept -> bool;
 
         auto await_suspend(std::coroutine_handle<> h) noexcept
-            -> std::coroutine_handle<>
-        {
-            node_.handle = h;
-            node_.next = nullptr;
-            auto_lock g(rw_.lock_);
-            // Re-check: state may have changed between ready() and suspend()
-            if (rw_.state_ >= 0 && !rw_.write_head_) {
-                ++rw_.state_;
-                return h;  // auto_lock destructs first, then resume
-            }
-            // Add to read wait queue
-            if (!rw_.read_tail_) {
-                rw_.read_head_ = rw_.read_tail_ = &node_;
-            } else {
-                rw_.read_tail_->next = &node_;
-                rw_.read_tail_ = &node_;
-            }
-            return std::noop_coroutine();
-        }
+            -> std::coroutine_handle<>;
 
-        void await_resume() noexcept {}
+        void await_resume() noexcept;
     };
 
-    auto lock_shared() noexcept -> lock_shared_awaitable {
-        return lock_shared_awaitable{*this};
-    }
+    auto lock_shared() noexcept -> lock_shared_awaitable;
 
     /// Release read lock
-    void unlock_shared() noexcept {
-        std::coroutine_handle<> to_resume;
-        {
-            auto_lock g(lock_);
-            --state_;
-
-            // Last reader releases → try to wake writer
-            if (state_ == 0 && write_head_) {
-                state_ = -1;  // Convert to write lock
-                auto* w = write_head_;
-                write_head_ = w->next;
-                if (!write_head_) write_tail_ = nullptr;
-                to_resume = w->handle;
-            }
-        }
-        if (to_resume) to_resume.resume();
-    }
+    void unlock_shared() noexcept;
 
     // =========================================================================
     // Exclusive write lock
@@ -148,91 +96,23 @@ public:
         async_shared_mutex& rw_;
         waiter_node node_;
 
-        explicit lock_awaitable(async_shared_mutex& rw) noexcept : rw_(rw) {}
+        explicit lock_awaitable(async_shared_mutex& rw) noexcept;
 
-        auto await_ready() noexcept -> bool {
-            auto_lock g(rw_.lock_);
-            if (rw_.state_ == 0) {
-                rw_.state_ = -1;
-                return true;
-            }
-            return false;
-        }
+        auto await_ready() noexcept -> bool;
 
         auto await_suspend(std::coroutine_handle<> h) noexcept
-            -> std::coroutine_handle<>
-        {
-            node_.handle = h;
-            node_.next = nullptr;
-            auto_lock g(rw_.lock_);
-            // Re-check: state may have changed between ready() and suspend()
-            if (rw_.state_ == 0) {
-                rw_.state_ = -1;
-                return h;  // auto_lock destructs first, then resume
-            }
-            // Add to write wait queue
-            if (!rw_.write_tail_) {
-                rw_.write_head_ = rw_.write_tail_ = &node_;
-            } else {
-                rw_.write_tail_->next = &node_;
-                rw_.write_tail_ = &node_;
-            }
-            return std::noop_coroutine();
-        }
+            -> std::coroutine_handle<>;
 
-        void await_resume() noexcept {}
+        void await_resume() noexcept;
     };
 
-    auto lock() noexcept -> lock_awaitable {
-        return lock_awaitable{*this};
-    }
+    auto lock() noexcept -> lock_awaitable;
 
     /// Non-coroutine context synchronous try to acquire write lock (non-blocking)
-    [[nodiscard]] auto try_lock() noexcept -> bool {
-        auto_lock g(lock_);
-        if (state_ == 0) {
-            state_ = -1;
-            return true;
-        }
-        return false;
-    }
+    [[nodiscard]] auto try_lock() noexcept -> bool;
 
     /// Release write lock
-    void unlock() noexcept {
-        std::coroutine_handle<> writer_to_resume;
-        waiter_node* readers = nullptr;
-        {
-            auto_lock g(lock_);
-
-            // Prioritize waking next writer (lock handoff)
-            if (write_head_) {
-                // state_ remains -1 (write lock directly transferred)
-                auto* w = write_head_;
-                write_head_ = w->next;
-                if (!write_head_) write_tail_ = nullptr;
-                writer_to_resume = w->handle;
-            } else if (read_head_) {
-                // No writer waiting → wake all readers (steal list, walk outside lock)
-                int count = 0;
-                for (auto* n = read_head_; n; n = n->next) ++count;
-                state_ = count;
-                readers = read_head_;
-                read_head_ = read_tail_ = nullptr;
-            } else {
-                state_ = 0;
-            }
-        }
-        // Resume writer first, or resume all readers
-        if (writer_to_resume) {
-            writer_to_resume.resume();
-        } else {
-            for (auto* n = readers; n;) {
-                auto* nx = n->next;
-                n->handle.resume();
-                n = nx;
-            }
-        }
-    }
+    void unlock() noexcept;
 
 private:
     mutable spinlock lock_;
@@ -254,27 +134,17 @@ private:
 export class async_shared_lock_guard {
 public:
     explicit async_shared_lock_guard(async_shared_mutex& rw,
-                                     std::adopt_lock_t) noexcept
-        : rw_(&rw) {}
+                                     std::adopt_lock_t) noexcept;
 
-    ~async_shared_lock_guard() {
-        if (rw_) rw_->unlock_shared();
-    }
+    ~async_shared_lock_guard();
 
     async_shared_lock_guard(const async_shared_lock_guard&) = delete;
     auto operator=(const async_shared_lock_guard&) -> async_shared_lock_guard& = delete;
 
-    async_shared_lock_guard(async_shared_lock_guard&& o) noexcept
-        : rw_(std::exchange(o.rw_, nullptr)) {}
-    auto operator=(async_shared_lock_guard&& o) noexcept -> async_shared_lock_guard& {
-        if (this != &o) {
-            if (rw_) rw_->unlock_shared();
-            rw_ = std::exchange(o.rw_, nullptr);
-        }
-        return *this;
-    }
+    async_shared_lock_guard(async_shared_lock_guard&& o) noexcept;
+    auto operator=(async_shared_lock_guard&& o) noexcept -> async_shared_lock_guard&;
 
-    void release() noexcept { rw_ = nullptr; }
+    void release() noexcept;
 
 private:
     async_shared_mutex* rw_;
@@ -290,27 +160,17 @@ private:
 export class async_unique_lock_guard {
 public:
     explicit async_unique_lock_guard(async_shared_mutex& rw,
-                                     std::adopt_lock_t) noexcept
-        : rw_(&rw) {}
+                                     std::adopt_lock_t) noexcept;
 
-    ~async_unique_lock_guard() {
-        if (rw_) rw_->unlock();
-    }
+    ~async_unique_lock_guard();
 
     async_unique_lock_guard(const async_unique_lock_guard&) = delete;
     auto operator=(const async_unique_lock_guard&) -> async_unique_lock_guard& = delete;
 
-    async_unique_lock_guard(async_unique_lock_guard&& o) noexcept
-        : rw_(std::exchange(o.rw_, nullptr)) {}
-    auto operator=(async_unique_lock_guard&& o) noexcept -> async_unique_lock_guard& {
-        if (this != &o) {
-            if (rw_) rw_->unlock();
-            rw_ = std::exchange(o.rw_, nullptr);
-        }
-        return *this;
-    }
+    async_unique_lock_guard(async_unique_lock_guard&& o) noexcept;
+    auto operator=(async_unique_lock_guard&& o) noexcept -> async_unique_lock_guard&;
 
-    void release() noexcept { rw_ = nullptr; }
+    void release() noexcept;
 
 private:
     async_shared_mutex* rw_;

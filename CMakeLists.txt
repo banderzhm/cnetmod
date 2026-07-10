@@ -499,6 +499,10 @@ elseif(UNIX)
     check_include_file_cxx("liburing.h" CNETMOD_HAS_IO_URING)
     if(CNETMOD_HAS_IO_URING)
         message(STATUS "I/O backend: io_uring (Linux)")
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles(
+            "#include <liburing.h>\nint main() { io_uring_buf_reg reg{}; io_uring_buf_ring* ring = nullptr; return sizeof(reg) + sizeof(*ring); }"
+            CNETMOD_HAS_IO_URING_BUFFER_RING)
     endif()
     # epoll is always available on Linux
     set(CNETMOD_HAS_EPOLL ON)
@@ -519,14 +523,19 @@ file(GLOB_RECURSE MODULE_INTERFACE_FILES CONFIGURE_DEPENDS
 file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
-# Split .cpp sources into regular translation units and module implementation units.
-# Module implementation units (.cpp with 'module X;') are regular sources, NOT CXX_MODULES.
-# Only module interface/partition files (.cppm with 'export module') belong in CXX_MODULES.
+# Split .cpp sources into regular translation units, module implementation units,
+# and interface units. Most interfaces use .cppm, but a renamed interface may
+# retain an `export module` declaration in a .cpp file.
 set(MODULE_IMPLEMENTATION_CPP_FILES)
 set(REGULAR_CPP_SOURCES)
 foreach(src ${CPP_SOURCES})
-    file(STRINGS "${src}" module_decl_line REGEX "^[ \t]*(export[ \t]+)?module[ \t]+")
-    if(module_decl_line)
+    file(STRINGS "${src}" export_module_decl_line
+        REGEX "^[ \t]*export[ \t]+module[ \t]+")
+    file(STRINGS "${src}" module_decl_line
+        REGEX "^[ \t]*(export[ \t]+)?module[ \t]+")
+    if(export_module_decl_line)
+        list(APPEND MODULE_INTERFACE_FILES "${src}")
+    elseif(module_decl_line)
         list(APPEND MODULE_IMPLEMENTATION_CPP_FILES "${src}")
     else()
         list(APPEND REGULAR_CPP_SOURCES "${src}")
@@ -602,6 +611,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<PLATFORM_ID:Darwin>:CNETMOD_PLATFORM_MACOS>
     $<$<BOOL:${CNETMOD_HAS_IOCP}>:CNETMOD_HAS_IOCP>
     $<$<BOOL:${CNETMOD_HAS_IO_URING}>:CNETMOD_HAS_IO_URING>
+    $<$<BOOL:${CNETMOD_HAS_IO_URING_BUFFER_RING}>:CNETMOD_HAS_IO_URING_BUFFER_RING>
     $<$<BOOL:${CNETMOD_HAS_EPOLL}>:CNETMOD_HAS_EPOLL>
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>

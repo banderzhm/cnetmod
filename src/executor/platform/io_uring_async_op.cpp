@@ -5,6 +5,7 @@ module;
 #ifdef CNETMOD_HAS_IO_URING
 
 #include <liburing.h>
+#include <cstdlib>
 #include <sys/socket.h>
 #include <sys/uio.h>
 #include <netinet/in.h>
@@ -18,6 +19,7 @@ module;
 module cnetmod.executor.async_op;
 
 #ifdef CNETMOD_HAS_IO_URING
+import std;
 import cnetmod.io.platform.io_uring;
 import cnetmod.executor.pool;
 #endif
@@ -119,17 +121,9 @@ inline auto& file_pool() {
     return pool;
 }
 
-} // anonymous namespace
-
-// =============================================================================
-// Async Network Operations — io_uring (completion-based)
-// =============================================================================
-
-auto async_accept(io_context& ctx, socket& listener)
+auto one_shot_async_accept(io_uring_context& uring, socket& listener)
     -> task<std::expected<socket, std::error_code>>
 {
-    auto& uring = static_cast<io_uring_context&>(ctx);
-
     uring_overlapped ov;
 
     auto* sqe = uring.prepare_sqe();
@@ -149,6 +143,149 @@ auto async_accept(io_context& ctx, socket& listener)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
     co_return socket::from_native(ov.result);
+}
+
+// liburing 2.0+ exposes these flags.  Older distributions retain the
+// single-shot path below at compile time.
+#if defined(IORING_ACCEPT_MULTISHOT) && defined(IORING_CQE_F_MORE)
+
+struct multishot_accept_state {
+    io_uring_context* context{};
+    std::uint64_t context_id{};
+    int listener_fd = -1;
+    uring_overlapped operation{};
+    std::deque<int> accepted_fds;
+    uring_overlapped* waiter{};
+    bool active = false;
+    bool unsupported = false;
+};
+
+using multishot_accept_key = std::pair<std::uint64_t, int>;
+
+auto multishot_accept_states()
+    -> std::map<multishot_accept_key, std::unique_ptr<multishot_accept_state>>&
+{
+    // io_uring submissions and completion delivery are already serialized by
+    // io_uring_context.  The state is retained for the listener lifetime so a
+    // persistent SQE never points at a coroutine-local object.
+    static std::map<multishot_accept_key, std::unique_ptr<multishot_accept_state>> states;
+    return states;
+}
+
+auto multishot_accept_enabled() noexcept -> bool {
+    static const bool enabled = [] {
+        const auto* value = std::getenv("CNETMOD_DISABLE_MULTISHOT_ACCEPT");
+        return value == nullptr || value[0] == '\0' || value[0] == '0';
+    }();
+    return enabled;
+}
+
+void on_multishot_accept(uring_overlapped& operation, int32_t result,
+                         std::uint32_t flags)
+{
+    auto& state = *static_cast<multishot_accept_state*>(operation.completion_context);
+    state.active = (flags & IORING_CQE_F_MORE) != 0;
+
+    // A kernel that predates multishot accept accepts the SQE but completes it
+    // with EINVAL/EOPNOTSUPP.  Mark this listener once, then let the current
+    // caller transparently reissue its request as a single-shot accept.
+    if (result == -EINVAL || result == -EOPNOTSUPP)
+        state.unsupported = true;
+
+    if (state.waiter && state.waiter->coroutine) {
+        auto* waiter = std::exchange(state.waiter, nullptr);
+        waiter->result = result;
+        waiter->coroutine.resume();
+    } else if (result >= 0) {
+        state.accepted_fds.push_back(result);
+    }
+
+    // A terminal operation can no longer produce CQEs.  Drop its state once
+    // there are no accepted descriptors to hand out.  Unsupported listeners
+    // are retained so older kernels fall back only once per listener.
+    if (!state.active && !state.unsupported && state.accepted_fds.empty() &&
+        !state.waiter) {
+        multishot_accept_states().erase({state.context_id, state.listener_fd});
+    }
+}
+
+auto start_multishot_accept(multishot_accept_state& state)
+    -> std::expected<void, std::error_code>
+{
+    auto* sqe = state.context->prepare_sqe();
+    if (!sqe)
+        return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    state.operation.completion = &on_multishot_accept;
+    state.operation.completion_context = &state;
+    ::io_uring_prep_multishot_accept(sqe, state.listener_fd, nullptr, nullptr,
+                                     SOCK_NONBLOCK | SOCK_CLOEXEC);
+    ::io_uring_sqe_set_data(sqe, &state.operation);
+    state.active = true;
+
+    if (auto r = state.context->flush(); !r) {
+        state.active = false;
+        return std::unexpected(r.error());
+    }
+    return {};
+}
+
+#endif
+
+} // anonymous namespace
+
+// =============================================================================
+// Async Network Operations — io_uring (completion-based)
+// =============================================================================
+
+auto async_accept(io_context& ctx, socket& listener)
+    -> task<std::expected<socket, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+
+#if defined(IORING_ACCEPT_MULTISHOT) && defined(IORING_CQE_F_MORE)
+    const auto key = multishot_accept_key{uring.instance_id(),
+                                          static_cast<int>(listener.native_handle())};
+    auto& states = multishot_accept_states();
+    auto [it, inserted] = states.try_emplace(key);
+    if (inserted) {
+        it->second = std::make_unique<multishot_accept_state>();
+        it->second->context = &uring;
+        it->second->context_id = key.first;
+        it->second->listener_fd = key.second;
+    }
+    auto& state = *it->second;
+
+    if (multishot_accept_enabled() && !state.unsupported) {
+        if (!state.accepted_fds.empty()) {
+            const auto fd = state.accepted_fds.front();
+            state.accepted_fds.pop_front();
+            co_return socket::from_native(fd);
+        }
+
+        // A shared multishot SQE has a single waiter.  A concurrent caller
+        // retains the established one-shot semantics rather than stealing a
+        // completion intended for the first caller.
+        if (!state.waiter) {
+            if (!state.active) {
+                if (auto r = start_multishot_accept(state); !r)
+                    co_return std::unexpected(r.error());
+            }
+
+            uring_overlapped waiter;
+            state.waiter = &waiter;
+            co_await uring_suspend{waiter};
+
+            if (waiter.result >= 0)
+                co_return socket::from_native(waiter.result);
+            if (!state.unsupported)
+                co_return std::unexpected(
+                    make_error_code(from_native_error(-waiter.result)));
+        }
+    }
+#endif
+
+    co_return co_await one_shot_async_accept(uring, listener);
 }
 
 auto async_accept(io_context& ctx, socket& listener, cancel_token& token)

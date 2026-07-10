@@ -3,6 +3,11 @@ module;
 #include <cnetmod/config.hpp>
 #include <ctime>
 
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
+#include <cstdlib>
+#include <liburing.h>
+#endif
+
 module cnetmod.protocol.http;
 
 import std;
@@ -24,6 +29,12 @@ import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
+
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
+import cnetmod.io.platform.io_uring;
+import cnetmod.io.platform.io_uring_recv_service;
+import cnetmod.io.platform.io_uring_multishot_recv;
+#endif
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -569,6 +580,34 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 {
     bool keep_alive = true;
 
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT)
+    std::unique_ptr<io_uring_recv_service> recv_service;
+    std::unique_ptr<io_uring_multishot_recv> recv_stream;
+    if (const auto* enabled = std::getenv("CNETMOD_HTTP_MULTISHOT_RECV");
+        enabled && enabled[0] != '\0' && enabled[0] != '0') {
+        if (auto* uring = dynamic_cast<io_uring_context*>(&io)) {
+            // This per-connection adapter is deliberately opt-in.  The next
+            // iteration promotes the service to worker-context ownership.
+            static std::atomic<unsigned> next_group{1};
+            const auto group = static_cast<std::uint16_t>(
+                next_group.fetch_add(1, std::memory_order_relaxed));
+            try {
+                recv_service = std::make_unique<io_uring_recv_service>(
+                    *uring, group, 4096, 16);
+                recv_stream = recv_service->make_receiver(client);
+            } catch (...) {
+                recv_service.reset();
+            }
+        }
+    }
+
+    auto stop_recv = [&]() -> task<void> {
+        if (recv_stream)
+            (void)co_await recv_stream->async_stop();
+    };
+#endif
+
     while (keep_alive) {
         request_parser parser;
         std::array<std::byte, 8192> buf{};
@@ -582,13 +621,44 @@ auto server::handle_h1_clear(socket& client, io_context& io,
         }
 
         while (!parser.ready()) {
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT)
+            if (recv_stream) {
+                auto rd = co_await recv_stream->async_next();
+                if (!rd || rd->size() == 0) {
+                    co_await stop_recv();
+                    co_return;
+                }
+                auto data = rd->data();
+                auto consumed = parser.consume(
+                    static_cast<const char*>(data.data), data.size);
+                rd->release();
+                if (!consumed) {
+                    co_await stop_recv();
+                    co_return;
+                }
+                continue;
+            }
+#endif
             auto rd = co_await async_read(io, client,
                 mutable_buffer{buf.data(), buf.size()});
-            if (!rd || *rd == 0) co_return;
+            if (!rd || *rd == 0) {
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT)
+                co_await stop_recv();
+#endif
+                co_return;
+            }
 
             auto consumed = parser.consume(
                 reinterpret_cast<const char*>(buf.data()), *rd);
-            if (!consumed) co_return;
+            if (!consumed) {
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT)
+                co_await stop_recv();
+#endif
+                co_return;
+            }
         }
 
         // Route matching
@@ -637,7 +707,13 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 auto data = resp.serialize();
                 auto wr = co_await async_write_all(io, client,
                     const_buffer{data.data(), data.size()});
-                if (!wr) co_return;
+                if (!wr) {
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT)
+                    co_await stop_recv();
+#endif
+                    co_return;
+                }
             }
         }
 
@@ -648,6 +724,11 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             keep_alive = false;
         }
     }
+
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT)
+    co_await stop_recv();
+#endif
 }
 
 #ifdef CNETMOD_HAS_SSL
