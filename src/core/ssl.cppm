@@ -207,6 +207,13 @@ public:
             nullptr);
     }
 
+    /// Server-side mTLS mode: verify and require a client certificate.
+    void set_require_peer_certificate(bool require) noexcept {
+        SSL_CTX_set_verify(ctx_,
+            require ? (SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT) : SSL_VERIFY_NONE,
+            nullptr);
+    }
+
     // =========================================================================
     // ALPN (Application-Layer Protocol Negotiation)
     // =========================================================================

@@ -1308,6 +1308,8 @@ auto broker::handle_publish(const mqtt_frame& frame, std::shared_ptr<detail::con
             topic, msg.payload.str(), msg.qos_value, msg.props});
     }
 
+    if (publish_observer_)
+        publish_observer_(msg, conn->session ? std::string_view{conn->session->client_id} : std::string_view{});
     co_await route_publish(conn->io, msg, conn->session ? conn->session->client_id : "");
 }
 auto broker::handle_puback(const mqtt_frame& frame, std::shared_ptr<detail::conn_state> conn)
@@ -1375,6 +1377,8 @@ auto broker::handle_pubrel(const mqtt_frame& frame, std::shared_ptr<detail::conn
                 retained_.store(topic, retained_message{
                     topic, msg.payload.str(), msg.qos_value, msg.props});
             }
+            if (publish_observer_)
+                publish_observer_(msg, conn->session->client_id);
             co_await route_publish(conn->io, msg, conn->session->client_id);
         }
     }

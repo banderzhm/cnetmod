@@ -90,6 +90,9 @@ export struct broker_metrics_snapshot {
     std::uint64_t batch_messages = 0;
 };
 
+export using publish_observer = std::function<void(const publish_message& msg,
+                                                   std::string_view client_id)>;
+
 // =============================================================================
 // Connection State
 // =============================================================================
@@ -239,6 +242,7 @@ public:
     }
     void set_security(security_config cfg) { security_ = std::move(cfg); }
     void set_auth_handler(broker_auth_handler h) { auth_handler_ = std::move(h); }
+    void set_publish_observer(publish_observer observer) { publish_observer_ = std::move(observer); }
 
     [[nodiscard]] auto security() noexcept -> security_config& { return security_; }
     [[nodiscard]] auto sessions() noexcept -> session_store& { return sessions_; }
@@ -346,6 +350,7 @@ private:
     shared_target_store shared_store_;
     security_config  security_;
     broker_auth_handler auth_handler_;
+    publish_observer publish_observer_;
     bool             running_  = false;
     std::unique_ptr<tcp::acceptor> acc_;
     std::atomic_uint64_t accepted_connections_{0};

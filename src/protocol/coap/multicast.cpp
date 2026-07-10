@@ -11,6 +11,7 @@ import :codec;
 import cnetmod.core.address;
 import cnetmod.core.buffer;
 import cnetmod.core.error;
+import cnetmod.core.socket;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;

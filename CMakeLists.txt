@@ -507,13 +507,13 @@ endif()
 # ==============================================================================
 
 # Collect module interface files
-file(GLOB_RECURSE MODULE_INTERFACE_FILES
+file(GLOB_RECURSE MODULE_INTERFACE_FILES CONFIGURE_DEPENDS
     "src/*.cppm"
     "src/*.ixx"
 )
 
 # Collect implementation files (excluding main.cpp)
-file(GLOB_RECURSE CPP_SOURCES "src/*.cpp")
+file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
 
 # Split .cpp sources into regular translation units and module implementation units.

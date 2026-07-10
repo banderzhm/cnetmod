@@ -13,6 +13,7 @@ import :codec;
 import cnetmod.core.address;
 import cnetmod.core.buffer;
 import cnetmod.core.dtls;
+import cnetmod.core.socket;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 

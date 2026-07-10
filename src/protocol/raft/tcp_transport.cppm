@@ -780,6 +780,11 @@ namespace cnetmod::raft
                 if (sock)
                     sock->close();
             }
+            for (auto* sock : outbound_tls_sockets_)
+            {
+                if (sock)
+                    sock->close();
+            }
         }
 
         auto cleanup_snapshot_sessions() -> std::size_t
@@ -883,6 +888,27 @@ namespace cnetmod::raft
             auto operator=(const inbound_socket_guard&) -> inbound_socket_guard& = delete;
         };
 
+        struct outbound_tls_socket_guard
+        {
+            raft_tcp_transport* owner = nullptr;
+            socket* sock = nullptr;
+
+            outbound_tls_socket_guard(raft_tcp_transport& transport, socket& outbound) noexcept
+                : owner(&transport), sock(&outbound)
+            {
+                owner->outbound_tls_sockets_.insert(sock);
+            }
+
+            ~outbound_tls_socket_guard()
+            {
+                if (owner && sock)
+                    owner->outbound_tls_sockets_.erase(sock);
+            }
+
+            outbound_tls_socket_guard(const outbound_tls_socket_guard&) = delete;
+            auto operator=(const outbound_tls_socket_guard&) -> outbound_tls_socket_guard& = delete;
+        };
+
         struct snapshot_receive_state
         {
             std::uint64_t expected_offset = 0;
@@ -906,6 +932,8 @@ namespace cnetmod::raft
 
         void send(const node_id& peer, raft_rpc_message message)
         {
+            if (!running_)
+                return;
             auto& metrics = metrics_for(peer);
             auto it = peers_.find(peer);
             if (it == peers_.end())
@@ -947,6 +975,16 @@ namespace cnetmod::raft
         {
             for (;;)
             {
+                if (!running_)
+                {
+                    if (auto conn_it = connections_.find(peer); conn_it != connections_.end())
+                    {
+                        auto& conn = conn_it->second;
+                        conn.outbound.clear();
+                        conn.writer_running = false;
+                    }
+                    co_return;
+                }
                 auto conn_it = connections_.find(peer);
                 if (conn_it == connections_.end())
                     co_return;
@@ -967,7 +1005,8 @@ namespace cnetmod::raft
                     std::chrono::steady_clock::now() - item.enqueued_at;
 
                 const auto started = std::chrono::steady_clock::now();
-                auto r = co_await send_with_retry(peer, item.ep, item.message);
+                conn.write_token.reset();
+                auto r = co_await send_with_retry(peer, item.ep, item.message, conn.write_token);
                 auto latency = std::chrono::steady_clock::now() - started;
 
                 if (auto it = peer_metrics_.find(peer);
@@ -1009,20 +1048,26 @@ namespace cnetmod::raft
             return request.entries.empty() && request.read_contexts.empty();
         }
 
-        auto send_with_retry(const node_id& peer, endpoint ep, const raft_rpc_message& message)
+        auto send_with_retry(const node_id& peer, endpoint ep, const raft_rpc_message& message, cancel_token& token)
             -> task<std::expected<void, std::error_code>>
         {
             std::error_code last_error;
             const auto attempts = std::max<std::uint32_t>(1, options_.max_send_attempts);
             for (std::uint32_t attempt = 0; attempt < attempts; ++attempt)
             {
+                if (token.is_cancelled() || !running_)
+                    co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
                 auto r = options_.security.enable_tls
-                    ? co_await send_tls_once(peer, ep, message)
+                    ? co_await send_tls_once(peer, ep, message, token)
                     : co_await send_pooled(peer, ep, message);
                 if (r) co_return {};
                 last_error = r.error();
                 if (attempt + 1 < attempts && options_.retry_backoff.count() > 0)
+                {
+                    if (token.is_cancelled() || !running_)
+                        co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
                     (void)co_await async_timer_wait(ctx_, options_.retry_backoff);
+                }
             }
             co_return std::unexpected(last_error);
         }
@@ -1075,24 +1120,39 @@ namespace cnetmod::raft
             sock.close();
         }
 
-        auto send_tls_once(const node_id& peer, const endpoint& ep, const raft_rpc_message& message)
+        auto send_tls_once(const node_id& peer, const endpoint& ep, const raft_rpc_message& message, cancel_token& token)
             -> task<std::expected<void, std::error_code>>
         {
 #ifdef CNETMOD_HAS_SSL
             if (!options_.security.client_tls)
                 co_return std::unexpected(std::make_error_code(std::errc::protocol_not_supported));
+            if (token.is_cancelled() || !running_)
+                co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
 
             auto family = ep.address().is_v6() ? address_family::ipv6 : address_family::ipv4;
             auto sock_r = socket::create(family, socket_type::stream);
             if (!sock_r) co_return std::unexpected(sock_r.error());
             auto sock = std::move(*sock_r);
+            outbound_tls_socket_guard tls_guard{*this, sock};
             if (auto r = sock.set_non_blocking(true); !r)
                 co_return std::unexpected(r.error());
-            if (auto r = co_await async_connect(ctx_, sock, ep); !r)
+            token.reset();
+            if (token.is_cancelled() || !running_)
+            {
+                sock.close();
+                co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+            }
+            if (auto r = co_await async_connect(ctx_, sock, ep, token); !r)
                 co_return std::unexpected(r.error());
+            if (token.is_cancelled() || !running_)
+            {
+                sock.close();
+                co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+            }
 
             ssl_stream stream{*options_.security.client_tls, ctx_, sock};
             stream.set_connect_state();
+            stream.set_hostname(ep.address().to_string());
             if (auto hs = co_await stream.async_handshake(); !hs)
             {
                 sock.close();
@@ -1122,6 +1182,7 @@ namespace cnetmod::raft
             (void)peer;
             (void)ep;
             (void)message;
+            (void)token;
             co_return std::unexpected(std::make_error_code(std::errc::protocol_not_supported));
 #endif
         }
@@ -1515,7 +1576,9 @@ namespace cnetmod::raft
                     .to = peer,
                     .snapshot = std::move(chunk),
                 };
-                auto sent = co_await send_with_retry(peer, ep, message);
+                auto& conn = connections_[peer];
+                conn.write_token.reset();
+                auto sent = co_await send_with_retry(peer, ep, message, conn.write_token);
                 if (auto it = snapshot_sends_.find(snapshot_send_key(peer, request.snapshot_id));
                     it != snapshot_sends_.end())
                 {
@@ -1576,7 +1639,9 @@ namespace cnetmod::raft
                     .to = peer,
                     .snapshot = std::move(chunk),
                 };
-                auto sent = co_await send_with_retry(peer, ep, message);
+                auto& conn = connections_[peer];
+                conn.write_token.reset();
+                auto sent = co_await send_with_retry(peer, ep, message, conn.write_token);
                 if (auto it = snapshot_sends_.find(snapshot_send_key(peer, request.snapshot_id));
                     it != snapshot_sends_.end())
                 {
@@ -1786,6 +1851,7 @@ namespace cnetmod::raft
         std::map<node_id, endpoint> peers_;
         std::map<node_id, peer_connection> connections_;
         std::set<socket*> inbound_sockets_;
+        std::set<socket*> outbound_tls_sockets_;
         std::set<cancel_token*> inbound_tokens_;
         std::map<node_id, raft_peer_transport_metrics> peer_metrics_;
         std::map<std::string, snapshot_receive_state> snapshot_receives_;
