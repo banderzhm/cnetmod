@@ -688,6 +688,185 @@ auto client::send_http2(const request& req)
     co_return result;
 }
 
+auto client::send_http2_batch(std::span<const request> requests)
+    -> task<std::vector<std::expected<response, std::error_code>>>
+{
+    std::vector<std::expected<response, std::error_code>> results;
+    results.reserve(requests.size());
+    for (std::size_t i = 0; i < requests.size(); ++i) {
+        results.emplace_back(std::unexpected(make_error_code(std::errc::operation_canceled)));
+    }
+    if (requests.empty()) co_return results;
+    if (!state_ || !state_->conn) co_return results;
+
+    auto append_frame = [](std::vector<std::byte>& output, v2::frame_header header,
+                           std::span<const std::byte> payload) {
+        header.length = static_cast<std::uint32_t>(payload.size());
+        const auto encoded = v2::encode_frame_header(header);
+        output.insert(output.end(), encoded.begin(), encoded.end());
+        output.insert(output.end(), payload.begin(), payload.end());
+    };
+    auto request_target = [](const request& request) -> std::expected<std::string, std::error_code> {
+        std::string target(request.uri());
+        if (!target.starts_with("http://") && !target.starts_with("https://")) return target;
+        const auto parsed = url::parse(target);
+        if (!parsed) return std::unexpected(make_error_code(http_errc::invalid_uri));
+        target = parsed->path;
+        if (!parsed->query.empty()) {
+            target.push_back('?');
+            target += parsed->query;
+        }
+        return target;
+    };
+
+    std::vector<std::byte> outbound;
+    if (!state_->h2_initialized) {
+        constexpr std::string_view preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+        outbound.reserve(preface.size() + requests.size() * 128);
+        for (const auto ch : preface) outbound.push_back(static_cast<std::byte>(ch));
+        const v2::settings settings{.max_concurrent_streams = options_.h2_max_concurrent_streams,
+                                    .initial_window_size = options_.h2_initial_window_size};
+        const auto values = v2::encode_settings(settings);
+        append_frame(outbound, {.type = v2::frame_type::settings}, values);
+        state_->h2_initialized = true;
+    }
+
+    std::unordered_map<std::uint32_t, std::size_t> stream_indexes;
+    stream_indexes.reserve(requests.size());
+    std::vector<bool> received_headers(requests.size(), false);
+    std::vector<bool> completed(requests.size(), false);
+
+    for (std::size_t index = 0; index < requests.size(); ++index) {
+        const auto& req = requests[index];
+        const auto stream_id = state_->h2_next_stream_id;
+        if (stream_id == 0 || stream_id > 0x7fff'fffdU) co_return results;
+        state_->h2_next_stream_id += 2;
+        auto target = request_target(req);
+        if (!target) co_return results;
+        std::string authority(req.get_header("Host"));
+        if (authority.empty()) authority = format_authority(state_->host, state_->port, state_->is_ssl);
+        std::vector<v2::header_field> fields{
+            {":method", std::string(method_to_string(req.method()))},
+            {":scheme", state_->is_ssl ? "https" : "http"},
+            {":authority", std::move(authority)},
+            {":path", std::move(*target)},
+        };
+        fields.reserve(fields.size() + req.headers().size());
+        for (const auto& [name, value] : req.headers()) {
+            std::string lowercase;
+            lowercase.reserve(name.size());
+            for (const auto ch : name) {
+                lowercase.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+            }
+            if (lowercase == "host" || lowercase == "connection" || lowercase == "transfer-encoding" ||
+                lowercase == "upgrade" || lowercase == "keep-alive") continue;
+            const bool sensitive = lowercase == "authorization" || lowercase == "cookie";
+            fields.push_back({std::move(lowercase), value, sensitive});
+        }
+        const auto block = state_->h2_encoder.encode(fields);
+        if (!block || block->size() > 16 * 1024) co_return results;
+        const bool has_body = !req.body().empty();
+        append_frame(outbound, {.type = v2::frame_type::headers,
+                                .flags = static_cast<std::uint8_t>(0x4 | (has_body ? 0 : 0x1)),
+                                .stream_id = stream_id}, *block);
+        const auto body = req.body();
+        for (std::size_t offset = 0; offset < body.size();) {
+            const auto size = std::min<std::size_t>(16 * 1024, body.size() - offset);
+            const bool final = offset + size == body.size();
+            append_frame(outbound, {.type = v2::frame_type::data,
+                                    .flags = static_cast<std::uint8_t>(final ? 0x1 : 0),
+                                    .stream_id = stream_id},
+                         {reinterpret_cast<const std::byte*>(body.data() + offset), size});
+            offset += size;
+        }
+        stream_indexes.emplace(stream_id, index);
+    }
+
+    const auto write = co_await write_data({reinterpret_cast<const char*>(outbound.data()), outbound.size()});
+    if (!write) {
+        for (auto& result : results) result = std::unexpected(write.error());
+        co_return results;
+    }
+
+    std::size_t pending = requests.size();
+    std::vector<std::byte> input;
+    input.reserve(16 * 1024);
+    std::array<std::byte, 16 * 1024> buffer{};
+    while (pending != 0) {
+        while (input.size() < v2::frame_header_size) {
+            const auto read = co_await read_data(buffer.data(), buffer.size());
+            if (!read || *read == 0) {
+                const auto error = read ? make_error_code(std::errc::connection_reset) : read.error();
+                for (std::size_t i = 0; i < results.size(); ++i)
+                    if (!completed[i]) results[i] = std::unexpected(error);
+                co_return results;
+            }
+            input.insert(input.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(*read));
+        }
+        const auto header = v2::decode_frame_header({input.data(), v2::frame_header_size});
+        if (!header || header->length > 16 * 1024 * 1024) co_return results;
+        const auto required = v2::frame_header_size + static_cast<std::size_t>(header->length);
+        while (input.size() < required) {
+            const auto read = co_await read_data(buffer.data(), buffer.size());
+            if (!read || *read == 0) co_return results;
+            input.insert(input.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(*read));
+        }
+        const auto payload = std::span{input.data() + v2::frame_header_size,
+                                       static_cast<std::size_t>(header->length)};
+        if (header->type == v2::frame_type::settings && (header->flags & 0x1) == 0) {
+            v2::settings peer;
+            if (const auto error = v2::decode_settings(payload, peer); error) co_return results;
+            state_->h2_encoder.set_dynamic_table_limit(peer.header_table_size);
+            std::vector<std::byte> ack;
+            append_frame(ack, {.type = v2::frame_type::settings, .flags = 0x1}, {});
+            const auto ack_write = co_await write_data({reinterpret_cast<const char*>(ack.data()), ack.size()});
+            if (!ack_write) co_return results;
+        } else if (header->type == v2::frame_type::ping && (header->flags & 0x1) == 0) {
+            std::vector<std::byte> ack;
+            append_frame(ack, {.type = v2::frame_type::ping, .flags = 0x1}, payload);
+            const auto ack_write = co_await write_data({reinterpret_cast<const char*>(ack.data()), ack.size()});
+            if (!ack_write) co_return results;
+        } else if (const auto found = stream_indexes.find(header->stream_id); found != stream_indexes.end()) {
+            const auto index = found->second;
+            if (header->type == v2::frame_type::headers) {
+                const auto decoded = state_->h2_decoder.decode(payload);
+                if (!decoded) co_return results;
+                response current(200, http_version::http_2);
+                if (received_headers[index]) current = std::move(*results[index]);
+                for (const auto& field : *decoded) {
+                    if (field.name == ":status") {
+                        int status{};
+                        const auto [end, error] = std::from_chars(field.value.data(), field.value.data() + field.value.size(), status);
+                        if (error != std::errc{} || end != field.value.data() + field.value.size()) co_return results;
+                        current.set_status(status);
+                    } else if (!field.name.starts_with(':')) {
+                        current.append_header(field.name, field.value);
+                    }
+                }
+                results[index] = std::move(current);
+                received_headers[index] = true;
+            } else if (header->type == v2::frame_type::data) {
+                if (!received_headers[index]) co_return results;
+                auto& current = *results[index];
+                current.set_body_preserve_headers(current.take_body() +
+                    std::string(reinterpret_cast<const char*>(payload.data()), payload.size()));
+            } else if (header->type == v2::frame_type::rst_stream) {
+                results[index] = std::unexpected(make_error_code(std::errc::connection_aborted));
+            }
+            if ((header->flags & 0x1) != 0 && !completed[index]) {
+                completed[index] = true;
+                --pending;
+            }
+        } else if (header->type == v2::frame_type::goaway) {
+            for (std::size_t i = 0; i < results.size(); ++i)
+                if (!completed[i]) results[i] = std::unexpected(make_error_code(std::errc::connection_aborted));
+            co_return results;
+        }
+        input.erase(input.begin(), input.begin() + static_cast<std::ptrdiff_t>(required));
+    }
+    co_return results;
+}
+
 // =============================================================================
 // Redirect Handling
 // =============================================================================
@@ -850,6 +1029,64 @@ auto client::send(http_method method, std::string_view url, std::string_view bod
     }
 
     co_return co_await send(req);
+}
+
+auto client::send_batch(std::span<const request> requests)
+    -> task<std::vector<std::expected<response, std::error_code>>>
+{
+    std::vector<std::expected<response, std::error_code>> results;
+    if (requests.empty()) co_return results;
+
+    const auto first_uri = requests.front().uri();
+    std::string host;
+    std::uint16_t port{};
+    bool use_ssl{};
+    if (first_uri.starts_with("http://") || first_uri.starts_with("https://")) {
+        const auto parsed = url::parse(first_uri);
+        if (!parsed) {
+            for (std::size_t i = 0; i < requests.size(); ++i)
+                results.emplace_back(std::unexpected(make_error_code(http_errc::invalid_uri)));
+            co_return results;
+        }
+        host = parsed->host;
+        port = parsed->port;
+        use_ssl = parsed->scheme == "https";
+        const auto connected = co_await connect(host, port, use_ssl);
+        if (!connected) {
+            for (std::size_t i = 0; i < requests.size(); ++i)
+                results.emplace_back(std::unexpected(connected.error()));
+            co_return results;
+        }
+    } else if (state_ && state_->conn && state_->conn->is_open()) {
+        host = state_->host;
+        port = state_->port;
+        use_ssl = state_->is_ssl;
+    } else {
+        for (std::size_t i = 0; i < requests.size(); ++i)
+            results.emplace_back(std::unexpected(make_error_code(std::errc::not_connected)));
+        co_return results;
+    }
+
+    for (const auto& request : requests) {
+        const auto uri = request.uri();
+        if (!uri.starts_with("http://") && !uri.starts_with("https://")) continue;
+        const auto parsed = url::parse(uri);
+        if (!parsed || parsed->host != host || parsed->port != port ||
+            (parsed->scheme == "https") != use_ssl) {
+            for (std::size_t i = 0; i < requests.size(); ++i)
+                results.emplace_back(std::unexpected(make_error_code(http_errc::invalid_uri)));
+            co_return results;
+        }
+    }
+
+    if (state_->protocol == protocol_type::http2) {
+        co_return co_await send_http2_batch(requests);
+    }
+    results.reserve(requests.size());
+    for (const auto& request : requests) {
+        results.emplace_back(co_await send_http1(request));
+    }
+    co_return results;
 }
 
 } // namespace cnetmod::http

@@ -104,6 +104,25 @@ auto run_http_client(cn::io_context& ctx,
     http::client client(ctx, std::move(opts));
     std::size_t completed = 0;
 
+    if (cfg.version == http::http_version_preference::http2_only) {
+        std::vector<http::request> batch;
+        batch.reserve(requests);
+        for (std::size_t i = 0; i < requests; ++i) {
+            batch.emplace_back(http::http_method::GET,
+                               (i == 0 || !keep_alive) ? url : "/hello");
+        }
+        auto responses = co_await client.send_batch(batch);
+        for (const auto& resp : responses) {
+            if (!resp || resp->status_code() != http::status::ok ||
+                resp->body() != "Hello, World!") {
+                break;
+            }
+            ++completed;
+        }
+        client.close();
+        co_return completed;
+    }
+
     for (std::size_t i = 0; i < requests; ++i) {
         auto resp = co_await client.get((i == 0 || !keep_alive)
                                             ? std::string_view{url}

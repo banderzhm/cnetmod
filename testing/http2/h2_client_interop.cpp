@@ -31,11 +31,20 @@ auto run(cn::io_context& context, std::uint16_t port, bool verify_body, int& exi
     if (!second || second->status_code() != 200 || second->version() != cn::http::http_version::http_2 ||
         (verify_body && second->body() != "received: payload"))
         exit_code = 1;
-    for (unsigned index = 0; exit_code == 0 && index < 16; ++index) {
-        auto response = co_await client.get("/hello");
+    std::vector<cn::http::request> batch;
+    batch.reserve(16);
+    for (unsigned index = 0; index < 16; ++index) {
+        batch.emplace_back(cn::http::http_method::GET, "/hello");
+    }
+    const auto responses = co_await client.send_batch(batch);
+    if (responses.size() != batch.size()) {
+        exit_code = 1;
+    }
+    for (const auto& response : responses) {
         if (!response || response->status_code() != 200 ||
-            (verify_body && response->body() != "Hello, World!"))
+            (verify_body && response->body() != "Hello, World!")) {
             exit_code = 1;
+        }
     }
     context.stop();
 }

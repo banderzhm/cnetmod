@@ -100,6 +100,13 @@ public:
                            std::string_view body = {})
         -> task<std::expected<response, std::error_code>>;
 
+    /// Submit same-origin requests as concurrent HTTP/2 streams on one
+    /// connection. HTTP/1.1 falls back to ordered requests. Redirect handling
+    /// is intentionally not applied to a batch, because a redirect can change
+    /// the origin and therefore cannot remain on the shared HTTP/2 connection.
+    [[nodiscard]] auto send_batch(std::span<const request> requests)
+        -> task<std::vector<std::expected<response, std::error_code>>>;
+
     /// GET request (async)
     [[nodiscard]] auto get(std::string_view url)
         -> task<std::expected<response, std::error_code>> {
@@ -236,6 +243,9 @@ private:
 
     [[nodiscard]] auto send_http2(const request& req)
         -> task<std::expected<response, std::error_code>>;
+
+    [[nodiscard]] auto send_http2_batch(std::span<const request> requests)
+        -> task<std::vector<std::expected<response, std::error_code>>>;
 
     /// Send with redirect handling (async)
     [[nodiscard]] auto send_with_redirects(const request& req, std::size_t redirect_count)
