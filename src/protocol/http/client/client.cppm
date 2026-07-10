@@ -2,11 +2,6 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_NGHTTP2
-#define NGHTTP2_NO_SSIZE_T
-#include <nghttp2/nghttp2.h>
-#endif
-
 export module cnetmod.protocol.http:client;
 
 import std;
@@ -18,7 +13,10 @@ import cnetmod.io.io_context;
 import cnetmod.protocol.tcp;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
-import :types;
+import cnetmod.protocol.http.v2.frame;
+import cnetmod.protocol.http.v2.settings;
+import cnetmod.protocol.http.v2.header_compression;
+import :semantics;
 import :request;
 import :response;
 import :parser;
@@ -26,10 +24,6 @@ import :cookie;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
-#endif
-
-#ifdef CNETMOD_HAS_NGHTTP2
-import :h2_types;
 #endif
 
 namespace cnetmod::http {
@@ -210,25 +204,15 @@ private:
         std::string request_buffer;
         std::string read_buffer;
         std::string body_buffer;
+        v2::header_compression h2_encoder;
+        v2::header_compression h2_decoder;
+        std::uint32_t h2_next_stream_id = 1;
+        bool h2_initialized = false;
         
 #ifdef CNETMOD_HAS_SSL
         std::optional<ssl_stream> ssl;
 #endif
 
-#ifdef CNETMOD_HAS_NGHTTP2
-        nghttp2_session* h2_session = nullptr;
-        
-        struct h2_stream_data {
-            int status_code = 0;
-            header_map headers;
-            header_map trailers;
-            std::string body;
-            std::string request_body;
-            std::size_t request_body_offset = 0;
-            bool complete = false;
-        };
-        std::unordered_map<std::int32_t, h2_stream_data> h2_streams;
-#endif
     };
 
     io_context* ctx_;
@@ -250,42 +234,12 @@ private:
     [[nodiscard]] auto send_http1(const request& req)
         -> task<std::expected<response, std::error_code>>;
 
+    [[nodiscard]] auto send_http2(const request& req)
+        -> task<std::expected<response, std::error_code>>;
+
     /// Send with redirect handling (async)
     [[nodiscard]] auto send_with_redirects(const request& req, std::size_t redirect_count)
         -> task<std::expected<response, std::error_code>>;
-
-#ifdef CNETMOD_HAS_NGHTTP2
-    /// Send HTTP/2 request (async)
-    [[nodiscard]] auto send_http2(const request& req)
-        -> task<std::expected<response, std::error_code>>;
-    
-    /// Initialize HTTP/2 session (async)
-    [[nodiscard]] auto init_h2_session() -> task<std::expected<void, std::error_code>>;
-    
-    /// HTTP/2 callbacks
-    static auto h2_on_header_callback(
-        nghttp2_session* session, const nghttp2_frame* frame,
-        const uint8_t* name, size_t namelen,
-        const uint8_t* value, size_t valuelen,
-        uint8_t flags, void* user_data) -> int;
-    
-    static auto h2_on_data_chunk_recv_callback(
-        nghttp2_session* session, uint8_t flags, int32_t stream_id,
-        const uint8_t* data, size_t len, void* user_data) -> int;
-    
-    static auto h2_on_frame_recv_callback(
-        nghttp2_session* session, const nghttp2_frame* frame,
-        void* user_data) -> int;
-    
-    static auto h2_on_stream_close_callback(
-        nghttp2_session* session, int32_t stream_id,
-        uint32_t error_code, void* user_data) -> int;
-
-    static auto h2_request_body_read_callback(
-        nghttp2_session* session, int32_t stream_id,
-        uint8_t* buf, size_t length, uint32_t* data_flags,
-        nghttp2_data_source* source, void* user_data) -> nghttp2_ssize;
-#endif
 
     /// Low-level I/O helpers (async)
     [[nodiscard]] auto write_data(std::string_view data)

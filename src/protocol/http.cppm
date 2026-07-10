@@ -4,7 +4,7 @@ module;
 
 export module cnetmod.protocol.http;
 
-export import :types;
+export import :semantics;
 export import :parser;
 export import :request;
 export import :response;
@@ -16,10 +16,10 @@ export import :server;
 export import :client;
 export import :utils;
 export import :cookie;
-
-#ifdef CNETMOD_HAS_NGHTTP2
-export import :stream_io;
-export import :h2_types;
-export import :h2_stream;
-export import :h2_session;
-#endif
+export import cnetmod.protocol.http.v2.frame;
+export import cnetmod.protocol.http.v2.huffman;
+export import cnetmod.protocol.http.v2.header_compression;
+export import cnetmod.protocol.http.v2.flow_control;
+export import cnetmod.protocol.http.v2.settings;
+export import cnetmod.protocol.http.v2.stream;
+export import cnetmod.protocol.http.v2.session;

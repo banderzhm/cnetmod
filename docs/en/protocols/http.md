@@ -417,8 +417,8 @@ Protocol version selection depends on two factors: **whether TLS is configured**
 | Feature | Build Option |
 |---------|--------------|
 | HTTP/1.1 only | No extra requirements |
-| HTTP/2 (TLS) | `-DCNETMOD_ENABLE_SSL=ON` + nghttp2 submodule |
-| HTTP/2 (cleartext h2c) | nghttp2 submodule |
+| HTTP/2 (TLS) | `-DCNETMOD_ENABLE_SSL=ON` |
+| HTTP/2 (cleartext h2c) | Built-in HTTP/2 engine |
 
 ### Protocol Detection Logic
 
@@ -520,7 +520,7 @@ curl --http1.1 -k https://localhost:8443/  # Fails: ALPN negotiation mismatch
 
 ### Scenario 5: HTTP/2 Cleartext (h2c)
 
-Without TLS, if the client sends an HTTP/2 client connection preface, the server automatically switches to HTTP/2 cleartext mode (h2c). Requires nghttp2 at build time.
+Without TLS, if the client sends an HTTP/2 client connection preface, the server automatically switches to the built-in cleartext HTTP/2 mode (h2c).
 
 ```cpp
 // No special configuration needed — just don't set ssl_context

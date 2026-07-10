@@ -11,7 +11,7 @@ module;
 module cnetmod.protocol.http;
 
 import std;
-import :types;
+import :semantics;
 import :parser;
 import :request;
 import :response;
@@ -29,6 +29,7 @@ import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
+import cnetmod.protocol.http.v2.session;
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
 import cnetmod.io.platform.io_uring;
@@ -38,10 +39,6 @@ import cnetmod.io.platform.io_uring_multishot_recv;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
-#endif
-
-#ifdef CNETMOD_HAS_NGHTTP2
-// HTTP/2 server.cppm
 #endif
 
 namespace cnetmod::http {
@@ -501,31 +498,19 @@ auto server::handle_connection(socket client, io_context& io) -> task<void> {
         auto hr = co_await ssl.async_handshake();
         if (!hr) { client.close(); co_return; }
 
-#ifdef CNETMOD_HAS_NGHTTP2
-        // Check ALPN-negotiated protocol
-        auto alpn = ssl.get_alpn_selected();
-        if (alpn == "h2") {
-            // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
-            (void)client.apply_options({.non_blocking = false, .no_delay = true});
-
-            stream_io sio(io, client, ssl);
-            http2_session h2(sio, router_, middlewares_, {},
-                [this]() { return date_cache_.get(); });
-            co_await h2.run();
-            client.close();
-            co_return;
+        if (ssl.get_alpn_selected() == "h2") {
+            co_await handle_h2_tls(client, io, ssl);
+        } else {
+            co_await handle_h1_tls(client, io, ssl);
         }
-#endif
-        // HTTP/1.1 over TLS
-        co_await handle_h1_tls(client, io, ssl);
         client.close();
         co_return;
     }
 #endif
 
     // --- Cleartext path ---
-#ifdef CNETMOD_HAS_NGHTTP2
     // Read initial data and check for HTTP/2 client connection preface
+    constexpr std::string_view h2_client_magic = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
     std::array<std::byte, 8192> peek_buf{};
     auto peek_rd = co_await async_read(io, client,
         mutable_buffer{peek_buf.data(), peek_buf.size()});
@@ -548,15 +533,13 @@ auto server::handle_connection(socket client, io_context& io) -> task<void> {
         peek_len += *rd;
     }
 
-    if (is_h2_client_preface(peek_buf.data(), peek_len)) {
+    if (peek_len >= h2_client_magic.size() &&
+        std::string_view{reinterpret_cast<const char*>(peek_buf.data()),
+                         h2_client_magic.size()} == h2_client_magic) {
         // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
-        // HTTP/2 cleartext (h2c via direct preface)
-        stream_io sio(io, client);
-        http2_session h2(sio, router_, middlewares_, {},
-            [this]() { return date_cache_.get(); });
-        co_await h2.run(peek_buf.data(), peek_len);
+        co_await handle_h2(client, io, {peek_buf.data(), peek_len});
         client.close();
         co_return;
     }
@@ -564,10 +547,60 @@ auto server::handle_connection(socket client, io_context& io) -> task<void> {
     // HTTP/1.1 cleartext — feed already-read bytes to parser
     co_await handle_h1_clear(client, io,
         reinterpret_cast<const char*>(peek_buf.data()), peek_len);
-#else
-    co_await handle_h1_clear(client, io);
-#endif
     client.close();
+}
+
+auto server::make_h2_handler(io_context& io, socket& client) -> v2::server_handler {
+    return [this, &io, &client](v2::server_request request)
+        -> task<v2::server_response>
+    {
+        std::string method = "GET";
+        std::string uri = "/";
+        header_map headers;
+        for (const auto& field : request.headers) {
+            if (field.name == ":method") method = field.value;
+            else if (field.name == ":path") uri = field.value;
+            else if (!field.name.starts_with(':')) headers[field.name] = field.value;
+        }
+        const auto query = uri.find('?');
+        const auto path = query == std::string::npos ? std::string_view(uri)
+                                                      : std::string_view(uri).substr(0, query);
+        auto match = router_.match(method, path);
+        response output(status::ok, http_version::http_2);
+        output.set_header("Server", "cnetmod");
+        output.set_header("Date", date_cache_.get());
+        route_params params;
+        handler_fn route;
+        if (match) {
+            route = std::move(match->handler);
+            params = std::move(match->params);
+        } else {
+            route = [](request_context& context) -> task<void> {
+                return detail::not_found_handler(context);
+            };
+        }
+        const std::string body(reinterpret_cast<const char*>(request.body.data()), request.body.size());
+        request_context context(io, client, method, uri, headers, body, output, std::move(params));
+        co_await execute_chain(context, route);
+        v2::server_response result;
+        result.status = static_cast<std::uint32_t>(output.status_code());
+        result.body.assign(reinterpret_cast<const std::byte*>(output.body().data()),
+                           reinterpret_cast<const std::byte*>(output.body().data()) + output.body().size());
+        for (const auto& [name, value] : output.headers()) {
+            std::string lowercase;
+            lowercase.reserve(name.size());
+            for (const auto character : name)
+                lowercase.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(character))));
+            result.headers.push_back({std::move(lowercase), value});
+        }
+        co_return result;
+    };
+}
+
+auto server::handle_h2(socket& client, io_context& io,
+                       std::span<const std::byte> initial) -> task<void> {
+    v2::session session(io, client, make_h2_handler(io, client));
+    co_await session.run(initial);
 }
 
 // =============================================================================
@@ -733,8 +766,24 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 
 #ifdef CNETMOD_HAS_SSL
 // =============================================================================
-// HTTP/1.1 TLS Handler
+// TLS Handlers
 // =============================================================================
+
+auto server::handle_h2_tls(socket& client, io_context& io,
+                           ssl_stream& ssl) -> task<void>
+{
+    auto reader = [&ssl](mutable_buffer buffer)
+        -> task<std::expected<std::size_t, std::error_code>> {
+        co_return co_await ssl.async_read(buffer);
+    };
+    auto writer = [&ssl](const_buffer buffer)
+        -> task<std::expected<void, std::error_code>> {
+        co_return co_await ssl.async_write_all(buffer);
+    };
+    v2::session session(io, client, make_h2_handler(io, client),
+                        std::move(reader), std::move(writer));
+    co_await session.run();
+}
 
 auto server::handle_h1_tls(socket& client, io_context& io,
                             ssl_stream& ssl) -> task<void>

@@ -9,7 +9,6 @@
     "jwt-cpp",
     "leveldb",
     "mimalloc",
-    "nghttp2",
     "nlohmann-json",
     "openssl",
     "pugixml",

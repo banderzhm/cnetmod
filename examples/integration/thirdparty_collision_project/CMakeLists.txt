@@ -53,25 +53,6 @@ add_subdirectory(
     EXCLUDE_FROM_ALL
 )
 
-# Host-owned nghttp2 target. cnetmod should reuse nghttp2_static.
-set(ENABLE_LIB_ONLY ON CACHE BOOL "" FORCE)
-set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
-set(ENABLE_DOC OFF CACHE BOOL "" FORCE)
-set(ENABLE_FAILMALLOC OFF CACHE BOOL "" FORCE)
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(CNETMOD_HOST_NGHTTP2_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/host_deps/nghttp2")
-file(MAKE_DIRECTORY
-    "${CNETMOD_HOST_NGHTTP2_BINARY_DIR}/lib"
-    "${CNETMOD_HOST_NGHTTP2_BINARY_DIR}/lib/includes/nghttp2"
-    "${CNETMOD_HOST_NGHTTP2_BINARY_DIR}/integration-tests"
-    "${CNETMOD_HOST_NGHTTP2_BINARY_DIR}/doc"
-)
-add_subdirectory(
-    "${CNETMOD_SOURCE_DIR}/3rdparty/nghttp2"
-    "${CNETMOD_HOST_NGHTTP2_BINARY_DIR}"
-    EXCLUDE_FROM_ALL
-)
-
 # Host-owned LevelDB target. cnetmod should reuse leveldb.
 set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LEVELDB_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)

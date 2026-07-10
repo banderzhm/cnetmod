@@ -2,21 +2,15 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_NGHTTP2
-#define NGHTTP2_NO_SSIZE_T
-#include <nghttp2/nghttp2.h>
-#endif
-
 module cnetmod.protocol.http;
 
 import std;
-import :types;
+import :semantics;
 import :request;
 import :response;
 import :parser;
 import :cookie;
 import :client;
-import :h2_types;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
@@ -26,6 +20,9 @@ import cnetmod.io.io_context;
 import cnetmod.protocol.tcp;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
+import cnetmod.protocol.http.v2.frame;
+import cnetmod.protocol.http.v2.settings;
+import cnetmod.protocol.http.v2.header_compression;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -64,26 +61,16 @@ void client::init_ssl_context() {
     // Configure ALPN based on version preference
     switch (options_.version_pref) {
     case http_version_preference::http2_only:
-#ifdef CNETMOD_HAS_NGHTTP2
         ssl_ctx_->configure_alpn_client({"h2"});
-#endif
         break;
     case http_version_preference::http1_only:
         ssl_ctx_->configure_alpn_client({"http/1.1"});
         break;
     case http_version_preference::http2_preferred:
-#ifdef CNETMOD_HAS_NGHTTP2
         ssl_ctx_->configure_alpn_client({"h2", "http/1.1"});
-#else
-        ssl_ctx_->configure_alpn_client({"http/1.1"});
-#endif
         break;
     case http_version_preference::http1_preferred:
-#ifdef CNETMOD_HAS_NGHTTP2
         ssl_ctx_->configure_alpn_client({"http/1.1", "h2"});
-#else
-        ssl_ctx_->configure_alpn_client({"http/1.1"});
-#endif
         break;
     }
 }
@@ -95,13 +82,6 @@ void client::init_ssl_context() {
 
 void client::close() noexcept {
     if (!state_) return;
-    
-#ifdef CNETMOD_HAS_NGHTTP2
-    if (state_->h2_session) {
-        nghttp2_session_del(state_->h2_session);
-        state_->h2_session = nullptr;
-    }
-#endif
     
 #ifdef CNETMOD_HAS_SSL
     if (state_->ssl) {
@@ -166,17 +146,7 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
         // Check ALPN negotiation
         auto alpn = state_->ssl->get_alpn_selected();
         if (alpn == "h2") {
-#ifdef CNETMOD_HAS_NGHTTP2
             state_->protocol = protocol_type::http2;
-            auto init_result = co_await init_h2_session();
-            if (!init_result) {
-                close();
-                co_return std::unexpected(init_result.error());
-            }
-#else
-            close();
-            co_return std::unexpected(make_error_code(std::errc::not_supported));
-#endif
         } else {
             state_->protocol = protocol_type::http1;
         }
@@ -186,17 +156,7 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
         // Plain HTTP - check version preference
         switch (options_.version_pref) {
         case http_version_preference::http2_only: {
-#ifdef CNETMOD_HAS_NGHTTP2
             state_->protocol = protocol_type::http2;
-            auto init_result = co_await init_h2_session();
-            if (!init_result) {
-                close();
-                co_return std::unexpected(init_result.error());
-            }
-#else
-            close();
-            co_return std::unexpected(make_error_code(std::errc::not_supported));
-#endif
             break;
         }
         default:
@@ -589,462 +549,144 @@ auto client::send_http1(const request& req)
     co_return resp;
 }
 
-#ifdef CNETMOD_HAS_NGHTTP2
 
 // =============================================================================
-// HTTP/2 Session Initialization
-// =============================================================================
-
-auto client::init_h2_session() -> task<std::expected<void, std::error_code>> {
-    if (!state_ || state_->h2_session) {
-        co_return {};
-    }
-
-    // Create callbacks
-    nghttp2_session_callbacks* callbacks = nullptr;
-    nghttp2_session_callbacks_new(&callbacks);
-
-    nghttp2_session_callbacks_set_on_header_callback(
-        callbacks, h2_on_header_callback);
-    nghttp2_session_callbacks_set_on_data_chunk_recv_callback(
-        callbacks, h2_on_data_chunk_recv_callback);
-    nghttp2_session_callbacks_set_on_frame_recv_callback(
-        callbacks, h2_on_frame_recv_callback);
-    nghttp2_session_callbacks_set_on_stream_close_callback(
-        callbacks, h2_on_stream_close_callback);
-
-    // Create client session
-    int rv = nghttp2_session_client_new(&state_->h2_session, callbacks, this);
-    nghttp2_session_callbacks_del(callbacks);
-
-    if (rv != 0) {
-        co_return std::unexpected(make_error_code(h2_errc::internal_error));
-    }
-
-    // Submit client settings
-    nghttp2_settings_entry iv[] = {
-        {NGHTTP2_SETTINGS_MAX_CONCURRENT_STREAMS, 
-         options_.h2_max_concurrent_streams},
-        {NGHTTP2_SETTINGS_INITIAL_WINDOW_SIZE, 
-         options_.h2_initial_window_size},
-        {NGHTTP2_SETTINGS_ENABLE_PUSH, 0},
-    };
-
-    rv = nghttp2_submit_settings(
-        state_->h2_session, NGHTTP2_FLAG_NONE,
-        iv, sizeof(iv) / sizeof(iv[0]));
-
-    if (rv != 0) {
-        nghttp2_session_del(state_->h2_session);
-        state_->h2_session = nullptr;
-        co_return std::unexpected(make_error_code(h2_errc::internal_error));
-    }
-
-    // Flush client connection preface and settings. nghttp2 emits the
-    // cleartext client magic for client sessions on the first send.
-    std::string buffer;
-    for (;;) {
-        const uint8_t* data = nullptr;
-        auto len = nghttp2_session_mem_send2(state_->h2_session, &data);
-        if (len < 0) {
-            co_return std::unexpected(make_error_code(h2_errc::internal_error));
-        }
-        if (len == 0) break;
-        buffer.append(reinterpret_cast<const char*>(data), 
-                     static_cast<std::size_t>(len));
-    }
-
-    if (!buffer.empty()) {
-        auto result = co_await write_data(buffer);
-        if (!result) {
-            co_return std::unexpected(result.error());
-        }
-    }
-
-    // Receive server settings
-    char temp[16384];
-    auto result = co_await read_data(temp, sizeof(temp));
-    if (!result) {
-        co_return std::unexpected(result.error());
-    }
-
-    auto consumed = nghttp2_session_mem_recv2(
-        state_->h2_session,
-        reinterpret_cast<const uint8_t*>(temp),
-        *result);
-
-    if (consumed < 0) {
-        co_return std::unexpected(make_error_code(h2_errc::protocol_error));
-    }
-
-    co_return {};
-}
-
-// =============================================================================
-// HTTP/2 Send Implementation
+// HTTP/2 Client (cleartext h2c prior-knowledge)
 // =============================================================================
 
 auto client::send_http2(const request& req)
     -> task<std::expected<response, std::error_code>>
 {
-    if (!state_ || !state_->h2_session) {
+    if (!state_ || !state_->conn) {
         co_return std::unexpected(make_error_code(std::errc::not_connected));
     }
-
-    // Parse URI to get path
-    auto uri = req.uri();
-    std::string path = "/";
-    
-    if (uri.starts_with("http://") || uri.starts_with("https://")) {
-        auto url_result = url::parse(uri);
-        if (!url_result) {
-            co_return std::unexpected(make_error_code(http_errc::invalid_uri));
-        }
-        path = url_result->path;
-        if (!url_result->query.empty()) {
-            path += "?";
-            path += url_result->query;
-        }
-    } else {
-        path = std::string(uri);
+    auto append_frame = [](std::vector<std::byte>& output, v2::frame_header header,
+                           std::span<const std::byte> payload) {
+        header.length = static_cast<std::uint32_t>(payload.size());
+        const auto encoded = v2::encode_frame_header(header);
+        output.insert(output.end(), encoded.begin(), encoded.end());
+        output.insert(output.end(), payload.begin(), payload.end());
+    };
+    std::vector<std::byte> outbound;
+    if (!state_->h2_initialized) {
+        constexpr std::string_view preface = "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
+        for (const auto ch : preface) outbound.push_back(static_cast<std::byte>(ch));
+        const v2::settings settings{.max_concurrent_streams = options_.h2_max_concurrent_streams,
+                                    .initial_window_size = options_.h2_initial_window_size};
+        const auto values = v2::encode_settings(settings);
+        append_frame(outbound, {.type = v2::frame_type::settings}, values);
+        state_->h2_initialized = true;
     }
 
-    auto stream_id = nghttp2_session_get_next_stream_id(state_->h2_session);
-    if (stream_id <= 0) {
-        co_return std::unexpected(make_error_code(h2_errc::internal_error));
+    const auto stream_id = state_->h2_next_stream_id;
+    if (stream_id == 0 || stream_id > 0x7fff'fffdU) {
+        co_return std::unexpected(make_error_code(std::errc::resource_unavailable_try_again));
     }
-
-    // Create request stream data before submit so nghttp2's data provider
-    // always points at stable storage, including flow-control delayed sends.
-    auto [stream_it, inserted] = state_->h2_streams.emplace(
-        stream_id, connection_state::h2_stream_data{});
-    if (!inserted) {
-        co_return std::unexpected(make_error_code(h2_errc::internal_error));
-    }
-    stream_it->second.request_body = std::string(req.body());
-
-    // Build HTTP/2 headers
-    std::vector<nghttp2_nv> nva;
-    nva.reserve(req.headers().size() + 5);
-    std::vector<std::string> header_names;
-    header_names.reserve(req.headers().size());
-
-    // Pseudo-headers
-    auto method_str = std::string(method_to_string(req.method()));
-    nva.push_back({
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(":method")),
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(method_str.data())),
-        7, method_str.size(),
-        NGHTTP2_NV_FLAG_NO_COPY_NAME
-    });
-
-    nva.push_back({
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(":path")),
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(path.data())),
-        5, path.size(),
-        NGHTTP2_NV_FLAG_NO_COPY_NAME
-    });
-
-    std::string scheme = state_->is_ssl ? "https" : "http";
-    nva.push_back({
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(":scheme")),
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(scheme.data())),
-        7, scheme.size(),
-        NGHTTP2_NV_FLAG_NO_COPY_NAME
-    });
-
-    // Authority
-    std::string authority;
-    auto host_header = req.get_header("Host");
-    if (!host_header.empty()) {
-        authority = std::string(host_header);
-    } else {
-        authority = format_authority(state_->host, state_->port, state_->is_ssl);
-    }
-
-    nva.push_back({
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(":authority")),
-        const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(authority.data())),
-        10, authority.size(),
-        NGHTTP2_NV_FLAG_NO_COPY_NAME
-    });
-
-    // Regular headers (convert to lowercase, filter hop-by-hop)
-    for (const auto& [key, value] : req.headers()) {
-        if (key.empty() || key[0] == ':') continue;
-        if (key == "Host" || key == "Connection" || key == "Keep-Alive" ||
-            key == "Transfer-Encoding" || key == "Upgrade") {
-            continue;
-        }
-
-        std::string lower_key(key);
-        std::ranges::transform(lower_key, lower_key.begin(),
-            [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-        header_names.push_back(std::move(lower_key));
-        auto& stored_key = header_names.back();
-
-        nva.push_back({
-            const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(stored_key.data())),
-            const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(value.data())),
-            stored_key.size(), value.size(),
-            NGHTTP2_NV_FLAG_NO_COPY_NAME | NGHTTP2_NV_FLAG_NO_COPY_VALUE
-        });
-    }
-
-    nghttp2_data_provider2 data_provider{};
-    nghttp2_data_provider2* data_provider_ptr = nullptr;
-    if (!stream_it->second.request_body.empty()) {
-        data_provider.source.ptr = &stream_it->second;
-        data_provider.read_callback = h2_request_body_read_callback;
-        data_provider_ptr = &data_provider;
-    }
-
-    // Submit request
-    int rv = nghttp2_submit_request2(
-        state_->h2_session,
-        nullptr,
-        nva.data(),
-        nva.size(),
-        data_provider_ptr,
-        nullptr
-    );
-
-    if (rv < 0) {
-        state_->h2_streams.erase(stream_id);
-        co_return std::unexpected(make_error_code(h2_errc::internal_error));
-    }
-    if (rv != stream_id) {
-        state_->h2_streams.erase(stream_id);
-        co_return std::unexpected(make_error_code(h2_errc::internal_error));
-    }
-
-    // Flush request
-    std::string buffer;
-    for (;;) {
-        const uint8_t* data = nullptr;
-        auto len = nghttp2_session_mem_send2(state_->h2_session, &data);
-        if (len < 0) {
-            state_->h2_streams.erase(stream_id);
-            co_return std::unexpected(make_error_code(h2_errc::internal_error));
-        }
-        if (len == 0) break;
-        buffer.append(reinterpret_cast<const char*>(data), 
-                     static_cast<std::size_t>(len));
-    }
-
-    if (!buffer.empty()) {
-        auto result = co_await write_data(buffer);
-        if (!result) {
-            state_->h2_streams.erase(stream_id);
-            co_return std::unexpected(result.error());
+    state_->h2_next_stream_id += 2;
+    std::string authority = std::string(req.get_header("Host"));
+    if (authority.empty()) authority = format_authority(state_->host, state_->port, state_->is_ssl);
+    std::string target(req.uri());
+    if (target.starts_with("http://") || target.starts_with("https://")) {
+        auto parsed = url::parse(target);
+        if (!parsed) co_return std::unexpected(make_error_code(http_errc::invalid_uri));
+        target = parsed->path;
+        if (!parsed->query.empty()) {
+            target.push_back('?');
+            target += parsed->query;
         }
     }
+    std::array<v2::header_field, 4> pseudo{{
+        {":method", std::string(method_to_string(req.method()))},
+        {":scheme", state_->is_ssl ? "https" : "http"},
+        {":authority", std::move(authority)},
+        {":path", std::move(target)},
+    }};
+    std::vector<v2::header_field> fields(pseudo.begin(), pseudo.end());
+    for (const auto& [name, value] : req.headers()) {
+        std::string lowercase;
+        lowercase.reserve(name.size());
+        for (const auto ch : name) lowercase.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+        if (lowercase == "host" || lowercase == "connection" || lowercase == "transfer-encoding" ||
+            lowercase == "upgrade" || lowercase == "keep-alive") continue;
+        fields.push_back({std::move(lowercase), value,
+                          lowercase == "authorization" || lowercase == "cookie"});
+    }
+    const auto block = state_->h2_encoder.encode(fields);
+    if (!block || block->size() > 16 * 1024) {
+        co_return std::unexpected(block ? make_error_code(std::errc::message_size) : block.error());
+    }
+    const bool has_body = !req.body().empty();
+    append_frame(outbound, {.type = v2::frame_type::headers,
+                            .flags = static_cast<std::uint8_t>(0x4 | (has_body ? 0 : 0x1)),
+                            .stream_id = stream_id}, *block);
+    if (has_body) {
+        const auto body = req.body();
+        append_frame(outbound, {.type = v2::frame_type::data, .flags = 0x1, .stream_id = stream_id},
+                     {reinterpret_cast<const std::byte*>(body.data()), body.size()});
+    }
+    const auto write = co_await write_data({reinterpret_cast<const char*>(outbound.data()), outbound.size()});
+    if (!write) co_return std::unexpected(write.error());
 
-    // Receive response
-    while (!state_->h2_streams[stream_id].complete) {
-        char temp[16384];
-        auto result = co_await read_data(temp, sizeof(temp));
-        if (!result) {
-            state_->h2_streams.erase(stream_id);
-            co_return std::unexpected(result.error());
+    response result(200, http_version::http_2);
+    bool received_headers = false;
+    bool completed = false;
+    std::vector<std::byte> input;
+    input.reserve(16 * 1024);
+    std::array<std::byte, 16 * 1024> buffer{};
+    while (!completed) {
+        while (input.size() < v2::frame_header_size) {
+            const auto read = co_await read_data(buffer.data(), buffer.size());
+            if (!read || *read == 0) co_return std::unexpected(read ? make_error_code(std::errc::connection_reset) : read.error());
+            input.insert(input.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(*read));
         }
-
-        if (*result == 0) {
-            state_->h2_streams.erase(stream_id);
-            co_return std::unexpected(make_error_code(std::errc::connection_reset));
+        const auto header = v2::decode_frame_header({input.data(), v2::frame_header_size});
+        if (!header || header->length > 16 * 1024 * 1024) co_return std::unexpected(header ? make_error_code(std::errc::message_size) : header.error());
+        const auto required = v2::frame_header_size + static_cast<std::size_t>(header->length);
+        while (input.size() < required) {
+            const auto read = co_await read_data(buffer.data(), buffer.size());
+            if (!read || *read == 0) co_return std::unexpected(read ? make_error_code(std::errc::connection_reset) : read.error());
+            input.insert(input.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(*read));
         }
-
-        auto consumed = nghttp2_session_mem_recv2(
-            state_->h2_session,
-            reinterpret_cast<const uint8_t*>(temp),
-            *result);
-
-        if (consumed < 0) {
-            state_->h2_streams.erase(stream_id);
-            co_return std::unexpected(make_error_code(h2_errc::protocol_error));
-        }
-
-        // Flush any pending frames
-        buffer.clear();
-        for (;;) {
-            const uint8_t* data = nullptr;
-            auto len = nghttp2_session_mem_send2(state_->h2_session, &data);
-            if (len < 0) {
-                state_->h2_streams.erase(stream_id);
-                co_return std::unexpected(make_error_code(h2_errc::internal_error));
+        const auto payload = std::span{input.data() + v2::frame_header_size, static_cast<std::size_t>(header->length)};
+        if (header->type == v2::frame_type::settings && (header->flags & 0x1) == 0) {
+            v2::settings peer;
+            if (const auto settings_error = v2::decode_settings(payload, peer); settings_error)
+                co_return std::unexpected(settings_error);
+            state_->h2_encoder.set_dynamic_table_limit(peer.header_table_size);
+            const std::array<std::byte, 0> empty{};
+            std::vector<std::byte> ack;
+            append_frame(ack, {.type = v2::frame_type::settings, .flags = 0x1}, empty);
+            const auto ack_write = co_await write_data({reinterpret_cast<const char*>(ack.data()), ack.size()});
+            if (!ack_write) co_return std::unexpected(ack_write.error());
+        } else if (header->type == v2::frame_type::headers && header->stream_id == stream_id) {
+            const auto decoded = state_->h2_decoder.decode(payload);
+            if (!decoded) co_return std::unexpected(decoded.error());
+            for (const auto& field : *decoded) {
+                if (field.name == ":status") {
+                    int status{};
+                    const auto [end, ec] = std::from_chars(field.value.data(), field.value.data() + field.value.size(), status);
+                    if (ec != std::errc{} || end != field.value.data() + field.value.size())
+                        co_return std::unexpected(make_error_code(std::errc::protocol_error));
+                    result.set_status(status);
+                } else if (!field.name.starts_with(':')) {
+                    result.append_header(field.name, field.value);
+                }
             }
-            if (len == 0) break;
-            buffer.append(reinterpret_cast<const char*>(data), 
-                         static_cast<std::size_t>(len));
+            received_headers = true;
+            completed = (header->flags & 0x1) != 0;
+        } else if (header->type == v2::frame_type::data && header->stream_id == stream_id) {
+            if (!received_headers) co_return std::unexpected(make_error_code(std::errc::protocol_error));
+            result.set_body_preserve_headers(result.take_body() + std::string(reinterpret_cast<const char*>(payload.data()), payload.size()));
+            completed = (header->flags & 0x1) != 0;
+        } else if (header->type == v2::frame_type::rst_stream && header->stream_id == stream_id) {
+            co_return std::unexpected(make_error_code(std::errc::connection_aborted));
+        } else if (header->type == v2::frame_type::goaway) {
+            co_return std::unexpected(make_error_code(std::errc::connection_aborted));
         }
-
-        if (!buffer.empty()) {
-            auto wr = co_await write_data(buffer);
-            if (!wr) {
-                state_->h2_streams.erase(stream_id);
-                co_return std::unexpected(wr.error());
-            }
-        }
+        input.erase(input.begin(), input.begin() + static_cast<std::ptrdiff_t>(required));
     }
-
-    // Build response
-    auto& stream = state_->h2_streams[stream_id];
-    response resp(stream.status_code);
-    for (const auto& [key, value] : stream.headers) {
-        resp.set_header(key, value);
-    }
-    for (const auto& [key, value] : stream.trailers) {
-        resp.set_trailer(key, value);
-    }
-    resp.set_body_preserve_headers(std::move(stream.body));
-
-    state_->h2_streams.erase(stream_id);
-    if (!options_.keep_alive) {
-        close();
-    }
-    co_return resp;
+    co_return result;
 }
-
-// =============================================================================
-// HTTP/2 Callbacks
-// =============================================================================
-
-auto client::h2_on_header_callback(
-    nghttp2_session* /*session*/,
-    const nghttp2_frame* frame,
-    const uint8_t* name, size_t namelen,
-    const uint8_t* value, size_t valuelen,
-    uint8_t /*flags*/,
-    void* user_data) -> int
-{
-    auto* self = static_cast<client*>(user_data);
-    
-    if (frame->hd.type != NGHTTP2_HEADERS || !self->state_) {
-        return 0;
-    }
-
-    auto it = self->state_->h2_streams.find(frame->hd.stream_id);
-    if (it == self->state_->h2_streams.end()) {
-        return 0;
-    }
-
-    auto& stream = it->second;
-    std::string_view name_sv(reinterpret_cast<const char*>(name), namelen);
-    std::string_view value_sv(reinterpret_cast<const char*>(value), valuelen);
-
-    if (name_sv == ":status") {
-        auto [ptr, ec] = std::from_chars(value_sv.data(),
-                                        value_sv.data() + value_sv.size(),
-                                        stream.status_code);
-        if (ec != std::errc{}) {
-            return NGHTTP2_ERR_CALLBACK_FAILURE;
-        }
-    } else if (!name_sv.empty() && name_sv[0] != ':') {
-        if (frame->headers.cat == NGHTTP2_HCAT_RESPONSE) {
-            stream.headers[std::string(name_sv)] = std::string(value_sv);
-        } else {
-            stream.trailers[std::string(name_sv)] = std::string(value_sv);
-        }
-    }
-
-    return 0;
-}
-
-auto client::h2_on_data_chunk_recv_callback(
-    nghttp2_session* session,
-    uint8_t /*flags*/,
-    int32_t stream_id,
-    const uint8_t* data, size_t len,
-    void* user_data) -> int
-{
-    auto* self = static_cast<client*>(user_data);
-    
-    if (!self->state_) return 0;
-    
-    auto it = self->state_->h2_streams.find(stream_id);
-    if (it != self->state_->h2_streams.end()) {
-        it->second.body.append(reinterpret_cast<const char*>(data), len);
-    }
-
-    nghttp2_session_consume(session, stream_id, len);
-
-    return 0;
-}
-
-auto client::h2_on_frame_recv_callback(
-    nghttp2_session* /*session*/,
-    const nghttp2_frame* frame,
-    void* user_data) -> int
-{
-    auto* self = static_cast<client*>(user_data);
-
-    if (!self->state_) return 0;
-
-    if (frame->hd.type == NGHTTP2_HEADERS) {
-        auto it = self->state_->h2_streams.find(frame->hd.stream_id);
-        if (it != self->state_->h2_streams.end()) {
-            if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-                it->second.complete = true;
-            }
-        }
-    } else if (frame->hd.type == NGHTTP2_DATA) {
-        if (frame->hd.flags & NGHTTP2_FLAG_END_STREAM) {
-            auto it = self->state_->h2_streams.find(frame->hd.stream_id);
-            if (it != self->state_->h2_streams.end()) {
-                it->second.complete = true;
-            }
-        }
-    }
-
-    return 0;
-}
-
-auto client::h2_on_stream_close_callback(
-    nghttp2_session* /*session*/,
-    int32_t stream_id,
-    uint32_t /*error_code*/,
-    void* user_data) -> int
-{
-    auto* self = static_cast<client*>(user_data);
-    
-    if (!self->state_) return 0;
-    
-    auto it = self->state_->h2_streams.find(stream_id);
-    if (it != self->state_->h2_streams.end()) {
-        it->second.complete = true;
-    }
-
-    return 0;
-}
-
-auto client::h2_request_body_read_callback(
-    nghttp2_session* /*session*/,
-    int32_t /*stream_id*/,
-    uint8_t* buf,
-    size_t length,
-    uint32_t* data_flags,
-    nghttp2_data_source* source,
-    void* /*user_data*/) -> nghttp2_ssize
-{
-    auto* stream = static_cast<connection_state::h2_stream_data*>(source->ptr);
-    if (!stream) {
-        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-        return 0;
-    }
-
-    auto remaining = stream->request_body.size() - stream->request_body_offset;
-    auto n = std::min<std::size_t>(length, remaining);
-    if (n > 0) {
-        std::memcpy(buf, stream->request_body.data() + stream->request_body_offset, n);
-        stream->request_body_offset += n;
-    }
-    if (stream->request_body_offset >= stream->request_body.size()) {
-        *data_flags |= NGHTTP2_DATA_FLAG_EOF;
-    }
-    return static_cast<nghttp2_ssize>(n);
-}
-
-#endif // CNETMOD_HAS_NGHTTP2
 
 // =============================================================================
 // Redirect Handling
@@ -1104,11 +746,9 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
     if (state_->protocol == protocol_type::http1) {
         result = co_await send_http1(req);
     }
-#ifdef CNETMOD_HAS_NGHTTP2
     else if (state_->protocol == protocol_type::http2) {
         result = co_await send_http2(req);
     }
-#endif
     else {
         co_return std::unexpected(make_error_code(std::errc::not_supported));
     }

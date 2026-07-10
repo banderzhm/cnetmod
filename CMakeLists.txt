@@ -305,83 +305,7 @@ endif()
 
 # Logging module uses pure C++23 std::format implementation, no external dependencies
 
-# nghttp2: HTTP/2 C library (build core library only)
-option(CNETMOD_ENABLE_HTTP2 "Enable HTTP/2 support (requires nghttp2)" ON)
-if(CNETMOD_ENABLE_HTTP2)
-    if(CNETMOD_USE_SYSTEM_DEPS)
-        find_package(nghttp2 CONFIG QUIET)
-        find_package(unofficial-nghttp2 CONFIG QUIET)
-        find_package(libnghttp2 CONFIG QUIET)
-    endif()
-    if(TARGET libnghttp2::libnghttp2)
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET libnghttp2::libnghttp2)
-        message(STATUS "HTTP/2: Enabled (libnghttp2::libnghttp2)")
-    elseif(TARGET libnghttp2::nghttp2)
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET libnghttp2::nghttp2)
-        message(STATUS "HTTP/2: Enabled (libnghttp2::nghttp2)")
-    elseif(TARGET unofficial::nghttp2::nghttp2)
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET unofficial::nghttp2::nghttp2)
-        message(STATUS "HTTP/2: Enabled (unofficial::nghttp2::nghttp2)")
-    elseif(TARGET nghttp2::nghttp2)
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET nghttp2::nghttp2)
-        message(STATUS "HTTP/2: Enabled (nghttp2::nghttp2)")
-    elseif(TARGET nghttp2_static)
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET nghttp2_static)
-        message(STATUS "HTTP/2: Enabled (existing target nghttp2_static)")
-    elseif(TARGET nghttp2)
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET nghttp2)
-        message(STATUS "HTTP/2: Enabled (existing target nghttp2)")
-    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/nghttp2/CMakeLists.txt")
-        # Configure nghttp2 build options before add_subdirectory
-        set(ENABLE_LIB_ONLY ON CACHE BOOL "Build libnghttp2 only" FORCE)
-        set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
-        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-        set(BUILD_STATIC_LIBS ON CACHE BOOL "" FORCE)
-        set(ENABLE_DOC OFF CACHE BOOL "" FORCE)
-        set(BUILD_TESTING_SAVED ${BUILD_TESTING})
-        set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-        set(ENABLE_FAILMALLOC OFF CACHE BOOL "" FORCE)
-
-        # nghttp2 configures a few generated files before its subdirectories
-        # are added; pre-create those binary directories for stable reconfigure.
-        set(CNETMOD_NGHTTP2_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/nghttp2")
-        file(MAKE_DIRECTORY
-            "${CNETMOD_NGHTTP2_BINARY_DIR}/lib"
-            "${CNETMOD_NGHTTP2_BINARY_DIR}/lib/includes/nghttp2"
-            "${CNETMOD_NGHTTP2_BINARY_DIR}/integration-tests"
-            "${CNETMOD_NGHTTP2_BINARY_DIR}/doc"
-        )
-
-        add_subdirectory(3rdparty/nghttp2 EXCLUDE_FROM_ALL)
-
-        # Restore parent project settings
-        set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
-        set(BUILD_TESTING ${BUILD_TESTING_SAVED} CACHE BOOL "" FORCE)
-
-        set(CNETMOD_HAS_NGHTTP2 ON)
-        set(CNETMOD_NGHTTP2_TARGET nghttp2_static)
-        message(STATUS "HTTP/2: Enabled (nghttp2)")
-    else()
-        find_path(CNETMOD_NGHTTP2_INCLUDE_DIR nghttp2/nghttp2.h)
-        find_library(CNETMOD_NGHTTP2_LIBRARY NAMES nghttp2 nghttp2_static)
-        if(CNETMOD_NGHTTP2_INCLUDE_DIR AND CNETMOD_NGHTTP2_LIBRARY)
-            set(CNETMOD_HAS_NGHTTP2 ON)
-            message(STATUS "HTTP/2: Enabled (${CNETMOD_NGHTTP2_LIBRARY})")
-        else()
-            set(CNETMOD_HAS_NGHTTP2 OFF)
-            message(STATUS "HTTP/2: nghttp2 not found, HTTP/2 disabled")
-        endif()
-    endif()
-else()
-    set(CNETMOD_HAS_NGHTTP2 OFF)
-    message(STATUS "HTTP/2: Disabled by user")
-endif()
+# HTTP/2 is implemented in-tree under src/protocol/http/v2.
 
 # ==============================================================================
 # SSL/TLS Support (Optional)
@@ -558,7 +482,7 @@ if(MSVC)
     # MSVC 19.44 can fail required coroutine tail-call codegen (C4737) in this
     # large Release translation unit. Keep the workaround scoped to the file.
     set_source_files_properties(
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/http/client_impl.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/http/client/client.cpp"
         PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
     )
 endif()
@@ -583,12 +507,6 @@ endif()
 if(NOT CNETMOD_HAS_SSL)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "core/ssl")
     list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "core/ssl")
-endif()
-if(NOT CNETMOD_HAS_NGHTTP2)
-    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/h2_")
-    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/stream_io")
-    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "http/h2_")
-    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "http/stream_io")
 endif()
 
 # ==============================================================================
@@ -616,7 +534,6 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
-    $<$<BOOL:${CNETMOD_HAS_NGHTTP2}>:CNETMOD_HAS_NGHTTP2>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
 )
 
@@ -635,16 +552,6 @@ endif()
 # zlib linking
 if(CNETMOD_HAS_ZLIB)
     target_link_libraries(cnetmod_core PUBLIC ZLIB::ZLIB)
-endif()
-
-# nghttp2 linking
-if(CNETMOD_HAS_NGHTTP2)
-    if(CNETMOD_NGHTTP2_TARGET)
-        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_TARGET})
-    else()
-        target_include_directories(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_INCLUDE_DIR})
-        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_NGHTTP2_LIBRARY})
-    endif()
 endif()
 
 if(TARGET nlohmann_json::nlohmann_json)

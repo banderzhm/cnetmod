@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.http:swagger;
 
 import std;
-import :types;
+import :semantics;
 import :router;
 
 namespace cnetmod::http {

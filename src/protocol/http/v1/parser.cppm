@@ -6,7 +6,7 @@ module;
 export module cnetmod.protocol.http:parser;
 
 import std;
-import :types;
+import :semantics;
 
 namespace cnetmod::http {
 
@@ -50,85 +50,7 @@ public:
     /// If parsing is complete, ready() returns true
     /// Returns error_code on error
     [[nodiscard]] auto consume(const char* data, std::size_t len)
-        -> std::expected<std::size_t, std::error_code>
-    {
-        if (ready_) return std::size_t{0};
-
-        buf_.append(data, len);
-        std::size_t total_consumed = len;
-
-        while (!ready_) {
-            switch (state_) {
-            case state::request_line: {
-                auto pos = detail::find_crlf(buf_.data(), buf_.size());
-                if (pos == std::string_view::npos) {
-                    if (buf_.size() > max_header_size)
-                        return std::unexpected(make_error_code(http_errc::header_too_large));
-                    return total_consumed;
-                }
-
-                auto line = std::string_view(buf_.data(), pos);
-                auto r = parse_request_line(line);
-                if (!r) return std::unexpected(r.error());
-
-                header_bytes_ += pos + 2;
-                buf_.erase(0, pos + 2);
-                state_ = state::headers;
-                break;
-            }
-            case state::headers: {
-                auto pos = detail::find_crlf(buf_.data(), buf_.size());
-                if (pos == std::string_view::npos) {
-                    if (header_bytes_ + buf_.size() > max_header_size)
-                        return std::unexpected(make_error_code(http_errc::header_too_large));
-                    return total_consumed;
-                }
-
-                if (pos == 0) {
-                    // Empty line: headers end
-                    buf_.erase(0, 2);
-                    header_bytes_ += 2;
-
-                    if (!prepare_body()) {
-                        ready_ = true;
-                    } else {
-                        state_ = state::body;
-                    }
-                    break;
-                }
-
-                auto line = std::string_view(buf_.data(), pos);
-                auto r = parse_header_line(line);
-                if (!r) return std::unexpected(r.error());
-
-                header_bytes_ += pos + 2;
-                buf_.erase(0, pos + 2);
-                break;
-            }
-            case state::body: {
-                if (chunked_) {
-                    auto r = process_chunked_body();
-                    if (!r) return std::unexpected(r.error());
-                    if (!*r) return total_consumed; // Need more data
-                } else {
-                    auto available = buf_.size();
-                    auto need = body_bytes_remaining_;
-                    auto take = std::min(available, need);
-                    body_.append(buf_.data(), take);
-                    buf_.erase(0, take);
-                    body_bytes_remaining_ -= take;
-
-                    if (body_bytes_remaining_ > 0)
-                        return total_consumed;
-                }
-                ready_ = true;
-                break;
-            }
-            } // switch
-        }
-
-        return total_consumed;
-    }
+        -> std::expected<std::size_t, std::error_code>;
 
     /// Check if parsing is complete
     [[nodiscard]] auto ready() const noexcept -> bool { return ready_; }
@@ -306,84 +228,7 @@ public:
 
     /// Parse input data, returns number of bytes consumed
     [[nodiscard]] auto consume(const char* data, std::size_t len)
-        -> std::expected<std::size_t, std::error_code>
-    {
-        if (ready_) return std::size_t{0};
-
-        buf_.append(data, len);
-        std::size_t total_consumed = len;
-
-        while (!ready_) {
-            switch (state_) {
-            case state::status_line: {
-                auto pos = detail::find_crlf(buf_.data(), buf_.size());
-                if (pos == std::string_view::npos) {
-                    if (buf_.size() > max_header_size)
-                        return std::unexpected(make_error_code(http_errc::header_too_large));
-                    return total_consumed;
-                }
-
-                auto line = std::string_view(buf_.data(), pos);
-                auto r = parse_status_line(line);
-                if (!r) return std::unexpected(r.error());
-
-                header_bytes_ += pos + 2;
-                buf_.erase(0, pos + 2);
-                state_ = state::headers;
-                break;
-            }
-            case state::headers: {
-                auto pos = detail::find_crlf(buf_.data(), buf_.size());
-                if (pos == std::string_view::npos) {
-                    if (header_bytes_ + buf_.size() > max_header_size)
-                        return std::unexpected(make_error_code(http_errc::header_too_large));
-                    return total_consumed;
-                }
-
-                if (pos == 0) {
-                    buf_.erase(0, 2);
-                    header_bytes_ += 2;
-
-                    if (!prepare_body()) {
-                        ready_ = true;
-                    } else {
-                        state_ = state::body;
-                    }
-                    break;
-                }
-
-                auto line = std::string_view(buf_.data(), pos);
-                auto r = parse_header_line(line);
-                if (!r) return std::unexpected(r.error());
-
-                header_bytes_ += pos + 2;
-                buf_.erase(0, pos + 2);
-                break;
-            }
-            case state::body: {
-                if (chunked_) {
-                    auto r = process_chunked_body();
-                    if (!r) return std::unexpected(r.error());
-                    if (!*r) return total_consumed;
-                } else {
-                    auto available = buf_.size();
-                    auto need = body_bytes_remaining_;
-                    auto take = std::min(available, need);
-                    body_.append(buf_.data(), take);
-                    buf_.erase(0, take);
-                    body_bytes_remaining_ -= take;
-
-                    if (body_bytes_remaining_ > 0)
-                        return total_consumed;
-                }
-                ready_ = true;
-                break;
-            }
-            }
-        }
-
-        return total_consumed;
-    }
+        -> std::expected<std::size_t, std::error_code>;
 
     [[nodiscard]] auto ready() const noexcept -> bool { return ready_; }
 
@@ -544,4 +389,3 @@ private:
 };
 
 } // namespace cnetmod::http
-

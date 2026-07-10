@@ -417,8 +417,8 @@ cnetmod 同时支持 HTTP/1.1 和 HTTP/2。路由器、中间件和 `request_con
 | 功能 | 构建选项 |
 |------|----------|
 | 仅 HTTP/1.1 | 无额外要求 |
-| HTTP/2 (TLS) | `-DCNETMOD_ENABLE_SSL=ON` + nghttp2 子模块 |
-| HTTP/2 (明文 h2c) | nghttp2 子模块 |
+| HTTP/2 (TLS) | `-DCNETMOD_ENABLE_SSL=ON` |
+| HTTP/2 (明文 h2c) | 内置 HTTP/2 引擎 |
 
 ### 协议检测逻辑
 
@@ -520,7 +520,7 @@ curl --http1.1 -k https://localhost:8443/  # 失败：ALPN 协商不匹配
 
 ### 场景五：HTTP/2 明文（h2c）
 
-不配置 TLS 时，如果客户端发送 HTTP/2 客户端连接前言，服务器会自动切换到 HTTP/2 明文模式（h2c）。需要编译时启用 nghttp2。
+不配置 TLS 时，如果客户端发送 HTTP/2 客户端连接前言，服务器会自动切换到内置 HTTP/2 明文模式（h2c）。
 
 ```cpp
 // 无需特殊配置 —— 不设置 ssl_context 即可

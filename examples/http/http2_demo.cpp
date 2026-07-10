@@ -203,8 +203,8 @@ int main(int argc, char* argv[]) {
 int main() {
     logger::init("http2_demo");
     logger::error(
-        "HTTP/2 demo requires both SSL and nghttp2 support. "
-        "Build with -DCNETMOD_ENABLE_SSL=ON and nghttp2 submodule.");
+        "HTTP/2 demo requires TLS support. "
+        "Build with -DCNETMOD_ENABLE_SSL=ON.");
     return 1;
 }
 

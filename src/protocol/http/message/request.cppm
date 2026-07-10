@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.http:request;
 
 import std;
-import :types;
+import :semantics;
 
 namespace cnetmod::http {
 

@@ -35,9 +35,6 @@ class CnetmodConan(ConanFile):
         "leveldb/*:shared": False,
         "leveldb/*:with_crc32c": False,
         "leveldb/*:with_snappy": False,
-        "libnghttp2/*:shared": False,
-        "libnghttp2/*:with_app": False,
-        "libnghttp2/*:with_hpack": False,
         "pugixml/*:shared": False,
     }
 
@@ -65,8 +62,6 @@ class CnetmodConan(ConanFile):
 
         if self.options.with_ssl:
             self.requires("openssl/[>=1.1 <4]")
-        if self.options.with_http2:
-            self.requires("libnghttp2/1.68.1")
         if self.options.with_leveldb:
             self.requires("leveldb/1.23")
         if self.options.with_mimalloc:

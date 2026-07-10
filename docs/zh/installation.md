@@ -128,7 +128,7 @@ cmake --build build
 ### Linux (Arch / WSL2 Arch)
 
 ```bash
-sudo pacman -S --needed clang llvm libc++ libc++abi cmake ninja mold mimalloc liburing openssl zlib nghttp2
+sudo pacman -S --needed clang llvm libc++ libc++abi cmake ninja mold mimalloc liburing openssl zlib
 
 rm -rf cmake-build-debug-arch
 

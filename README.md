@@ -218,7 +218,7 @@ conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 ```
 
 The default Conan recipe installs ConanCenter packages for `jwt-cpp`,
-`nlohmann_json`, `pugixml`, `libnghttp2`, `leveldb`, `openssl`, and `zlib`.
+`nlohmann_json`, `pugixml`, `leveldb`, `openssl`, and `zlib`.
 `mimalloc` is enabled by default and can be disabled with
 `-o cnetmod/*:with_mimalloc=False`. `stdexec` is normally taken from
 `3rdparty/stdexec`; if your Conan remote provides the upstream `p2300` package,

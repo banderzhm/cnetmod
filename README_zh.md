@@ -215,7 +215,7 @@ conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 ```
 
 默认 Conan recipe 会从 ConanCenter 安装 `jwt-cpp`、`nlohmann_json`、
-`pugixml`、`libnghttp2`、`leveldb`、`openssl` 和 `zlib`。`mimalloc`
+`pugixml`、`leveldb`、`openssl` 和 `zlib`。`mimalloc`
 默认启用；如需关闭可传 `-o cnetmod/*:with_mimalloc=False`。`stdexec`
 默认使用 `3rdparty/stdexec`；如果你的 Conan remote 提供上游 `p2300` 包，可以开启
 `-o cnetmod/*:with_stdexec_package=True`。

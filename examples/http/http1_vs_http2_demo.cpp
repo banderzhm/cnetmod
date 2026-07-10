@@ -89,7 +89,7 @@ auto demo_http2_frames() -> task<void> {
             std::println("\n  How it works:");
             std::println("  1. Server sends binary DATA frames");
             std::println("  2. Each frame has 9-byte header + payload");
-            std::println("  3. nghttp2 library parses frames automatically");
+            std::println("  3. built-in HTTP/2 codec parses frames");
             std::println("  4. Callback receives decoded data");
             std::println("  5. Multiple streams can be multiplexed");
         }
@@ -101,7 +101,7 @@ auto demo_http2_frames() -> task<void> {
         std::println("✗ Error: {}", result.error().message());
     }
 #else
-    std::println("HTTP/2 support not enabled (need nghttp2)");
+    std::println("HTTP/2 support not enabled");
 #endif
 }
 
@@ -162,7 +162,7 @@ auto demo_performance_comparison() -> task<void> {
     
     std::println("\nHTTP/2 DATA Frames:");
     std::println("  Format: Binary (fixed 9-byte header)");
-    std::println("  Parsing: nghttp2 library (optimized)");
+    std::println("  Parsing: built-in HTTP/2 codec (optimized)");
     std::println("  Overhead: 9 bytes per frame");
     std::println("  Multiplexing: Yes (multiple streams)");
     std::println("  Head-of-line blocking: No");

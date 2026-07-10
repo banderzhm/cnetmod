@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.http:server;
 
 import std;
-import :types;
+import :semantics;
 import :parser;
 import :request;
 import :response;
@@ -27,11 +27,7 @@ import cnetmod.protocol.tcp;
 import cnetmod.core.ssl;
 #endif
 
-#ifdef CNETMOD_HAS_NGHTTP2
-import :stream_io;
-import :h2_types;
-import :h2_session;
-#endif
+import cnetmod.protocol.http.v2.session;
 
 namespace cnetmod::http {
 
@@ -126,8 +122,15 @@ private:
                          const char* initial_data = nullptr,
                          std::size_t initial_len = 0) -> task<void>;
 
+    auto handle_h2(socket& client, io_context& io,
+                   std::span<const std::byte> initial = {}) -> task<void>;
+
+    auto make_h2_handler(io_context& io, socket& client) -> v2::server_handler;
+
 #ifdef CNETMOD_HAS_SSL
     auto handle_h1_tls(socket& client, io_context& io,
+                       ssl_stream& ssl) -> task<void>;
+    auto handle_h2_tls(socket& client, io_context& io,
                        ssl_stream& ssl) -> task<void>;
 #endif
 

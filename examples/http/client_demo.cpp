@@ -77,7 +77,7 @@ auto run_examples(client& http_client) -> task<void> {
     std::println("✓ HTTP/2 (via ALPN)");
     std::println("✓ Automatic protocol negotiation");
 #else
-    std::println("✗ HTTP/2 (nghttp2 not enabled)");
+    std::println("✓ HTTP/2 (built-in engine)");
 #endif
 #else
     std::println("✗ HTTPS (OpenSSL not enabled)");

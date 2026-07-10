@@ -4,9 +4,6 @@
 [submodule "3rdparty/jwt-cpp"]
 	path = 3rdparty/jwt-cpp
 	url = https://github.com/Thalhammer/jwt-cpp.git
-[submodule "3rdparty/nghttp2"]
-	path = 3rdparty/nghttp2
-	url = https://github.com/nghttp2/nghttp2.git
 [submodule "3rdparty/spdlog"]
 	path = 3rdparty/spdlog
 	url = https://github.com/gabime/spdlog.git

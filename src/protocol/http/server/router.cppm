@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.http:router;
 
 import std;
-import :types;
+import :semantics;
 import :parser;
 import :request;
 import :response;
@@ -285,8 +285,8 @@ private:
     route_params params_;
     const header_map* headers_ptr_;   // Non-owning, points to parser's or stream's headers
     std::string_view method_;         // Non-owning, stable for request lifetime
-    mutable std::string_view body_;   // Non-owning for HTTP/1, owned view for streamed requests
     mutable std::string body_storage_; // Owned body for streaming/protocol-neutral requests
+    mutable std::string_view body_;   // Non-owning for HTTP/1, owned view for streamed requests
     std::shared_ptr<request_body_stream> body_stream_;
     std::string uri_;                 // Owned (for uri() accessor)
     std::string path_;                // Owned

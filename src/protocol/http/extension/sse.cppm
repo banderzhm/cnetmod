@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.http:sse;
 
 import std;
-import :types;
+import :semantics;
 import :response;
 
 namespace cnetmod::http::sse {

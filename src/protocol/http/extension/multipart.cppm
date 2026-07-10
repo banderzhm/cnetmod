@@ -6,7 +6,7 @@ module;
 export module cnetmod.protocol.http:multipart;
 
 import std;
-import :types;
+import :semantics;
 
 namespace cnetmod::http {
 

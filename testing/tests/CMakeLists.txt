@@ -24,6 +24,7 @@ set(TEST_SOURCES
     test_http_swagger.cpp
     test_http_utils.cpp
     test_http_ip_filter.cpp
+    test_http2_hpack.cpp
     test_dns.cpp
     test_coap.cpp
     test_grpc.cpp
@@ -57,6 +58,21 @@ if(MSVC AND TARGET test_raft)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_executable(http2_interop_server
+        "${CMAKE_CURRENT_SOURCE_DIR}/../http2/h2_interop_server.cpp")
+    add_executable(http2_client_interop
+        "${CMAKE_CURRENT_SOURCE_DIR}/../http2/h2_client_interop.cpp")
+    list(APPEND CNETMOD_TEST_TARGETS http2_interop_server)
+    list(APPEND CNETMOD_TEST_TARGETS http2_client_interop)
+    target_link_libraries(http2_interop_server PRIVATE cnetmod_core)
+    target_link_libraries(http2_client_interop PRIVATE cnetmod_core)
+    set_property(TARGET http2_interop_server PROPERTY CXX_MODULE_GENERATION_MODE "SEPARATE")
+    set_property(TARGET http2_client_interop PROPERTY CXX_MODULE_GENERATION_MODE "SEPARATE")
+    add_test(NAME python_h2_interop
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../http2/h2_interop.py"
+                "$<TARGET_FILE:http2_interop_server>")
+endif()
 if(Python3_Interpreter_FOUND AND TARGET test_grpc_proto)
     add_executable(grpc_interop_server
         "${CMAKE_CURRENT_SOURCE_DIR}/../grpc/grpc_interop_server.cpp"
