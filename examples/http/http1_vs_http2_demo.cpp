@@ -64,7 +64,6 @@ auto demo_http1_chunked(client& http_client) -> task<void> {
 auto demo_http2_frames() -> task<void> {
     std::println("\n=== HTTP/2 DATA Frames ===");
     
-#ifdef CNETMOD_HAS_NGHTTP2
     auto ctx = make_io_context();
     
     // Implementation note: HTTP/2.
@@ -100,9 +99,6 @@ auto demo_http2_frames() -> task<void> {
     } else {
         std::println("✗ Error: {}", result.error().message());
     }
-#else
-    std::println("HTTP/2 support not enabled");
-#endif
 }
 
 // =============================================================================

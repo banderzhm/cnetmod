@@ -8,7 +8,6 @@
 
 - `pugixml::pugixml`
 - `pugixml-static`
-- `nghttp2_static`
 - `leveldb`
 - `leveldb::leveldb`
 
@@ -26,7 +25,6 @@
 cnetmod 会优先复用已经存在的依赖 target：
 
 - `pugixml::pugixml`、`pugixml-static` 或 `pugixml`
-- `unofficial::nghttp2::nghttp2`、`nghttp2::nghttp2`、`nghttp2_static` 或 `nghttp2`
 - `leveldb`、`leveldb::leveldb` 或 `LevelDB::LevelDB`
 
 对于 header-only 依赖，宿主项目可以覆盖：
@@ -74,8 +72,7 @@ cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 `X_VCPKG_REGISTRIES_CACHE` 和 `VCPKG_DOWNLOADS` 不是必须项；如果 C 盘空间不足，
 建议像上面一样把 vcpkg registry cache、下载和构建缓存放到其它盘。
 
-`nghttp2` 也支持通过 `find_path` / `find_library` 接入，因为当前包管理器
-可能只安装头文件和库，不提供上游 CMake config。`pugixml` 在本仓库里保持为
+`pugixml` 在本仓库里保持为
 正常 Git submodule；包管理器构建应优先使用 package target，只在没有系统包
 时回退到该 submodule。
 
@@ -87,7 +84,6 @@ cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 - `jwt-cpp` -> `jwt-cpp::jwt-cpp`
 - `nlohmann_json` -> `nlohmann_json::nlohmann_json`
 - `pugixml` -> `pugixml::pugixml`
-- `libnghttp2` -> `libnghttp2::libnghttp2`
 - `leveldb` -> `leveldb::leveldb`
 
 ```bash
@@ -138,7 +134,7 @@ conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 examples/integration/thirdparty_collision_project
 ```
 
-它会先创建宿主拥有的 `pugixml`、`nghttp2` 和 `leveldb` target，再添加 cnetmod。如果 cnetmod 重复创建 target，这个项目会在 CMake 配置阶段失败。
+它会先创建宿主拥有的 `pugixml` 和 `leveldb` target，再添加 cnetmod。如果 cnetmod 重复创建 target，这个项目会在 CMake 配置阶段失败。
 
 在 cnetmod 仓库根目录构建：
 

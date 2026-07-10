@@ -538,7 +538,7 @@ int sync_function() {
 ### Third-party Collision Integration Project
 
 **What it demonstrates**: A standalone host project that owns `pugixml`,
-`nghttp2`, `leveldb`, and header-only dependency paths before adding cnetmod as a
+`leveldb` and header-only dependency paths before adding cnetmod as a
 subdirectory.
 
 **Run**:

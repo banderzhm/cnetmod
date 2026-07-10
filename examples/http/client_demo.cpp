@@ -36,7 +36,6 @@ auto run_examples(client& http_client) -> task<void> {
         }
     }
 
-#ifdef CNETMOD_HAS_NGHTTP2
     // Example 3: HTTP/2 request (automatic negotiation via ALPN)
     std::println("\n=== Example 3: HTTP/2 Request (ALPN) ===");
     {
@@ -49,7 +48,6 @@ auto run_examples(client& http_client) -> task<void> {
             std::println("Error: {}", result.error().message());
         }
     }
-#endif
 #endif
 
     // Example 4: POST request with JSON body
@@ -73,12 +71,8 @@ auto run_examples(client& http_client) -> task<void> {
     std::println("✓ HTTP/1.1");
 #ifdef CNETMOD_HAS_SSL
     std::println("✓ HTTPS (SSL/TLS)");
-#ifdef CNETMOD_HAS_NGHTTP2
-    std::println("✓ HTTP/2 (via ALPN)");
+    std::println("✓ HTTP/2 (built-in engine, via ALPN)");
     std::println("✓ Automatic protocol negotiation");
-#else
-    std::println("✓ HTTP/2 (built-in engine)");
-#endif
 #else
     std::println("✗ HTTPS (OpenSSL not enabled)");
     std::println("✗ HTTP/2 (requires SSL for ALPN)");

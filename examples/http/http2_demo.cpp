@@ -33,7 +33,7 @@ import cnetmod.protocol.http.middleware.recover;
 import cnetmod.protocol.http.middleware.cors;
 import cnetmod.protocol.http.middleware.request_id;
 
-#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_HAS_NGHTTP2)
+#ifdef CNETMOD_HAS_SSL
 
 import cnetmod.core.ssl;
 
@@ -198,7 +198,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-#else // !CNETMOD_HAS_SSL || !CNETMOD_HAS_NGHTTP2
+#else // !CNETMOD_HAS_SSL
 
 int main() {
     logger::init("http2_demo");

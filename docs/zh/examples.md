@@ -536,7 +536,7 @@ int sync_function() {
 
 ### 第三方依赖碰撞集成项目
 
-**演示内容**：一个独立宿主项目先拥有 `pugixml`、`nghttp2`、`leveldb` 和 header-only 依赖路径，再把 cnetmod 作为子目录加入。
+**演示内容**：一个独立宿主项目先拥有 `pugixml`、`leveldb` 和 header-only 依赖路径，再把 cnetmod 作为子目录加入。
 
 **运行**：
 ```bash

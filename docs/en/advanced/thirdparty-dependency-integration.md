@@ -9,7 +9,6 @@ A downstream project may already define targets such as:
 
 - `pugixml::pugixml`
 - `pugixml-static`
-- `nghttp2_static`
 - `leveldb`
 - `leveldb::leveldb`
 
@@ -29,7 +28,6 @@ The host project should own shared dependencies first, then add cnetmod:
 cnetmod reuses existing dependency targets when they are already present:
 
 - `pugixml::pugixml`, `pugixml-static`, or `pugixml`
-- `unofficial::nghttp2::nghttp2`, `nghttp2::nghttp2`, `nghttp2_static`, or `nghttp2`
 - `leveldb`, `leveldb::leveldb`, or `LevelDB::LevelDB`
 
 For header-only dependencies, the host can override:
@@ -79,9 +77,7 @@ cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 when the default user-wide vcpkg cache on the C drive does not have enough free
 space.
 
-`nghttp2` is also accepted through `find_path` / `find_library`, because the
-active package manager may install headers and libraries without an upstream
-CMake config. `pugixml` remains a normal Git submodule; package-manager builds
+`pugixml` remains a normal Git submodule; package-manager builds
 should prefer the package target and only fall back to that submodule when no
 system package is available.
 
@@ -94,7 +90,6 @@ understands:
 - `jwt-cpp` -> `jwt-cpp::jwt-cpp`
 - `nlohmann_json` -> `nlohmann_json::nlohmann_json`
 - `pugixml` -> `pugixml::pugixml`
-- `libnghttp2` -> `libnghttp2::libnghttp2`
 - `leveldb` -> `leveldb::leveldb`
 
 ```bash
@@ -145,7 +140,7 @@ The repository includes a standalone integration example:
 examples/integration/thirdparty_collision_project
 ```
 
-It intentionally creates host-owned `pugixml`, `nghttp2`, and `leveldb` targets
+It intentionally creates host-owned `pugixml` and `leveldb` targets
 before adding cnetmod. If cnetmod creates duplicate targets, this project fails
 during CMake configuration.
 
