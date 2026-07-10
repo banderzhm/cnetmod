@@ -297,7 +297,10 @@ elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pugixml/CMakeLists.txt")
     message(STATUS "XML Parser: pugixml enabled")
 else()
     set(CNETMOD_HAS_PUGIXML OFF)
-    message(STATUS "XML Parser: pugixml not found in 3rdparty/")
+    message(FATAL_ERROR
+        "pugixml is required by the MySQL XML ORM modules. Install pugixml through "
+        "the active package manager or initialize the bundled dependency with "
+        "'git submodule update --init --recursive'.")
 endif()
 
 # Logging module uses pure C++23 std::format implementation, no external dependencies
