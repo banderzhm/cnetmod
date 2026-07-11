@@ -19,8 +19,13 @@ set(BENCH_TARGETS
     bench_ws
     bench_mqtt
     bench_raft
-    bench_uring_recv
 )
+
+# io_uring is Linux-only. Do not create this target on macOS/Windows: the
+# corresponding C++ module is intentionally absent on those platforms.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CNETMOD_HAS_IO_URING)
+    list(APPEND BENCH_TARGETS bench_uring_recv)
+endif()
 
 foreach(bench_name ${BENCH_TARGETS})
     add_executable(${bench_name} ${bench_name}.cpp)
