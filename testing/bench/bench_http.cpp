@@ -6,6 +6,12 @@
 
 #include <cnetmod/config.hpp>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
+
 import std;
 import cnetmod.core.net_init;
 import cnetmod.core.log;
@@ -70,6 +76,26 @@ auto env_u32(const char* name, unsigned fallback) -> unsigned {
         return fallback;
     }
     return out;
+}
+
+auto process_cpu_seconds() noexcept -> double {
+#ifdef _WIN32
+    FILETIME created{};
+    FILETIME exited{};
+    FILETIME kernel{};
+    FILETIME user{};
+    if (::GetProcessTimes(::GetCurrentProcess(), &created, &exited, &kernel, &user) == 0) {
+        return 0.0;
+    }
+    const auto to_ticks = [](const FILETIME& value) noexcept -> std::uint64_t {
+        return (static_cast<std::uint64_t>(value.dwHighDateTime) << 32) | value.dwLowDateTime;
+    };
+    return static_cast<double>(to_ticks(kernel) + to_ticks(user)) / 10'000'000.0;
+#else
+    ::timespec value{};
+    if (::clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &value) != 0) return 0.0;
+    return static_cast<double>(value.tv_sec) + static_cast<double>(value.tv_nsec) / 1'000'000'000.0;
+#endif
 }
 
 auto default_worker_count(std::size_t client_count) -> unsigned {
@@ -249,6 +275,7 @@ void run_http_bench_impl(const bench_case& cfg,
     }
 
     const auto started = std::chrono::steady_clock::now();
+    const auto cpu_started = process_cpu_seconds();
     run_server();
     for (std::size_t i = 0; i < client_count; ++i) {
         auto& client_ctx = *client_contexts[i % client_contexts.size()];
@@ -282,18 +309,23 @@ void run_http_bench_impl(const bench_case& cfg,
 
     const auto elapsed = std::chrono::duration<double>(
         std::chrono::steady_clock::now() - started).count();
+    const auto cpu_elapsed = std::max(0.0, process_cpu_seconds() - cpu_started);
     const auto ok = total.load(std::memory_order_relaxed);
     const auto expected = requests_per_client * client_count;
     const double rps = elapsed > 0.0 ? static_cast<double>(ok) / elapsed : 0.0;
+    const double cpu_percent = elapsed > 0.0 ? 100.0 * cpu_elapsed / elapsed : 0.0;
+    const double cpu_us_per_request = ok > 0 ? 1'000'000.0 * cpu_elapsed / static_cast<double>(ok) : 0.0;
 
-    logger::info("  {:<18} {:<10} {:>4} x {:<7}{:>14} req/sec  ({} ok, {} failed)",
+    logger::info("  {:<18} {:<10} {:>4} x {:<7}{:>14} req/sec  ({} ok, {} failed; CPU {:.1f}%, {:.2f} us/req)",
                  cfg.name,
                  mode_name,
                  client_count,
                  requests_per_client,
                  format_number(rps),
                  ok,
-                 expected - ok);
+                 expected - ok,
+                 cpu_percent,
+                 cpu_us_per_request);
 }
 
 void run_http_bench_single(const bench_case& cfg,

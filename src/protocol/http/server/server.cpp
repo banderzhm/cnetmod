@@ -930,7 +930,7 @@ auto server::send_chunked_response(io_context& io, socket& client, response& res
 }
 
 #ifdef CNETMOD_HAS_SSL
-auto server::send_chunked_response_tls(io_context& io, ssl_stream& ssl, response& resp)
+auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl, response& resp)
     -> task<void>
 {
     // Send headers (without body)
@@ -949,21 +949,14 @@ auto server::send_chunked_response_tls(io_context& io, ssl_stream& ssl, response
     while (offset < body.size()) {
         auto chunk_size = std::min(CHUNK_SIZE, body.size() - offset);
         
-        // Send chunk size (hex)
-        auto size_str = std::format("{:x}\r\n", chunk_size);
-        auto wr1 = co_await ssl.async_write_all(
-            const_buffer{size_str.data(), size_str.size()});
-        if (!wr1) co_return;
-        
-        // Send chunk data
-        auto wr2 = co_await ssl.async_write_all(
-            const_buffer{body.data() + offset, chunk_size});
-        if (!wr2) co_return;
-        
-        // Send chunk ending \r\n
-        auto wr3 = co_await ssl.async_write_all(
-            const_buffer{"\r\n", 2});
-        if (!wr3) co_return;
+        // One TLS record per HTTP chunk. This preserves streaming latency while
+        // avoiding three SSL_write calls for the size, payload and CRLF.
+        auto record = std::format("{:x}\r\n", chunk_size);
+        record.append(body.data() + offset, chunk_size);
+        record += "\r\n";
+        auto written = co_await ssl.async_write_all(
+            const_buffer{record.data(), record.size()});
+        if (!written) co_return;
         
         offset += chunk_size;
     }
