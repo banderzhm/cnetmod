@@ -7,12 +7,15 @@
 #endif
 
 import std;
+
+#if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
 import cnetmod.core.socket;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.io.platform.io_uring;
 import cnetmod.io.platform.io_uring_recv_service;
 import cnetmod.protocol.http;
+#endif
 
 namespace cn = cnetmod;
 

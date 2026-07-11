@@ -286,39 +286,4 @@ export inline auto openapi_json_handler(openapi_document doc) -> handler_fn {
     };
 }
 
-export inline auto swagger_ui_html(std::string_view openapi_url = "/openapi.json",
-                                   std::string_view title = "API Docs") -> std::string {
-    return std::format(R"(<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{}</title>
-  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
-</head>
-<body>
-  <div id="swagger-ui"></div>
-  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
-  <script>
-    window.ui = SwaggerUIBundle({{
-      url: "{}",
-      dom_id: "#swagger-ui",
-      deepLinking: true,
-      presets: [SwaggerUIBundle.presets.apis],
-      layout: "BaseLayout"
-    }});
-  </script>
-</body>
-</html>)", detail::json_escape(title), detail::json_escape(openapi_url));
-}
-
-export inline auto swagger_ui_handler(std::string openapi_url = "/openapi.json",
-                                      std::string title = "API Docs") -> handler_fn {
-    return [openapi_url = std::move(openapi_url),
-            title = std::move(title)](request_context& ctx) -> task<void> {
-        ctx.html(status::ok, swagger_ui_html(openapi_url, title));
-        co_return;
-    };
-}
-
 } // namespace cnetmod::http

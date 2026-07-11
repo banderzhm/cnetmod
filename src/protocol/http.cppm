@@ -12,6 +12,7 @@ export import :multipart;
 export import :sse;
 export import :router;
 export import :swagger;
+export import :swagger_ui;
 export import :server;
 export import :client;
 export import :utils;
