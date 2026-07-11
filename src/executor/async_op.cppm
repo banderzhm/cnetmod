@@ -245,6 +245,17 @@ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
     co_return {};
 }
 
+#ifdef CNETMOD_PLATFORM_LINUX
+/// Wait for a non-blocking socket to become readable without consuming bytes.
+/// Used by the OpenSSL socket BIO path required for optional Linux kTLS.
+export auto async_wait_readable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>;
+
+/// Wait for a non-blocking socket to become writable without writing bytes.
+export auto async_wait_writable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>;
+#endif
+
 /// Async recvfrom — Receive UDP datagram and get sender address
 /// Usage: auto n = co_await async_recvfrom(ctx, sock, buf, peer);
 export auto async_recvfrom(io_context& ctx, socket& sock,

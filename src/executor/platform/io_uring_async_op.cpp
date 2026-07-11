@@ -7,6 +7,7 @@ module;
 #include <liburing.h>
 #include <cstdlib>
 #include <sys/socket.h>
+#include <poll.h>
 #include <sys/uio.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -501,6 +502,36 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
 
     co_return static_cast<std::size_t>(ov.result);
+}
+
+auto async_wait_readable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    uring_overlapped ov;
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe) co_return std::unexpected(make_error_code(errc::no_buffer_space));
+    ::io_uring_prep_poll_add(sqe, static_cast<int>(sock.native_handle()), POLLIN);
+    ::io_uring_sqe_set_data(sqe, &ov);
+    if (auto result = uring.flush(); !result) co_return std::unexpected(result.error());
+    co_await uring_suspend{ov};
+    if (ov.result < 0) co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_writable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    uring_overlapped ov;
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe) co_return std::unexpected(make_error_code(errc::no_buffer_space));
+    ::io_uring_prep_poll_add(sqe, static_cast<int>(sock.native_handle()), POLLOUT);
+    ::io_uring_sqe_set_data(sqe, &ov);
+    if (auto result = uring.flush(); !result) co_return std::unexpected(result.error());
+    co_await uring_suspend{ov};
+    if (ov.result < 0) co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+    co_return std::expected<void, std::error_code>{};
 }
 
 // =============================================================================

@@ -94,6 +94,14 @@ public:
     /// Set whether to verify peer certificate
     void set_verify_peer(bool verify) noexcept;
 
+    /// Request Linux kernel TLS when the runtime OpenSSL and kernel support it.
+    /// Unsupported cipher suites or kernels transparently retain user-space TLS.
+    void set_kernel_tls(bool enabled) noexcept;
+
+    [[nodiscard]] auto kernel_tls_enabled() const noexcept -> bool {
+        return kernel_tls_enabled_;
+    }
+
     /// Server-side mTLS mode: verify and require a client certificate.
     void set_require_peer_certificate(bool require) noexcept;
 
@@ -129,6 +137,7 @@ private:
 
     SSL_CTX* ctx_ = nullptr;
     std::vector<unsigned char> alpn_wire_;  // Server-side ALPN wire format
+    bool kernel_tls_enabled_ = false;
 };
 
 // =============================================================================
@@ -185,6 +194,9 @@ public:
     /// Get ALPN-negotiated protocol after handshake
     [[nodiscard]] auto get_alpn_selected() const noexcept -> std::string_view;
 
+    /// True only when the current Linux connection is actually using kTLS TX.
+    [[nodiscard]] auto kernel_tls_active() const noexcept -> bool;
+
     /// Get native SSL pointer
     [[nodiscard]] auto native() const noexcept -> SSL*;
 
@@ -204,6 +216,8 @@ private:
     SSL*        ssl_  = nullptr;
     BIO*        rbio_ = nullptr;  // Network -> SSL (receive direction)
     BIO*        wbio_ = nullptr;  // SSL -> Network (send direction)
+    bool        direct_socket_bio_ = false;
+    bool        kernel_tls_active_ = false;
 };
 
 #endif // CNETMOD_HAS_SSL

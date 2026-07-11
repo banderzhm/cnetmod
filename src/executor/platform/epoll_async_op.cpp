@@ -384,6 +384,26 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
     co_return static_cast<std::size_t>(n);
 }
 
+auto async_wait_readable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+    epoll_awaiter awaiter{epoll, static_cast<int>(sock.native_handle()), EPOLLIN};
+    co_await awaiter;
+    if (awaiter.sync_error) co_return std::unexpected(awaiter.sync_error);
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_writable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+    epoll_awaiter awaiter{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
+    co_await awaiter;
+    if (awaiter.sync_error) co_return std::unexpected(awaiter.sync_error);
+    co_return std::expected<void, std::error_code>{};
+}
+
 // =============================================================================
 // Async File Operations — epoll (thread-pool offload)
 // epoll does not support async I/O for regular files, offload pread/pwrite/fsync to thread pool
