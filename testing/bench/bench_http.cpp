@@ -105,19 +105,31 @@ auto run_http_client(cn::io_context& ctx,
     std::size_t completed = 0;
 
     if (cfg.version == http::http_version_preference::http2_only) {
-        std::vector<http::request> batch;
-        batch.reserve(requests);
-        for (std::size_t i = 0; i < requests; ++i) {
-            batch.emplace_back(http::http_method::GET,
-                               (i == 0 || !keep_alive) ? url : "/hello");
-        }
-        auto responses = co_await client.send_batch(batch);
-        for (const auto& resp : responses) {
-            if (!resp || resp->status_code() != http::status::ok ||
-                resp->body() != "Hello, World!") {
-                break;
+        // Keep the default at one in-flight request so HTTP/1.1 and HTTP/2
+        // have the same per-connection concurrency. Set this to a larger
+        // value only when measuring the multiplexing benefit explicitly.
+        const auto in_flight = std::max<std::size_t>(1, env_u32("CNETMOD_BENCH_H2_INFLIGHT", 1));
+        for (std::size_t offset = 0; offset < requests;) {
+            const auto count = std::min(in_flight, requests - offset);
+            std::vector<http::request> batch;
+            batch.reserve(count);
+            for (std::size_t i = 0; i < count; ++i) {
+                const auto request_index = offset + i;
+                batch.emplace_back(http::http_method::GET,
+                                   (request_index == 0 || !keep_alive) ? url : "/hello");
             }
-            ++completed;
+            auto responses = co_await client.send_batch(batch);
+            bool valid = responses.size() == count;
+            for (const auto& resp : responses) {
+                if (!resp || resp->status_code() != http::status::ok ||
+                    resp->body() != "Hello, World!") {
+                    valid = false;
+                    break;
+                }
+            }
+            if (!valid) break;
+            completed += count;
+            offset += count;
         }
         client.close();
         co_return completed;
@@ -377,6 +389,8 @@ int main(int argc, char** argv)
     logger::info("  Handler   : GET /hello -> 'Hello, World!' (13 bytes)");
     logger::info("  Keep-alive: {}", env_u32("CNETMOD_BENCH_HTTP_SHORT_CONNECTIONS", 0) == 0 ? "on" : "off");
     logger::info("  Matrix    : HTTP/1.1, HTTP/2, HTTPS/1.1, HTTPS/2");
+    logger::info("  H2 streams: {} in flight per connection (CNETMOD_BENCH_H2_INFLIGHT)",
+                 std::max(1u, env_u32("CNETMOD_BENCH_H2_INFLIGHT", 1)));
     logger::info("  Mode      : single-loop or multicore; env CNETMOD_BENCH_*_WORKERS overrides");
     logger::info("================================================================");
 
