@@ -1,0 +1,88 @@
+name: Windows MSVC Build
+
+env:
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: read
+
+jobs:
+  build-msvc:
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        build_type: [Release, Debug]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install CMake 4.2.3
+        run: |
+          choco install cmake --version=4.2.3 -y --force
+          cmake --version
+
+      - name: Setup MSBuild (VS 2026 / VS18)
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: "18.0"
+          msbuild-architecture: x86
+
+      - name: Configure CMake
+        shell: pwsh
+        run: |
+          cmake -B "${{ github.workspace }}/build" `
+            -G "Visual Studio 18 2026" `
+            -A x64 `
+            -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
+            -DCNETMOD_BUILD_EXAMPLES=ON `
+            -S "${{ github.workspace }}"
+
+      - name: Build
+        run: cmake --build ${{ github.workspace }}/build --target cnetmod_build_all --config ${{ matrix.build_type }} -- /m:1
+
+      - name: Run smoke tests
+        shell: pwsh
+        run: |
+          Write-Host "=== Running cnetmod_app ==="
+          & "${{ github.workspace }}/build/${{ matrix.build_type }}/cnetmod_app.exe"
+          
+          Write-Host "=== Running channel_demo ==="
+          & "${{ github.workspace }}/build/examples/concurrency/${{ matrix.build_type }}/example_channel_demo.exe"
+          
+          Write-Host "=== Running stdexec_bridge ==="
+          & "${{ github.workspace }}/build/examples/concurrency/${{ matrix.build_type }}/example_stdexec_bridge.exe"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: cnetmod-windows-msvc-${{ matrix.build_type }}
+          path: |
+            ${{ github.workspace }}/build/${{ matrix.build_type }}/*.lib
+            ${{ github.workspace }}/build/${{ matrix.build_type }}/*.exe
+            ${{ github.workspace }}/build/examples/**/*.exe
+          retention-days: 7
+
+      - name: Display build summary
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "========================================="
+          Write-Host "Build Summary for Windows MSVC VS2026"
+          Write-Host "========================================="
+          Write-Host "Build Type: ${{ matrix.build_type }}"
+          Write-Host "Generator: Visual Studio 18 2026"
+          Write-Host "CMake Version: 4.2.3"
+          Write-Host "Runner: windows-latest"
+          Write-Host "=========================================" 
