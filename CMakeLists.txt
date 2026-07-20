@@ -1,0 +1,860 @@
+cmake_minimum_required(VERSION 3.28)
+
+project(cnetmod
+    VERSION 2.0.0
+    DESCRIPTION "Cross-platform asynchronous network library with C++23 modules"
+    LANGUAGES CXX
+)
+
+# ==============================================================================
+# C++ Standard Configuration
+# ==============================================================================
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_SCAN_FOR_MODULES ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+# ==============================================================================
+# Linker Optimization: Use mold if available (Linux only)
+# ==============================================================================
+option(CNETMOD_USE_MOLD "Use mold linker for faster linking (Linux only)" ON)
+if(CNETMOD_USE_MOLD)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils/UseMold.cmake)
+    cnetmod_use_mold()
+endif()
+
+# ==============================================================================
+# Memory Allocator Optimization: Use mimalloc if available
+# ==============================================================================
+option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
+if(CNETMOD_USE_MIMALLOC)
+    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils/UseMimalloc.cmake)
+    cnetmod_use_mimalloc()
+endif()
+
+# ==============================================================================
+# Auto-detect platform-specific standard library module paths
+# ==============================================================================
+#[[
+  Load CMake helpers for:
+    1) stdlib module path detection
+    2) target C++ module file-set wiring
+]]
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/utils/DetectStdLibModulePaths.cmake)
+detect_stdlib_module_paths()
+
+
+# ==============================================================================
+# Compiler Flags
+# ==============================================================================
+if(MSVC)
+    add_compile_options(/std:c++latest)
+    add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj /FS /wd4737)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+        "$<$<CONFIG:Debug>:Embedded>$<$<NOT:$<CONFIG:Debug>>:ProgramDatabase>")
+
+   #[[ add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
+
+    # Use C7-compatible debug format (/Z7) instead of program database (/Zi)
+    # Embeds debug symbols in .obj files instead of a single huge .pdb, bypassing 4GB limit
+    add_compile_options(/Z7)
+    
+    # Disable excessive inlining (reduces code bloat)
+    add_compile_options(/Ob1)
+    # Disable whole program optimization (avoids merged object file bloat)
+    add_compile_options(/GL-)
+    # Define macro to suppress CRT security warnings (eliminates irrelevant warnings)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+]]
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_compile_options(
+        -Wall -Wextra
+        -Wno-unused-command-line-argument
+        -Wno-reserved-module-identifier
+        -Wno-include-angled-in-module-purview
+    )
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    add_compile_options(-Wall -Wextra)
+endif()
+
+# ==============================================================================
+# C++20 Module Scanning Configuration
+# ==============================================================================
+# Workaround: Disable module scanning for files that include stdexec headers
+# stdexec uses digit separators (e.g., 2019'07L) which some module scanners reject
+# Alternative: manually specify module dependencies or patch stdexec
+if(CMAKE_VERSION VERSION_GREATER_EQUAL "3.28")
+    # Option 1: Use a more lenient scanning mode (if available)
+    # Option 2: Disable automatic scanning and manually specify dependencies
+    # For now, we rely on the compiler's normal preprocessing which works fine
+
+    # If the issue persists, consider:
+    # set(CMAKE_CXX_SCAN_FOR_MODULES OFF)
+    # and manually specify module dependencies
+endif()
+
+# ==============================================================================
+# Third-party Library Configuration
+# ==============================================================================
+option(CNETMOD_USE_SYSTEM_DEPS
+    "Prefer dependencies provided by the active toolchain/package manager before bundled 3rdparty copies"
+    ON)
+
+# Header-only third-party paths are cache variables so a parent project or vcpkg
+# toolchain can provide dependency locations when cnetmod is added as a subdirectory.
+set(CNETMOD_STDEXEC_INCLUDE_DIR
+    ""
+    CACHE PATH "stdexec include directory used by cnetmod")
+set(CNETMOD_JWT_CPP_INCLUDE_DIR
+    ""
+    CACHE PATH "jwt-cpp include directory used by cnetmod")
+set(CNETMOD_JSON_INCLUDE_DIR
+    ""
+    CACHE PATH "nlohmann/json include directory used by cnetmod")
+set(CNETMOD_JSON_MODULE
+    ""
+    CACHE FILEPATH "nlohmann/json C++ module interface used by cnetmod")
+
+set(CNETMOD_JSON_PROVIDER "AUTO"
+    CACHE STRING "nlohmann/json provider: AUTO, PACKAGE, or VENDORED")
+set_property(CACHE CNETMOD_JSON_PROVIDER PROPERTY STRINGS AUTO PACKAGE VENDORED)
+set(CNETMOD_JSON_MINIMUM_VERSION "3.12.0"
+    CACHE STRING "Minimum nlohmann/json version supported by cnetmod's module shim")
+
+set(CNETMOD_VENDORED_STDEXEC_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/stdexec/include")
+set(CNETMOD_VENDORED_JWT_CPP_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/jwt-cpp/include")
+set(CNETMOD_VENDORED_JSON_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/include")
+set(CNETMOD_VENDORED_JSON_MODULE "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm")
+
+function(cnetmod_get_target_include_dir OUT_VAR TARGET_NAME HEADER_NAME)
+    if(NOT TARGET "${TARGET_NAME}")
+        return()
+    endif()
+
+    get_target_property(CNETMOD_TARGET_INCLUDE_DIRS
+        "${TARGET_NAME}" INTERFACE_INCLUDE_DIRECTORIES)
+    foreach(CNETMOD_INCLUDE_DIR IN LISTS CNETMOD_TARGET_INCLUDE_DIRS)
+        set(CNETMOD_CANDIDATE_INCLUDE_DIR "${CNETMOD_INCLUDE_DIR}")
+
+        if(CNETMOD_CANDIDATE_INCLUDE_DIR MATCHES "^\\$<BUILD_INTERFACE:(.*)>$")
+            set(CNETMOD_CANDIDATE_INCLUDE_DIR "${CMAKE_MATCH_1}")
+        elseif(CNETMOD_CANDIDATE_INCLUDE_DIR MATCHES "^\\$<\\$<CONFIG:[^>]+>:(.*)>$")
+            set(CNETMOD_CANDIDATE_INCLUDE_DIR "${CMAKE_MATCH_1}")
+        elseif(CNETMOD_CANDIDATE_INCLUDE_DIR MATCHES "^\\$<INSTALL_INTERFACE:(.*)>$")
+            continue()
+        endif()
+
+        if(IS_ABSOLUTE "${CNETMOD_CANDIDATE_INCLUDE_DIR}" AND
+           EXISTS "${CNETMOD_CANDIDATE_INCLUDE_DIR}/${HEADER_NAME}")
+            set("${OUT_VAR}" "${CNETMOD_CANDIDATE_INCLUDE_DIR}" PARENT_SCOPE)
+            return()
+        endif()
+    endforeach()
+endfunction()
+
+function(cnetmod_get_nlohmann_json_version OUT_VAR INCLUDE_DIR)
+    set(CNETMOD_JSON_ABI_HEADER "${INCLUDE_DIR}/nlohmann/detail/abi_macros.hpp")
+    if(NOT EXISTS "${CNETMOD_JSON_ABI_HEADER}")
+        set("${OUT_VAR}" "" PARENT_SCOPE)
+        return()
+    endif()
+
+    file(STRINGS "${CNETMOD_JSON_ABI_HEADER}" CNETMOD_JSON_VERSION_LINES
+        REGEX "^#define NLOHMANN_JSON_VERSION_(MAJOR|MINOR|PATCH) [0-9]+")
+    foreach(COMPONENT MAJOR MINOR PATCH)
+        string(REGEX MATCH
+            "#define NLOHMANN_JSON_VERSION_${COMPONENT} ([0-9]+)"
+            CNETMOD_JSON_VERSION_MATCH
+            "${CNETMOD_JSON_VERSION_LINES}")
+        set(CNETMOD_JSON_VERSION_${COMPONENT} "${CMAKE_MATCH_1}")
+    endforeach()
+
+    if(CNETMOD_JSON_VERSION_MAJOR STREQUAL "" OR
+       CNETMOD_JSON_VERSION_MINOR STREQUAL "" OR
+       CNETMOD_JSON_VERSION_PATCH STREQUAL "")
+        set("${OUT_VAR}" "" PARENT_SCOPE)
+    else()
+        set("${OUT_VAR}"
+            "${CNETMOD_JSON_VERSION_MAJOR}.${CNETMOD_JSON_VERSION_MINOR}.${CNETMOD_JSON_VERSION_PATCH}"
+            PARENT_SCOPE)
+    endif()
+endfunction()
+
+function(cnetmod_find_nlohmann_json_module OUT_VAR INCLUDE_DIR)
+    find_file(CNETMOD_JSON_MODULE_FROM_PROVIDER
+        NAMES json.cppm
+        PATHS
+            "${INCLUDE_DIR}/../src/modules"
+            "${INCLUDE_DIR}/../../src/modules"
+        PATH_SUFFIXES src/modules
+        NO_DEFAULT_PATH
+        NO_CACHE)
+    set("${OUT_VAR}" "${CNETMOD_JSON_MODULE_FROM_PROVIDER}" PARENT_SCOPE)
+endfunction()
+
+string(TOUPPER "${CNETMOD_JSON_PROVIDER}" CNETMOD_JSON_PROVIDER)
+if(NOT CNETMOD_JSON_PROVIDER STREQUAL "AUTO" AND
+   NOT CNETMOD_JSON_PROVIDER STREQUAL "PACKAGE" AND
+   NOT CNETMOD_JSON_PROVIDER STREQUAL "VENDORED")
+    message(FATAL_ERROR
+        "CNETMOD_JSON_PROVIDER must be AUTO, PACKAGE, or VENDORED (got ${CNETMOD_JSON_PROVIDER})")
+endif()
+
+if(CNETMOD_USE_SYSTEM_DEPS)
+    find_package(P2300 CONFIG QUIET)
+    find_package(jwt-cpp CONFIG QUIET)
+endif()
+
+if((CNETMOD_USE_SYSTEM_DEPS AND CNETMOD_JSON_PROVIDER STREQUAL "AUTO") OR
+   CNETMOD_JSON_PROVIDER STREQUAL "PACKAGE")
+    # The bundled fallback module and compatibility shim require 3.12.0+.
+    # Do not let an older Conda package silently pair with a newer module file.
+    find_package(nlohmann_json ${CNETMOD_JSON_MINIMUM_VERSION} CONFIG QUIET)
+endif()
+
+if(NOT CNETMOD_STDEXEC_INCLUDE_DIR)
+    cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+        STDEXEC::stdexec exec/static_thread_pool.hpp)
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+            STDEXEC::stdexec stdexec/execution.hpp)
+    endif()
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+            P2300::P2300 exec/static_thread_pool.hpp)
+    endif()
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        cnetmod_get_target_include_dir(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET
+            P2300::P2300 stdexec/execution.hpp)
+    endif()
+    if(CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET)
+        set(CNETMOD_STDEXEC_INCLUDE_DIR "${CNETMOD_STDEXEC_INCLUDE_DIR_FROM_TARGET}" CACHE PATH "" FORCE)
+    endif()
+    if((NOT CNETMOD_STDEXEC_INCLUDE_DIR OR NOT EXISTS "${CNETMOD_STDEXEC_INCLUDE_DIR}") AND CNETMOD_USE_SYSTEM_DEPS)
+        set(CNETMOD_STDEXEC_INCLUDE_DIR "" CACHE PATH "stdexec include directory used by cnetmod" FORCE)
+        find_path(CNETMOD_STDEXEC_INCLUDE_DIR
+            NAMES exec/static_thread_pool.hpp stdexec/execution.hpp
+            DOC "stdexec include directory used by cnetmod")
+    endif()
+    if(NOT CNETMOD_STDEXEC_INCLUDE_DIR AND EXISTS "${CNETMOD_VENDORED_STDEXEC_INCLUDE_DIR}/exec/static_thread_pool.hpp")
+        set(CNETMOD_STDEXEC_INCLUDE_DIR "${CNETMOD_VENDORED_STDEXEC_INCLUDE_DIR}" CACHE PATH "" FORCE)
+    endif()
+endif()
+
+if(NOT CNETMOD_JWT_CPP_INCLUDE_DIR)
+    cnetmod_get_target_include_dir(CNETMOD_JWT_CPP_INCLUDE_DIR_FROM_TARGET
+        jwt-cpp::jwt-cpp jwt-cpp/jwt.h)
+    if(CNETMOD_JWT_CPP_INCLUDE_DIR_FROM_TARGET)
+        set(CNETMOD_JWT_CPP_INCLUDE_DIR "${CNETMOD_JWT_CPP_INCLUDE_DIR_FROM_TARGET}" CACHE PATH "" FORCE)
+    endif()
+    if((NOT CNETMOD_JWT_CPP_INCLUDE_DIR OR NOT EXISTS "${CNETMOD_JWT_CPP_INCLUDE_DIR}") AND CNETMOD_USE_SYSTEM_DEPS)
+        set(CNETMOD_JWT_CPP_INCLUDE_DIR "" CACHE PATH "jwt-cpp include directory used by cnetmod" FORCE)
+        find_path(CNETMOD_JWT_CPP_INCLUDE_DIR
+            NAMES jwt-cpp/jwt.h
+            DOC "jwt-cpp include directory used by cnetmod")
+    endif()
+    if(NOT CNETMOD_JWT_CPP_INCLUDE_DIR AND EXISTS "${CNETMOD_VENDORED_JWT_CPP_INCLUDE_DIR}/jwt-cpp/jwt.h")
+        set(CNETMOD_JWT_CPP_INCLUDE_DIR "${CNETMOD_VENDORED_JWT_CPP_INCLUDE_DIR}" CACHE PATH "" FORCE)
+    endif()
+endif()
+
+# Select the JSON headers and module interface as one provider decision.  The
+# old behavior selected headers from a package manager and then fell back to a
+# vendored module file, which mixed Conda's 3.11.2 headers with a 3.12.0 module.
+set(CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR "")
+set(CNETMOD_JSON_EFFECTIVE_MODULE "")
+set(CNETMOD_JSON_EFFECTIVE_PROVIDER "")
+
+if(NOT CNETMOD_JSON_PROVIDER STREQUAL "VENDORED" AND
+   (CNETMOD_USE_SYSTEM_DEPS OR CNETMOD_JSON_PROVIDER STREQUAL "PACKAGE"))
+    if(CNETMOD_JSON_INCLUDE_DIR)
+        set(CNETMOD_JSON_PACKAGE_INCLUDE_DIR "${CNETMOD_JSON_INCLUDE_DIR}")
+    elseif(TARGET nlohmann_json::nlohmann_json)
+        cnetmod_get_target_include_dir(CNETMOD_JSON_PACKAGE_INCLUDE_DIR
+            nlohmann_json::nlohmann_json nlohmann/json.hpp)
+    endif()
+
+    if(CNETMOD_JSON_PACKAGE_INCLUDE_DIR AND
+       EXISTS "${CNETMOD_JSON_PACKAGE_INCLUDE_DIR}/nlohmann/json.hpp")
+        cnetmod_get_nlohmann_json_version(
+            CNETMOD_JSON_PACKAGE_VERSION "${CNETMOD_JSON_PACKAGE_INCLUDE_DIR}")
+        if(CNETMOD_JSON_PACKAGE_VERSION AND
+           NOT CNETMOD_JSON_PACKAGE_VERSION VERSION_LESS CNETMOD_JSON_MINIMUM_VERSION)
+            set(CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR "${CNETMOD_JSON_PACKAGE_INCLUDE_DIR}")
+            set(CNETMOD_JSON_EFFECTIVE_PROVIDER "PACKAGE")
+            if(CNETMOD_JSON_MODULE AND EXISTS "${CNETMOD_JSON_MODULE}")
+                set(CNETMOD_JSON_EFFECTIVE_MODULE "${CNETMOD_JSON_MODULE}")
+            else()
+                cnetmod_find_nlohmann_json_module(
+                    CNETMOD_JSON_EFFECTIVE_MODULE "${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR}")
+            endif()
+            if(NOT CNETMOD_JSON_EFFECTIVE_MODULE)
+                set(CNETMOD_JSON_EFFECTIVE_MODULE
+                    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules/nlohmann_json.cppm")
+            endif()
+        endif()
+    endif()
+endif()
+
+if(NOT CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR)
+    if(CNETMOD_JSON_PROVIDER STREQUAL "PACKAGE")
+        if(CNETMOD_JSON_PACKAGE_INCLUDE_DIR)
+            cnetmod_get_nlohmann_json_version(
+                CNETMOD_JSON_REJECTED_VERSION "${CNETMOD_JSON_PACKAGE_INCLUDE_DIR}")
+            if(CNETMOD_JSON_REJECTED_VERSION)
+                set(CNETMOD_JSON_PROVIDER_DIAGNOSTIC
+                    "Found ${CNETMOD_JSON_REJECTED_VERSION} at ${CNETMOD_JSON_PACKAGE_INCLUDE_DIR}.")
+            else()
+                set(CNETMOD_JSON_PROVIDER_DIAGNOSTIC
+                    "Could not determine the version at ${CNETMOD_JSON_PACKAGE_INCLUDE_DIR}.")
+            endif()
+        else()
+            set(CNETMOD_JSON_PROVIDER_DIAGNOSTIC "No usable package include directory was found.")
+        endif()
+        message(FATAL_ERROR
+            "CNETMOD_JSON_PROVIDER=PACKAGE requires nlohmann/json ${CNETMOD_JSON_MINIMUM_VERSION}+ "
+            "and a usable nlohmann_json::nlohmann_json target or CNETMOD_JSON_INCLUDE_DIR. "
+            "${CNETMOD_JSON_PROVIDER_DIAGNOSTIC} "
+            "The package module interface is used when present; otherwise cnetmod uses its "
+            "version-validated compatibility shim.")
+    endif()
+    if(NOT EXISTS "${CNETMOD_VENDORED_JSON_INCLUDE_DIR}/nlohmann/json.hpp" OR
+       NOT EXISTS "${CNETMOD_VENDORED_JSON_MODULE}")
+        message(FATAL_ERROR "Vendored nlohmann/json headers or module interface are missing")
+    endif()
+    set(CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR "${CNETMOD_VENDORED_JSON_INCLUDE_DIR}")
+    set(CNETMOD_JSON_EFFECTIVE_MODULE "${CNETMOD_VENDORED_JSON_MODULE}")
+    set(CNETMOD_JSON_EFFECTIVE_PROVIDER "VENDORED")
+endif()
+
+message(STATUS
+    "nlohmann/json: ${CNETMOD_JSON_EFFECTIVE_PROVIDER} "
+    "(${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR}; module ${CNETMOD_JSON_EFFECTIVE_MODULE})")
+
+# stdexec: Header-only mode (not using add_subdirectory to avoid CPM dependency)
+# Used for upper-layer sender/receiver organization, lower-layer I/O uses native coroutines
+if(NOT EXISTS "${CNETMOD_STDEXEC_INCLUDE_DIR}/exec/static_thread_pool.hpp")
+    message(FATAL_ERROR
+        "stdexec headers were not found at ${CNETMOD_STDEXEC_INCLUDE_DIR}. "
+        "Install dependencies with vcpkg manifest mode or initialize submodules with: "
+        "git submodule update --init --recursive")
+endif()
+set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR "${CNETMOD_STDEXEC_INCLUDE_DIR}")
+set(CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR
+    "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}"
+    CACHE INTERNAL "Effective stdexec include directory after toolchain-specific preparation" FORCE)
+include_directories(SYSTEM ${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR})
+
+# jwt-cpp: Header-only JWT library (HS256/RS256, etc.)
+if(NOT EXISTS "${CNETMOD_JWT_CPP_INCLUDE_DIR}/jwt-cpp/jwt.h")
+    message(FATAL_ERROR
+        "jwt-cpp headers were not found. Install dependencies with vcpkg manifest mode, "
+        "set CNETMOD_JWT_CPP_INCLUDE_DIR, or initialize submodules.")
+endif()
+include_directories(SYSTEM ${CNETMOD_JWT_CPP_INCLUDE_DIR})
+
+# nlohmann/json: C++ modules support (json.cppm)
+if(NOT EXISTS "${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR}/nlohmann/json.hpp")
+    message(FATAL_ERROR
+        "nlohmann/json headers were not found. Install dependencies with vcpkg manifest mode, "
+        "set CNETMOD_JSON_INCLUDE_DIR, or initialize submodules.")
+endif()
+include_directories(SYSTEM ${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR})
+set(NLOHMANN_JSON_MODULE ${CNETMOD_JSON_EFFECTIVE_MODULE})
+
+# pugixml: Lightweight XML parser
+if(CNETMOD_USE_SYSTEM_DEPS)
+    find_package(pugixml CONFIG QUIET)
+endif()
+if(TARGET pugixml::pugixml)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml::pugixml)
+    message(STATUS "XML Parser: pugixml enabled (existing target pugixml::pugixml)")
+elseif(TARGET pugixml-static)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml-static)
+    message(STATUS "XML Parser: pugixml enabled (existing target pugixml-static)")
+elseif(TARGET pugixml)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml)
+    message(STATUS "XML Parser: pugixml enabled (existing target pugixml)")
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/pugixml/CMakeLists.txt")
+    set(BUILD_SHARED_LIBS_SAVED ${BUILD_SHARED_LIBS})
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/pugixml")
+    add_subdirectory(3rdparty/pugixml EXCLUDE_FROM_ALL)
+    set(BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS_SAVED} CACHE BOOL "" FORCE)
+    set(CNETMOD_HAS_PUGIXML ON)
+    set(CNETMOD_PUGIXML_TARGET pugixml-static)
+    message(STATUS "XML Parser: pugixml enabled")
+else()
+    set(CNETMOD_HAS_PUGIXML OFF)
+    message(FATAL_ERROR
+        "pugixml is required by the MySQL XML ORM modules. Install pugixml through "
+        "the active package manager or initialize the bundled dependency with "
+        "'git submodule update --init --recursive'.")
+endif()
+
+# Logging module uses pure C++23 std::format implementation, no external dependencies
+
+# HTTP/2 is implemented in-tree under src/protocol/http/v2.
+
+# ==============================================================================
+# SSL/TLS Support (Optional)
+# ==============================================================================
+option(CNETMOD_ENABLE_SSL "Enable SSL/TLS support (requires OpenSSL)" ON)
+if(CNETMOD_ENABLE_SSL)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        set(CNETMOD_HAS_SSL ON)
+        message(STATUS "SSL/TLS: Enabled (OpenSSL ${OPENSSL_VERSION})")
+    else()
+        set(CNETMOD_HAS_SSL OFF)
+        message(STATUS "SSL/TLS: OpenSSL not found, SSL support disabled")
+    endif()
+else()
+    set(CNETMOD_HAS_SSL OFF)
+    message(STATUS "SSL/TLS: Disabled by user")
+endif()
+
+# ==============================================================================
+# zlib Compression Support (Optional)
+# ==============================================================================
+find_package(ZLIB QUIET)
+if(ZLIB_FOUND)
+    set(CNETMOD_HAS_ZLIB ON)
+    message(STATUS "zlib: Found (${ZLIB_VERSION_STRING})")
+else()
+    set(CNETMOD_HAS_ZLIB OFF)
+    message(STATUS "zlib: Not found, gzip compression middleware disabled")
+endif()
+
+# ==============================================================================
+# LevelDB Support (Optional, used by Raft persistent storage)
+# ==============================================================================
+option(CNETMOD_ENABLE_LEVELDB "Enable LevelDB-backed Raft storage when LevelDB is available" ON)
+if(CNETMOD_ENABLE_LEVELDB)
+    if(CNETMOD_USE_SYSTEM_DEPS)
+        find_package(leveldb CONFIG QUIET)
+        find_package(LevelDB QUIET)
+    endif()
+    if(TARGET leveldb)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET leveldb)
+        message(STATUS "LevelDB: Enabled (existing target leveldb)")
+    elseif(TARGET leveldb::leveldb)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET leveldb::leveldb)
+        message(STATUS "LevelDB: Enabled (existing target leveldb::leveldb)")
+    elseif(TARGET LevelDB::LevelDB)
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET LevelDB::LevelDB)
+        message(STATUS "LevelDB: Enabled (existing target LevelDB::LevelDB)")
+    elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/leveldb/CMakeLists.txt")
+        set(LEVELDB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+        set(LEVELDB_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
+        set(LEVELDB_INSTALL OFF CACHE BOOL "" FORCE)
+        add_subdirectory(3rdparty/leveldb EXCLUDE_FROM_ALL)
+        if(TARGET leveldb)
+            # LevelDB adds PUBLIC -Werror when clang thread-safety analysis is
+            # available. Keep its warnings visible, but do not let third-party
+            # warnings fail cnetmod builds or propagate -Werror to consumers.
+            foreach(prop COMPILE_OPTIONS INTERFACE_COMPILE_OPTIONS)
+                get_target_property(leveldb_options leveldb ${prop})
+                if(leveldb_options)
+                    list(REMOVE_ITEM leveldb_options -Werror)
+                    set_target_properties(leveldb PROPERTIES ${prop} "${leveldb_options}")
+                endif()
+            endforeach()
+        endif()
+        set(CNETMOD_HAS_LEVELDB ON)
+        set(CNETMOD_LEVELDB_TARGET leveldb)
+        message(STATUS "LevelDB: Enabled (3rdparty/leveldb)")
+    else()
+        find_package(LevelDB QUIET)
+    endif()
+    if(LevelDB_FOUND AND NOT CNETMOD_HAS_LEVELDB)
+        set(CNETMOD_HAS_LEVELDB ON)
+        if(TARGET leveldb::leveldb)
+            set(CNETMOD_LEVELDB_TARGET leveldb::leveldb)
+        elseif(TARGET LevelDB::LevelDB)
+            set(CNETMOD_LEVELDB_TARGET LevelDB::LevelDB)
+        elseif(LevelDB_LIBRARIES)
+            set(CNETMOD_LEVELDB_LIBRARY ${LevelDB_LIBRARIES})
+            set(CNETMOD_LEVELDB_INCLUDE_DIR ${LevelDB_INCLUDE_DIRS})
+        endif()
+        message(STATUS "LevelDB: Enabled (CMake package)")
+    elseif(NOT CNETMOD_HAS_LEVELDB)
+        find_path(CNETMOD_LEVELDB_INCLUDE_DIR leveldb/db.h)
+        find_library(CNETMOD_LEVELDB_LIBRARY NAMES leveldb)
+        if(CNETMOD_LEVELDB_INCLUDE_DIR AND CNETMOD_LEVELDB_LIBRARY)
+            set(CNETMOD_HAS_LEVELDB ON)
+            message(STATUS "LevelDB: Enabled (${CNETMOD_LEVELDB_LIBRARY})")
+        else()
+            set(CNETMOD_HAS_LEVELDB OFF)
+            message(STATUS "LevelDB: Not found, Raft LevelDB storage disabled")
+        endif()
+    endif()
+else()
+    set(CNETMOD_HAS_LEVELDB OFF)
+    message(STATUS "LevelDB: Disabled by user")
+endif()
+
+# ==============================================================================
+# Platform-specific I/O Backend Detection
+# ==============================================================================
+if(WIN32)
+    set(CNETMOD_HAS_IOCP ON)
+    message(STATUS "I/O backend: IOCP (Windows)")
+elseif(APPLE)
+    set(CNETMOD_HAS_KQUEUE ON)
+    message(STATUS "I/O backend: kqueue (macOS)")
+elseif(UNIX)
+    # Detect io_uring support
+    include(CheckIncludeFileCXX)
+    check_include_file_cxx("liburing.h" CNETMOD_HAS_IO_URING)
+    if(CNETMOD_HAS_IO_URING)
+        message(STATUS "I/O backend: io_uring (Linux)")
+        include(CheckCXXSourceCompiles)
+        check_cxx_source_compiles(
+            "#include <liburing.h>\nint main() { io_uring_buf_reg reg{}; io_uring_buf_ring* ring = nullptr; return sizeof(reg) + sizeof(*ring); }"
+            CNETMOD_HAS_IO_URING_BUFFER_RING)
+    endif()
+    # epoll is always available on Linux
+    set(CNETMOD_HAS_EPOLL ON)
+    message(STATUS "I/O backend: epoll (Linux)")
+endif()
+
+# ==============================================================================
+# Source File Collection
+# ==============================================================================
+
+# Collect module interface files
+file(GLOB_RECURSE MODULE_INTERFACE_FILES CONFIGURE_DEPENDS
+    "src/*.cppm"
+    "src/*.ixx"
+)
+
+# Collect implementation files (excluding main.cpp)
+file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
+list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+
+# Split .cpp sources into regular translation units, module implementation units,
+# and interface units. Most interfaces use .cppm, but a renamed interface may
+# retain an `export module` declaration in a .cpp file.
+set(MODULE_IMPLEMENTATION_CPP_FILES)
+set(REGULAR_CPP_SOURCES)
+foreach(src ${CPP_SOURCES})
+    file(STRINGS "${src}" export_module_decl_line
+        REGEX "^[ \t]*export[ \t]+module[ \t]+")
+    file(STRINGS "${src}" module_decl_line
+        REGEX "^[ \t]*(export[ \t]+)?module[ \t]+")
+    if(export_module_decl_line)
+        list(APPEND MODULE_INTERFACE_FILES "${src}")
+    elseif(module_decl_line)
+        list(APPEND MODULE_IMPLEMENTATION_CPP_FILES "${src}")
+    else()
+        list(APPEND REGULAR_CPP_SOURCES "${src}")
+    endif()
+endforeach()
+
+# MSVC's module scanner defaults ordinary .cpp scan output to "$(IntDir)/.d.json".
+# Multiple module implementation units then share the same dependency output and
+# make the Visual Studio target permanently out of date. Give every .cpp source a
+# stable per-file dependency path so repeated builds can be true no-ops.
+if(MSVC)
+    foreach(src ${CPP_SOURCES})
+        file(RELATIVE_PATH src_rel "${CMAKE_CURRENT_SOURCE_DIR}" "${src}")
+        string(MAKE_C_IDENTIFIER "${src_rel}" src_dep_name)
+        set_source_files_properties("${src}" PROPERTIES
+            VS_SETTINGS "ModuleDependenciesFile=$(IntDir)/${src_dep_name}.module.json"
+        )
+    endforeach()
+
+    # MSVC 19.44 can fail required coroutine tail-call codegen (C4737) in this
+    # large Release translation unit. Keep the workaround scoped to the file.
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/http/client/http_client.cpp"
+        PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
+    )
+endif()
+
+# Filter by platform: Exclude I/O backend modules not needed for current platform
+if(NOT CNETMOD_HAS_IOCP)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/iocp")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/iocp")
+endif()
+if(NOT CNETMOD_HAS_IO_URING)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/io_uring")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/io_uring")
+endif()
+if(NOT CNETMOD_HAS_EPOLL)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/epoll")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/epoll")
+endif()
+if(NOT CNETMOD_HAS_KQUEUE)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/kqueue")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/kqueue")
+endif()
+if(NOT CNETMOD_HAS_SSL)
+    # DTLS imports cnetmod.core.ssl, so it must be disabled together with the
+    # TLS implementation when OpenSSL is not available.
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "core/(ssl|dtls)")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "core/(ssl|dtls)")
+endif()
+
+# ============================================================================== 
+# Core Library Target: cnetmod_core
+# ============================================================================== 
+
+add_library(cnetmod_core STATIC
+    ${REGULAR_CPP_SOURCES}
+    ${MODULE_IMPLEMENTATION_CPP_FILES}
+)
+
+target_include_directories(cnetmod_core PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
+
+# Platform-specific macro definitions
+target_compile_definitions(cnetmod_core PUBLIC
+    $<$<PLATFORM_ID:Windows>:CNETMOD_PLATFORM_WINDOWS>
+    $<$<PLATFORM_ID:Linux>:CNETMOD_PLATFORM_LINUX>
+    $<$<PLATFORM_ID:Darwin>:CNETMOD_PLATFORM_MACOS>
+    $<$<BOOL:${CNETMOD_HAS_IOCP}>:CNETMOD_HAS_IOCP>
+    $<$<BOOL:${CNETMOD_HAS_IO_URING}>:CNETMOD_HAS_IO_URING>
+    $<$<BOOL:${CNETMOD_HAS_IO_URING_BUFFER_RING}>:CNETMOD_HAS_IO_URING_BUFFER_RING>
+    $<$<BOOL:${CNETMOD_HAS_EPOLL}>:CNETMOD_HAS_EPOLL>
+    $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
+    $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
+    $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
+    $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
+)
+add_library(cnetmod::core ALIAS cnetmod_core)
+
+# Platform-specific linking
+if(WIN32)
+    target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock)
+elseif(CNETMOD_HAS_IO_URING)
+    target_link_libraries(cnetmod_core PUBLIC uring)
+endif()
+
+# SSL/TLS linking
+if(CNETMOD_HAS_SSL)
+    target_link_libraries(cnetmod_core PUBLIC OpenSSL::SSL OpenSSL::Crypto)
+endif()
+
+# zlib linking
+if(CNETMOD_HAS_ZLIB)
+    target_link_libraries(cnetmod_core PUBLIC ZLIB::ZLIB)
+endif()
+
+if(CNETMOD_JSON_EFFECTIVE_PROVIDER STREQUAL "PACKAGE" AND
+   TARGET nlohmann_json::nlohmann_json)
+    target_link_libraries(cnetmod_core PUBLIC nlohmann_json::nlohmann_json)
+endif()
+
+if(TARGET jwt-cpp::jwt-cpp)
+    target_link_libraries(cnetmod_core PUBLIC jwt-cpp::jwt-cpp)
+endif()
+
+if(TARGET STDEXEC::stdexec)
+    target_link_libraries(cnetmod_core PUBLIC STDEXEC::stdexec)
+elseif(TARGET P2300::P2300)
+    target_link_libraries(cnetmod_core PUBLIC P2300::P2300)
+endif()
+
+# pugixml linking
+if(CNETMOD_HAS_PUGIXML)
+    target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_PUGIXML_TARGET})
+endif()
+
+# LevelDB linking
+if(CNETMOD_HAS_LEVELDB)
+    if(CNETMOD_LEVELDB_TARGET)
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_LEVELDB_TARGET})
+    else()
+        target_include_directories(cnetmod_core PUBLIC ${CNETMOD_LEVELDB_INCLUDE_DIR})
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_LEVELDB_LIBRARY})
+    endif()
+endif()
+
+# ==============================================================================
+# C++ Module Configuration
+# ==============================================================================
+#[[
+  Configure standard-library/project/json C++ module file sets on cnetmod_core.
+]]
+configure_cxx_modules(
+    TARGET cnetmod_core
+    MODULE_INTERFACE_FILES ${MODULE_INTERFACE_FILES}
+    JSON_MODULE ${NLOHMANN_JSON_MODULE}
+)
+
+# Module generation mode
+set_property(TARGET cnetmod_core PROPERTY
+    CXX_MODULE_GENERATION_MODE "SEPARATE"
+)
+
+# ============================================================================== 
+# Installable binary package / GitHub Release asset
+# ============================================================================== 
+# The package contains the static core library, public headers, C++ module
+# interfaces, and the exported CMake target.  Consumers must use a compatible
+# compiler/toolchain because C++ module BMIs are toolchain-specific.
+if(CNETMOD_HAS_LEVELDB AND CNETMOD_LEVELDB_TARGET STREQUAL "leveldb")
+    install(TARGETS leveldb
+        EXPORT cnetmodTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    )
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/leveldb/include/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
+install(TARGETS cnetmod_core
+    EXPORT cnetmodTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    FILE_SET cxx_modules DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules"
+)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+configure_package_config_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodConfig.cmake.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
+    INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
+)
+write_basic_package_version_file(
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfigVersion.cmake"
+    VERSION "${PROJECT_VERSION}"
+    COMPATIBILITY SameMajorVersion
+)
+install(EXPORT cnetmodTargets
+    FILE cnetmodTargets.cmake
+    NAMESPACE cnetmod::
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
+)
+install(FILES
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfigVersion.cmake"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
+)
+
+set(CPACK_PACKAGE_NAME "cnetmod")
+set(CPACK_PACKAGE_VENDOR "banderzhm")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_FILE_NAME "cnetmod-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
+set(CPACK_GENERATOR "ZIP")
+include(CPack)
+
+set(CNETMOD_LINK_TARGET cnetmod_core)
+
+# ==============================================================================
+# Main Executable
+# ==============================================================================
+
+add_executable(cnetmod_app src/main.cpp)
+target_link_libraries(cnetmod_app PRIVATE ${CNETMOD_LINK_TARGET})
+set_property(TARGET cnetmod_app PROPERTY
+    CXX_MODULE_GENERATION_MODE "SEPARATE"
+)
+
+# ==============================================================================
+# Testing, Benchmarks & TFB
+# ==============================================================================
+
+option(CNETMOD_BUILD_TESTS "Build tests" ON)
+option(CNETMOD_BUILD_BENCH "Build performance benchmarks" ON)
+if(CNETMOD_BUILD_TESTS)
+    enable_testing()
+endif()
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/testing/CMakeLists.txt")
+    add_subdirectory(testing)
+endif()
+
+# ==============================================================================
+# Example Program Configuration
+# ==============================================================================
+
+option(CNETMOD_BUILD_EXAMPLES "Build examples" ON)
+if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
+    add_subdirectory(examples)
+endif()
+
+# ==============================================================================
+# Documentation Examples
+# ==============================================================================
+
+if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/doc/CMakeLists.txt")
+    add_subdirectory(doc)
+endif()
+
+# ==============================================================================
+# Aggregate Build Targets
+# ==============================================================================
+
+set(CNETMOD_ALL_TARGETS
+    cnetmod_core
+    cnetmod_app
+    ${CNETMOD_TEST_TARGETS}
+    ${CNETMOD_BENCH_TARGETS}
+    ${CNETMOD_EXAMPLE_TARGETS}
+)
+
+list(REMOVE_DUPLICATES CNETMOD_ALL_TARGETS)
+
+add_custom_target(cnetmod_build_all
+    DEPENDS ${CNETMOD_ALL_TARGETS}
+    COMMENT "Build cnetmod core, app, tests, benchmarks, and examples"
+)
+
+# ==============================================================================
+# Build Information Summary
+# ==============================================================================
+
+message(STATUS "==========================================")
+message(STATUS "Project: ${PROJECT_NAME} v${PROJECT_VERSION}")
+message(STATUS "C++ Standard: C++${CMAKE_CXX_STANDARD}")
+message(STATUS "Compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "Platform: ${CMAKE_SYSTEM_NAME}")
+if(STDLIB_MODULE_DIRS)
+    message(STATUS "Standard Library Modules: ${STDLIB_MODULE_DIRS}")
+endif()
+
+# Linker information
+if(CNETMOD_USING_MOLD)
+    message(STATUS "Linker: mold (high-performance)")
+else()
+    message(STATUS "Linker: system default")
+endif()
+
+# Memory allocator information
+if(CNETMOD_USING_MIMALLOC)
+    message(STATUS "Memory Allocator: mimalloc (high-performance)")
+else()
+    message(STATUS "Memory Allocator: system default")
+endif()
+
+message(STATUS "==========================================")
+
+# Print detailed optimization info if enabled
+if(CNETMOD_USING_MOLD OR CNETMOD_USING_MIMALLOC)
+    message(STATUS "")
+    message(STATUS "Performance Optimizations Enabled:")
+    if(CNETMOD_USING_MOLD)
+        message(STATUS "  ✓ mold linker: 10-20x faster linking")
+    endif()
+    if(CNETMOD_USING_MIMALLOC)
+        message(STATUS "  ✓ mimalloc: 2-3x faster memory allocation")
+    endif()
+    message(STATUS "")
+endif()

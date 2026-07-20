@@ -1,0 +1,279 @@
+/// cnetmod.protocol.modbus:rtu_client — Modbus RTU Client Implementation
+/// Full-featured async Modbus RTU (Serial) client
+
+module;
+
+#include <cnetmod/config.hpp>
+
+module cnetmod.protocol.modbus;
+import :rtu_client;
+
+import std;
+import :types;
+import cnetmod.io.io_context;
+import cnetmod.coro.task;
+import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
+import cnetmod.core.serial_port;
+import cnetmod.core.buffer;
+import cnetmod.core.file;
+import cnetmod.executor.async_op;
+
+namespace cnetmod::modbus {
+
+// =============================================================================
+// RTU Configuration
+// =============================================================================
+
+struct rtu_config_implementation_only {
+  std::string port_name; // e.g., "COM1" (Windows) or "/dev/ttyUSB0" (Linux)
+  std::uint32_t baudrate = 9600;   // 9600, 19200, 38400, 57600, 115200
+  std::uint8_t data_bits = 8;      // 7 or 8
+  stop_bits stop = stop_bits::one; // 1 or 2
+  parity par = parity::none;       // None, Even, Odd
+
+  // Modbus RTU timing
+  std::chrono::microseconds char_timeout =
+      std::chrono::microseconds(1500); // 1.5 char times
+  std::chrono::microseconds frame_delay =
+      std::chrono::microseconds(3500); // 3.5 char times
+
+  // Convert to serial_config
+  auto to_serial_config() const -> serial_config {
+    serial_config cfg;
+    cfg.baud_rate = baudrate;
+    cfg.data_bits = data_bits;
+    cfg.stop = stop;
+    cfg.par = par;
+    cfg.flow = flow_control::none; // Modbus RTU doesn't use flow control
+    cfg.read_timeout_ms = static_cast<std::uint32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(char_timeout)
+            .count());
+    cfg.write_timeout_ms = 1000;
+    return cfg;
+  }
+};
+
+// =============================================================================
+// Modbus RTU Client
+// =============================================================================
+
+class rtu_client_impl {
+public:
+  explicit rtu_client_impl(io_context &ctx) : ctx_(ctx) {}
+
+  rtu_client_impl(const rtu_client_impl &) = delete;
+  auto operator=(const rtu_client_impl &) -> rtu_client_impl & = delete;
+
+  // ── Open serial port ──
+  auto open(const rtu_config &config) -> task<std::error_code> {
+    config_ = config;
+
+    // Open serial port using existing implementation
+    auto result =
+        serial_port::open(config.port_name, config.to_serial_config());
+    if (!result) {
+      co_return result.error();
+    }
+
+    serial_ = std::move(*result);
+    co_return std::error_code{};
+  }
+
+  // ── Execute request and receive response ──
+  auto execute(const modbus_request &request)
+      -> task<std::expected<modbus_response, std::error_code>> {
+    if (!serial_.is_open()) {
+      co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    }
+
+    // Serialize RTU frame: [unit_id][func_code][data][crc16_le]
+    auto frame = serialize_rtu_frame(request);
+
+    // Wait for frame delay (3.5 char times) before sending
+    co_await async_sleep(ctx_, config_.frame_delay);
+
+    // Send request (using async I/O on io_context)
+    auto send_result = co_await async_write_serial(frame);
+    if (!send_result) {
+      co_return std::unexpected(send_result.error());
+    }
+
+    // Calculate response timeout
+    auto response_timeout = calculate_response_timeout(request);
+
+    // Receive response
+    std::vector<std::uint8_t> response_buf(256);
+    std::size_t total_received = 0;
+    auto start_time = std::chrono::steady_clock::now();
+
+    while (total_received < response_buf.size()) {
+      auto elapsed = std::chrono::steady_clock::now() - start_time;
+      if (elapsed >= response_timeout) {
+        co_return std::unexpected(std::make_error_code(std::errc::timed_out));
+      }
+
+      auto remaining_timeout = response_timeout - elapsed;
+      std::span<std::uint8_t> buf_span(response_buf.data() + total_received,
+                                       response_buf.size() - total_received);
+
+      // Read with timeout
+      auto recv_result =
+          co_await async_read_with_timeout(buf_span, remaining_timeout);
+
+      if (!recv_result) {
+        if (total_received >= 5) { // Minimum valid frame
+          break;
+        }
+        co_return std::unexpected(recv_result.error());
+      }
+
+      total_received += *recv_result;
+
+      // Check if we have a complete frame
+      if (total_received >= 5) {
+        // Wait for char timeout to ensure frame is complete
+        co_await async_sleep(ctx_, config_.char_timeout);
+
+        // Try to receive more, if nothing comes, frame is complete
+        std::uint8_t dummy;
+        auto check_result = co_await async_read_with_timeout(
+            std::span(&dummy, 1), config_.char_timeout);
+
+        if (!check_result || *check_result == 0) {
+          break;
+        }
+        response_buf[total_received++] = dummy;
+      }
+    }
+
+    response_buf.resize(total_received);
+
+    // Parse RTU frame
+    co_return parse_rtu_frame(response_buf);
+  }
+
+  // ── Execute with retry ──
+  auto execute_with_retry(const modbus_request &request, int max_retries = 3)
+      -> task<std::expected<modbus_response, std::error_code>> {
+    for (int i = 0; i < max_retries; ++i) {
+      auto result = co_await execute(request);
+      if (result) {
+        co_return result;
+      }
+
+      // Wait before retry
+      if (i < max_retries - 1) {
+        co_await async_sleep(ctx_, std::chrono::milliseconds(100));
+      }
+    }
+
+    co_return std::unexpected(std::make_error_code(std::errc::timed_out));
+  }
+
+  // ── Close serial port ──
+  void close() { serial_.close(); }
+
+  // ── Check if open ──
+  auto is_open() const -> bool { return serial_.is_open(); }
+
+  // ── Get configuration ──
+  auto get_config() const -> const rtu_config & { return config_; }
+
+  // ── Get serial port handle ──
+  auto native_handle() const -> file_handle_t {
+    return serial_.native_handle();
+  }
+
+private:
+  io_context &ctx_;
+  serial_port serial_;
+  rtu_config config_;
+
+  // Calculate response timeout based on request size and baudrate
+  auto calculate_response_timeout(const modbus_request &request) const
+      -> std::chrono::steady_clock::duration {
+    // Estimate: request size + response size + processing time
+    // For RTU: ~10 bits per byte (start + 8 data + parity + stop)
+    std::size_t estimated_bytes = 256; // Conservative estimate
+    auto bits = estimated_bytes * 10;
+    auto transmission_time =
+        std::chrono::microseconds(bits * 1000000 / config_.baudrate);
+    auto processing_time = std::chrono::milliseconds(100);
+
+    return transmission_time + processing_time + config_.frame_delay * 2;
+  }
+
+  // Async write wrapper for serial port (uses io_context scheduler)
+  auto async_write_serial(std::span<const std::uint8_t> data)
+      -> task<std::expected<std::size_t, std::error_code>> {
+    const_buffer buf{reinterpret_cast<const std::byte *>(data.data()),
+                     data.size()};
+    co_return co_await async_serial_write(ctx_, serial_, buf);
+  }
+
+  // Async read with timeout wrapper for serial port (uses io_context scheduler)
+  auto async_read_with_timeout(std::span<std::uint8_t> buffer,
+                               std::chrono::steady_clock::duration timeout)
+      -> task<std::expected<std::size_t, std::error_code>> {
+    // Create cancellation token for timeout
+    cancel_token token;
+
+    // Start timeout timer
+    auto timeout_task = [](io_context &ctx,
+                           std::chrono::steady_clock::duration dur,
+                           cancel_token &tok) -> task<void> {
+      co_await async_timer_wait(ctx, dur);
+      tok.cancel();
+    }(ctx_, timeout, token);
+
+    // Start read operation with cancellation support
+    mutable_buffer buf{reinterpret_cast<std::byte *>(buffer.data()),
+                       buffer.size()};
+    auto result = co_await async_serial_read(ctx_, serial_, buf, token);
+
+    // Cancel timeout if read completed first
+    token.cancel();
+
+    co_return result;
+  }
+};
+auto rtu_config::to_serial_config() const -> serial_config {
+  serial_config cfg;
+  cfg.baud_rate = baudrate;
+  cfg.data_bits = data_bits;
+  cfg.stop = stop;
+  cfg.par = par;
+  cfg.flow = flow_control::none;
+  cfg.read_timeout_ms = static_cast<std::uint32_t>(
+      std::chrono::duration_cast<std::chrono::milliseconds>(char_timeout)
+          .count());
+  cfg.write_timeout_ms = 1000;
+  return cfg;
+}
+class rtu_client::impl final : public rtu_client_impl {
+public:
+  using rtu_client_impl::rtu_client_impl;
+};
+rtu_client::rtu_client(io_context &ctx) : impl_(std::make_unique<impl>(ctx)) {}
+rtu_client::~rtu_client() = default;
+auto rtu_client::open(const rtu_config &c) -> task<std::error_code> {
+  return impl_->open(c);
+}
+auto rtu_client::execute(const modbus_request &r)
+    -> task<std::expected<modbus_response, std::error_code>> {
+  return impl_->execute(r);
+}
+auto rtu_client::execute_with_retry(const modbus_request &r, int n)
+    -> task<std::expected<modbus_response, std::error_code>> {
+  return impl_->execute_with_retry(r, n);
+}
+void rtu_client::close() { impl_->close(); }
+auto rtu_client::is_open() const -> bool { return impl_->is_open(); }
+auto rtu_client::get_config() const -> const rtu_config & {
+  return impl_->get_config();
+}
+auto rtu_client::native_handle() const -> file_handle_t {
+  return impl_->native_handle();
+}
+} // namespace cnetmod::modbus

@@ -1,0 +1,22 @@
+{
+  "name": "cnetmod",
+  "version": "2.0.0",
+  "description": "Cross-platform asynchronous network library with C++23 modules",
+  "homepage": "https://github.com/banderzhm/cnetmod",
+  "license": "MIT",
+  "builtin-baseline": "a7bd30319eeac16afbe18d64a855303a0a425e84",
+  "dependencies": [
+    "jwt-cpp",
+    "leveldb",
+    "mimalloc",
+    "nlohmann-json",
+    "openssl",
+    "pugixml",
+    "stdexec",
+    "zlib",
+    {
+      "name": "liburing",
+      "platform": "linux"
+    }
+  ]
+}

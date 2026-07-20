@@ -1,0 +1,14 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# The exported target retains its public link interface.  Resolve the standard
+# system dependencies that are enabled by the default Windows build first.
+if(WIN32)
+    find_dependency(OpenSSL QUIET)
+    find_dependency(ZLIB QUIET)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/cnetmodTargets.cmake")
+
+check_required_components(cnetmod)

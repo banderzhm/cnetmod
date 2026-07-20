@@ -1,0 +1,116 @@
+module cnetmod.protocol.raft;
+
+import std;
+import :fsm;
+
+namespace cnetmod::raft {
+state_machine::~state_machine() = default;
+void state_machine::on_snapshot_save(const snapshot_metadata &) {}
+void state_machine::on_snapshot_load(const snapshot_metadata &) {}
+auto state_machine::save_snapshot(const snapshot_writer &writer)
+    -> std::expected<void, raft_error> {
+  on_snapshot_save(writer.metadata);
+  return {};
+}
+auto state_machine::load_snapshot(const snapshot_reader &reader)
+    -> std::expected<void, raft_error> {
+  on_snapshot_load(reader.metadata);
+  return {};
+}
+void state_machine::on_leader_start(term_t) {}
+void state_machine::on_leader_stop(term_t) {}
+
+fsm_caller::fsm_caller(state_machine *machine) : machine_(machine) {}
+void fsm_caller::reset(state_machine *machine) { machine_ = machine; }
+auto fsm_caller::last_applied() const noexcept -> log_index {
+  return last_applied_;
+}
+void fsm_caller::set_last_applied(log_index index) noexcept {
+  last_applied_ = index;
+}
+auto fsm_caller::apply_committed(raft_storage &storage, log_index committed)
+    -> std::expected<log_index, raft_error> {
+  if (!machine_) {
+    last_applied_ = std::max(last_applied_, committed);
+    return last_applied_;
+  }
+  for (auto index = last_applied_ + 1; index <= committed; ++index) {
+    auto entry = storage.entry_at(index);
+    if (!entry)
+      return std::unexpected(
+          raft_error{.code = raft_errc::log_inconsistent,
+                     .message = "committed log entry is missing"});
+    if (entry->type == entry_type::command ||
+        entry->type == entry_type::configuration)
+      machine_->on_apply(*entry);
+    last_applied_ = index;
+  }
+  return last_applied_;
+}
+auto fsm_caller::apply_entry(const log_entry &entry)
+    -> std::expected<log_index, raft_error> {
+  if (entry.index != last_applied_ + 1)
+    return std::unexpected(
+        raft_error{.code = raft_errc::log_inconsistent,
+                   .message = "committed log entry is not contiguous"});
+  if (machine_ && (entry.type == entry_type::command ||
+                   entry.type == entry_type::configuration)) {
+    try {
+      machine_->on_apply(entry);
+    } catch (const std::exception &e) {
+      return std::unexpected(raft_error{.code = raft_errc::state_machine_error,
+                                        .message = e.what()});
+    } catch (...) {
+      return std::unexpected(
+          raft_error{.code = raft_errc::state_machine_error,
+                     .message = "state machine apply failed"});
+    }
+  }
+  last_applied_ = entry.index;
+  return last_applied_;
+}
+void fsm_caller::on_snapshot_load(const snapshot_metadata &metadata) {
+  last_applied_ = std::max(last_applied_, metadata.last_included_index);
+  if (machine_)
+    machine_->on_snapshot_load(metadata);
+}
+auto fsm_caller::save_snapshot(const snapshot_writer &writer)
+    -> std::expected<void, raft_error> {
+  if (!machine_)
+    return {};
+  try {
+    return machine_->save_snapshot(writer);
+  } catch (const std::exception &e) {
+    return std::unexpected(raft_error{.code = raft_errc::state_machine_error,
+                                      .message = e.what()});
+  } catch (...) {
+    return std::unexpected(
+        raft_error{.code = raft_errc::state_machine_error,
+                   .message = "state machine snapshot save failed"});
+  }
+}
+auto fsm_caller::load_snapshot(const snapshot_reader &reader)
+    -> std::expected<void, raft_error> {
+  last_applied_ = std::max(last_applied_, reader.metadata.last_included_index);
+  if (!machine_)
+    return {};
+  try {
+    return machine_->load_snapshot(reader);
+  } catch (const std::exception &e) {
+    return std::unexpected(raft_error{.code = raft_errc::state_machine_error,
+                                      .message = e.what()});
+  } catch (...) {
+    return std::unexpected(
+        raft_error{.code = raft_errc::state_machine_error,
+                   .message = "state machine snapshot load failed"});
+  }
+}
+void fsm_caller::on_leader_start(term_t term) {
+  if (machine_)
+    machine_->on_leader_start(term);
+}
+void fsm_caller::on_leader_stop(term_t term) {
+  if (machine_)
+    machine_->on_leader_stop(term);
+}
+} // namespace cnetmod::raft
