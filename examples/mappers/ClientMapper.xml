@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ClientMapper">
+
+    <sql id="clientColumns">
+        id, wechat_id, name, created_at
+    </sql>
+
+    <!-- Query all clients -->
+    <select id="selectAll">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- Query client by ID -->
+    <select id="selectById">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        WHERE id = #{id}
+    </select>
+
+    <!-- Query client by WeChat ID -->
+    <select id="selectByWechatId">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        WHERE wechat_id = #{wechat_id}
+    </select>
+
+    <!-- Search clients -->
+    <select id="search">
+        SELECT <include refid="clientColumns"/>
+        FROM clients
+        <where>
+            <if test="keyword != null">
+                (name LIKE CONCAT('%', #{keyword}, '%')
+                 OR wechat_id LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+        </where>
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- Insert client -->
+    <insert id="insert">
+        INSERT INTO clients (wechat_id, name, created_at)
+        VALUES (#{wechat_id}, #{name}, NOW())
+    </insert>
+
+    <!-- Update client -->
+    <update id="update">
+        UPDATE clients
+        <set>
+            <if test="wechat_id != null">
+                wechat_id = #{wechat_id},
+            </if>
+            <if test="name != null">
+                name = #{name},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- Delete client -->
+    <delete id="delete">
+        DELETE FROM clients WHERE id = #{id}
+    </delete>
+
+    <!-- Query distinct clients by WeChat ID -->
+    <select id="selectDistinctClients">
+        SELECT DISTINCT wechat_id AS wechatId, name
+        FROM clients
+        ORDER BY name
+    </select>
+
+    <!-- Fuzzy search clients for autocomplete -->
+    <select id="searchFuzzy">
+        SELECT DISTINCT wechat_id AS wechatId, name
+        FROM clients
+        WHERE wechat_id LIKE CONCAT('%', #{keyword}, '%')
+           OR name LIKE CONCAT('%', #{keyword}, '%')
+        ORDER BY name
+        LIMIT 10
+    </select>
+
+</mapper>

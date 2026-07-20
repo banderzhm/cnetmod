@@ -1,0 +1,2 @@
+# 对包含敏感信息的文件应用过滤器
+examples/http/account_server_demo.cpp filter=hide-secrets

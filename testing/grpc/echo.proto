@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package cnetmod.testing.grpc;
+
+message EchoRequest {
+  string name = 1;
+  uint64 sequence = 2;
+  bool urgent = 3;
+}
+
+message EchoReply {
+  string message = 1;
+  uint64 sequence = 2;
+}
+
+service EchoService {
+  rpc Say(EchoRequest) returns (EchoReply);
+  rpc Chat(stream EchoRequest) returns (stream EchoReply);
+}

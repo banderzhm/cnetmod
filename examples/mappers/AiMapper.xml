@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="AiMapper">
+
+    <!-- Query all AI prompt templates -->
+    <select id="selectAllPrompts">
+        SELECT id, name, prompt_template, is_default, created_at
+        FROM ai_prompts
+        ORDER BY is_default DESC, created_at DESC
+    </select>
+
+    <!-- Query default prompt -->
+    <select id="selectDefaultPrompt">
+        SELECT id, name, prompt_template, is_default, created_at
+        FROM ai_prompts
+        WHERE is_default = 1
+        LIMIT 1
+    </select>
+
+    <!-- Query prompt by ID -->
+    <select id="selectPromptById">
+        SELECT id, name, prompt_template, is_default, created_at
+        FROM ai_prompts
+        WHERE id = #{id}
+    </select>
+
+    <!-- Insert prompt -->
+    <insert id="insertPrompt">
+        INSERT INTO ai_prompts (name, prompt_template, is_default, created_at)
+        VALUES (#{name}, #{prompt_template}, #{is_default}, NOW())
+    </insert>
+
+    <!-- Update prompt -->
+    <update id="updatePrompt">
+        UPDATE ai_prompts
+        <set>
+            <if test="name != null">
+                name = #{name},
+            </if>
+            <if test="prompt_template != null">
+                prompt_template = #{prompt_template},
+            </if>
+            <if test="is_default != null">
+                is_default = #{is_default},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- Clear all default prompts -->
+    <update id="clearDefaultPrompts">
+        UPDATE ai_prompts SET is_default = 0 WHERE is_default = 1
+    </update>
+
+    <!-- Delete prompt -->
+    <delete id="deletePrompt">
+        DELETE FROM ai_prompts WHERE id = #{id}
+    </delete>
+
+    <!-- Insert analysis history -->
+    <insert id="insertAnalysisHistory">
+        INSERT INTO ai_analysis_history (
+            start_date, end_date, prompt_id,
+            analysis_result, project_summary, projects_json, created_at
+        ) VALUES (
+            #{start_date}, #{end_date}, #{prompt_id},
+            #{analysis_result}, #{project_summary}, #{projects_json}, NOW()
+        )
+    </insert>
+
+    <!-- Query analysis history with pagination -->
+    <select id="selectAnalysisHistory">
+        SELECT
+            id, start_date, end_date, prompt_id,
+            analysis_result, project_summary, projects_json, created_at
+        FROM ai_analysis_history
+        ORDER BY created_at DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+            <if test="offset != null">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <!-- Query analysis history by ID -->
+    <select id="selectAnalysisById">
+        SELECT
+            id, start_date, end_date, prompt_id,
+            analysis_result, project_summary, projects_json, created_at
+        FROM ai_analysis_history
+        WHERE id = #{id}
+    </select>
+
+    <!-- Query analysis history list with prompt name -->
+    <select id="selectAnalysisHistoryWithPrompt">
+        SELECT
+            h.id, h.start_date, h.end_date, h.project_summary,
+            h.created_at, p.name AS prompt_name
+        FROM ai_analysis_history h
+        LEFT JOIN ai_prompts p ON h.prompt_id = p.id
+        ORDER BY h.created_at DESC
+        LIMIT 50
+    </select>
+
+    <!-- Query analysis history details with prompt template -->
+    <select id="selectAnalysisDetailById">
+        SELECT
+            h.id, h.start_date, h.end_date, h.prompt_id,
+            h.analysis_result, h.project_summary, h.projects_json,
+            h.created_at, p.name AS prompt_name, p.prompt_template
+        FROM ai_analysis_history h
+        LEFT JOIN ai_prompts p ON h.prompt_id = p.id
+        WHERE h.id = #{id}
+    </select>
+
+    <!-- Query default prompt template -->
+    <select id="selectDefaultPromptTemplate">
+        SELECT id, prompt_template
+        FROM ai_prompts
+        WHERE is_default = TRUE
+        LIMIT 1
+    </select>
+
+    <!-- Query prompt template by ID -->
+    <select id="selectPromptTemplateById">
+        SELECT prompt_template
+        FROM ai_prompts
+        WHERE id = #{id}
+    </select>
+
+    <!-- Save or update analysis history -->
+    <insert id="replaceAnalysisHistory">
+        REPLACE INTO ai_analysis_history
+        (start_date, end_date, prompt_id, analysis_result, project_summary, projects_json)
+        VALUES (#{start_date}, #{end_date}, #{prompt_id}, #{analysis_result}, #{project_summary}, #{projects_json})
+    </insert>
+
+</mapper>

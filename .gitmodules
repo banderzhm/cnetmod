@@ -1,0 +1,18 @@
+[submodule "3rdparty/json"]
+	path = 3rdparty/json
+	url = https://github.com/nlohmann/json.git
+[submodule "3rdparty/jwt-cpp"]
+	path = 3rdparty/jwt-cpp
+	url = https://github.com/Thalhammer/jwt-cpp.git
+[submodule "3rdparty/spdlog"]
+	path = 3rdparty/spdlog
+	url = https://github.com/gabime/spdlog.git
+[submodule "3rdparty/leveldb"]
+	path = 3rdparty/leveldb
+	url = https://github.com/google/leveldb.git
+[submodule "3rdparty/stdexec"]
+	path = 3rdparty/stdexec
+	url = https://github.com/NVIDIA/stdexec.git
+[submodule "3rdparty/pugixml"]
+	path = 3rdparty/pugixml
+	url = https://github.com/zeux/pugixml.git

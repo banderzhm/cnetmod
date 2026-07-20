@@ -1,0 +1,163 @@
+/// cnetmod example — High-level WebSocket Server + Client
+/// Demonstrates ws::server routeregister + + Client
+
+#include <cnetmod/config.hpp>
+
+import std;
+import cnetmod.core;
+import cnetmod.coro;
+import cnetmod.io;
+import cnetmod.executor;
+import cnetmod.protocol.tcp;
+import cnetmod.protocol.websocket;
+import cnetmod.protocol.http.middleware.access_log;
+
+namespace cn = cnetmod;
+namespace ws = cnetmod::ws;
+
+constexpr std::uint16_t PORT = 19081;
+
+// =============================================================================
+// /echo : echo back
+// =============================================================================
+
+auto echo_handler(ws::ws_context& ctx) -> cn::task<void> {
+    std::println("  [/echo] Client connected");
+    while (ctx.is_open()) {
+        auto msg = co_await ctx.recv();
+        if (!msg) break;
+        if (msg->op == ws::opcode::close) break;
+
+        std::string_view text(
+            reinterpret_cast<const char*>(msg->payload.data()),
+            msg->payload.size());
+        std::println("  [/echo] recv: {}", text);
+
+        auto sr = co_await ctx.send_text(std::format("[echo] {}", text));
+        if (!sr) break;
+    }
+    std::println("  [/echo] Client disconnected");
+}
+
+// =============================================================================
+// /chat/:room : read room, room echo back
+// =============================================================================
+
+auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
+    auto room = ctx.param("room");
+    std::println("  [/chat/{}] Client joined", room);
+
+    while (ctx.is_open()) {
+        auto msg = co_await ctx.recv();
+        if (!msg) break;
+        if (msg->op == ws::opcode::close) break;
+
+        std::string_view text(
+            reinterpret_cast<const char*>(msg->payload.data()),
+            msg->payload.size());
+        std::println("  [/chat/{}] recv: {}", room, text);
+
+        auto reply = std::format("[room:{}] {}", room, text);
+        auto sr = co_await ctx.send_text(reply);
+        if (!sr) break;
+    }
+    std::println("  [/chat/{}] Client left", room);
+}
+
+// =============================================================================
+// Client: WS , N
+// =============================================================================
+
+auto ws_client(cn::io_context& ctx, std::string url,
+               std::vector<std::string> messages) -> cn::task<void>
+{
+    ws::connection conn(ctx);
+
+    auto cr = co_await conn.async_connect(url);
+    if (!cr) {
+        std::println("    [Client] connect {} failed: {}", url,
+                     cr.error().message());
+        co_return;
+    }
+    std::println("    [Client] Connected to {}", url);
+
+    for (auto& text : messages) {
+        auto sr = co_await conn.async_send_text(text);
+        if (!sr) break;
+        std::println("    [Client] sent: {}", text);
+
+        auto msg = co_await conn.async_recv();
+        if (!msg || msg->op == ws::opcode::close) break;
+
+        std::string_view reply(
+            reinterpret_cast<const char*>(msg->payload.data()),
+            msg->payload.size());
+        std::println("    [Client] recv: {}", reply);
+    }
+
+    (void)co_await conn.async_close();
+    std::println("    [Client] Closed {}", url);
+}
+
+// =============================================================================
+// Client: Test
+// =============================================================================
+
+auto run_clients(cn::io_context& ctx, ws::server& srv) -> cn::task<void> {
+    // Wait forServerstart
+    co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
+
+    std::println("\n--- Client: Testing /echo ---");
+    co_await ws_client(ctx,
+        std::format("ws://127.0.0.1:{}/echo", PORT),
+        {"Hello", "World", "cnetmod"});
+
+    std::println("\n--- Client: Testing /chat/general ---");
+    co_await ws_client(ctx,
+        std::format("ws://127.0.0.1:{}/chat/general", PORT),
+        {"Hi everyone", "How are you?"});
+
+    std::println("\n--- Client: Testing /chat/dev ---");
+    co_await ws_client(ctx,
+        std::format("ws://127.0.0.1:{}/chat/dev", PORT),
+        {"Bug fix landed", "Ship it!"});
+
+    std::println("\n--- All tests done ---");
+
+    srv.stop();
+    ctx.stop();
+}
+
+// =============================================================================
+// main
+// =============================================================================
+
+int main() {
+    std::println("=== cnetmod: High-level WebSocket Demo ===");
+
+    cn::net_init net;
+    auto ctx = cn::make_io_context();
+
+    // Build WS
+    ws::server srv(*ctx);
+    auto lr = srv.listen("127.0.0.1", PORT);
+    if (!lr) {
+        std::println("Listen failed: {}", lr.error().message());
+        return 1;
+    }
+
+    // Register()
+    srv.on("/echo", cn::ws_access_log(echo_handler));
+    srv.on("/chat/:room", cn::ws_access_log(chat_handler));
+
+    std::println("  WS Server listening on 127.0.0.1:{}", PORT);
+    std::println("  Endpoints: /echo, /chat/:room");
+
+    // Start components.
+    cn::spawn(*ctx, srv.run());
+    cn::spawn(*ctx, run_clients(*ctx, srv));
+
+    ctx->run();
+    std::println("Done.");
+    return 0;
+}

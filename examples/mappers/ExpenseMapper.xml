@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="ExpenseMapper">
+
+    <sql id="expenseColumns">
+        id, project_id, item_name, amount, created_at
+    </sql>
+
+    <!-- Query all expenses for a project -->
+    <select id="selectByProjectId">
+        SELECT <include refid="expenseColumns"/>
+        FROM expenses
+        WHERE project_id = #{project_id}
+        ORDER BY created_at DESC
+    </select>
+
+    <!-- Batch query expenses for multiple projects -->
+    <select id="selectByProjectIds">
+        SELECT <include refid="expenseColumns"/>
+        FROM expenses
+        WHERE project_id IN
+        <foreach collection="project_ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY project_id, created_at DESC
+    </select>
+
+    <!-- Calculate total project expenses -->
+    <select id="sumByProjectId">
+        SELECT COALESCE(SUM(amount), 0) as total_expense
+        FROM expenses
+        WHERE project_id = #{project_id}
+    </select>
+
+    <!-- Insert an expense record -->
+    <insert id="insert">
+        INSERT INTO expenses (project_id, item_name, amount, created_at)
+        VALUES (#{project_id}, #{item_name}, #{amount}, NOW())
+    </insert>
+
+    <!-- Batch insert expenses -->
+    <insert id="batchInsert">
+        INSERT INTO expenses (project_id, item_name, amount, created_at)
+        VALUES
+        <foreach collection="expenses" item="exp" separator=",">
+            (#{exp.project_id}, #{exp.item_name}, #{exp.amount}, NOW())
+        </foreach>
+    </insert>
+
+    <!-- Update expense -->
+    <update id="update">
+        UPDATE expenses
+        <set>
+            <if test="item_name != null">
+                item_name = #{item_name},
+            </if>
+            <if test="amount != null">
+                amount = #{amount},
+            </if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <!-- Delete expense -->
+    <delete id="delete">
+        DELETE FROM expenses WHERE id = #{id}
+    </delete>
+
+    <!-- Delete all expenses for a project -->
+    <delete id="deleteByProjectId">
+        DELETE FROM expenses WHERE project_id = #{project_id}
+    </delete>
+
+</mapper>

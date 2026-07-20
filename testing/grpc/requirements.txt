@@ -1,0 +1,4 @@
+grpcio>=1.64,<2
+grpcio-tools>=1.64,<2
+grpcio-health-checking>=1.64,<2
+grpcio-reflection>=1.64,<2

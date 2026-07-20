@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="UserMapper">
+    <!-- Reusable SQL fragment -->
+    <sql id="columns">
+        `id`, `name`, `email`, `status`, `created_at`
+    </sql>
+
+    <!-- Simple SELECT by ID -->
+    <select id="findById">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        WHERE `id` = #{id}
+    </select>
+
+    <!-- Dynamic WHERE with multiple conditions -->
+    <select id="findByCondition">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        <where>
+            <if test="name != null and name != ''">
+                AND `name` = #{name}
+            </if>
+            <if test="status != null">
+                AND `status` = #{status}
+            </if>
+            <if test="minAge != null">
+                AND `age` &gt;= #{minAge}
+            </if>
+        </where>
+        ORDER BY `id` DESC
+        <if test="limit != null and limit &gt; 0">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <!-- INSERT statement -->
+    <insert id="insertUser">
+        INSERT INTO `users` (`name`, `email`, `status`, `created_at`)
+        VALUES (#{name}, #{email}, #{status}, #{created_at})
+    </insert>
+
+    <!-- UPDATE with dynamic SET -->
+    <update id="updateSelective">
+        UPDATE `users`
+        <set>
+            <if test="name != null">
+                `name` = #{name},
+            </if>
+            <if test="email != null">
+                `email` = #{email},
+            </if>
+            <if test="status != null">
+                `status` = #{status},
+            </if>
+        </set>
+        WHERE `id` = #{id}
+    </update>
+
+    <!-- DELETE statement -->
+    <delete id="deleteByStatus">
+        DELETE FROM `users`
+        WHERE `status` = #{status}
+    </delete>
+
+    <!-- foreach example: IN clause -->
+    <select id="findByIds">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        WHERE `id` IN
+        <foreach collection="ids" item="id" open="(" close=")" separator=",">
+            #{id}
+        </foreach>
+    </select>
+
+    <!-- choose/when/otherwise example -->
+    <select id="findByRole">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        <where>
+            <choose>
+                <when test="role == 'admin'">
+                    AND `status` = 1
+                </when>
+                <when test="role == 'moderator'">
+                    AND `status` IN (1, 2)
+                </when>
+                <otherwise>
+                    AND `status` = 0
+                </otherwise>
+            </choose>
+        </where>
+    </select>
+
+    <!-- Complex expression example -->
+    <select id="searchUsers">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        <where>
+            <if test="keyword != null and keyword != ''">
+                AND (`name` LIKE #{keyword} OR `email` LIKE #{keyword})
+            </if>
+            <if test="status &gt;= 0">
+                AND `status` = #{status}
+            </if>
+            <if test="startDate != null">
+                AND `created_at` &gt;= #{startDate}
+            </if>
+            <if test="endDate != null">
+                AND `created_at` &lt;= #{endDate}
+            </if>
+        </where>
+        <if test="orderBy != null and orderBy != ''">
+            ORDER BY ${orderBy}
+        </if>
+        <if test="limit &gt; 0">
+            LIMIT #{limit}
+            <if test="offset &gt; 0">
+                OFFSET #{offset}
+            </if>
+        </if>
+    </select>
+
+    <!-- Complex scenario 1: Nested conditions with multiple foreach -->
+    <select id="complexSearch">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        <where>
+            <if test="includeIds != null">
+                AND `id` IN
+                <foreach collection="includeIds" item="id" open="(" close=")" separator=",">
+                    #{id}
+                </foreach>
+            </if>
+            <if test="excludeIds != null">
+                AND `id` NOT IN
+                <foreach collection="excludeIds" item="id" open="(" close=")" separator=",">
+                    #{id}
+                </foreach>
+            </if>
+            <choose>
+                <when test="searchMode == 'exact'">
+                    AND `name` = #{keyword}
+                </when>
+                <when test="searchMode == 'prefix'">
+                    AND `name` LIKE CONCAT(#{keyword}, '%')
+                </when>
+                <otherwise>
+                    AND `name` LIKE CONCAT('%', #{keyword}, '%')
+                </otherwise>
+            </choose>
+        </where>
+        ORDER BY ${orderBy}
+        LIMIT #{limit}
+    </select>
+
+    <!-- Complex scenario 2: Dynamic JOIN with conditions -->
+    <select id="findUsersWithOrders">
+        SELECT u.*, COUNT(o.id) as order_count
+        FROM `users` u
+        <if test="includeOrders == true">
+            LEFT JOIN `orders` o ON u.id = o.user_id
+        </if>
+        <where>
+            <if test="minOrderCount != null and minOrderCount &gt; 0">
+                <if test="includeOrders == true">
+                    AND o.id IS NOT NULL
+                </if>
+            </if>
+            <if test="statusList != null">
+                AND u.status IN
+                <foreach collection="statusList" item="status" open="(" close=")" separator=",">
+                    #{status}
+                </foreach>
+            </if>
+            <if test="createdAfter != null">
+                AND u.created_at &gt;= #{createdAfter}
+            </if>
+        </where>
+        <if test="includeOrders == true">
+            GROUP BY u.id
+            <if test="minOrderCount != null and minOrderCount &gt; 0">
+                HAVING COUNT(o.id) &gt;= #{minOrderCount}
+            </if>
+        </if>
+        ORDER BY ${orderBy}
+    </select>
+
+    <!-- Complex scenario 3: Batch INSERT with foreach -->
+    <insert id="batchInsert">
+        INSERT INTO `users` (`name`, `email`, `status`, `created_at`)
+        VALUES
+        <foreach collection="users" item="user" separator=",">
+            (#{user.name}, #{user.email}, #{user.status}, #{user.created_at})
+        </foreach>
+    </insert>
+
+    <!-- Complex scenario 4: UPDATE with CASE WHEN -->
+    <update id="batchUpdateStatus">
+        UPDATE `users`
+        <set>
+            `status` = CASE `id`
+            <foreach collection="updates" item="update">
+                WHEN #{update.id} THEN #{update.status}
+            </foreach>
+            END
+        </set>
+        WHERE `id` IN
+        <foreach collection="updates" item="update" open="(" close=")" separator=",">
+            #{update.id}
+        </foreach>
+    </update>
+
+    <!-- Complex scenario 5: Nested choose with trim -->
+    <select id="advancedFilter">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        <where>
+            <trim prefix="(" suffix=")" prefixOverrides="OR">
+                <if test="namePattern != null and namePattern != ''">
+                    OR `name` LIKE #{namePattern}
+                </if>
+                <if test="emailPattern != null and emailPattern != ''">
+                    OR `email` LIKE #{emailPattern}
+                </if>
+            </trim>
+            <choose>
+                <when test="filterType == 'active'">
+                    AND `status` = 1
+                    AND `created_at` &gt;= DATE_SUB(NOW(), INTERVAL 30 DAY)
+                </when>
+                <when test="filterType == 'inactive'">
+                    AND `status` = 0
+                    OR `created_at` &lt; DATE_SUB(NOW(), INTERVAL 90 DAY)
+                </when>
+                <when test="filterType == 'premium'">
+                    AND `status` IN (1, 2, 3)
+                    <if test="minSpent != null">
+                        AND `total_spent` &gt;= #{minSpent}
+                    </if>
+                </when>
+                <otherwise>
+                    AND `status` &gt;= 0
+                </otherwise>
+            </choose>
+        </where>
+        <if test="groupBy != null and groupBy != ''">
+            GROUP BY ${groupBy}
+        </if>
+        <if test="having != null and having != ''">
+            HAVING ${having}
+        </if>
+        ORDER BY ${orderBy}
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <!-- Complex scenario 6: Subquery with dynamic conditions -->
+    <select id="findUsersWithSubquery">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        WHERE `id` IN (
+            SELECT DISTINCT `user_id`
+            FROM `user_activities`
+            <where>
+                <if test="activityType != null">
+                    AND `activity_type` = #{activityType}
+                </if>
+                <if test="startDate != null">
+                    AND `activity_date` &gt;= #{startDate}
+                </if>
+                <if test="endDate != null">
+                    AND `activity_date` &lt;= #{endDate}
+                </if>
+                <if test="minCount != null">
+                    GROUP BY `user_id`
+                    HAVING COUNT(*) &gt;= #{minCount}
+                </if>
+            </where>
+        )
+        <if test="excludeStatus != null">
+            AND `status` != #{excludeStatus}
+        </if>
+        ORDER BY ${orderBy}
+    </select>
+
+    <!-- Complex scenario 7: Multiple includes with dynamic fragments -->
+    <sql id="userFields">
+        u.`id`, u.`name`, u.`email`, u.`status`
+    </sql>
+
+    <sql id="orderFields">
+        o.`id` as order_id, o.`total`, o.`created_at` as order_date
+    </sql>
+
+    <select id="getUsersWithDetails">
+        SELECT
+        <include refid="userFields"/>,
+        <if test="includeOrderInfo == true">
+            <include refid="orderFields"/>,
+        </if>
+        u.`created_at`
+        FROM `users` u
+        <if test="includeOrderInfo == true">
+            LEFT JOIN `orders` o ON u.id = o.user_id
+        </if>
+        <where>
+            <foreach collection="conditions" item="cond" separator="AND">
+                <choose>
+                    <when test="cond.type == 'equals'">
+                        ${cond.field} = #{cond.value}
+                    </when>
+                    <when test="cond.type == 'like'">
+                        ${cond.field} LIKE CONCAT('%', #{cond.value}, '%')
+                    </when>
+                    <when test="cond.type == 'range'">
+                        ${cond.field} BETWEEN #{cond.min} AND #{cond.max}
+                    </when>
+                </choose>
+            </foreach>
+        </where>
+    </select>
+
+    <!-- Complex scenario 8: Dynamic table name with bind -->
+    <select id="dynamicTableQuery">
+        SELECT * FROM ${tableName}
+        <where>
+            <if test="filters != null">
+                <foreach collection="filters" item="filter" separator="AND">
+                    <bind name="fieldName" value="filter.field"/>
+                    <bind name="fieldValue" value="filter.value"/>
+                    ${fieldName} = #{fieldValue}
+                </foreach>
+            </if>
+        </where>
+    </select>
+</mapper>
