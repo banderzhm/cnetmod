@@ -1,6 +1,7 @@
 module cnetmod.protocol.websocket; // implementation unit
 
 import :client;
+import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.io.io_context;
 
