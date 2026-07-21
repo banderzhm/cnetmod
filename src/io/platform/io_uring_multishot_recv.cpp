@@ -15,6 +15,7 @@ module cnetmod.io.platform.io_uring_multishot_recv;
     defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
 
 import std;
+import cnetmod.coro.task;
 
 namespace cnetmod {
 

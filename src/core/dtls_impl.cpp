@@ -14,6 +14,7 @@ module cnetmod.core.dtls;
 
 import std;
 import cnetmod.core.error;
+import cnetmod.coro.task;
 import cnetmod.executor.async_op;
 
 namespace cnetmod {

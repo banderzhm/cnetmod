@@ -2,6 +2,7 @@ module cnetmod.protocol.http.v2.session;
 
 import std;
 import cnetmod.core.buffer;
+import cnetmod.coro.task;
 import cnetmod.executor.async_op;
 
 namespace cnetmod::http::v2 {

@@ -23,6 +23,7 @@ import cnetmod.io.platform.kqueue;
 import cnetmod.executor.pool;
 #endif
 import cnetmod.coro.cancel;
+import cnetmod.coro.task;
 
 namespace cnetmod {
 

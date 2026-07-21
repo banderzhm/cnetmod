@@ -25,6 +25,7 @@ import cnetmod.io.platform.epoll;
 import cnetmod.executor.pool;
 #endif
 import cnetmod.coro.cancel;
+import cnetmod.coro.task;
 
 namespace cnetmod {
 

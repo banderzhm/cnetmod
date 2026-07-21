@@ -21,6 +21,7 @@ import cnetmod.executor.pool;
 #endif
 import cnetmod.core.serial_port;
 import cnetmod.coro.cancel;
+import cnetmod.coro.task;
 
 namespace cnetmod {
 
