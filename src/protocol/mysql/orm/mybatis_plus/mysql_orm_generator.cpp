@@ -1,5 +1,6 @@
 module cnetmod.protocol.mysql;
 
+import cnetmod.coro.task;
 import :orm_generator;
 
 namespace cnetmod::mysql::orm {
