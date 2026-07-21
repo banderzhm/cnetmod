@@ -1,7 +1,14 @@
 module cnetmod.protocol.redis;
 
 import std;
+import cnetmod.core.buffer;
+import cnetmod.core.dns;
+import cnetmod.coro.task;
+import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.core.ssl;
+#endif
 import :client;
 
 namespace cnetmod::redis {
