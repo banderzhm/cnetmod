@@ -12,6 +12,7 @@ import cnetmod.core.dns;
 import cnetmod.core.socket;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
+import cnetmod.io.io_context;
 import cnetmod.protocol.tcp;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
