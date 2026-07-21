@@ -315,4 +315,36 @@ auto sync_wait_sender(task_sender<T> &&sender) -> T {
   }
 }
 
+// Keep these non-template definitions in the primary module interface.
+//
+// MSVC 19.5x can hit an internal compiler error in module/reader.cpp when a
+// separate implementation unit re-imports this interface.  The interface
+// exports large stdexec-based templates, which makes that reader path
+// especially fragile.  Keeping the small implementation here avoids the
+// self-import without changing the module's public surface.
+io_scheduler::io_scheduler(io_context &ctx) noexcept : ctx_(&ctx) {}
+
+auto io_scheduler::operator==(const io_scheduler &other) const noexcept
+    -> bool {
+  return ctx_ == other.ctx_;
+}
+
+auto io_scheduler::context() const noexcept -> io_context & { return *ctx_; }
+
+auto io_scheduler::schedule() noexcept -> schedule_sender {
+  return schedule_sender{ctx_};
+}
+
+auto schedule_env::query(
+    stdexec::get_completion_scheduler_t<stdexec::set_value_t>) const noexcept
+    -> io_scheduler {
+  return io_scheduler{*ctx_};
+}
+
+schedule_sender::schedule_sender(io_context *ctx) noexcept : ctx_(ctx) {}
+
+auto schedule_sender::get_env() const noexcept -> schedule_env {
+  return {ctx_};
+}
+
 } // namespace cnetmod
