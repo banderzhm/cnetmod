@@ -11,6 +11,7 @@ import :pool;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
+import cnetmod.io.io_context;
 
 namespace cnetmod::redis {
 

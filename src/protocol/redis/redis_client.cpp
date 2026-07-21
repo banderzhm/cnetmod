@@ -1,6 +1,7 @@
 module cnetmod.protocol.redis;
 
 import std;
+import cnetmod.io.io_context;
 import :client;
 
 namespace cnetmod::redis {

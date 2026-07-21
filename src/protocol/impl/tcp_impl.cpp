@@ -17,6 +17,8 @@ module;
 
 module cnetmod.protocol.tcp;
 
+import cnetmod.io.io_context;
+
 namespace cnetmod::tcp {
 
 // =============================================================================

@@ -1,6 +1,7 @@
 module cnetmod.protocol.websocket;
 import std;
 import :server;
+import cnetmod.io.io_context;
 
 namespace cnetmod::ws {
 namespace detail {

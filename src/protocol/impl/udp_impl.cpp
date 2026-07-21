@@ -4,6 +4,8 @@ module;
 
 module cnetmod.protocol.udp;
 
+import cnetmod.io.io_context;
+
 namespace cnetmod::udp {
 
 udp_socket::udp_socket(io_context &ctx) : ctx_(&ctx) {}

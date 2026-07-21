@@ -1,6 +1,7 @@
 module cnetmod.protocol.websocket;
 
 import :connection;
+import cnetmod.io.io_context;
 
 namespace cnetmod::ws {
 

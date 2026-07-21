@@ -1,6 +1,7 @@
 module cnetmod.protocol.http.client.pool;
 
 import std;
+import cnetmod.io.io_context;
 
 namespace cnetmod::http {
 

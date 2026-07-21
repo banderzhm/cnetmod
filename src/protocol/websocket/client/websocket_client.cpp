@@ -2,6 +2,7 @@ module cnetmod.protocol.websocket; // implementation unit
 
 import :client;
 import cnetmod.coro.timer;
+import cnetmod.io.io_context;
 
 namespace cnetmod::ws {
 client::client(io_context &ctx) noexcept : ctx_(ctx), conn_(ctx) {}
