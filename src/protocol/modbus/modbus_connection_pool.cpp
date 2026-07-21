@@ -2,6 +2,10 @@ module cnetmod.protocol.modbus;
 
 import std;
 import :pool;
+import cnetmod.io.io_context;
+import cnetmod.coro.task;
+import cnetmod.coro.mutex;
+import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 
