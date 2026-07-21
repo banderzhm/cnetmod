@@ -5,6 +5,7 @@ module;
 module cnetmod.protocol.http;
 
 import std;
+import cnetmod.coro.task;
 import :semantics;
 
 namespace cnetmod::http {

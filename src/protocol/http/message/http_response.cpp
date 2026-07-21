@@ -3,6 +3,8 @@ module;
 #include <cnetmod/config.hpp>
 
 module cnetmod.protocol.http;
+
+import std;
 import :response;
 
 namespace cnetmod::http {
