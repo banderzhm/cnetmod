@@ -1,6 +1,7 @@
 module cnetmod.protocol.http;
 
 import std;
+import cnetmod.coro.task;
 import :swagger_ui;
 import :router;
 
