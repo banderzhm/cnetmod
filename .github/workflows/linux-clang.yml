@@ -16,7 +16,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        clang_version: [20]
+        clang_version: [22]
         build_type: [Release, Debug]
 
     steps:
