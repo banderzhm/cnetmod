@@ -17,10 +17,10 @@ import cnetmod.io.platform.io_uring_recv_service;
 import cnetmod.protocol.http;
 #endif
 
-namespace cn = cnetmod;
-
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
     defined(IORING_RECV_MULTISHOT)
+
+namespace cn = cnetmod;
 
 auto verify_recv(cn::io_uring_context& context,
                  cn::io_uring_recv_service& service,
