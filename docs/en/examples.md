@@ -453,8 +453,9 @@ co_await f.async_write("Hello", 5, 0);
 ```
 
 **Key concepts**:
-- IOCP-backed file I/O (Windows)
-- Thread pool offload (Linux/macOS)
+- Cross-platform asynchronous file I/O
+- Native IOCP reads/writes on Windows and io_uring reads/writes on Linux
+- Worker-pool offload for metadata operations and epoll/kqueue fallback
 - Scatter-gather I/O
 - File mapping
 

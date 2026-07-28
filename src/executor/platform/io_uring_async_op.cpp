@@ -12,6 +12,7 @@ module;
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <fcntl.h>
 #include <cerrno>
 #include <exec/static_thread_pool.hpp>
 
@@ -754,6 +755,166 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
     co_return static_cast<std::size_t>(ov.result);
 }
 
+namespace {
+
+struct file_batch_state {
+    std::vector<file_io_result>* results = nullptr;
+    std::coroutine_handle<> waiter{};
+    std::size_t remaining = 0;
+};
+
+struct file_batch_operation {
+    uring_overlapped operation{};
+    file_batch_state* state = nullptr;
+    std::size_t result_index = 0;
+};
+
+void complete_file_batch_operation(uring_overlapped& operation,
+                                   int32_t result, std::uint32_t)
+{
+    auto& item = *static_cast<file_batch_operation*>(
+        operation.completion_context);
+    if (result < 0) {
+        (*item.state->results)[item.result_index] = std::unexpected(
+            make_error_code(from_native_error(-result)));
+    } else {
+        (*item.state->results)[item.result_index] =
+            static_cast<std::size_t>(result);
+    }
+
+    if (--item.state->remaining == 0 && item.state->waiter)
+        item.state->waiter.resume();
+}
+
+struct file_batch_awaiter {
+    file_batch_state& state;
+
+    [[nodiscard]] auto await_ready() const noexcept -> bool {
+        return state.remaining == 0;
+    }
+
+    auto await_suspend(std::coroutine_handle<> coroutine) noexcept -> bool {
+        state.waiter = coroutine;
+        return state.remaining != 0;
+    }
+
+    void await_resume() const noexcept {}
+};
+
+template <typename Request, typename FileSelector, typename Prepare>
+auto submit_file_batch(io_context& ctx, std::span<const Request> requests,
+                       FileSelector select_file, Prepare prepare)
+    -> task<std::vector<file_io_result>>
+{
+    std::vector<file_io_result> results(requests.size());
+    std::vector<std::size_t> valid_indices;
+    valid_indices.reserve(requests.size());
+
+    for (std::size_t index = 0; index < requests.size(); ++index) {
+        if (select_file(requests[index])) {
+            valid_indices.push_back(index);
+        } else {
+            results[index] = std::unexpected(
+                make_error_code(errc::invalid_argument));
+        }
+    }
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    std::size_t cursor = 0;
+    while (cursor < valid_indices.size()) {
+        auto available = ::io_uring_sq_space_left(uring.native_ring());
+        if (available == 0) {
+            auto flushed = uring.flush_pending();
+            if (!flushed) {
+                for (; cursor < valid_indices.size(); ++cursor)
+                    results[valid_indices[cursor]] =
+                        std::unexpected(flushed.error());
+                break;
+            }
+            available = ::io_uring_sq_space_left(uring.native_ring());
+        }
+        if (available == 0) {
+            auto error = make_error_code(errc::no_buffer_space);
+            for (; cursor < valid_indices.size(); ++cursor)
+                results[valid_indices[cursor]] = std::unexpected(error);
+            break;
+        }
+
+        const auto chunk_size = std::min<std::size_t>(
+            available, valid_indices.size() - cursor);
+        file_batch_state state{
+            .results = &results,
+            .remaining = chunk_size,
+        };
+        std::vector<file_batch_operation> operations(chunk_size);
+
+        for (std::size_t item_index = 0; item_index < chunk_size;
+             ++item_index) {
+            const auto request_index = valid_indices[cursor + item_index];
+            auto& item = operations[item_index];
+            item.state = &state;
+            item.result_index = request_index;
+            item.operation.completion = &complete_file_batch_operation;
+            item.operation.completion_context = &item;
+
+            auto* sqe = uring.prepare_sqe();
+            prepare(sqe, requests[request_index]);
+            ::io_uring_sqe_set_data(sqe, &item.operation);
+        }
+
+        auto submitted = uring.flush_pending();
+        if (!submitted) {
+            for (std::size_t item_index = 0; item_index < chunk_size;
+                 ++item_index) {
+                results[valid_indices[cursor + item_index]] =
+                    std::unexpected(submitted.error());
+            }
+            cursor += chunk_size;
+            continue;
+        }
+
+        co_await file_batch_awaiter{state};
+        cursor += chunk_size;
+    }
+
+    co_return results;
+}
+
+} // namespace
+
+auto async_file_read_batch(
+    io_context& ctx, std::span<const file_read_request> requests)
+    -> task<std::vector<file_io_result>>
+{
+    co_return co_await submit_file_batch(
+        ctx, requests,
+        [](const file_read_request& request) { return request.source; },
+        [](io_uring_sqe* sqe, const file_read_request& request) {
+            ::io_uring_prep_read(
+                sqe, static_cast<int>(request.source->native_handle()),
+                request.destination.data,
+                static_cast<unsigned>(request.destination.size),
+                request.offset);
+        });
+}
+
+auto async_file_write_batch(
+    io_context& ctx, std::span<const file_write_request> requests)
+    -> task<std::vector<file_io_result>>
+{
+    co_return co_await submit_file_batch(
+        ctx, requests,
+        [](const file_write_request& request) {
+            return request.destination;
+        },
+        [](io_uring_sqe* sqe, const file_write_request& request) {
+            ::io_uring_prep_write(
+                sqe, static_cast<int>(request.destination->native_handle()),
+                request.source.data,
+                static_cast<unsigned>(request.source.size), request.offset);
+        });
+}
+
 auto async_file_flush(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>
 {
@@ -789,6 +950,140 @@ auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     co_return result;
+}
+
+namespace {
+
+struct splice_pipe {
+    int read_fd = -1;
+    int write_fd = -1;
+
+    splice_pipe() noexcept {
+        int descriptors[2] = {-1, -1};
+        if (::pipe2(descriptors, O_CLOEXEC) == 0) {
+            read_fd = descriptors[0];
+            write_fd = descriptors[1];
+        }
+    }
+
+    ~splice_pipe() {
+        if (read_fd >= 0)
+            ::close(read_fd);
+        if (write_fd >= 0)
+            ::close(write_fd);
+    }
+
+    splice_pipe(const splice_pipe&) = delete;
+    auto operator=(const splice_pipe&) -> splice_pipe& = delete;
+
+    [[nodiscard]] auto valid() const noexcept -> bool {
+        return read_fd >= 0 && write_fd >= 0;
+    }
+};
+
+auto submit_splice(io_uring_context& uring, int source_fd,
+                   std::int64_t source_offset, int destination_fd,
+                   std::int64_t destination_offset, unsigned length,
+                   unsigned flags, cancel_token* token)
+    -> task<std::expected<int32_t, std::error_code>>
+{
+    uring_overlapped operation;
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+
+    ::io_uring_prep_splice(sqe, source_fd, source_offset, destination_fd,
+                           destination_offset, length, flags);
+    ::io_uring_sqe_set_data(sqe, &operation);
+
+    auto submitted = uring.flush_pending();
+    if (!submitted)
+        co_return std::unexpected(submitted.error());
+
+    if (token) {
+        co_await uring_cancel_suspend{operation, *token, &uring};
+        if (token->is_cancelled())
+            co_return std::unexpected(
+                make_error_code(errc::operation_aborted));
+    } else {
+        co_await uring_suspend{operation};
+    }
+    co_return operation.result;
+}
+
+auto async_send_file_splice(io_context& ctx, socket& sock, file& source,
+                            std::uint64_t offset, std::uint64_t byte_count,
+                            cancel_token* token)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    if (token && token->is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    splice_pipe pipe;
+    if (!pipe.valid())
+        co_return std::unexpected(last_error());
+
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    constexpr std::uint64_t splice_chunk_size = 64 * 1024;
+    std::uint64_t transferred = 0;
+
+    while (transferred < byte_count) {
+        const auto length = static_cast<unsigned>(std::min<std::uint64_t>(
+            byte_count - transferred, splice_chunk_size));
+        // The two splice operations deliberately complete in two stages.
+        // A linked pair cannot safely use the first CQE's short-read result as
+        // the second SQE's length and may otherwise wait forever on the pipe.
+        auto staged_result = co_await submit_splice(
+            uring, static_cast<int>(source.native_handle()),
+            static_cast<std::int64_t>(offset + transferred), pipe.write_fd,
+            -1, length, SPLICE_F_MOVE | SPLICE_F_MORE, token);
+        if (!staged_result)
+            co_return std::unexpected(staged_result.error());
+        if (*staged_result < 0)
+            co_return std::unexpected(
+                make_error_code(from_native_error(-*staged_result)));
+        if (*staged_result == 0)
+            break;
+
+        const auto staged = static_cast<std::uint64_t>(*staged_result);
+        std::uint64_t sent = 0;
+        while (sent < staged) {
+            const auto remaining = static_cast<unsigned>(staged - sent);
+            auto drained = co_await submit_splice(
+                uring, pipe.read_fd, -1,
+                static_cast<int>(sock.native_handle()), -1, remaining,
+                SPLICE_F_MOVE | SPLICE_F_MORE, token);
+            if (!drained)
+                co_return std::unexpected(drained.error());
+            if (*drained < 0)
+                co_return std::unexpected(
+                    make_error_code(from_native_error(-*drained)));
+            if (*drained == 0)
+                co_return std::unexpected(make_error_code(errc::broken_pipe));
+            sent += static_cast<std::uint64_t>(*drained);
+        }
+        transferred += staged;
+    }
+    co_return transferred;
+}
+
+} // namespace
+
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    co_return co_await async_send_file_splice(
+        ctx, sock, source, offset, byte_count, nullptr);
+}
+
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count,
+                     cancel_token& token)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    co_return co_await async_send_file_splice(
+        ctx, sock, source, offset, byte_count, &token);
 }
 
 // =============================================================================

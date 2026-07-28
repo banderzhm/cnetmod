@@ -91,7 +91,7 @@ CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log,
 - **Buffer**: Endianness-aware readers/writers, buffer pool
 - **Logging**: `std::format`-based logger (no external dependency)
 - **Crash dump**: Platform-native minidump (Windows) / signal handler (Unix)
-- **Async file I/O**: IOCP-backed (Windows)
+- **Async file I/O**: Cross-platform reads/writes plus zero-copy file-to-socket transfer. The Linux io_uring backend uses `IORING_OP_SPLICE` through a pipe, while the Linux epoll backend uses non-blocking `sendfile()` and waits for `EPOLLOUT` on backpressure; Windows uses `TransmitFile`, and macOS/kqueue uses `sendfile`. Metadata operations and readiness-backend file reads/writes are offloaded to the worker pool
 
 ## Quick Start
 

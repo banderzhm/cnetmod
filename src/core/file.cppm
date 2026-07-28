@@ -42,6 +42,7 @@ export enum class open_mode : std::uint32_t {
     create       = 0x08,   // Create if not exists
     truncate     = 0x10,   // Truncate if exists
     create_new   = 0x20,   // Must not exist
+    direct       = 0x40,   // Bypass/minimize the platform page cache
 };
 
 export constexpr auto operator|(open_mode a, open_mode b) noexcept -> open_mode {
@@ -56,6 +57,37 @@ export constexpr auto operator&(open_mode a, open_mode b) noexcept -> open_mode 
 
 export constexpr auto has_flag(open_mode mode, open_mode flag) noexcept -> bool {
     return (mode & flag) == flag;
+}
+
+export enum class file_strategy {
+    buffered,
+    direct,
+    zero_copy,
+};
+
+export struct file_strategy_options {
+    bool to_socket = false;
+    bool encrypted_transport = false;
+    bool requires_processing = false;
+    bool allow_direct = false;
+    std::uint64_t direct_threshold = 16 * 1024 * 1024;
+};
+
+/// Select a conservative transfer strategy. Direct I/O is never selected
+/// solely from file size: the caller must explicitly allow it.
+export constexpr auto select_file_strategy(
+    std::uint64_t file_size, file_strategy_options options = {}) noexcept
+    -> file_strategy
+{
+    if (options.to_socket && !options.encrypted_transport &&
+        !options.requires_processing) {
+        return file_strategy::zero_copy;
+    }
+    if (options.allow_direct && !options.requires_processing &&
+        file_size >= options.direct_threshold) {
+        return file_strategy::direct;
+    }
+    return file_strategy::buffered;
 }
 
 // =============================================================================

@@ -54,140 +54,34 @@ export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
                        cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
-namespace detail {
-
-inline auto find_delimiter(const_buffer buf, std::string_view delimiter) noexcept
-    -> std::optional<std::size_t>
-{
-    if (delimiter.empty()) {
-        return std::nullopt;
-    }
-
-    auto* first = static_cast<const std::byte*>(buf.data);
-    auto* last = first + buf.size;
-    auto* d_first = reinterpret_cast<const std::byte*>(delimiter.data());
-    auto* d_last = d_first + delimiter.size();
-
-    auto pos = std::search(first, last, d_first, d_last);
-    if (pos == last) {
-        return std::nullopt;
-    }
-
-    return static_cast<std::size_t>((pos - first) + delimiter.size());
-}
-
-inline auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                                  std::string delimiter,
-                                  std::size_t max_bytes,
-                                  std::size_t read_chunk_size)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (delimiter.empty() || read_chunk_size == 0) {
-        co_return std::unexpected(make_error_code(errc::invalid_argument));
-    }
-
-    while (true) {
-        if (auto found = detail::find_delimiter(buf.data(), delimiter)) {
-            co_return *found;
-        }
-
-        if (buf.readable_bytes() >= max_bytes) {
-            co_return std::unexpected(make_error_code(errc::no_buffer_space));
-        }
-
-        auto to_read = std::min(read_chunk_size, max_bytes - buf.readable_bytes());
-        auto dst = buf.prepare(to_read);
-        auto r = co_await async_read(ctx, sock, dst);
-        if (!r) {
-            co_return std::unexpected(r.error());
-        }
-        if (*r == 0) {
-            co_return std::unexpected(make_error_code(errc::end_of_file));
-        }
-
-        buf.commit(*r);
-    }
-}
-
-inline auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                                  std::string delimiter, cancel_token& token,
-                                  std::size_t max_bytes,
-                                  std::size_t read_chunk_size)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (delimiter.empty() || read_chunk_size == 0) {
-        co_return std::unexpected(make_error_code(errc::invalid_argument));
-    }
-
-    while (true) {
-        if (auto found = detail::find_delimiter(buf.data(), delimiter)) {
-            co_return *found;
-        }
-
-        if (buf.readable_bytes() >= max_bytes) {
-            co_return std::unexpected(make_error_code(errc::no_buffer_space));
-        }
-
-        auto to_read = std::min(read_chunk_size, max_bytes - buf.readable_bytes());
-        auto dst = buf.prepare(to_read);
-        auto r = co_await async_read(ctx, sock, dst, token);
-        if (!r) {
-            co_return std::unexpected(r.error());
-        }
-        if (*r == 0) {
-            co_return std::unexpected(make_error_code(errc::end_of_file));
-        }
-
-        buf.commit(*r);
-    }
-}
-
-} // namespace detail
-
 /// Async read until delimiter is present in dynamic_buffer.
 /// Returns bytes from buffer readable start through the delimiter; does not consume.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
                              std::string_view delimiter,
                              std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
                              std::size_t read_chunk_size = 4096)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    return detail::async_read_until_impl(
-        ctx, sock, buf, std::string{delimiter}, max_bytes, read_chunk_size);
-}
+    -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async read until delimiter is present in dynamic_buffer.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
                              std::string_view delimiter, cancel_token& token,
                              std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
                              std::size_t read_chunk_size = 4096)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    return detail::async_read_until_impl(
-        ctx, sock, buf, std::string{delimiter}, token, max_bytes, read_chunk_size);
-}
+    -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async read until a single byte delimiter is present in dynamic_buffer.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
                              char delimiter,
                              std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
                              std::size_t read_chunk_size = 4096)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    return detail::async_read_until_impl(
-        ctx, sock, buf, std::string{delimiter}, max_bytes, read_chunk_size);
-}
+    -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async read until a single byte delimiter is present in dynamic_buffer.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
                              char delimiter, cancel_token& token,
                              std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
                              std::size_t read_chunk_size = 4096)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    return detail::async_read_until_impl(
-        ctx, sock, buf, std::string{delimiter}, token, max_bytes, read_chunk_size);
-}
+    -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async write
 /// Usage: auto n = co_await async_write(ctx, sock, buf);
@@ -202,48 +96,12 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 /// Async write all bytes in a buffer
 /// Usage: co_await async_write_all(ctx, sock, buf);
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
-    -> task<std::expected<void, std::error_code>>
-{
-    auto* data = static_cast<const std::byte*>(buf.data);
-    std::size_t written = 0;
-
-    while (written < buf.size) {
-        auto r = co_await async_write(ctx, sock,
-            const_buffer{data + written, buf.size - written});
-        if (!r) {
-            co_return std::unexpected(r.error());
-        }
-        if (*r == 0) {
-            co_return std::unexpected(make_error_code(errc::broken_pipe));
-        }
-        written += *r;
-    }
-
-    co_return {};
-}
+    -> task<std::expected<void, std::error_code>>;
 
 /// Cancellable async write all bytes in a buffer
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
                             cancel_token& token)
-    -> task<std::expected<void, std::error_code>>
-{
-    auto* data = static_cast<const std::byte*>(buf.data);
-    std::size_t written = 0;
-
-    while (written < buf.size) {
-        auto r = co_await async_write(ctx, sock,
-            const_buffer{data + written, buf.size - written}, token);
-        if (!r) {
-            co_return std::unexpected(r.error());
-        }
-        if (*r == 0) {
-            co_return std::unexpected(make_error_code(errc::broken_pipe));
-        }
-        written += *r;
-    }
-
-    co_return {};
-}
+    -> task<std::expected<void, std::error_code>>;
 
 #ifdef CNETMOD_PLATFORM_LINUX
 /// Wait for a non-blocking socket to become readable without consuming bytes.
@@ -341,6 +199,56 @@ export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
                              std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
+export using file_io_result =
+    std::expected<std::size_t, std::error_code>;
+
+/// One entry in a batched file read operation. The pointed-to file and buffer
+/// must remain valid until async_file_read_batch() completes.
+export struct file_read_request {
+    file* source = nullptr;
+    mutable_buffer destination{};
+    std::uint64_t offset = 0;
+};
+
+/// One entry in a batched file write operation. The pointed-to file and buffer
+/// must remain valid until async_file_write_batch() completes.
+export struct file_write_request {
+    file* destination = nullptr;
+    const_buffer source{};
+    std::uint64_t offset = 0;
+};
+
+/// Submit a batch of independent file reads. io_uring prepares as many SQEs as
+/// fit in the ring and submits them together; other backends preserve the same
+/// result ordering with their platform fallback.
+export auto async_file_read_batch(
+    io_context& ctx, std::span<const file_read_request> requests)
+    -> task<std::vector<file_io_result>>;
+
+/// Submit a batch of independent file writes.
+export auto async_file_write_batch(
+    io_context& ctx, std::span<const file_write_request> requests)
+    -> task<std::vector<file_io_result>>;
+
+export struct file_pipeline_options {
+    std::uint64_t offset = 0;
+    std::uint64_t byte_count = std::numeric_limits<std::uint64_t>::max();
+    std::size_t chunk_size = 256 * 1024;
+};
+
+/// Handler invoked for each file chunk. The buffer remains valid only until
+/// the returned task completes.
+export using file_chunk_handler = std::function<
+    task<std::expected<void, std::error_code>>(
+        const_buffer chunk, std::uint64_t offset)>;
+
+/// Read and process a file using two alternating buffers. While the handler
+/// processes the current chunk, the next chunk is read concurrently.
+export auto async_file_read_pipeline(
+    io_context& ctx, file& source, file_chunk_handler handler,
+    file_pipeline_options options = {})
+    -> task<std::expected<std::uint64_t, std::error_code>>;
+
 /// Async file flush
 /// Usage: co_await async_file_flush(ctx, f);
 export auto async_file_flush(io_context& ctx, file& f)
@@ -349,6 +257,20 @@ export auto async_file_flush(io_context& ctx, file& f)
 /// Cancellable async file flush
 export auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
+
+/// Transfer a file range directly to a connected stream socket where the
+/// active platform backend supports it. Stops at EOF or after byte_count.
+export auto async_send_file(
+    io_context& ctx, socket& sock, file& source,
+    std::uint64_t offset = 0,
+    std::uint64_t byte_count = std::numeric_limits<std::uint64_t>::max())
+    -> task<std::expected<std::uint64_t, std::error_code>>;
+
+/// Cancellable direct file-to-socket transfer.
+export auto async_send_file(
+    io_context& ctx, socket& sock, file& source,
+    std::uint64_t offset, std::uint64_t byte_count, cancel_token& token)
+    -> task<std::expected<std::uint64_t, std::error_code>>;
 
 // =============================================================================
 // Async Serial Port I/O Operations (Coroutine Version)

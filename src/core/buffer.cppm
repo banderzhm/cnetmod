@@ -76,6 +76,32 @@ export auto buffer(std::vector<std::byte>& v) noexcept -> mutable_buffer;
 /// Create const_buffer from vector<byte>
 export auto buffer(const std::vector<std::byte>& v) noexcept -> const_buffer;
 
+/// Owning buffer with explicit power-of-two alignment. Useful with
+/// open_mode::direct, where platforms require aligned addresses and sizes.
+export class aligned_buffer {
+public:
+    explicit aligned_buffer(std::size_t size,
+                            std::size_t alignment = 4096);
+    ~aligned_buffer();
+
+    aligned_buffer(const aligned_buffer&) = delete;
+    auto operator=(const aligned_buffer&) -> aligned_buffer& = delete;
+    aligned_buffer(aligned_buffer&& other) noexcept;
+    auto operator=(aligned_buffer&& other) noexcept -> aligned_buffer&;
+
+    [[nodiscard]] auto data() noexcept -> std::byte*;
+    [[nodiscard]] auto data() const noexcept -> const std::byte*;
+    [[nodiscard]] auto size() const noexcept -> std::size_t;
+    [[nodiscard]] auto alignment() const noexcept -> std::size_t;
+    [[nodiscard]] auto writable() noexcept -> mutable_buffer;
+    [[nodiscard]] auto readable() const noexcept -> const_buffer;
+
+private:
+    std::byte* data_ = nullptr;
+    std::size_t size_ = 0;
+    std::size_t alignment_ = 0;
+};
+
 /// Create mutable_buffer from array<byte, N>
 export template <std::size_t N>
 constexpr auto buffer(std::array<std::byte, N>& a) noexcept

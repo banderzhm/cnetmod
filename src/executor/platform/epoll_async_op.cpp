@@ -9,6 +9,7 @@ module;
 #include <sys/epoll.h>
 #include <sys/timerfd.h>
 #include <sys/socket.h>
+#include <sys/sendfile.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
@@ -580,6 +581,84 @@ auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     co_return result;
+}
+
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    auto& epoll = static_cast<epoll_context&>(ctx);
+    std::uint64_t transferred = 0;
+    while (transferred < byte_count) {
+        auto file_offset = static_cast<off_t>(offset + transferred);
+        const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(
+            byte_count - transferred,
+            static_cast<std::uint64_t>(std::numeric_limits<ssize_t>::max())));
+        const auto sent = ::sendfile(static_cast<int>(sock.native_handle()),
+                                     static_cast<int>(source.native_handle()),
+                                     &file_offset, count);
+        if (sent > 0) {
+            transferred += static_cast<std::uint64_t>(sent);
+            continue;
+        }
+        if (sent == 0)
+            break;
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            epoll_awaiter writable{
+                epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
+            co_await writable;
+            if (writable.sync_error)
+                co_return std::unexpected(writable.sync_error);
+            continue;
+        }
+        co_return std::unexpected(last_error());
+    }
+    co_return transferred;
+}
+
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count,
+                     cancel_token& token)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& epoll = static_cast<epoll_context&>(ctx);
+    std::uint64_t transferred = 0;
+    while (transferred < byte_count) {
+        auto file_offset = static_cast<off_t>(offset + transferred);
+        const auto count = static_cast<std::size_t>(std::min<std::uint64_t>(
+            byte_count - transferred,
+            static_cast<std::uint64_t>(std::numeric_limits<ssize_t>::max())));
+        const auto sent = ::sendfile(static_cast<int>(sock.native_handle()),
+                                     static_cast<int>(source.native_handle()),
+                                     &file_offset, count);
+        if (sent > 0) {
+            transferred += static_cast<std::uint64_t>(sent);
+            continue;
+        }
+        if (sent == 0)
+            break;
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            epoll_cancel_awaiter writable{
+                epoll, static_cast<int>(sock.native_handle()), EPOLLOUT,
+                token};
+            co_await writable;
+            if (token.is_cancelled())
+                co_return std::unexpected(
+                    make_error_code(errc::operation_aborted));
+            if (writable.sync_error)
+                co_return std::unexpected(writable.sync_error);
+            continue;
+        }
+        co_return std::unexpected(last_error());
+    }
+    co_return transferred;
 }
 
 // =============================================================================
