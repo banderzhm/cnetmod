@@ -1021,7 +1021,8 @@ auto async_send_file_splice(io_context& ctx, socket& sock, file& source,
 
     splice_pipe pipe;
     if (!pipe.valid())
-        co_return std::unexpected(last_error());
+        co_return std::unexpected(
+            make_error_code(from_native_error(errno)));
 
     auto& uring = static_cast<io_uring_context&>(ctx);
     constexpr std::uint64_t splice_chunk_size = 64 * 1024;
