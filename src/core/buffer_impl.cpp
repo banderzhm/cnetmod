@@ -9,6 +9,70 @@ import std;
 
 namespace cnetmod
 {
+    aligned_buffer::aligned_buffer(std::size_t size, std::size_t alignment)
+    {
+        if (alignment == 0 || !std::has_single_bit(alignment))
+        {
+            throw std::invalid_argument(
+                "aligned_buffer alignment must be a power of two");
+        }
+        alignment_ = std::max(alignment, alignof(std::max_align_t));
+        if (size > std::numeric_limits<std::size_t>::max() -
+                       (alignment_ - 1))
+        {
+            throw std::length_error("aligned_buffer size is too large");
+        }
+        size_ = size == 0 ? 0 :
+            ((size + alignment_ - 1) / alignment_) * alignment_;
+        if (size_ != 0)
+        {
+            data_ = static_cast<std::byte*>(
+                ::operator new(size_, std::align_val_t{alignment_}));
+        }
+    }
+
+    aligned_buffer::~aligned_buffer()
+    {
+        if (data_)
+            ::operator delete(data_, std::align_val_t{alignment_});
+    }
+
+    aligned_buffer::aligned_buffer(aligned_buffer&& other) noexcept
+        : data_(std::exchange(other.data_, nullptr)),
+          size_(std::exchange(other.size_, 0)),
+          alignment_(std::exchange(other.alignment_, 0))
+    {
+    }
+
+    auto aligned_buffer::operator=(aligned_buffer&& other) noexcept
+        -> aligned_buffer&
+    {
+        if (this != &other)
+        {
+            if (data_)
+                ::operator delete(data_, std::align_val_t{alignment_});
+            data_ = std::exchange(other.data_, nullptr);
+            size_ = std::exchange(other.size_, 0);
+            alignment_ = std::exchange(other.alignment_, 0);
+        }
+        return *this;
+    }
+
+    auto aligned_buffer::data() noexcept -> std::byte* { return data_; }
+    auto aligned_buffer::data() const noexcept -> const std::byte* {
+        return data_;
+    }
+    auto aligned_buffer::size() const noexcept -> std::size_t { return size_; }
+    auto aligned_buffer::alignment() const noexcept -> std::size_t {
+        return alignment_;
+    }
+    auto aligned_buffer::writable() noexcept -> mutable_buffer {
+        return {data_, size_};
+    }
+    auto aligned_buffer::readable() const noexcept -> const_buffer {
+        return {data_, size_};
+    }
+
     auto buffer(std::vector<std::byte>& value) noexcept -> mutable_buffer
     {
         return {value.data(), value.size()};

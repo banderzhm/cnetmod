@@ -562,6 +562,86 @@ auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
     co_return result;
 }
 
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    auto& kqueue = static_cast<kqueue_context&>(ctx);
+    std::uint64_t transferred = 0;
+    while (transferred < byte_count) {
+        off_t sent = static_cast<off_t>(std::min<std::uint64_t>(
+            byte_count - transferred,
+            static_cast<std::uint64_t>(std::numeric_limits<off_t>::max())));
+        const auto result = ::sendfile(
+            static_cast<int>(source.native_handle()),
+            static_cast<int>(sock.native_handle()),
+            static_cast<off_t>(offset + transferred), &sent, nullptr, 0);
+        if (sent > 0)
+            transferred += static_cast<std::uint64_t>(sent);
+        if (result == 0) {
+            if (sent == 0)
+                break;
+            continue;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            kqueue_awaiter writable{
+                kqueue, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
+            co_await writable;
+            if (writable.sync_error)
+                co_return std::unexpected(writable.sync_error);
+            continue;
+        }
+        co_return std::unexpected(last_error());
+    }
+    co_return transferred;
+}
+
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count,
+                     cancel_token& token)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& kqueue = static_cast<kqueue_context&>(ctx);
+    std::uint64_t transferred = 0;
+    while (transferred < byte_count) {
+        off_t sent = static_cast<off_t>(std::min<std::uint64_t>(
+            byte_count - transferred,
+            static_cast<std::uint64_t>(std::numeric_limits<off_t>::max())));
+        const auto result = ::sendfile(
+            static_cast<int>(source.native_handle()),
+            static_cast<int>(sock.native_handle()),
+            static_cast<off_t>(offset + transferred), &sent, nullptr, 0);
+        if (sent > 0)
+            transferred += static_cast<std::uint64_t>(sent);
+        if (result == 0) {
+            if (sent == 0)
+                break;
+            continue;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            kqueue_cancel_awaiter writable{
+                kqueue, static_cast<int>(sock.native_handle()), EVFILT_WRITE,
+                token};
+            co_await writable;
+            if (token.is_cancelled())
+                co_return std::unexpected(
+                    make_error_code(errc::operation_aborted));
+            if (writable.sync_error)
+                co_return std::unexpected(writable.sync_error);
+            continue;
+        }
+        co_return std::unexpected(last_error());
+    }
+    co_return transferred;
+}
+
 // =============================================================================
 // Async Serial Port Operations — kqueue (synchronous read/write, serial fd supports kqueue events)
 // =============================================================================

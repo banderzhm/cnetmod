@@ -69,6 +69,8 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
 
     // FILE_FLAG_OVERLAPPED allows handle to be associated with IOCP
     DWORD flags = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED;
+    if (has_flag(mode, open_mode::direct))
+        flags |= FILE_FLAG_NO_BUFFERING;
 
     HANDLE h = ::CreateFileW(
         path.c_str(),
@@ -102,10 +104,22 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
     if (has_flag(mode, open_mode::truncate)) flags |= O_TRUNC;
     if (has_flag(mode, open_mode::create_new))
         flags |= (O_CREAT | O_EXCL);
+#ifdef CNETMOD_PLATFORM_LINUX
+    if (has_flag(mode, open_mode::direct))
+        flags |= O_DIRECT;
+#endif
 
     int fd = ::open(path.c_str(), flags, 0644);
     if (fd < 0)
         return std::unexpected(make_error_code(from_native_error(errno)));
+
+#ifdef CNETMOD_PLATFORM_MACOS
+    if (has_flag(mode, open_mode::direct) && ::fcntl(fd, F_NOCACHE, 1) < 0) {
+        const auto error = errno;
+        ::close(fd);
+        return std::unexpected(make_error_code(from_native_error(error)));
+    }
+#endif
 
     return file{fd};
 #endif

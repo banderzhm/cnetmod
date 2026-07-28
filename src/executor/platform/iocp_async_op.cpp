@@ -723,6 +723,90 @@ auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
     co_return result;
 }
 
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    auto& iocp = static_cast<iocp_context&>(ctx);
+    auto associated = ensure_associated(
+        iocp, reinterpret_cast<HANDLE>(sock.native_handle()));
+    if (!associated)
+        co_return std::unexpected(associated.error());
+
+    std::uint64_t transferred = 0;
+    while (transferred < byte_count) {
+        const auto chunk = static_cast<DWORD>(std::min<std::uint64_t>(
+            byte_count - transferred,
+            std::numeric_limits<DWORD>::max()));
+        iocp_overlapped ov;
+        ov.set_offset(offset + transferred);
+
+        const BOOL ok = ::TransmitFile(sock.native_handle(),
+                                       source.native_handle(), chunk, 0,
+                                       &ov, nullptr, 0);
+        if (!ok) {
+            const auto error = ::WSAGetLastError();
+            if (error != WSA_IO_PENDING)
+                co_return std::unexpected(
+                    make_error_code(from_native_error(error)));
+        }
+
+        co_await iocp_suspend{ov};
+        if (ov.error)
+            co_return std::unexpected(ov.error);
+        if (ov.bytes_transferred == 0)
+            break;
+        transferred += ov.bytes_transferred;
+    }
+    co_return transferred;
+}
+
+auto async_send_file(io_context& ctx, socket& sock, file& source,
+                     std::uint64_t offset, std::uint64_t byte_count,
+                     cancel_token& token)
+    -> task<std::expected<std::uint64_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& iocp = static_cast<iocp_context&>(ctx);
+    auto associated = ensure_associated(
+        iocp, reinterpret_cast<HANDLE>(sock.native_handle()));
+    if (!associated)
+        co_return std::unexpected(associated.error());
+
+    std::uint64_t transferred = 0;
+    while (transferred < byte_count) {
+        const auto chunk = static_cast<DWORD>(std::min<std::uint64_t>(
+            byte_count - transferred,
+            std::numeric_limits<DWORD>::max()));
+        iocp_overlapped ov;
+        ov.set_offset(offset + transferred);
+
+        const BOOL ok = ::TransmitFile(sock.native_handle(),
+                                       source.native_handle(), chunk, 0,
+                                       &ov, nullptr, 0);
+        if (!ok) {
+            const auto error = ::WSAGetLastError();
+            if (error != WSA_IO_PENDING)
+                co_return std::unexpected(
+                    make_error_code(from_native_error(error)));
+        }
+
+        co_await iocp_cancel_suspend{
+            ov, token, reinterpret_cast<void*>(sock.native_handle())};
+        if (token.is_cancelled())
+            co_return std::unexpected(
+                make_error_code(errc::operation_aborted));
+        if (ov.error)
+            co_return std::unexpected(ov.error);
+        if (ov.bytes_transferred == 0)
+            break;
+        transferred += ov.bytes_transferred;
+    }
+    co_return transferred;
+}
+
 // =============================================================================
 // Async Timer — IOCP (CreateTimerQueueTimer + PostQueuedCompletionStatus)
 // =============================================================================

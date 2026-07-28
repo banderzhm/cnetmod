@@ -452,8 +452,9 @@ co_await f.async_write("Hello", 5, 0);
 ```
 
 **关键概念**：
-- IOCP 支持的文件 I/O（Windows）
-- 线程池卸载（Linux/macOS）
+- 全平台异步文件 I/O
+- Windows 使用原生 IOCP 读写，Linux 使用 io_uring 读写
+- 元数据操作及 epoll/kqueue 后端由工作线程池承载
 - 分散-聚集 I/O
 - 文件映射
 

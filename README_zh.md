@@ -90,7 +90,7 @@ CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 
 - **缓冲区**: 字节序感知的读写器、缓冲池
 - **日志**: 基于 `std::format` 的日志器（无外部依赖）
 - **崩溃转储**: 平台原生 minidump（Windows）/ 信号处理器（Unix）
-- **异步文件 I/O**: 基于 IOCP（Windows）
+- **异步文件 I/O**: 全平台异步读写及文件到 Socket 的零拷贝传输；Linux io_uring 后端通过管道提交 `IORING_OP_SPLICE`，Linux epoll 后端使用非阻塞 `sendfile()` 并在背压时等待 `EPOLLOUT`，Windows 使用 `TransmitFile`，macOS/kqueue 使用 `sendfile`。元数据操作以及 readiness 后端的文件读写由工作线程池承载
 
 ## 快速开始
 
