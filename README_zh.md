@@ -34,7 +34,7 @@
 ### 协议支持
 - **HTTP/1.1 & HTTP/2**: 完整服务器，包含路由器、中间件管道、分块传输、多部分上传；HTTP/2 通过 TLS + ALPN 协商，支持多路复用流
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
-- **SOCKS5**: 代理协议客户端和服务端 — CONNECT、BIND、UDP ASSOCIATE 命令；认证方法（无认证、用户名/密码）；支持 IPv4、IPv6 和域名
+- **SOCKS5**: 代理协议客户端和服务端 — CONNECT、BIND、UDP ASSOCIATE 命令；认证方法（无认证、用户名/密码、RFC 1961 GSSAPI provider 回调）；支持 IPv4、IPv6 和域名
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、事务管理、ORM（CRUD / 迁移 / 查询构建器 / MyBatis-Plus 风格 XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
 - **Redis**: 异步客户端，支持 RESP 协议、连接池

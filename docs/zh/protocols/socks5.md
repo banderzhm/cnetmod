@@ -8,11 +8,14 @@ cnetmod 的完整 SOCKS5 (RFC 1928) 代理协议实现。
 - ✅ 多种认证方式：
   - 无需认证
   - 用户名/密码认证 (RFC 1929)
+  - GSSAPI 认证与消息保护 (RFC 1961)
 - ✅ 地址类型：
   - IPv4
   - IPv6
   - 域名
 - ✅ CONNECT 命令支持
+- ✅ BIND 命令支持
+- ✅ UDP ASSOCIATE 命令支持
 - ✅ 基于协程的异步 API
 - ✅ 客户端和服务器实现
 - ✅ 多核服务器支持
@@ -107,15 +110,15 @@ int main() {
 ### 认证方法
 
 - `0x00` - 无需认证
-- `0x01` - GSSAPI（未实现）
+- `0x01` - GSSAPI（已支持，RFC 1961）
 - `0x02` - 用户名/密码
 - `0xFF` - 无可接受的方法
 
 ### 命令
 
 - `0x01` - CONNECT（已支持）
-- `0x02` - BIND（未实现）
-- `0x03` - UDP ASSOCIATE（未实现）
+- `0x02` - BIND（已支持）
+- `0x03` - UDP ASSOCIATE（已支持）
 
 ### 地址类型
 
@@ -171,15 +174,20 @@ curl --socks5 admin:secret@127.0.0.1:1080 http://www.example.com
 curl --socks5 127.0.0.1:1080 https://www.example.com
 ```
 
-## 限制
+## GSSAPI 接入
 
-- 未实现 BIND 命令
-- 未实现 UDP ASSOCIATE 命令
-- 未实现 GSSAPI 认证
-- 服务器中的 DNS 解析使用简单的 IP 解析（没有实际的 DNS 查询）
-- 双向中继是简化的（生产环境应使用并发任务）
+cnetmod 实现 RFC 1961 的认证令牌交换、保护级协商，以及 TCP/UDP 消息的
+GSS 封装。应用通过 `gssapi_context` 的 `step`、`wrap`、`unwrap` 回调接入
+Kerberos、SPNEGO、Windows SSPI 或 Heimdal，并通过
+`client::set_gssapi_context()` / `server_config::gssapi_factory` 为每条连接提供
+独立安全上下文。
+
+GSSAPI 建立后必须使用 `client::async_read()` 和 `client::async_write()` 传输 TCP
+数据；UDP ASSOCIATE 使用 `protect_udp_datagram()` 和
+`unprotect_udp_datagram()`。直接操作底层原始 socket 会绕过 RFC 1961 消息保护。
 
 ## 参考资料
 
 - [RFC 1928](https://tools.ietf.org/html/rfc1928) - SOCKS 协议版本 5
 - [RFC 1929](https://tools.ietf.org/html/rfc1929) - SOCKS V5 的用户名/密码认证
+- [RFC 1961](https://www.rfc-editor.org/rfc/rfc1961) - SOCKS V5 的 GSS-API 认证方法

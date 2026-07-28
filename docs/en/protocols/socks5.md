@@ -8,11 +8,14 @@ A complete SOCKS5 (RFC 1928) proxy protocol implementation for cnetmod.
 - ✅ Multiple authentication methods:
   - No authentication
   - Username/Password authentication (RFC 1929)
+  - GSSAPI authentication and message protection (RFC 1961)
 - ✅ Address types:
   - IPv4
   - IPv6
   - Domain names
 - ✅ CONNECT command support
+- ✅ BIND command support
+- ✅ UDP ASSOCIATE command support
 - ✅ Async/await coroutine-based API
 - ✅ Client and Server implementations
 - ✅ Multi-core server support
@@ -107,15 +110,15 @@ int main() {
 ### Authentication Methods
 
 - `0x00` - No authentication required
-- `0x01` - GSSAPI (not implemented)
+- `0x01` - GSSAPI (supported, RFC 1961)
 - `0x02` - Username/Password
 - `0xFF` - No acceptable methods
 
 ### Commands
 
 - `0x01` - CONNECT (supported)
-- `0x02` - BIND (not implemented)
-- `0x03` - UDP ASSOCIATE (not implemented)
+- `0x02` - BIND (supported)
+- `0x03` - UDP ASSOCIATE (supported)
 
 ### Address Types
 
@@ -171,15 +174,22 @@ curl --socks5 admin:secret@127.0.0.1:1080 http://www.example.com
 curl --socks5 127.0.0.1:1080 https://www.example.com
 ```
 
-## Limitations
+## GSSAPI Integration
 
-- BIND command not implemented
-- UDP ASSOCIATE command not implemented
-- GSSAPI authentication not implemented
-- DNS resolution in server uses simple IP parsing (no actual DNS lookup)
-- Bidirectional relay is simplified (should use concurrent tasks in production)
+cnetmod implements RFC 1961 authentication-token exchange, protection-level
+negotiation, and GSS framing for TCP and UDP messages. Applications connect
+Kerberos, SPNEGO, Windows SSPI, or Heimdal through the `step`, `wrap`, and
+`unwrap` callbacks in `gssapi_context`. Use `client::set_gssapi_context()` and
+`server_config::gssapi_factory` to provide an independent native security
+context for each connection.
+
+After GSSAPI is established, TCP traffic must use `client::async_read()` and
+`client::async_write()`. UDP ASSOCIATE uses `protect_udp_datagram()` and
+`unprotect_udp_datagram()`. Accessing the raw socket directly bypasses RFC 1961
+message protection.
 
 ## References
 
 - [RFC 1928](https://tools.ietf.org/html/rfc1928) - SOCKS Protocol Version 5
 - [RFC 1929](https://tools.ietf.org/html/rfc1929) - Username/Password Authentication for SOCKS V5
+- [RFC 1961](https://www.rfc-editor.org/rfc/rfc1961) - GSS-API Authentication Method for SOCKS V5

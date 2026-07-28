@@ -8,6 +8,7 @@ A complete SOCKS5 (RFC 1928) proxy protocol implementation for cnetmod.
 - ✅ Multiple authentication methods:
   - No authentication
   - Username/Password authentication (RFC 1929)
+  - GSSAPI authentication and protected TCP/UDP messages (RFC 1961)
 - ✅ Address types:
   - IPv4
   - IPv6
@@ -79,7 +80,7 @@ auto example(io_context& ctx) -> task<void> {
 ### Authentication Methods
 
 - `0x00` - No authentication required
-- `0x01` - GSSAPI (not implemented)
+- `0x01` - GSSAPI (supported through native-provider callbacks)
 - `0x02` - Username/Password
 - `0xFF` - No acceptable methods
 
@@ -140,11 +141,14 @@ curl --socks5 127.0.0.1:1080 http://www.example.com
 curl --socks5 admin:secret@127.0.0.1:1080 http://www.example.com
 ```
 
-## Limitations
+## GSSAPI Provider
 
-- GSSAPI authentication not implemented
+cnetmod implements the RFC 1961 wire protocol. Native GSS credentials and
+context operations are supplied through `gssapi_context` callbacks so the core
+library does not require a specific Kerberos, SPNEGO, SSPI, or Heimdal runtime.
 
 ## References
 
 - [RFC 1928](https://tools.ietf.org/html/rfc1928) - SOCKS Protocol Version 5
 - [RFC 1929](https://tools.ietf.org/html/rfc1929) - Username/Password Authentication for SOCKS V5
+- [RFC 1961](https://www.rfc-editor.org/rfc/rfc1961) - GSS-API Authentication Method for SOCKS V5

@@ -1,0 +1,216 @@
+name: Release cnetmod core
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish"
+        required: true
+        default: "v2.0.0"
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  core-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install CMake 4.2.3
+        run: choco install cmake --version=4.2.3 -y --force
+
+      - name: Setup MSBuild (VS 2026 / VS18)
+        uses: microsoft/setup-msbuild@v2
+        with:
+          vs-version: "18.0"
+          msbuild-architecture: x86
+
+      - name: Configure core-only build
+        shell: pwsh
+        run: |
+          cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" `
+            -G "Visual Studio 18 2026" -A x64 `
+            -DCNETMOD_BUILD_TESTS=OFF `
+            -DCNETMOD_BUILD_BENCH=OFF `
+            -DCNETMOD_BUILD_EXAMPLES=OFF
+
+      - name: Build and install core
+        shell: pwsh
+        run: |
+          cmake --build "${{ github.workspace }}/build" `
+            --target cnetmod_core --config Release -- /m:1
+          cmake --install "${{ github.workspace }}/build" `
+            --config Release --prefix "${{ github.workspace }}/package"
+
+      - name: Validate and archive core package
+        shell: pwsh
+        run: |
+          if (Get-ChildItem "${{ github.workspace }}/package" -Recurse -Filter *.exe) {
+            throw "Core package unexpectedly contains executable files"
+          }
+          if (-not (Get-ChildItem "${{ github.workspace }}/package" -Recurse -Filter cnetmod_core.lib)) {
+            throw "cnetmod_core.lib is missing from the package"
+          }
+          Compress-Archive -Path "${{ github.workspace }}/package/*" `
+            -DestinationPath "${{ github.workspace }}/cnetmod-core-${{ env.RELEASE_TAG }}-windows-msvc2026-x64.zip"
+
+      - name: Upload Windows core archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cnetmod-core-windows
+          path: cnetmod-core-*-windows-msvc2026-x64.zip
+          if-no-files-found: error
+
+  core-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install Clang 22 and build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget ninja-build liburing-dev
+          wget https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22 all
+          sudo apt-get install -y libc++-22-dev libc++abi-22-dev
+
+      - name: Install CMake 4.1.2
+        run: |
+          wget https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-x86_64.sh
+          chmod +x cmake-4.1.2-linux-x86_64.sh
+          sudo ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local
+
+      - name: Configure core-only build
+        run: |
+          cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-22 \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-22/share/libc++/v1 \
+            -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-22/include/c++/v1 \
+            -DCNETMOD_BUILD_TESTS=OFF \
+            -DCNETMOD_BUILD_BENCH=OFF \
+            -DCNETMOD_BUILD_EXAMPLES=OFF
+
+      - name: Build and install core
+        run: |
+          cmake --build "${{ github.workspace }}/build" --target cnetmod_core --parallel 2
+          cmake --install "${{ github.workspace }}/build" \
+            --prefix "${{ github.workspace }}/package"
+
+      - name: Validate and archive core package
+        run: |
+          if find "${{ github.workspace }}/package" -type f -perm /111 | grep -q .; then
+            echo "Core package unexpectedly contains executable files"
+            find "${{ github.workspace }}/package" -type f -perm /111
+            exit 1
+          fi
+          test -f "${{ github.workspace }}/package/lib/libcnetmod_core.a"
+          cmake -E tar cf \
+            "${{ github.workspace }}/cnetmod-core-${{ env.RELEASE_TAG }}-linux-clang22-x64.zip" \
+            --format=zip -- package
+
+      - name: Upload Linux core archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cnetmod-core-linux
+          path: cnetmod-core-*-linux-clang22-x64.zip
+          if-no-files-found: error
+
+  core-macos:
+    runs-on: macos-14
+    steps:
+      - name: Checkout tag
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install LLVM, Ninja, and CMake
+        run: brew install llvm ninja cmake
+
+      - name: Configure core-only build
+        run: |
+          LLVM_PREFIX="$(brew --prefix llvm)"
+          SDKROOT="$(xcrun --show-sdk-path)"
+          LIBCXX_MODULES="$(find "${LLVM_PREFIX}" -name std.cppm -exec dirname {} \; | head -1)"
+          cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="${LLVM_PREFIX}/bin/clang" \
+            -DCMAKE_CXX_COMPILER="${LLVM_PREFIX}/bin/clang++" \
+            -DCMAKE_CXX_FLAGS="-isysroot ${SDKROOT} -stdlib=libc++" \
+            -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++ -lc++ -lc++abi" \
+            -DCMAKE_OSX_SYSROOT="${SDKROOT}" \
+            -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \
+            -DLIBCXX_INCLUDE_DIRS="${LLVM_PREFIX}/include/c++/v1" \
+            -DCNETMOD_BUILD_TESTS=OFF \
+            -DCNETMOD_BUILD_BENCH=OFF \
+            -DCNETMOD_BUILD_EXAMPLES=OFF
+
+      - name: Build and install core
+        run: |
+          cmake --build "${{ github.workspace }}/build" --target cnetmod_core --parallel "$(sysctl -n hw.ncpu)"
+          cmake --install "${{ github.workspace }}/build" \
+            --prefix "${{ github.workspace }}/package"
+
+      - name: Validate and archive core package
+        run: |
+          if find "${{ github.workspace }}/package" -type f -perm +111 | grep -q .; then
+            echo "Core package unexpectedly contains executable files"
+            find "${{ github.workspace }}/package" -type f -perm +111
+            exit 1
+          fi
+          test -f "${{ github.workspace }}/package/lib/libcnetmod_core.a"
+          cmake -E tar cf \
+            "${{ github.workspace }}/cnetmod-core-${{ env.RELEASE_TAG }}-macos-clang-arm64.zip" \
+            --format=zip -- package
+
+      - name: Upload macOS core archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cnetmod-core-macos
+          path: cnetmod-core-*-macos-clang-arm64.zip
+          if-no-files-found: error
+
+  publish-release:
+    needs: [core-windows, core-linux, core-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download core archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cnetmod-core-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${RELEASE_TAG}" release-assets/*.zip \
+              --clobber --repo "${GITHUB_REPOSITORY}"
+          else
+            gh release create "${RELEASE_TAG}" release-assets/*.zip \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "cnetmod ${RELEASE_TAG}" \
+              --generate-notes
+          fi

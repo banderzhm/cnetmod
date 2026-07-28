@@ -34,7 +34,7 @@ English | [简体中文](README_zh.md)
 ### Protocols
 - **HTTP/1.1 & HTTP/2**: Full server with router, middleware pipeline, chunked transfer, multipart upload; HTTP/2 via TLS + ALPN negotiation with multiplexed streams
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
-- **SOCKS5**: Proxy protocol client and server — CONNECT, BIND, UDP ASSOCIATE commands; authentication methods (no auth, username/password); IPv4, IPv6, and domain name support
+- **SOCKS5**: Proxy protocol client and server — CONNECT, BIND, UDP ASSOCIATE commands; authentication methods (no auth, username/password, RFC 1961 GSSAPI provider callbacks); IPv4, IPv6, and domain name support
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool

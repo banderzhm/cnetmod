@@ -11,6 +11,7 @@ namespace cnetmod::socks5 {
 // =============================================================================
 
 export constexpr std::uint8_t SOCKS_VERSION = 0x05;
+export constexpr std::uint8_t GSSAPI_VERSION = 0x01;
 
 // Authentication methods
 export enum class auth_method : std::uint8_t {
@@ -18,6 +19,75 @@ export enum class auth_method : std::uint8_t {
   gssapi = 0x01,            // GSSAPI
   username_password = 0x02, // Username/Password
   no_acceptable = 0xFF      // No acceptable methods
+};
+
+// RFC 1961 GSS-API subnegotiation message types.
+export enum class gssapi_message_type : std::uint8_t {
+  authentication = 0x01,
+  protection_level = 0x02,
+  encapsulated_data = 0x03,
+  abort = 0xFF
+};
+
+// RFC 1961 section 4.2 protection levels.
+export enum class gssapi_protection_level : std::uint8_t {
+  integrity = 0x01,
+  confidentiality = 0x02,
+  selective = 0x03
+};
+
+export struct gssapi_message {
+  std::uint8_t version = GSSAPI_VERSION;
+  gssapi_message_type type = gssapi_message_type::authentication;
+  std::vector<std::byte> token;
+
+  [[nodiscard]] auto serialize() const
+      -> std::expected<std::vector<std::byte>, std::error_code>;
+  [[nodiscard]] static auto parse(const std::byte *data, std::size_t len)
+      -> std::optional<gssapi_message>;
+};
+
+// Adapter surface for a native GSS implementation (Kerberos, SPNEGO/SSPI,
+// Heimdal, ...). cnetmod owns the RFC 1961 wire protocol while the application
+// owns native credential and security-context lifetime.
+export struct gssapi_step_result {
+  std::vector<std::byte> output_token;
+  bool complete = false;
+};
+
+export struct gssapi_unwrap_result {
+  std::vector<std::byte> payload;
+  bool confidential = false;
+};
+
+export using gssapi_step_handler = std::function<
+    std::expected<gssapi_step_result, std::error_code>(
+        std::span<const std::byte> input_token)>;
+export using gssapi_wrap_handler = std::function<
+    std::expected<std::vector<std::byte>, std::error_code>(
+        std::span<const std::byte> payload, bool confidential)>;
+export using gssapi_unwrap_handler = std::function<
+    std::expected<gssapi_unwrap_result, std::error_code>(
+        std::span<const std::byte> token)>;
+
+export struct gssapi_context {
+  gssapi_step_handler step;
+  gssapi_wrap_handler wrap;
+  gssapi_unwrap_handler unwrap;
+
+  [[nodiscard]] explicit operator bool() const noexcept {
+    return static_cast<bool>(step) && static_cast<bool>(wrap) &&
+           static_cast<bool>(unwrap);
+  }
+};
+
+export using gssapi_context_factory =
+    std::function<std::expected<gssapi_context, std::error_code>()>;
+
+export struct gssapi_session {
+  gssapi_context context;
+  gssapi_protection_level protection =
+      gssapi_protection_level::integrity;
 };
 
 // SOCKS5 commands

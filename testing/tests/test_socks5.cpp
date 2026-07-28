@@ -99,4 +99,67 @@ TEST(socks5_request_ipv6_target_roundtrip) {
     ASSERT_EQ(static_cast<int>(parsed->address.type), static_cast<int>(address_type::ipv6));
 }
 
+TEST(socks5_gssapi_authentication_message_roundtrip) {
+    gssapi_message message{
+        .type = gssapi_message_type::authentication,
+        .token = {std::byte{0x10}, std::byte{0x20}, std::byte{0x30}},
+    };
+
+    auto raw = message.serialize();
+    ASSERT_TRUE(raw.has_value());
+    ASSERT_EQ(raw->size(), std::size_t{7});
+    ASSERT_EQ(std::to_integer<unsigned int>((*raw)[0]), 1U);
+    ASSERT_EQ(std::to_integer<unsigned int>((*raw)[1]), 1U);
+    ASSERT_EQ(std::to_integer<unsigned int>((*raw)[3]), 3U);
+
+    auto parsed = gssapi_message::parse(raw->data(), raw->size());
+    ASSERT_TRUE(parsed.has_value());
+    ASSERT_EQ(static_cast<int>(parsed->type),
+              static_cast<int>(gssapi_message_type::authentication));
+    ASSERT_EQ(parsed->token.size(), std::size_t{3});
+    ASSERT_EQ(std::to_integer<unsigned int>(parsed->token[2]), 0x30U);
+}
+
+TEST(socks5_gssapi_abort_is_two_octets) {
+    gssapi_message message{.type = gssapi_message_type::abort};
+    auto raw = message.serialize();
+    ASSERT_TRUE(raw.has_value());
+    ASSERT_EQ(raw->size(), std::size_t{2});
+
+    auto parsed = gssapi_message::parse(raw->data(), raw->size());
+    ASSERT_TRUE(parsed.has_value());
+    ASSERT_EQ(static_cast<int>(parsed->type),
+              static_cast<int>(gssapi_message_type::abort));
+}
+
+TEST(socks5_gssapi_rejects_oversized_token) {
+    gssapi_message message{
+        .type = gssapi_message_type::encapsulated_data,
+        .token = std::vector<std::byte>(65536),
+    };
+    auto raw = message.serialize();
+    ASSERT_FALSE(raw.has_value());
+    ASSERT_EQ(raw.error(), std::make_error_code(std::errc::message_size));
+}
+
+TEST(socks5_gssapi_context_requires_all_callbacks) {
+    gssapi_context context;
+    ASSERT_FALSE(static_cast<bool>(context));
+
+    context.step = [](std::span<const std::byte>)
+        -> std::expected<gssapi_step_result, std::error_code> {
+        return gssapi_step_result{.complete = true};
+    };
+    context.wrap = [](std::span<const std::byte> payload, bool)
+        -> std::expected<std::vector<std::byte>, std::error_code> {
+        return std::vector<std::byte>{payload.begin(), payload.end()};
+    };
+    context.unwrap = [](std::span<const std::byte> token)
+        -> std::expected<gssapi_unwrap_result, std::error_code> {
+        return gssapi_unwrap_result{
+            .payload = std::vector<std::byte>{token.begin(), token.end()}};
+    };
+    ASSERT_TRUE(static_cast<bool>(context));
+}
+
 RUN_TESTS()

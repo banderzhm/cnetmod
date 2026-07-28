@@ -31,6 +31,10 @@ The server supports two authentication methods:
   - `admin` / `secret` (admin user)
   - `user` / `pass` (regular user)
 
+The library also supports RFC 1961 GSSAPI through application-provided native
+provider callbacks; this example keeps username/password authentication so it
+does not require host Kerberos or SSPI configuration.
+
 Default settings:
 - Listen address: `0.0.0.0:1080`
 - Max connections: 1000
@@ -248,17 +252,14 @@ For production use:
 - Implement rate limiting
 - Add IP whitelisting/blacklisting
 - Enable logging and monitoring
-- Use TLS for authentication (not implemented)
+- Use GSSAPI when authenticated and protected proxy traffic is required
 - Implement access control lists
 - Add connection timeout handling
-- Implement proper DNS resolution
-- Add support for BIND and UDP ASSOCIATE commands
+- Exercise BIND and UDP ASSOCIATE for deployments that need them
 
 ## Next Steps
 
-- Implement BIND command for reverse connections
-- Add UDP ASSOCIATE for UDP proxying
-- Implement GSSAPI authentication
+- Add environment-specific Kerberos/SSPI provider examples
 - Add DNS resolution support
 - Implement connection pooling
 - Add bandwidth limiting

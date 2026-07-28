@@ -34,6 +34,69 @@ auto byte_to_u8(std::byte b) noexcept -> std::uint8_t {
 } // namespace
 
 // =============================================================================
+// RFC 1961 GSS-API message framing
+// =============================================================================
+
+auto gssapi_message::serialize() const
+    -> std::expected<std::vector<std::byte>, std::error_code> {
+    if (type == gssapi_message_type::abort) {
+        if (!token.empty()) {
+            return std::unexpected(make_error_code(std::errc::invalid_argument));
+        }
+        return std::vector<std::byte>{static_cast<std::byte>(version),
+                                      static_cast<std::byte>(type)};
+    }
+    if (token.size() > std::numeric_limits<std::uint16_t>::max()) {
+        return std::unexpected(make_error_code(std::errc::message_size));
+    }
+
+    const auto length = static_cast<std::uint16_t>(token.size());
+    std::vector<std::byte> result;
+    result.reserve(4 + token.size());
+    result.push_back(static_cast<std::byte>(version));
+    result.push_back(static_cast<std::byte>(type));
+    result.push_back(static_cast<std::byte>((length >> 8) & 0xFF));
+    result.push_back(static_cast<std::byte>(length & 0xFF));
+    result.insert(result.end(), token.begin(), token.end());
+    return result;
+}
+
+auto gssapi_message::parse(const std::byte *data, std::size_t len)
+    -> std::optional<gssapi_message> {
+    if (len < 2 || static_cast<std::uint8_t>(data[0]) != GSSAPI_VERSION) {
+        return std::nullopt;
+    }
+
+    const auto type = static_cast<gssapi_message_type>(data[1]);
+    if (type == gssapi_message_type::abort) {
+        if (len != 2) {
+            return std::nullopt;
+        }
+        return gssapi_message{.type = type};
+    }
+    if (len < 4) {
+        return std::nullopt;
+    }
+    if (type != gssapi_message_type::authentication &&
+        type != gssapi_message_type::protection_level &&
+        type != gssapi_message_type::encapsulated_data) {
+        return std::nullopt;
+    }
+
+    const auto token_length =
+        (static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[2])) << 8) |
+        static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[3]));
+    if (len != 4 + token_length) {
+        return std::nullopt;
+    }
+
+    gssapi_message result;
+    result.type = type;
+    result.token.assign(data + 4, data + len);
+    return result;
+}
+
+// =============================================================================
 // socks5_address Implementation
 // =============================================================================
 

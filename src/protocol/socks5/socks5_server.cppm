@@ -31,9 +31,13 @@ export using auth_handler =
 export struct server_config {
   bool allow_no_auth = true;
   bool allow_username_password = false;
+  bool allow_gssapi = false;
   bool allow_bind = true;
   bool allow_udp_associate = true;
   auth_handler authenticator;
+  gssapi_context_factory gssapi_factory;
+  gssapi_protection_level gssapi_protection =
+      gssapi_protection_level::integrity;
   std::size_t max_connections = 0; // 0 = unlimited
 };
 
@@ -80,19 +84,23 @@ private:
 
   auto handle_connection(socket client, io_context &io) -> task<void>;
   auto handle_authentication(socket &client, io_context &io)
+      -> task<std::expected<std::optional<gssapi_session>, std::error_code>>;
+  auto handle_request(socket &client, io_context &io, gssapi_session *gssapi)
       -> task<std::expected<void, std::error_code>>;
-  auto handle_request(socket &client, io_context &io)
+  auto handle_connect(socket &client, const socks5_request &req, io_context &io,
+                      gssapi_session *gssapi)
       -> task<std::expected<void, std::error_code>>;
-  auto handle_connect(socket &client, const socks5_request &req, io_context &io)
-      -> task<std::expected<void, std::error_code>>;
-  auto handle_bind(socket &client, const socks5_request &req, io_context &io)
+  auto handle_bind(socket &client, const socks5_request &req, io_context &io,
+                   gssapi_session *gssapi)
       -> task<std::expected<void, std::error_code>>;
   auto handle_udp_associate(socket &client, const socks5_request &req,
-                            io_context &io)
+                            io_context &io, gssapi_session *gssapi)
       -> task<std::expected<void, std::error_code>>;
-  auto relay_udp(socket &control, socket udp_sock, io_context &io)
+  auto relay_udp(socket &control, socket udp_sock, io_context &io,
+                 gssapi_session *gssapi)
       -> task<void>;
-  auto relay_data(socket &client, socket &target, io_context &io) -> task<void>;
+  auto relay_data(socket &client, socket &target, io_context &io,
+                  gssapi_session *gssapi) -> task<void>;
 
   io_context &ctx_;
   server_context *sctx_ = nullptr;
