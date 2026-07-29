@@ -18,7 +18,8 @@ import std;
 
 namespace cnetmod {
 
-auto make_io_context() -> std::unique_ptr<io_context> {
+auto make_io_context() -> std::unique_ptr<io_context>
+{
 #ifdef CNETMOD_PLATFORM_WINDOWS
     return std::make_unique<iocp_context>();
 #elif defined(CNETMOD_HAS_IO_URING)

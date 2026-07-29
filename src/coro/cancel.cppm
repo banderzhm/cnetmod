@@ -16,7 +16,8 @@ namespace cnetmod {
 ///   token.cancel();  // Request cancellation
 ///
 /// Note: cancel_token is not copyable/movable (address stability), can be reused via reset()
-export class cancel_token {
+export class cancel_token
+{
 public:
     cancel_token() = default;
     ~cancel_token() = default;
@@ -41,18 +42,18 @@ public:
     // Following fields are set internally by platform awaiter, users should not manipulate directly
     // =================================================================
 
-    std::atomic<bool> cancelled_{false};   // Whether cancellation has been requested
-    std::atomic<bool> pending_{false};     // Whether an operation is pending
+    std::atomic<bool> cancelled_{false}; // Whether cancellation has been requested
+    std::atomic<bool> pending_{false};   // Whether an operation is pending
 
     /// Platform-specific cancel function (set by cancel awaiter)
     void (*cancel_fn_)(cancel_token&) noexcept = nullptr;
 
-    void* ctx_{};              // Platform context pointer (epoll_context*/io_uring_context*)
-    void* io_handle_{};        // IOCP: HANDLE (socket/file)
-    void* overlapped_{};       // IOCP: OVERLAPPED* / io_uring: uring_overlapped*
-    int fd_{-1};               // epoll/kqueue: file descriptor
-    std::int16_t filter_{0};   // kqueue: EVFILT_READ / EVFILT_WRITE
-    std::coroutine_handle<> coroutine_{};  // epoll/kqueue: suspended coroutine
+    void* ctx_{};                         // Platform context pointer (epoll_context*/io_uring_context*)
+    void* io_handle_{};                   // IOCP: HANDLE (socket/file)
+    void* overlapped_{};                  // IOCP: OVERLAPPED* / io_uring: uring_overlapped*
+    int fd_{-1};                          // epoll/kqueue: file descriptor
+    std::int16_t filter_{0};              // kqueue: EVFILT_READ / EVFILT_WRITE
+    std::coroutine_handle<> coroutine_{}; // epoll/kqueue: suspended coroutine
 };
 
 } // namespace cnetmod

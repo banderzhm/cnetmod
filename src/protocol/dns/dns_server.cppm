@@ -19,12 +19,13 @@ import cnetmod.core.ssl;
 
 namespace cnetmod::dns {
 
-export class udp_server {
+export class udp_server
+{
 public:
     explicit udp_server(io_context& ctx);
 
     [[nodiscard]] auto listen(std::string_view host, std::uint16_t port,
-                              socket_options opts = {.reuse_address = true})
+        socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>;
 
     void set_handler(query_handler handler);
@@ -39,12 +40,13 @@ private:
     bool running_ = false;
 };
 
-export class tcp_server {
+export class tcp_server
+{
 public:
     explicit tcp_server(io_context& ctx);
 
     [[nodiscard]] auto listen(std::string_view host, std::uint16_t port,
-                              socket_options opts = {.reuse_address = true})
+        socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>;
 
     void set_handler(query_handler handler);
@@ -62,18 +64,20 @@ private:
 };
 
 #ifdef CNETMOD_HAS_SSL
-export struct dot_server_options {
+export struct dot_server_options
+{
     std::string cert_file;
     std::string key_file;
     bool verify_peer = false;
 };
 
-export class dot_server {
+export class dot_server
+{
 public:
     dot_server(io_context& ctx, dot_server_options opts);
 
     [[nodiscard]] auto listen(std::string_view host, std::uint16_t port,
-                              socket_options sock_opts = {.reuse_address = true})
+        socket_options sock_opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>;
 
     void set_handler(query_handler handler);

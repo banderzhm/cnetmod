@@ -19,39 +19,40 @@ namespace cnetmod::tcp {
 
 /// TCP connection acceptor
 /// Used to listen on a port and accept incoming connections
-export class acceptor {
+export class acceptor
+{
 public:
-  explicit acceptor(io_context &ctx);
+    explicit acceptor(io_context& ctx);
 
-  ~acceptor() = default;
+    ~acceptor() = default;
 
-  // Non-copyable
-  acceptor(const acceptor &) = delete;
-  auto operator=(const acceptor &) -> acceptor & = delete;
+    // Non-copyable
+    acceptor(const acceptor&) = delete;
+    auto operator=(const acceptor&) -> acceptor& = delete;
 
-  // Movable
-  acceptor(acceptor &&) noexcept = default;
-  auto operator=(acceptor &&) noexcept -> acceptor & = default;
+    // Movable
+    acceptor(acceptor&&) noexcept = default;
+    auto operator=(acceptor&&) noexcept -> acceptor& = default;
 
-  /// Open and bind to specified endpoint
-  [[nodiscard]] auto open(const endpoint &ep, const socket_options &opts = {})
-      -> std::expected<void, std::error_code>;
+    /// Open and bind to specified endpoint
+    [[nodiscard]] auto open(const endpoint& ep, const socket_options& opts = {})
+        -> std::expected<void, std::error_code>;
 
-  /// Close acceptor
-  void close() noexcept;
+    /// Close acceptor
+    void close() noexcept;
 
-  /// Check if open
-  [[nodiscard]] auto is_open() const noexcept -> bool;
+    /// Check if open
+    [[nodiscard]] auto is_open() const noexcept -> bool;
 
-  /// Get underlying socket
-  [[nodiscard]] auto native_socket() noexcept -> socket &;
+    /// Get underlying socket
+    [[nodiscard]] auto native_socket() noexcept -> socket&;
 
-  /// Get associated io_context
-  [[nodiscard]] auto context() noexcept -> io_context &;
+    /// Get associated io_context
+    [[nodiscard]] auto context() noexcept -> io_context&;
 
 private:
-  io_context *ctx_;
-  socket socket_;
+    io_context* ctx_;
+    socket socket_;
 };
 
 // =============================================================================
@@ -60,45 +61,46 @@ private:
 
 /// TCP connection
 /// Represents an established TCP connection
-export class connection {
+export class connection
+{
 public:
-  explicit connection(io_context &ctx);
+    explicit connection(io_context& ctx);
 
-  connection(io_context &ctx, socket sock);
+    connection(io_context& ctx, socket sock);
 
-  ~connection() = default;
+    ~connection() = default;
 
-  // Non-copyable
-  connection(const connection &) = delete;
-  auto operator=(const connection &) -> connection & = delete;
+    // Non-copyable
+    connection(const connection&) = delete;
+    auto operator=(const connection&) -> connection& = delete;
 
-  // Movable
-  connection(connection &&) noexcept = default;
-  auto operator=(connection &&) noexcept -> connection & = default;
+    // Movable
+    connection(connection&&) noexcept = default;
+    auto operator=(connection&&) noexcept -> connection& = default;
 
-  /// Get remote endpoint
-  [[nodiscard]] auto remote_endpoint() const
-      -> std::expected<endpoint, std::error_code>;
+    /// Get remote endpoint
+    [[nodiscard]] auto remote_endpoint() const
+        -> std::expected<endpoint, std::error_code>;
 
-  /// Get local endpoint
-  [[nodiscard]] auto local_endpoint() const
-      -> std::expected<endpoint, std::error_code>;
+    /// Get local endpoint
+    [[nodiscard]] auto local_endpoint() const
+        -> std::expected<endpoint, std::error_code>;
 
-  /// Close connection
-  void close() noexcept;
+    /// Close connection
+    void close() noexcept;
 
-  /// Check if open
-  [[nodiscard]] auto is_open() const noexcept -> bool;
+    /// Check if open
+    [[nodiscard]] auto is_open() const noexcept -> bool;
 
-  /// Get underlying socket
-  [[nodiscard]] auto native_socket() noexcept -> socket &;
+    /// Get underlying socket
+    [[nodiscard]] auto native_socket() noexcept -> socket&;
 
-  /// Get associated io_context
-  [[nodiscard]] auto context() noexcept -> io_context &;
+    /// Get associated io_context
+    [[nodiscard]] auto context() noexcept -> io_context&;
 
 private:
-  io_context *ctx_;
-  socket socket_;
+    io_context* ctx_;
+    socket socket_;
 };
 
 } // namespace cnetmod::tcp

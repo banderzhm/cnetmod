@@ -17,7 +17,8 @@ export using io_callback = std::function<void(std::error_code, std::size_t)>;
 
 /// General I/O operation awaitable
 /// Suspends coroutine when co_await, resumes when I/O completes
-export class io_awaitable {
+export class io_awaitable
+{
 public:
     using result_type = std::expected<std::size_t, std::error_code>;
 
@@ -43,9 +44,10 @@ protected:
 };
 
 /// accept operation awaitable (returns native handle instead of byte count)
-export class accept_awaitable {
+export class accept_awaitable
+{
 public:
-    using result_type = std::expected<int, std::error_code>;  // native fd/SOCKET
+    using result_type = std::expected<int, std::error_code>; // native fd/SOCKET
 
     accept_awaitable() noexcept = default;
 
@@ -66,7 +68,8 @@ protected:
 };
 
 /// connect operation awaitable (no return value, only error_code)
-export class connect_awaitable {
+export class connect_awaitable
+{
 public:
     using result_type = std::expected<void, std::error_code>;
 

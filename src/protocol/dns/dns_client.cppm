@@ -19,7 +19,8 @@ import cnetmod.core.ssl;
 
 namespace cnetmod::dns {
 
-export class udp_client {
+export class udp_client
+{
 public:
     explicit udp_client(io_context& ctx);
 
@@ -31,7 +32,8 @@ private:
     udp::udp_socket sock_;
 };
 
-export class tcp_client {
+export class tcp_client
+{
 public:
     explicit tcp_client(io_context& ctx);
 
@@ -43,7 +45,8 @@ private:
     socket sock_;
 };
 
-export class doh_client {
+export class doh_client
+{
 public:
     explicit doh_client(io_context& ctx, std::string endpoint_url = "https://dns.google/dns-query");
 
@@ -56,7 +59,8 @@ private:
 };
 
 #ifdef CNETMOD_HAS_SSL
-export class dot_client {
+export class dot_client
+{
 public:
     explicit dot_client(io_context& ctx);
 

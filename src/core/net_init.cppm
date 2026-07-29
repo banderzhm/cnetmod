@@ -3,10 +3,10 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <WinSock2.h>
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <WinSock2.h>
 #endif
 
 export module cnetmod.core.net_init;
@@ -22,7 +22,8 @@ namespace cnetmod {
 /// Initialize platform network library on construction, cleanup on destruction
 /// Windows: WSAStartup / WSACleanup
 /// Linux/macOS: no-op
-export class net_init {
+export class net_init
+{
 public:
     net_init();
     ~net_init();

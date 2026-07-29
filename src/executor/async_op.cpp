@@ -15,99 +15,113 @@ import cnetmod.coro.cancel;
 namespace cnetmod {
 namespace detail {
 
-auto find_delimiter(const_buffer buf, std::string_view delimiter) noexcept
-    -> std::optional<std::size_t>
-{
-    if (delimiter.empty()) {
-        return std::nullopt;
+    auto find_delimiter(const_buffer buf, std::string_view delimiter) noexcept
+        -> std::optional<std::size_t>
+    {
+        if (delimiter.empty())
+        {
+            return std::nullopt;
+        }
+
+        auto* first = static_cast<const std::byte*>(buf.data);
+        auto* last = first + buf.size;
+        auto* delimiter_first =
+            reinterpret_cast<const std::byte*>(delimiter.data());
+        auto* delimiter_last = delimiter_first + delimiter.size();
+
+        auto pos = std::search(first, last, delimiter_first, delimiter_last);
+        if (pos == last)
+        {
+            return std::nullopt;
+        }
+
+        return static_cast<std::size_t>((pos - first) + delimiter.size());
     }
 
-    auto* first = static_cast<const std::byte*>(buf.data);
-    auto* last = first + buf.size;
-    auto* delimiter_first =
-        reinterpret_cast<const std::byte*>(delimiter.data());
-    auto* delimiter_last = delimiter_first + delimiter.size();
+    auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
+        std::string delimiter, std::size_t max_bytes,
+        std::size_t read_chunk_size)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+        if (delimiter.empty() || read_chunk_size == 0)
+        {
+            co_return std::unexpected(make_error_code(errc::invalid_argument));
+        }
 
-    auto pos = std::search(first, last, delimiter_first, delimiter_last);
-    if (pos == last) {
-        return std::nullopt;
+        while (true)
+        {
+            if (auto found = find_delimiter(buf.data(), delimiter))
+            {
+                co_return *found;
+            }
+
+            if (buf.readable_bytes() >= max_bytes)
+            {
+                co_return std::unexpected(make_error_code(errc::no_buffer_space));
+            }
+
+            auto to_read =
+                std::min(read_chunk_size, max_bytes - buf.readable_bytes());
+            auto dst = buf.prepare(to_read);
+            auto result = co_await async_read(ctx, sock, dst);
+            if (!result)
+            {
+                co_return std::unexpected(result.error());
+            }
+            if (*result == 0)
+            {
+                co_return std::unexpected(make_error_code(errc::end_of_file));
+            }
+
+            buf.commit(*result);
+        }
     }
 
-    return static_cast<std::size_t>((pos - first) + delimiter.size());
-}
+    auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
+        std::string delimiter, cancel_token& token,
+        std::size_t max_bytes,
+        std::size_t read_chunk_size)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+        if (delimiter.empty() || read_chunk_size == 0)
+        {
+            co_return std::unexpected(make_error_code(errc::invalid_argument));
+        }
 
-auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                           std::string delimiter, std::size_t max_bytes,
-                           std::size_t read_chunk_size)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (delimiter.empty() || read_chunk_size == 0) {
-        co_return std::unexpected(make_error_code(errc::invalid_argument));
+        while (true)
+        {
+            if (auto found = find_delimiter(buf.data(), delimiter))
+            {
+                co_return *found;
+            }
+
+            if (buf.readable_bytes() >= max_bytes)
+            {
+                co_return std::unexpected(make_error_code(errc::no_buffer_space));
+            }
+
+            auto to_read =
+                std::min(read_chunk_size, max_bytes - buf.readable_bytes());
+            auto dst = buf.prepare(to_read);
+            auto result = co_await async_read(ctx, sock, dst, token);
+            if (!result)
+            {
+                co_return std::unexpected(result.error());
+            }
+            if (*result == 0)
+            {
+                co_return std::unexpected(make_error_code(errc::end_of_file));
+            }
+
+            buf.commit(*result);
+        }
     }
-
-    while (true) {
-        if (auto found = find_delimiter(buf.data(), delimiter)) {
-            co_return *found;
-        }
-
-        if (buf.readable_bytes() >= max_bytes) {
-            co_return std::unexpected(make_error_code(errc::no_buffer_space));
-        }
-
-        auto to_read =
-            std::min(read_chunk_size, max_bytes - buf.readable_bytes());
-        auto dst = buf.prepare(to_read);
-        auto result = co_await async_read(ctx, sock, dst);
-        if (!result) {
-            co_return std::unexpected(result.error());
-        }
-        if (*result == 0) {
-            co_return std::unexpected(make_error_code(errc::end_of_file));
-        }
-
-        buf.commit(*result);
-    }
-}
-
-auto async_read_until_impl(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                           std::string delimiter, cancel_token& token,
-                           std::size_t max_bytes,
-                           std::size_t read_chunk_size)
-    -> task<std::expected<std::size_t, std::error_code>>
-{
-    if (delimiter.empty() || read_chunk_size == 0) {
-        co_return std::unexpected(make_error_code(errc::invalid_argument));
-    }
-
-    while (true) {
-        if (auto found = find_delimiter(buf.data(), delimiter)) {
-            co_return *found;
-        }
-
-        if (buf.readable_bytes() >= max_bytes) {
-            co_return std::unexpected(make_error_code(errc::no_buffer_space));
-        }
-
-        auto to_read =
-            std::min(read_chunk_size, max_bytes - buf.readable_bytes());
-        auto dst = buf.prepare(to_read);
-        auto result = co_await async_read(ctx, sock, dst, token);
-        if (!result) {
-            co_return std::unexpected(result.error());
-        }
-        if (*result == 0) {
-            co_return std::unexpected(make_error_code(errc::end_of_file));
-        }
-
-        buf.commit(*result);
-    }
-}
 
 } // namespace detail
 
 auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                      std::string_view delimiter, std::size_t max_bytes,
-                      std::size_t read_chunk_size)
+    std::string_view delimiter, std::size_t max_bytes,
+    std::size_t read_chunk_size)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     return detail::async_read_until_impl(
@@ -115,8 +129,8 @@ auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
 }
 
 auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                      std::string_view delimiter, cancel_token& token,
-                      std::size_t max_bytes, std::size_t read_chunk_size)
+    std::string_view delimiter, cancel_token& token,
+    std::size_t max_bytes, std::size_t read_chunk_size)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     return detail::async_read_until_impl(
@@ -125,8 +139,8 @@ auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
 }
 
 auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                      char delimiter, std::size_t max_bytes,
-                      std::size_t read_chunk_size)
+    char delimiter, std::size_t max_bytes,
+    std::size_t read_chunk_size)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     return detail::async_read_until_impl(
@@ -134,8 +148,8 @@ auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
 }
 
 auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                      char delimiter, cancel_token& token,
-                      std::size_t max_bytes, std::size_t read_chunk_size)
+    char delimiter, cancel_token& token,
+    std::size_t max_bytes, std::size_t read_chunk_size)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     return detail::async_read_until_impl(
@@ -149,13 +163,16 @@ auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
     auto* data = static_cast<const std::byte*>(buf.data);
     std::size_t written = 0;
 
-    while (written < buf.size) {
+    while (written < buf.size)
+    {
         auto result = co_await async_write(
             ctx, sock, const_buffer{data + written, buf.size - written});
-        if (!result) {
+        if (!result)
+        {
             co_return std::unexpected(result.error());
         }
-        if (*result == 0) {
+        if (*result == 0)
+        {
             co_return std::unexpected(make_error_code(errc::broken_pipe));
         }
         written += *result;
@@ -165,19 +182,22 @@ auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
 }
 
 auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
-                     cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>
 {
     auto* data = static_cast<const std::byte*>(buf.data);
     std::size_t written = 0;
 
-    while (written < buf.size) {
+    while (written < buf.size)
+    {
         auto result = co_await async_write(
             ctx, sock, const_buffer{data + written, buf.size - written}, token);
-        if (!result) {
+        if (!result)
+        {
             co_return std::unexpected(result.error());
         }
-        if (*result == 0) {
+        if (*result == 0)
+        {
             co_return std::unexpected(make_error_code(errc::broken_pipe));
         }
         written += *result;
@@ -187,8 +207,8 @@ auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
 }
 
 auto async_file_read_pipeline(io_context& ctx, file& source,
-                              file_chunk_handler handler,
-                              file_pipeline_options options)
+    file_chunk_handler handler,
+    file_pipeline_options options)
     -> task<std::expected<std::uint64_t, std::error_code>>
 {
     if (!handler || options.chunk_size == 0)
@@ -216,11 +236,13 @@ auto async_file_read_pipeline(io_context& ctx, file& source,
     std::uint64_t current_offset = options.offset;
     std::uint64_t transferred = 0;
 
-    while (true) {
+    while (true)
+    {
         const auto consumed_after_current = transferred + current_size;
         const auto remaining =
             options.byte_count - consumed_after_current;
-        if (remaining == 0) {
+        if (remaining == 0)
+        {
             auto handled = co_await handler(
                 const_buffer{buffers[current].data(), current_size},
                 current_offset);
@@ -267,8 +289,10 @@ auto async_file_read_batch(
 {
     std::vector<file_io_result> results;
     results.reserve(requests.size());
-    for (const auto& request : requests) {
-        if (!request.source) {
+    for (const auto& request : requests)
+    {
+        if (!request.source)
+        {
             results.emplace_back(std::unexpected(
                 make_error_code(errc::invalid_argument)));
             continue;
@@ -285,8 +309,10 @@ auto async_file_write_batch(
 {
     std::vector<file_io_result> results;
     results.reserve(requests.size());
-    for (const auto& request : requests) {
-        if (!request.destination) {
+    for (const auto& request : requests)
+    {
+        if (!request.destination)
+        {
             results.emplace_back(std::unexpected(
                 make_error_code(errc::invalid_argument)));
             continue;

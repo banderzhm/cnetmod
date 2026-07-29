@@ -15,7 +15,8 @@ namespace cnetmod {
 // =============================================================================
 
 /// I/O operation type
-export enum class io_op_type {
+export enum class io_op_type
+{
     // Network operations
     accept,
     connect,
@@ -34,15 +35,18 @@ export enum class io_op_type {
 // =============================================================================
 
 /// I/O operation completion result
-export struct io_result {
-    std::error_code error;          // Error code
-    std::size_t bytes_transferred;  // Number of bytes transferred
+export struct io_result
+{
+    std::error_code error;         // Error code
+    std::size_t bytes_transferred; // Number of bytes transferred
 
-    [[nodiscard]] auto success() const noexcept -> bool {
+    [[nodiscard]] auto success() const noexcept -> bool
+    {
         return !error;
     }
 
-    explicit operator bool() const noexcept {
+    explicit operator bool() const noexcept
+    {
         return success();
     }
 };
@@ -53,7 +57,8 @@ export struct io_result {
 
 /// Async I/O operation abstract base class
 /// Platform-specific implementations need to inherit from this class
-export class io_operation {
+export class io_operation
+{
 public:
     virtual ~io_operation() = default;
 

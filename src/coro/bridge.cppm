@@ -33,9 +33,9 @@
 module;
 
 #include <cnetmod/config.hpp>
+#include <exec/static_thread_pool.hpp>
 #include <new>
 #include <stdexec/execution.hpp>
-#include <exec/static_thread_pool.hpp>
 
 export module cnetmod.coro.bridge;
 
@@ -70,48 +70,46 @@ namespace cnetmod {
 ///   });
 namespace detail {
 
-/// blocking_invoke coroutine implementation (not exported, avoids MSVC 14.50 "export coroutine template" ICE bug)
-template <typename F>
-    requires std::invocable<F>
-          && (!std::is_void_v<std::invoke_result_t<F>>)
-auto blocking_invoke_impl(exec::static_thread_pool& pool, io_context& io, F fn)
-    -> task<std::invoke_result_t<F>>
-{
-    using R = std::invoke_result_t<F>;
-    co_await pool_post_awaitable{pool};
-    R result = fn();
-    co_await post_awaitable{io};
-    co_return std::move(result);
-}
+    /// blocking_invoke coroutine implementation (not exported, avoids MSVC 14.50 "export coroutine template" ICE bug)
+    template <typename F>
+    requires std::invocable<F> && (!std::is_void_v<std::invoke_result_t<F>>)
+    auto blocking_invoke_impl(exec::static_thread_pool& pool, io_context& io, F fn)
+        -> task<std::invoke_result_t<F>>
+    {
+        using R = std::invoke_result_t<F>;
+        co_await pool_post_awaitable{pool};
+        R result = fn();
+        co_await post_awaitable{io};
+        co_return std::move(result);
+    }
 
-template <typename F>
-    requires std::invocable<F>
-          && std::is_void_v<std::invoke_result_t<F>>
-auto blocking_invoke_impl(exec::static_thread_pool& pool, io_context& io, F fn)
-    -> task<void>
-{
-    co_await pool_post_awaitable{pool};
-    fn();
-    co_await post_awaitable{io};
-}
+    template <typename F>
+    requires std::invocable<F> && std::is_void_v<std::invoke_result_t<F>>
+    auto blocking_invoke_impl(exec::static_thread_pool& pool, io_context& io, F fn)
+        -> task<void>
+    {
+        co_await pool_post_awaitable{pool};
+        fn();
+        co_await post_awaitable{io};
+    }
 
 } // namespace detail
 
 /// Non-coroutine wrapper: calls detail layer coroutine implementation, avoids MSVC IFC export coroutine template ICE
 /// Uses auto return type, avoids MSVC 14.50 ICE when serializing task<...> dependent type to IFC
 export template <typename F>
-    requires std::invocable<std::decay_t<F>>
-          && (!std::is_void_v<std::invoke_result_t<std::decay_t<F>>>)
-auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn) {
+requires std::invocable<std::decay_t<F>> && (!std::is_void_v<std::invoke_result_t<std::decay_t<F>>>)
+auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn)
+{
     return detail::blocking_invoke_impl(
         pool, io, std::decay_t<F>(std::forward<F>(fn)));
 }
 
 /// void return value specialization
 export template <typename F>
-    requires std::invocable<std::decay_t<F>>
-          && std::is_void_v<std::invoke_result_t<std::decay_t<F>>>
-auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn) {
+requires std::invocable<std::decay_t<F>> && std::is_void_v<std::invoke_result_t<std::decay_t<F>>>
+auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn)
+{
     return detail::blocking_invoke_impl(
         pool, io, std::decay_t<F>(std::forward<F>(fn)));
 }
@@ -131,63 +129,83 @@ auto blocking_invoke(exec::static_thread_pool& pool, io_context& io, F&& fn) {
 
 namespace detail {
 
-/// Bridge receiver for sender_awaitable (non-void)
-template <typename T>
-struct bridge_receiver {
-    using receiver_concept = stdexec::receiver_t;
+    /// Bridge receiver for sender_awaitable (non-void)
+    template <typename T>
+    struct bridge_receiver
+    {
+        using receiver_concept = stdexec::receiver_t;
 
-    std::optional<T>* result_;
-    std::exception_ptr* error_;
-    std::coroutine_handle<>* coro_;
+        std::optional<T>* result_;
+        std::exception_ptr* error_;
+        std::coroutine_handle<>* coro_;
 
-    void set_value(T val) noexcept {
-        result_->emplace(std::move(val));
-        coro_->resume();
-    }
+        void set_value(T val) noexcept
+        {
+            result_->emplace(std::move(val));
+            coro_->resume();
+        }
 
-    void set_error(std::exception_ptr e) noexcept {
-        *error_ = std::move(e);
-        coro_->resume();
-    }
+        void set_error(std::exception_ptr e) noexcept
+        {
+            *error_ = std::move(e);
+            coro_->resume();
+        }
 
-    void set_stopped() noexcept {
-        *error_ = std::make_exception_ptr(
-            std::runtime_error("sender stopped"));
-        coro_->resume();
-    }
+        void set_stopped() noexcept
+        {
+            *error_ = std::make_exception_ptr(
+                std::runtime_error("sender stopped"));
+            coro_->resume();
+        }
 
-    struct env {};
-    auto get_env() const noexcept -> env { return {}; }
-};
+        struct env
+        {
+        };
 
-/// void specialization
-template <>
-struct bridge_receiver<void> {
-    using receiver_concept = stdexec::receiver_t;
+        auto get_env() const noexcept -> env
+        {
+            return {};
+        }
+    };
 
-    bool* done_;
-    std::exception_ptr* error_;
-    std::coroutine_handle<>* coro_;
+    /// void specialization
+    template <>
+    struct bridge_receiver<void>
+    {
+        using receiver_concept = stdexec::receiver_t;
 
-    void set_value() noexcept {
-        *done_ = true;
-        coro_->resume();
-    }
+        bool* done_;
+        std::exception_ptr* error_;
+        std::coroutine_handle<>* coro_;
 
-    void set_error(std::exception_ptr e) noexcept {
-        *error_ = std::move(e);
-        coro_->resume();
-    }
+        void set_value() noexcept
+        {
+            *done_ = true;
+            coro_->resume();
+        }
 
-    void set_stopped() noexcept {
-        *error_ = std::make_exception_ptr(
-            std::runtime_error("sender stopped"));
-        coro_->resume();
-    }
+        void set_error(std::exception_ptr e) noexcept
+        {
+            *error_ = std::move(e);
+            coro_->resume();
+        }
 
-    struct env {};
-    auto get_env() const noexcept -> env { return {}; }
-};
+        void set_stopped() noexcept
+        {
+            *error_ = std::make_exception_ptr(
+                std::runtime_error("sender stopped"));
+            coro_->resume();
+        }
+
+        struct env
+        {
+        };
+
+        auto get_env() const noexcept -> env
+        {
+            return {};
+        }
+    };
 
 } // namespace detail
 
@@ -200,7 +218,8 @@ struct bridge_receiver<void> {
 ///   auto v = co_await sender_awaitable<int, decltype(sndr)>{std::move(sndr)};
 ///   // Or use await_sender<int>(sndr) factory function
 template <typename T, typename Sender>
-struct sender_awaitable {
+struct sender_awaitable
+{
     using receiver_t = detail::bridge_receiver<T>;
     using op_t = stdexec::connect_result_t<Sender, receiver_t>;
 
@@ -213,17 +232,22 @@ struct sender_awaitable {
     explicit sender_awaitable(Sender sndr)
         : sender_(std::move(sndr)) {}
 
-    auto await_ready() const noexcept -> bool { return false; }
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
 
-    void await_suspend(std::coroutine_handle<> h) noexcept {
+    void await_suspend(std::coroutine_handle<> h) noexcept
+    {
         coro_ = h;
         auto* op = new (op_storage_) op_t(
             stdexec::connect(std::move(sender_),
-                             receiver_t{&result_, &error_, &coro_}));
+                receiver_t{&result_, &error_, &coro_}));
         stdexec::start(*op);
     }
 
-    auto await_resume() -> T {
+    auto await_resume() -> T
+    {
         // Destroy op_state
         std::launder(reinterpret_cast<op_t*>(op_storage_))->~op_t();
         if (error_)
@@ -234,7 +258,8 @@ struct sender_awaitable {
 
 /// void sender specialization
 template <typename Sender>
-struct sender_awaitable<void, Sender> {
+struct sender_awaitable<void, Sender>
+{
     using receiver_t = detail::bridge_receiver<void>;
     using op_t = stdexec::connect_result_t<Sender, receiver_t>;
 
@@ -247,17 +272,22 @@ struct sender_awaitable<void, Sender> {
     explicit sender_awaitable(Sender sndr)
         : sender_(std::move(sndr)) {}
 
-    auto await_ready() const noexcept -> bool { return false; }
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
 
-    void await_suspend(std::coroutine_handle<> h) noexcept {
+    void await_suspend(std::coroutine_handle<> h) noexcept
+    {
         coro_ = h;
         auto* op = new (op_storage_) op_t(
             stdexec::connect(std::move(sender_),
-                             receiver_t{&done_, &error_, &coro_}));
+                receiver_t{&done_, &error_, &coro_}));
         stdexec::start(*op);
     }
 
-    void await_resume() {
+    void await_resume()
+    {
         std::launder(reinterpret_cast<op_t*>(op_storage_))->~op_t();
         if (error_)
             std::rethrow_exception(error_);
@@ -272,7 +302,8 @@ struct sender_awaitable<void, Sender> {
 /// T needs to be explicitly specified (sender's value type)
 /// Uses auto return type, avoids MSVC 14.50 ICE when serializing sender_awaitable<...> to IFC
 export template <typename T, typename Sender>
-auto await_sender(Sender&& sndr) {
+auto await_sender(Sender&& sndr)
+{
     return sender_awaitable<T, std::decay_t<Sender>>{
         std::forward<Sender>(sndr)};
 }
@@ -297,19 +328,24 @@ auto await_sender(Sender&& sndr) {
 /// the actual coroutine implementation is in detail::from_awaitable_impl (not exported).
 /// This is a workaround for MSVC 14.50 ICE bug with "exported coroutine templates".
 namespace detail {
-template <typename T, typename Awaitable>
-auto from_awaitable_impl(Awaitable aw) -> task<T> {
-    if constexpr (std::is_void_v<T>) {
-        co_await std::move(aw);
-    } else {
-        co_return co_await std::move(aw);
+    template <typename T, typename Awaitable>
+    auto from_awaitable_impl(Awaitable aw) -> task<T>
+    {
+        if constexpr (std::is_void_v<T>)
+        {
+            co_await std::move(aw);
+        }
+        else
+        {
+            co_return co_await std::move(aw);
+        }
     }
-}
 } // namespace detail
 
 /// Uses auto return type, avoids MSVC 14.50 ICE when serializing task<T> to IFC
 export template <typename T, typename Awaitable>
-auto from_awaitable(Awaitable&& aw) {
+auto from_awaitable(Awaitable&& aw)
+{
     // Non-coroutine wrapper: calls detail layer coroutine implementation, avoids MSVC IFC export coroutine template ICE
     return detail::from_awaitable_impl<T>(std::forward<Awaitable>(aw));
 }

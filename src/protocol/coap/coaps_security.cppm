@@ -15,19 +15,22 @@ import cnetmod.core.ssl;
 
 namespace cnetmod::coap {
 
-export enum class coaps_peer_verification {
+export enum class coaps_peer_verification
+{
     context_default,
     none,
     required,
 };
 
-export enum class coaps_identity_policy {
+export enum class coaps_identity_policy
+{
     none,
     configured_name,
     remote_address,
 };
 
-export enum class coaps_security_failure {
+export enum class coaps_security_failure
+{
     none,
     context_configuration,
     certificate_verification,
@@ -36,7 +39,8 @@ export enum class coaps_security_failure {
     transport,
 };
 
-export struct coaps_security_config {
+export struct coaps_security_config
+{
     coaps_peer_verification verify_peer = coaps_peer_verification::context_default;
     coaps_identity_policy identity = coaps_identity_policy::remote_address;
     std::string peer_name;

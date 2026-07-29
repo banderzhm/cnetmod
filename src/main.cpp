@@ -1,37 +1,43 @@
-#include <cnetmod/version.hpp>
 #include <cnetmod/config.hpp>
+#include <cnetmod/version.hpp>
 
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.io.io_context;
 import cnetmod.executor.scheduler;
+
 // import cnetmod.core.log;
 
 // =============================================================================
 // Demo: coroutine chain + spawn + stdexec bridge (smoke test)
 // =============================================================================
 
-auto echo(std::string msg) -> cnetmod::task<std::string> {
+auto echo(std::string msg) -> cnetmod::task<std::string>
+{
     co_return "echo: " + msg;
 }
 
-auto demo_chain() -> cnetmod::task<void> {
+auto demo_chain() -> cnetmod::task<void>
+{
     auto r = co_await echo("Hello, cnetmod!");
     std::println("  {}", r);
 }
 
-auto compute(int x, int y) -> cnetmod::task<int> {
-    co_return x * y + 1;
+auto compute(int x, int y) -> cnetmod::task<int>
+{
+    co_return x* y + 1;
 }
 
-auto demo_spawn(cnetmod::io_context& ctx) -> cnetmod::task<void> {
+auto demo_spawn(cnetmod::io_context& ctx) -> cnetmod::task<void>
+{
     std::println("  spawn task running on event loop!");
     ctx.stop();
     co_return;
 }
 
-auto main() -> int {
+auto main() -> int
+{
     std::println("cnetmod v{}", CNETMOD_VERSION_STRING);
 
     // 1. coroutine chain

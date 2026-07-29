@@ -18,19 +18,21 @@ import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 
-export struct coaps_session_manager_options {
+export struct coaps_session_manager_options
+{
     coaps_session_options session;
     std::size_t max_sessions = 1024;
     std::size_t queue_capacity = 64;
     std::chrono::steady_clock::duration idle_timeout = std::chrono::seconds{120};
 };
 
-export class coaps_session_manager {
+export class coaps_session_manager
+{
 public:
     coaps_session_manager(io_context& ctx,
-                          ssl_context& ssl_ctx,
-                          socket& sock,
-                          coaps_session_manager_options options);
+        ssl_context& ssl_ctx,
+        socket& sock,
+        coaps_session_manager_options options);
 
     coaps_session_manager(const coaps_session_manager&) = delete;
     auto operator=(const coaps_session_manager&) -> coaps_session_manager& = delete;

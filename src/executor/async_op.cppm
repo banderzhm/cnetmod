@@ -31,7 +31,7 @@ export auto async_accept(io_context& ctx, socket& listener)
 
 /// Cancellable async accept
 export auto async_accept(io_context& ctx, socket& listener,
-                         cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<socket, std::error_code>>;
 
 /// Async connect
@@ -41,7 +41,7 @@ export auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
 
 /// Cancellable async connect
 export auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
-                          cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
 /// Async read
@@ -51,36 +51,36 @@ export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
 
 /// Cancellable async read
 export auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
-                       cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async read until delimiter is present in dynamic_buffer.
 /// Returns bytes from buffer readable start through the delimiter; does not consume.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                             std::string_view delimiter,
-                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
-                             std::size_t read_chunk_size = 4096)
+    std::string_view delimiter,
+    std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+    std::size_t read_chunk_size = 4096)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async read until delimiter is present in dynamic_buffer.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                             std::string_view delimiter, cancel_token& token,
-                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
-                             std::size_t read_chunk_size = 4096)
+    std::string_view delimiter, cancel_token& token,
+    std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+    std::size_t read_chunk_size = 4096)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async read until a single byte delimiter is present in dynamic_buffer.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                             char delimiter,
-                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
-                             std::size_t read_chunk_size = 4096)
+    char delimiter,
+    std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+    std::size_t read_chunk_size = 4096)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async read until a single byte delimiter is present in dynamic_buffer.
 export auto async_read_until(io_context& ctx, socket& sock, dynamic_buffer& buf,
-                             char delimiter, cancel_token& token,
-                             std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
-                             std::size_t read_chunk_size = 4096)
+    char delimiter, cancel_token& token,
+    std::size_t max_bytes = std::numeric_limits<std::size_t>::max(),
+    std::size_t read_chunk_size = 4096)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async write
@@ -90,7 +90,7 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 
 /// Cancellable async write
 export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
-                        cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async write all bytes in a buffer
@@ -100,7 +100,7 @@ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
 
 /// Cancellable async write all bytes in a buffer
 export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
-                            cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
 #ifdef CNETMOD_PLATFORM_LINUX
@@ -117,25 +117,25 @@ export auto async_wait_writable(io_context& ctx, socket& sock)
 /// Async recvfrom — Receive UDP datagram and get sender address
 /// Usage: auto n = co_await async_recvfrom(ctx, sock, buf, peer);
 export auto async_recvfrom(io_context& ctx, socket& sock,
-                           mutable_buffer buf, endpoint& peer)
+    mutable_buffer buf, endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async recvfrom
 export auto async_recvfrom(io_context& ctx, socket& sock,
-                           mutable_buffer buf, endpoint& peer,
-                           cancel_token& token)
+    mutable_buffer buf, endpoint& peer,
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async sendto — Send UDP datagram to specified address
 /// Usage: auto n = co_await async_sendto(ctx, sock, buf, peer);
 export auto async_sendto(io_context& ctx, socket& sock,
-                         const_buffer buf, const endpoint& peer)
+    const_buffer buf, const endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async sendto
 export auto async_sendto(io_context& ctx, socket& sock,
-                         const_buffer buf, const endpoint& peer,
-                         cancel_token& token)
+    const_buffer buf, const endpoint& peer,
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 // =============================================================================
@@ -145,27 +145,27 @@ export auto async_sendto(io_context& ctx, socket& sock,
 /// Async file open
 /// Usage: auto f = co_await async_file_open(ctx, path, mode);
 export auto async_file_open(io_context& ctx,
-                            const std::filesystem::path& path,
-                            open_mode mode)
+    const std::filesystem::path& path,
+    open_mode mode)
     -> task<std::expected<file, std::error_code>>;
 
 /// Cancellable async file open
 export auto async_file_open(io_context& ctx,
-                            const std::filesystem::path& path,
-                            open_mode mode,
-                            cancel_token& token)
+    const std::filesystem::path& path,
+    open_mode mode,
+    cancel_token& token)
     -> task<std::expected<file, std::error_code>>;
 
 /// Async file stat
 /// Usage: auto st = co_await async_file_stat(ctx, path);
 export auto async_file_stat(io_context& ctx,
-                            const std::filesystem::path& path)
+    const std::filesystem::path& path)
     -> task<std::expected<file_stat, std::error_code>>;
 
 /// Cancellable async file stat
 export auto async_file_stat(io_context& ctx,
-                            const std::filesystem::path& path,
-                            cancel_token& token)
+    const std::filesystem::path& path,
+    cancel_token& token)
     -> task<std::expected<file_stat, std::error_code>>;
 
 /// Async file close (best-effort, underlying close has no error reporting)
@@ -180,23 +180,23 @@ export auto async_file_close(io_context& ctx, file& f, cancel_token& token)
 /// Async file read
 /// Usage: auto n = co_await async_file_read(ctx, f, buf, offset);
 export auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                            std::uint64_t offset = 0)
+    std::uint64_t offset = 0)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async file read
 export auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                            std::uint64_t offset, cancel_token& token)
+    std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async file write
 /// Usage: auto n = co_await async_file_write(ctx, f, buf, offset);
 export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                             std::uint64_t offset = 0)
+    std::uint64_t offset = 0)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async file write
 export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                             std::uint64_t offset, cancel_token& token)
+    std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 export using file_io_result =
@@ -204,7 +204,8 @@ export using file_io_result =
 
 /// One entry in a batched file read operation. The pointed-to file and buffer
 /// must remain valid until async_file_read_batch() completes.
-export struct file_read_request {
+export struct file_read_request
+{
     file* source = nullptr;
     mutable_buffer destination{};
     std::uint64_t offset = 0;
@@ -212,7 +213,8 @@ export struct file_read_request {
 
 /// One entry in a batched file write operation. The pointed-to file and buffer
 /// must remain valid until async_file_write_batch() completes.
-export struct file_write_request {
+export struct file_write_request
+{
     file* destination = nullptr;
     const_buffer source{};
     std::uint64_t offset = 0;
@@ -230,7 +232,8 @@ export auto async_file_write_batch(
     io_context& ctx, std::span<const file_write_request> requests)
     -> task<std::vector<file_io_result>>;
 
-export struct file_pipeline_options {
+export struct file_pipeline_options
+{
     std::uint64_t offset = 0;
     std::uint64_t byte_count = std::numeric_limits<std::uint64_t>::max();
     std::size_t chunk_size = 256 * 1024;
@@ -279,23 +282,23 @@ export auto async_send_file(
 /// Async serial port read
 /// Usage: auto n = co_await async_serial_read(ctx, port, buf);
 export auto async_serial_read(io_context& ctx, serial_port& port,
-                              mutable_buffer buf)
+    mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async serial port read
 export auto async_serial_read(io_context& ctx, serial_port& port,
-                              mutable_buffer buf, cancel_token& token)
+    mutable_buffer buf, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Async serial port write
 /// Usage: auto n = co_await async_serial_write(ctx, port, buf);
 export auto async_serial_write(io_context& ctx, serial_port& port,
-                               const_buffer buf)
+    const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 /// Cancellable async serial port write
 export auto async_serial_write(io_context& ctx, serial_port& port,
-                               const_buffer buf, cancel_token& token)
+    const_buffer buf, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 // =============================================================================
@@ -305,13 +308,13 @@ export auto async_serial_write(io_context& ctx, serial_port& port,
 /// Async wait for specified duration
 /// Usage: co_await async_timer_wait(ctx, std::chrono::milliseconds(500));
 export auto async_timer_wait(io_context& ctx,
-                             std::chrono::steady_clock::duration duration)
+    std::chrono::steady_clock::duration duration)
     -> task<std::expected<void, std::error_code>>;
 
 /// Cancellable async timer
 export auto async_timer_wait(io_context& ctx,
-                             std::chrono::steady_clock::duration duration,
-                             cancel_token& token)
+    std::chrono::steady_clock::duration duration,
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
 } // namespace cnetmod

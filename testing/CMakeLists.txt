@@ -8,5 +8,9 @@ if(CNETMOD_BUILD_BENCH AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/bench/CMakeLists.
     add_subdirectory(bench)
 endif()
 
+if(CNETMOD_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/messaging/CMakeLists.txt")
+    add_subdirectory(messaging)
+endif()
+
 set(CNETMOD_TEST_TARGETS ${CNETMOD_TEST_TARGETS} PARENT_SCOPE)
 set(CNETMOD_BENCH_TARGETS ${CNETMOD_BENCH_TARGETS} PARENT_SCOPE)

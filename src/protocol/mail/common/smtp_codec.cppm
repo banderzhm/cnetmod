@@ -10,7 +10,7 @@ export namespace cnetmod::mail {
     -> std::expected<reply, std::string>;
 [[nodiscard]] auto
 serialize_command(std::string_view verb,
-                  std::span<const std::string_view> arguments)
+    std::span<const std::string_view> arguments)
     -> std::expected<std::string, std::string>;
 [[nodiscard]] auto dot_stuff(std::string_view body)
     -> std::expected<std::string, std::string>;

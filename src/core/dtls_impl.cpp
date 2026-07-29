@@ -3,11 +3,11 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_HAS_SSL
-#include <openssl/ssl.h>
-#include <openssl/err.h>
-#include <openssl/bio.h>
-#include <openssl/x509.h>
-#include <algorithm>
+    #include <algorithm>
+    #include <openssl/bio.h>
+    #include <openssl/err.h>
+    #include <openssl/ssl.h>
+    #include <openssl/x509.h>
 #endif
 
 module cnetmod.core.dtls;
@@ -24,24 +24,22 @@ namespace cnetmod {
 
 namespace {
 
-auto endpoint_key(const endpoint& ep) -> std::string {
-    return ep.to_string();
-}
+    auto endpoint_key(const endpoint& ep) -> std::string
+    {
+        return ep.to_string();
+    }
 
 } // namespace
 
-struct dtls_datagram_session::impl {
+struct dtls_datagram_session::impl
+{
     impl(ssl_context& ssl_ctx,
-         io_context& io_ctx,
-         socket& sock,
-         endpoint peer,
-         dtls_role role,
-         dtls_datagram_options options)
-        : io_ctx(io_ctx)
-        , sock(sock)
-        , peer(std::move(peer))
-        , peer_key(endpoint_key(this->peer))
-        , options(options)
+        io_context& io_ctx,
+        socket& sock,
+        endpoint peer,
+        dtls_role role,
+        dtls_datagram_options options)
+        : io_ctx(io_ctx), sock(sock), peer(std::move(peer)), peer_key(endpoint_key(this->peer)), options(options)
     {
         ssl = SSL_new(ssl_ctx.native());
         rbio = BIO_new(BIO_s_mem());
@@ -50,35 +48,44 @@ struct dtls_datagram_session::impl {
         BIO_set_mem_eof_return(wbio, -1);
         SSL_set_bio(ssl, rbio, wbio);
         SSL_set_mtu(ssl, static_cast<unsigned int>(std::max<std::size_t>(options.mtu, 576)));
-#ifdef DTLS_set_link_mtu
+    #ifdef DTLS_set_link_mtu
         DTLS_set_link_mtu(ssl, static_cast<unsigned int>(std::max<std::size_t>(options.mtu, 576)));
-#endif
-        if (role == dtls_role::client) {
+    #endif
+        if (role == dtls_role::client)
+        {
             SSL_set_connect_state(ssl);
-        } else {
+        }
+        else
+        {
             SSL_set_accept_state(ssl);
         }
     }
 
-    ~impl() {
-        if (ssl) {
+    ~impl()
+    {
+        if (ssl)
+        {
             SSL_free(ssl);
         }
     }
 
-    auto flush_wbio() -> task<std::expected<void, std::error_code>> {
+    auto flush_wbio() -> task<std::expected<void, std::error_code>>
+    {
         std::vector<std::byte> out;
         out.resize(65536);
 
-        for (;;) {
+        for (;;)
+        {
             auto pending = static_cast<int>(BIO_ctrl_pending(wbio));
-            if (pending <= 0) {
+            if (pending <= 0)
+            {
                 break;
             }
 
             const auto want = std::min<int>(pending, static_cast<int>(out.size()));
             const int n = BIO_read(wbio, out.data(), want);
-            if (n <= 0) {
+            if (n <= 0)
+            {
                 break;
             }
 
@@ -87,7 +94,8 @@ struct dtls_datagram_session::impl {
                 sock,
                 const_buffer{out.data(), static_cast<std::size_t>(n)},
                 peer);
-            if (!sent) {
+            if (!sent)
+            {
                 co_return std::unexpected(sent.error());
             }
         }
@@ -95,19 +103,24 @@ struct dtls_datagram_session::impl {
         co_return {};
     }
 
-    auto fill_rbio() -> task<std::expected<void, std::error_code>> {
-        if (!queued.empty()) {
+    auto fill_rbio() -> task<std::expected<void, std::error_code>>
+    {
+        if (!queued.empty())
+        {
             BIO_write(rbio, queued.data(), static_cast<int>(queued.size()));
             queued.clear();
             co_return {};
         }
 
-        if (receive) {
+        if (receive)
+        {
             auto datagram = co_await receive();
-            if (!datagram) {
+            if (!datagram)
+            {
                 co_return std::unexpected(datagram.error());
             }
-            if (datagram->empty()) {
+            if (datagram->empty())
+            {
                 co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
             }
             BIO_write(rbio, datagram->data(), static_cast<int>(datagram->size()));
@@ -117,20 +130,24 @@ struct dtls_datagram_session::impl {
         std::vector<std::byte> in;
         in.resize(std::max<std::size_t>(options.recv_buffer_size, 2048));
 
-        for (;;) {
+        for (;;)
+        {
             endpoint from;
             auto n = co_await async_recvfrom(
                 io_ctx,
                 sock,
                 mutable_buffer{in.data(), in.size()},
                 from);
-            if (!n) {
+            if (!n)
+            {
                 co_return std::unexpected(n.error());
             }
-            if (endpoint_key(from) != peer_key) {
+            if (endpoint_key(from) != peer_key)
+            {
                 continue;
             }
-            if (*n == 0) {
+            if (*n == 0)
+            {
                 continue;
             }
             BIO_write(rbio, in.data(), static_cast<int>(*n));
@@ -151,11 +168,11 @@ struct dtls_datagram_session::impl {
 };
 
 dtls_datagram_session::dtls_datagram_session(ssl_context& ssl_ctx,
-                                             io_context& io_ctx,
-                                             socket& sock,
-                                             endpoint peer,
-                                             dtls_role role,
-                                             dtls_datagram_options options)
+    io_context& io_ctx,
+    socket& sock,
+    endpoint peer,
+    dtls_role role,
+    dtls_datagram_options options)
     : impl_(std::make_unique<impl>(ssl_ctx, io_ctx, sock, std::move(peer), role, options))
 {}
 
@@ -166,17 +183,19 @@ dtls_datagram_session::dtls_datagram_session(dtls_datagram_session&&) noexcept =
 auto dtls_datagram_session::operator=(dtls_datagram_session&&) noexcept
     -> dtls_datagram_session& = default;
 
-void dtls_datagram_session::set_hostname(std::string_view hostname) {
+void dtls_datagram_session::set_hostname(std::string_view hostname)
+{
     std::string h(hostname);
     auto* param = SSL_get0_param(impl_->ssl);
 
-    if (auto ip = ip_address::from_string(h)) {
+    if (auto ip = ip_address::from_string(h))
+    {
         auto literal = ip->to_string();
-#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+    #if OPENSSL_VERSION_NUMBER >= 0x10100000L
         X509_VERIFY_PARAM_set1_ip_asc(param, literal.c_str());
-#else
+    #else
         X509_VERIFY_PARAM_set1_host(param, literal.c_str(), literal.size());
-#endif
+    #endif
         return;
     }
 
@@ -184,52 +203,65 @@ void dtls_datagram_session::set_hostname(std::string_view hostname) {
     X509_VERIFY_PARAM_set1_host(param, h.c_str(), h.size());
 }
 
-void dtls_datagram_session::queue_datagram(const_buffer datagram) {
+void dtls_datagram_session::queue_datagram(const_buffer datagram)
+{
     const auto* first = static_cast<const std::byte*>(datagram.data);
     impl_->queued.assign(first, first + datagram.size);
 }
 
-void dtls_datagram_session::set_receive_handler(receive_handler handler) {
+void dtls_datagram_session::set_receive_handler(receive_handler handler)
+{
     impl_->receive = std::move(handler);
 }
 
-auto dtls_datagram_session::peer() const noexcept -> const endpoint& {
+auto dtls_datagram_session::peer() const noexcept -> const endpoint&
+{
     return impl_->peer;
 }
 
-auto dtls_datagram_session::native() const noexcept -> void* {
+auto dtls_datagram_session::native() const noexcept -> void*
+{
     return impl_->ssl;
 }
 
 auto dtls_datagram_session::async_handshake()
     -> task<std::expected<void, std::error_code>>
 {
-    for (;;) {
+    for (;;)
+    {
         const int ret = SSL_do_handshake(impl_->ssl);
-        if (ret == 1) {
+        if (ret == 1)
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             co_return {};
         }
 
         const int err = SSL_get_error(impl_->ssl, ret);
-        switch (err) {
-        case SSL_ERROR_WANT_WRITE: {
+        switch (err)
+        {
+        case SSL_ERROR_WANT_WRITE:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             break;
         }
-        case SSL_ERROR_WANT_READ: {
+        case SSL_ERROR_WANT_READ:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             auto filled = co_await impl_->fill_rbio();
-            if (!filled) {
+            if (!filled)
+            {
                 co_return std::unexpected(filled.error());
             }
             break;
@@ -243,28 +275,36 @@ auto dtls_datagram_session::async_handshake()
 auto dtls_datagram_session::async_read(mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
-    for (;;) {
+    for (;;)
+    {
         const int ret = SSL_read(impl_->ssl, buf.data, static_cast<int>(buf.size));
-        if (ret > 0) {
+        if (ret > 0)
+        {
             co_return static_cast<std::size_t>(ret);
         }
 
         const int err = SSL_get_error(impl_->ssl, ret);
-        switch (err) {
-        case SSL_ERROR_WANT_READ: {
+        switch (err)
+        {
+        case SSL_ERROR_WANT_READ:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             auto filled = co_await impl_->fill_rbio();
-            if (!filled) {
+            if (!filled)
+            {
                 co_return std::unexpected(filled.error());
             }
             break;
         }
-        case SSL_ERROR_WANT_WRITE: {
+        case SSL_ERROR_WANT_WRITE:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             break;
@@ -280,32 +320,41 @@ auto dtls_datagram_session::async_read(mutable_buffer buf)
 auto dtls_datagram_session::async_write(const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
-    for (;;) {
+    for (;;)
+    {
         const int ret = SSL_write(impl_->ssl, buf.data, static_cast<int>(buf.size));
-        if (ret > 0) {
+        if (ret > 0)
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             co_return static_cast<std::size_t>(ret);
         }
 
         const int err = SSL_get_error(impl_->ssl, ret);
-        switch (err) {
-        case SSL_ERROR_WANT_WRITE: {
+        switch (err)
+        {
+        case SSL_ERROR_WANT_WRITE:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             break;
         }
-        case SSL_ERROR_WANT_READ: {
+        case SSL_ERROR_WANT_READ:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             auto filled = co_await impl_->fill_rbio();
-            if (!filled) {
+            if (!filled)
+            {
                 co_return std::unexpected(filled.error());
             }
             break;
@@ -319,44 +368,56 @@ auto dtls_datagram_session::async_write(const_buffer buf)
 auto dtls_datagram_session::async_shutdown()
     -> task<std::expected<void, std::error_code>>
 {
-    for (int attempt = 0; attempt < 2; ++attempt) {
+    for (int attempt = 0; attempt < 2; ++attempt)
+    {
         const int ret = SSL_shutdown(impl_->ssl);
-        if (ret == 1) {
+        if (ret == 1)
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             co_return {};
         }
-        if (ret == 0) {
+        if (ret == 0)
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             auto filled = co_await impl_->fill_rbio();
-            if (!filled) {
+            if (!filled)
+            {
                 co_return std::unexpected(filled.error());
             }
             continue;
         }
 
         const int err = SSL_get_error(impl_->ssl, ret);
-        switch (err) {
-        case SSL_ERROR_WANT_WRITE: {
+        switch (err)
+        {
+        case SSL_ERROR_WANT_WRITE:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             --attempt;
             break;
         }
-        case SSL_ERROR_WANT_READ: {
+        case SSL_ERROR_WANT_READ:
+        {
             auto flushed = co_await impl_->flush_wbio();
-            if (!flushed) {
+            if (!flushed)
+            {
                 co_return std::unexpected(flushed.error());
             }
             auto filled = co_await impl_->fill_rbio();
-            if (!filled) {
+            if (!filled)
+            {
                 co_return std::unexpected(filled.error());
             }
             --attempt;

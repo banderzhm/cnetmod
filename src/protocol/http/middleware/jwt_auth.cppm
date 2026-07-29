@@ -43,12 +43,14 @@ namespace cnetmod {
 
 /// Generate cryptographically secure random token (hex encoded)
 /// MSVC uses BCryptGenRandom, GCC/Clang uses /dev/urandom
-export inline auto generate_secure_token(std::size_t bytes = 32) -> std::string {
+export inline auto generate_secure_token(std::size_t bytes = 32) -> std::string
+{
     static thread_local std::random_device rd;
     static constexpr char hex[] = "0123456789abcdef";
     std::string token;
     token.reserve(bytes * 2);
-    for (std::size_t i = 0; i < bytes; ++i) {
+    for (std::size_t i = 0; i < bytes; ++i)
+    {
         auto byte = static_cast<std::uint8_t>(rd() & 0xFF);
         token.push_back(hex[(byte >> 4) & 0x0F]);
         token.push_back(hex[byte & 0x0F]);
@@ -60,7 +62,8 @@ export inline auto generate_secure_token(std::size_t bytes = 32) -> std::string 
 // jwt_auth_options — JWT authentication configuration
 // =============================================================================
 
-export struct jwt_auth_options {
+export struct jwt_auth_options
+{
     /// Token verification function: returns true if valid
     std::function<bool(std::string_view token)> verify;
 
@@ -87,17 +90,13 @@ export struct jwt_auth_options {
 
 export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
 {
-    return [opts = std::move(opts)]
-           (http::request_context& ctx, http::next_fn next) -> task<void>
+    return [opts = std::move(opts)](http::request_context& ctx, http::next_fn next) -> task<void>
     {
         // Skip specified paths
         auto path = ctx.path();
-        for (auto& skip : opts.skip_paths) {
-            if (path == skip
-                || (!skip.empty() && skip != "/"
-                    && path.starts_with(skip)
-                    && (path.size() == skip.size()
-                        || path[skip.size()] == '/')))
+        for (auto& skip : opts.skip_paths)
+        {
+            if (path == skip || (!skip.empty() && skip != "/" && path.starts_with(skip) && (path.size() == skip.size() || path[skip.size()] == '/')))
             {
                 co_await next();
                 co_return;
@@ -106,15 +105,18 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
 
         // Extract token
         auto auth = ctx.get_header(opts.header_name);
-        if (auth.empty()) {
+        if (auth.empty())
+        {
             ctx.json(http::status::unauthorized,
                 R"({"error":"missing authorization header"})");
             co_return;
         }
 
         std::string_view token = auth;
-        if (!opts.token_prefix.empty()) {
-            if (!auth.starts_with(opts.token_prefix)) {
+        if (!opts.token_prefix.empty())
+        {
+            if (!auth.starts_with(opts.token_prefix))
+            {
                 ctx.json(http::status::unauthorized,
                     R"({"error":"invalid authorization format"})");
                 co_return;
@@ -123,7 +125,8 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         }
 
         // Verify
-        if (!opts.verify || !opts.verify(token)) {
+        if (!opts.verify || !opts.verify(token))
+        {
             ctx.json(http::status::unauthorized,
                 R"({"error":"invalid or expired token"})");
             co_return;

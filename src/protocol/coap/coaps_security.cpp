@@ -15,14 +15,16 @@ import cnetmod.core.ssl;
 
 namespace cnetmod::coap {
 
-auto coaps_security_config::insecure_for_testing() -> coaps_security_config {
+auto coaps_security_config::insecure_for_testing() -> coaps_security_config
+{
     coaps_security_config cfg;
     cfg.verify_peer = coaps_peer_verification::none;
     cfg.identity = coaps_identity_policy::none;
     return cfg;
 }
 
-auto coaps_security_config::verified_peer(std::string peer_name) -> coaps_security_config {
+auto coaps_security_config::verified_peer(std::string peer_name) -> coaps_security_config
+{
     coaps_security_config cfg;
     cfg.verify_peer = coaps_peer_verification::required;
     cfg.identity = peer_name.empty()
@@ -34,21 +36,26 @@ auto coaps_security_config::verified_peer(std::string peer_name) -> coaps_securi
 }
 
 auto configure_coaps_context(ssl_context& ctx,
-                             const coaps_security_config& cfg)
+    const coaps_security_config& cfg)
     -> std::expected<void, std::error_code>
 {
-    if (!cfg.ca_file.empty()) {
-        if (auto r = ctx.load_ca_file(cfg.ca_file); !r) {
+    if (!cfg.ca_file.empty())
+    {
+        if (auto r = ctx.load_ca_file(cfg.ca_file); !r)
+        {
             return std::unexpected(r.error());
         }
     }
-    if (cfg.use_default_ca) {
-        if (auto r = ctx.set_default_ca(); !r) {
+    if (cfg.use_default_ca)
+    {
+        if (auto r = ctx.set_default_ca(); !r)
+        {
             return std::unexpected(r.error());
         }
     }
 
-    switch (cfg.verify_peer) {
+    switch (cfg.verify_peer)
+    {
     case coaps_peer_verification::context_default:
         break;
     case coaps_peer_verification::none:
@@ -63,18 +70,21 @@ auto configure_coaps_context(ssl_context& ctx,
 }
 
 void configure_coaps_session_identity(dtls_datagram_session& session,
-                                      const endpoint& remote,
-                                      const coaps_security_config& cfg)
+    const endpoint& remote,
+    const coaps_security_config& cfg)
 {
-    if (cfg.verify_peer == coaps_peer_verification::none) {
+    if (cfg.verify_peer == coaps_peer_verification::none)
+    {
         return;
     }
 
-    switch (cfg.identity) {
+    switch (cfg.identity)
+    {
     case coaps_identity_policy::none:
         return;
     case coaps_identity_policy::configured_name:
-        if (!cfg.peer_name.empty()) {
+        if (!cfg.peer_name.empty())
+        {
             session.set_hostname(cfg.peer_name);
         }
         return;
@@ -87,17 +97,20 @@ void configure_coaps_session_identity(dtls_datagram_session& session,
 auto classify_coaps_security_error(const std::error_code& ec) noexcept
     -> coaps_security_failure
 {
-    if (!ec) {
+    if (!ec)
+    {
         return coaps_security_failure::none;
     }
     if (ec == std::make_error_code(std::errc::timed_out) ||
         ec == std::make_error_code(std::errc::connection_reset) ||
         ec == std::make_error_code(std::errc::connection_aborted) ||
         ec == std::make_error_code(std::errc::network_unreachable) ||
-        ec == std::make_error_code(std::errc::host_unreachable)) {
+        ec == std::make_error_code(std::errc::host_unreachable))
+    {
         return coaps_security_failure::transport;
     }
-    if (ec.category().name() == std::string_view{"openssl"}) {
+    if (ec.category().name() == std::string_view{"openssl"})
+    {
         return coaps_security_failure::handshake;
     }
     return coaps_security_failure::context_configuration;

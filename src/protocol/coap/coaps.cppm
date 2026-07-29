@@ -21,14 +21,16 @@ import cnetmod.coro.task;
 
 namespace cnetmod::coap {
 
-export struct secure_client_config {
+export struct secure_client_config
+{
     client_config coap;
     std::size_t dtls_mtu = 1400;
     coaps_security_config security;
     std::chrono::seconds handshake_timeout{10};
 };
 
-export struct secure_server_config {
+export struct secure_server_config
+{
     server_config coap;
     std::size_t dtls_mtu = 1400;
     std::size_t max_sessions = 1024;
@@ -38,10 +40,11 @@ export struct secure_server_config {
     std::chrono::seconds handshake_timeout{10};
 };
 
-export class secure_client {
+export class secure_client
+{
 public:
     explicit secure_client(io_context& ctx, ssl_context& ssl_ctx,
-                           secure_client_config cfg = {});
+        secure_client_config cfg = {});
 
     secure_client(const secure_client&) = delete;
     auto operator=(const secure_client&) -> secure_client& = delete;
@@ -53,7 +56,7 @@ public:
         -> task<std::expected<message, std::error_code>>;
 
     auto post(const endpoint& remote, std::string path, std::vector<std::byte> payload,
-              content_format format = content_format::octet_stream)
+        content_format format = content_format::octet_stream)
         -> task<std::expected<message, std::error_code>>;
 
     void close() noexcept;
@@ -70,16 +73,17 @@ private:
     std::mt19937_64 rng_;
 };
 
-export class secure_server {
+export class secure_server
+{
 public:
     explicit secure_server(io_context& ctx, ssl_context& ssl_ctx,
-                           secure_server_config cfg = {});
+        secure_server_config cfg = {});
 
     secure_server(const secure_server&) = delete;
     auto operator=(const secure_server&) -> secure_server& = delete;
 
     auto listen(std::string_view host, std::uint16_t port = default_secure_port,
-                socket_options opts = {.reuse_address = true, .non_blocking = true})
+        socket_options opts = {.reuse_address = true, .non_blocking = true})
         -> std::expected<void, std::error_code>;
 
     void set_handler(request_handler handler);

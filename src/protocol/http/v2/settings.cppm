@@ -4,7 +4,8 @@ import std;
 
 export namespace cnetmod::http::v2 {
 
-enum class setting_id : std::uint16_t {
+enum class setting_id : std::uint16_t
+{
     header_table_size = 0x1,
     enable_push = 0x2,
     max_concurrent_streams = 0x3,
@@ -13,7 +14,8 @@ enum class setting_id : std::uint16_t {
     max_header_list_size = 0x6,
 };
 
-struct settings {
+struct settings
+{
     std::uint32_t header_table_size = 4096;
     bool enable_push = false;
     std::uint32_t max_concurrent_streams = 100;

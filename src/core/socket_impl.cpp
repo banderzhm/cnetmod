@@ -3,20 +3,22 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#include <MSWSock.h>
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+// clang-format off: Winsock declarations must precede extension headers.
+    #include <WinSock2.h>
+    #include <WS2tcpip.h>
+    #include <MSWSock.h>
+// clang-format on
 #else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <cerrno>
+    #include <arpa/inet.h>
+    #include <cerrno>
+    #include <fcntl.h>
+    #include <netinet/in.h>
+    #include <netinet/tcp.h>
+    #include <sys/socket.h>
+    #include <unistd.h>
 #endif
 
 module cnetmod.core.socket;
@@ -32,48 +34,62 @@ namespace cnetmod {
 
 namespace {
 
-auto to_native_family(address_family family) noexcept -> int {
-    switch (family) {
-        case address_family::ipv4:        return AF_INET;
-        case address_family::ipv6:        return AF_INET6;
-        case address_family::unspecified: return AF_UNSPEC;
+    auto to_native_family(address_family family) noexcept -> int
+    {
+        switch (family)
+        {
+        case address_family::ipv4:
+            return AF_INET;
+        case address_family::ipv6:
+            return AF_INET6;
+        case address_family::unspecified:
+            return AF_UNSPEC;
+        }
+        return AF_UNSPEC;
     }
-    return AF_UNSPEC;
-}
 
-auto to_native_socktype(socket_type type) noexcept -> int {
-    switch (type) {
-        case socket_type::stream:   return SOCK_STREAM;
-        case socket_type::datagram: return SOCK_DGRAM;
+    auto to_native_socktype(socket_type type) noexcept -> int
+    {
+        switch (type)
+        {
+        case socket_type::stream:
+            return SOCK_STREAM;
+        case socket_type::datagram:
+            return SOCK_DGRAM;
+        }
+        return SOCK_STREAM;
     }
-    return SOCK_STREAM;
-}
 
-auto last_error() noexcept -> int {
+    auto last_error() noexcept -> int
+    {
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    return ::WSAGetLastError();
+        return ::WSAGetLastError();
 #else
-    return errno;
+        return errno;
 #endif
-}
-
-/// Fill sockaddr_storage, return length
-auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> int {
-    std::memset(&storage, 0, sizeof(storage));
-    if (ep.address().is_v4()) {
-        auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
-        sa.sin_family = AF_INET;
-        sa.sin_port = htons(ep.port());
-        sa.sin_addr = ep.address().to_v4().native();
-        return static_cast<int>(sizeof(::sockaddr_in));
-    } else {
-        auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
-        sa.sin6_family = AF_INET6;
-        sa.sin6_port = htons(ep.port());
-        sa.sin6_addr = ep.address().to_v6().native();
-        return static_cast<int>(sizeof(::sockaddr_in6));
     }
-}
+
+    /// Fill sockaddr_storage, return length
+    auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> int
+    {
+        std::memset(&storage, 0, sizeof(storage));
+        if (ep.address().is_v4())
+        {
+            auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
+            sa.sin_family = AF_INET;
+            sa.sin_port = htons(ep.port());
+            sa.sin_addr = ep.address().to_v4().native();
+            return static_cast<int>(sizeof(::sockaddr_in));
+        }
+        else
+        {
+            auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
+            sa.sin6_family = AF_INET6;
+            sa.sin6_port = htons(ep.port());
+            sa.sin6_addr = ep.address().to_v6().native();
+            return static_cast<int>(sizeof(::sockaddr_in6));
+        }
+    }
 
 } // anonymous namespace
 
@@ -81,18 +97,22 @@ auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> 
 // Lifecycle
 // =============================================================================
 
-socket::~socket() {
+socket::~socket()
+{
     close();
 }
 
 socket::socket(socket&& other) noexcept
-    : handle_(other.handle_), family_(other.family_) {
+    : handle_(other.handle_), family_(other.family_)
+{
     other.handle_ = invalid_handle;
     other.family_ = address_family::unspecified;
 }
 
-auto socket::operator=(socket&& other) noexcept -> socket& {
-    if (this != &other) {
+auto socket::operator=(socket&& other) noexcept -> socket&
+{
+    if (this != &other)
+    {
         close();
         handle_ = other.handle_;
         family_ = other.family_;
@@ -131,7 +151,8 @@ auto socket::create(address_family family, socket_type type)
 // bind / listen
 // =============================================================================
 
-auto socket::bind(const endpoint& ep) -> std::expected<void, std::error_code> {
+auto socket::bind(const endpoint& ep) -> std::expected<void, std::error_code>
+{
     ::sockaddr_storage storage{};
     int len = fill_sockaddr(ep, storage);
 
@@ -141,7 +162,8 @@ auto socket::bind(const endpoint& ep) -> std::expected<void, std::error_code> {
     return {};
 }
 
-auto socket::listen(int backlog) -> std::expected<void, std::error_code> {
+auto socket::listen(int backlog) -> std::expected<void, std::error_code>
+{
     if (::listen(handle_, backlog) != 0)
         return std::unexpected(make_error_code(from_native_error(last_error())));
     return {};
@@ -151,7 +173,8 @@ auto socket::listen(int backlog) -> std::expected<void, std::error_code> {
 // Options
 // =============================================================================
 
-auto socket::set_non_blocking(bool enabled) -> std::expected<void, std::error_code> {
+auto socket::set_non_blocking(bool enabled) -> std::expected<void, std::error_code>
+{
 #ifdef CNETMOD_PLATFORM_WINDOWS
     u_long mode = enabled ? 1 : 0;
     if (::ioctlsocket(handle_, FIONBIO, &mode) != 0)
@@ -171,57 +194,65 @@ auto socket::apply_options(const socket_options& opts)
     -> std::expected<void, std::error_code>
 {
     // SO_REUSEADDR
-    if (opts.reuse_address) {
+    if (opts.reuse_address)
+    {
         int val = 1;
         if (::setsockopt(handle_, SOL_SOCKET, SO_REUSEADDR,
-                         reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
+                reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
     // SO_REUSEPORT (POSIX only)
 #ifndef CNETMOD_PLATFORM_WINDOWS
-    if (opts.reuse_port) {
+    if (opts.reuse_port)
+    {
         int val = 1;
         if (::setsockopt(handle_, SOL_SOCKET, SO_REUSEPORT,
-                         &val, sizeof(val)) != 0)
+                &val, sizeof(val)) != 0)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 #endif
 
     // TCP_NODELAY
-    if (opts.no_delay) {
+    if (opts.no_delay)
+    {
         int val = 1;
         if (::setsockopt(handle_, IPPROTO_TCP, TCP_NODELAY,
-                         reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
+                reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
     // IPV6_V6ONLY: explicit dual-stack control for IPv6 listeners/sockets.
-    if (opts.ipv6_only.has_value() && family_ == address_family::ipv6) {
+    if (opts.ipv6_only.has_value() && family_ == address_family::ipv6)
+    {
         int val = *opts.ipv6_only ? 1 : 0;
         if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_V6ONLY,
-                         reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
+                reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
     // Non-blocking
-    if (opts.non_blocking) {
-        if (auto r = set_non_blocking(true); !r) return r;
+    if (opts.non_blocking)
+    {
+        if (auto r = set_non_blocking(true); !r)
+            return r;
     }
 
     // Receive buffer
-    if (opts.recv_buffer_size > 0) {
+    if (opts.recv_buffer_size > 0)
+    {
         int val = opts.recv_buffer_size;
         if (::setsockopt(handle_, SOL_SOCKET, SO_RCVBUF,
-                         reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
+                reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
     // Send buffer
-    if (opts.send_buffer_size > 0) {
+    if (opts.send_buffer_size > 0)
+    {
         int val = opts.send_buffer_size;
         if (::setsockopt(handle_, SOL_SOCKET, SO_SNDBUF,
-                         reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
+                reinterpret_cast<const char*>(&val), sizeof(val)) != 0)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
@@ -229,18 +260,20 @@ auto socket::apply_options(const socket_options& opts)
 }
 
 auto socket::join_multicast_group(const ip_address& group,
-                                  std::optional<ip_address> local_address,
-                                  unsigned int interface_index)
+    std::optional<ip_address> local_address,
+    unsigned int interface_index)
     -> std::expected<void, std::error_code>
 {
-    if (group.is_v4()) {
+    if (group.is_v4())
+    {
         ::ip_mreq mreq{};
         mreq.imr_multiaddr = group.to_v4().native();
         mreq.imr_interface = local_address && local_address->is_v4()
             ? local_address->to_v4().native()
             : ipv4_address::any().native();
         if (::setsockopt(handle_, IPPROTO_IP, IP_ADD_MEMBERSHIP,
-                         reinterpret_cast<const char*>(&mreq), sizeof(mreq)) != 0) {
+                reinterpret_cast<const char*>(&mreq), sizeof(mreq)) != 0)
+        {
             return std::unexpected(make_error_code(from_native_error(last_error())));
         }
         return {};
@@ -250,25 +283,28 @@ auto socket::join_multicast_group(const ip_address& group,
     mreq6.ipv6mr_multiaddr = group.to_v6().native();
     mreq6.ipv6mr_interface = interface_index;
     if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_JOIN_GROUP,
-                     reinterpret_cast<const char*>(&mreq6), sizeof(mreq6)) != 0) {
+            reinterpret_cast<const char*>(&mreq6), sizeof(mreq6)) != 0)
+    {
         return std::unexpected(make_error_code(from_native_error(last_error())));
     }
     return {};
 }
 
 auto socket::leave_multicast_group(const ip_address& group,
-                                   std::optional<ip_address> local_address,
-                                   unsigned int interface_index)
+    std::optional<ip_address> local_address,
+    unsigned int interface_index)
     -> std::expected<void, std::error_code>
 {
-    if (group.is_v4()) {
+    if (group.is_v4())
+    {
         ::ip_mreq mreq{};
         mreq.imr_multiaddr = group.to_v4().native();
         mreq.imr_interface = local_address && local_address->is_v4()
             ? local_address->to_v4().native()
             : ipv4_address::any().native();
         if (::setsockopt(handle_, IPPROTO_IP, IP_DROP_MEMBERSHIP,
-                         reinterpret_cast<const char*>(&mreq), sizeof(mreq)) != 0) {
+                reinterpret_cast<const char*>(&mreq), sizeof(mreq)) != 0)
+        {
             return std::unexpected(make_error_code(from_native_error(last_error())));
         }
         return {};
@@ -278,7 +314,8 @@ auto socket::leave_multicast_group(const ip_address& group,
     mreq6.ipv6mr_multiaddr = group.to_v6().native();
     mreq6.ipv6mr_interface = interface_index;
     if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_LEAVE_GROUP,
-                     reinterpret_cast<const char*>(&mreq6), sizeof(mreq6)) != 0) {
+            reinterpret_cast<const char*>(&mreq6), sizeof(mreq6)) != 0)
+    {
         return std::unexpected(make_error_code(from_native_error(last_error())));
     }
     return {};
@@ -287,14 +324,16 @@ auto socket::leave_multicast_group(const ip_address& group,
 auto socket::set_multicast_hops(address_family family, int hops)
     -> std::expected<void, std::error_code>
 {
-    if (family == address_family::ipv4) {
+    if (family == address_family::ipv4)
+    {
 #ifdef CNETMOD_PLATFORM_WINDOWS
         DWORD value = static_cast<DWORD>(std::max(hops, 0));
 #else
         unsigned char value = static_cast<unsigned char>(std::clamp(hops, 0, 255));
 #endif
         if (::setsockopt(handle_, IPPROTO_IP, IP_MULTICAST_TTL,
-                         reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+                reinterpret_cast<const char*>(&value), sizeof(value)) != 0)
+        {
             return std::unexpected(make_error_code(from_native_error(last_error())));
         }
         return {};
@@ -302,7 +341,8 @@ auto socket::set_multicast_hops(address_family family, int hops)
 
     int value = std::max(hops, 0);
     if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_MULTICAST_HOPS,
-                     reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+            reinterpret_cast<const char*>(&value), sizeof(value)) != 0)
+    {
         return std::unexpected(make_error_code(from_native_error(last_error())));
     }
     return {};
@@ -311,14 +351,16 @@ auto socket::set_multicast_hops(address_family family, int hops)
 auto socket::set_multicast_loopback(address_family family, bool enabled)
     -> std::expected<void, std::error_code>
 {
-    if (family == address_family::ipv4) {
+    if (family == address_family::ipv4)
+    {
 #ifdef CNETMOD_PLATFORM_WINDOWS
         DWORD value = enabled ? 1u : 0u;
 #else
         unsigned char value = enabled ? 1u : 0u;
 #endif
         if (::setsockopt(handle_, IPPROTO_IP, IP_MULTICAST_LOOP,
-                         reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+                reinterpret_cast<const char*>(&value), sizeof(value)) != 0)
+        {
             return std::unexpected(make_error_code(from_native_error(last_error())));
         }
         return {};
@@ -326,7 +368,8 @@ auto socket::set_multicast_loopback(address_family family, bool enabled)
 
     int value = enabled ? 1 : 0;
     if (::setsockopt(handle_, IPPROTO_IPV6, IPV6_MULTICAST_LOOP,
-                     reinterpret_cast<const char*>(&value), sizeof(value)) != 0) {
+            reinterpret_cast<const char*>(&value), sizeof(value)) != 0)
+    {
         return std::unexpected(make_error_code(from_native_error(last_error())));
     }
     return {};
@@ -336,7 +379,8 @@ auto socket::set_multicast_loopback(address_family family, bool enabled)
 // local_endpoint
 // =============================================================================
 
-auto socket::local_endpoint() const -> std::expected<endpoint, std::error_code> {
+auto socket::local_endpoint() const -> std::expected<endpoint, std::error_code>
+{
     ::sockaddr_storage storage{};
 #ifdef CNETMOD_PLATFORM_WINDOWS
     int len = sizeof(storage);
@@ -347,13 +391,16 @@ auto socket::local_endpoint() const -> std::expected<endpoint, std::error_code> 
             reinterpret_cast<::sockaddr*>(&storage), &len) != 0)
         return std::unexpected(make_error_code(from_native_error(last_error())));
 
-    if (storage.ss_family == AF_INET) {
+    if (storage.ss_family == AF_INET)
+    {
         auto& sa = reinterpret_cast<const ::sockaddr_in&>(storage);
         char buf[INET_ADDRSTRLEN]{};
         ::inet_ntop(AF_INET, &sa.sin_addr, buf, sizeof(buf));
         auto a = ipv4_address::from_string(buf);
         return endpoint{ip_address{a.value_or(ipv4_address{})}, ntohs(sa.sin_port)};
-    } else {
+    }
+    else
+    {
         auto& sa = reinterpret_cast<const ::sockaddr_in6&>(storage);
         char buf[INET6_ADDRSTRLEN]{};
         ::inet_ntop(AF_INET6, &sa.sin6_addr, buf, sizeof(buf));
@@ -366,7 +413,8 @@ auto socket::local_endpoint() const -> std::expected<endpoint, std::error_code> 
 // remote_endpoint
 // =============================================================================
 
-auto socket::remote_endpoint() const -> std::expected<endpoint, std::error_code> {
+auto socket::remote_endpoint() const -> std::expected<endpoint, std::error_code>
+{
     ::sockaddr_storage storage{};
 #ifdef CNETMOD_PLATFORM_WINDOWS
     int len = sizeof(storage);
@@ -378,13 +426,16 @@ auto socket::remote_endpoint() const -> std::expected<endpoint, std::error_code>
             reinterpret_cast<::sockaddr*>(&storage), &len) != 0)
         return std::unexpected(make_error_code(from_native_error(last_error())));
 
-    if (storage.ss_family == AF_INET) {
+    if (storage.ss_family == AF_INET)
+    {
         auto& sa = reinterpret_cast<const ::sockaddr_in&>(storage);
         char buf[INET_ADDRSTRLEN]{};
         ::inet_ntop(AF_INET, &sa.sin_addr, buf, sizeof(buf));
         auto a = ipv4_address::from_string(buf);
         return endpoint{ip_address{a.value_or(ipv4_address{})}, ntohs(sa.sin_port)};
-    } else {
+    }
+    else
+    {
         auto& sa = reinterpret_cast<const ::sockaddr_in6&>(storage);
         char buf[INET6_ADDRSTRLEN]{};
         ::inet_ntop(AF_INET6, &sa.sin6_addr, buf, sizeof(buf));
@@ -397,8 +448,10 @@ auto socket::remote_endpoint() const -> std::expected<endpoint, std::error_code>
 // Close
 // =============================================================================
 
-void socket::shutdown_send() noexcept {
-    if (handle_ == invalid_handle) return;
+void socket::shutdown_send() noexcept
+{
+    if (handle_ == invalid_handle)
+        return;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     ::shutdown(handle_, SD_SEND);
 #else
@@ -406,8 +459,10 @@ void socket::shutdown_send() noexcept {
 #endif
 }
 
-void socket::shutdown_both() noexcept {
-    if (handle_ == invalid_handle) return;
+void socket::shutdown_both() noexcept
+{
+    if (handle_ == invalid_handle)
+        return;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     ::shutdown(handle_, SD_BOTH);
 #else
@@ -415,8 +470,10 @@ void socket::shutdown_both() noexcept {
 #endif
 }
 
-void socket::close() noexcept {
-    if (handle_ == invalid_handle) return;
+void socket::close() noexcept
+{
+    if (handle_ == invalid_handle)
+        return;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     ::closesocket(handle_);
 #else

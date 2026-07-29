@@ -20,7 +20,8 @@ import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 
-export struct coaps_session_options {
+export struct coaps_session_options
+{
     std::size_t max_datagram_size = default_max_datagram_size;
     std::size_t dtls_mtu = 1400;
 };
@@ -29,14 +30,15 @@ export using coaps_datagram_queue = channel<std::vector<std::byte>>;
 export using coaps_response_handler =
     std::function<task<message>(const inbound_request&, const endpoint&)>;
 
-export class coaps_session {
+export class coaps_session
+{
 public:
     coaps_session(io_context& ctx,
-                  ssl_context& ssl_ctx,
-                  socket& sock,
-                  endpoint peer,
-                  coaps_session_options options,
-                  coaps_response_handler response_handler);
+        ssl_context& ssl_ctx,
+        socket& sock,
+        endpoint peer,
+        coaps_session_options options,
+        coaps_response_handler response_handler);
 
     coaps_session(const coaps_session&) = delete;
     auto operator=(const coaps_session&) -> coaps_session& = delete;

@@ -3,8 +3,8 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_HAS_SSL
-#include <openssl/ssl.h>
-#include <openssl/bio.h>
+    #include <openssl/bio.h>
+    #include <openssl/ssl.h>
 #endif
 
 export module cnetmod.core.ssl;
@@ -25,7 +25,7 @@ namespace cnetmod {
 
 namespace detail {
 
-void ssl_global_init() noexcept;
+    void ssl_global_init() noexcept;
 
 } // namespace detail
 
@@ -35,13 +35,14 @@ void ssl_global_init() noexcept;
 
 namespace detail {
 
-class ssl_error_category_impl : public std::error_category {
-public:
-    auto name() const noexcept -> const char* override;
-    auto message(int ev) const -> std::string override;
-};
+    class ssl_error_category_impl : public std::error_category
+    {
+    public:
+        auto name() const noexcept -> const char* override;
+        auto message(int ev) const -> std::string override;
+    };
 
-auto ssl_category() -> const std::error_category&;
+    auto ssl_category() -> const std::error_category&;
 
 } // namespace detail
 
@@ -55,7 +56,8 @@ export auto make_ssl_error(int ssl_err) -> std::error_code;
 // ssl_context — RAII wrapper for SSL_CTX
 // =============================================================================
 
-export class ssl_context {
+export class ssl_context
+{
 public:
     ~ssl_context();
 
@@ -98,7 +100,8 @@ public:
     /// Unsupported cipher suites or kernels transparently retain user-space TLS.
     void set_kernel_tls(bool enabled) noexcept;
 
-    [[nodiscard]] auto kernel_tls_enabled() const noexcept -> bool {
+    [[nodiscard]] auto kernel_tls_enabled() const noexcept -> bool
+    {
         return kernel_tls_enabled_;
     }
 
@@ -118,10 +121,14 @@ public:
     void configure_alpn_client(std::initializer_list<std::string_view> protos);
 
     /// Get native SSL_CTX pointer
-    [[nodiscard]] auto native() const noexcept -> SSL_CTX* { return ctx_; }
+    [[nodiscard]] auto native() const noexcept -> SSL_CTX*
+    {
+        return ctx_;
+    }
 
 private:
-    explicit ssl_context(SSL_CTX* ctx) noexcept : ctx_(ctx) {}
+    explicit ssl_context(SSL_CTX* ctx) noexcept
+        : ctx_(ctx) {}
 
     /// ALPN server-side selection callback
     static auto alpn_select_cb(
@@ -130,13 +137,13 @@ private:
         void* arg) -> int;
 
     static auto dtls_generate_cookie(SSL*, unsigned char* cookie,
-                                     unsigned int* cookie_len) -> int;
+        unsigned int* cookie_len) -> int;
 
     static auto dtls_verify_cookie(SSL*, const unsigned char* cookie,
-                                   unsigned int cookie_len) -> int;
+        unsigned int cookie_len) -> int;
 
     SSL_CTX* ctx_ = nullptr;
-    std::vector<unsigned char> alpn_wire_;  // Server-side ALPN wire format
+    std::vector<unsigned char> alpn_wire_; // Server-side ALPN wire format
     bool kernel_tls_enabled_ = false;
 };
 
@@ -144,7 +151,8 @@ private:
 // ssl_stream — Async SSL stream based on Memory BIO
 // =============================================================================
 
-export class ssl_stream {
+export class ssl_stream
+{
 public:
     /// Construct ssl_stream, bind to existing ssl_context, io_context and socket
     /// Socket must already be connected via async_connect (client) or obtained from async_accept (server)
@@ -212,12 +220,12 @@ private:
     auto fill_rbio() -> task<std::expected<void, std::error_code>>;
 
     io_context& io_ctx_;
-    socket&     sock_;
-    SSL*        ssl_  = nullptr;
-    BIO*        rbio_ = nullptr;  // Network -> SSL (receive direction)
-    BIO*        wbio_ = nullptr;  // SSL -> Network (send direction)
-    bool        direct_socket_bio_ = false;
-    bool        kernel_tls_active_ = false;
+    socket& sock_;
+    SSL* ssl_ = nullptr;
+    BIO* rbio_ = nullptr; // Network -> SSL (receive direction)
+    BIO* wbio_ = nullptr; // SSL -> Network (send direction)
+    bool direct_socket_bio_ = false;
+    bool kernel_tls_active_ = false;
 };
 
 #endif // CNETMOD_HAS_SSL

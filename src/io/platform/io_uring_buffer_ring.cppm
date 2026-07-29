@@ -3,8 +3,8 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_HAS_IO_URING
-#include <liburing.h>
-#include <liburing/io_uring.h>
+    #include <liburing.h>
+    #include <liburing/io_uring.h>
 #endif
 
 export module cnetmod.io.platform.io_uring_buffer_ring;
@@ -21,12 +21,13 @@ namespace cnetmod {
 ///
 /// The kernel selects a block for recv operations that use IOSQE_BUFFER_SELECT.
 /// Call release() only after the consumer no longer reads that block.
-export class io_uring_buffer_ring {
+export class io_uring_buffer_ring
+{
 public:
     io_uring_buffer_ring(io_uring_context& context,
-                         std::uint16_t group_id,
-                         std::size_t block_size = 8192,
-                         unsigned block_count = 256);
+        std::uint16_t group_id,
+        std::size_t block_size = 8192,
+        unsigned block_count = 256);
     ~io_uring_buffer_ring();
 
     io_uring_buffer_ring(const io_uring_buffer_ring&) = delete;

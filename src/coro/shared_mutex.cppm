@@ -35,17 +35,21 @@ namespace cnetmod {
 /// - lock_shared / unlock_shared: Read lock (shared, multiple readers concurrent)
 /// - lock / unlock: Write lock (exclusive)
 /// - Writer priority: New readers queue when writers waiting, prevents writer starvation
-export class async_shared_mutex {
+export class async_shared_mutex
+{
     // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
 
-    class spinlock {
+    class spinlock
+    {
         std::atomic_flag flag_{};
+
     public:
         void lock() noexcept;
         void unlock() noexcept;
     };
 
-    struct auto_lock {
+    struct auto_lock
+    {
         spinlock& lk_;
         explicit auto_lock(spinlock& lk) noexcept;
         ~auto_lock();
@@ -53,7 +57,8 @@ export class async_shared_mutex {
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
 
-    struct waiter_node {
+    struct waiter_node
+    {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
     };
@@ -69,7 +74,8 @@ public:
     // Shared read lock
     // =========================================================================
 
-    struct [[nodiscard]] lock_shared_awaitable {
+    struct [[nodiscard]] lock_shared_awaitable
+    {
         async_shared_mutex& rw_;
         waiter_node node_;
 
@@ -92,7 +98,8 @@ public:
     // Exclusive write lock
     // =========================================================================
 
-    struct [[nodiscard]] lock_awaitable {
+    struct [[nodiscard]] lock_awaitable
+    {
         async_shared_mutex& rw_;
         waiter_node node_;
 
@@ -116,12 +123,12 @@ public:
 
 private:
     mutable spinlock lock_;
-    int state_ = 0;                      // 0=free, >0=N readers, -1=writer
+    int state_ = 0; // 0=free, >0=N readers, -1=writer
 
     waiter_node* write_head_ = nullptr;
     waiter_node* write_tail_ = nullptr;
-    waiter_node* read_head_  = nullptr;
-    waiter_node* read_tail_  = nullptr;
+    waiter_node* read_head_ = nullptr;
+    waiter_node* read_tail_ = nullptr;
 };
 
 // =============================================================================
@@ -131,10 +138,11 @@ private:
 /// Usage:
 ///   co_await rw.lock_shared();
 ///   async_shared_lock_guard guard(rw, std::adopt_lock);
-export class async_shared_lock_guard {
+export class async_shared_lock_guard
+{
 public:
     explicit async_shared_lock_guard(async_shared_mutex& rw,
-                                     std::adopt_lock_t) noexcept;
+        std::adopt_lock_t) noexcept;
 
     ~async_shared_lock_guard();
 
@@ -157,10 +165,11 @@ private:
 /// Usage:
 ///   co_await rw.lock();
 ///   async_unique_lock_guard guard(rw, std::adopt_lock);
-export class async_unique_lock_guard {
+export class async_unique_lock_guard
+{
 public:
     explicit async_unique_lock_guard(async_shared_mutex& rw,
-                                     std::adopt_lock_t) noexcept;
+        std::adopt_lock_t) noexcept;
 
     ~async_unique_lock_guard();
 

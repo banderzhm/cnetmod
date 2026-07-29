@@ -19,14 +19,14 @@ namespace cnetmod {
 
 /// Async timer based on io_context
 /// Uses platform-native timers (timerfd / EVFILT_TIMER / IOCP timer / io_uring timeout)
-export class steady_timer {
+export class steady_timer
+{
 public:
     explicit steady_timer(io_context& ctx) noexcept;
 
     /// Async wait for specified duration
     auto async_wait(std::chrono::steady_clock::duration duration)
-        -> task<std::expected<void, std::error_code>>
-        ;
+        -> task<std::expected<void, std::error_code>>;
 
     [[nodiscard]] auto context() noexcept -> io_context&;
 
@@ -39,19 +39,18 @@ private:
 // =============================================================================
 
 /// High-precision timer, supports time_point waiting
-export class high_resolution_timer {
+export class high_resolution_timer
+{
 public:
     explicit high_resolution_timer(io_context& ctx) noexcept;
 
     /// Async wait until specified time point
     auto async_wait_until(std::chrono::steady_clock::time_point deadline)
-        -> task<std::expected<void, std::error_code>>
-        ;
+        -> task<std::expected<void, std::error_code>>;
 
     /// Async wait for specified duration
     auto async_wait(std::chrono::steady_clock::duration duration)
-        -> task<std::expected<void, std::error_code>>
-        ;
+        -> task<std::expected<void, std::error_code>>;
 
     [[nodiscard]] auto context() noexcept -> io_context&;
 
@@ -67,12 +66,12 @@ private:
 /// Use `async_timer_wait()` or timer objects when you want explicit
 /// `std::expected`-based error handling.
 export auto async_sleep(io_context& ctx,
-                        std::chrono::steady_clock::duration duration)
+    std::chrono::steady_clock::duration duration)
     -> task<void>;
 
 /// Convenience: async_sleep until specified time point
 export auto async_sleep_until(io_context& ctx,
-                              std::chrono::steady_clock::time_point tp)
+    std::chrono::steady_clock::time_point tp)
     -> task<void>;
 
 // =============================================================================
@@ -81,23 +80,23 @@ export auto async_sleep_until(io_context& ctx,
 
 namespace detail {
 
-/// Timer side: cancel operation after timeout
-auto timeout_timer_task(io_context& ctx,
-                        std::chrono::steady_clock::duration dur,
-                        cancel_token& timer_token,
-                        cancel_token& op_token)
-    -> task<int>;
+    /// Timer side: cancel operation after timeout
+    auto timeout_timer_task(io_context& ctx,
+        std::chrono::steady_clock::duration dur,
+        cancel_token& timer_token,
+        cancel_token& op_token)
+        -> task<int>;
 
-/// Operation side: cancel timer after completion
-template<typename T>
-auto timeout_op_wrapper(task<std::expected<T, std::error_code>> op,
-                        cancel_token& timer_token)
-    -> task<std::expected<T, std::error_code>>
-{
-    auto result = co_await std::move(op);
-    timer_token.cancel();
-    co_return std::move(result);
-}
+    /// Operation side: cancel timer after completion
+    template <typename T>
+    auto timeout_op_wrapper(task<std::expected<T, std::error_code>> op,
+        cancel_token& timer_token)
+        -> task<std::expected<T, std::error_code>>
+    {
+        auto result = co_await std::move(op);
+        timer_token.cancel();
+        co_return std::move(result);
+    }
 
 } // namespace detail
 
@@ -110,15 +109,15 @@ auto timeout_op_wrapper(task<std::expected<T, std::error_code>> op,
 ///
 /// After timeout, the wrapped operation is cancelled via `cancel_token` and
 /// typically returns `errc::operation_aborted`.
-export template<typename T>
+export template <typename T>
 auto with_timeout(io_context& ctx,
-                  std::chrono::steady_clock::duration timeout,
-                  task<std::expected<T, std::error_code>> op,
-                  cancel_token& op_token)
+    std::chrono::steady_clock::duration timeout,
+    task<std::expected<T, std::error_code>> op,
+    cancel_token& op_token)
     -> task<std::expected<T, std::error_code>>
 {
     cancel_token timer_token;
-    auto op_task  = detail::timeout_op_wrapper<T>(std::move(op), timer_token);
+    auto op_task = detail::timeout_op_wrapper<T>(std::move(op), timer_token);
     auto tmr_task = detail::timeout_timer_task(ctx, timeout, timer_token, op_token);
 
     auto [result, dummy] = co_await when_all(std::move(op_task), std::move(tmr_task));

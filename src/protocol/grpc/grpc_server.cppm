@@ -27,7 +27,8 @@ export using server_streaming_handler =
 export using server_interceptor =
     std::function<std::expected<void, status>(const call_context&)>;
 
-export struct server_options {
+export struct server_options
+{
     std::size_t max_receive_message_bytes = default_max_message_bytes;
     std::size_t max_send_message_bytes = default_max_message_bytes;
     std::size_t max_metadata_bytes = default_max_metadata_bytes;
@@ -37,7 +38,8 @@ export struct server_options {
     std::shared_ptr<governance::server_policy> governance;
 };
 
-export class service_router {
+export class service_router
+{
 public:
     service_router() = default;
     explicit service_router(server_options options);
@@ -53,7 +55,8 @@ public:
     [[nodiscard]] auto make_http_handler() const -> http::handler_fn;
 
 private:
-    struct method_entry {
+    struct method_entry
+    {
         call_kind kind = call_kind::unary;
         unary_handler unary;
         streaming_handler streaming;

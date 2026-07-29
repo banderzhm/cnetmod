@@ -29,15 +29,16 @@ namespace cnetmod {
 // cors_options — CORS configuration
 // =============================================================================
 
-export struct cors_options {
-  std::vector<std::string> allow_origins = {"*"};
-  std::vector<std::string> allow_methods = {"GET",    "POST",  "PUT",
-                                            "DELETE", "PATCH", "OPTIONS"};
-  std::vector<std::string> allow_headers = {"Content-Type", "Authorization",
-                                            "X-Request-ID"};
-  std::vector<std::string> expose_headers = {"X-Request-ID"};
-  bool allow_credentials = false;
-  int max_age = 86400; // Preflight cache seconds (24h)
+export struct cors_options
+{
+    std::vector<std::string> allow_origins = {"*"};
+    std::vector<std::string> allow_methods = {"GET", "POST", "PUT",
+        "DELETE", "PATCH", "OPTIONS"};
+    std::vector<std::string> allow_headers = {"Content-Type", "Authorization",
+        "X-Request-ID"};
+    std::vector<std::string> expose_headers = {"X-Request-ID"};
+    bool allow_credentials = false;
+    int max_age = 86400; // Preflight cache seconds (24h)
 };
 
 // =============================================================================

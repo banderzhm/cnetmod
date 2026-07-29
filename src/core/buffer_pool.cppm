@@ -12,7 +12,8 @@ namespace cnetmod {
 export class buffer_pool;
 
 /// RAII handle for a block leased from buffer_pool.
-export class pooled_buffer {
+export class pooled_buffer
+{
 public:
     pooled_buffer() noexcept = default;
     ~pooled_buffer();
@@ -39,10 +40,11 @@ private:
     std::size_t size_ = 0;
 };
 
-export class buffer_pool {
+export class buffer_pool
+{
 public:
     explicit buffer_pool(std::size_t block_size = 4096,
-                         std::size_t max_blocks = 1024) noexcept;
+        std::size_t max_blocks = 1024) noexcept;
     ~buffer_pool();
 
     buffer_pool(const buffer_pool&) = delete;
@@ -54,7 +56,11 @@ public:
 
 private:
     friend class pooled_buffer;
-    struct block_node { block_node* next = nullptr; };
+
+    struct block_node
+    {
+        block_node* next = nullptr;
+    };
 
     void return_block(void* data) noexcept;
     auto allocate_new() -> pooled_buffer;

@@ -3,14 +3,16 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_HAS_IOCP
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
-#include <WinSock2.h>
-#include <WS2tcpip.h>
-#include <MSWSock.h>
-#include <exec/static_thread_pool.hpp>
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+// clang-format off: Winsock must precede Windows.h and extension headers.
+    #include <WinSock2.h>
+    #include <WS2tcpip.h>
+    #include <MSWSock.h>
+    #include <Windows.h>
+    // clang-format on
+    #include <exec/static_thread_pool.hpp>
 #endif
 
 module cnetmod.executor.async_op;
@@ -34,81 +36,92 @@ namespace cnetmod {
 
 namespace {
 
-/// Associate handle to IOCP (duplicate association silently ignored)
-auto ensure_associated(iocp_context& iocp, HANDLE handle)
-    -> std::expected<void, std::error_code>
-{
-    auto r = iocp.associate(handle);
-    if (!r) {
-        if (r.error().value() == ERROR_INVALID_PARAMETER)
-            return {};
-        return r;
+    /// Associate handle to IOCP (duplicate association silently ignored)
+    auto ensure_associated(iocp_context& iocp, HANDLE handle)
+        -> std::expected<void, std::error_code>
+    {
+        auto r = iocp.associate(handle);
+        if (!r)
+        {
+            if (r.error().value() == ERROR_INVALID_PARAMETER)
+                return {};
+            return r;
+        }
+        return {};
     }
-    return {};
-}
 
-auto load_accept_ex(SOCKET s) -> LPFN_ACCEPTEX {
-    LPFN_ACCEPTEX fn = nullptr;
-    GUID guid = WSAID_ACCEPTEX;
-    DWORD bytes = 0;
-    ::WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER,
-        &guid, sizeof(guid), &fn, sizeof(fn),
-        &bytes, nullptr, nullptr);
-    return fn;
-}
-
-auto load_connect_ex(SOCKET s) -> LPFN_CONNECTEX {
-    LPFN_CONNECTEX fn = nullptr;
-    GUID guid = WSAID_CONNECTEX;
-    DWORD bytes = 0;
-    ::WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER,
-        &guid, sizeof(guid), &fn, sizeof(fn),
-        &bytes, nullptr, nullptr);
-    return fn;
-}
-
-auto get_socket_family(SOCKET s) -> int {
-    ::sockaddr_storage addr{};
-    int addrlen = sizeof(addr);
-    if (::getsockname(s, reinterpret_cast<::sockaddr*>(&addr), &addrlen) == 0)
-        return addr.ss_family;
-    return AF_INET;
-}
-
-inline auto& file_pool() {
-    static exec::static_thread_pool pool;
-    return pool;
-}
-
-auto fill_sockaddr(const endpoint& ep,
-                   ::sockaddr_storage& storage) noexcept -> int {
-    std::memset(&storage, 0, sizeof(storage));
-    if (ep.address().is_v4()) {
-        auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
-        sa.sin_family = AF_INET;
-        sa.sin_port = ::htons(ep.port());
-        sa.sin_addr = ep.address().to_v4().native();
-        return sizeof(::sockaddr_in);
-    } else {
-        auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
-        sa.sin6_family = AF_INET6;
-        sa.sin6_port = ::htons(ep.port());
-        sa.sin6_addr = ep.address().to_v6().native();
-        return sizeof(::sockaddr_in6);
+    auto load_accept_ex(SOCKET s) -> LPFN_ACCEPTEX
+    {
+        LPFN_ACCEPTEX fn = nullptr;
+        GUID guid = WSAID_ACCEPTEX;
+        DWORD bytes = 0;
+        ::WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER,
+            &guid, sizeof(guid), &fn, sizeof(fn),
+            &bytes, nullptr, nullptr);
+        return fn;
     }
-}
 
-auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
-    if (sa.ss_family == AF_INET6) {
-        const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
-        return endpoint{ipv6_address::from_native(sin6.sin6_addr),
-                        ::ntohs(sin6.sin6_port)};
+    auto load_connect_ex(SOCKET s) -> LPFN_CONNECTEX
+    {
+        LPFN_CONNECTEX fn = nullptr;
+        GUID guid = WSAID_CONNECTEX;
+        DWORD bytes = 0;
+        ::WSAIoctl(s, SIO_GET_EXTENSION_FUNCTION_POINTER,
+            &guid, sizeof(guid), &fn, sizeof(fn),
+            &bytes, nullptr, nullptr);
+        return fn;
     }
-    const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
-    const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
-    return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
-                    ::ntohs(sin.sin_port)};
-}
+
+    auto get_socket_family(SOCKET s) -> int
+    {
+        ::sockaddr_storage addr{};
+        int addrlen = sizeof(addr);
+        if (::getsockname(s, reinterpret_cast<::sockaddr*>(&addr), &addrlen) == 0)
+            return addr.ss_family;
+        return AF_INET;
+    }
+
+    inline auto& file_pool()
+    {
+        static exec::static_thread_pool pool;
+        return pool;
+    }
+
+    auto fill_sockaddr(const endpoint& ep,
+        ::sockaddr_storage& storage) noexcept -> int
+    {
+        std::memset(&storage, 0, sizeof(storage));
+        if (ep.address().is_v4())
+        {
+            auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
+            sa.sin_family = AF_INET;
+            sa.sin_port = ::htons(ep.port());
+            sa.sin_addr = ep.address().to_v4().native();
+            return sizeof(::sockaddr_in);
+        }
+        else
+        {
+            auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
+            sa.sin6_family = AF_INET6;
+            sa.sin6_port = ::htons(ep.port());
+            sa.sin6_addr = ep.address().to_v6().native();
+            return sizeof(::sockaddr_in6);
+        }
+    }
+
+    auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint
+    {
+        if (sa.ss_family == AF_INET6)
+        {
+            const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
+            return endpoint{ipv6_address::from_native(sin6.sin6_addr),
+                ::ntohs(sin6.sin6_port)};
+        }
+        const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
+        const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
+        return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
+            ::ntohs(sin.sin_port)};
+    }
 
 } // anonymous namespace
 
@@ -116,10 +129,20 @@ auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
 // IOCP Suspend Awaiter
 // =============================================================================
 
-struct iocp_suspend {
+struct iocp_suspend
+{
     iocp_overlapped& ov;
-    auto await_ready() const noexcept -> bool { return false; }
-    void await_suspend(std::coroutine_handle<> h) noexcept { ov.coroutine = h; }
+
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
+
+    void await_suspend(std::coroutine_handle<> h) noexcept
+    {
+        ov.coroutine = h;
+    }
+
     void await_resume() noexcept {}
 };
 
@@ -128,21 +151,27 @@ struct iocp_suspend {
 // =============================================================================
 
 /// cancel_fn_: Call CancelIoEx to cancel specified OVERLAPPED operation
-static void iocp_cancel_fn(cancel_token& token) noexcept {
+static void iocp_cancel_fn(cancel_token& token) noexcept
+{
     ::CancelIoEx(static_cast<HANDLE>(token.io_handle_),
-                 static_cast<LPOVERLAPPED>(token.overlapped_));
+        static_cast<LPOVERLAPPED>(token.overlapped_));
 }
 
 /// IOCP suspend awaiter with cancel support
 /// Writes cancel info to cancel_token on await_suspend
-struct iocp_cancel_suspend {
+struct iocp_cancel_suspend
+{
     iocp_overlapped& ov;
     cancel_token& token;
-    void* io_handle;  // HANDLE (socket converted to HANDLE or file HANDLE)
+    void* io_handle; // HANDLE (socket converted to HANDLE or file HANDLE)
 
-    auto await_ready() const noexcept -> bool { return false; }
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
 
-    void await_suspend(std::coroutine_handle<> h) noexcept {
+    void await_suspend(std::coroutine_handle<> h) noexcept
+    {
         ov.coroutine = h;
         token.io_handle_ = io_handle;
         token.overlapped_ = static_cast<LPOVERLAPPED>(&ov);
@@ -153,7 +182,8 @@ struct iocp_cancel_suspend {
             iocp_cancel_fn(token);
     }
 
-    void await_resume() noexcept {
+    void await_resume() noexcept
+    {
         token.pending_.store(false, std::memory_order_relaxed);
     }
 };
@@ -168,7 +198,8 @@ auto async_accept(io_context& ctx, socket& listener)
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(listener.native_handle())); !r)
+            reinterpret_cast<HANDLE>(listener.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     auto accept_ex = load_accept_ex(listener.native_handle());
@@ -190,14 +221,16 @@ auto async_accept(io_context& ctx, socket& listener)
         listener.native_handle(), accept_sock->native_handle(),
         output_buf, 0, addr_len, addr_len, &bytes, &ov);
 
-    if (!ok) {
+    if (!ok)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
 
     SOCKET ls = listener.native_handle();
     ::setsockopt(accept_sock->native_handle(), SOL_SOCKET,
@@ -216,7 +249,8 @@ auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(listener.native_handle())); !r)
+            reinterpret_cast<HANDLE>(listener.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     auto accept_ex = load_accept_ex(listener.native_handle());
@@ -238,7 +272,8 @@ auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
         listener.native_handle(), accept_sock->native_handle(),
         output_buf, 0, addr_len, addr_len, &bytes, &ov);
 
-    if (!ok) {
+    if (!ok)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
@@ -249,7 +284,8 @@ auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
 
     SOCKET ls = listener.native_handle();
     ::setsockopt(accept_sock->native_handle(), SOL_SOCKET,
@@ -265,7 +301,8 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     // ConnectEx requires socket to be already bound
@@ -282,13 +319,16 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
 
     ::sockaddr_storage dest{};
     int dest_len = 0;
-    if (ep.address().is_v4()) {
+    if (ep.address().is_v4())
+    {
         auto& sa = reinterpret_cast<::sockaddr_in&>(dest);
         sa.sin_family = AF_INET;
         sa.sin_port = ::htons(ep.port());
         sa.sin_addr = ep.address().to_v4().native();
         dest_len = sizeof(::sockaddr_in);
-    } else {
+    }
+    else
+    {
         auto& sa = reinterpret_cast<::sockaddr_in6&>(dest);
         sa.sin6_family = AF_INET6;
         sa.sin6_port = ::htons(ep.port());
@@ -302,14 +342,16 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
         reinterpret_cast<const ::sockaddr*>(&dest), dest_len,
         nullptr, 0, nullptr, &ov);
 
-    if (!ok) {
+    if (!ok)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
 
     ::setsockopt(sock.native_handle(), SOL_SOCKET,
         SO_UPDATE_CONNECT_CONTEXT, nullptr, 0);
@@ -318,7 +360,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
 }
 
 auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
-                   cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>
 {
     if (token.is_cancelled())
@@ -327,7 +369,8 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     ::sockaddr_in bind_addr{};
@@ -343,13 +386,16 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
 
     ::sockaddr_storage dest{};
     int dest_len = 0;
-    if (ep.address().is_v4()) {
+    if (ep.address().is_v4())
+    {
         auto& sa = reinterpret_cast<::sockaddr_in&>(dest);
         sa.sin_family = AF_INET;
         sa.sin_port = ::htons(ep.port());
         sa.sin_addr = ep.address().to_v4().native();
         dest_len = sizeof(::sockaddr_in);
-    } else {
+    }
+    else
+    {
         auto& sa = reinterpret_cast<::sockaddr_in6&>(dest);
         sa.sin6_family = AF_INET6;
         sa.sin6_port = ::htons(ep.port());
@@ -363,7 +409,8 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
         reinterpret_cast<const ::sockaddr*>(&dest), dest_len,
         nullptr, 0, nullptr, &ov);
 
-    if (!ok) {
+    if (!ok)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
@@ -374,7 +421,8 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
 
     ::setsockopt(sock.native_handle(), SOL_SOCKET,
         SO_UPDATE_CONNECT_CONTEXT, nullptr, 0);
@@ -388,7 +436,8 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -398,20 +447,22 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
     iocp_overlapped ov;
 
     int ret = ::WSARecv(sock.native_handle(), &wsabuf, 1,
-                        nullptr, &flags, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, &flags, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
-                cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -419,7 +470,8 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
 
     auto& iocp = static_cast<iocp_context&>(ctx);
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -429,8 +481,9 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
     iocp_overlapped ov;
 
     int ret = ::WSARecv(sock.native_handle(), &wsabuf, 1,
-                        nullptr, &flags, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, &flags, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
@@ -441,7 +494,8 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
@@ -451,7 +505,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -460,20 +515,22 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
     iocp_overlapped ov;
 
     int ret = ::WSASend(sock.native_handle(), &wsabuf, 1,
-                        nullptr, 0, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, 0, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_write(io_context& ctx, socket& sock, const_buffer buf,
-                 cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -481,7 +538,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 
     auto& iocp = static_cast<iocp_context&>(ctx);
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -490,8 +548,9 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
     iocp_overlapped ov;
 
     int ret = ::WSASend(sock.native_handle(), &wsabuf, 1,
-                        nullptr, 0, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, 0, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
@@ -502,7 +561,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
@@ -511,8 +571,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 // =============================================================================
 
 auto async_file_open(io_context& ctx,
-                     const std::filesystem::path& path,
-                     open_mode mode)
+    const std::filesystem::path& path,
+    open_mode mode)
     -> task<std::expected<file, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
@@ -522,16 +582,17 @@ auto async_file_open(io_context& ctx,
 }
 
 auto async_file_open(io_context& ctx,
-                     const std::filesystem::path& path,
-                     open_mode mode,
-                     cancel_token& token)
+    const std::filesystem::path& path,
+    open_mode mode,
+    cancel_token& token)
     -> task<std::expected<file, std::error_code>>
 {
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     auto result = co_await async_file_open(ctx, path, mode);
-    if (token.is_cancelled()) {
+    if (token.is_cancelled())
+    {
         if (result)
             (void)co_await async_file_close(ctx, *result);
         co_return std::unexpected(make_error_code(errc::operation_aborted));
@@ -540,7 +601,7 @@ auto async_file_open(io_context& ctx,
 }
 
 auto async_file_stat(io_context& ctx,
-                     const std::filesystem::path& path)
+    const std::filesystem::path& path)
     -> task<std::expected<file_stat, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
@@ -550,8 +611,8 @@ auto async_file_stat(io_context& ctx,
 }
 
 auto async_file_stat(io_context& ctx,
-                     const std::filesystem::path& path,
-                     cancel_token& token)
+    const std::filesystem::path& path,
+    cancel_token& token)
     -> task<std::expected<file_stat, std::error_code>>
 {
     if (token.is_cancelled())
@@ -585,7 +646,7 @@ auto async_file_close(io_context& ctx, file& f, cancel_token& token)
 }
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                     std::uint64_t offset)
+    std::uint64_t offset)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& iocp = static_cast<iocp_context&>(ctx);
@@ -597,7 +658,8 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
 
     BOOL ok = ::ReadFile(f.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -605,12 +667,13 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                     std::uint64_t offset, cancel_token& token)
+    std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -625,7 +688,8 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
 
     BOOL ok = ::ReadFile(f.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -637,12 +701,13 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                      std::uint64_t offset)
+    std::uint64_t offset)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& iocp = static_cast<iocp_context&>(ctx);
@@ -654,7 +719,8 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 
     BOOL ok = ::WriteFile(f.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -662,12 +728,13 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                      std::uint64_t offset, cancel_token& token)
+    std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -682,7 +749,8 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 
     BOOL ok = ::WriteFile(f.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -694,7 +762,8 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
@@ -703,7 +772,8 @@ auto async_file_flush(io_context& ctx, file& f)
 {
     (void)ctx;
     BOOL ok = ::FlushFileBuffers(f.native_handle());
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         co_return std::unexpected(
             std::error_code(static_cast<int>(err), std::system_category()));
@@ -724,7 +794,7 @@ auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
 }
 
 auto async_send_file(io_context& ctx, socket& sock, file& source,
-                     std::uint64_t offset, std::uint64_t byte_count)
+    std::uint64_t offset, std::uint64_t byte_count)
     -> task<std::expected<std::uint64_t, std::error_code>>
 {
     auto& iocp = static_cast<iocp_context&>(ctx);
@@ -734,7 +804,8 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
         co_return std::unexpected(associated.error());
 
     std::uint64_t transferred = 0;
-    while (transferred < byte_count) {
+    while (transferred < byte_count)
+    {
         const auto chunk = static_cast<DWORD>(std::min<std::uint64_t>(
             byte_count - transferred,
             std::numeric_limits<DWORD>::max()));
@@ -742,9 +813,10 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
         ov.set_offset(offset + transferred);
 
         const BOOL ok = ::TransmitFile(sock.native_handle(),
-                                       source.native_handle(), chunk, 0,
-                                       &ov, nullptr, 0);
-        if (!ok) {
+            source.native_handle(), chunk, 0,
+            &ov, nullptr, 0);
+        if (!ok)
+        {
             const auto error = ::WSAGetLastError();
             if (error != WSA_IO_PENDING)
                 co_return std::unexpected(
@@ -762,8 +834,8 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
 }
 
 auto async_send_file(io_context& ctx, socket& sock, file& source,
-                     std::uint64_t offset, std::uint64_t byte_count,
-                     cancel_token& token)
+    std::uint64_t offset, std::uint64_t byte_count,
+    cancel_token& token)
     -> task<std::expected<std::uint64_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -776,7 +848,8 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
         co_return std::unexpected(associated.error());
 
     std::uint64_t transferred = 0;
-    while (transferred < byte_count) {
+    while (transferred < byte_count)
+    {
         const auto chunk = static_cast<DWORD>(std::min<std::uint64_t>(
             byte_count - transferred,
             std::numeric_limits<DWORD>::max()));
@@ -784,9 +857,10 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
         ov.set_offset(offset + transferred);
 
         const BOOL ok = ::TransmitFile(sock.native_handle(),
-                                       source.native_handle(), chunk, 0,
-                                       &ov, nullptr, 0);
-        if (!ok) {
+            source.native_handle(), chunk, 0,
+            &ov, nullptr, 0);
+        if (!ok)
+        {
             const auto error = ::WSAGetLastError();
             if (error != WSA_IO_PENDING)
                 co_return std::unexpected(
@@ -812,12 +886,13 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
-                      std::chrono::steady_clock::duration duration)
+    std::chrono::steady_clock::duration duration)
     -> task<std::expected<void, std::error_code>>
 {
     auto& iocp = static_cast<iocp_context&>(ctx);
 
-    struct timer_ctx {
+    struct timer_ctx
+    {
         iocp_overlapped ov;
         iocp_context* iocp_ptr;
     };
@@ -826,19 +901,22 @@ auto async_timer_wait(io_context& ctx,
     tc.iocp_ptr = &iocp;
 
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-    if (ms <= 0) ms = 1;
+    if (ms <= 0)
+        ms = 1;
 
     HANDLE timer = nullptr;
-    auto callback = [](PVOID param, BOOLEAN /*fired*/) {
+    auto callback = [](PVOID param, BOOLEAN /*fired*/)
+    {
         auto* p = static_cast<timer_ctx*>(param);
         p->iocp_ptr->post_completion(&p->ov);
     };
 
     if (!::CreateTimerQueueTimer(&timer, nullptr, callback, &tc,
-            static_cast<DWORD>(ms), 0, WT_EXECUTEONLYONCE)) {
+            static_cast<DWORD>(ms), 0, WT_EXECUTEONLYONCE))
+    {
         co_return std::unexpected(
             std::error_code(static_cast<int>(::GetLastError()),
-                            std::system_category()));
+                std::system_category()));
     }
 
     co_await iocp_suspend{tc.ov};
@@ -849,8 +927,8 @@ auto async_timer_wait(io_context& ctx,
 }
 
 auto async_timer_wait(io_context& ctx,
-                      std::chrono::steady_clock::duration duration,
-                      cancel_token& token)
+    std::chrono::steady_clock::duration duration,
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>
 {
     if (token.is_cancelled())
@@ -858,7 +936,8 @@ auto async_timer_wait(io_context& ctx,
 
     auto& iocp = static_cast<iocp_context&>(ctx);
 
-    struct timer_ctx {
+    struct timer_ctx
+    {
         iocp_overlapped ov;
         iocp_context* iocp_ptr;
         std::atomic<bool> completed{false};
@@ -868,26 +947,32 @@ auto async_timer_wait(io_context& ctx,
     tc.iocp_ptr = &iocp;
 
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-    if (ms <= 0) ms = 1;
+    if (ms <= 0)
+        ms = 1;
 
     HANDLE timer = nullptr;
-    auto callback = [](PVOID param, BOOLEAN /*fired*/) {
+    auto callback = [](PVOID param, BOOLEAN /*fired*/)
+    {
         auto* p = static_cast<timer_ctx*>(param);
-        if (!p->completed.exchange(true, std::memory_order_acq_rel)) {
+        if (!p->completed.exchange(true, std::memory_order_acq_rel))
+        {
             p->iocp_ptr->post_completion(&p->ov);
         }
     };
 
     if (!::CreateTimerQueueTimer(&timer, nullptr, callback, &tc,
-            static_cast<DWORD>(ms), 0, WT_EXECUTEONLYONCE)) {
+            static_cast<DWORD>(ms), 0, WT_EXECUTEONLYONCE))
+    {
         co_return std::unexpected(
             std::error_code(static_cast<int>(::GetLastError()),
-                            std::system_category()));
+                std::system_category()));
     }
 
-    auto cancel_timer = [](cancel_token& tk) noexcept {
+    auto cancel_timer = [](cancel_token& tk) noexcept
+    {
         auto* p = static_cast<timer_ctx*>(tk.ctx_);
-        if (p && !p->completed.exchange(true, std::memory_order_acq_rel)) {
+        if (p && !p->completed.exchange(true, std::memory_order_acq_rel))
+        {
             p->iocp_ptr->post_completion(&p->ov);
         }
     };
@@ -895,7 +980,8 @@ auto async_timer_wait(io_context& ctx,
     token.pending_.store(true, std::memory_order_release);
     token.ctx_ = &tc;
     token.cancel_fn_ = cancel_timer;
-    if (token.is_cancelled()) {
+    if (token.is_cancelled())
+    {
         cancel_timer(token);
     }
     co_await iocp_suspend{tc.ov};
@@ -927,7 +1013,8 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
 
     BOOL ok = ::ReadFile(port.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -935,12 +1022,13 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
-                       cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -954,7 +1042,8 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
 
     BOOL ok = ::ReadFile(port.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -966,7 +1055,8 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
@@ -981,7 +1071,8 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 
     BOOL ok = ::WriteFile(port.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -989,12 +1080,13 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
-                        cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -1008,7 +1100,8 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 
     BOOL ok = ::WriteFile(port.native_handle(), buf.data,
         static_cast<DWORD>(buf.size), nullptr, &ov);
-    if (!ok) {
+    if (!ok)
+    {
         DWORD err = ::GetLastError();
         if (err != ERROR_IO_PENDING)
             co_return std::unexpected(
@@ -1020,7 +1113,8 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
@@ -1029,13 +1123,14 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,
-                    mutable_buffer buf, endpoint& peer)
+    mutable_buffer buf, endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -1047,25 +1142,27 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     INT from_len = sizeof(from_addr);
 
     int ret = ::WSARecvFrom(sock.native_handle(), &wsabuf, 1,
-                            nullptr, &flags,
-                            reinterpret_cast<::sockaddr*>(&from_addr),
-                            &from_len, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, &flags,
+        reinterpret_cast<::sockaddr*>(&from_addr),
+        &from_len, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
 
     peer = endpoint_from_sockaddr(from_addr);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_recvfrom(io_context& ctx, socket& sock,
-                    mutable_buffer buf, endpoint& peer,
-                    cancel_token& token)
+    mutable_buffer buf, endpoint& peer,
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -1074,7 +1171,8 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -1086,10 +1184,11 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     INT from_len = sizeof(from_addr);
 
     int ret = ::WSARecvFrom(sock.native_handle(), &wsabuf, 1,
-                            nullptr, &flags,
-                            reinterpret_cast<::sockaddr*>(&from_addr),
-                            &from_len, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, &flags,
+        reinterpret_cast<::sockaddr*>(&from_addr),
+        &from_len, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
@@ -1100,20 +1199,22 @@ auto async_recvfrom(io_context& ctx, socket& sock,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
 
     peer = endpoint_from_sockaddr(from_addr);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
-                  const_buffer buf, const endpoint& peer)
+    const_buffer buf, const endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -1124,23 +1225,25 @@ auto async_sendto(io_context& ctx, socket& sock,
     int dest_len = fill_sockaddr(peer, dest);
 
     int ret = ::WSASendTo(sock.native_handle(), &wsabuf, 1,
-                          nullptr, 0,
-                          reinterpret_cast<const ::sockaddr*>(&dest),
-                          dest_len, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, 0,
+        reinterpret_cast<const ::sockaddr*>(&dest),
+        dest_len, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
     co_await iocp_suspend{ov};
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
-                  const_buffer buf, const endpoint& peer,
-                  cancel_token& token)
+    const_buffer buf, const endpoint& peer,
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -1149,7 +1252,8 @@ auto async_sendto(io_context& ctx, socket& sock,
     auto& iocp = static_cast<iocp_context&>(ctx);
 
     if (auto r = ensure_associated(iocp,
-            reinterpret_cast<HANDLE>(sock.native_handle())); !r)
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !r)
         co_return std::unexpected(r.error());
 
     WSABUF wsabuf{};
@@ -1160,10 +1264,11 @@ auto async_sendto(io_context& ctx, socket& sock,
     int dest_len = fill_sockaddr(peer, dest);
 
     int ret = ::WSASendTo(sock.native_handle(), &wsabuf, 1,
-                          nullptr, 0,
-                          reinterpret_cast<const ::sockaddr*>(&dest),
-                          dest_len, &ov, nullptr);
-    if (ret == SOCKET_ERROR) {
+        nullptr, 0,
+        reinterpret_cast<const ::sockaddr*>(&dest),
+        dest_len, &ov, nullptr);
+    if (ret == SOCKET_ERROR)
+    {
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
@@ -1174,7 +1279,8 @@ auto async_sendto(io_context& ctx, socket& sock,
 
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.error) co_return std::unexpected(ov.error);
+    if (ov.error)
+        co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
 }
 

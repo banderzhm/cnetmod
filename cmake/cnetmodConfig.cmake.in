@@ -9,6 +9,15 @@ if(WIN32)
     find_dependency(ZLIB QUIET)
 endif()
 
+if(@CNETMOD_HAS_LZ4@)
+    find_package(lz4 CONFIG QUIET)
+    if(NOT TARGET lz4::lz4 AND NOT TARGET LZ4::lz4 AND
+       NOT TARGET LZ4::LZ4 AND NOT TARGET unofficial::lz4::lz4 AND
+       NOT TARGET lz4_static AND NOT TARGET lz4_shared)
+        find_package(LZ4 CONFIG QUIET)
+    endif()
+endif()
+
 include("${CMAKE_CURRENT_LIST_DIR}/cnetmodTargets.cmake")
 
 check_required_components(cnetmod)

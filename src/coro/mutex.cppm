@@ -14,17 +14,21 @@ namespace cnetmod {
 
 /// Non-blocking coroutine mutex
 /// Suspends coroutine instead of blocking thread when contention occurs
-export class async_mutex {
+export class async_mutex
+{
     // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
 
-    class spinlock {
+    class spinlock
+    {
         std::atomic_flag flag_{};
+
     public:
         void lock() noexcept;
         void unlock() noexcept;
     };
 
-    struct auto_lock {
+    struct auto_lock
+    {
         spinlock& lk_;
         explicit auto_lock(spinlock& lk) noexcept;
         ~auto_lock();
@@ -32,7 +36,8 @@ export class async_mutex {
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
 
-    struct waiter_node {
+    struct waiter_node
+    {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
     };
@@ -45,7 +50,8 @@ public:
     auto operator=(const async_mutex&) -> async_mutex& = delete;
 
     /// co_await mtx.lock() to acquire lock
-    struct [[nodiscard]] lock_awaitable {
+    struct [[nodiscard]] lock_awaitable
+    {
         async_mutex& mtx_;
         waiter_node node_;
 
@@ -84,7 +90,8 @@ private:
 ///   async_lock_guard guard(mtx, std::adopt_lock);
 ///   // ... critical section ...
 ///   // guard destructor automatically unlocks
-export class async_lock_guard {
+export class async_lock_guard
+{
 public:
     explicit async_lock_guard(async_mutex& mtx, std::adopt_lock_t) noexcept;
 

@@ -28,86 +28,98 @@ export using auth_handler =
 // SOCKS5 Server Configuration
 // =============================================================================
 
-export struct server_config {
-  bool allow_no_auth = true;
-  bool allow_username_password = false;
-  bool allow_gssapi = false;
-  bool allow_bind = true;
-  bool allow_udp_associate = true;
-  auth_handler authenticator;
-  gssapi_context_factory gssapi_factory;
-  gssapi_protection_level gssapi_protection =
-      gssapi_protection_level::integrity;
-  std::size_t max_connections = 0; // 0 = unlimited
+export struct server_config
+{
+    bool allow_no_auth = true;
+    bool allow_username_password = false;
+    bool allow_gssapi = false;
+    bool allow_bind = true;
+    bool allow_udp_associate = true;
+    auth_handler authenticator;
+    gssapi_context_factory gssapi_factory;
+    gssapi_protection_level gssapi_protection =
+        gssapi_protection_level::integrity;
+    std::size_t max_connections = 0; // 0 = unlimited
 };
 
 // =============================================================================
 // SOCKS5 Server
 // =============================================================================
 
-export class server {
+export class server
+{
 public:
-  /// Single-threaded mode
-  explicit server(io_context &ctx, server_config config = {})
-      : ctx_(ctx), config_(std::move(config)) {}
+    /// Single-threaded mode
+    explicit server(io_context& ctx, server_config config = {})
+        : ctx_(ctx), config_(std::move(config)) {}
 
-  /// Multi-core mode
-  explicit server(server_context &sctx, server_config config = {})
-      : ctx_(sctx.accept_io()), sctx_(&sctx), config_(std::move(config)) {}
+    /// Multi-core mode
+    explicit server(server_context& sctx, server_config config = {})
+        : ctx_(sctx.accept_io()), sctx_(&sctx), config_(std::move(config)) {}
 
-  /// Listen on specified address and port
-  [[nodiscard]] auto listen(std::string_view host, std::uint16_t port,
-                            socket_options opts = {.reuse_address = true})
-      -> std::expected<void, std::error_code>;
+    /// Listen on specified address and port
+    [[nodiscard]] auto listen(std::string_view host, std::uint16_t port,
+        socket_options opts = {.reuse_address = true})
+        -> std::expected<void, std::error_code>;
 
-  /// Run server (accept loop)
-  auto run() -> task<void>;
+    /// Run server (accept loop)
+    auto run() -> task<void>;
 
-  /// Stop server
-  void stop();
+    /// Stop server
+    void stop();
 
-  /// Get current active connection count
-  [[nodiscard]] auto active_connections() const noexcept -> std::size_t {
-    return active_connections_.load(std::memory_order_relaxed);
-  }
+    /// Get current active connection count
+    [[nodiscard]] auto active_connections() const noexcept -> std::size_t
+    {
+        return active_connections_.load(std::memory_order_relaxed);
+    }
 
 private:
-  struct conn_count_guard {
-    std::atomic<std::size_t> &counter;
-    conn_count_guard(std::atomic<std::size_t> &c) noexcept : counter(c) {
-      counter.fetch_add(1, std::memory_order_relaxed);
-    }
-    ~conn_count_guard() { counter.fetch_sub(1, std::memory_order_relaxed); }
-    conn_count_guard(const conn_count_guard &) = delete;
-    auto operator=(const conn_count_guard &) -> conn_count_guard & = delete;
-  };
+    struct conn_count_guard
+    {
+        std::atomic<std::size_t>& counter;
 
-  auto handle_connection(socket client, io_context &io) -> task<void>;
-  auto handle_authentication(socket &client, io_context &io)
-      -> task<std::expected<std::optional<gssapi_session>, std::error_code>>;
-  auto handle_request(socket &client, io_context &io, gssapi_session *gssapi)
-      -> task<std::expected<void, std::error_code>>;
-  auto handle_connect(socket &client, const socks5_request &req, io_context &io,
-                      gssapi_session *gssapi)
-      -> task<std::expected<void, std::error_code>>;
-  auto handle_bind(socket &client, const socks5_request &req, io_context &io,
-                   gssapi_session *gssapi)
-      -> task<std::expected<void, std::error_code>>;
-  auto handle_udp_associate(socket &client, const socks5_request &req,
-                            io_context &io, gssapi_session *gssapi)
-      -> task<std::expected<void, std::error_code>>;
-  auto relay_udp(socket &control, socket udp_sock, io_context &io,
-                 gssapi_session *gssapi)
-      -> task<void>;
-  auto relay_data(socket &client, socket &target, io_context &io,
-                  gssapi_session *gssapi) -> task<void>;
+        conn_count_guard(std::atomic<std::size_t>& c) noexcept
+            : counter(c)
+        {
+            counter.fetch_add(1, std::memory_order_relaxed);
+        }
 
-  io_context &ctx_;
-  server_context *sctx_ = nullptr;
-  server_config config_;
-  std::unique_ptr<tcp::acceptor> acceptor_;
-  bool running_ = false;
-  std::atomic<std::size_t> active_connections_{0};
+        ~conn_count_guard()
+        {
+            counter.fetch_sub(1, std::memory_order_relaxed);
+        }
+
+        conn_count_guard(const conn_count_guard&) = delete;
+        auto operator=(const conn_count_guard&) -> conn_count_guard& = delete;
+    };
+
+    auto handle_connection(socket client, io_context& io) -> task<void>;
+    auto handle_authentication(socket& client, io_context& io)
+        -> task<std::expected<std::optional<gssapi_session>, std::error_code>>;
+    auto handle_request(socket& client, io_context& io, gssapi_session* gssapi)
+        -> task<std::expected<void, std::error_code>>;
+    auto handle_connect(socket& client, const socks5_request& req, io_context& io,
+        gssapi_session* gssapi)
+        -> task<std::expected<void, std::error_code>>;
+    auto handle_bind(socket& client, const socks5_request& req, io_context& io,
+        gssapi_session* gssapi)
+        -> task<std::expected<void, std::error_code>>;
+    auto handle_udp_associate(socket& client, const socks5_request& req,
+        io_context& io, gssapi_session* gssapi)
+        -> task<std::expected<void, std::error_code>>;
+    auto relay_udp(socket& control, socket udp_sock, io_context& io,
+        gssapi_session* gssapi)
+        -> task<void>;
+    auto relay_data(socket& client, socket& target, io_context& io,
+        gssapi_session* gssapi) -> task<void>;
+
+    io_context& ctx_;
+    server_context* sctx_ = nullptr;
+    server_config config_;
+    std::unique_ptr<tcp::acceptor> acceptor_;
+    bool running_ = false;
+    std::atomic<std::size_t> active_connections_{0};
 };
 
 } // namespace cnetmod::socks5

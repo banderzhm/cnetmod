@@ -35,9 +35,10 @@ namespace cnetmod {
 // circuit_breaker_options
 // =============================================================================
 
-export struct circuit_breaker_options {
-    std::uint32_t failure_threshold = 5;   ///< Failures before opening
-    std::uint32_t success_threshold = 2;   ///< Successes in half_open before closing
+export struct circuit_breaker_options
+{
+    std::uint32_t failure_threshold = 5; ///< Failures before opening
+    std::uint32_t success_threshold = 2; ///< Successes in half_open before closing
     std::chrono::steady_clock::duration
         timeout = std::chrono::seconds(30); ///< Time in open state before half_open
 };
@@ -46,30 +47,33 @@ export struct circuit_breaker_options {
 // circuit_breaker_state
 // =============================================================================
 
-export enum class circuit_breaker_state : std::uint8_t {
-    closed,     ///< Normal — requests pass through, failures tracked
-    open,       ///< Tripped — requests rejected immediately
-    half_open,  ///< Probing — limited requests allowed to test recovery
+export enum class circuit_breaker_state : std::uint8_t
+{
+    closed,    ///< Normal — requests pass through, failures tracked
+    open,      ///< Tripped — requests rejected immediately
+    half_open, ///< Probing — limited requests allowed to test recovery
 };
 
 // =============================================================================
 // circuit_breaker_error
 // =============================================================================
 
-export enum class circuit_breaker_errc {
+export enum class circuit_breaker_errc
+{
     success = 0,
-    circuit_open,  ///< Circuit is open, request rejected
+    circuit_open, ///< Circuit is open, request rejected
 };
 
 namespace detail {
 
-class cb_error_category_impl : public std::error_category {
-public:
-    auto name() const noexcept -> const char* override;
-    auto message(int ev) const -> std::string override;
-};
+    class cb_error_category_impl : public std::error_category
+    {
+    public:
+        auto name() const noexcept -> const char* override;
+        auto message(int ev) const -> std::string override;
+    };
 
-auto cb_category_instance() -> const std::error_category&;
+    auto cb_category_instance() -> const std::error_category&;
 
 } // namespace detail
 
@@ -79,7 +83,8 @@ export auto make_error_code(circuit_breaker_errc e) noexcept -> std::error_code;
 // circuit_breaker — Three-state circuit breaker
 // =============================================================================
 
-export class circuit_breaker {
+export class circuit_breaker
+{
 public:
     explicit circuit_breaker(circuit_breaker_options opts = {}) noexcept;
 
@@ -89,22 +94,27 @@ public:
     /// Execute an operation through the circuit breaker
     /// Fn must return task<expected<T, E>>
     template <typename T, typename E, typename Fn>
-        requires std::invocable<Fn> &&
+    requires std::invocable<Fn> &&
                  std::same_as<std::invoke_result_t<Fn>, task<std::expected<T, E>>>
-    auto execute(Fn fn) -> task<std::expected<T, E>> {
+    auto execute(Fn fn) -> task<std::expected<T, E>>
+    {
         // Check state transition: open → half_open on timeout
         auto action = pre_execute();
 
-        if (action == execute_action::reject) {
+        if (action == execute_action::reject)
+        {
             co_return std::unexpected(E{});
         }
 
         // Execute the operation
         auto result = co_await fn();
 
-        if (result.has_value()) {
+        if (result.has_value())
+        {
             on_success();
-        } else {
+        }
+        else
+        {
             on_failure();
         }
 
@@ -113,20 +123,25 @@ public:
 
     /// Execute with std::error_code as error type (convenience overload)
     template <typename T, typename Fn>
-        requires std::invocable<Fn> &&
+    requires std::invocable<Fn> &&
                  std::same_as<std::invoke_result_t<Fn>, task<std::expected<T, std::error_code>>>
-    auto execute_ec(Fn fn) -> task<std::expected<T, std::error_code>> {
+    auto execute_ec(Fn fn) -> task<std::expected<T, std::error_code>>
+    {
         auto action = pre_execute();
 
-        if (action == execute_action::reject) {
+        if (action == execute_action::reject)
+        {
             co_return std::unexpected(make_error_code(circuit_breaker_errc::circuit_open));
         }
 
         auto result = co_await fn();
 
-        if (result.has_value()) {
+        if (result.has_value())
+        {
             on_success();
-        } else {
+        }
+        else
+        {
             on_failure();
         }
 
@@ -149,7 +164,11 @@ public:
     void trip() noexcept;
 
 private:
-    enum class execute_action { allow, reject };
+    enum class execute_action
+    {
+        allow,
+        reject
+    };
 
     auto pre_execute() noexcept -> execute_action;
 
@@ -171,6 +190,7 @@ private:
 
 } // namespace cnetmod
 
-
 template <>
-struct std::is_error_code_enum<cnetmod::circuit_breaker_errc> : std::true_type {};
+struct std::is_error_code_enum<cnetmod::circuit_breaker_errc> : std::true_type
+{
+};

@@ -14,25 +14,29 @@ namespace cnetmod::mysql::orm {
 // =============================================================================
 
 export template <Model T>
-class select_builder {
+class select_builder
+{
 public:
     select_builder() = default;
 
     /// Custom SELECT columns (default generates all columns from meta)
-    auto columns(std::string_view cols) -> select_builder& {
+    auto columns(std::string_view cols) -> select_builder&
+    {
         custom_cols_ = cols;
         return *this;
     }
 
     /// WHERE clause (raw SQL)
-    auto where(std::string_view clause) -> select_builder& {
+    auto where(std::string_view clause) -> select_builder&
+    {
         where_ = clause;
         return *this;
     }
 
     /// WHERE clause + format_sql parameters
     auto where(std::string_view fmt,
-               std::initializer_list<param_value> args) -> select_builder& {
+        std::initializer_list<param_value> args) -> select_builder&
+    {
         where_fmt_ = fmt;
         where_args_.assign(args);
         return *this;
@@ -40,42 +44,50 @@ public:
 
     /// WHERE clause + vector parameters
     auto where(std::string_view fmt,
-               std::vector<param_value> args) -> select_builder& {
+        std::vector<param_value> args) -> select_builder&
+    {
         where_fmt_ = fmt;
         where_args_ = std::move(args);
         return *this;
     }
 
-    auto order_by(std::string_view clause) -> select_builder& {
+    auto order_by(std::string_view clause) -> select_builder&
+    {
         order_by_ = clause;
         return *this;
     }
 
-    auto limit(std::size_t n) -> select_builder& {
+    auto limit(std::size_t n) -> select_builder&
+    {
         limit_ = n;
         return *this;
     }
 
-    auto offset(std::size_t n) -> select_builder& {
+    auto offset(std::size_t n) -> select_builder&
+    {
         offset_ = n;
         return *this;
     }
 
     /// Generate final SQL
     [[nodiscard]] auto build_sql(
-        const format_options& opts = {}
-    ) const -> std::string
+        const format_options& opts = {}) const -> std::string
     {
         auto& meta = model_traits<T>::meta();
         std::string sql = "SELECT ";
 
         // Column list
-        if (!custom_cols_.empty()) {
+        if (!custom_cols_.empty())
+        {
             sql.append(custom_cols_);
-        } else {
+        }
+        else
+        {
             bool first = true;
-            for (auto& f : meta.fields) {
-                if (!first) sql.append(", ");
+            for (auto& f : meta.fields)
+            {
+                if (!first)
+                    sql.append(", ");
                 first = false;
                 sql.push_back('`');
                 sql.append(f.col.column_name);
@@ -88,28 +100,36 @@ public:
         sql.push_back('`');
 
         // WHERE
-        if (!where_fmt_.empty()) {
+        if (!where_fmt_.empty())
+        {
             sql.append(" WHERE ");
             auto r = format_sql(opts, where_fmt_, where_args_);
-            if (r) sql.append(*r);
-            else sql.append(where_fmt_); // fallback
-        } else if (!where_.empty()) {
+            if (r)
+                sql.append(*r);
+            else
+                sql.append(where_fmt_); // fallback
+        }
+        else if (!where_.empty())
+        {
             sql.append(" WHERE ");
             sql.append(where_);
         }
 
         // ORDER BY
-        if (!order_by_.empty()) {
+        if (!order_by_.empty())
+        {
             sql.append(" ORDER BY ");
             sql.append(order_by_);
         }
 
         // LIMIT / OFFSET
-        if (limit_ > 0) {
+        if (limit_ > 0)
+        {
             sql.append(" LIMIT ");
             sql.append(std::to_string(limit_));
         }
-        if (offset_ > 0) {
+        if (offset_ > 0)
+        {
             sql.append(" OFFSET ");
             sql.append(std::to_string(offset_));
         }
@@ -118,46 +138,54 @@ public:
     }
 
 private:
-    std::string              custom_cols_;
-    std::string              where_;
-    std::string              where_fmt_;
+    std::string custom_cols_;
+    std::string where_;
+    std::string where_fmt_;
     std::vector<param_value> where_args_;
-    std::string              order_by_;
-    std::size_t              limit_  = 0;
-    std::size_t              offset_ = 0;
+    std::string order_by_;
+    std::size_t limit_ = 0;
+    std::size_t offset_ = 0;
 };
 
 /// Factory function
 export template <Model T>
-auto select() -> select_builder<T> { return {}; }
+auto select() -> select_builder<T>
+{
+    return {};
+}
 
 // =============================================================================
 // insert_builder<T> — INSERT builder
 // =============================================================================
 
 export template <Model T>
-class insert_builder {
+class insert_builder
+{
 public:
     /// Set the model to insert
-    auto values(const T& model) -> insert_builder& {
+    auto values(const T& model) -> insert_builder&
+    {
         models_.clear();
         models_.push_back(model);
         return *this;
     }
 
     /// Batch insert
-    auto values(std::span<const T> models) -> insert_builder& {
+    auto values(std::span<const T> models) -> insert_builder&
+    {
         models_.assign(models.begin(), models.end());
         return *this;
     }
 
     /// Generate SQL + params
-    struct built_sql {
-        std::string              sql;
+    struct built_sql
+    {
+        std::string sql;
         std::vector<param_value> params;
     };
 
-    [[nodiscard]] auto build(const format_options& opts = {}) const -> built_sql {
+    [[nodiscard]] auto build(const format_options& opts = {}) const -> built_sql
+    {
         auto& meta = model_traits<T>::meta();
         auto ins_fields = meta.insertable_fields();
 
@@ -166,8 +194,10 @@ public:
         sql.append("` (");
 
         // Column names
-        for (std::size_t i = 0; i < ins_fields.size(); ++i) {
-            if (i > 0) sql.append(", ");
+        for (std::size_t i = 0; i < ins_fields.size(); ++i)
+        {
+            if (i > 0)
+                sql.append(", ");
             sql.push_back('`');
             sql.append(ins_fields[i]->col.column_name);
             sql.push_back('`');
@@ -177,11 +207,15 @@ public:
         std::vector<param_value> params;
 
         // One group (?, ?, ...) per row
-        for (std::size_t m = 0; m < models_.size(); ++m) {
-            if (m > 0) sql.append(", ");
+        for (std::size_t m = 0; m < models_.size(); ++m)
+        {
+            if (m > 0)
+                sql.append(", ");
             sql.push_back('(');
-            for (std::size_t i = 0; i < ins_fields.size(); ++i) {
-                if (i > 0) sql.append(", ");
+            for (std::size_t i = 0; i < ins_fields.size(); ++i)
+            {
+                if (i > 0)
+                    sql.append(", ");
                 sql.append("{}");
                 params.push_back(ins_fields[i]->getter(models_[m]));
             }
@@ -199,40 +233,49 @@ private:
 
 /// Factory function
 export template <Model T>
-auto insert_of() -> insert_builder<T> { return {}; }
+auto insert_of() -> insert_builder<T>
+{
+    return {};
+}
 
 // =============================================================================
 // update_builder<T> — UPDATE builder
 // =============================================================================
 
 export template <Model T>
-class update_builder {
+class update_builder
+{
 public:
     /// Update all non-PK fields by model PK
-    auto set(const T& model) -> update_builder& {
+    auto set(const T& model) -> update_builder&
+    {
         model_ = model;
         has_model_ = true;
         return *this;
     }
 
-    auto where(std::string_view clause) -> update_builder& {
+    auto where(std::string_view clause) -> update_builder&
+    {
         where_ = clause;
         return *this;
     }
 
     auto where(std::string_view fmt,
-               std::initializer_list<param_value> args) -> update_builder& {
+        std::initializer_list<param_value> args) -> update_builder&
+    {
         where_fmt_ = fmt;
         where_args_.assign(args);
         return *this;
     }
 
-    struct built_sql {
-        std::string              sql;
+    struct built_sql
+    {
+        std::string sql;
         std::vector<param_value> params;
     };
 
-    [[nodiscard]] auto build(const format_options& opts = {}) const -> built_sql {
+    [[nodiscard]] auto build(const format_options& opts = {}) const -> built_sql
+    {
         auto& meta = model_traits<T>::meta();
 
         std::string sql = "UPDATE `";
@@ -243,28 +286,38 @@ public:
 
         // SET col = {}
         bool first = true;
-        for (auto& f : meta.fields) {
-            if (f.col.is_pk()) continue;
-            if (!first) sql.append(", ");
+        for (auto& f : meta.fields)
+        {
+            if (f.col.is_pk())
+                continue;
+            if (!first)
+                sql.append(", ");
             first = false;
             sql.push_back('`');
             sql.append(f.col.column_name);
             sql.append("` = {}");
-            if (has_model_) params.push_back(f.getter(model_));
+            if (has_model_)
+                params.push_back(f.getter(model_));
         }
 
         // WHERE
-        if (!where_fmt_.empty()) {
+        if (!where_fmt_.empty())
+        {
             sql.append(" WHERE ");
             sql.append(where_fmt_);
             params.insert(params.end(), where_args_.begin(), where_args_.end());
-        } else if (!where_.empty()) {
+        }
+        else if (!where_.empty())
+        {
             sql.append(" WHERE ");
             sql.append(where_);
-        } else if (has_model_) {
+        }
+        else if (has_model_)
+        {
             // Default by PK
             auto* pk = meta.pk();
-            if (pk) {
+            if (pk)
+            {
                 sql.append(" WHERE `");
                 sql.append(pk->col.column_name);
                 sql.append("` = {}");
@@ -277,49 +330,58 @@ public:
     }
 
 private:
-    T                        model_{};
-    bool                     has_model_ = false;
-    std::string              where_;
-    std::string              where_fmt_;
+    T model_{};
+    bool has_model_ = false;
+    std::string where_;
+    std::string where_fmt_;
     std::vector<param_value> where_args_;
 };
 
 /// Factory function
 export template <Model T>
-auto update_of() -> update_builder<T> { return {}; }
+auto update_of() -> update_builder<T>
+{
+    return {};
+}
 
 // =============================================================================
 // delete_builder<T> — DELETE builder
 // =============================================================================
 
 export template <Model T>
-class delete_builder {
+class delete_builder
+{
 public:
-    auto where(std::string_view clause) -> delete_builder& {
+    auto where(std::string_view clause) -> delete_builder&
+    {
         where_ = clause;
         return *this;
     }
 
     auto where(std::string_view fmt,
-               std::initializer_list<param_value> args) -> delete_builder& {
+        std::initializer_list<param_value> args) -> delete_builder&
+    {
         where_fmt_ = fmt;
         where_args_.assign(args);
         return *this;
     }
 
     auto where(std::string_view fmt,
-               std::vector<param_value> args) -> delete_builder& {
+        std::vector<param_value> args) -> delete_builder&
+    {
         where_fmt_ = fmt;
         where_args_ = std::move(args);
         return *this;
     }
 
-    struct built_sql {
-        std::string              sql;
+    struct built_sql
+    {
+        std::string sql;
         std::vector<param_value> params;
     };
 
-    [[nodiscard]] auto build(const format_options& opts = {}) const -> built_sql {
+    [[nodiscard]] auto build(const format_options& opts = {}) const -> built_sql
+    {
         auto& meta = model_traits<T>::meta();
 
         std::string sql = "DELETE FROM `";
@@ -328,11 +390,14 @@ public:
 
         std::vector<param_value> params;
 
-        if (!where_fmt_.empty()) {
+        if (!where_fmt_.empty())
+        {
             sql.append(" WHERE ");
             sql.append(where_fmt_);
             params = where_args_;
-        } else if (!where_.empty()) {
+        }
+        else if (!where_.empty())
+        {
             sql.append(" WHERE ");
             sql.append(where_);
         }
@@ -342,14 +407,17 @@ public:
     }
 
 private:
-    std::string              where_;
-    std::string              where_fmt_;
+    std::string where_;
+    std::string where_fmt_;
     std::vector<param_value> where_args_;
 };
 
 /// Factory function
 export template <Model T>
-auto delete_of() -> delete_builder<T> { return {}; }
+auto delete_of() -> delete_builder<T>
+{
+    return {};
+}
 
 // =============================================================================
 // DDL generation
@@ -357,7 +425,8 @@ auto delete_of() -> delete_builder<T> { return {}; }
 
 /// Generate CREATE TABLE IF NOT EXISTS SQL
 export template <Model T>
-auto build_create_table_sql() -> std::string {
+auto build_create_table_sql() -> std::string
+{
     auto& meta = model_traits<T>::meta();
 
     std::string sql = "CREATE TABLE IF NOT EXISTS `";
@@ -366,9 +435,11 @@ auto build_create_table_sql() -> std::string {
 
     std::string pk_col;
 
-    for (std::size_t i = 0; i < meta.fields.size(); ++i) {
+    for (std::size_t i = 0; i < meta.fields.size(); ++i)
+    {
         auto& f = meta.fields[i];
-        if (i > 0) sql.append(",\n");
+        if (i > 0)
+            sql.append(",\n");
         sql.append("  `");
         sql.append(f.col.column_name);
         sql.append("` ");
@@ -379,22 +450,27 @@ auto build_create_table_sql() -> std::string {
         else
             sql.append(sql_type_str(f.col.type));
 
-        if (f.col.is_pk()) {
+        if (f.col.is_pk())
+        {
             sql.append(" NOT NULL");
             pk_col = f.col.column_name;
-        } else if (!f.col.is_nullable()) {
+        }
+        else if (!f.col.is_nullable())
+        {
             sql.append(" NOT NULL");
-        } else {
+        }
+        else
+        {
             sql.append(" DEFAULT NULL");
         }
 
         // Only add AUTO_INCREMENT for auto_increment strategy
-        if (f.col.is_auto() && f.col.strategy != id_strategy::uuid
-                            && f.col.strategy != id_strategy::snowflake)
+        if (f.col.is_auto() && f.col.strategy != id_strategy::uuid && f.col.strategy != id_strategy::snowflake)
             sql.append(" AUTO_INCREMENT");
     }
 
-    if (!pk_col.empty()) {
+    if (!pk_col.empty())
+    {
         sql.append(",\n  PRIMARY KEY (`");
         sql.append(pk_col);
         sql.append("`)");
@@ -406,7 +482,8 @@ auto build_create_table_sql() -> std::string {
 
 /// Generate DROP TABLE IF EXISTS SQL
 export template <Model T>
-auto build_drop_table_sql() -> std::string {
+auto build_drop_table_sql() -> std::string
+{
     auto& meta = model_traits<T>::meta();
     std::string sql = "DROP TABLE IF EXISTS `";
     sql.append(meta.table_name);

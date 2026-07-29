@@ -16,27 +16,30 @@ namespace cnetmod {
 
 #ifdef CNETMOD_HAS_SSL
 
-export enum class dtls_role {
+export enum class dtls_role
+{
     client,
     server,
 };
 
-export struct dtls_datagram_options {
+export struct dtls_datagram_options
+{
     std::size_t mtu = 1400;
     std::size_t recv_buffer_size = 65536;
 };
 
-export class dtls_datagram_session {
+export class dtls_datagram_session
+{
 public:
     using receive_handler =
         std::function<task<std::expected<std::vector<std::byte>, std::error_code>>()>;
 
     dtls_datagram_session(ssl_context& ssl_ctx,
-                          io_context& io_ctx,
-                          socket& sock,
-                          endpoint peer,
-                          dtls_role role,
-                          dtls_datagram_options options = {});
+        io_context& io_ctx,
+        socket& sock,
+        endpoint peer,
+        dtls_role role,
+        dtls_datagram_options options = {});
     ~dtls_datagram_session();
 
     dtls_datagram_session(const dtls_datagram_session&) = delete;

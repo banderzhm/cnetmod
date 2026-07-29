@@ -3,16 +3,16 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <Windows.h>
 #else
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <cerrno>
+    #include <cerrno>
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <unistd.h>
 #endif
 
 module cnetmod.core.file;
@@ -21,16 +21,21 @@ import cnetmod.core.error;
 
 namespace cnetmod {
 
-file::~file() {
+file::~file()
+{
     close();
 }
 
-file::file(file&& other) noexcept : handle_(other.handle_) {
+file::file(file&& other) noexcept
+    : handle_(other.handle_)
+{
     other.handle_ = invalid_file_handle;
 }
 
-auto file::operator=(file&& other) noexcept -> file& {
-    if (this != &other) {
+auto file::operator=(file&& other) noexcept -> file&
+{
+    if (this != &other)
+    {
         close();
         handle_ = other.handle_;
         other.handle_ = invalid_file_handle;
@@ -79,10 +84,10 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
         nullptr,
         disposition,
         flags,
-        nullptr
-    );
+        nullptr);
 
-    if (h == INVALID_HANDLE_VALUE) {
+    if (h == INVALID_HANDLE_VALUE)
+    {
         int err = static_cast<int>(::GetLastError());
         return std::unexpected(make_error_code(from_native_error(err)));
     }
@@ -99,27 +104,31 @@ auto file::open(const std::filesystem::path& path, open_mode mode)
     else
         flags |= O_RDONLY;
 
-    if (has_flag(mode, open_mode::append))   flags |= O_APPEND;
-    if (has_flag(mode, open_mode::create))   flags |= O_CREAT;
-    if (has_flag(mode, open_mode::truncate)) flags |= O_TRUNC;
+    if (has_flag(mode, open_mode::append))
+        flags |= O_APPEND;
+    if (has_flag(mode, open_mode::create))
+        flags |= O_CREAT;
+    if (has_flag(mode, open_mode::truncate))
+        flags |= O_TRUNC;
     if (has_flag(mode, open_mode::create_new))
         flags |= (O_CREAT | O_EXCL);
-#ifdef CNETMOD_PLATFORM_LINUX
+    #ifdef CNETMOD_PLATFORM_LINUX
     if (has_flag(mode, open_mode::direct))
         flags |= O_DIRECT;
-#endif
+    #endif
 
     int fd = ::open(path.c_str(), flags, 0644);
     if (fd < 0)
         return std::unexpected(make_error_code(from_native_error(errno)));
 
-#ifdef CNETMOD_PLATFORM_MACOS
-    if (has_flag(mode, open_mode::direct) && ::fcntl(fd, F_NOCACHE, 1) < 0) {
+    #ifdef CNETMOD_PLATFORM_MACOS
+    if (has_flag(mode, open_mode::direct) && ::fcntl(fd, F_NOCACHE, 1) < 0)
+    {
         const auto error = errno;
         ::close(fd);
         return std::unexpected(make_error_code(from_native_error(error)));
     }
-#endif
+    #endif
 
     return file{fd};
 #endif
@@ -134,7 +143,8 @@ auto file::stat(const std::filesystem::path& path)
 {
 #ifdef CNETMOD_PLATFORM_WINDOWS
     WIN32_FILE_ATTRIBUTE_DATA data{};
-    if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data)) {
+    if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
+    {
         int err = static_cast<int>(::GetLastError());
         return std::unexpected(make_error_code(from_native_error(err)));
     }
@@ -142,11 +152,13 @@ auto file::stat(const std::filesystem::path& path)
     file_stat st{};
     st.is_directory = (data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
     st.is_regular = !st.is_directory;
-    st.size = (static_cast<std::uint64_t>(data.nFileSizeHigh) << 32)
-              | static_cast<std::uint64_t>(data.nFileSizeLow);
+    st.size = (static_cast<std::uint64_t>(data.nFileSizeHigh) << 32) | static_cast<std::uint64_t>(data.nFileSizeLow);
     return st;
 #else
-    struct stat s{};
+    struct stat s
+    {
+    };
+
     if (::stat(path.c_str(), &s) != 0)
         return std::unexpected(make_error_code(from_native_error(errno)));
 
@@ -162,8 +174,10 @@ auto file::stat(const std::filesystem::path& path)
 // Close
 // =============================================================================
 
-void file::close() noexcept {
-    if (handle_ == invalid_file_handle) return;
+void file::close() noexcept
+{
+    if (handle_ == invalid_file_handle)
+        return;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     ::CloseHandle(handle_);
 #else
@@ -176,16 +190,21 @@ void file::close() noexcept {
 // File size
 // =============================================================================
 
-auto file::size() const -> std::expected<std::uint64_t, std::error_code> {
+auto file::size() const -> std::expected<std::uint64_t, std::error_code>
+{
 #ifdef CNETMOD_PLATFORM_WINDOWS
     LARGE_INTEGER li{};
-    if (!::GetFileSizeEx(handle_, &li)) {
+    if (!::GetFileSizeEx(handle_, &li))
+    {
         int err = static_cast<int>(::GetLastError());
         return std::unexpected(make_error_code(from_native_error(err)));
     }
     return static_cast<std::uint64_t>(li.QuadPart);
 #else
-    struct stat st{};
+    struct stat st
+    {
+    };
+
     if (::fstat(handle_, &st) != 0)
         return std::unexpected(make_error_code(from_native_error(errno)));
     return static_cast<std::uint64_t>(st.st_size);

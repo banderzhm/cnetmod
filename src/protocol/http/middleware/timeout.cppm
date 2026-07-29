@@ -34,23 +34,23 @@ namespace cnetmod {
 export inline auto request_timeout(std::chrono::steady_clock::duration max_time)
     -> http::middleware_fn
 {
-    return [max_time](http::request_context& ctx, http::next_fn next) -> task<void> {
+    return [max_time](http::request_context& ctx, http::next_fn next) -> task<void>
+    {
         auto start = std::chrono::steady_clock::now();
 
         co_await next();
 
         auto elapsed = std::chrono::steady_clock::now() - start;
-        if (elapsed > max_time) {
+        if (elapsed > max_time)
+        {
             auto ms = std::chrono::duration<double, std::milli>(elapsed).count();
             auto limit_ms = std::chrono::duration<double, std::milli>(max_time).count();
 
             logger::warn("{} {} exceeded timeout ({:.0f}ms > {:.0f}ms)",
-                         ctx.method(), ctx.path(), ms, limit_ms);
+                ctx.method(), ctx.path(), ms, limit_ms);
 
             // Override handler's response to 504
-            ctx.json(http::status::gateway_timeout, std::format(
-                R"({{"error":"request timeout","elapsed_ms":{:.0f},"limit_ms":{:.0f}}})",
-                ms, limit_ms));
+            ctx.json(http::status::gateway_timeout, std::format(R"({{"error":"request timeout","elapsed_ms":{:.0f},"limit_ms":{:.0f}}})", ms, limit_ms));
         }
     };
 }

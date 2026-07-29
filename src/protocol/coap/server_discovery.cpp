@@ -12,9 +12,11 @@ import :server;
 
 namespace cnetmod::coap {
 
-auto udp_server::make_discovery_response(const inbound_request& req) -> std::optional<message> {
+auto udp_server::make_discovery_response(const inbound_request& req) -> std::optional<message>
+{
     if (!cfg_.enable_resource_discovery || req.request.method_code() != method::get ||
-        req.path != "/.well-known/core") {
+        req.path != "/.well-known/core")
+    {
         return std::nullopt;
     }
 
@@ -25,24 +27,29 @@ auto udp_server::make_discovery_response(const inbound_request& req) -> std::opt
     }
 
     std::string body;
-    for (const auto& res : resources) {
-        if (!body.empty()) {
+    for (const auto& res : resources)
+    {
+        if (!body.empty())
+        {
             body.push_back(',');
         }
         body += "<";
         body += res.path;
         body += ">";
-        if (!res.rt.empty()) {
+        if (!res.rt.empty())
+        {
             body += ";rt=\"";
             body += res.rt;
             body += "\"";
         }
-        if (!res.if_.empty()) {
+        if (!res.if_.empty())
+        {
             body += ";if=\"";
             body += res.if_;
             body += "\"";
         }
-        if (res.observable) {
+        if (res.observable)
+        {
             body += ";obs";
         }
     }

@@ -13,11 +13,13 @@ namespace cnetmod {
 // =============================================================================
 
 /// Read-only buffer view (does not own data)
-export struct const_buffer {
+export struct const_buffer
+{
     const void* data = nullptr;
     std::size_t size = 0;
 
     constexpr const_buffer() noexcept = default;
+
     constexpr const_buffer(const void* p, std::size_t n) noexcept
         : data(p), size(n) {}
 
@@ -27,11 +29,13 @@ export struct const_buffer {
 };
 
 /// Writable buffer view (does not own data)
-export struct mutable_buffer {
+export struct mutable_buffer
+{
     void* data = nullptr;
     std::size_t size = 0;
 
     constexpr mutable_buffer() noexcept = default;
+
     constexpr mutable_buffer(void* p, std::size_t n) noexcept
         : data(p), size(n) {}
 
@@ -40,7 +44,8 @@ export struct mutable_buffer {
         : data(s.data()), size(s.size()) {}
 
     /// Implicit conversion to const_buffer
-    constexpr operator const_buffer() const noexcept {
+    constexpr operator const_buffer() const noexcept
+    {
         return {data, size};
     }
 };
@@ -78,10 +83,11 @@ export auto buffer(const std::vector<std::byte>& v) noexcept -> const_buffer;
 
 /// Owning buffer with explicit power-of-two alignment. Useful with
 /// open_mode::direct, where platforms require aligned addresses and sizes.
-export class aligned_buffer {
+export class aligned_buffer
+{
 public:
     explicit aligned_buffer(std::size_t size,
-                            std::size_t alignment = 4096);
+        std::size_t alignment = 4096);
     ~aligned_buffer();
 
     aligned_buffer(const aligned_buffer&) = delete;
@@ -115,7 +121,8 @@ constexpr auto buffer(std::array<std::byte, N>& a) noexcept
 // =============================================================================
 
 /// Growable dynamic buffer for receiving variable-length data
-export class dynamic_buffer {
+export class dynamic_buffer
+{
 public:
     explicit dynamic_buffer(std::size_t initial_capacity = 4096);
 
@@ -145,7 +152,8 @@ private:
 // =============================================================================
 
 /// Byte order enum
-export enum class byte_order {
+export enum class byte_order
+{
     little_endian,
     big_endian,
     native =
@@ -159,83 +167,128 @@ export enum class byte_order {
 
 namespace detail {
 
-constexpr auto bswap16(std::uint16_t v) noexcept -> std::uint16_t {
-    return static_cast<std::uint16_t>((v >> 8) | (v << 8));
-}
+    constexpr auto bswap16(std::uint16_t v) noexcept -> std::uint16_t
+    {
+        return static_cast<std::uint16_t>((v >> 8) | (v << 8));
+    }
 
-constexpr auto bswap32(std::uint32_t v) noexcept -> std::uint32_t {
-    return ((v >> 24) & 0x000000FF)
-         | ((v >>  8) & 0x0000FF00)
-         | ((v <<  8) & 0x00FF0000)
-         | ((v << 24) & 0xFF000000);
-}
+    constexpr auto bswap32(std::uint32_t v) noexcept -> std::uint32_t
+    {
+        return ((v >> 24) & 0x000000FF) | ((v >> 8) & 0x0000FF00) | ((v << 8) & 0x00FF0000) | ((v << 24) & 0xFF000000);
+    }
 
-constexpr auto bswap64(std::uint64_t v) noexcept -> std::uint64_t {
-    return ((v >> 56) & 0x00000000000000FF)
-         | ((v >> 40) & 0x000000000000FF00)
-         | ((v >> 24) & 0x0000000000FF0000)
-         | ((v >>  8) & 0x00000000FF000000)
-         | ((v <<  8) & 0x000000FF00000000)
-         | ((v << 24) & 0x0000FF0000000000)
-         | ((v << 40) & 0x00FF000000000000)
-         | ((v << 56) & 0xFF00000000000000);
-}
+    constexpr auto bswap64(std::uint64_t v) noexcept -> std::uint64_t
+    {
+        return ((v >> 56) & 0x00000000000000FF) | ((v >> 40) & 0x000000000000FF00) | ((v >> 24) & 0x0000000000FF0000) | ((v >> 8) & 0x00000000FF000000) | ((v << 8) & 0x000000FF00000000) | ((v << 24) & 0x0000FF0000000000) | ((v << 40) & 0x00FF000000000000) | ((v << 56) & 0xFF00000000000000);
+    }
 
 } // namespace detail
 
 // --- host <-> network (big-endian) ---
 
-export constexpr auto hton(std::uint16_t v) noexcept -> std::uint16_t {
-    if constexpr (byte_order::native == byte_order::big_endian) return v;
-    else return detail::bswap16(v);
+export constexpr auto hton(std::uint16_t v) noexcept -> std::uint16_t
+{
+    if constexpr (byte_order::native == byte_order::big_endian)
+        return v;
+    else
+        return detail::bswap16(v);
 }
 
-export constexpr auto hton(std::uint32_t v) noexcept -> std::uint32_t {
-    if constexpr (byte_order::native == byte_order::big_endian) return v;
-    else return detail::bswap32(v);
+export constexpr auto hton(std::uint32_t v) noexcept -> std::uint32_t
+{
+    if constexpr (byte_order::native == byte_order::big_endian)
+        return v;
+    else
+        return detail::bswap32(v);
 }
 
-export constexpr auto hton(std::uint64_t v) noexcept -> std::uint64_t {
-    if constexpr (byte_order::native == byte_order::big_endian) return v;
-    else return detail::bswap64(v);
+export constexpr auto hton(std::uint64_t v) noexcept -> std::uint64_t
+{
+    if constexpr (byte_order::native == byte_order::big_endian)
+        return v;
+    else
+        return detail::bswap64(v);
 }
 
-export constexpr auto ntoh(std::uint16_t v) noexcept -> std::uint16_t { return hton(v); }
-export constexpr auto ntoh(std::uint32_t v) noexcept -> std::uint32_t { return hton(v); }
-export constexpr auto ntoh(std::uint64_t v) noexcept -> std::uint64_t { return hton(v); }
+export constexpr auto ntoh(std::uint16_t v) noexcept -> std::uint16_t
+{
+    return hton(v);
+}
+
+export constexpr auto ntoh(std::uint32_t v) noexcept -> std::uint32_t
+{
+    return hton(v);
+}
+
+export constexpr auto ntoh(std::uint64_t v) noexcept -> std::uint64_t
+{
+    return hton(v);
+}
 
 // --- host <-> little-endian ---
 
-export constexpr auto htole(std::uint16_t v) noexcept -> std::uint16_t {
-    if constexpr (byte_order::native == byte_order::little_endian) return v;
-    else return detail::bswap16(v);
+export constexpr auto htole(std::uint16_t v) noexcept -> std::uint16_t
+{
+    if constexpr (byte_order::native == byte_order::little_endian)
+        return v;
+    else
+        return detail::bswap16(v);
 }
 
-export constexpr auto htole(std::uint32_t v) noexcept -> std::uint32_t {
-    if constexpr (byte_order::native == byte_order::little_endian) return v;
-    else return detail::bswap32(v);
+export constexpr auto htole(std::uint32_t v) noexcept -> std::uint32_t
+{
+    if constexpr (byte_order::native == byte_order::little_endian)
+        return v;
+    else
+        return detail::bswap32(v);
 }
 
-export constexpr auto htole(std::uint64_t v) noexcept -> std::uint64_t {
-    if constexpr (byte_order::native == byte_order::little_endian) return v;
-    else return detail::bswap64(v);
+export constexpr auto htole(std::uint64_t v) noexcept -> std::uint64_t
+{
+    if constexpr (byte_order::native == byte_order::little_endian)
+        return v;
+    else
+        return detail::bswap64(v);
 }
 
-export constexpr auto letoh(std::uint16_t v) noexcept -> std::uint16_t { return htole(v); }
-export constexpr auto letoh(std::uint32_t v) noexcept -> std::uint32_t { return htole(v); }
-export constexpr auto letoh(std::uint64_t v) noexcept -> std::uint64_t { return htole(v); }
+export constexpr auto letoh(std::uint16_t v) noexcept -> std::uint16_t
+{
+    return htole(v);
+}
+
+export constexpr auto letoh(std::uint32_t v) noexcept -> std::uint32_t
+{
+    return htole(v);
+}
+
+export constexpr auto letoh(std::uint64_t v) noexcept -> std::uint64_t
+{
+    return htole(v);
+}
 
 // --- Generic byte_swap ---
 
-export constexpr auto byte_swap(std::uint16_t v) noexcept -> std::uint16_t { return detail::bswap16(v); }
-export constexpr auto byte_swap(std::uint32_t v) noexcept -> std::uint32_t { return detail::bswap32(v); }
-export constexpr auto byte_swap(std::uint64_t v) noexcept -> std::uint64_t { return detail::bswap64(v); }
+export constexpr auto byte_swap(std::uint16_t v) noexcept -> std::uint16_t
+{
+    return detail::bswap16(v);
+}
+
+export constexpr auto byte_swap(std::uint32_t v) noexcept -> std::uint32_t
+{
+    return detail::bswap32(v);
+}
+
+export constexpr auto byte_swap(std::uint64_t v) noexcept -> std::uint64_t
+{
+    return detail::bswap64(v);
+}
 
 // =============================================================================
 // buffer_reader — Read integers from buffer in specified byte order
 // =============================================================================
 
-export class buffer_reader {
+export class buffer_reader
+{
 public:
     explicit buffer_reader(const_buffer buf) noexcept;
 
@@ -281,7 +334,8 @@ private:
 // buffer_writer — Write integers to buffer in specified byte order
 // =============================================================================
 
-export class buffer_writer {
+export class buffer_writer
+{
 public:
     explicit buffer_writer(mutable_buffer buf) noexcept;
 

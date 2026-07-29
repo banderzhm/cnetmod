@@ -3,17 +3,17 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-#include <Windows.h>
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <Windows.h>
 #else
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <termios.h>
-#include <cerrno>
+    #include <cerrno>
+    #include <fcntl.h>
+    #include <sys/stat.h>
+    #include <sys/types.h>
+    #include <termios.h>
+    #include <unistd.h>
 #endif
 
 module cnetmod.core.serial_port;
@@ -26,7 +26,8 @@ namespace cnetmod {
 // Lifecycle
 // =============================================================================
 
-serial_port::~serial_port() {
+serial_port::~serial_port()
+{
     close();
 }
 
@@ -36,8 +37,10 @@ serial_port::serial_port(serial_port&& other) noexcept
     other.handle_ = invalid_file_handle;
 }
 
-auto serial_port::operator=(serial_port&& other) noexcept -> serial_port& {
-    if (this != &other) {
+auto serial_port::operator=(serial_port&& other) noexcept -> serial_port&
+{
+    if (this != &other)
+    {
         close();
         handle_ = other.handle_;
         config_ = other.config_;
@@ -50,8 +53,10 @@ auto serial_port::operator=(serial_port&& other) noexcept -> serial_port& {
 // Close
 // =============================================================================
 
-void serial_port::close() noexcept {
-    if (handle_ == invalid_file_handle) return;
+void serial_port::close() noexcept
+{
+    if (handle_ == invalid_file_handle)
+        return;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     ::CloseHandle(handle_);
 #else
@@ -71,9 +76,12 @@ auto serial_port::open(std::string_view name, const serial_config& config)
 {
     // Construct device path: \\.\COMn
     std::string device_path;
-    if (name.starts_with("\\\\.\\")) {
+    if (name.starts_with("\\\\.\\"))
+    {
         device_path = std::string(name);
-    } else {
+    }
+    else
+    {
         device_path = std::string("\\\\.\\") + std::string(name);
     }
 
@@ -90,14 +98,14 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     HANDLE h = ::CreateFileW(
         wpath.c_str(),
         GENERIC_READ | GENERIC_WRITE,
-        0,              // No sharing
+        0, // No sharing
         nullptr,
         OPEN_EXISTING,
         FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED,
-        nullptr
-    );
+        nullptr);
 
-    if (h == INVALID_HANDLE_VALUE) {
+    if (h == INVALID_HANDLE_VALUE)
+    {
         int err = static_cast<int>(::GetLastError());
         return std::unexpected(make_error_code(from_native_error(err)));
     }
@@ -106,7 +114,8 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     DCB dcb{};
     dcb.DCBlength = sizeof(DCB);
 
-    if (!::GetCommState(h, &dcb)) {
+    if (!::GetCommState(h, &dcb))
+    {
         int err = static_cast<int>(::GetLastError());
         ::CloseHandle(h);
         return std::unexpected(make_error_code(from_native_error(err)));
@@ -116,38 +125,62 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     dcb.ByteSize = config.data_bits;
 
     // Stop bits
-    switch (config.stop) {
-        case stop_bits::one:      dcb.StopBits = ONESTOPBIT;   break;
-        case stop_bits::one_half: dcb.StopBits = ONE5STOPBITS; break;
-        case stop_bits::two:      dcb.StopBits = TWOSTOPBITS;  break;
+    switch (config.stop)
+    {
+    case stop_bits::one:
+        dcb.StopBits = ONESTOPBIT;
+        break;
+    case stop_bits::one_half:
+        dcb.StopBits = ONE5STOPBITS;
+        break;
+    case stop_bits::two:
+        dcb.StopBits = TWOSTOPBITS;
+        break;
     }
 
     // Parity
-    switch (config.par) {
-        case parity::none:  dcb.Parity = NOPARITY;    dcb.fParity = FALSE; break;
-        case parity::odd:   dcb.Parity = ODDPARITY;   dcb.fParity = TRUE;  break;
-        case parity::even:  dcb.Parity = EVENPARITY;  dcb.fParity = TRUE;  break;
-        case parity::mark:  dcb.Parity = MARKPARITY;  dcb.fParity = TRUE;  break;
-        case parity::space: dcb.Parity = SPACEPARITY; dcb.fParity = TRUE;  break;
+    switch (config.par)
+    {
+    case parity::none:
+        dcb.Parity = NOPARITY;
+        dcb.fParity = FALSE;
+        break;
+    case parity::odd:
+        dcb.Parity = ODDPARITY;
+        dcb.fParity = TRUE;
+        break;
+    case parity::even:
+        dcb.Parity = EVENPARITY;
+        dcb.fParity = TRUE;
+        break;
+    case parity::mark:
+        dcb.Parity = MARKPARITY;
+        dcb.fParity = TRUE;
+        break;
+    case parity::space:
+        dcb.Parity = SPACEPARITY;
+        dcb.fParity = TRUE;
+        break;
     }
 
     // Flow control
     dcb.fOutxCtsFlow = FALSE;
-    dcb.fRtsControl  = RTS_CONTROL_DISABLE;
-    dcb.fOutX        = FALSE;
-    dcb.fInX         = FALSE;
+    dcb.fRtsControl = RTS_CONTROL_DISABLE;
+    dcb.fOutX = FALSE;
+    dcb.fInX = FALSE;
 
-    switch (config.flow) {
-        case flow_control::none:
-            break;
-        case flow_control::hardware:
-            dcb.fOutxCtsFlow = TRUE;
-            dcb.fRtsControl  = RTS_CONTROL_HANDSHAKE;
-            break;
-        case flow_control::software:
-            dcb.fOutX = TRUE;
-            dcb.fInX  = TRUE;
-            break;
+    switch (config.flow)
+    {
+    case flow_control::none:
+        break;
+    case flow_control::hardware:
+        dcb.fOutxCtsFlow = TRUE;
+        dcb.fRtsControl = RTS_CONTROL_HANDSHAKE;
+        break;
+    case flow_control::software:
+        dcb.fOutX = TRUE;
+        dcb.fInX = TRUE;
+        break;
     }
 
     // Binary mode
@@ -155,7 +188,8 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     dcb.fDtrControl = DTR_CONTROL_ENABLE;
     dcb.fAbortOnError = FALSE;
 
-    if (!::SetCommState(h, &dcb)) {
+    if (!::SetCommState(h, &dcb))
+    {
         int err = static_cast<int>(::GetLastError());
         ::CloseHandle(h);
         return std::unexpected(make_error_code(from_native_error(err)));
@@ -165,14 +199,16 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     COMMTIMEOUTS timeouts{};
     // In OVERLAPPED mode, typically set to 0 to let IOCP manage
     // But setting ReadTotalTimeoutConstant can give read operations an upper limit
-    timeouts.ReadIntervalTimeout         = MAXDWORD;
-    timeouts.ReadTotalTimeoutMultiplier  = MAXDWORD;
-    timeouts.ReadTotalTimeoutConstant    = config.read_timeout_ms > 0
-                                           ? config.read_timeout_ms : MAXDWORD - 1;
+    timeouts.ReadIntervalTimeout = MAXDWORD;
+    timeouts.ReadTotalTimeoutMultiplier = MAXDWORD;
+    timeouts.ReadTotalTimeoutConstant = config.read_timeout_ms > 0
+        ? config.read_timeout_ms
+        : MAXDWORD - 1;
     timeouts.WriteTotalTimeoutMultiplier = 0;
-    timeouts.WriteTotalTimeoutConstant   = config.write_timeout_ms;
+    timeouts.WriteTotalTimeoutConstant = config.write_timeout_ms;
 
-    if (!::SetCommTimeouts(h, &timeouts)) {
+    if (!::SetCommTimeouts(h, &timeouts))
+    {
         int err = static_cast<int>(::GetLastError());
         ::CloseHandle(h);
         return std::unexpected(make_error_code(from_native_error(err)));
@@ -192,35 +228,58 @@ auto serial_port::open(std::string_view name, const serial_config& config)
 
 namespace {
 
-auto to_posix_baud(std::uint32_t baud) noexcept -> speed_t {
-    switch (baud) {
-        case 50:     return B50;
-        case 75:     return B75;
-        case 110:    return B110;
-        case 134:    return B134;
-        case 150:    return B150;
-        case 200:    return B200;
-        case 300:    return B300;
-        case 600:    return B600;
-        case 1200:   return B1200;
-        case 1800:   return B1800;
-        case 2400:   return B2400;
-        case 4800:   return B4800;
-        case 9600:   return B9600;
-        case 19200:  return B19200;
-        case 38400:  return B38400;
-        case 57600:  return B57600;
-        case 115200: return B115200;
-        case 230400: return B230400;
-#ifdef B460800
-        case 460800: return B460800;
-#endif
-#ifdef B921600
-        case 921600: return B921600;
-#endif
-        default:     return B9600;
+    auto to_posix_baud(std::uint32_t baud) noexcept -> speed_t
+    {
+        switch (baud)
+        {
+        case 50:
+            return B50;
+        case 75:
+            return B75;
+        case 110:
+            return B110;
+        case 134:
+            return B134;
+        case 150:
+            return B150;
+        case 200:
+            return B200;
+        case 300:
+            return B300;
+        case 600:
+            return B600;
+        case 1200:
+            return B1200;
+        case 1800:
+            return B1800;
+        case 2400:
+            return B2400;
+        case 4800:
+            return B4800;
+        case 9600:
+            return B9600;
+        case 19200:
+            return B19200;
+        case 38400:
+            return B38400;
+        case 57600:
+            return B57600;
+        case 115200:
+            return B115200;
+        case 230400:
+            return B230400;
+    #ifdef B460800
+        case 460800:
+            return B460800;
+    #endif
+    #ifdef B921600
+        case 921600:
+            return B921600;
+    #endif
+        default:
+            return B9600;
+        }
     }
-}
 
 } // anonymous namespace
 
@@ -238,8 +297,12 @@ auto serial_port::open(std::string_view name, const serial_config& config)
         ::fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
 
     // --- termios configuration ---
-    struct termios tty{};
-    if (::tcgetattr(fd, &tty) != 0) {
+    struct termios tty
+    {
+    };
+
+    if (::tcgetattr(fd, &tty) != 0)
+    {
         int err = errno;
         ::close(fd);
         return std::unexpected(make_error_code(from_native_error(err)));
@@ -252,65 +315,77 @@ auto serial_port::open(std::string_view name, const serial_config& config)
 
     // Data bits
     tty.c_cflag &= ~CSIZE;
-    switch (config.data_bits) {
-        case 5: tty.c_cflag |= CS5; break;
-        case 6: tty.c_cflag |= CS6; break;
-        case 7: tty.c_cflag |= CS7; break;
-        default: tty.c_cflag |= CS8; break;
+    switch (config.data_bits)
+    {
+    case 5:
+        tty.c_cflag |= CS5;
+        break;
+    case 6:
+        tty.c_cflag |= CS6;
+        break;
+    case 7:
+        tty.c_cflag |= CS7;
+        break;
+    default:
+        tty.c_cflag |= CS8;
+        break;
     }
 
     // Parity
-    switch (config.par) {
-        case parity::none:
-            tty.c_cflag &= ~PARENB;
-            break;
-        case parity::odd:
-            tty.c_cflag |= PARENB | PARODD;
-            break;
-        case parity::even:
-            tty.c_cflag |= PARENB;
-            tty.c_cflag &= ~PARODD;
-            break;
-        case parity::mark:
-            tty.c_cflag |= PARENB | PARODD;
-#ifdef CMSPAR
-            tty.c_cflag |= CMSPAR;
-#endif
-            break;
-        case parity::space:
-            tty.c_cflag |= PARENB;
-            tty.c_cflag &= ~PARODD;
-#ifdef CMSPAR
-            tty.c_cflag |= CMSPAR;
-#endif
-            break;
+    switch (config.par)
+    {
+    case parity::none:
+        tty.c_cflag &= ~PARENB;
+        break;
+    case parity::odd:
+        tty.c_cflag |= PARENB | PARODD;
+        break;
+    case parity::even:
+        tty.c_cflag |= PARENB;
+        tty.c_cflag &= ~PARODD;
+        break;
+    case parity::mark:
+        tty.c_cflag |= PARENB | PARODD;
+    #ifdef CMSPAR
+        tty.c_cflag |= CMSPAR;
+    #endif
+        break;
+    case parity::space:
+        tty.c_cflag |= PARENB;
+        tty.c_cflag &= ~PARODD;
+    #ifdef CMSPAR
+        tty.c_cflag |= CMSPAR;
+    #endif
+        break;
     }
 
     // Stop bits
-    switch (config.stop) {
-        case stop_bits::one:
-        case stop_bits::one_half: // POSIX doesn't support 1.5, fallback to 1
-            tty.c_cflag &= ~CSTOPB;
-            break;
-        case stop_bits::two:
-            tty.c_cflag |= CSTOPB;
-            break;
+    switch (config.stop)
+    {
+    case stop_bits::one:
+    case stop_bits::one_half: // POSIX doesn't support 1.5, fallback to 1
+        tty.c_cflag &= ~CSTOPB;
+        break;
+    case stop_bits::two:
+        tty.c_cflag |= CSTOPB;
+        break;
     }
 
     // Flow control
-    switch (config.flow) {
-        case flow_control::none:
-            tty.c_cflag &= ~CRTSCTS;
-            tty.c_iflag &= ~(IXON | IXOFF | IXANY);
-            break;
-        case flow_control::hardware:
-            tty.c_cflag |= CRTSCTS;
-            tty.c_iflag &= ~(IXON | IXOFF | IXANY);
-            break;
-        case flow_control::software:
-            tty.c_cflag &= ~CRTSCTS;
-            tty.c_iflag |= IXON | IXOFF;
-            break;
+    switch (config.flow)
+    {
+    case flow_control::none:
+        tty.c_cflag &= ~CRTSCTS;
+        tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+        break;
+    case flow_control::hardware:
+        tty.c_cflag |= CRTSCTS;
+        tty.c_iflag &= ~(IXON | IXOFF | IXANY);
+        break;
+    case flow_control::software:
+        tty.c_cflag &= ~CRTSCTS;
+        tty.c_iflag |= IXON | IXOFF;
+        break;
     }
 
     // Enable receive, local mode
@@ -322,12 +397,13 @@ auto serial_port::open(std::string_view name, const serial_config& config)
     tty.c_oflag &= ~OPOST;
 
     // Minimum character count and timeout
-    tty.c_cc[VMIN]  = 0;
+    tty.c_cc[VMIN] = 0;
     tty.c_cc[VTIME] = config.read_timeout_ms > 0
-                       ? static_cast<cc_t>(config.read_timeout_ms / 100)
-                       : 0;
+        ? static_cast<cc_t>(config.read_timeout_ms / 100)
+        : 0;
 
-    if (::tcsetattr(fd, TCSANOW, &tty) != 0) {
+    if (::tcsetattr(fd, TCSANOW, &tty) != 0)
+    {
         int err = errno;
         ::close(fd);
         return std::unexpected(make_error_code(from_native_error(err)));

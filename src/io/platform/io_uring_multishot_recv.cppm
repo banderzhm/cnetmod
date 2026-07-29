@@ -3,7 +3,7 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_HAS_IO_URING
-#include <liburing.h>
+    #include <liburing.h>
 #endif
 
 export module cnetmod.io.platform.io_uring_multishot_recv;
@@ -18,13 +18,14 @@ import cnetmod.io.platform.io_uring_buffer_ring;
 namespace cnetmod {
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT) && \
+    defined(IORING_RECV_MULTISHOT) &&                                             \
     defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
 
 export class io_uring_multishot_recv;
 
 /// Owns one kernel-selected buffer until destruction or release().
-export class io_uring_received_buffer {
+export class io_uring_received_buffer
+{
 public:
     io_uring_received_buffer() noexcept = default;
     ~io_uring_received_buffer();
@@ -41,8 +42,8 @@ public:
 private:
     friend class io_uring_multishot_recv;
     io_uring_received_buffer(io_uring_multishot_recv* owner,
-                             std::uint16_t buffer_id,
-                             std::size_t size) noexcept;
+        std::uint16_t buffer_id,
+        std::size_t size) noexcept;
 
     io_uring_multishot_recv* owner_{};
     std::uint16_t buffer_id_{};
@@ -52,10 +53,11 @@ private:
 /// Persistent recv operation backed by an io_uring provided-buffer ring.
 /// Exactly one async_next() waiter is permitted.  co_await async_stop() before
 /// destroying the stream, so the kernel no longer holds its operation state.
-export class io_uring_multishot_recv {
+export class io_uring_multishot_recv
+{
 public:
     io_uring_multishot_recv(io_uring_context& context, socket& socket,
-                            io_uring_buffer_ring& buffers);
+        io_uring_buffer_ring& buffers);
     ~io_uring_multishot_recv();
 
     io_uring_multishot_recv(const io_uring_multishot_recv&) = delete;
@@ -67,7 +69,8 @@ public:
 private:
     friend class io_uring_received_buffer;
 
-    struct ready_buffer {
+    struct ready_buffer
+    {
         std::uint16_t buffer_id;
         std::size_t size;
     };

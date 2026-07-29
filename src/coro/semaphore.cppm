@@ -27,17 +27,21 @@ namespace cnetmod {
 
 /// Non-blocking coroutine semaphore
 /// acquire returns immediately when count > 0, suspends when count == 0 waiting for release
-export class async_semaphore {
+export class async_semaphore
+{
     // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
 
-    class spinlock {
+    class spinlock
+    {
         std::atomic_flag flag_{};
+
     public:
         void lock() noexcept;
         void unlock() noexcept;
     };
 
-    struct auto_lock {
+    struct auto_lock
+    {
         spinlock& lk_;
         explicit auto_lock(spinlock& lk) noexcept;
         ~auto_lock();
@@ -45,7 +49,8 @@ export class async_semaphore {
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
 
-    struct waiter_node {
+    struct waiter_node
+    {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
     };
@@ -62,7 +67,8 @@ public:
     // acquire — Acquire a permit
     // =========================================================================
 
-    struct [[nodiscard]] acquire_awaitable {
+    struct [[nodiscard]] acquire_awaitable
+    {
         async_semaphore& sem_;
         waiter_node node_;
 

@@ -6,4 +6,3 @@ export module cnetmod.protocol.modbus:client;
 export import :tcp_client;
 export import :udp_client;
 export import :rtu_client;
-

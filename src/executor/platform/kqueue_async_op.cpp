@@ -4,15 +4,15 @@ module;
 
 #ifdef CNETMOD_HAS_KQUEUE
 
-#include <sys/types.h>
-#include <sys/event.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <cerrno>
-#include <exec/static_thread_pool.hpp>
+    #include <arpa/inet.h>
+    #include <cerrno>
+    #include <exec/static_thread_pool.hpp>
+    #include <fcntl.h>
+    #include <netinet/in.h>
+    #include <sys/event.h>
+    #include <sys/socket.h>
+    #include <sys/types.h>
+    #include <unistd.h>
 
 #endif
 
@@ -36,18 +36,24 @@ namespace cnetmod {
 
 /// Register event to kqueue, resume coroutine when ready
 /// Use EV_ONESHOT to ensure single trigger
-struct kqueue_awaiter {
+struct kqueue_awaiter
+{
     kqueue_context& ctx;
     int fd;
-    int16_t filter;                // EVFILT_READ or EVFILT_WRITE
+    int16_t filter; // EVFILT_READ or EVFILT_WRITE
     std::error_code sync_error{};
 
-    auto await_ready() const noexcept -> bool { return false; }
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
 
-    auto await_suspend(std::coroutine_handle<> h) noexcept -> bool {
+    auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
+    {
         auto r = ctx.add_event(fd, filter, EV_ADD | EV_ONESHOT,
-                               reinterpret_cast<void*>(h.address()));
-        if (!r) {
+            reinterpret_cast<void*>(h.address()));
+        if (!r)
+        {
             sync_error = r.error();
             return false;
         }
@@ -63,111 +69,128 @@ struct kqueue_awaiter {
 
 namespace {
 
-auto last_error() noexcept -> std::error_code {
-    return make_error_code(from_native_error(errno));
-}
-
-inline auto& file_pool() {
-    static exec::static_thread_pool pool;
-    return pool;
-}
-
-auto get_socket_family(int fd) -> int {
-    ::sockaddr_storage addr{};
-    ::socklen_t addrlen = sizeof(addr);
-    if (::getsockname(fd, reinterpret_cast<::sockaddr*>(&addr), &addrlen) == 0)
-        return addr.ss_family;
-    return AF_INET;
-}
-
-auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> ::socklen_t {
-    std::memset(&storage, 0, sizeof(storage));
-    if (ep.address().is_v4()) {
-        auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
-        sa.sin_family = AF_INET;
-        sa.sin_port = htons(ep.port());
-        sa.sin_addr = ep.address().to_v4().native();
-        return sizeof(::sockaddr_in);
-    } else {
-        auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
-        sa.sin6_family = AF_INET6;
-        sa.sin6_port = htons(ep.port());
-        sa.sin6_addr = ep.address().to_v6().native();
-        return sizeof(::sockaddr_in6);
-    }
-}
-
-// =============================================================================
-// kqueue awaiter with cancellation support
-// =============================================================================
-
-/// cancel_fn_: delete event from kqueue, then post coroutine resume
-static void kqueue_cancel_fn(cancel_token& token) noexcept {
-    auto* kq = static_cast<kqueue_context*>(token.ctx_);
-    (void)kq->delete_event(token.fd_, token.filter_);
-    if (token.coroutine_)
-        kq->post(token.coroutine_);
-}
-
-/// kqueue awaiter with cancellation support
-struct kqueue_cancel_awaiter {
-    kqueue_context& ctx;
-    int fd;
-    int16_t filter;
-    cancel_token& token;
-    std::error_code sync_error{};
-
-    auto await_ready() const noexcept -> bool {
-        return token.is_cancelled();
+    auto last_error() noexcept -> std::error_code
+    {
+        return make_error_code(from_native_error(errno));
     }
 
-    auto await_suspend(std::coroutine_handle<> h) noexcept -> bool {
-        if (token.is_cancelled()) {
-            sync_error = make_error_code(errc::operation_aborted);
-            return false;
+    inline auto& file_pool()
+    {
+        static exec::static_thread_pool pool;
+        return pool;
+    }
+
+    auto get_socket_family(int fd) -> int
+    {
+        ::sockaddr_storage addr{};
+        ::socklen_t addrlen = sizeof(addr);
+        if (::getsockname(fd, reinterpret_cast<::sockaddr*>(&addr), &addrlen) == 0)
+            return addr.ss_family;
+        return AF_INET;
+    }
+
+    auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> ::socklen_t
+    {
+        std::memset(&storage, 0, sizeof(storage));
+        if (ep.address().is_v4())
+        {
+            auto& sa = reinterpret_cast<::sockaddr_in&>(storage);
+            sa.sin_family = AF_INET;
+            sa.sin_port = htons(ep.port());
+            sa.sin_addr = ep.address().to_v4().native();
+            return sizeof(::sockaddr_in);
+        }
+        else
+        {
+            auto& sa = reinterpret_cast<::sockaddr_in6&>(storage);
+            sa.sin6_family = AF_INET6;
+            sa.sin6_port = htons(ep.port());
+            sa.sin6_addr = ep.address().to_v6().native();
+            return sizeof(::sockaddr_in6);
+        }
+    }
+
+    // =============================================================================
+    // kqueue awaiter with cancellation support
+    // =============================================================================
+
+    /// cancel_fn_: delete event from kqueue, then post coroutine resume
+    static void kqueue_cancel_fn(cancel_token& token) noexcept
+    {
+        auto* kq = static_cast<kqueue_context*>(token.ctx_);
+        (void)kq->delete_event(token.fd_, token.filter_);
+        if (token.coroutine_)
+            kq->post(token.coroutine_);
+    }
+
+    /// kqueue awaiter with cancellation support
+    struct kqueue_cancel_awaiter
+    {
+        kqueue_context& ctx;
+        int fd;
+        int16_t filter;
+        cancel_token& token;
+        std::error_code sync_error{};
+
+        auto await_ready() const noexcept -> bool
+        {
+            return token.is_cancelled();
         }
 
-        token.ctx_ = &ctx;
-        token.fd_ = fd;
-        token.filter_ = filter;
-        token.coroutine_ = h;
-        token.cancel_fn_ = &kqueue_cancel_fn;
+        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
+        {
+            if (token.is_cancelled())
+            {
+                sync_error = make_error_code(errc::operation_aborted);
+                return false;
+            }
 
-        auto r = ctx.add_event(fd, filter, EV_ADD | EV_ONESHOT,
-                               reinterpret_cast<void*>(h.address()));
-        if (!r) {
-            sync_error = r.error();
-            return false;
+            token.ctx_ = &ctx;
+            token.fd_ = fd;
+            token.filter_ = filter;
+            token.coroutine_ = h;
+            token.cancel_fn_ = &kqueue_cancel_fn;
+
+            auto r = ctx.add_event(fd, filter, EV_ADD | EV_ONESHOT,
+                reinterpret_cast<void*>(h.address()));
+            if (!r)
+            {
+                sync_error = r.error();
+                return false;
+            }
+
+            token.pending_.store(true, std::memory_order_release);
+
+            if (token.is_cancelled())
+            {
+                token.pending_.store(false, std::memory_order_relaxed);
+                (void)ctx.delete_event(fd, filter);
+                sync_error = make_error_code(errc::operation_aborted);
+                return false;
+            }
+
+            return true;
         }
 
-        token.pending_.store(true, std::memory_order_release);
-
-        if (token.is_cancelled()) {
-        token.pending_.store(false, std::memory_order_relaxed);
-            (void)ctx.delete_event(fd, filter);
-            sync_error = make_error_code(errc::operation_aborted);
-            return false;
+        void await_resume() noexcept
+        {
+            token.pending_.store(false, std::memory_order_relaxed);
         }
+    };
 
-        return true;
+    auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint
+    {
+        if (sa.ss_family == AF_INET6)
+        {
+            const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
+            return endpoint{ipv6_address::from_native(sin6.sin6_addr),
+                ntohs(sin6.sin6_port)};
+        }
+        const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
+        const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
+        return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
+            ntohs(sin.sin_port)};
     }
-
-    void await_resume() noexcept {
-        token.pending_.store(false, std::memory_order_relaxed);
-    }
-};
-
-auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint {
-    if (sa.ss_family == AF_INET6) {
-        const auto& sin6 = reinterpret_cast<const ::sockaddr_in6&>(sa);
-        return endpoint{ipv6_address::from_native(sin6.sin6_addr),
-                        ntohs(sin6.sin6_port)};
-    }
-    const auto& sin = reinterpret_cast<const ::sockaddr_in&>(sa);
-    const auto* b = reinterpret_cast<const std::uint8_t*>(&sin.sin_addr);
-    return endpoint{ipv4_address(b[0], b[1], b[2], b[3]),
-                    ntohs(sin.sin_port)};
-}
 
 } // anonymous namespace
 
@@ -207,7 +230,7 @@ auto async_accept(io_context& ctx, socket& listener, cancel_token& token)
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(listener.native_handle()),
-                             EVFILT_READ, token};
+        EVFILT_READ, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -234,7 +257,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     ::socklen_t dest_len = fill_sockaddr(ep, dest);
 
     int ret = ::connect(static_cast<int>(sock.native_handle()),
-                        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
     if (ret == 0)
         co_return std::expected<void, std::error_code>{};
 
@@ -251,7 +274,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     int so_error = 0;
     ::socklen_t len = sizeof(so_error);
     ::getsockopt(static_cast<int>(sock.native_handle()),
-                 SOL_SOCKET, SO_ERROR, &so_error, &len);
+        SOL_SOCKET, SO_ERROR, &so_error, &len);
     if (so_error != 0)
         co_return std::unexpected(make_error_code(from_native_error(so_error)));
 
@@ -259,7 +282,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
 }
 
 auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
-                   cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>
 {
     if (token.is_cancelled())
@@ -271,7 +294,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
     ::socklen_t dest_len = fill_sockaddr(ep, dest);
 
     int ret = ::connect(static_cast<int>(sock.native_handle()),
-                        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
     if (ret == 0)
         co_return std::expected<void, std::error_code>{};
 
@@ -279,7 +302,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
         co_return std::unexpected(last_error());
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-                             EVFILT_WRITE, token};
+        EVFILT_WRITE, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -289,7 +312,7 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
     int so_error = 0;
     ::socklen_t len = sizeof(so_error);
     ::getsockopt(static_cast<int>(sock.native_handle()),
-                 SOL_SOCKET, SO_ERROR, &so_error, &len);
+        SOL_SOCKET, SO_ERROR, &so_error, &len);
     if (so_error != 0)
         co_return std::unexpected(make_error_code(from_native_error(so_error)));
 
@@ -307,7 +330,7 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
         co_return std::unexpected(aw.sync_error);
 
     ssize_t n = ::recv(static_cast<int>(sock.native_handle()),
-                       buf.data, buf.size, 0);
+        buf.data, buf.size, 0);
     if (n < 0)
         co_return std::unexpected(last_error());
     if (n == 0)
@@ -317,7 +340,7 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf)
 }
 
 auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
-                cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -326,7 +349,7 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-                             EVFILT_READ, token};
+        EVFILT_READ, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -334,7 +357,7 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     ssize_t n = ::recv(static_cast<int>(sock.native_handle()),
-                       buf.data, buf.size, 0);
+        buf.data, buf.size, 0);
     if (n < 0)
         co_return std::unexpected(last_error());
     if (n == 0)
@@ -354,7 +377,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
         co_return std::unexpected(aw.sync_error);
 
     ssize_t n = ::send(static_cast<int>(sock.native_handle()),
-                       buf.data, buf.size, 0);
+        buf.data, buf.size, 0);
     if (n < 0)
         co_return std::unexpected(last_error());
 
@@ -362,7 +385,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
 }
 
 auto async_write(io_context& ctx, socket& sock, const_buffer buf,
-                 cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -371,7 +394,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-                             EVFILT_WRITE, token};
+        EVFILT_WRITE, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -379,7 +402,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     ssize_t n = ::send(static_cast<int>(sock.native_handle()),
-                       buf.data, buf.size, 0);
+        buf.data, buf.size, 0);
     if (n < 0)
         co_return std::unexpected(last_error());
 
@@ -392,8 +415,8 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
 // =============================================================================
 
 auto async_file_open(io_context& ctx,
-                     const std::filesystem::path& path,
-                     open_mode mode)
+    const std::filesystem::path& path,
+    open_mode mode)
     -> task<std::expected<file, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
@@ -403,16 +426,17 @@ auto async_file_open(io_context& ctx,
 }
 
 auto async_file_open(io_context& ctx,
-                     const std::filesystem::path& path,
-                     open_mode mode,
-                     cancel_token& token)
+    const std::filesystem::path& path,
+    open_mode mode,
+    cancel_token& token)
     -> task<std::expected<file, std::error_code>>
 {
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     auto result = co_await async_file_open(ctx, path, mode);
-    if (token.is_cancelled()) {
+    if (token.is_cancelled())
+    {
         if (result)
             (void)co_await async_file_close(ctx, *result);
         co_return std::unexpected(make_error_code(errc::operation_aborted));
@@ -421,7 +445,7 @@ auto async_file_open(io_context& ctx,
 }
 
 auto async_file_stat(io_context& ctx,
-                     const std::filesystem::path& path)
+    const std::filesystem::path& path)
     -> task<std::expected<file_stat, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
@@ -431,8 +455,8 @@ auto async_file_stat(io_context& ctx,
 }
 
 auto async_file_stat(io_context& ctx,
-                     const std::filesystem::path& path,
-                     cancel_token& token)
+    const std::filesystem::path& path,
+    cancel_token& token)
     -> task<std::expected<file_stat, std::error_code>>
 {
     if (token.is_cancelled())
@@ -466,13 +490,14 @@ auto async_file_close(io_context& ctx, file& f, cancel_token& token)
 }
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                     std::uint64_t offset)
+    std::uint64_t offset)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
-    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+    auto result = [&]() -> std::expected<std::size_t, std::error_code>
+    {
         ssize_t n = ::pread(static_cast<int>(f.native_handle()),
-                            buf.data, buf.size, static_cast<off_t>(offset));
+            buf.data, buf.size, static_cast<off_t>(offset));
         if (n < 0)
             return std::unexpected(last_error());
         return static_cast<std::size_t>(n);
@@ -482,15 +507,16 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
 }
 
 auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
-                     std::uint64_t offset, cancel_token& token)
+    std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     co_await pool_post_awaitable{file_pool()};
-    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+    auto result = [&]() -> std::expected<std::size_t, std::error_code>
+    {
         ssize_t n = ::pread(static_cast<int>(f.native_handle()),
-                            buf.data, buf.size, static_cast<off_t>(offset));
+            buf.data, buf.size, static_cast<off_t>(offset));
         if (n < 0)
             return std::unexpected(last_error());
         return static_cast<std::size_t>(n);
@@ -502,13 +528,14 @@ auto async_file_read(io_context& ctx, file& f, mutable_buffer buf,
 }
 
 auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                      std::uint64_t offset)
+    std::uint64_t offset)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
-    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+    auto result = [&]() -> std::expected<std::size_t, std::error_code>
+    {
         ssize_t n = ::pwrite(static_cast<int>(f.native_handle()),
-                             buf.data, buf.size, static_cast<off_t>(offset));
+            buf.data, buf.size, static_cast<off_t>(offset));
         if (n < 0)
             return std::unexpected(last_error());
         return static_cast<std::size_t>(n);
@@ -518,15 +545,16 @@ auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 }
 
 auto async_file_write(io_context& ctx, file& f, const_buffer buf,
-                      std::uint64_t offset, cancel_token& token)
+    std::uint64_t offset, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     co_await pool_post_awaitable{file_pool()};
-    auto result = [&]() -> std::expected<std::size_t, std::error_code> {
+    auto result = [&]() -> std::expected<std::size_t, std::error_code>
+    {
         ssize_t n = ::pwrite(static_cast<int>(f.native_handle()),
-                             buf.data, buf.size, static_cast<off_t>(offset));
+            buf.data, buf.size, static_cast<off_t>(offset));
         if (n < 0)
             return std::unexpected(last_error());
         return static_cast<std::size_t>(n);
@@ -541,7 +569,8 @@ auto async_file_flush(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>
 {
     co_await pool_post_awaitable{file_pool()};
-    auto result = [&]() -> std::expected<void, std::error_code> {
+    auto result = [&]() -> std::expected<void, std::error_code>
+    {
         if (::fsync(static_cast<int>(f.native_handle())) != 0)
             return std::unexpected(last_error());
         return std::expected<void, std::error_code>{};
@@ -563,12 +592,13 @@ auto async_file_flush(io_context& ctx, file& f, cancel_token& token)
 }
 
 auto async_send_file(io_context& ctx, socket& sock, file& source,
-                     std::uint64_t offset, std::uint64_t byte_count)
+    std::uint64_t offset, std::uint64_t byte_count)
     -> task<std::expected<std::uint64_t, std::error_code>>
 {
     auto& kqueue = static_cast<kqueue_context&>(ctx);
     std::uint64_t transferred = 0;
-    while (transferred < byte_count) {
+    while (transferred < byte_count)
+    {
         off_t sent = static_cast<off_t>(std::min<std::uint64_t>(
             byte_count - transferred,
             static_cast<std::uint64_t>(std::numeric_limits<off_t>::max())));
@@ -578,14 +608,16 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
             static_cast<off_t>(offset + transferred), &sent, nullptr, 0);
         if (sent > 0)
             transferred += static_cast<std::uint64_t>(sent);
-        if (result == 0) {
+        if (result == 0)
+        {
             if (sent == 0)
                 break;
             continue;
         }
         if (errno == EINTR)
             continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
             kqueue_awaiter writable{
                 kqueue, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
             co_await writable;
@@ -599,8 +631,8 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
 }
 
 auto async_send_file(io_context& ctx, socket& sock, file& source,
-                     std::uint64_t offset, std::uint64_t byte_count,
-                     cancel_token& token)
+    std::uint64_t offset, std::uint64_t byte_count,
+    cancel_token& token)
     -> task<std::expected<std::uint64_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -608,7 +640,8 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
 
     auto& kqueue = static_cast<kqueue_context&>(ctx);
     std::uint64_t transferred = 0;
-    while (transferred < byte_count) {
+    while (transferred < byte_count)
+    {
         off_t sent = static_cast<off_t>(std::min<std::uint64_t>(
             byte_count - transferred,
             static_cast<std::uint64_t>(std::numeric_limits<off_t>::max())));
@@ -618,14 +651,16 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
             static_cast<off_t>(offset + transferred), &sent, nullptr, 0);
         if (sent > 0)
             transferred += static_cast<std::uint64_t>(sent);
-        if (result == 0) {
+        if (result == 0)
+        {
             if (sent == 0)
                 break;
             continue;
         }
         if (errno == EINTR)
             continue;
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+        {
             kqueue_cancel_awaiter writable{
                 kqueue, static_cast<int>(sock.native_handle()), EVFILT_WRITE,
                 token};
@@ -666,7 +701,7 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf)
 }
 
 auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
-                       cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -675,7 +710,7 @@ auto async_serial_read(io_context& ctx, serial_port& port, mutable_buffer buf,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(port.native_handle()),
-                             EVFILT_READ, token};
+        EVFILT_READ, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -709,7 +744,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf)
 }
 
 auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
-                        cancel_token& token)
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -718,7 +753,7 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(port.native_handle()),
-                             EVFILT_WRITE, token};
+        EVFILT_WRITE, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -737,33 +772,43 @@ auto async_serial_write(io_context& ctx, serial_port& port, const_buffer buf,
 // =============================================================================
 
 auto async_timer_wait(io_context& ctx,
-                      std::chrono::steady_clock::duration duration)
+    std::chrono::steady_clock::duration duration)
     -> task<std::expected<void, std::error_code>>
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-    if (ms <= 0) ms = 1;
+    if (ms <= 0)
+        ms = 1;
 
     // Use globally incrementing ID as EVFILT_TIMER ident
     static std::atomic<int> next_id{1000000};
     int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
 
     // Register EVFILT_TIMER + EV_ONESHOT directly via native kqueue fd
-    struct kqueue_timer_awaiter {
+    struct kqueue_timer_awaiter
+    {
         int kq_fd;
         int id;
         intptr_t timeout_ms;
         std::error_code sync_error{};
 
-        auto await_ready() const noexcept -> bool { return false; }
+        auto await_ready() const noexcept -> bool
+        {
+            return false;
+        }
 
-        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool {
-            struct kevent ev{};
+        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
+        {
+            struct kevent ev
+            {
+            };
+
             EV_SET(&ev, static_cast<uintptr_t>(id), EVFILT_TIMER,
-                   EV_ADD | EV_ONESHOT, 0, timeout_ms,
-                   reinterpret_cast<void*>(h.address()));
-            if (::kevent(kq_fd, &ev, 1, nullptr, 0, nullptr) < 0) {
+                EV_ADD | EV_ONESHOT, 0, timeout_ms,
+                reinterpret_cast<void*>(h.address()));
+            if (::kevent(kq_fd, &ev, 1, nullptr, 0, nullptr) < 0)
+            {
                 sync_error = std::error_code(errno, std::generic_category());
                 return false;
             }
@@ -783,8 +828,8 @@ auto async_timer_wait(io_context& ctx,
 }
 
 auto async_timer_wait(io_context& ctx,
-                      std::chrono::steady_clock::duration duration,
-                      cancel_token& token)
+    std::chrono::steady_clock::duration duration,
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>
 {
     if (token.is_cancelled())
@@ -793,35 +838,44 @@ auto async_timer_wait(io_context& ctx,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
-    if (ms <= 0) ms = 1;
+    if (ms <= 0)
+        ms = 1;
 
     static std::atomic<int> next_id{1000000};
     int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
 
     // kqueue EVFILT_TIMER cannot use cancel_awaiter (ident is timer_id not fd)
     // Use raw kqueue_timer_awaiter + manual token check
-    struct kqueue_timer_cancel_awaiter {
+    struct kqueue_timer_cancel_awaiter
+    {
         int kq_fd;
         int id;
         intptr_t timeout_ms;
         cancel_token& tk;
         std::error_code sync_error{};
 
-        auto await_ready() const noexcept -> bool {
+        auto await_ready() const noexcept -> bool
+        {
             return tk.is_cancelled();
         }
 
-        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool {
-            if (tk.is_cancelled()) {
+        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
+        {
+            if (tk.is_cancelled())
+            {
                 sync_error = make_error_code(errc::operation_aborted);
                 return false;
             }
 
-            struct kevent ev{};
+            struct kevent ev
+            {
+            };
+
             EV_SET(&ev, static_cast<uintptr_t>(id), EVFILT_TIMER,
-                   EV_ADD | EV_ONESHOT, 0, timeout_ms,
-                   reinterpret_cast<void*>(h.address()));
-            if (::kevent(kq_fd, &ev, 1, nullptr, 0, nullptr) < 0) {
+                EV_ADD | EV_ONESHOT, 0, timeout_ms,
+                reinterpret_cast<void*>(h.address()));
+            if (::kevent(kq_fd, &ev, 1, nullptr, 0, nullptr) < 0)
+            {
                 sync_error = std::error_code(errno, std::generic_category());
                 return false;
             }
@@ -830,13 +884,14 @@ auto async_timer_wait(io_context& ctx,
             return true;
         }
 
-        void await_resume() noexcept {
+        void await_resume() noexcept
+        {
             tk.pending_.store(false, std::memory_order_relaxed);
         }
     };
 
     kqueue_timer_cancel_awaiter aw{kq.native_handle(), timer_id,
-                                   static_cast<intptr_t>(ms), token};
+        static_cast<intptr_t>(ms), token};
     co_await aw;
 
     if (aw.sync_error)
@@ -852,7 +907,7 @@ auto async_timer_wait(io_context& ctx,
 // =============================================================================
 
 auto async_recvfrom(io_context& ctx, socket& sock,
-                    mutable_buffer buf, endpoint& peer)
+    mutable_buffer buf, endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
@@ -865,8 +920,8 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     ::sockaddr_storage from_addr{};
     ::socklen_t from_len = sizeof(from_addr);
     ssize_t n = ::recvfrom(static_cast<int>(sock.native_handle()),
-                           buf.data, buf.size, 0,
-                           reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
+        buf.data, buf.size, 0,
+        reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
     if (n < 0)
         co_return std::unexpected(last_error());
 
@@ -875,8 +930,8 @@ auto async_recvfrom(io_context& ctx, socket& sock,
 }
 
 auto async_recvfrom(io_context& ctx, socket& sock,
-                    mutable_buffer buf, endpoint& peer,
-                    cancel_token& token)
+    mutable_buffer buf, endpoint& peer,
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -885,7 +940,7 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-                             EVFILT_READ, token};
+        EVFILT_READ, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -895,8 +950,8 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     ::sockaddr_storage from_addr{};
     ::socklen_t from_len = sizeof(from_addr);
     ssize_t n = ::recvfrom(static_cast<int>(sock.native_handle()),
-                           buf.data, buf.size, 0,
-                           reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
+        buf.data, buf.size, 0,
+        reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
     if (n < 0)
         co_return std::unexpected(last_error());
 
@@ -905,7 +960,7 @@ auto async_recvfrom(io_context& ctx, socket& sock,
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
-                  const_buffer buf, const endpoint& peer)
+    const_buffer buf, const endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
@@ -918,8 +973,8 @@ auto async_sendto(io_context& ctx, socket& sock,
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
     ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-                         buf.data, buf.size, 0,
-                         reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+        buf.data, buf.size, 0,
+        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
     if (n < 0)
         co_return std::unexpected(last_error());
 
@@ -927,8 +982,8 @@ auto async_sendto(io_context& ctx, socket& sock,
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
-                  const_buffer buf, const endpoint& peer,
-                  cancel_token& token)
+    const_buffer buf, const endpoint& peer,
+    cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (token.is_cancelled())
@@ -937,7 +992,7 @@ auto async_sendto(io_context& ctx, socket& sock,
     auto& kq = static_cast<kqueue_context&>(ctx);
 
     kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-                             EVFILT_WRITE, token};
+        EVFILT_WRITE, token};
     co_await aw;
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
@@ -947,8 +1002,8 @@ auto async_sendto(io_context& ctx, socket& sock,
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
     ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-                         buf.data, buf.size, 0,
-                         reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+        buf.data, buf.size, 0,
+        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
     if (n < 0)
         co_return std::unexpected(last_error());
 

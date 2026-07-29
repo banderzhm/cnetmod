@@ -41,3 +41,6 @@ doc
 cmake-build*
 *orchids
 *claude
+testing/messaging/.env.external.local
+examples/test_ssl/*.pem
+examples/test_ssl/*.p12

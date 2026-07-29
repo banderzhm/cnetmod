@@ -31,17 +31,21 @@ namespace cnetmod {
 /// - add(n): Increase pending completion count
 /// - done(): Decrease count, wakes all wait() waiters when reaching zero
 /// - co_await wait(): Resumes when count reaches zero (returns immediately if already zero)
-export class async_wait_group {
+export class async_wait_group
+{
     // ---- Adaptive spinlock (atomic_flag + C++20 wait) ----
 
-    class spinlock {
+    class spinlock
+    {
         std::atomic_flag flag_{};
+
     public:
         void lock() noexcept;
         void unlock() noexcept;
     };
 
-    struct auto_lock {
+    struct auto_lock
+    {
         spinlock& lk_;
         explicit auto_lock(spinlock& lk) noexcept;
         ~auto_lock();
@@ -49,7 +53,8 @@ export class async_wait_group {
         auto operator=(const auto_lock&) -> auto_lock& = delete;
     };
 
-    struct waiter_node {
+    struct waiter_node
+    {
         std::coroutine_handle<> handle{};
         waiter_node* next = nullptr;
     };
@@ -71,7 +76,8 @@ public:
     // wait — Wait for count to reach zero
     // =========================================================================
 
-    struct [[nodiscard]] wait_awaitable {
+    struct [[nodiscard]] wait_awaitable
+    {
         async_wait_group& wg_;
         waiter_node node_;
 

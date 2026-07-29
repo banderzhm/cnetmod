@@ -54,8 +54,10 @@ detect_stdlib_module_paths()
 if(MSVC)
     add_compile_options(/std:c++latest)
     add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj /FS /wd4737)
-    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
-        "$<$<CONFIG:Debug>:Embedded>$<$<NOT:$<CONFIG:Debug>>:ProgramDatabase>")
+    # Keep debug information in each object file. The core target contains many
+    # module translation units; a shared compiler PDB can otherwise become a
+    # point of contention even when /FS is enabled.
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 
    #[[ add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
@@ -424,13 +426,91 @@ endif()
 # ==============================================================================
 # zlib Compression Support (Optional)
 # ==============================================================================
+set(CNETMOD_ZLIB_ROOT "" CACHE PATH
+    "Optional zlib installation prefix (Conda, vcpkg, or a system prefix)")
+if(CNETMOD_ZLIB_ROOT)
+    set(ZLIB_ROOT "${CNETMOD_ZLIB_ROOT}")
+endif()
 find_package(ZLIB QUIET)
+if(NOT ZLIB_FOUND)
+    find_path(CNETMOD_ZLIB_INCLUDE_DIR
+        NAMES zlib.h
+        HINTS "${CNETMOD_ZLIB_ROOT}" "$ENV{CONDA_PREFIX}"
+        PATH_SUFFIXES include Library/include)
+    find_library(CNETMOD_ZLIB_LIBRARY
+        NAMES zlib zlibstatic zlib-ng
+        HINTS "${CNETMOD_ZLIB_ROOT}" "$ENV{CONDA_PREFIX}"
+        PATH_SUFFIXES lib Library/lib)
+    if(CNETMOD_ZLIB_INCLUDE_DIR AND CNETMOD_ZLIB_LIBRARY)
+        add_library(ZLIB::ZLIB UNKNOWN IMPORTED)
+        set_target_properties(ZLIB::ZLIB PROPERTIES
+            IMPORTED_LOCATION "${CNETMOD_ZLIB_LIBRARY}"
+            INTERFACE_INCLUDE_DIRECTORIES "${CNETMOD_ZLIB_INCLUDE_DIR}")
+        set(ZLIB_FOUND ON)
+        set(ZLIB_VERSION_STRING "provider fallback")
+    endif()
+endif()
 if(ZLIB_FOUND)
     set(CNETMOD_HAS_ZLIB ON)
     message(STATUS "zlib: Found (${ZLIB_VERSION_STRING})")
 else()
     set(CNETMOD_HAS_ZLIB OFF)
     message(STATUS "zlib: Not found, gzip compression middleware disabled")
+endif()
+
+# ==============================================================================
+# LZ4 Compression Support (Optional, Kafka record batches)
+# ==============================================================================
+option(CNETMOD_ENABLE_LZ4 "Enable Kafka LZ4 record-batch compression" ON)
+set(CNETMOD_LZ4_ROOT "" CACHE PATH
+    "Optional LZ4 installation prefix (Conda, vcpkg, or a system prefix)")
+set(CNETMOD_HAS_LZ4 OFF)
+set(CNETMOD_LZ4_TARGET "")
+if(CNETMOD_ENABLE_LZ4)
+    # Config packages cover vcpkg and modern system/Conda packages.  Package
+    # names and exported target names unfortunately differ between providers.
+    find_package(lz4 CONFIG QUIET)
+    if(NOT TARGET lz4::lz4 AND NOT TARGET LZ4::lz4 AND
+       NOT TARGET LZ4::LZ4 AND
+       NOT TARGET unofficial::lz4::lz4 AND NOT TARGET lz4_static AND
+       NOT TARGET lz4_shared)
+        find_package(LZ4 CONFIG QUIET)
+    endif()
+
+    foreach(candidate
+            lz4::lz4
+            LZ4::lz4
+            LZ4::LZ4
+            unofficial::lz4::lz4
+            lz4_static
+            lz4_shared)
+        if(TARGET "${candidate}" AND NOT CNETMOD_LZ4_TARGET)
+            set(CNETMOD_LZ4_TARGET "${candidate}")
+        endif()
+    endforeach()
+
+    if(NOT CNETMOD_LZ4_TARGET)
+        find_path(CNETMOD_LZ4_INCLUDE_DIR
+            NAMES lz4frame.h
+            HINTS "${CNETMOD_LZ4_ROOT}" "$ENV{CONDA_PREFIX}"
+            PATH_SUFFIXES include Library/include
+            DOC "Directory containing the LZ4 frame API headers")
+        find_library(CNETMOD_LZ4_LIBRARY
+            NAMES lz4 liblz4
+            HINTS "${CNETMOD_LZ4_ROOT}" "$ENV{CONDA_PREFIX}"
+            PATH_SUFFIXES lib Library/lib
+            DOC "LZ4 library used by Kafka record-batch compression")
+    endif()
+
+    if(CNETMOD_LZ4_TARGET OR
+       (CNETMOD_LZ4_INCLUDE_DIR AND CNETMOD_LZ4_LIBRARY))
+        set(CNETMOD_HAS_LZ4 ON)
+        message(STATUS "LZ4: Enabled for Kafka record batches")
+    else()
+        message(STATUS "LZ4: Not found, Kafka LZ4 record batches disabled")
+    endif()
+else()
+    message(STATUS "LZ4: Disabled by user")
 endif()
 
 # ==============================================================================
@@ -633,6 +713,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
+    $<$<BOOL:${CNETMOD_HAS_LZ4}>:CNETMOD_HAS_LZ4>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
 )
 add_library(cnetmod::core ALIAS cnetmod_core)
@@ -652,6 +733,15 @@ endif()
 # zlib linking
 if(CNETMOD_HAS_ZLIB)
     target_link_libraries(cnetmod_core PUBLIC ZLIB::ZLIB)
+endif()
+
+if(CNETMOD_HAS_LZ4)
+    if(CNETMOD_LZ4_TARGET)
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_LZ4_TARGET})
+    else()
+        target_include_directories(cnetmod_core PUBLIC ${CNETMOD_LZ4_INCLUDE_DIR})
+        target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_LZ4_LIBRARY})
+    endif()
 endif()
 
 if(CNETMOD_JSON_EFFECTIVE_PROVIDER STREQUAL "PACKAGE" AND

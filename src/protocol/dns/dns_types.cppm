@@ -10,7 +10,8 @@ import cnetmod.coro.task;
 
 namespace cnetmod::dns {
 
-export enum class record_type : std::uint16_t {
+export enum class record_type : std::uint16_t
+{
     A = 1,
     NS = 2,
     CNAME = 5,
@@ -24,11 +25,13 @@ export enum class record_type : std::uint16_t {
     HTTPS = 65,
 };
 
-export enum class record_class : std::uint16_t {
+export enum class record_class : std::uint16_t
+{
     IN = 1,
 };
 
-export enum class response_code : std::uint8_t {
+export enum class response_code : std::uint8_t
+{
     no_error = 0,
     format_error = 1,
     server_failure = 2,
@@ -37,13 +40,15 @@ export enum class response_code : std::uint8_t {
     refused = 5,
 };
 
-export struct question {
+export struct question
+{
     std::string name;
     record_type type = record_type::A;
     record_class cls = record_class::IN;
 };
 
-export struct resource_record {
+export struct resource_record
+{
     std::string name;
     record_type type = record_type::A;
     record_class cls = record_class::IN;
@@ -51,7 +56,8 @@ export struct resource_record {
     std::vector<std::byte> data;
 };
 
-export struct message {
+export struct message
+{
     std::uint16_t id = 0;
     bool query = true;
     bool authoritative = false;

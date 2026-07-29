@@ -13,49 +13,72 @@ namespace cnetmod::http {
 // request — HTTP Request Builder
 // =============================================================================
 
-export class request {
+export class request
+{
 public:
     request() = default;
 
     explicit request(http_method method, std::string_view uri,
-                     http_version version = http_version::http_1_1)
+        http_version version = http_version::http_1_1)
         : method_(method), uri_(uri), version_(version) {}
 
     // --- Settings ---
 
-    auto& set_method(http_method m) noexcept { method_ = m; return *this; }
-    auto& set_uri(std::string_view uri) { uri_ = std::string(uri); return *this; }
-    auto& set_version(http_version v) noexcept { version_ = v; return *this; }
+    auto& set_method(http_method m) noexcept
+    {
+        method_ = m;
+        return *this;
+    }
 
-    auto& set_header(std::string_view key, std::string_view value) {
+    auto& set_uri(std::string_view uri)
+    {
+        uri_ = std::string(uri);
+        return *this;
+    }
+
+    auto& set_version(http_version v) noexcept
+    {
+        version_ = v;
+        return *this;
+    }
+
+    auto& set_header(std::string_view key, std::string_view value)
+    {
         headers_[std::string(key)] = std::string(value);
         return *this;
     }
 
-    auto& append_header(std::string_view key, std::string_view value) {
+    auto& append_header(std::string_view key, std::string_view value)
+    {
         auto it = headers_.find(std::string(key));
-        if (it != headers_.end()) {
+        if (it != headers_.end())
+        {
             it->second += ", ";
             it->second += value;
-        } else {
+        }
+        else
+        {
             headers_[std::string(key)] = std::string(value);
         }
         return *this;
     }
 
-    auto& remove_header(std::string_view key) {
+    auto& remove_header(std::string_view key)
+    {
         headers_.erase(std::string(key));
         return *this;
     }
 
-    auto& set_body(std::string_view body) {
+    auto& set_body(std::string_view body)
+    {
         body_ = std::string(body);
         // Automatically set Content-Length
         headers_["Content-Length"] = std::to_string(body_.size());
         return *this;
     }
 
-    auto& set_body(std::string body) {
+    auto& set_body(std::string body)
+    {
         headers_["Content-Length"] = std::to_string(body.size());
         body_ = std::move(body);
         return *this;
@@ -63,22 +86,44 @@ public:
 
     // --- Access ---
 
-    [[nodiscard]] auto method() const noexcept -> http_method { return method_; }
-    [[nodiscard]] auto uri() const noexcept -> std::string_view { return uri_; }
-    [[nodiscard]] auto version() const noexcept -> http_version { return version_; }
-    [[nodiscard]] auto headers() const noexcept -> const header_map& { return headers_; }
-    [[nodiscard]] auto body() const noexcept -> std::string_view { return body_; }
+    [[nodiscard]] auto method() const noexcept -> http_method
+    {
+        return method_;
+    }
 
-    [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view {
+    [[nodiscard]] auto uri() const noexcept -> std::string_view
+    {
+        return uri_;
+    }
+
+    [[nodiscard]] auto version() const noexcept -> http_version
+    {
+        return version_;
+    }
+
+    [[nodiscard]] auto headers() const noexcept -> const header_map&
+    {
+        return headers_;
+    }
+
+    [[nodiscard]] auto body() const noexcept -> std::string_view
+    {
+        return body_;
+    }
+
+    [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view
+    {
         auto it = headers_.find(std::string(key));
-        if (it != headers_.end()) return it->second;
+        if (it != headers_.end())
+            return it->second;
         return {};
     }
 
     // --- Serialization ---
 
     /// Serialize to complete HTTP request string
-    [[nodiscard]] auto serialize() const -> std::string {
+    [[nodiscard]] auto serialize() const -> std::string
+    {
         std::string out;
         out.reserve(256 + body_.size());
 
@@ -91,7 +136,8 @@ public:
         out += "\r\n";
 
         // Headers
-        for (auto& [k, v] : headers_) {
+        for (auto& [k, v] : headers_)
+        {
             out += k;
             out += ": ";
             out += v;
@@ -102,7 +148,8 @@ public:
         out += "\r\n";
 
         // Body
-        if (!body_.empty()) {
+        if (!body_.empty())
+        {
             out += body_;
         }
 

@@ -15,12 +15,14 @@ import cnetmod.io.io_context;
 
 namespace cnetmod::coap {
 
-export struct multicast_response {
+export struct multicast_response
+{
     endpoint peer;
     message response;
 };
 
-export struct multicast_client_config {
+export struct multicast_client_config
+{
     client_config coap;
     endpoint local_endpoint{ip_address{ipv4_address::any()}, 0};
     bool loopback = true;
@@ -32,7 +34,8 @@ export struct multicast_client_config {
 export [[nodiscard]] auto all_coap_nodes_ipv4(std::uint16_t port = default_port) -> endpoint;
 export [[nodiscard]] auto all_coap_nodes_ipv6_link_local(std::uint16_t port = default_port) -> endpoint;
 
-export class multicast_client {
+export class multicast_client
+{
 public:
     explicit multicast_client(io_context& ctx, multicast_client_config cfg = {});
 

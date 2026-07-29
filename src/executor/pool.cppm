@@ -30,47 +30,67 @@ namespace cnetmod {
 
 namespace detail {
 
-/// Minimal stdexec receiver: resume coroutine
-struct coro_resume_receiver {
-  using receiver_concept = stdexec::receiver_t;
-  std::coroutine_handle<> coro;
+    /// Minimal stdexec receiver: resume coroutine
+    struct coro_resume_receiver
+    {
+        using receiver_concept = stdexec::receiver_t;
+        std::coroutine_handle<> coro;
 
-  void set_value() noexcept { coro.resume(); }
-  void set_stopped() noexcept { coro.resume(); }
+        void set_value() noexcept
+        {
+            coro.resume();
+        }
 
-  struct env {};
-  auto get_env() const noexcept -> env { return {}; }
-};
+        void set_stopped() noexcept
+        {
+            coro.resume();
+        }
+
+        struct env
+        {
+        };
+
+        auto get_env() const noexcept -> env
+        {
+            return {};
+        }
+    };
 
 } // namespace detail
 
-export struct pool_post_awaitable {
-  exec::static_thread_pool &pool;
+export struct pool_post_awaitable
+{
+    exec::static_thread_pool& pool;
 
-  using scheduler_t = exec::static_thread_pool::scheduler;
-  using sender_t = decltype(std::declval<scheduler_t>().schedule());
-  using op_t = decltype(stdexec::connect(
-      std::declval<sender_t>(), std::declval<detail::coro_resume_receiver>()));
+    using scheduler_t = exec::static_thread_pool::scheduler;
+    using sender_t = decltype(std::declval<scheduler_t>().schedule());
+    using op_t = decltype(stdexec::connect(
+        std::declval<sender_t>(), std::declval<detail::coro_resume_receiver>()));
 
-  // op_state stored on coroutine frame (awaitable embedded in frame, alive
-  // during suspension)
-  alignas(op_t) std::byte storage_[sizeof(op_t)];
+    // op_state stored on coroutine frame (awaitable embedded in frame, alive
+    // during suspension)
+    alignas(op_t) std::byte storage_[sizeof(op_t)];
 
-  explicit pool_post_awaitable(exec::static_thread_pool &p) noexcept
-      : pool(p), storage_{} {}
+    explicit pool_post_awaitable(exec::static_thread_pool& p) noexcept
+        : pool(p), storage_{} {}
 
-  auto await_ready() const noexcept -> bool { return false; }
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
 
-  void await_suspend(std::coroutine_handle<> h) noexcept {
-    auto sched = pool.get_scheduler();
-    auto *op = new (storage_) op_t(
-        stdexec::connect(sched.schedule(), detail::coro_resume_receiver{h}));
-    op->start();
-  }
+    void await_suspend(std::coroutine_handle<> h) noexcept
+    {
+        auto sched = pool.get_scheduler();
+        auto* op = new (storage_) op_t(
+            stdexec::connect(sched.schedule(), detail::coro_resume_receiver{h}));
+        op->start();
+    }
 
-  void await_resume() noexcept {
-    std::launder(reinterpret_cast<op_t *>(storage_))->~op_t();
-  }
+    void await_resume() noexcept
+    {
+        std::launder(reinterpret_cast<op_t*>(storage_))->~op_t();
+    }
 };
 
 // =============================================================================
@@ -80,7 +100,7 @@ export struct pool_post_awaitable {
 // Same semantics as spawn(ctx, t), but explicitly for cross-thread scenarios.
 // Switches coroutine to target event loop thread via io_context::post().
 
-export void spawn_on(io_context &target, task<void> t);
+export void spawn_on(io_context& target, task<void> t);
 
 // =============================================================================
 // server_context — Multi-Core Server Context
@@ -99,50 +119,51 @@ export void spawn_on(io_context &target, task<void> t);
 // async_read/write on worker io_context automatically associates with worker's
 // IOCP.
 
-export class server_context {
+export class server_context
+{
 public:
-  /// @param workers Number of worker threads (default = CPU cores)
-  /// @param pool_threads stdexec thread pool size (default = CPU cores)
-  explicit server_context(
-      unsigned workers = std::thread::hardware_concurrency(),
-      unsigned pool_threads = std::thread::hardware_concurrency());
+    /// @param workers Number of worker threads (default = CPU cores)
+    /// @param pool_threads stdexec thread pool size (default = CPU cores)
+    explicit server_context(
+        unsigned workers = std::thread::hardware_concurrency(),
+        unsigned pool_threads = std::thread::hardware_concurrency());
 
-  ~server_context();
+    ~server_context();
 
-  // Non-copyable and non-movable
-  server_context(const server_context &) = delete;
-  server_context(server_context &&) = delete;
-  auto operator=(const server_context &) -> server_context & = delete;
-  auto operator=(server_context &&) -> server_context & = delete;
+    // Non-copyable and non-movable
+    server_context(const server_context&) = delete;
+    server_context(server_context&&) = delete;
+    auto operator=(const server_context&) -> server_context& = delete;
+    auto operator=(server_context&&) -> server_context& = delete;
 
-  /// Accept-dedicated io_context
-  [[nodiscard]] auto accept_io() noexcept -> io_context &;
+    /// Accept-dedicated io_context
+    [[nodiscard]] auto accept_io() noexcept -> io_context&;
 
-  /// Round-robin select next worker io_context (atomic, thread-safe)
-  [[nodiscard]] auto next_worker_io() noexcept -> io_context &;
+    /// Round-robin select next worker io_context (atomic, thread-safe)
+    [[nodiscard]] auto next_worker_io() noexcept -> io_context&;
 
-  /// Worker count
-  [[nodiscard]] auto worker_count() const noexcept -> unsigned;
+    /// Worker count
+    [[nodiscard]] auto worker_count() const noexcept -> unsigned;
 
-  /// Return all worker io_context pointers
-  [[nodiscard]] auto worker_ios() -> std::vector<io_context *>;
+    /// Return all worker io_context pointers
+    [[nodiscard]] auto worker_ios() -> std::vector<io_context*>;
 
-  /// stdexec thread pool
-  [[nodiscard]] auto pool() noexcept -> exec::static_thread_pool &;
+    /// stdexec thread pool
+    [[nodiscard]] auto pool() noexcept -> exec::static_thread_pool&;
 
-  /// Start worker threads, then run accept_io on current thread
-  /// Blocks until stop()
-  void run();
+    /// Start worker threads, then run accept_io on current thread
+    /// Blocks until stop()
+    void run();
 
-  /// Stop all io_context and thread pool
-  void stop();
+    /// Stop all io_context and thread pool
+    void stop();
 
 private:
-  std::unique_ptr<io_context> accept_io_;
-  std::vector<std::unique_ptr<io_context>> workers_;
-  std::vector<std::jthread> threads_;
-  exec::static_thread_pool pool_;
-  std::atomic<std::size_t> next_{0};
+    std::unique_ptr<io_context> accept_io_;
+    std::vector<std::unique_ptr<io_context>> workers_;
+    std::vector<std::jthread> threads_;
+    exec::static_thread_pool pool_;
+    std::atomic<std::size_t> next_{0};
 };
 
 } // namespace cnetmod

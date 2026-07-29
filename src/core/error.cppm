@@ -3,7 +3,7 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-#include <WinSock2.h>
+    #include <WinSock2.h>
 #endif
 
 export module cnetmod.core.error;
@@ -17,7 +17,8 @@ namespace cnetmod {
 // =============================================================================
 
 /// Network operation error codes
-export enum class errc {
+export enum class errc
+{
     success = 0,
 
     // Connection-related
@@ -66,7 +67,8 @@ export enum class errc {
 // =============================================================================
 
 /// cnetmod error category
-export class network_error_category : public std::error_category {
+export class network_error_category : public std::error_category
+{
 public:
     [[nodiscard]] auto name() const noexcept -> const char* override;
     [[nodiscard]] auto message(int ev) const -> std::string override;
@@ -85,4 +87,6 @@ export [[nodiscard]] auto from_native_error(int native_error) noexcept -> errc;
 
 // Register with std::error_code system
 template <>
-struct std::is_error_code_enum<cnetmod::errc> : std::true_type {};
+struct std::is_error_code_enum<cnetmod::errc> : std::true_type
+{
+};

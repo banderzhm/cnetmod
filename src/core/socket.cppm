@@ -3,13 +3,13 @@ module;
 #include <cnetmod/config.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-#include <WinSock2.h>
-#include <WS2tcpip.h>
+    #include <WS2tcpip.h>
+    #include <WinSock2.h>
 #else
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <fcntl.h>
+    #include <fcntl.h>
+    #include <netinet/in.h>
+    #include <sys/socket.h>
+    #include <unistd.h>
 #endif
 
 export module cnetmod.core.socket;
@@ -37,9 +37,10 @@ export inline constexpr native_handle_t invalid_handle = -1;
 // =============================================================================
 
 /// Socket protocol type
-export enum class socket_type {
-    stream,    // TCP
-    datagram,  // UDP
+export enum class socket_type
+{
+    stream,   // TCP
+    datagram, // UDP
 };
 
 // =============================================================================
@@ -47,14 +48,15 @@ export enum class socket_type {
 // =============================================================================
 
 /// Socket options
-export struct socket_options {
+export struct socket_options
+{
     bool reuse_address = false;
     bool reuse_port = false;
     bool non_blocking = true;
-    bool no_delay = false;        // TCP_NODELAY
-    std::optional<bool> ipv6_only = std::nullopt;  // IPV6_V6ONLY; nullopt keeps OS default
-    int recv_buffer_size = 0;     // 0 = system default
-    int send_buffer_size = 0;     // 0 = system default
+    bool no_delay = false;                        // TCP_NODELAY
+    std::optional<bool> ipv6_only = std::nullopt; // IPV6_V6ONLY; nullopt keeps OS default
+    int recv_buffer_size = 0;                     // 0 = system default
+    int send_buffer_size = 0;                     // 0 = system default
 };
 
 // =============================================================================
@@ -63,7 +65,8 @@ export struct socket_options {
 
 /// Platform-independent socket wrapper
 /// Owns the lifetime of native handle (RAII)
-export class socket {
+export class socket
+{
 public:
     socket() noexcept = default;
     ~socket();
@@ -79,11 +82,11 @@ public:
     /// Create socket
     [[nodiscard]] static auto create(
         address_family family,
-        socket_type type
-    ) -> std::expected<socket, std::error_code>;
+        socket_type type) -> std::expected<socket, std::error_code>;
 
     /// Construct from native handle (takes ownership)
-    [[nodiscard]] static auto from_native(native_handle_t handle) noexcept -> socket {
+    [[nodiscard]] static auto from_native(native_handle_t handle) noexcept -> socket
+    {
         return socket{handle};
     }
 
@@ -133,31 +136,38 @@ public:
     void shutdown_both() noexcept;
 
     /// Get native handle
-    [[nodiscard]] auto native_handle() const noexcept -> native_handle_t {
+    [[nodiscard]] auto native_handle() const noexcept -> native_handle_t
+    {
         return handle_;
     }
 
-    [[nodiscard]] auto family() const noexcept -> address_family {
+    [[nodiscard]] auto family() const noexcept -> address_family
+    {
         return family_;
     }
 
     /// Release ownership (does not close)
-    [[nodiscard]] auto release() noexcept -> native_handle_t {
+    [[nodiscard]] auto release() noexcept -> native_handle_t
+    {
         auto h = handle_;
         handle_ = invalid_handle;
         return h;
     }
 
     /// Check if valid
-    [[nodiscard]] auto is_open() const noexcept -> bool {
+    [[nodiscard]] auto is_open() const noexcept -> bool
+    {
         return handle_ != invalid_handle;
     }
 
-    explicit operator bool() const noexcept { return is_open(); }
+    explicit operator bool() const noexcept
+    {
+        return is_open();
+    }
 
 private:
     explicit socket(native_handle_t handle,
-                    address_family family = address_family::unspecified) noexcept
+        address_family family = address_family::unspecified) noexcept
         : handle_(handle), family_(family) {}
 
     native_handle_t handle_ = invalid_handle;

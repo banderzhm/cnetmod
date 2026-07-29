@@ -29,7 +29,8 @@ namespace cnetmod {
 // health_status — Health check result
 // =============================================================================
 
-export struct health_status {
+export struct health_status
+{
     bool ok = true;
     std::string message = "ok";
 };
@@ -44,7 +45,8 @@ export struct health_status {
 /// Create simple liveness check handler (always returns 200)
 export inline auto health_check() -> http::handler_fn
 {
-    return [](http::request_context& ctx) -> task<void> {
+    return [](http::request_context& ctx) -> task<void>
+    {
         ctx.json(http::status::ok,
             R"({"status":"UP","message":"ok"})");
         co_return;
@@ -55,15 +57,12 @@ export inline auto health_check() -> http::handler_fn
 export inline auto health_check(std::function<health_status()> check_fn)
     -> http::handler_fn
 {
-    return [check_fn = std::move(check_fn)]
-           (http::request_context& ctx) -> task<void>
+    return [check_fn = std::move(check_fn)](http::request_context& ctx) -> task<void>
     {
         auto result = check_fn();
         auto status = result.ok ? http::status::ok
                                 : http::status::service_unavailable;
-        ctx.json(status, std::format(
-            R"({{"status":"{}","message":"{}"}})",
-            result.ok ? "UP" : "DOWN", result.message));
+        ctx.json(status, std::format(R"({{"status":"{}","message":"{}"}})", result.ok ? "UP" : "DOWN", result.message));
         co_return;
     };
 }
@@ -79,19 +78,14 @@ export inline auto health_check(std::function<health_status()> check_fn)
 export inline auto readiness_check(std::function<health_status()> check_fn)
     -> http::handler_fn
 {
-    return [check_fn = std::move(check_fn)]
-           (http::request_context& ctx) -> task<void>
+    return [check_fn = std::move(check_fn)](http::request_context& ctx) -> task<void>
     {
         auto result = check_fn();
         auto status = result.ok ? http::status::ok
                                 : http::status::service_unavailable;
 
         // Readiness probe returns more detailed information
-        ctx.json(status, std::format(
-            R"({{"status":"{}","message":"{}","ready":{}}})",
-            result.ok ? "UP" : "DOWN",
-            result.message,
-            result.ok ? "true" : "false"));
+        ctx.json(status, std::format(R"({{"status":"{}","message":"{}","ready":{}}})", result.ok ? "UP" : "DOWN", result.message, result.ok ? "true" : "false"));
         co_return;
     };
 }
@@ -101,17 +95,19 @@ export inline auto readiness_check(
     std::vector<std::pair<std::string, std::function<health_status()>>> checks)
     -> http::handler_fn
 {
-    return [checks = std::move(checks)]
-           (http::request_context& ctx) -> task<void>
+    return [checks = std::move(checks)](http::request_context& ctx) -> task<void>
     {
         bool all_ok = true;
         std::string details = "[";
         bool first = true;
 
-        for (auto& [name, check_fn] : checks) {
-            if (!first) details += ",";
+        for (auto& [name, check_fn] : checks)
+        {
+            if (!first)
+                details += ",";
             auto result = check_fn();
-            if (!result.ok) all_ok = false;
+            if (!result.ok)
+                all_ok = false;
 
             details += std::format(
                 R"({{"name":"{}","status":"{}","message":"{}"}})",
@@ -122,9 +118,7 @@ export inline auto readiness_check(
 
         auto status = all_ok ? http::status::ok
                              : http::status::service_unavailable;
-        ctx.json(status, std::format(
-            R"({{"status":"{}","checks":{}}})",
-            all_ok ? "UP" : "DOWN", details));
+        ctx.json(status, std::format(R"({{"status":"{}","checks":{}}})", all_ok ? "UP" : "DOWN", details));
         co_return;
     };
 }

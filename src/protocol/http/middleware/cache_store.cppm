@@ -23,7 +23,8 @@ namespace cnetmod::cache {
 // cache_store — Cache storage abstract interface
 // =============================================================================
 
-export class cache_store {
+export class cache_store
+{
 public:
     virtual ~cache_store() = default;
 
@@ -33,7 +34,7 @@ public:
 
     /// Set cached value, ttl = 0 means no expiration
     virtual auto set(std::string_view key, std::string_view value,
-                     std::chrono::seconds ttl = std::chrono::seconds{0})
+        std::chrono::seconds ttl = std::chrono::seconds{0})
         -> task<bool> = 0;
 
     /// Delete cache
