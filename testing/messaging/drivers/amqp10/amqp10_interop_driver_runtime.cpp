@@ -118,7 +118,8 @@ namespace {
                             auto json_key = amqp_value_to_json(key);
                             if (!json_key.is_string())
                                 throw std::runtime_error("AMQP map key is not a string");
-                            result[json_key.get<std::string>()] = amqp_value_to_json(entry);
+                            result[json_key.template get<std::string>()] =
+                                amqp_value_to_json(entry);
                         }
                     return result;
                 }
