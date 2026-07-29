@@ -3,6 +3,7 @@ import std;
 import cnetmod.protocol.kafka.protocol_value_codec;
 import cnetmod.protocol.kafka.record_batch;
 import cnetmod.protocol.kafka.group_coordinator;
+import cnetmod.protocol.kafka.offset_manager;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;

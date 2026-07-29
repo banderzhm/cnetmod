@@ -365,7 +365,12 @@ if(NOT EXISTS "${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR}/nlohmann/json.hpp")
         "nlohmann/json headers were not found. Install dependencies with vcpkg manifest mode, "
         "set CNETMOD_JSON_INCLUDE_DIR, or initialize submodules.")
 endif()
-include_directories(SYSTEM ${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR})
+# Keep the selected JSON provider ahead of broad dependency include roots such
+# as Conda's Library/include.  Clang searches every -I directory before every
+# -isystem directory regardless of their command-line order; marking this path
+# SYSTEM therefore allowed an unrelated, older nlohmann/json.hpp pulled in by
+# LZ4 to be paired with the vendored 3.12 module interface.
+include_directories(BEFORE ${CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR})
 set(NLOHMANN_JSON_MODULE ${CNETMOD_JSON_EFFECTIVE_MODULE})
 
 # pugixml: Lightweight XML parser
@@ -680,12 +685,12 @@ if(NOT CNETMOD_HAS_KQUEUE)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/kqueue")
     list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/kqueue")
 endif()
-if(NOT CNETMOD_HAS_SSL)
-    # DTLS imports cnetmod.core.ssl, so it must be disabled together with the
-    # TLS implementation when OpenSSL is not available.
-    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "core/(ssl|dtls)")
-    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "core/(ssl|dtls)")
-endif()
+# Keep the SSL and DTLS module units in non-OpenSSL builds.  Their declarations
+# and implementations are already guarded by CNETMOD_HAS_SSL, so they become
+# empty compatibility modules without introducing an OpenSSL link dependency.
+# Other protocol modules can then import their stable module names while
+# compiling their own TLS code out.  Removing the units here made MSVC fail
+# dependency scanning with C2230 before those feature guards were considered.
 
 # ============================================================================== 
 # Core Library Target: cnetmod_core

@@ -36,6 +36,9 @@
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
 - **SOCKS5**: 代理协议客户端和服务端 — CONNECT、BIND、UDP ASSOCIATE 命令；认证方法（无认证、用户名/密码、RFC 1961 GSSAPI provider 回调）；支持 IPv4、IPv6 和域名
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
+- **Kafka**: 异步生产者与消费组 — 元数据发现、API 版本协商、record batch、gzip/LZ4 压缩、幂等与事务生产、cooperative-sticky rebalance、手动提交 offset、SASL/TLS、重试与重连
+- **AMQP 0-9-1**: RabbitMQ 兼容异步客户端 — channel、持久化 exchange/queue/binding、publisher confirm、QoS/prefetch、ACK/NACK、事务、心跳、自动重连与拓扑恢复、SASL/TLS
+- **AMQP 1.0**: Artemis 兼容异步客户端 — SASL/TLS 连接、session、sender/receiver link、credit 流控、unsettled delivery outcome、显式 settlement、事务、重连与 link 恢复
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、事务管理、ORM（CRUD / 迁移 / 查询构建器 / MyBatis-Plus 风格 XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
 - **Raft**: 复制状态机工具集，支持 leader 选举、日志复制、ReadIndex、leader lease / check-quorum、joint consensus 成员变更、snapshot install / compaction、LevelDB 持久化、TCP transport、TLS / mTLS 认证、传输指标、chaos / 重启恢复测试，以及分布式存储示例
@@ -521,7 +524,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id 自动生成
 ```
 
-查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`redis_cluster`、`oss_shared_storage`、`modbus_demo`、`multicore_http`、`ssl_echo_server` 等。
+查看 `examples/` 获取完整示例，包括 `http_demo`、`http2_demo`、`ws_demo`、`mqtt_demo`、`kafka_demo`、`amqp091_demo`、`amqp10_demo`、`mysql_crud`、`mysql_orm`、`redis_client`、`redis_cluster`、`oss_shared_storage`、`modbus_demo`、`multicore_http`、`ssl_echo_server` 等。[高并发消息服务指南](docs/zh/protocols/messaging.md)给出了 Kafka、AMQP 示例与 Spring Boot producer/listener container 的概念映射，以及并发、背压、确认、恢复、SASL 和 TLS 配置。
 
 ## 架构
 
@@ -538,6 +541,9 @@ cnetmod.protocol.http — HTTP/1.1 + HTTP/2 服务器、路由器、中间件管
 cnetmod.protocol.websocket — WebSocket 服务器
 cnetmod.protocol.socks5 — SOCKS5 代理客户端 + 服务端
 cnetmod.protocol.mqtt — MQTT broker + 客户端（v3.1.1 / v5.0）
+cnetmod.protocol.kafka — Kafka 生产者、消费组、offset、幂等与事务
+cnetmod.protocol.amqp091 — AMQP 0-9-1 / RabbitMQ 客户端、channel、confirm、恢复
+cnetmod.protocol.amqp10 — AMQP 1.0 客户端、session、link、流控与 settlement
 cnetmod.protocol.mysql — MySQL 异步客户端 + ORM
 cnetmod.protocol.redis — Redis 异步客户端
 cnetmod.protocol.raft — Raft 复制状态机、存储、传输、运行时、成员变更、快照

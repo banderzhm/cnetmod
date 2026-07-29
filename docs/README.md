@@ -13,7 +13,7 @@ Welcome to the cnetmod documentation! Choose your language:
 Complete documentation in English covering:
 - Installation and quick start
 - Core concepts (coroutines, I/O, synchronization)
-- Protocol guides (HTTP, WebSocket, MQTT, MySQL, Redis, Raft)
+- Protocol guides (HTTP, WebSocket, MQTT, Kafka, AMQP 0-9-1, AMQP 1.0, MySQL, Redis, Raft)
 - Advanced topics (ORM, mutex, coroutine bridge, third-party dependency integration)
 
 ## 中文文档
@@ -23,7 +23,7 @@ Complete documentation in English covering:
 完整的中文文档，包括：
 - 安装和快速开始
 - 核心概念（协程、I/O、同步）
-- 协议指南（HTTP、WebSocket、MQTT、MySQL、Redis、Raft）
+- 协议指南（HTTP、WebSocket、MQTT、Kafka、AMQP 0-9-1、AMQP 1.0、MySQL、Redis、Raft）
 - 高级主题（ORM、互斥锁、协程桥接、第三方依赖集成）
 
 ---

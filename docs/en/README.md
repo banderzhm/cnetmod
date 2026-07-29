@@ -31,6 +31,7 @@ Build networked applications:
 - **[HTTP Server](protocols/http.md)** - Build REST APIs and web services
 - **[WebSocket](protocols/websocket.md)** - Real-time bidirectional communication
 - **[MQTT](protocols/mqtt.md)** - IoT messaging (broker + client)
+- **[Kafka and AMQP](protocols/messaging.md)** - High-concurrency Kafka, AMQP 0-9-1, and AMQP 1.0 services
 - **[CoAP](protocols/coap.md)** - UDP CoAP client/server for constrained devices
 - **[MySQL](protocols/mysql.md)** - Database access with ORM
 - **[Redis](protocols/redis.md)** - In-memory data store client

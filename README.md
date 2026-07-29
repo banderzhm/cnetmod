@@ -36,6 +36,9 @@ English | [简体中文](README_zh.md)
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
 - **SOCKS5**: Proxy protocol client and server — CONNECT, BIND, UDP ASSOCIATE commands; authentication methods (no auth, username/password, RFC 1961 GSSAPI provider callbacks); IPv4, IPv6, and domain name support
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
+- **Kafka**: Async producer and consumer groups — metadata discovery, API-version negotiation, record batches, gzip/LZ4 compression, idempotent and transactional production, cooperative-sticky rebalancing, manual offset commits, SASL/TLS, retry and reconnect handling
+- **AMQP 0-9-1**: RabbitMQ-compatible async client — channels, durable exchanges/queues/bindings, publisher confirms, QoS/prefetch, ACK/NACK, transactions, heartbeats, automatic reconnection and topology recovery, SASL/TLS
+- **AMQP 1.0**: Artemis-compatible async client — SASL/TLS connections, sessions, sender/receiver links, credit-based flow control, unsettled delivery outcomes, explicit settlement, transactions, reconnect and link recovery
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
 - **Redis**: Async client with RESP protocol, connection pool
 - **Raft**: Replicated state machine toolkit with leader election, log replication, ReadIndex, leader lease / check-quorum, joint consensus membership changes, snapshot install / compaction, LevelDB-backed persistence, TCP transport, TLS / mTLS authentication, transport metrics, chaos / restart tests, and distributed storage examples
@@ -525,7 +528,7 @@ orm::db_session db(cli, sf);
 co_await db.insert(event);  // event.id auto-generated
 ```
 
-See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `redis_cluster`, `oss_shared_storage`, `modbus_demo`, `multicore_http`, `ssl_echo_server`, and more.
+See `examples/` for complete demos including `http_demo`, `http2_demo`, `ws_demo`, `mqtt_demo`, `kafka_demo`, `amqp091_demo`, `amqp10_demo`, `mysql_crud`, `mysql_orm`, `redis_client`, `redis_cluster`, `oss_shared_storage`, `modbus_demo`, `multicore_http`, `ssl_echo_server`, and more. The [high-concurrency messaging guide](docs/en/protocols/messaging.md) maps the Kafka and AMQP examples to Spring Boot producer/listener-container concepts and documents concurrency, backpressure, acknowledgement, recovery, SASL, and TLS configuration.
 
 ## Architecture
 
@@ -542,6 +545,9 @@ cnetmod.protocol.http — HTTP/1.1 + HTTP/2 server, router, middleware pipeline,
 cnetmod.protocol.websocket — WebSocket server
 cnetmod.protocol.socks5 — SOCKS5 proxy client + server
 cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
+cnetmod.protocol.kafka — Kafka producer, consumer groups, offsets, idempotence, transactions
+cnetmod.protocol.amqp091 — AMQP 0-9-1 / RabbitMQ client, channels, confirms, recovery
+cnetmod.protocol.amqp10 — AMQP 1.0 client, sessions, links, flow control, settlement
 cnetmod.protocol.mysql — MySQL async client + ORM
 cnetmod.protocol.redis — Redis async client
 cnetmod.protocol.raft — Raft replicated state machine, storage, transport, runtime, membership, snapshots

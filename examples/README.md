@@ -13,6 +13,9 @@ examples/
 ├── database/       # MySQL operations (CRUD, ORM, transactions, MyBatis)
 ├── redis/          # Redis client and connection pools
 ├── mqtt/           # MQTT client with pub/sub
+├── kafka/          # High-concurrency Kafka producer and consumer group
+├── amqp091/        # RabbitMQ publishers and listener container
+├── amqp10/         # AMQP 1.0 sender and receiver containers
 ├── modbus/         # Modbus protocol (TCP, UDP, RTU)
 ├── integration/    # Standalone host-project integration tests
 ├── mappers/        # MyBatis XML mapper files
@@ -119,3 +122,11 @@ Industrial protocol implementation:
 ### Integration
 Standalone projects that model real downstream usage:
 - `integration/thirdparty_collision_project`: verifies that cnetmod can be added to a host project that already owns the same third-party libraries. See `docs/en/advanced/thirdparty-dependency-integration.md` and `docs/zh/advanced/thirdparty-dependency-integration.md`.
+
+### Messaging
+
+Production-oriented Kafka, AMQP 0-9-1, and AMQP 1.0 examples cover TLS and
+authentication configuration, reliable delivery, acknowledgements, recovery,
+flow control, and manual offset/settlement handling.
+
+[View Messaging Guide](../docs/en/protocols/messaging.md)

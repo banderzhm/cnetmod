@@ -121,6 +121,15 @@ set(MQTT_EXAMPLES
 )
 
 # ==============================================================================
+# Messaging Examples
+# ==============================================================================
+set(MESSAGING_EXAMPLES
+    kafka/kafka_demo
+    amqp091/amqp091_demo
+    amqp10/amqp10_demo
+)
+
+# ==============================================================================
 # Modbus Examples
 # ==============================================================================
 set(MODBUS_EXAMPLES
@@ -158,6 +167,7 @@ set(ALL_EXAMPLES
     ${GRPC_EXAMPLES}
     ${RAFT_EXAMPLES}
     ${MQTT_EXAMPLES}
+    ${MESSAGING_EXAMPLES}
     ${MODBUS_EXAMPLES}
     ${COAP_EXAMPLES}
 )

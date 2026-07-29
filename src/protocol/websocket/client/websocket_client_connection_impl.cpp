@@ -198,6 +198,7 @@ auto connection::async_accept(socket client_sock)
     co_return {};
 }
 
+#ifdef CNETMOD_HAS_SSL
 auto connection::async_accept_tls(socket client_sock, ssl_context& ssl_ctx)
     -> task<std::expected<void, std::error_code>>
 {
@@ -262,6 +263,7 @@ auto connection::async_accept_tls(socket client_sock, ssl_context& ssl_ctx)
     connected_ = true;
     co_return {};
 }
+#endif
 
 auto connection::async_send_text(std::string_view text)
     -> task<std::expected<void, std::error_code>>
@@ -483,10 +485,12 @@ void connection::clear_cancel_token() noexcept
     return handshake_headers_;
 }
 
+#ifdef CNETMOD_HAS_SSL
 [[nodiscard]] auto connection::is_secure() const noexcept -> bool
 {
     return secure_;
 }
+#endif
 
 auto connection::async_read_some(char* buf, std::size_t len)
     -> task<std::expected<std::size_t, std::error_code>>
