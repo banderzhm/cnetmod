@@ -303,7 +303,8 @@ auto json_escape(std::string_view s) -> std::string
 }
 
 /// Field_value -> nlohmann::json
-inline auto field_to_json(const mysql::field_value& f) -> nlohmann::json
+template <typename FieldValue>
+inline auto field_to_json(const FieldValue& f) -> nlohmann::json
 {
     if (f.is_null())
         return nullptr;
@@ -323,7 +324,8 @@ inline auto field_to_json(const mysql::field_value& f) -> nlohmann::json
 }
 
 /// Security field_value double( DECIMAL/)
-inline auto to_double(const mysql::field_value& f) -> double
+template <typename FieldValue>
+inline auto to_double(const FieldValue& f) -> double
 {
     if (f.is_double())
         return f.get_double();
@@ -640,7 +642,7 @@ auto handle_get_years(http::request_context& ctx) -> cn::task<void>
 
 /// Query projects ( A)- XML Mapper
 auto query_projects(mysql::client& conn, std::string_view start_date, std::string_view end_date)
-    -> cn::task<mysql::result_set>
+    -> cn::task<orm::result_set>
 {
     orm::mysql_mapper_session session(conn, g_mapper_registry);
 
@@ -653,7 +655,7 @@ auto query_projects(mysql::client& conn, std::string_view start_date, std::strin
 
 /// Query project_files( B)- XML Mapper
 auto query_files(mysql::client& conn, std::string_view start_date, std::string_view end_date)
-    -> cn::task<mysql::result_set>
+    -> cn::task<orm::result_set>
 {
     orm::mysql_mapper_session session(conn, g_mapper_registry);
 
@@ -665,8 +667,8 @@ auto query_files(mysql::client& conn, std::string_view start_date, std::string_v
 }
 
 /// Projects + files JSON
-auto build_projects_json(const mysql::result_set& proj_rs,
-    const mysql::result_set& file_rs) -> std::string
+auto build_projects_json(const orm::result_set& proj_rs,
+    const orm::result_set& file_rs) -> std::string
 {
     // Build files_map: project_id -> [{id, name}, ...]
     std::unordered_map<std::int64_t, std::vector<std::pair<std::int64_t, std::string>>> files_map;
@@ -1534,7 +1536,7 @@ auto handle_statistics(http::request_context& ctx) -> cn::task<void>
     std::map<std::string, double> client_contrib; // Implementation note.
     std::map<std::string, int> status_dist;       // State ->
 
-    auto to_month = [](const mysql::field_value& f) -> std::string
+    auto to_month = [](const auto& f) -> std::string
     {
         if (f.is_date())
         {

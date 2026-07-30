@@ -18,7 +18,7 @@ using param_value = cnetmod::orm::param_value;
 using field_value = cnetmod::orm::field_value;
 
 // =============================================================================
-// orm_result<T> — ORM operation result
+// orm_result<T> 鈥?ORM operation result
 // =============================================================================
 
 template <class T> struct orm_result
@@ -52,7 +52,7 @@ template <class T> struct orm_result
 };
 
 // =============================================================================
-// mysql_session — Async ORM session backed by mysql::client
+// mysql_session 鈥?Async ORM session backed by mysql::client
 // =============================================================================
 
 template <class DatabaseClient> class basic_db_session
@@ -65,12 +65,12 @@ public:
     basic_db_session(DatabaseClient& cli, snowflake_generator& sf) noexcept
         : cli_(cli), snowflake_(&sf) {}
 
-    // ── Query ─────────────────────────────────────────────────
+    // 鈹€鈹€ Query 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /// SELECT * FROM table
     template <Model T> auto find_all() -> task<orm_result<T>>
     {
-        auto sql = select<T>().build_sql(cli_.current_format_opts());
+        auto sql = select<T>().build_sql(orm_format_options());
         co_return co_await exec_select<T>(sql);
     }
 
@@ -89,7 +89,7 @@ public:
         auto sql = select<T>()
                        .where(where_fmt, {std::move(id)})
                        .limit(1)
-                       .build_sql(cli_.current_format_opts());
+                       .build_sql(orm_format_options());
         co_return co_await exec_select<T>(sql);
     }
 
@@ -97,11 +97,11 @@ public:
     template <Model T>
     auto find(const select_builder<T>& qb) -> task<orm_result<T>>
     {
-        auto sql = qb.build_sql(cli_.current_format_opts());
+        auto sql = qb.build_sql(orm_format_options());
         co_return co_await exec_select<T>(sql);
     }
 
-    // ── Insert ─────────────────────────────────────────────────
+    // 鈹€鈹€ Insert 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /// INSERT single record (auto-generate uuid/snowflake ID, fill back
     /// auto_increment ID)
@@ -110,7 +110,7 @@ public:
         generate_id_if_needed(model);
 
         auto [sql, params] =
-            insert_of<T>().values(model).build(cli_.current_format_opts());
+            insert_of<T>().values(model).build(orm_format_options());
         if constexpr (requires { cli_.append_insert_returning(sql, std::string_view{}); })
         {
             if (auto* pk = model_traits<T>::meta().pk(); pk && pk->col.is_auto())
@@ -144,7 +144,7 @@ public:
         std::vector<T> copy(models.begin(), models.end());
         auto [sql, params] = insert_of<T>()
                                  .values(std::span<const T>(copy))
-                                 .build(cli_.current_format_opts());
+                                 .build(orm_format_options());
         if constexpr (requires { cli_.append_insert_returning(sql, std::string_view{}); })
         {
             if (auto* pk = model_traits<T>::meta().pk(); pk && pk->col.is_auto())
@@ -165,13 +165,13 @@ public:
         co_return r;
     }
 
-    // ── Update ─────────────────────────────────────────────────
+    // 鈹€鈹€ Update 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /// UPDATE by PK (model itself carries PK value)
     template <Model T> auto update(const T& model) -> task<orm_result<T>>
     {
         auto [sql, params] =
-            update_of<T>().set(model).build(cli_.current_format_opts());
+            update_of<T>().set(model).build(orm_format_options());
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
             co_return make_err<T>(rs.error_msg);
@@ -185,7 +185,7 @@ public:
     template <Model T>
     auto update(const update_builder<T>& ub) -> task<orm_result<T>>
     {
-        auto [sql, params] = ub.build(cli_.current_format_opts());
+        auto [sql, params] = ub.build(orm_format_options());
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
             co_return make_err<T>(rs.error_msg);
@@ -195,7 +195,7 @@ public:
         co_return r;
     }
 
-    // ── Delete ─────────────────────────────────────────────────
+    // 鈹€鈹€ Delete 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /// DELETE by PK
     template <Model T> auto remove(const T& model) -> task<orm_result<T>>
@@ -211,7 +211,7 @@ public:
 
         auto [sql, params] = delete_of<T>()
                                  .where(where_fmt, {pk->getter(model)})
-                                 .build(cli_.current_format_opts());
+                                 .build(orm_format_options());
 
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
@@ -236,7 +236,7 @@ public:
 
         auto [sql, params] = delete_of<T>()
                                  .where(where_fmt, {std::move(id)})
-                                 .build(cli_.current_format_opts());
+                                 .build(orm_format_options());
 
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
@@ -251,7 +251,7 @@ public:
     template <Model T>
     auto remove(const delete_builder<T>& db) -> task<orm_result<T>>
     {
-        auto [sql, params] = db.build(cli_.current_format_opts());
+        auto [sql, params] = db.build(orm_format_options());
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
             co_return make_err<T>(rs.error_msg);
@@ -261,7 +261,7 @@ public:
         co_return r;
     }
 
-    // ── DDL ──────────────────────────────────────────────────
+    // 鈹€鈹€ DDL 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /// CREATE TABLE IF NOT EXISTS
     template <Model T> auto create_table() -> task<orm_result<T>>
@@ -286,7 +286,7 @@ public:
     /// Raw SQL query
     auto raw_query(std::string_view sql) -> task<result_set>
     {
-        co_return co_await cli_.query(sql);
+        co_return mysql_adapt_result(co_await cli_.query(sql));
     }
 
     /// Underlying client access
@@ -295,7 +295,7 @@ public:
         return cli_;
     }
 
-    // ── Transaction ──────────────────────────────────────────────
+    // 鈹€鈹€ Transaction 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€
 
     /// Execute a function within a transaction (auto commit/rollback)
     template <typename Func>
@@ -304,7 +304,8 @@ public:
     }
     auto transaction(Func&& func) -> task<result_set>
     {
-        co_return co_await cli_.transaction(std::forward<Func>(func));
+        co_return mysql_adapt_result(
+            co_await cli_.transaction(std::forward<Func>(func)));
     }
 
     /// Execute a function within a transaction with specific isolation level
@@ -314,10 +315,16 @@ public:
     }
     auto transaction(Func&& func, isolation_level level) -> task<result_set>
     {
-        co_return co_await cli_.transaction(std::forward<Func>(func), level);
+        co_return mysql_adapt_result(
+            co_await cli_.transaction(std::forward<Func>(func), level));
     }
 
 private:
+    [[nodiscard]] auto orm_format_options() const -> cnetmod::orm::format_options
+    {
+        return {.backslash_escapes = cli_.current_format_opts().backslash_escapes};
+    }
+
     DatabaseClient& cli_;
     snowflake_generator* snowflake_ = nullptr;
 

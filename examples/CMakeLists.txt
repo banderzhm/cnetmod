@@ -258,6 +258,10 @@ set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)
 # ==============================================================================
 if(TARGET example_account_server_demo)
     target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+    # jwt-cpp is header-only and its nlohmann traits include json.hpp from the
+    # header context, so both third-party header dependencies belong here.
+    cnetmod_link_jwt_cpp(example_account_server_demo)
+    cnetmod_link_nlohmann_json(example_account_server_demo)
 endif()
 
 # stdexec currently ships as a header-only P2300 implementation rather than a
