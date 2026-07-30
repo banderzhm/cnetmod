@@ -18,6 +18,71 @@ import cnetmod.core.ssl;
 namespace cnetmod::postgresql {
 namespace {
 
+    // MSVC requires a machine-level tail call for task's symmetric transfer.
+    // Portal streaming deliberately keeps a rich state object alive between
+    // protocol actions, so schedule child tasks through the owning event loop
+    // instead. This is local to the portal driver; all other task users retain
+    // zero-hop symmetric transfer.
+    template <typename T> class portal_task_awaiter
+    {
+    public:
+        portal_task_awaiter(io_context& context, task<T>&& operation) noexcept
+            : context_(context), operation_(std::move(operation)) {}
+
+        auto await_ready() const noexcept -> bool
+        {
+            return false;
+        }
+
+        void await_suspend(std::coroutine_handle<> caller) noexcept
+        {
+            operation_.handle().promise().set_caller(caller);
+            context_.post(operation_.handle());
+        }
+
+        auto await_resume() -> T
+        {
+            return operation_.handle().promise().result();
+        }
+
+    private:
+        io_context& context_;
+        task<T> operation_;
+    };
+
+    template <> class portal_task_awaiter<void>
+    {
+    public:
+        portal_task_awaiter(io_context& context, task<void>&& operation) noexcept
+            : context_(context), operation_(std::move(operation)) {}
+
+        auto await_ready() const noexcept -> bool
+        {
+            return false;
+        }
+
+        void await_suspend(std::coroutine_handle<> caller) noexcept
+        {
+            operation_.handle().promise().set_caller(caller);
+            context_.post(operation_.handle());
+        }
+
+        void await_resume()
+        {
+            operation_.handle().promise().result();
+        }
+
+    private:
+        io_context& context_;
+        task<void> operation_;
+    };
+
+    template <typename T>
+    auto await_portal_task(io_context& context, task<T>&& operation) -> portal_task_awaiter<T>
+    {
+        return {context, std::move(operation)};
+    }
+
     auto read_u16(std::span<const std::uint8_t> input) -> std::uint16_t
     {
         return (std::uint16_t(input[0]) << 8) | input[1];
@@ -658,13 +723,226 @@ auto client::deliver_batch(std::vector<row>& batch,
     co_return nullptr;
 }
 
-#if defined(_MSC_VER)
-    // MSVC's Release coroutine backend cannot emit the required symmetric tail
-    // call for this large portal state machine (C4737). Keep the workaround to
-    // this network-bound API; the remainder of the connection implementation
-    // continues using the project's Release optimization settings.
-    #pragma optimize("", off)
-#endif
+struct client::streaming_portal_state
+{
+    streaming_portal_state(std::size_t requested_batch_size,
+        std::function<task<void>(std::span<const row>)> batch_consumer)
+        : consume(std::move(batch_consumer)), batch_size(requested_batch_size)
+    {
+        batch.reserve(batch_size);
+    }
+
+    result_set result;
+    std::vector<std::uint32_t> oids;
+    std::vector<row> batch;
+    std::function<task<void>(std::span<const row>)> consume;
+    std::size_t batch_size;
+    bool command_complete{};
+    bool completed{};
+    bool transaction_failed{};
+};
+
+auto client::parse_streaming_row_description(std::span<const std::uint8_t> payload,
+    result_set& result, std::vector<std::uint32_t>& oids) const -> std::optional<std::string>
+{
+    if (payload.size() < 2)
+        return "truncated RowDescription";
+    const auto count = read_u16(payload.first(2));
+    if (count > options_.maximum_column_count)
+        return "PostgreSQL column limit exceeded";
+    result.columns.clear();
+    oids.clear();
+    result.columns.reserve(count);
+    oids.reserve(count);
+    std::size_t position = 2;
+    for (std::uint16_t i = 0; i < count; ++i)
+    {
+        auto name = read_cstring(payload, position);
+        if (!name || position + 18 > payload.size())
+            return "invalid RowDescription";
+        column_meta column;
+        column.name = *name;
+        column.original_name = *name;
+        position += 6;
+        const auto oid = read_u32(payload.subspan(position, 4));
+        position += 4;
+        column.native_type = oid;
+        oids.push_back(oid);
+        const auto width = read_u16(payload.subspan(position, 2));
+        position += 2;
+        column.type_size = width == 0xffff ? -1 : static_cast<std::int16_t>(width);
+        column.type_modifier = static_cast<std::int32_t>(read_u32(payload.subspan(position, 4)));
+        position += 4;
+        column.format_code = static_cast<std::int16_t>(read_u16(payload.subspan(position, 2)));
+        position += 2;
+        result.columns.push_back(std::move(column));
+    }
+    return std::nullopt;
+}
+
+auto client::parse_streaming_data_row(std::span<const std::uint8_t> payload,
+    const std::vector<std::uint32_t>& oids) const -> std::expected<row, std::string>
+{
+    if (payload.size() < 2)
+        return std::unexpected("truncated DataRow");
+    const auto count = read_u16(payload.first(2));
+    if (count != oids.size())
+        return std::unexpected("DataRow column count mismatch");
+    std::size_t position = 2;
+    row values;
+    values.reserve(count);
+    for (std::size_t i = 0; i < count; ++i)
+    {
+        if (position + 4 > payload.size())
+            return std::unexpected("truncated DataRow field length");
+        const auto length = read_u32(payload.subspan(position, 4));
+        position += 4;
+        if (length == 0xffffffffU)
+        {
+            values.push_back(field_value::null());
+            continue;
+        }
+        if (length > payload.size() - position)
+            return std::unexpected("invalid DataRow field length");
+        std::string_view value(reinterpret_cast<const char*>(payload.data() + position), length);
+        values.push_back(detail::decode_text_field(oids[i], value));
+        position += length;
+    }
+    return values;
+}
+
+void client::parse_streaming_command_complete(std::span<const std::uint8_t> payload, result_set& result)
+{
+    std::size_t position{};
+    if (auto tag = read_cstring(payload, position))
+    {
+        result.info = *tag;
+        if (auto split = tag->find_last_of(' '); split != std::string::npos)
+            (void)std::from_chars(tag->data() + split + 1, tag->data() + tag->size(), result.affected_rows);
+    }
+}
+
+enum class client::streaming_portal_action : std::uint8_t
+{
+    none,
+    abort,
+    deliver,
+    deliver_and_continue,
+    deliver_and_synchronize,
+    synchronize,
+    complete,
+};
+
+auto client::advance_streaming_portal_state(streaming_portal_state& state,
+    const detail::backend_message& message) const -> streaming_portal_action
+{
+    const auto payload = std::span<const std::uint8_t>(message.payload);
+    switch (message.type)
+    {
+    case 'T':
+        if (auto error = parse_streaming_row_description(payload, state.result, state.oids))
+        {
+            state.result = make_error(std::move(*error));
+            return streaming_portal_action::abort;
+        }
+        return streaming_portal_action::none;
+    case 'D':
+    {
+        auto values = parse_streaming_data_row(payload, state.oids);
+        if (!values)
+        {
+            state.result = make_error(values.error());
+            return streaming_portal_action::abort;
+        }
+        state.batch.push_back(std::move(*values));
+        return state.batch.size() == state.batch_size ? streaming_portal_action::deliver : streaming_portal_action::none;
+    }
+    case 's':
+        return streaming_portal_action::deliver_and_continue;
+    case 'C':
+        parse_streaming_command_complete(payload, state.result);
+        state.command_complete = true;
+        return streaming_portal_action::deliver_and_synchronize;
+    case 'E':
+    {
+        auto error = detail::parse_error(payload);
+        state.result.error_msg = std::move(error.message);
+        state.result.sql_state = std::move(error.sql_state);
+        return streaming_portal_action::synchronize;
+    }
+    case 'Z':
+        state.completed = true;
+        state.transaction_failed = !payload.empty() && payload[0] == 'E';
+        if (!state.command_complete && state.result.error_msg.empty())
+            state.result.error_msg = "streaming portal ended without CommandComplete";
+        return streaming_portal_action::complete;
+    default:
+        return streaming_portal_action::none;
+    }
+}
+
+auto client::run_streaming_portal(std::string_view portal, streaming_portal_state& state) -> task<void>
+{
+    for (;;)
+    {
+        streaming_portal_action action{};
+        {
+            auto message = co_await await_portal_task(context_, read_message());
+            if (!message)
+            {
+                disconnect();
+                state.result = make_error(std::move(message.error()));
+                state.completed = true;
+                action = streaming_portal_action::complete;
+            }
+            else
+                action = advance_streaming_portal_state(state, *message);
+        }
+        if (action == streaming_portal_action::abort)
+        {
+            co_await await_portal_task(context_, abort_streaming_portal(portal));
+            co_return;
+        }
+        if (action == streaming_portal_action::deliver ||
+            action == streaming_portal_action::deliver_and_continue ||
+            action == streaming_portal_action::deliver_and_synchronize)
+        {
+            auto callback_failure = co_await await_portal_task(context_,
+                deliver_batch(state.batch, state.consume));
+            if (callback_failure)
+            {
+                co_await await_portal_task(context_, abort_streaming_portal(portal));
+                std::rethrow_exception(callback_failure);
+            }
+        }
+        if (action == streaming_portal_action::deliver_and_continue)
+        {
+            if (!co_await await_portal_task(context_,
+                    write_all(detail::streaming_portal_continue_messages(portal,
+                        static_cast<std::uint32_t>(state.batch_size)))))
+            {
+                disconnect();
+                state.result = make_error("failed to continue streaming portal");
+                co_return;
+            }
+        }
+        if (action == streaming_portal_action::deliver_and_synchronize ||
+            action == streaming_portal_action::synchronize)
+        {
+            if (!co_await await_portal_task(context_, write_all(detail::synchronization_message())))
+            {
+                disconnect();
+                state.result = make_error("failed to synchronize streaming portal");
+                co_return;
+            }
+        }
+        if (state.completed)
+        {
+            transaction_failed_ = state.transaction_failed;
+            co_return;
+        }
+    }
+}
 
 auto client::query_batches(std::string_view sql, std::size_t batch_size,
     std::function<task<void>(std::span<const row>)> consume) -> task<result_set>
@@ -678,183 +956,18 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
     operation_guard guard{operation_in_progress_};
 
     const std::string portal = std::format("cnetmod_stream_{}", ++statement_counter_);
-    auto start = detail::streaming_portal_start_messages(portal,
-        normalized_sql(sql), static_cast<std::uint32_t>(batch_size));
-    if (!co_await write_all(start))
-        co_return make_error("failed to start streaming portal");
-
-    result_set result;
-    std::vector<std::uint32_t> oids;
-    std::vector<row> batch;
-    batch.reserve(batch_size);
-    bool command_complete{};
-
-    for (;;)
+    streaming_portal_state state{batch_size, std::move(consume)};
+    bool started{};
     {
-        auto message = co_await read_message();
-        if (!message)
-        {
-            disconnect();
-            co_return make_error(message.error());
-        }
-        auto payload = std::span<const std::uint8_t>(message->payload);
-        if (message->type == 'T')
-        {
-            if (payload.size() < 2)
-            {
-                co_await abort_streaming_portal(portal);
-                co_return make_error("truncated RowDescription");
-            }
-            const auto count = read_u16(payload.first(2));
-            if (count > options_.maximum_column_count)
-            {
-                co_await abort_streaming_portal(portal);
-                co_return make_error("PostgreSQL column limit exceeded");
-            }
-            result.columns.clear();
-            oids.clear();
-            result.columns.reserve(count);
-            oids.reserve(count);
-            std::size_t position = 2;
-            for (std::uint16_t i = 0; i < count; ++i)
-            {
-                auto name = read_cstring(payload, position);
-                if (!name || position + 18 > payload.size())
-                {
-                    co_await abort_streaming_portal(portal);
-                    co_return make_error("invalid RowDescription");
-                }
-                column_meta column;
-                column.name = *name;
-                column.original_name = *name;
-                position += 6;
-                const auto oid = read_u32(payload.subspan(position, 4));
-                position += 4;
-                column.native_type = oid;
-                oids.push_back(oid);
-                const auto width = read_u16(payload.subspan(position, 2));
-                position += 2;
-                column.type_size = width == 0xffff ? -1 : static_cast<std::int16_t>(width);
-                column.type_modifier = static_cast<std::int32_t>(read_u32(payload.subspan(position, 4)));
-                position += 4;
-                column.format_code = static_cast<std::int16_t>(read_u16(payload.subspan(position, 2)));
-                position += 2;
-                result.columns.push_back(std::move(column));
-            }
-        }
-        else if (message->type == 'D')
-        {
-            if (payload.size() < 2)
-            {
-                co_await abort_streaming_portal(portal);
-                co_return make_error("truncated DataRow");
-            }
-            const auto count = read_u16(payload.first(2));
-            if (count != oids.size())
-            {
-                co_await abort_streaming_portal(portal);
-                co_return make_error("DataRow column count mismatch");
-            }
-            std::size_t position = 2;
-            row values;
-            values.reserve(count);
-            for (std::size_t i = 0; i < count; ++i)
-            {
-                if (position + 4 > payload.size())
-                {
-                    co_await abort_streaming_portal(portal);
-                    co_return make_error("truncated DataRow field length");
-                }
-                const auto length = read_u32(payload.subspan(position, 4));
-                position += 4;
-                if (length == 0xffffffffU)
-                {
-                    values.push_back(field_value::null());
-                    continue;
-                }
-                if (length > payload.size() - position)
-                {
-                    co_await abort_streaming_portal(portal);
-                    co_return make_error("invalid DataRow field length");
-                }
-                std::string_view value(reinterpret_cast<const char*>(payload.data() + position), length);
-                values.push_back(detail::decode_text_field(oids[i], value));
-                position += length;
-            }
-            batch.push_back(std::move(values));
-            if (batch.size() == batch_size)
-            {
-                auto callback_failure = co_await deliver_batch(batch, consume);
-                if (callback_failure)
-                {
-                    co_await abort_streaming_portal(portal);
-                    std::rethrow_exception(callback_failure);
-                }
-            }
-        }
-        else if (message->type == 's')
-        {
-            auto callback_failure = co_await deliver_batch(batch, consume);
-            if (callback_failure)
-            {
-                co_await abort_streaming_portal(portal);
-                std::rethrow_exception(callback_failure);
-            }
-            auto next = detail::streaming_portal_continue_messages(portal, static_cast<std::uint32_t>(batch_size));
-            if (!co_await write_all(next))
-            {
-                disconnect();
-                co_return make_error("failed to continue streaming portal");
-            }
-        }
-        else if (message->type == 'C')
-        {
-            auto callback_failure = co_await deliver_batch(batch, consume);
-            if (callback_failure)
-            {
-                co_await abort_streaming_portal(portal);
-                std::rethrow_exception(callback_failure);
-            }
-            std::size_t position{};
-            auto tag = read_cstring(payload, position);
-            if (tag)
-            {
-                result.info = *tag;
-                auto split = tag->find_last_of(' ');
-                if (split != std::string::npos)
-                    (void)std::from_chars(tag->data() + split + 1, tag->data() + tag->size(), result.affected_rows);
-            }
-            command_complete = true;
-            if (!co_await write_all(detail::synchronization_message()))
-            {
-                disconnect();
-                co_return make_error("failed to synchronize streaming portal");
-            }
-        }
-        else if (message->type == 'E')
-        {
-            auto error = detail::parse_error(payload);
-            result.error_msg = error.message;
-            result.sql_state = error.sql_state;
-            if (!co_await write_all(detail::synchronization_message()))
-            {
-                disconnect();
-                co_return result;
-            }
-        }
-        else if (message->type == 'Z')
-        {
-            transaction_failed_ = !payload.empty() && payload[0] == 'E';
-            if (!command_complete && result.error_msg.empty())
-                result.error_msg = "streaming portal ended without CommandComplete";
-            co_return result;
-        }
+        auto start = detail::streaming_portal_start_messages(portal, normalized_sql(sql),
+            static_cast<std::uint32_t>(batch_size));
+        started = co_await await_portal_task(context_, write_all(start));
     }
+    if (!started)
+        co_return make_error("failed to start streaming portal");
+    co_await await_portal_task(context_, run_streaming_portal(portal, state));
+    co_return std::move(state.result);
 }
-
-#if defined(_MSC_VER)
-    #pragma optimize("", on)
-#endif
 
 auto client::cancel_current_operation() -> task<result_set>
 {

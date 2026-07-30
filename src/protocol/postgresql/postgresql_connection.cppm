@@ -126,6 +126,8 @@ public:
     void append_insert_returning(std::string& sql, std::string_view column) const;
 
 private:
+    struct streaming_portal_state;
+    enum class streaming_portal_action : std::uint8_t;
     auto read_exact(std::uint8_t*, std::size_t) -> task<bool>;
     auto read_message() -> task<std::expected<detail::backend_message, std::string>>;
     auto write_all(std::span<const std::uint8_t>) -> task<bool>;
@@ -136,6 +138,14 @@ private:
     auto deliver_batch(std::vector<row>& batch,
         const std::function<task<void>(std::span<const row>)>& consume)
         -> task<std::exception_ptr>;
+    auto parse_streaming_row_description(std::span<const std::uint8_t> payload,
+        result_set& result, std::vector<std::uint32_t>& oids) const -> std::optional<std::string>;
+    auto parse_streaming_data_row(std::span<const std::uint8_t> payload,
+        const std::vector<std::uint32_t>& oids) const -> std::expected<row, std::string>;
+    auto run_streaming_portal(std::string_view portal, streaming_portal_state& state) -> task<void>;
+    auto advance_streaming_portal_state(streaming_portal_state& state,
+        const detail::backend_message& message) const -> streaming_portal_action;
+    static void parse_streaming_command_complete(std::span<const std::uint8_t>, result_set&);
     void disconnect(std::error_code = {}) noexcept;
 
     io_context& context_;
