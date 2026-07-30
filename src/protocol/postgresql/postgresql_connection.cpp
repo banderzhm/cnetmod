@@ -658,6 +658,14 @@ auto client::deliver_batch(std::vector<row>& batch,
     co_return nullptr;
 }
 
+#if defined(_MSC_VER)
+    // MSVC's Release coroutine backend cannot emit the required symmetric tail
+    // call for this large portal state machine (C4737). Keep the workaround to
+    // this network-bound API; the remainder of the connection implementation
+    // continues using the project's Release optimization settings.
+    #pragma optimize("", off)
+#endif
+
 auto client::query_batches(std::string_view sql, std::size_t batch_size,
     std::function<task<void>(std::span<const row>)> consume) -> task<result_set>
 {
@@ -843,6 +851,10 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
         }
     }
 }
+
+#if defined(_MSC_VER)
+    #pragma optimize("", on)
+#endif
 
 auto client::cancel_current_operation() -> task<result_set>
 {
