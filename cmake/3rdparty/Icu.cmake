@@ -7,9 +7,9 @@ macro(cnetmod_configure_icu)
         if(ICU_FOUND AND TARGET ICU::uc AND TARGET ICU::i18n)
             set(CNETMOD_HAS_ICU ON)
         else()
-            message(WARNING
-                "ICU uc and i18n were not found; PostgreSQL SCRAM accepts only printable ASCII credentials. "
-                "Install ICU to enable complete RFC 4013 SASLprep for non-ASCII credentials.")
+            message(FATAL_ERROR
+                "CNETMOD_ENABLE_POSTGRESQL=ON requires ICU uc and i18n for complete RFC 4013 SASLprep. "
+                "Install ICU with the selected package manager or disable PostgreSQL explicitly.")
         endif()
     endif()
 endmacro()

@@ -1,10 +1,8 @@
 module;
 
 #include <cnetmod/config.hpp>
-#ifdef CNETMOD_HAS_ICU
-    #include <unicode/usprep.h>
-    #include <unicode/ustring.h>
-#endif
+#include <unicode/usprep.h>
+#include <unicode/ustring.h>
 #ifdef CNETMOD_HAS_SSL
     #include <openssl/crypto.h>
     #include <openssl/evp.h>
@@ -318,17 +316,6 @@ auto saslprep(std::string_view input) -> std::expected<std::string, std::string>
 {
     if (input.size() > static_cast<std::size_t>(std::numeric_limits<std::int32_t>::max()))
         return std::unexpected("SASLprep input is too large");
-#ifndef CNETMOD_HAS_ICU
-    for (const auto byte : input)
-    {
-        const auto code_point = static_cast<unsigned char>(byte);
-        if (code_point > 0x7f)
-            return std::unexpected("non-ASCII SCRAM credentials require ICU RFC 4013 SASLprep support");
-        if (code_point < 0x20 || code_point == 0x7f)
-            return std::unexpected("SASLprep rejected an ASCII control character");
-    }
-    return std::string(input);
-#else
     UErrorCode status = U_ZERO_ERROR;
     std::int32_t utf16_length{};
     u_strFromUTF8(nullptr, 0, &utf16_length, input.data(),
@@ -382,7 +369,6 @@ auto saslprep(std::string_view input) -> std::expected<std::string, std::string>
     if (U_FAILURE(status))
         return std::unexpected("SASLprep UTF-8 encoding failed");
     return prepared;
-#endif
 }
 
 auto scram_client::respond(std::string_view password, std::string_view challenge)

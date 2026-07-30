@@ -30,6 +30,15 @@ jobs:
       - name: Install CMake 4.2.3
         run: choco install cmake --version=4.2.3 -y --force
 
+      - name: Install ICU through vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          runVcpkgInstall: false
+
+      - name: Install ICU package
+        shell: pwsh
+        run: & "$env:VCPKG_ROOT/vcpkg.exe" install icu:x64-windows --disable-metrics
+
       - name: Setup MSBuild (VS 2026 / VS18)
         uses: microsoft/setup-msbuild@v2
         with:
@@ -41,6 +50,8 @@ jobs:
         run: |
           cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" `
             -G "Visual Studio 18 2026" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_MANIFEST_MODE=OFF `
             -DCNETMOD_BUILD_TESTS=OFF `
             -DCNETMOD_BUILD_BENCH=OFF `
             -DCNETMOD_BUILD_EXAMPLES=OFF
@@ -84,7 +95,7 @@ jobs:
       - name: Install Clang 22 and build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y wget ninja-build liburing-dev
+          sudo apt-get install -y wget ninja-build libicu-dev liburing-dev
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh 22 all
@@ -143,12 +154,13 @@ jobs:
           submodules: recursive
           ref: ${{ env.RELEASE_TAG }}
 
-      - name: Install LLVM, Ninja, and CMake
-        run: brew install llvm ninja cmake
+      - name: Install ICU, LLVM, Ninja, and CMake
+        run: brew install icu4c llvm ninja cmake
 
       - name: Configure core-only build
         run: |
           LLVM_PREFIX="$(brew --prefix llvm)"
+          ICU_PREFIX="$(brew --prefix icu4c)"
           SDKROOT="$(xcrun --show-sdk-path)"
           LIBCXX_MODULES="$(find "${LLVM_PREFIX}" -name std.cppm -exec dirname {} \; | head -1)"
           cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" \
@@ -159,6 +171,7 @@ jobs:
             -DCMAKE_CXX_FLAGS="-isysroot ${SDKROOT} -stdlib=libc++" \
             -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++ -lc++ -lc++abi" \
             -DCMAKE_OSX_SYSROOT="${SDKROOT}" \
+            -DCMAKE_PREFIX_PATH="${ICU_PREFIX}" \
             -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \
             -DLIBCXX_INCLUDE_DIRS="${LLVM_PREFIX}/include/c++/v1" \
             -DCNETMOD_BUILD_TESTS=OFF \

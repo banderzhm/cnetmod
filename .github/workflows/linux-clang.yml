@@ -38,7 +38,7 @@ jobs:
     - name: Install base dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y wget ninja-build liburing-dev
+        sudo apt-get install -y wget ninja-build libicu-dev liburing-dev
 
     - name: Install Clang ${{ matrix.clang_version }}
       run: |

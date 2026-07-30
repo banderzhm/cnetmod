@@ -28,7 +28,7 @@ jobs:
     - name: Setup Homebrew and install LLVM
       run: |
         brew update
-        brew install llvm ninja cmake
+        brew install icu4c llvm ninja cmake
         
         LLVM_VERSION=$(/opt/homebrew/opt/llvm/bin/clang++ --version 2>/dev/null || /usr/local/opt/llvm/bin/clang++ --version)
         echo "Installed LLVM version:"
@@ -98,6 +98,7 @@ jobs:
     - name: Configure CMake
       run: |
         LLVM_PREFIX="${{ steps.llvm-paths.outputs.LLVM_PREFIX }}"
+        ICU_PREFIX="$(brew --prefix icu4c)"
         SDKROOT="${{ steps.sdk-path.outputs.SDKROOT }}"
         LIBCXX_MODULES="${{ steps.llvm-paths.outputs.LIBCXX_MODULES }}"
         LIBCXX_INCLUDE="${{ steps.llvm-paths.outputs.LIBCXX_INCLUDE }}"
@@ -110,6 +111,7 @@ jobs:
           -DCMAKE_CXX_FLAGS="-isysroot ${SDKROOT} -stdlib=libc++" \
           -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++ -lc++ -lc++abi" \
           -DCMAKE_OSX_SYSROOT="${SDKROOT}" \
+          -DCMAKE_PREFIX_PATH="${ICU_PREFIX}" \
           -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \
           -DLIBCXX_INCLUDE_DIRS="${LIBCXX_INCLUDE}" \
           -DCNETMOD_BUILD_EXAMPLES=ON \

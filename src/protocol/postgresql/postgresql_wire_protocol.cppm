@@ -47,8 +47,8 @@ struct scram_client
         -> std::expected<void, std::string>;
 };
 
-/// Uses ICU's complete RFC 4013 SASLprep profile when available. Builds
-/// without ICU safely accept printable ASCII credentials only.
+/// Complete RFC 4013 preparation through ICU's SASLprep profile, including
+/// Unicode NFKC mapping, prohibited-code-point checks, and bidirectional rules.
 auto saslprep(std::string_view input) -> std::expected<std::string, std::string>;
 
 auto scram_initial_response(std::string_view mechanism, std::string_view data)
