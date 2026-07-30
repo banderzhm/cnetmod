@@ -37,10 +37,10 @@ jobs:
         with:
           runVcpkgInstall: false
 
-      - name: Install ICU package
+      - name: Install manifest dependencies
         shell: pwsh
         run: |
-          & "$env:VCPKG_ROOT/vcpkg.exe" install icu:x64-windows --disable-metrics
+          & "$env:VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows --disable-metrics
 
       - name: Setup MSBuild (VS 2026 / VS18)
         uses: microsoft/setup-msbuild@v2
@@ -56,7 +56,6 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DVCPKG_MANIFEST_MODE=OFF `
             -DCNETMOD_BUILD_EXAMPLES=ON `
             -S "${{ github.workspace }}"
 
