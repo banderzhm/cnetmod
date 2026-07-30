@@ -18,7 +18,6 @@ target_sources(amqp091_interop_driver PRIVATE
         "drivers/amqp091/rabbitmq_operation_executor.cppm"
 )
 target_link_libraries(amqp091_interop_driver PRIVATE cnetmod_core)
-cnetmod_link_nlohmann_json(amqp091_interop_driver)
 set_property(TARGET amqp091_interop_driver PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE")
 endif()
@@ -33,7 +32,6 @@ target_sources(amqp10_interop_driver PRIVATE
         "drivers/amqp10/amqp10_interop_driver.cppm"
 )
 target_link_libraries(amqp10_interop_driver PRIVATE cnetmod_core)
-cnetmod_link_nlohmann_json(amqp10_interop_driver)
 set_property(TARGET amqp10_interop_driver PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE")
 endif()
@@ -48,7 +46,6 @@ target_sources(kafka_interop_driver PRIVATE
         "drivers/kafka/kafka_interoperability_driver.cppm"
 )
 target_link_libraries(kafka_interop_driver PRIVATE cnetmod_core)
-cnetmod_link_nlohmann_json(kafka_interop_driver)
 set_property(TARGET kafka_interop_driver PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE")
 endif()

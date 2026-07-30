@@ -1,11 +1,11 @@
 module;
 
 #include <cnetmod/config.hpp>
-#include <nlohmann/json.hpp>
 
 module cnetmod.testing.messaging.kafka_interoperability_driver;
 
 import std;
+import nlohmann.json;
 import cnetmod.coro.spawn;
 import cnetmod.coro.wait_group;
 import cnetmod.protocol.kafka;
