@@ -260,6 +260,18 @@ if(TARGET example_account_server_demo)
     target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
+# stdexec currently ships as a header-only P2300 implementation rather than a
+# C++ module.  Keep this third-party header dependency explicit for the few
+# examples that use exec::async_scope or exec::static_thread_pool directly.
+foreach(stdexec_header_example
+        example_http_demo
+        example_ws_demo
+        example_mqtt_demo)
+    if(TARGET ${stdexec_header_example})
+        cnetmod_link_stdexec(${stdexec_header_example})
+    endif()
+endforeach()
+
 if(MSVC)
     foreach(target_name
         example_async_file
