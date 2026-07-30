@@ -101,7 +101,7 @@ auto main() -> int
 
         // 3. Auto-create table if not exists
         logger::info("Syncing table schema...");
-        auto sync_result = co_await synchronize_mysql_schema<User>(cli);
+        auto sync_result = co_await orm::mysql_synchronize_schema<User>(cli);
         if (sync_result.is_err())
         {
             logger::error("Failed to sync schema: {}", sync_result.error_msg);

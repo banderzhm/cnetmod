@@ -316,13 +316,32 @@ public:
     auto transaction(Func&& func, isolation_level level) -> task<result_set>
     {
         co_return mysql_adapt_result(
-            co_await cli_.transaction(std::forward<Func>(func), level));
+            co_await cli_.transaction(std::forward<Func>(func),
+                to_mysql_isolation(level)));
     }
 
 private:
     [[nodiscard]] auto orm_format_options() const -> cnetmod::orm::format_options
     {
         return {.backslash_escapes = cli_.current_format_opts().backslash_escapes};
+    }
+
+    [[nodiscard]] static auto to_mysql_isolation(cnetmod::orm::isolation_level level)
+        -> cnetmod::mysql::isolation_level
+    {
+        using enum cnetmod::orm::isolation_level;
+        switch (level)
+        {
+        case read_uncommitted:
+            return cnetmod::mysql::isolation_level::read_uncommitted;
+        case read_committed:
+            return cnetmod::mysql::isolation_level::read_committed;
+        case repeatable_read:
+            return cnetmod::mysql::isolation_level::repeatable_read;
+        case serializable:
+            return cnetmod::mysql::isolation_level::serializable;
+        }
+        std::unreachable();
     }
 
     DatabaseClient& cli_;

@@ -7,6 +7,7 @@ import :connection_client;
 import :orm_id_gen;
 import :orm_meta;
 import :orm_query;
+import :orm_mysql_result_adapter;
 import cnetmod.coro.task;
 
 namespace cnetmod::orm::mysql_detail {
@@ -325,7 +326,7 @@ template <Model T> auto sync_schema(client& cli) -> task<sync_result>
     }
 
     // 2) Detect differences
-    result.diff = detect_diff<T>(rs);
+    result.diff = detect_diff<T>(mysql_adapt_result(rs));
 
     if (result.diff.changes.empty())
         co_return result; // No changes

@@ -175,7 +175,7 @@ auto demo_transaction_with_isolation(orm::mysql_session& db) -> cn::task<void>
             std::println("  插入用户 (SERIALIZABLE): id={}, name={}", user.id, user.name);
             co_return;
         },
-        mysql::isolation_level::serializable);
+        orm::isolation_level::serializable);
 
     if (rs.is_err())
     {
