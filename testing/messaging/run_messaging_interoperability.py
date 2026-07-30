@@ -4,17 +4,18 @@ from __future__ import annotations
 
 import importlib.util
 import os
+import sys
 from pathlib import Path
 
 
 SKIP_RETURN_CODE = 77
 
 
-def _external_endpoint_exists() -> bool:
-    return any(
-        os.environ.get(f"CNETMOD_{protocol}_HOST")
-        and os.environ.get(f"CNETMOD_{protocol}_PORT")
-        for protocol in ("AMQP091", "AMQP10", "KAFKA")
+def _external_endpoint_exists(protocol: str) -> bool:
+    prefix = protocol.upper()
+    return bool(
+        os.environ.get(f"CNETMOD_{prefix}_HOST")
+        and os.environ.get(f"CNETMOD_{prefix}_PORT")
     )
 
 
@@ -31,15 +32,21 @@ def _docker_is_usable() -> bool:
 
 
 def main() -> int:
+    if len(sys.argv) != 2 or sys.argv[1] not in {"amqp091", "amqp10", "kafka"}:
+        print("ERROR: expected one protocol: amqp091, amqp10, or kafka")
+        return 2
+    protocol = sys.argv[1]
+    protocol_modules = {
+        "amqp091": ("aio_pika", "pika"),
+        "amqp10": ("proton",),
+        "kafka": ("confluent_kafka",),
+    }
     required_modules = (
         "pytest",
         "testcontainers",
-        "aio_pika",
-        "pika",
-        "proton",
-        "confluent_kafka",
         "docker",
         "dotenv",
+        *protocol_modules[protocol],
     )
     missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
     if missing:
@@ -55,7 +62,7 @@ def main() -> int:
     if mode not in {"auto", "container", "external"}:
         print("ERROR: CNETMOD_MESSAGING_SERVICE_MODE must be auto, container, or external")
         return 2
-    external_exists = _external_endpoint_exists()
+    external_exists = _external_endpoint_exists(protocol)
     docker_usable = False if mode == "external" else _docker_is_usable()
     if mode == "container" and not docker_usable:
         print("SKIP: container mode requires a usable Docker engine")
@@ -77,7 +84,7 @@ def main() -> int:
         [
             "-c",
             str(directory / "pytest.ini"),
-            str(directory),
+            str(directory / protocol),
             "--strict-markers",
         ]
     )

@@ -6,6 +6,7 @@ import :connection_client;
 import :format_sql;
 import :orm_meta;
 import :orm_mapper;
+import :orm_mysql_result_adapter;
 import :orm_crud;
 import :orm_reflect;
 import :orm_dynamic_sql;
@@ -18,9 +19,11 @@ import cnetmod.coro.task;
     #define CNETMOD_XML_PARAM_MAP std::flat_map
 #endif
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
 
-export struct exec_result
+struct exec_result
 {
     std::uint64_t affected_rows = 0;
     std::uint64_t last_insert_id = 0;
@@ -37,7 +40,7 @@ export struct exec_result
     }
 };
 
-export class mapper_session
+class mapper_session
 {
 public:
     mapper_session(client& cli, mapper_registry& registry) noexcept;
@@ -69,7 +72,7 @@ public:
             co_return make_err<T>(rs.error_msg);
 
         orm_result<T> result;
-        result.data = from_result_set<T>(rs);
+        result.data = mysql_map_result<T>(rs);
         result.affected_rows = rs.affected_rows;
         co_return result;
     }
@@ -83,7 +86,7 @@ public:
 
     template <Model T>
     auto query(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, param_value> params)
+        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
         -> task<orm_result<T>>
     {
         co_return co_await query<T>(statement_id,
@@ -92,12 +95,12 @@ public:
 
     template <Model T, typename Map>
     requires std::ranges::input_range<Map> &&
-                 std::same_as<
-                     std::remove_const_t<
-                         typename std::ranges::range_value_t<Map>::first_type>,
-                     std::string> &&
-                 std::same_as<typename std::ranges::range_value_t<Map>::second_type,
-                     param_value>
+        std::same_as<
+            std::remove_const_t<
+                typename std::ranges::range_value_t<Map>::first_type>,
+            std::string> &&
+        std::same_as<typename std::ranges::range_value_t<Map>::second_type,
+            cnetmod::orm::param_value>
     auto query(std::string_view statement_id, Map&& params)
         -> task<orm_result<T>>
     {
@@ -139,14 +142,14 @@ public:
         }
 
         orm_result<std::tuple<Ts...>> result;
-        result.data = from_result_set_to_tuple<Ts...>(rs);
+        result.data = mysql_map_result_to_tuples<Ts...>(rs);
         result.affected_rows = rs.affected_rows;
         co_return result;
     }
 
     template <typename... Ts>
     auto query_tuple(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, param_value> params)
+        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
         -> task<orm_result<std::tuple<Ts...>>>
     {
         co_return co_await query_tuple<Ts...>(
@@ -155,12 +158,12 @@ public:
 
     template <typename... Ts, typename Map>
     requires std::ranges::input_range<Map> &&
-                 std::same_as<
-                     std::remove_const_t<
-                         typename std::ranges::range_value_t<Map>::first_type>,
-                     std::string> &&
-                 std::same_as<typename std::ranges::range_value_t<Map>::second_type,
-                     param_value>
+        std::same_as<
+            std::remove_const_t<
+                typename std::ranges::range_value_t<Map>::first_type>,
+            std::string> &&
+        std::same_as<typename std::ranges::range_value_t<Map>::second_type,
+            cnetmod::orm::param_value>
     auto query_tuple(std::string_view statement_id, Map&& params)
         -> task<orm_result<std::tuple<Ts...>>>
     {
@@ -179,17 +182,17 @@ public:
     }
 
     auto execute(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, param_value> params)
+        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
         -> task<exec_result>;
 
     template <typename Map>
     requires std::ranges::input_range<Map> &&
-                 std::same_as<
-                     std::remove_const_t<
-                         typename std::ranges::range_value_t<Map>::first_type>,
-                     std::string> &&
-                 std::same_as<typename std::ranges::range_value_t<Map>::second_type,
-                     param_value>
+        std::same_as<
+            std::remove_const_t<
+                typename std::ranges::range_value_t<Map>::first_type>,
+            std::string> &&
+        std::same_as<typename std::ranges::range_value_t<Map>::second_type,
+            cnetmod::orm::param_value>
     auto execute(std::string_view statement_id, Map&& params)
         -> task<exec_result>
     {
@@ -201,17 +204,17 @@ public:
         -> task<result_set>;
 
     auto execute_query(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, param_value> params)
+        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
         -> task<result_set>;
 
     template <typename Map>
     requires std::ranges::input_range<Map> &&
-                 std::same_as<
-                     std::remove_const_t<
-                         typename std::ranges::range_value_t<Map>::first_type>,
-                     std::string> &&
-                 std::same_as<typename std::ranges::range_value_t<Map>::second_type,
-                     param_value>
+        std::same_as<
+            std::remove_const_t<
+                typename std::ranges::range_value_t<Map>::first_type>,
+            std::string> &&
+        std::same_as<typename std::ranges::range_value_t<Map>::second_type,
+            cnetmod::orm::param_value>
     auto execute_query(std::string_view statement_id, Map&& params)
         -> task<result_set>
     {
@@ -242,4 +245,9 @@ private:
     static const fragment_map empty_fragments_;
 };
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+using mysql_mapper_execution_result = mysql_detail::exec_result;
+using mysql_mapper_session = mysql_detail::mapper_session;
+} // namespace cnetmod::orm

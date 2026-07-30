@@ -5,17 +5,20 @@ import :types;
 import :connection_client;
 import :orm_meta;
 import :orm_mapper;
+import :orm_mysql_result_adapter;
 import :orm_wrapper;
 import :format_sql;
 import cnetmod.coro.task;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
 
 // =============================================================================
 // page — Pagination result container
 // =============================================================================
 
-export template <Model T> struct page
+template <Model T> struct page
 {
     std::vector<T> records;        // Current page records
     std::int64_t total = 0;        // Total record count
@@ -48,7 +51,7 @@ export template <Model T> struct page
 // page_helper — Pagination helper for executing paginated queries
 // =============================================================================
 
-export class page_helper
+class page_helper
 {
 public:
     /// Execute paginated query with wrapper
@@ -108,7 +111,7 @@ public:
         if (select_rs.is_err())
             co_return result;
 
-        result.records = from_result_set<T>(select_rs);
+        result.records = mysql_map_result<T>(select_rs);
         co_return result;
     }
 
@@ -127,7 +130,7 @@ public:
 // =============================================================================
 
 /// Add this to base_mapper via inheritance or composition
-export template <Model T> class pageable_mapper
+template <Model T> class pageable_mapper
 {
 public:
     explicit pageable_mapper(client& cli) noexcept
@@ -152,4 +155,10 @@ private:
     client& cli_;
 };
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+template <Model T> using mysql_page = mysql_detail::page<T>;
+using mysql_page_helper = mysql_detail::page_helper;
+template <Model T> using mysql_pageable_mapper = mysql_detail::pageable_mapper<T>;
+} // namespace cnetmod::orm

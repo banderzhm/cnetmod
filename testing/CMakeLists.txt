@@ -12,5 +12,13 @@ if(CNETMOD_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/messaging/CMakeLi
     add_subdirectory(messaging)
 endif()
 
+if(CNETMOD_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/database/CMakeLists.txt")
+    add_subdirectory(database)
+endif()
+
+if(CNETMOD_BUILD_TESTS AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
+    add_subdirectory(examples)
+endif()
+
 set(CNETMOD_TEST_TARGETS ${CNETMOD_TEST_TARGETS} PARENT_SCOPE)
 set(CNETMOD_BENCH_TARGETS ${CNETMOD_BENCH_TARGETS} PARENT_SCOPE)

@@ -3,6 +3,7 @@ export module cnetmod.protocol.mysql:format_sql;
 import std;
 import :types;
 import :diagnostics;
+import cnetmod.database.sql_parameters;
 
 export namespace cnetmod::mysql {
 
@@ -38,6 +39,9 @@ void format_sql_to(format_context& ctx, std::string_view fmt,
     std::span<const param_value> args);
 auto format_sql(const format_options& opts, std::string_view fmt,
     std::span<const param_value> args)
+    -> std::expected<std::string, format_errc>;
+auto format_sql(const format_options& opts, std::string_view fmt,
+    std::span<const cnetmod::database::query_parameter> args)
     -> std::expected<std::string, format_errc>;
 auto format_sql(const format_options& opts, std::string_view fmt)
     -> std::expected<std::string, format_errc>;

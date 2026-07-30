@@ -6,14 +6,6 @@ import time
 from dataclasses import dataclass
 from typing import Callable
 
-import pika
-from confluent_kafka.admin import AdminClient
-from proton.utils import BlockingConnection
-from testcontainers.core.container import DockerContainer
-from testcontainers.kafka import KafkaContainer
-from testcontainers.rabbitmq import RabbitMqContainer
-
-
 @dataclass(frozen=True)
 class Amqp091BrokerEndpoint:
     host: str
@@ -58,6 +50,8 @@ def _wait_until_usable(
 
 
 def _probe_rabbitmq(endpoint: Amqp091BrokerEndpoint) -> None:
+    import pika
+
     connection = pika.BlockingConnection(
         pika.ConnectionParameters(
             endpoint.host,
@@ -75,6 +69,8 @@ def _probe_rabbitmq(endpoint: Amqp091BrokerEndpoint) -> None:
 
 
 def _probe_artemis(endpoint: Amqp10BrokerEndpoint) -> None:
+    from proton.utils import BlockingConnection
+
     connection = BlockingConnection(
         f"amqp://{endpoint.host}:{endpoint.port}",
         user=endpoint.username,
@@ -101,6 +97,8 @@ def kafka_reference_configuration(endpoint: KafkaBrokerEndpoint) -> dict[str, ob
 
 
 def _probe_kafka(endpoint: KafkaBrokerEndpoint) -> None:
+    from confluent_kafka.admin import AdminClient
+
     configuration = kafka_reference_configuration(endpoint)
     configuration["socket.timeout.ms"] = 2000
     AdminClient(configuration).list_topics(timeout=3)
@@ -108,6 +106,8 @@ def _probe_kafka(endpoint: KafkaBrokerEndpoint) -> None:
 
 class RabbitMqService:
     def __init__(self) -> None:
+        from testcontainers.rabbitmq import RabbitMqContainer
+
         self.container = (
             RabbitMqContainer("rabbitmq:4.1-management")
             .with_env("RABBITMQ_DEFAULT_USER", "cnetmod")
@@ -146,6 +146,8 @@ class RabbitMqService:
 
 class ArtemisService:
     def __init__(self) -> None:
+        from testcontainers.core.container import DockerContainer
+
         self.container = (
             DockerContainer("apache/activemq-artemis:2.40.0")
             .with_exposed_ports(5672)
@@ -187,6 +189,8 @@ class ArtemisService:
 
 class KafkaService:
     def __init__(self) -> None:
+        from testcontainers.kafka import KafkaContainer
+
         self.container = KafkaContainer("confluentinc/cp-kafka:7.9.1")
         self.endpoint: KafkaBrokerEndpoint | None = None
 

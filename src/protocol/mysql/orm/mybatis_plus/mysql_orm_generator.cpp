@@ -3,7 +3,8 @@ module cnetmod.protocol.mysql;
 import cnetmod.coro.task;
 import :orm_generator;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
 
 code_generator::code_generator(generator_config config)
     : config_(std::move(config)) {}
@@ -303,4 +304,4 @@ auto code_generator::mysql_type_to_sql_type(std::string_view mysql_type)
     return "varchar";
 }
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail

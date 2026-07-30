@@ -17,13 +17,15 @@ endif()
 # ==============================================================================
 # Generate embedded mappers header for account_server_demo
 # ==============================================================================
-include(${CMAKE_SOURCE_DIR}/cmake/utils/EmbedMappers.cmake)
-
-cnetmod_embed_mappers(
-    OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/embedded_mappers.hpp
-    MAPPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-    NAMESPACE embedded_mappers
-)
+if(CNETMOD_ENABLE_HTTP AND CNETMOD_ENABLE_OPENAI AND
+   CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
+    include(${CMAKE_SOURCE_DIR}/cmake/utils/EmbedMappers.cmake)
+    cnetmod_embed_mappers(
+        OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/embedded_mappers.hpp
+        MAPPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers
+        NAMESPACE embedded_mappers
+    )
+endif()
 
 # ==============================================================================
 # Core Examples
@@ -55,101 +57,141 @@ set(CONCURRENCY_EXAMPLES
 # ==============================================================================
 # HTTP Examples
 # ==============================================================================
-set(HTTP_EXAMPLES
-    http/http_demo
-    http/http2_demo
-    http/hight_http
-    http/hight_plus_http
-    http/multicore_http
-    http/tfb_benchmark
-    http/client_demo
-    http/cookie_demo
-    http/account_server_demo
-)
+set(HTTP_EXAMPLES)
+if(CNETMOD_ENABLE_HTTP)
+    list(APPEND HTTP_EXAMPLES
+        http/http_demo
+        http/http2_demo
+        http/hight_http
+        http/hight_plus_http
+        http/multicore_http
+        http/client_demo
+        http/cookie_demo
+    )
+    if(CNETMOD_ENABLE_MYSQL)
+        list(APPEND HTTP_EXAMPLES http/tfb_benchmark)
+        if(CNETMOD_ENABLE_OPENAI AND CNETMOD_ENABLE_ORM)
+            list(APPEND HTTP_EXAMPLES http/account_server_demo)
+        endif()
+    endif()
+endif()
 
 # ==============================================================================
 # WebSocket Examples
 # ==============================================================================
-set(WEBSOCKET_EXAMPLES
-    websocket/ws_demo
-    websocket/hight_ws
-    websocket/multicore_ws
-)
+set(WEBSOCKET_EXAMPLES)
+if(CNETMOD_ENABLE_WEBSOCKET)
+    list(APPEND WEBSOCKET_EXAMPLES
+        websocket/ws_demo
+        websocket/hight_ws
+        websocket/multicore_ws
+    )
+endif()
 
 # ==============================================================================
 # Database Examples
 # ==============================================================================
-set(DATABASE_EXAMPLES
-    database/mysql_crud
-    database/mysql_orm
-    database/mysql_transaction
-    database/mysql_xml_mapper
-    database/mysql_xml_complex
-    database/mybatis_plus_demo
-    database/transaction_simple_test
-)
+set(DATABASE_EXAMPLES)
+if(CNETMOD_ENABLE_MYSQL)
+    list(APPEND DATABASE_EXAMPLES database/mysql/mysql_crud)
+    if(CNETMOD_ENABLE_ORM)
+        list(APPEND DATABASE_EXAMPLES
+        database/mysql/mysql_orm
+        database/mysql/mysql_transaction
+        database/mysql/mysql_xml_mapper
+        database/mysql/mysql_xml_complex
+        database/mysql/mysql_mybatis_plus_demo
+        database/mysql/mysql_transaction_rollback_demo
+        )
+    endif()
+endif()
+if(CNETMOD_ENABLE_POSTGRESQL AND CNETMOD_ENABLE_HTTP AND CNETMOD_ENABLE_ORM)
+    list(APPEND DATABASE_EXAMPLES database/postgresql/postgresql_production_service)
+endif()
+if(CNETMOD_ENABLE_MONGODB)
+    list(APPEND DATABASE_EXAMPLES database/mongodb/mongodb_production_service)
+endif()
 
 # ==============================================================================
 # Redis Examples
 # ==============================================================================
-set(REDIS_EXAMPLES
-    redis/redis_client
-    redis/redis_pool
-    redis/redis_sharded_pool
-)
+set(REDIS_EXAMPLES)
+if(CNETMOD_ENABLE_REDIS)
+    list(APPEND REDIS_EXAMPLES
+        redis/redis_client
+        redis/redis_pool
+        redis/redis_sharded_pool
+    )
+endif()
 
 # ==============================================================================
 # gRPC Examples
 # ==============================================================================
-set(GRPC_EXAMPLES
-    grpc/security_interceptor
-)
+set(GRPC_EXAMPLES)
+if(CNETMOD_ENABLE_GRPC)
+    list(APPEND GRPC_EXAMPLES grpc/security_interceptor)
+endif()
 
 # ==============================================================================
 # Raft Examples
 # ==============================================================================
-set(RAFT_EXAMPLES
-    raft/redis_cluster
-    raft/oss_shared_storage
-)
+set(RAFT_EXAMPLES)
+if(CNETMOD_ENABLE_RAFT)
+    list(APPEND RAFT_EXAMPLES
+        raft/redis_cluster
+        raft/oss_shared_storage
+    )
+endif()
 
 # ==============================================================================
 # MQTT Examples
 # ==============================================================================
-set(MQTT_EXAMPLES
-    mqtt/mqtt_demo
-)
+set(MQTT_EXAMPLES)
+if(CNETMOD_ENABLE_MQTT)
+    list(APPEND MQTT_EXAMPLES mqtt/mqtt_demo)
+endif()
 
 # ==============================================================================
 # Messaging Examples
 # ==============================================================================
-set(MESSAGING_EXAMPLES
-    kafka/kafka_demo
-    amqp091/amqp091_demo
-    amqp10/amqp10_demo
-)
+set(MESSAGING_EXAMPLES)
+if(CNETMOD_ENABLE_KAFKA)
+    list(APPEND MESSAGING_EXAMPLES kafka/kafka_demo)
+endif()
+if(CNETMOD_ENABLE_AMQP091)
+    list(APPEND MESSAGING_EXAMPLES amqp091/amqp091_demo)
+endif()
+if(CNETMOD_ENABLE_AMQP10)
+    list(APPEND MESSAGING_EXAMPLES amqp10/amqp10_demo)
+endif()
 
 # ==============================================================================
 # Modbus Examples
 # ==============================================================================
-set(MODBUS_EXAMPLES
-    modbus/modbus_demo
-    modbus/modbus_converter_demo
-    modbus/modbus_rtu_demo
-    modbus/modbus_udp_demo
-)
+set(MODBUS_EXAMPLES)
+if(CNETMOD_ENABLE_MODBUS)
+    list(APPEND MODBUS_EXAMPLES
+        modbus/modbus_demo
+        modbus/modbus_converter_demo
+        modbus/modbus_rtu_demo
+        modbus/modbus_udp_demo
+    )
+endif()
 
 # ==============================================================================
 # CoAP Examples
 # ==============================================================================
-set(COAP_EXAMPLES
-    coap/coap_interop_server
-    coap/coap_interop_client
-    coap/coap_multicast_server
-    coap/coap_multicast_client
-)
+set(COAP_EXAMPLES)
+if(CNETMOD_ENABLE_COAP)
+    list(APPEND COAP_EXAMPLES
+        coap/coap_interop_server
+        coap/coap_interop_client
+        coap/coap_multicast_server
+        coap/coap_multicast_client
+    )
+endif()
 
-if(CNETMOD_HAS_SSL)
+if(CNETMOD_ENABLE_COAP AND CNETMOD_HAS_SSL)
     list(APPEND COAP_EXAMPLES coap/coaps_interop_server)
     list(APPEND COAP_EXAMPLES coap/coaps_interop_client)
 endif()
@@ -214,7 +256,9 @@ set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)
 # ==============================================================================
 # Special handling for account_server_demo (needs embedded_mappers.hpp)
 # ==============================================================================
-target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+if(TARGET example_account_server_demo)
+    target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+endif()
 
 if(MSVC)
     foreach(target_name
@@ -234,33 +278,40 @@ endif()
 
 # Copy mapper XML files once. Keeping this as a single target avoids parallel
 # POST_BUILD copy races when several database examples build at the same time.
+if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
 add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/examples/database/mappers/.cnetmod_mappers_copied
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/examples/database/mappers
+    OUTPUT ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers/.cnetmod_mappers_copied
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers
     COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers
-            ${CMAKE_BINARY_DIR}/examples/database/mappers
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers
+            ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers
     COMMAND ${CMAKE_COMMAND} -E touch
-            ${CMAKE_BINARY_DIR}/examples/database/mappers/.cnetmod_mappers_copied
+            ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers/.cnetmod_mappers_copied
     DEPENDS
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/AiMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/ClientMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/ExpenseMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/FileMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/ProjectMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/mappers/user_mapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/AiMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/ClientMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/ExpenseMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/FileMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/ProjectMapper.xml
+            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/user_mapper.xml
     COMMENT "Copying mapper XML files"
     VERBATIM
 )
 
 add_custom_target(copy_example_mappers
-    DEPENDS ${CMAKE_BINARY_DIR}/examples/database/mappers/.cnetmod_mappers_copied
+    DEPENDS ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers/.cnetmod_mappers_copied
 )
 
 list(APPEND CNETMOD_EXAMPLE_TARGETS copy_example_mappers)
 
-add_dependencies(example_mysql_xml_mapper copy_example_mappers)
-add_dependencies(example_mysql_xml_complex copy_example_mappers)
-add_dependencies(example_mybatis_plus_demo copy_example_mappers)
+foreach(mysql_mapper_example
+        example_mysql_xml_mapper
+        example_mysql_xml_complex
+        example_mysql_mybatis_plus_demo)
+    if(TARGET ${mysql_mapper_example})
+        add_dependencies(${mysql_mapper_example} copy_example_mappers)
+    endif()
+endforeach()
+endif()
 
 set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)

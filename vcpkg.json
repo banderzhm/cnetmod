@@ -7,6 +7,7 @@
   "builtin-baseline": "a7bd30319eeac16afbe18d64a855303a0a425e84",
   "dependencies": [
     "jwt-cpp",
+    "icu",
     "leveldb",
     "mimalloc",
     "nlohmann-json",

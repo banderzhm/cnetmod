@@ -2,11 +2,18 @@
 
 include(CMakeFindDependencyMacro)
 
-# The exported target retains its public link interface.  Resolve the standard
-# system dependencies that are enabled by the default Windows build first.
-if(WIN32)
-    find_dependency(OpenSSL QUIET)
-    find_dependency(ZLIB QUIET)
+# Resolve exactly the dependencies retained by the configured static target.
+if(@CNETMOD_HAS_SSL@)
+    find_dependency(OpenSSL)
+endif()
+if(@CNETMOD_HAS_ZLIB@)
+    find_dependency(ZLIB)
+endif()
+if(@CNETMOD_HAS_ICU@)
+    find_dependency(ICU COMPONENTS uc i18n)
+endif()
+if(@CNETMOD_HAS_PUGIXML@ AND NOT "@CNETMOD_PUGIXML_TARGET@" STREQUAL "pugixml-static")
+    find_dependency(pugixml CONFIG)
 endif()
 
 if(@CNETMOD_HAS_LZ4@)

@@ -304,7 +304,7 @@ CNETMOD_MODEL(User, "users",
     CNETMOD_FIELD(email, "email", varchar, NULLABLE)
 )
 
-orm::db_session db(cli);
+cnetmod::orm::mysql_session db(cli);
 
 // CRUD operations
 co_await db.insert(user);
@@ -314,7 +314,7 @@ co_await db.remove(user);
 
 // Query builder
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` = {}", {param_value::from_string("Alice")})
         .order_by("`id` DESC")
         .limit(10)

@@ -7,16 +7,21 @@ import :connection_client;
 import :orm_id_gen;
 import :orm_meta;
 import :orm_mapper;
+import :orm_mysql_result_adapter;
 import :orm_query;
 import cnetmod.coro.task;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
+using param_value = cnetmod::orm::param_value;
+using field_value = cnetmod::orm::field_value;
 
 // =============================================================================
 // orm_result<T> — ORM operation result
 // =============================================================================
 
-export template <class T> struct orm_result
+template <class T> struct orm_result
 {
     std::vector<T> data;
     std::uint64_t affected_rows = 0;
@@ -47,17 +52,17 @@ export template <class T> struct orm_result
 };
 
 // =============================================================================
-// db_session — Async ORM session, wraps mysql::client
+// mysql_session — Async ORM session backed by mysql::client
 // =============================================================================
 
-export class db_session
+template <class DatabaseClient> class basic_db_session
 {
 public:
-    explicit db_session(client& cli) noexcept
+    explicit basic_db_session(DatabaseClient& cli) noexcept
         : cli_(cli) {}
 
     /// Constructor with snowflake generator
-    db_session(client& cli, snowflake_generator& sf) noexcept
+    basic_db_session(DatabaseClient& cli, snowflake_generator& sf) noexcept
         : cli_(cli), snowflake_(&sf) {}
 
     // ── Query ─────────────────────────────────────────────────
@@ -106,6 +111,11 @@ public:
 
         auto [sql, params] =
             insert_of<T>().values(model).build(cli_.current_format_opts());
+        if constexpr (requires { cli_.append_insert_returning(sql, std::string_view{}); })
+        {
+            if (auto* pk = model_traits<T>::meta().pk(); pk && pk->col.is_auto())
+                cli_.append_insert_returning(sql, pk->col.column_name);
+        }
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
             co_return make_err<T>(rs.error_msg);
@@ -135,6 +145,11 @@ public:
         auto [sql, params] = insert_of<T>()
                                  .values(std::span<const T>(copy))
                                  .build(cli_.current_format_opts());
+        if constexpr (requires { cli_.append_insert_returning(sql, std::string_view{}); })
+        {
+            if (auto* pk = model_traits<T>::meta().pk(); pk && pk->col.is_auto())
+                cli_.append_insert_returning(sql, pk->col.column_name);
+        }
 
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
@@ -275,7 +290,7 @@ public:
     }
 
     /// Underlying client access
-    auto underlying() noexcept -> client&
+    auto underlying() noexcept -> DatabaseClient&
     {
         return cli_;
     }
@@ -303,7 +318,7 @@ public:
     }
 
 private:
-    client& cli_;
+    DatabaseClient& cli_;
     snowflake_generator* snowflake_ = nullptr;
 
     /// Auto-generate ID before insert (uuid / snowflake)
@@ -355,7 +370,7 @@ private:
             co_return make_err<T>(rs.error_msg);
 
         orm_result<T> r;
-        r.data = from_result_set<T>(rs);
+        r.data = mysql_map_result<T>(rs);
         r.affected_rows = rs.affected_rows;
         co_return r;
     }
@@ -368,4 +383,10 @@ private:
     }
 };
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+using mysql_session = mysql_detail::basic_db_session<cnetmod::mysql::client>;
+template <class T>
+using mysql_orm_result = mysql_detail::orm_result<T>;
+} // namespace cnetmod::orm

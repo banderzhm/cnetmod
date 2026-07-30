@@ -2,7 +2,10 @@ module cnetmod.protocol.mysql;
 
 import :orm_optimistic_lock;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using param_value = cnetmod::orm::param_value;
+using namespace cnetmod::orm;
 
 auto optimistic_lock_interceptor::inject_version_check_impl(
     std::string sql, std::vector<param_value>& params,
@@ -43,4 +46,4 @@ auto global_optimistic_lock_interceptor() -> optimistic_lock_interceptor&
     return instance;
 }
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail

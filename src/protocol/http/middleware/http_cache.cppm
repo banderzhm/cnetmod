@@ -10,7 +10,9 @@ export import cnetmod.protocol.http.middleware.cache_store;
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.shared_mutex;
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
 import cnetmod.protocol.redis;
+#endif
 import cnetmod.protocol.http;
 
 export namespace cnetmod::cache {
@@ -49,10 +51,12 @@ private:
     std::list<std::string> lru_;
 };
 
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
 struct redis_cache_options
 {
     std::string key_prefix;
 };
+#endif
 
 class redis_cache : public cache_store
 {

@@ -16,7 +16,9 @@ import cnetmod.core.log;
     #define CNETMOD_XML_PARAM_MAP std::flat_map
 #endif
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
 
 const fragment_map mapper_session::empty_fragments_{};
 
@@ -82,7 +84,7 @@ auto mapper_session::execute(std::string_view statement_id,
 
 auto mapper_session::execute(
     std::string_view statement_id,
-    CNETMOD_XML_PARAM_MAP<std::string, param_value> params)
+    CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
     -> task<exec_result>
 {
     co_return co_await execute(statement_id,
@@ -123,12 +125,13 @@ auto mapper_session::execute_query(std::string_view statement_id,
             std::format("[SQL] Final: {}", *final_sql_result));
     }
 
-    co_return co_await cli_.execute(*final_sql_result);
+    auto mysql_result = co_await cli_.execute(*final_sql_result);
+    co_return mysql_adapt_result(mysql_result);
 }
 
 auto mapper_session::execute_query(
     std::string_view statement_id,
-    CNETMOD_XML_PARAM_MAP<std::string, param_value> params)
+    CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
     -> task<result_set>
 {
     co_return co_await execute_query(statement_id,
@@ -158,8 +161,10 @@ auto mapper_session::build_sql(std::string_view statement_id,
     if (!fragments)
         fragments = &empty_fragments_;
 
-    dynamic_sql_processor processor(cli_.current_format_opts());
+    const cnetmod::orm::format_options orm_options{
+        .backslash_escapes = cli_.current_format_opts().backslash_escapes};
+    dynamic_sql_processor processor(orm_options);
     return processor.process(*stmt, ctx, *fragments);
 }
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail

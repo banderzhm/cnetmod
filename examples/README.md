@@ -10,7 +10,10 @@ examples/
 ├── concurrency/    # Coroutine primitives (channels, mutex, blocking bridge)
 ├── http/           # HTTP/1.1 and HTTP/2 servers
 ├── websocket/      # WebSocket servers
-├── database/       # MySQL operations (CRUD, ORM, transactions, MyBatis)
+├── database/       # Database protocol examples
+│   ├── mysql/      # MySQL client, ORM, transactions, and XML mappers
+│   ├── postgresql/ # PostgreSQL production HTTP service
+│   └── mongodb/    # MongoDB production topology service
 ├── redis/          # Redis client and connection pools
 ├── mqtt/           # MQTT client with pub/sub
 ├── kafka/          # High-concurrency Kafka producer and consumer group
@@ -18,7 +21,6 @@ examples/
 ├── amqp10/         # AMQP 1.0 sender and receiver containers
 ├── modbus/         # Modbus protocol (TCP, UDP, RTU)
 ├── integration/    # Standalone host-project integration tests
-├── mappers/        # MyBatis XML mapper files
 └── test_ssl/       # SSL/TLS certificates for testing
 ```
 
@@ -84,14 +86,15 @@ Real-time WebSocket servers:
 [View WebSocket Examples →](websocket/README.md)
 
 ###  Database
-MySQL database operations:
+MySQL, PostgreSQL, and MongoDB database services:
 - CRUD operations
 - ORM (Object-Relational Mapping)
 - Transactions
 - MyBatis-style XML mappers
 - MyBatis Plus features
 
-[View Database Examples →](database/README.md)
+[PostgreSQL production guide →](../docs/en/protocols/postgresql.md)
+[MongoDB production guide →](../docs/en/protocols/mongodb.md)
 
 ###  Redis
 Redis client and connection pools:

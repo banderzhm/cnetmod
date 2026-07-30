@@ -1,4 +1,5 @@
 from conan import ConanFile
+from conan.errors import ConanInvalidConfiguration
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
 from conan.tools.files import copy
@@ -17,8 +18,28 @@ class CnetmodConan(ConanFile):
     options = {
         "shared": [False],
         "fPIC": [True, False],
+        "with_amqp091": [True, False],
+        "with_amqp10": [True, False],
+        "with_coap": [True, False],
+        "with_dns": [True, False],
+        "with_grpc": [True, False],
+        "with_http": [True, False],
+        "with_kafka": [True, False],
+        "with_mail": [True, False],
+        "with_modbus": [True, False],
+        "with_mongodb": [True, False],
+        "with_mqtt": [True, False],
+        "with_mysql": [True, False],
+        "with_openai": [True, False],
+        "with_postgresql": [True, False],
+        "with_raft": [True, False],
+        "with_redis": [True, False],
+        "with_socks5": [True, False],
+        "with_websocket": [True, False],
+        "with_orm": [True, False],
         "with_ssl": [True, False],
         "with_http2": [True, False],
+        "with_lz4": [True, False],
         "with_leveldb": [True, False],
         "with_mimalloc": [True, False],
         "with_stdexec_package": [True, False],
@@ -26,8 +47,28 @@ class CnetmodConan(ConanFile):
     default_options = {
         "shared": False,
         "fPIC": True,
+        "with_amqp091": True,
+        "with_amqp10": True,
+        "with_coap": True,
+        "with_dns": True,
+        "with_grpc": True,
+        "with_http": True,
+        "with_kafka": True,
+        "with_mail": True,
+        "with_modbus": True,
+        "with_mongodb": True,
+        "with_mqtt": True,
+        "with_mysql": True,
+        "with_openai": True,
+        "with_postgresql": True,
+        "with_raft": True,
+        "with_redis": True,
+        "with_socks5": True,
+        "with_websocket": True,
+        "with_orm": True,
         "with_ssl": True,
         "with_http2": True,
+        "with_lz4": True,
         "with_leveldb": True,
         "with_mimalloc": True,
         "with_stdexec_package": False,
@@ -55,14 +96,27 @@ class CnetmodConan(ConanFile):
         self.options.shared = False
 
     def requirements(self):
-        self.requires("jwt-cpp/0.7.2")
         self.requires("nlohmann_json/3.12.0")
-        self.requires("pugixml/1.16")
-        self.requires("zlib/1.3.2")
+
+        if self.options.with_http:
+            self.requires("jwt-cpp/0.7.2")
+        if self.options.with_postgresql:
+            self.requires("icu/[>=74 <79]")
+        if self.options.with_orm:
+            self.requires("pugixml/1.16")
+        if (
+            self.options.with_http
+            or self.options.with_grpc
+            or self.options.with_kafka
+            or self.options.with_mongodb
+        ):
+            self.requires("zlib/1.3.2")
+        if self.options.with_kafka and self.options.with_lz4:
+            self.requires("lz4/[>=1.9 <2]")
 
         if self.options.with_ssl:
             self.requires("openssl/[>=1.1 <4]")
-        if self.options.with_leveldb:
+        if self.options.with_raft and self.options.with_leveldb:
             self.requires("leveldb/1.23")
         if self.options.with_mimalloc:
             self.requires("mimalloc/3.3.2")
@@ -73,6 +127,25 @@ class CnetmodConan(ConanFile):
 
     def validate(self):
         check_min_cppstd(self, "23")
+        dependencies = {
+            "with_dns": ("with_http",),
+            "with_grpc": ("with_http",),
+            "with_mqtt": ("with_http", "with_websocket"),
+            "with_openai": ("with_http",),
+            "with_websocket": ("with_http",),
+        }
+        for protocol, required_protocols in dependencies.items():
+            if not bool(self.options.get_safe(protocol)):
+                continue
+            missing = [
+                dependency
+                for dependency in required_protocols
+                if not bool(self.options.get_safe(dependency))
+            ]
+            if missing:
+                raise ConanInvalidConfiguration(
+                    f"{protocol}=True requires {', '.join(missing)}=True"
+                )
 
     def layout(self):
         cmake_layout(self)
@@ -83,8 +156,37 @@ class CnetmodConan(ConanFile):
 
         tc = CMakeToolchain(self)
         tc.variables["CNETMOD_USE_SYSTEM_DEPS"] = True
+        # Every Conan protocol option is explicit, so do not let CMake's
+        # aggregate default silently re-enable an omitted protocol.
+        tc.variables["CNETMOD_ENABLE_ALL_PROTOCOLS"] = False
+        protocol_options = {
+            "AMQP091": "with_amqp091",
+            "AMQP10": "with_amqp10",
+            "COAP": "with_coap",
+            "DNS": "with_dns",
+            "GRPC": "with_grpc",
+            "HTTP": "with_http",
+            "KAFKA": "with_kafka",
+            "MAIL": "with_mail",
+            "MODBUS": "with_modbus",
+            "MONGODB": "with_mongodb",
+            "MQTT": "with_mqtt",
+            "MYSQL": "with_mysql",
+            "OPENAI": "with_openai",
+            "POSTGRESQL": "with_postgresql",
+            "RAFT": "with_raft",
+            "REDIS": "with_redis",
+            "SOCKS5": "with_socks5",
+            "WEBSOCKET": "with_websocket",
+        }
+        for protocol, option_name in protocol_options.items():
+            tc.variables[f"CNETMOD_ENABLE_{protocol}"] = bool(
+                self.options.get_safe(option_name)
+            )
+        tc.variables["CNETMOD_ENABLE_ORM"] = bool(self.options.with_orm)
         tc.variables["CNETMOD_ENABLE_SSL"] = bool(self.options.with_ssl)
         tc.variables["CNETMOD_ENABLE_HTTP2"] = bool(self.options.with_http2)
+        tc.variables["CNETMOD_ENABLE_LZ4"] = bool(self.options.with_lz4)
         tc.variables["CNETMOD_ENABLE_LEVELDB"] = bool(self.options.with_leveldb)
         tc.variables["CNETMOD_USE_MIMALLOC"] = bool(self.options.with_mimalloc)
         tc.variables["CNETMOD_BUILD_TESTS"] = False

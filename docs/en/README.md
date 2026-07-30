@@ -34,6 +34,8 @@ Build networked applications:
 - **[Kafka and AMQP](protocols/messaging.md)** - High-concurrency Kafka, AMQP 0-9-1, and AMQP 1.0 services
 - **[CoAP](protocols/coap.md)** - UDP CoAP client/server for constrained devices
 - **[MySQL](protocols/mysql.md)** - Database access with ORM
+- **[PostgreSQL](protocols/postgresql.md)** - Production async connection and MySQL ORM-compatible access
+- **[MongoDB](protocols/mongodb.md)** - BSON/OP_MSG connection with SCRAM-SHA-256 and TLS
 - **[Redis](protocols/redis.md)** - In-memory data store client
 - **[Raft](protocols/raft.md)** - Replicated state machines, membership, snapshots, TCP transport, and storage examples
 

@@ -40,6 +40,8 @@ English | [简体中文](README_zh.md)
 - **AMQP 0-9-1**: RabbitMQ-compatible async client — channels, durable exchanges/queues/bindings, publisher confirms, QoS/prefetch, ACK/NACK, transactions, heartbeats, automatic reconnection and topology recovery, SASL/TLS
 - **AMQP 1.0**: Artemis-compatible async client — SASL/TLS connections, sessions, sender/receiver links, credit-based flow control, unsettled delivery outcomes, explicit settlement, transactions, reconnect and link recovery
 - **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
+- **PostgreSQL**: Async TLS client with SCRAM-SHA-256/MD5 authentication, prepared queries, cancellation, and seamless reuse of the MySQL ORM model/query/session API
+- **MongoDB**: Async BSON/OP_MSG client with TLS, SCRAM-SHA-256, capability negotiation, strict protocol limits, and correlated command execution
 - **Redis**: Async client with RESP protocol, connection pool
 - **Raft**: Replicated state machine toolkit with leader election, log replication, ReadIndex, leader lease / check-quorum, joint consensus membership changes, snapshot install / compaction, LevelDB-backed persistence, TCP transport, TLS / mTLS authentication, transport metrics, chaos / restart tests, and distributed storage examples
 - **Modbus**: Complete protocol implementation — TCP/UDP/RTU (serial) client and server, all standard function codes, connection pool, CRC-16 validation, frame timing control, data stores (mutex-based and lock-free channel-based)
@@ -434,11 +436,11 @@ CNETMOD_MODEL(User, "users",
 )
 
 task<void> demo(mysql::client& cli) {
-    orm::db_session db(cli);
+    cnetmod::orm::mysql_session db(cli);
 
     // DDL — create / drop / sync_schema (auto-migration)
     co_await db.create_table<User>();
-    co_await orm::sync_schema<User>(cli);  // detects diff and applies ALTER TABLE
+    co_await orm::mysql_synchronize_schema<User>(cli);  // detects diff and applies ALTER TABLE
 
     // INSERT (auto_increment ID auto-filled)
     User u; u.name = "Alice"; u.email = "a@b.com";
@@ -449,7 +451,7 @@ task<void> demo(mysql::client& cli) {
     auto all = co_await db.find_all<User>();
     auto one = co_await db.find_by_id<User>(param_value::from_int(1));
     auto top = co_await db.find(
-        orm::select<User>()
+        orm::mysql_select<User>()
             .where("`name` = {}", {param_value::from_string("Alice")})
             .order_by("`id` DESC")
             .limit(10).offset(0)
@@ -462,7 +464,7 @@ task<void> demo(mysql::client& cli) {
     // DELETE — by model / by ID / conditional
     co_await db.remove(u);
     co_await db.remove_by_id<User>(param_value::from_int(1));
-    co_await db.remove(orm::delete_of<User>()
+    co_await db.remove(orm::mysql_delete<User>()
         .where("`name` = {}", {param_value::from_string("test")}));
 }
 
@@ -524,7 +526,7 @@ CNETMOD_MODEL(Event, "events",
 
 // Snowflake requires a generator
 orm::snowflake_generator sf(/*machine_id=*/1);
-orm::db_session db(cli, sf);
+cnetmod::orm::mysql_session db(cli, sf);
 co_await db.insert(event);  // event.id auto-generated
 ```
 

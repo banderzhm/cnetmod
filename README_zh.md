@@ -40,6 +40,8 @@
 - **AMQP 0-9-1**: RabbitMQ 兼容异步客户端 — channel、持久化 exchange/queue/binding、publisher confirm、QoS/prefetch、ACK/NACK、事务、心跳、自动重连与拓扑恢复、SASL/TLS
 - **AMQP 1.0**: Artemis 兼容异步客户端 — SASL/TLS 连接、session、sender/receiver link、credit 流控、unsettled delivery outcome、显式 settlement、事务、重连与 link 恢复
 - **MySQL**: 异步客户端，支持预处理语句、连接池、管道、事务管理、ORM（CRUD / 迁移 / 查询构建器 / MyBatis-Plus 风格 XML 映射器 / BaseMapper / 分页 / 软删除 / 乐观锁 / 多租户 / 缓存）
+- **PostgreSQL**：异步 TLS 客户端，支持 SCRAM-SHA-256/MD5、预处理查询、请求取消，并可无缝复用现有 MySQL ORM 的模型、查询和会话 API
+- **MongoDB**：异步 BSON/OP_MSG 客户端，支持 TLS、SCRAM-SHA-256、能力协商、严格协议边界与请求关联校验
 - **Redis**: 异步客户端，支持 RESP 协议、连接池
 - **Raft**: 复制状态机工具集，支持 leader 选举、日志复制、ReadIndex、leader lease / check-quorum、joint consensus 成员变更、snapshot install / compaction、LevelDB 持久化、TCP transport、TLS / mTLS 认证、传输指标、chaos / 重启恢复测试，以及分布式存储示例
 - **Modbus**: 完整协议实现 — TCP/UDP/RTU（串口）客户端和服务端、所有标准功能码、连接池、CRC-16 校验、帧时序控制、数据存储（基于互斥锁和无锁通道）
@@ -430,11 +432,11 @@ CNETMOD_MODEL(User, "users",
 )
 
 task<void> demo(mysql::client& cli) {
-    orm::db_session db(cli);
+    cnetmod::orm::mysql_session db(cli);
 
     // DDL — create / drop / sync_schema（自动迁移）
     co_await db.create_table<User>();
-    co_await orm::sync_schema<User>(cli);  // 检测差异并应用 ALTER TABLE
+    co_await orm::mysql_synchronize_schema<User>(cli);  // 检测差异并应用 ALTER TABLE
 
     // INSERT（自增 ID 自动填充）
     User u; u.name = "Alice"; u.email = "a@b.com";
@@ -445,7 +447,7 @@ task<void> demo(mysql::client& cli) {
     auto all = co_await db.find_all<User>();
     auto one = co_await db.find_by_id<User>(param_value::from_int(1));
     auto top = co_await db.find(
-        orm::select<User>()
+        orm::mysql_select<User>()
             .where("`name` = {}", {param_value::from_string("Alice")})
             .order_by("`id` DESC")
             .limit(10).offset(0)
@@ -458,7 +460,7 @@ task<void> demo(mysql::client& cli) {
     // DELETE — 按模型 / 按 ID / 条件删除
     co_await db.remove(u);
     co_await db.remove_by_id<User>(param_value::from_int(1));
-    co_await db.remove(orm::delete_of<User>()
+    co_await db.remove(orm::mysql_delete<User>()
         .where("`name` = {}", {param_value::from_string("test")}));
 }
 
@@ -520,7 +522,7 @@ CNETMOD_MODEL(Event, "events",
 
 // Snowflake 需要生成器
 orm::snowflake_generator sf(/*machine_id=*/1);
-orm::db_session db(cli, sf);
+cnetmod::orm::mysql_session db(cli, sf);
 co_await db.insert(event);  // event.id 自动生成
 ```
 

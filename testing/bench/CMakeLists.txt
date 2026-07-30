@@ -21,9 +21,25 @@ set(BENCH_TARGETS
     bench_raft
 )
 
+if(NOT CNETMOD_ENABLE_HTTP)
+    list(REMOVE_ITEM BENCH_TARGETS bench_http bench_grpc)
+endif()
+if(NOT CNETMOD_ENABLE_GRPC)
+    list(REMOVE_ITEM BENCH_TARGETS bench_grpc)
+endif()
+if(NOT CNETMOD_ENABLE_WEBSOCKET)
+    list(REMOVE_ITEM BENCH_TARGETS bench_ws)
+endif()
+if(NOT CNETMOD_ENABLE_MQTT)
+    list(REMOVE_ITEM BENCH_TARGETS bench_mqtt)
+endif()
+if(NOT CNETMOD_ENABLE_RAFT)
+    list(REMOVE_ITEM BENCH_TARGETS bench_raft)
+endif()
+
 # io_uring is Linux-only. Do not create this target on macOS/Windows: the
 # corresponding C++ module is intentionally absent on those platforms.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CNETMOD_HAS_IO_URING)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CNETMOD_HAS_IO_URING AND CNETMOD_ENABLE_HTTP)
     list(APPEND BENCH_TARGETS bench_uring_recv)
 endif()
 

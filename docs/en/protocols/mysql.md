@@ -2,6 +2,13 @@
 
 Async MySQL client with ORM, connection pooling, and prepared statements.
 
+ORM models and database-independent values live in `cnetmod::orm`. The MySQL
+adapter API also lives there and uses explicit `mysql_` names, including
+`mysql_session`, `mysql_base_mapper<T>`, `mysql_mapper_session`,
+`mysql_select<T>()`, `mysql_synchronize_schema<T>()`,
+`mysql_pageable_mapper<T>`, and `mysql_code_generator`. MySQL protocol objects
+remain in `cnetmod::mysql`; there is no second ORM namespace under that protocol.
+
 ## Basic Usage
 
 ```cpp
@@ -103,7 +110,7 @@ CNETMOD_MODEL(User, "users",
 
 ```cpp
 task<void> orm_example(mysql::client& client) {
-    orm::db_session db(client);
+    cnetmod::orm::mysql_session db(client);
     
     // CREATE TABLE
     co_await db.create_table<User>();
@@ -141,13 +148,13 @@ task<void> orm_example(mysql::client& client) {
 ```cpp
 // SELECT with WHERE
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` = {}", {param_value::from_string("Alice")})
 );
 
 // SELECT with ORDER BY and LIMIT
 auto top_users = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`email` IS NOT NULL")
         .order_by("`created_at` DESC")
         .limit(10)
@@ -156,7 +163,7 @@ auto top_users = co_await db.find(
 
 // COUNT
 auto count = co_await db.count<User>(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`email` IS NOT NULL")
 );
 ```
@@ -175,7 +182,7 @@ co_await db.insert_many(users);
 
 // Batch delete
 co_await db.remove(
-    orm::delete_of<User>()
+    orm::mysql_delete<User>()
         .where("`created_at` < {}", {param_value::from_int(old_timestamp)})
 );
 ```
@@ -184,7 +191,7 @@ co_await db.remove(
 
 ```cpp
 // Detect schema changes and apply ALTER TABLE
-co_await orm::sync_schema<User>(client);
+co_await orm::mysql_synchronize_schema<User>(client);
 
 // Example: Add new field to struct
 struct User {
@@ -195,7 +202,7 @@ struct User {
 };
 
 // sync_schema will execute: ALTER TABLE users ADD COLUMN phone VARCHAR(255)
-co_await orm::sync_schema<User>(client);
+co_await orm::mysql_synchronize_schema<User>(client);
 ```
 
 ### UUID Primary Key
@@ -233,7 +240,7 @@ CNETMOD_MODEL(Event, "events",
 
 // Setup
 orm::snowflake_generator sf(/*machine_id=*/1);
-orm::db_session db(client, sf);
+cnetmod::orm::mysql_session db(client, sf);
 
 // Usage
 Event event;

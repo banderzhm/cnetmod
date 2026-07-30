@@ -50,7 +50,7 @@ CNETMOD_MODEL(User, "users",
 
 ```cpp
 task<void> crud_example(mysql::client& client) {
-    orm::db_session db(client);
+    orm::mysql_session db(client);
     
     // CREATE TABLE
     co_await db.create_table<User>();
@@ -191,7 +191,7 @@ if (user) {
 
 // Find with condition
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` = {}", {param_value::from_string("Alice")})
 );
 
@@ -227,7 +227,7 @@ co_await db.remove_by_id<User>(param_value::from_int(1));
 
 // Delete with condition
 co_await db.remove(
-    orm::delete_of<User>()
+    orm::mysql_delete<User>()
         .where("`created_at` < {}", {param_value::from_int(old_timestamp)})
 );
 ```
@@ -239,13 +239,13 @@ co_await db.remove(
 ```cpp
 // Simple condition
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` = {}", {param_value::from_string("Alice")})
 );
 
 // Multiple conditions (AND)
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` = {} AND `age` > {}", {
             param_value::from_string("Alice"),
             param_value::from_int(18)
@@ -254,7 +254,7 @@ auto results = co_await db.find(
 
 // OR condition
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` = {} OR `email` = {}", {
             param_value::from_string("Alice"),
             param_value::from_string("alice@example.com")
@@ -263,19 +263,19 @@ auto results = co_await db.find(
 
 // IN clause
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`id` IN (1, 2, 3)")
 );
 
 // LIKE
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`name` LIKE {}", {param_value::from_string("%Alice%")})
 );
 
 // IS NULL / IS NOT NULL
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`email` IS NOT NULL")
 );
 ```
@@ -285,19 +285,19 @@ auto results = co_await db.find(
 ```cpp
 // Ascending
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .order_by("`name` ASC")
 );
 
 // Descending
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .order_by("`created_at` DESC")
 );
 
 // Multiple columns
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .order_by("`age` DESC, `name` ASC")
 );
 ```
@@ -307,20 +307,20 @@ auto results = co_await db.find(
 ```cpp
 // First 10 users
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .limit(10)
 );
 
 // Pagination (page 2, 10 per page)
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .limit(10)
         .offset(10)
 );
 
 // Top 5 oldest users
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .order_by("`created_at` ASC")
         .limit(5)
 );
@@ -331,7 +331,7 @@ auto results = co_await db.find(
 ```cpp
 // Combine all features
 auto results = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`age` > {} AND `email` IS NOT NULL", {
             param_value::from_int(18)
         })
@@ -396,7 +396,7 @@ CNETMOD_MODEL(Event, "events",
 
 // Setup: Create Snowflake generator
 orm::snowflake_generator sf(/*machine_id=*/1);
-orm::db_session db(client, sf);
+orm::mysql_session db(client, sf);
 
 // Usage
 Event event{.title = "Conference"};
@@ -459,7 +459,7 @@ CNETMOD_MODEL(User, "users",
 )
 
 // Sync schema (applies ALTER TABLE)
-co_await orm::sync_schema<User>(client);
+co_await orm::mysql_synchronize_schema<User>(client);
 // Executes: ALTER TABLE users ADD COLUMN email VARCHAR(255)
 ```
 
@@ -501,14 +501,14 @@ CNETMOD_MODEL(User, "users",
 )
 
 // Soft delete
-task<void> soft_delete(orm::db_session& db, User& user) {
+task<void> soft_delete(orm::mysql_session& db, User& user) {
     user.deleted_at = std::time(nullptr);
     co_await db.update(user);
 }
 
 // Query only non-deleted
 auto active_users = co_await db.find(
-    orm::select<User>()
+    orm::mysql_select<User>()
         .where("`deleted_at` IS NULL")
 );
 ```
@@ -531,13 +531,13 @@ CNETMOD_MODEL(Post, "posts",
 )
 
 // Auto-set timestamps
-task<void> create_post(orm::db_session& db, Post& post) {
+task<void> create_post(orm::mysql_session& db, Post& post) {
     post.created_at = std::time(nullptr);
     post.updated_at = post.created_at;
     co_await db.insert(post);
 }
 
-task<void> update_post(orm::db_session& db, Post& post) {
+task<void> update_post(orm::mysql_session& db, Post& post) {
     post.updated_at = std::time(nullptr);
     co_await db.update(post);
 }
@@ -566,7 +566,7 @@ co_await db.insert(product);
 
 // Query JSON field (MySQL 5.7+)
 auto results = co_await db.find(
-    orm::select<Product>()
+    orm::mysql_select<Product>()
         .where("JSON_EXTRACT(`metadata`, '$.brand') = 'Dell'")
 );
 ```
@@ -1077,7 +1077,7 @@ if (result) {
 See complete examples:
 - `examples/mysql_xml_mapper.cpp` - Basic XML mapper usage
 - `examples/mysql_xml_complex.cpp` - Advanced XML features
-- `examples/mybatis_plus_demo.cpp` - All MyBatis-Plus style features
+- `examples/database/mysql/mysql_mybatis_plus_demo.cpp` - All MyBatis-Plus style features
 
 ## Next Steps
 

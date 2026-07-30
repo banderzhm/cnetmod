@@ -37,6 +37,35 @@ set(TEST_SOURCES
     test_redis.cpp
 )
 
+if(NOT CNETMOD_ENABLE_RAFT)
+    list(REMOVE_ITEM TEST_SOURCES test_raft.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_HTTP)
+    list(FILTER TEST_SOURCES EXCLUDE REGEX
+        "^(test_http|test_tfb|test_metrics)")
+endif()
+if(NOT CNETMOD_ENABLE_DNS)
+    list(REMOVE_ITEM TEST_SOURCES test_dns.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_COAP)
+    list(REMOVE_ITEM TEST_SOURCES test_coap.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_GRPC)
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "^test_grpc")
+endif()
+if(NOT CNETMOD_ENABLE_MQTT)
+    list(REMOVE_ITEM TEST_SOURCES test_mqtt.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_SOCKS5)
+    list(REMOVE_ITEM TEST_SOURCES test_socks5.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_MAIL)
+    list(REMOVE_ITEM TEST_SOURCES test_mail.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_REDIS)
+    list(REMOVE_ITEM TEST_SOURCES test_redis.cpp)
+endif()
+
 set(CNETMOD_TEST_TARGETS)
 
 foreach(test_src ${TEST_SOURCES})
@@ -59,7 +88,7 @@ if(MSVC AND TARGET test_raft)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
-if(Python3_Interpreter_FOUND)
+if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MAIL)
     add_executable(smtp_bench_server
         "${CMAKE_CURRENT_SOURCE_DIR}/../mail/smtp_bench_server.cpp")
     list(APPEND CNETMOD_TEST_TARGETS smtp_bench_server)
@@ -90,6 +119,9 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(python_smtp_semantic_interop PROPERTIES
         SKIP_RETURN_CODE 77)
 
+endif()
+
+if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_HTTP)
     add_executable(http2_interop_server
         "${CMAKE_CURRENT_SOURCE_DIR}/../http2/h2_interop_server.cpp")
     add_executable(http2_client_interop
@@ -162,7 +194,7 @@ if(Python3_Interpreter_FOUND AND TARGET test_grpc_proto)
     )
 endif()
 
-if(Python3_Interpreter_FOUND)
+if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MQTT)
     add_executable(mqtt_interop_broker
         "${CMAKE_CURRENT_SOURCE_DIR}/../mqtt/mqtt_interop_broker.cpp"
     )

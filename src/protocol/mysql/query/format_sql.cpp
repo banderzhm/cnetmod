@@ -1,5 +1,6 @@
 module cnetmod.protocol.mysql;
 import :format_sql;
+import cnetmod.database.sql_parameters;
 
 namespace cnetmod::mysql {
 format_context::format_context(format_options opts) noexcept
@@ -171,10 +172,59 @@ auto format_sql(const format_options& opts, std::string_view fmt,
     return std::move(ctx).get();
 }
 
+auto format_sql(const format_options& opts, std::string_view fmt,
+    std::span<const cnetmod::database::query_parameter> args)
+    -> std::expected<std::string, format_errc>
+{
+    std::vector<param_value> converted;
+    converted.reserve(args.size());
+    for (const auto& value : args)
+    {
+        using source_kind = cnetmod::database::query_parameter::kind_t;
+        switch (value.kind)
+        {
+        case source_kind::null_kind:
+            converted.push_back(param_value::null());
+            break;
+        case source_kind::int64_kind:
+            converted.push_back(param_value::from_int(value.int_val));
+            break;
+        case source_kind::uint64_kind:
+            converted.push_back(param_value::from_uint(value.uint_val));
+            break;
+        case source_kind::double_kind:
+            converted.push_back(param_value::from_double(value.double_val));
+            break;
+        case source_kind::string_kind:
+            converted.push_back(param_value::from_string(value.str_val));
+            break;
+        case source_kind::blob_kind:
+            converted.push_back(param_value::from_blob(value.str_val));
+            break;
+        case source_kind::date_kind:
+            converted.push_back(param_value::from_date({value.date_val.year,
+                value.date_val.month, value.date_val.day}));
+            break;
+        case source_kind::datetime_kind:
+            converted.push_back(param_value::from_datetime({value.datetime_val.year,
+                value.datetime_val.month, value.datetime_val.day,
+                value.datetime_val.hour, value.datetime_val.minute,
+                value.datetime_val.second, value.datetime_val.microsecond}));
+            break;
+        case source_kind::time_kind:
+            converted.push_back(param_value::from_time({value.time_val.negative,
+                value.time_val.hours, value.time_val.minutes,
+                value.time_val.seconds, value.time_val.microsecond}));
+            break;
+        }
+    }
+    return format_sql(opts, fmt, std::span<const param_value>(converted));
+}
+
 auto format_sql(const format_options& opts, std::string_view fmt)
     -> std::expected<std::string, format_errc>
 {
-    return format_sql(opts, fmt, {});
+    return format_sql(opts, fmt, std::span<const param_value>{});
 }
 
 auto with_params(std::string_view query,

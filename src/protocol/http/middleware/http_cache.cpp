@@ -7,7 +7,9 @@ module cnetmod.protocol.http.middleware.cache;
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.shared_mutex;
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
 import cnetmod.protocol.redis;
+#endif
 import cnetmod.protocol.http;
 
 namespace cnetmod::cache {
@@ -96,6 +98,7 @@ auto memory_cache::clear() -> task<void>
     lru_.clear();
 }
 
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
 redis_cache::redis_cache(redis::client& client,
     redis_cache_options opts) noexcept
     : client_(client), opts_(std::move(opts)) {}
@@ -145,6 +148,7 @@ auto redis_cache::exists(std::string_view key) -> task<bool>
     auto r = co_await client_.exec(req);
     co_return r && !r->empty() && redis::first_value(*r) != "0";
 }
+#endif
 
 auto cache_group_registry::add(std::string_view group, std::string_view key)
     -> task<void>

@@ -5,13 +5,14 @@ import :types;
 import :connection_client;
 import cnetmod.coro.task;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
 
 // =============================================================================
 // table_column — Database column information
 // =============================================================================
 
-export struct table_column
+struct table_column
 {
     std::string name;
     std::string type;
@@ -26,7 +27,7 @@ export struct table_column
 // table_info — Database table information
 // =============================================================================
 
-export struct table_info
+struct table_info
 {
     std::string name;
     std::string comment;
@@ -37,7 +38,7 @@ export struct table_info
 // generator_config — Code generator configuration
 // =============================================================================
 
-export struct generator_config
+struct generator_config
 {
     std::string output_dir = "./generated";
     std::string namespace_name = "generated";
@@ -51,7 +52,7 @@ export struct generator_config
 // code_generator — Generate C++ code from database tables
 // =============================================================================
 
-export class code_generator
+class code_generator
 {
 public:
     explicit code_generator(generator_config config = {});
@@ -88,4 +89,11 @@ private:
         -> std::string;
 };
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+using mysql_table_column = mysql_detail::table_column;
+using mysql_table_information = mysql_detail::table_info;
+using mysql_generator_configuration = mysql_detail::generator_config;
+using mysql_code_generator = mysql_detail::code_generator;
+} // namespace cnetmod::orm

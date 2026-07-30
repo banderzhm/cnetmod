@@ -6,14 +6,19 @@ import :connection_client;
 import :orm_meta;
 import :orm_crud;
 import :orm_mapper;
+import :orm_mysql_result_adapter;
 import :orm_reflect;
 import :orm_wrapper;
 import :orm_xml_crud;
 import :orm_page;
 import :format_sql;
 import cnetmod.coro.task;
+import cnetmod.orm.sql_parameters;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
+using param_value = cnetmod::orm::param_value;
 
 // =============================================================================
 // base_mapper — Generic CRUD operations (MyBatis-Plus style)
@@ -21,7 +26,7 @@ namespace cnetmod::mysql::orm {
 
 /// BaseMapper provides common CRUD operations without writing XML
 /// Similar to MyBatis-Plus BaseMapper<T>
-export template <Model T> class base_mapper
+template <Model T> class base_mapper
 {
 public:
     explicit base_mapper(client& cli) noexcept
@@ -177,7 +182,7 @@ public:
             meta.table_name, pk_field->col.column_name);
 
         std::vector<param_value> params;
-        params.push_back(detail::to_param_value(id));
+        params.push_back(cnetmod::orm::to_query_parameter(id));
 
         auto final_sql = format_sql(cli_.current_format_opts(), sql, params);
         if (!final_sql)
@@ -223,7 +228,7 @@ public:
             if (i > 0)
                 sql += ", ";
             sql += "{}";
-            params.push_back(detail::to_param_value(ids[i]));
+            params.push_back(cnetmod::orm::to_query_parameter(ids[i]));
         }
         sql += ")";
 
@@ -367,7 +372,7 @@ public:
             meta.table_name, pk_field->col.column_name);
 
         std::vector<param_value> params;
-        params.push_back(detail::to_param_value(id));
+        params.push_back(cnetmod::orm::to_query_parameter(id));
 
         auto final_sql = format_sql(cli_.current_format_opts(), sql, params);
         if (!final_sql)
@@ -377,7 +382,7 @@ public:
         if (rs.is_err() || rs.rows.empty())
             co_return std::nullopt;
 
-        auto results = from_result_set<T>(rs);
+        auto results = mysql_map_result<T>(rs);
         if (results.empty())
             co_return std::nullopt;
         co_return results[0];
@@ -405,7 +410,7 @@ public:
             if (i > 0)
                 sql += ", ";
             sql += "{}";
-            params.push_back(detail::to_param_value(ids[i]));
+            params.push_back(cnetmod::orm::to_query_parameter(ids[i]));
         }
         sql += ")";
 
@@ -417,7 +422,7 @@ public:
         if (rs.is_err())
             co_return std::vector<T>{};
 
-        co_return from_result_set<T>(rs);
+        co_return mysql_map_result<T>(rs);
     }
 
     /// Select all records
@@ -430,7 +435,7 @@ public:
         if (rs.is_err())
             co_return std::vector<T>{};
 
-        co_return from_result_set<T>(rs);
+        co_return mysql_map_result<T>(rs);
     }
 
     /// Count all records
@@ -474,7 +479,7 @@ public:
         if (rs.is_err())
             co_return std::vector<T>{};
 
-        co_return from_result_set<T>(rs);
+        co_return mysql_map_result<T>(rs);
     }
 
     /// Select one with query_wrapper
@@ -599,4 +604,9 @@ private:
     mysql::client& cli_;
 };
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+template <Model T>
+using mysql_base_mapper = mysql_detail::base_mapper<T>;
+}

@@ -9,13 +9,15 @@ import :orm_meta;
 import :orm_query;
 import cnetmod.coro.task;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
 
 // =============================================================================
 // schema_diff — Table structure difference description
 // =============================================================================
 
-export struct column_change
+struct column_change
 {
     enum class action_t : std::uint8_t
     {
@@ -29,7 +31,7 @@ export struct column_change
     std::string ddl; ///< Generated ALTER TABLE clause
 };
 
-export struct schema_diff
+struct schema_diff
 {
     std::vector<column_change> changes;
     bool table_missing = false; ///< Table doesn't exist, needs CREATE TABLE
@@ -190,7 +192,7 @@ namespace detail {
 } // namespace detail
 
 /// Detect differences between model and database table
-export template <Model T>
+template <Model T>
 auto detect_diff(const result_set& describe_rs) -> schema_diff
 {
     schema_diff diff;
@@ -267,7 +269,7 @@ auto detect_diff(const result_set& describe_rs) -> schema_diff
 // sync_result — Sync result
 // =============================================================================
 
-export struct sync_result
+struct sync_result
 {
     schema_diff diff;
     std::string error_msg;
@@ -288,7 +290,7 @@ export struct sync_result
 // sync_schema — Async sync table structure
 // =============================================================================
 
-export template <Model T> auto sync_schema(client& cli) -> task<sync_result>
+template <Model T> auto sync_schema(client& cli) -> task<sync_result>
 {
     sync_result result;
     auto& meta = model_traits<T>::meta();
@@ -343,4 +345,17 @@ export template <Model T> auto sync_schema(client& cli) -> task<sync_result>
     co_return result;
 }
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+using mysql_column_change = mysql_detail::column_change;
+using mysql_schema_diff = mysql_detail::schema_diff;
+using mysql_schema_sync_result = mysql_detail::sync_result;
+
+template <Model T>
+auto mysql_synchronize_schema(cnetmod::mysql::client& client)
+    -> task<mysql_schema_sync_result>
+{
+    return mysql_detail::sync_schema<T>(client);
+}
+} // namespace cnetmod::orm

@@ -34,6 +34,8 @@
 - **[Kafka 与 AMQP](protocols/messaging.md)** - Kafka、AMQP 0-9-1 和 AMQP 1.0 高并发消息服务
 - **[CoAP](protocols/coap.md)** - 面向受限设备的 UDP CoAP 客户端/服务端
 - **[MySQL](protocols/mysql.md)** - 带 ORM 的数据库访问
+- **[PostgreSQL](protocols/postgresql.md)** - 生产级异步连接与 MySQL ORM 无缝兼容
+- **[MongoDB](protocols/mongodb.md)** - 支持 SCRAM-SHA-256 与 TLS 的 BSON/OP_MSG 连接
 - **[Redis](protocols/redis.md)** - 内存数据存储客户端
 - **[Raft](protocols/raft.md)** - 复制状态机、成员变更、快照、TCP transport 和存储示例
 

@@ -6,20 +6,26 @@ import :orm_meta;
 import :connection_client;
 import :format_sql;
 import cnetmod.coro.task;
+import cnetmod.orm.sql_query_data;
+import cnetmod.orm.sql_parameters;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
+using param_value = cnetmod::orm::param_value;
+using field_value = cnetmod::orm::field_value;
 
 // =============================================================================
 // Optimistic lock field flag
 // =============================================================================
 
-export constexpr col_flag VERSION = static_cast<col_flag>(0x20);
+constexpr col_flag VERSION = static_cast<col_flag>(0x20);
 
 // =============================================================================
 // optimistic_lock_interceptor — Intercepts UPDATE to add version check
 // =============================================================================
 
-export class optimistic_lock_interceptor
+class optimistic_lock_interceptor
 {
 public:
     /// Check if model has version field
@@ -142,7 +148,7 @@ private:
 // optimistic_lock_exception — Thrown when version mismatch occurs
 // =============================================================================
 
-export class optimistic_lock_exception : public std::runtime_error
+class optimistic_lock_exception : public std::runtime_error
 {
 public:
     explicit optimistic_lock_exception(std::string_view msg);
@@ -154,7 +160,7 @@ public:
 // Global optimistic lock interceptor instance
 // =============================================================================
 
-export auto global_optimistic_lock_interceptor()
+auto global_optimistic_lock_interceptor()
     -> optimistic_lock_interceptor&;
 
 // =============================================================================
@@ -163,7 +169,7 @@ export auto global_optimistic_lock_interceptor()
 
 /// Update entity with optimistic lock check
 /// Returns true if successful, false if version mismatch
-export template <Model T>
+template <Model T>
 auto update_with_version_check(client& cli, T& entity) -> task<bool>
 {
     auto& interceptor = global_optimistic_lock_interceptor();
@@ -255,4 +261,16 @@ auto update_with_version_check(client& cli, T& entity) -> task<bool>
     co_return true;
 }
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+using mysql_optimistic_lock_interceptor = mysql_detail::optimistic_lock_interceptor;
+using mysql_optimistic_lock_exception = mysql_detail::optimistic_lock_exception;
+
+template <Model T>
+auto mysql_update_with_version_check(cnetmod::mysql::client& client, T& entity)
+    -> task<bool>
+{
+    return mysql_detail::update_with_version_check(client, entity);
+}
+} // namespace cnetmod::orm

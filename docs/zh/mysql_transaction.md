@@ -26,7 +26,7 @@ if (rs.is_err()) {
 }
 ```
 
-### 2. 使用 `db_session::transaction` (ORM 风格)
+### 2. 使用 `mysql_session::transaction` (ORM 风格)
 
 ```cpp
 User user;
@@ -95,7 +95,7 @@ import cnetmod.protocol.mysql;
 
 namespace cn = cnetmod;
 namespace mysql = cn::mysql;
-namespace orm = mysql::orm;
+namespace orm = cnetmod::orm;
 
 struct User {
     std::int64_t id = 0;
@@ -121,7 +121,7 @@ CNETMOD_MODEL(Order, "orders",
     CNETMOD_FIELD(amount, "amount", double_)
 )
 
-auto transfer_money(orm::db_session& db, 
+auto transfer_money(orm::mysql_session& db,
                    std::int64_t from_id, 
                    std::int64_t to_id, 
                    double amount) -> cn::task<void> {
@@ -188,7 +188,7 @@ template <typename Func>
 auto transaction(Func&& func, isolation_level level) -> task<result_set>;
 ```
 
-### `db_session::transaction`
+### `mysql_session::transaction`
 
 ```cpp
 template <typename Func>

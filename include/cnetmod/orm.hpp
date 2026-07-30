@@ -4,7 +4,7 @@
 // CNETMOD_MODEL / CNETMOD_FIELD Macros
 // =============================================================================
 //
-// Usage (after import cnetmod.protocol.mysql;):
+// Usage (after import cnetmod.orm and the selected database protocol):
 //
 //   #include <cnetmod/orm.hpp>
 //
@@ -21,15 +21,16 @@
 //   )
 
 // Flag aliases (for user convenience)
-#define NONE                ::cnetmod::mysql::orm::col_flag::none
-#define PK                  ::cnetmod::mysql::orm::col_flag::primary_key
-#define AUTO_INC            ::cnetmod::mysql::orm::col_flag::auto_increment
-#define NULLABLE            ::cnetmod::mysql::orm::col_flag::nullable
-#define VERSION             ::cnetmod::mysql::orm::col_flag::version
-#define LOGIC_DELETE        ::cnetmod::mysql::orm::col_flag::logic_delete
-#define FILL_INSERT         ::cnetmod::mysql::orm::col_flag::fill_insert
-#define FILL_INSERT_UPDATE  ::cnetmod::mysql::orm::col_flag::fill_insert_update
-#define TENANT_ID           ::cnetmod::mysql::orm::col_flag::tenant_id
+#define NONE ::cnetmod::orm::col_flag::none
+#define PK ::cnetmod::orm::col_flag::primary_key
+#define AUTO_INC ::cnetmod::orm::col_flag::auto_increment
+#define NULLABLE ::cnetmod::orm::col_flag::nullable
+#define VERSION ::cnetmod::orm::col_flag::version
+#define LOGIC_DELETE ::cnetmod::orm::col_flag::logic_delete
+#define FILL_INSERT ::cnetmod::orm::col_flag::fill_insert
+#define FILL_INSERT_UPDATE ::cnetmod::orm::col_flag::fill_insert_update
+#define TENANT_ID ::cnetmod::orm::col_flag::tenant_id
+#define UNIQUE_KEY ::cnetmod::orm::col_flag::unique
 
 // ID strategy composite flag aliases
 // UUID_PK   — Primary key + UUID strategy (C++ type uses orm::uuid, DDL generates CHAR(36))
@@ -42,48 +43,51 @@
 // Internal use: composite flags carrying strategy tag
 // UUID_PK expands to CNETMOD_FIELD_5(member, col, type, PK, id_strategy::uuid)
 // But designed as 4-parameter form for user simplicity, strategy expanded via macro
-#define UUID_PK_FLAGS      ::cnetmod::mysql::orm::col_flag::primary_key
-#define UUID_PK_STRATEGY   ::cnetmod::mysql::orm::id_strategy::uuid
-#define SNOWFLAKE_PK_FLAGS ::cnetmod::mysql::orm::col_flag::primary_key
-#define SNOWFLAKE_PK_STRATEGY ::cnetmod::mysql::orm::id_strategy::snowflake
+#define UUID_PK_FLAGS ::cnetmod::orm::col_flag::primary_key
+#define UUID_PK_STRATEGY ::cnetmod::orm::id_strategy::uuid
+#define SNOWFLAKE_PK_FLAGS ::cnetmod::orm::col_flag::primary_key
+#define SNOWFLAKE_PK_STRATEGY ::cnetmod::orm::id_strategy::snowflake
 
 // CNETMOD_FIELD(member, "col_name", column_type_suffix) - 3
-#define CNETMOD_FIELD_3(M, COL, CT) \
-    ::cnetmod::mysql::orm::field_mapping<_cnetmod_model_type>{ \
-        {#M, COL, ::cnetmod::mysql::column_type::CT, \
-         ::cnetmod::mysql::orm::col_flag::none, \
-         ::cnetmod::mysql::orm::id_strategy::none}, \
-        [](auto& obj, const ::cnetmod::mysql::field_value& v) { \
-            ::cnetmod::mysql::orm::detail::set_member(obj.M, v); \
-        }, \
-        [](const auto& obj) -> ::cnetmod::mysql::param_value { \
-            return ::cnetmod::mysql::orm::detail::get_member(obj.M); \
-        } \
+#define CNETMOD_FIELD_3(M, COL, CT)                               \
+    ::cnetmod::orm::field_mapping<_cnetmod_model_type>            \
+    {                                                             \
+        {#M, COL, ::cnetmod::orm::column_type::CT,                \
+            ::cnetmod::orm::col_flag::none,                       \
+            ::cnetmod::orm::id_strategy::none},                   \
+            [](auto& obj, const ::cnetmod::orm::field_value& v) { \
+                ::cnetmod::orm::detail::set_member(obj.M, v);     \
+            },                                                    \
+            [](const auto& obj) -> ::cnetmod::orm::param_value {  \
+                return ::cnetmod::orm::detail::get_member(obj.M); \
+            }                                                     \
     }
 
 // CNETMOD_FIELD(member, "col_name", column_type_suffix, flags) - 4
-#define CNETMOD_FIELD_4(M, COL, CT, FLAGS) \
-    ::cnetmod::mysql::orm::field_mapping<_cnetmod_model_type>{ \
-        {#M, COL, ::cnetmod::mysql::column_type::CT, FLAGS, \
-         ::cnetmod::mysql::orm::id_strategy::none}, \
-        [](auto& obj, const ::cnetmod::mysql::field_value& v) { \
-            ::cnetmod::mysql::orm::detail::set_member(obj.M, v); \
-        }, \
-        [](const auto& obj) -> ::cnetmod::mysql::param_value { \
-            return ::cnetmod::mysql::orm::detail::get_member(obj.M); \
-        } \
+#define CNETMOD_FIELD_4(M, COL, CT, FLAGS)                        \
+    ::cnetmod::orm::field_mapping<_cnetmod_model_type>            \
+    {                                                             \
+        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS,         \
+            ::cnetmod::orm::id_strategy::none},                   \
+            [](auto& obj, const ::cnetmod::orm::field_value& v) { \
+                ::cnetmod::orm::detail::set_member(obj.M, v);     \
+            },                                                    \
+            [](const auto& obj) -> ::cnetmod::orm::param_value {  \
+                return ::cnetmod::orm::detail::get_member(obj.M); \
+            }                                                     \
     }
 
 // CNETMOD_FIELD(member, "col_name", column_type_suffix, flags, strategy) - 5
-#define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY) \
-    ::cnetmod::mysql::orm::field_mapping<_cnetmod_model_type>{ \
-        {#M, COL, ::cnetmod::mysql::column_type::CT, FLAGS, STRATEGY}, \
-        [](auto& obj, const ::cnetmod::mysql::field_value& v) { \
-            ::cnetmod::mysql::orm::detail::set_member(obj.M, v); \
-        }, \
-        [](const auto& obj) -> ::cnetmod::mysql::param_value { \
-            return ::cnetmod::mysql::orm::detail::get_member(obj.M); \
-        } \
+#define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY)                 \
+    ::cnetmod::orm::field_mapping<_cnetmod_model_type>               \
+    {                                                                \
+        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY}, \
+            [](auto& obj, const ::cnetmod::orm::field_value& v) {    \
+                ::cnetmod::orm::detail::set_member(obj.M, v);        \
+            },                                                       \
+            [](const auto& obj) -> ::cnetmod::orm::param_value {     \
+                return ::cnetmod::orm::detail::get_member(obj.M);    \
+            }                                                        \
     }
 
 // Simplified: UUID_PK / SNOWFLAKE_PK used as 4th parameter of CNETMOD_FIELD
@@ -99,31 +103,32 @@
     CNETMOD_FIELD_SELECT(__VA_ARGS__, CNETMOD_FIELD_5, CNETMOD_FIELD_4, CNETMOD_FIELD_3)(__VA_ARGS__)
 
 // CNETMOD_MODEL(Type, "table_name", CNETMOD_FIELD(...), ...)
-#define CNETMOD_MODEL(TYPE, TABLE, ...) \
-    template<> \
-    struct ::cnetmod::mysql::orm::model_traits<TYPE> { \
-        using _cnetmod_model_type = TYPE; \
-        static auto meta() -> const ::cnetmod::mysql::orm::table_meta<TYPE>& { \
-            static const ::cnetmod::mysql::orm::field_mapping<TYPE> fields_[] = { \
-                __VA_ARGS__ \
-            }; \
-            static const ::cnetmod::mysql::orm::table_meta<TYPE> m{ \
-                TABLE, \
-                std::span<const ::cnetmod::mysql::orm::field_mapping<TYPE>>( \
-                    fields_, sizeof(fields_) / sizeof(fields_[0])) \
-            }; \
-            return m; \
-        } \
+#define CNETMOD_MODEL(TYPE, TABLE, ...)                                    \
+    template <>                                                            \
+    struct ::cnetmod::orm::model_traits<TYPE>                              \
+    {                                                                      \
+        using _cnetmod_model_type = TYPE;                                  \
+        static auto meta() -> const ::cnetmod::orm::table_meta<TYPE>&      \
+        {                                                                  \
+            static const ::cnetmod::orm::field_mapping<TYPE> fields_[] = { \
+                __VA_ARGS__};                                              \
+            static const ::cnetmod::orm::table_meta<TYPE> m{               \
+                TABLE,                                                     \
+                std::span<const ::cnetmod::orm::field_mapping<TYPE>>(      \
+                    fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
+            return m;                                                      \
+        }                                                                  \
     };
 
 // Helper macro to define field name constants
 // Usage after CNETMOD_MODEL:
 //   CNETMOD_FIELDS(AiPrompt, id, name, prompt_template, is_default)
-#define CNETMOD_FIELDS(TYPE, ...) \
-    namespace orm_fields { \
-        struct TYPE { \
-            CNETMOD_FIELD_CONSTANTS(__VA_ARGS__) \
-        }; \
+#define CNETMOD_FIELDS(TYPE, ...)            \
+    namespace orm_fields {                   \
+    struct TYPE                              \
+    {                                        \
+        CNETMOD_FIELD_CONSTANTS(__VA_ARGS__) \
+    };                                       \
     }
 
 #define CNETMOD_FIELD_CONSTANTS(...) \
@@ -137,8 +142,8 @@
 #define CNETMOD_FIELD_CONST_EACH(...) \
     CNETMOD_FIELD_CONST_EXPAND(CNETMOD_FIELD_CONST, __VA_ARGS__)
 
-#define CNETMOD_FIELD_CONST_EXPAND(MACRO, ...) \
-    CNETMOD_FIELD_CONST_IMPL(MACRO, __VA_ARGS__, \
+#define CNETMOD_FIELD_CONST_EXPAND(MACRO, ...)            \
+    CNETMOD_FIELD_CONST_IMPL(MACRO, __VA_ARGS__,          \
         CNETMOD_FIELD_CONST_END, CNETMOD_FIELD_CONST_END, \
         CNETMOD_FIELD_CONST_END, CNETMOD_FIELD_CONST_END, \
         CNETMOD_FIELD_CONST_END, CNETMOD_FIELD_CONST_END, \
@@ -150,28 +155,28 @@
         CNETMOD_FIELD_CONST_END, CNETMOD_FIELD_CONST_END, \
         CNETMOD_FIELD_CONST_END, CNETMOD_FIELD_CONST_END)
 
-#define CNETMOD_FIELD_CONST_IMPL(M, \
-    _1, _2, _3, _4, _5, _6, _7, _8, _9, _10, \
+#define CNETMOD_FIELD_CONST_IMPL(M,                        \
+    _1, _2, _3, _4, _5, _6, _7, _8, _9, _10,               \
     _11, _12, _13, _14, _15, _16, _17, _18, _19, _20, ...) \
-    CNETMOD_FIELD_CONST_APPLY(M, _1) \
-    CNETMOD_FIELD_CONST_APPLY(M, _2) \
-    CNETMOD_FIELD_CONST_APPLY(M, _3) \
-    CNETMOD_FIELD_CONST_APPLY(M, _4) \
-    CNETMOD_FIELD_CONST_APPLY(M, _5) \
-    CNETMOD_FIELD_CONST_APPLY(M, _6) \
-    CNETMOD_FIELD_CONST_APPLY(M, _7) \
-    CNETMOD_FIELD_CONST_APPLY(M, _8) \
-    CNETMOD_FIELD_CONST_APPLY(M, _9) \
-    CNETMOD_FIELD_CONST_APPLY(M, _10) \
-    CNETMOD_FIELD_CONST_APPLY(M, _11) \
-    CNETMOD_FIELD_CONST_APPLY(M, _12) \
-    CNETMOD_FIELD_CONST_APPLY(M, _13) \
-    CNETMOD_FIELD_CONST_APPLY(M, _14) \
-    CNETMOD_FIELD_CONST_APPLY(M, _15) \
-    CNETMOD_FIELD_CONST_APPLY(M, _16) \
-    CNETMOD_FIELD_CONST_APPLY(M, _17) \
-    CNETMOD_FIELD_CONST_APPLY(M, _18) \
-    CNETMOD_FIELD_CONST_APPLY(M, _19) \
+    CNETMOD_FIELD_CONST_APPLY(M, _1)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _2)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _3)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _4)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _5)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _6)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _7)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _8)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _9)                       \
+    CNETMOD_FIELD_CONST_APPLY(M, _10)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _11)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _12)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _13)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _14)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _15)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _16)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _17)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _18)                      \
+    CNETMOD_FIELD_CONST_APPLY(M, _19)                      \
     CNETMOD_FIELD_CONST_APPLY(M, _20)
 
 #define CNETMOD_FIELD_CONST_APPLY(M, X) \
@@ -190,4 +195,3 @@
     CNETMOD_FIELD_CONST_IS_END_##X
 
 #define CNETMOD_FIELD_CONST_IS_END_CNETMOD_FIELD_CONST_END 1
-

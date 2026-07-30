@@ -1,9 +1,13 @@
+module;
+#include <cnetmod/config.hpp>
 module cnetmod.protocol.http.middleware.access_log;
 
 import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
+#ifdef CNETMOD_HAS_PROTOCOL_WEBSOCKET
 import cnetmod.protocol.websocket;
+#endif
 import cnetmod.core.log;
 
 namespace cnetmod {
@@ -155,6 +159,7 @@ auto access_log(logger::level lv, std::source_location loc)
     return access_log(access_log_options{.lv = lv}, loc);
 }
 
+#ifdef CNETMOD_HAS_PROTOCOL_WEBSOCKET
 auto ws_access_log(ws::ws_handler_fn handler, logger::level lv,
     std::source_location loc) -> ws::ws_handler_fn
 {
@@ -185,4 +190,5 @@ auto ws_access_log(ws::ws_handler_fn handler, logger::level lv,
             loc);
     };
 }
+#endif
 } // namespace cnetmod

@@ -8,7 +8,9 @@ export import :connection_client;
 export import :pool;
 export import :pipeline;
 export import :transaction;
+#ifdef CNETMOD_HAS_ORM
 export import :orm;
+#endif
 // Internal wire/auth partitions are consumed by the connection implementation.
 import :protocol;
 import :auth;

@@ -6,14 +6,19 @@ import :format_sql;
 import :orm_id_gen;
 import :orm_meta;
 import :orm_mapper;
+import cnetmod.orm.sql_parameters;
+import cnetmod.orm.sql_statement_formatting;
 
-namespace cnetmod::mysql::orm {
+namespace cnetmod::orm::mysql_detail {
+using namespace cnetmod::mysql;
+using namespace cnetmod::orm;
+using param_value = cnetmod::orm::param_value;
 
 // =============================================================================
 // select_builder<T> — SELECT query builder
 // =============================================================================
 
-export template <Model T>
+template <Model T>
 class select_builder
 {
 public:
@@ -103,7 +108,7 @@ public:
         if (!where_fmt_.empty())
         {
             sql.append(" WHERE ");
-            auto r = format_sql(opts, where_fmt_, where_args_);
+            auto r = cnetmod::orm::format_sql(opts, where_fmt_, where_args_);
             if (r)
                 sql.append(*r);
             else
@@ -148,7 +153,7 @@ private:
 };
 
 /// Factory function
-export template <Model T>
+template <Model T>
 auto select() -> select_builder<T>
 {
     return {};
@@ -158,7 +163,7 @@ auto select() -> select_builder<T>
 // insert_builder<T> — INSERT builder
 // =============================================================================
 
-export template <Model T>
+template <Model T>
 class insert_builder
 {
 public:
@@ -223,7 +228,7 @@ public:
         }
 
         // format_sql expands placeholders
-        auto final_sql = format_sql(opts, sql, params);
+        auto final_sql = cnetmod::orm::format_sql(opts, sql, params);
         return {final_sql ? std::move(*final_sql) : sql, std::move(params)};
     }
 
@@ -232,7 +237,7 @@ private:
 };
 
 /// Factory function
-export template <Model T>
+template <Model T>
 auto insert_of() -> insert_builder<T>
 {
     return {};
@@ -242,7 +247,7 @@ auto insert_of() -> insert_builder<T>
 // update_builder<T> — UPDATE builder
 // =============================================================================
 
-export template <Model T>
+template <Model T>
 class update_builder
 {
 public:
@@ -325,7 +330,7 @@ public:
             }
         }
 
-        auto final_sql = format_sql(opts, sql, params);
+        auto final_sql = cnetmod::orm::format_sql(opts, sql, params);
         return {final_sql ? std::move(*final_sql) : sql, std::move(params)};
     }
 
@@ -338,7 +343,7 @@ private:
 };
 
 /// Factory function
-export template <Model T>
+template <Model T>
 auto update_of() -> update_builder<T>
 {
     return {};
@@ -348,7 +353,7 @@ auto update_of() -> update_builder<T>
 // delete_builder<T> — DELETE builder
 // =============================================================================
 
-export template <Model T>
+template <Model T>
 class delete_builder
 {
 public:
@@ -402,7 +407,7 @@ public:
             sql.append(where_);
         }
 
-        auto final_sql = format_sql(opts, sql, params);
+        auto final_sql = cnetmod::orm::format_sql(opts, sql, params);
         return {final_sql ? std::move(*final_sql) : sql, std::move(params)};
     }
 
@@ -413,7 +418,7 @@ private:
 };
 
 /// Factory function
-export template <Model T>
+template <Model T>
 auto delete_of() -> delete_builder<T>
 {
     return {};
@@ -424,7 +429,7 @@ auto delete_of() -> delete_builder<T>
 // =============================================================================
 
 /// Generate CREATE TABLE IF NOT EXISTS SQL
-export template <Model T>
+template <Model T>
 auto build_create_table_sql() -> std::string
 {
     auto& meta = model_traits<T>::meta();
@@ -481,7 +486,7 @@ auto build_create_table_sql() -> std::string
 }
 
 /// Generate DROP TABLE IF EXISTS SQL
-export template <Model T>
+template <Model T>
 auto build_drop_table_sql() -> std::string
 {
     auto& meta = model_traits<T>::meta();
@@ -491,4 +496,31 @@ auto build_drop_table_sql() -> std::string
     return sql;
 }
 
-} // namespace cnetmod::mysql::orm
+} // namespace cnetmod::orm::mysql_detail
+
+export namespace cnetmod::orm {
+template <Model T> using mysql_select_builder = mysql_detail::select_builder<T>;
+template <Model T> using mysql_insert_builder = mysql_detail::insert_builder<T>;
+template <Model T> using mysql_update_builder = mysql_detail::update_builder<T>;
+template <Model T> using mysql_delete_builder = mysql_detail::delete_builder<T>;
+
+template <Model T> auto mysql_select()
+{
+    return mysql_detail::select<T>();
+}
+
+template <Model T> auto mysql_insert()
+{
+    return mysql_detail::insert_of<T>();
+}
+
+template <Model T> auto mysql_update()
+{
+    return mysql_detail::update_of<T>();
+}
+
+template <Model T> auto mysql_delete()
+{
+    return mysql_detail::delete_of<T>();
+}
+} // namespace cnetmod::orm
