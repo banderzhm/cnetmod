@@ -39,7 +39,8 @@ jobs:
 
       - name: Install ICU package
         shell: pwsh
-        run: & "$env:VCPKG_ROOT/vcpkg.exe" install icu:x64-windows --disable-metrics
+        run: |
+          & "$env:VCPKG_ROOT/vcpkg.exe" install icu:x64-windows --disable-metrics
 
       - name: Setup MSBuild (VS 2026 / VS18)
         uses: microsoft/setup-msbuild@v2
