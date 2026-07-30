@@ -616,6 +616,48 @@ auto client::copy_to(std::string_view copy_sql, copy_data_sink sink)
     }
 }
 
+auto client::drain_until_ready() -> task<bool>
+{
+    for (;;)
+    {
+        auto message = co_await read_message();
+        if (!message)
+            co_return false;
+        if (message->type == 'Z')
+            co_return true;
+    }
+}
+
+auto client::abort_streaming_portal(std::string_view portal) -> task<void>
+{
+    if (!co_await write_all(detail::streaming_portal_close_messages(portal)))
+    {
+        disconnect();
+        co_return;
+    }
+    if (!co_await drain_until_ready())
+        disconnect();
+}
+
+auto client::deliver_batch(std::vector<row>& batch,
+    const std::function<task<void>(std::span<const row>)>& consume)
+    -> task<std::exception_ptr>
+{
+    if (batch.empty())
+        co_return nullptr;
+    try
+    {
+        co_await consume(std::span<const row>(batch));
+    }
+    catch (...)
+    {
+        batch.clear();
+        co_return std::current_exception();
+    }
+    batch.clear();
+    co_return nullptr;
+}
+
 auto client::query_batches(std::string_view sql, std::size_t batch_size,
     std::function<task<void>(std::span<const row>)> consume) -> task<result_set>
 {
@@ -637,44 +679,7 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
     std::vector<std::uint32_t> oids;
     std::vector<row> batch;
     batch.reserve(batch_size);
-    std::exception_ptr callback_failure;
     bool command_complete{};
-
-    auto drain_until_ready = [this]() -> task<bool>
-    {
-        for (;;)
-        {
-            auto message = co_await read_message();
-            if (!message)
-                co_return false;
-            if (message->type == 'Z')
-                co_return true;
-        }
-    };
-    auto abort_portal = [this, &portal, &drain_until_ready]() -> task<void>
-    {
-        if (!co_await write_all(detail::streaming_portal_close_messages(portal)))
-        {
-            disconnect();
-            co_return;
-        }
-        if (!co_await drain_until_ready())
-            disconnect();
-    };
-    auto deliver = [&]() -> task<void>
-    {
-        if (batch.empty())
-            co_return;
-        try
-        {
-            co_await consume(std::span<const row>(batch));
-        }
-        catch (...)
-        {
-            callback_failure = std::current_exception();
-        }
-        batch.clear();
-    };
 
     for (;;)
     {
@@ -689,13 +694,13 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
         {
             if (payload.size() < 2)
             {
-                co_await abort_portal();
+                co_await abort_streaming_portal(portal);
                 co_return make_error("truncated RowDescription");
             }
             const auto count = read_u16(payload.first(2));
             if (count > options_.maximum_column_count)
             {
-                co_await abort_portal();
+                co_await abort_streaming_portal(portal);
                 co_return make_error("PostgreSQL column limit exceeded");
             }
             result.columns.clear();
@@ -708,7 +713,7 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
                 auto name = read_cstring(payload, position);
                 if (!name || position + 18 > payload.size())
                 {
-                    co_await abort_portal();
+                    co_await abort_streaming_portal(portal);
                     co_return make_error("invalid RowDescription");
                 }
                 column_meta column;
@@ -733,13 +738,13 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
         {
             if (payload.size() < 2)
             {
-                co_await abort_portal();
+                co_await abort_streaming_portal(portal);
                 co_return make_error("truncated DataRow");
             }
             const auto count = read_u16(payload.first(2));
             if (count != oids.size())
             {
-                co_await abort_portal();
+                co_await abort_streaming_portal(portal);
                 co_return make_error("DataRow column count mismatch");
             }
             std::size_t position = 2;
@@ -749,7 +754,7 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
             {
                 if (position + 4 > payload.size())
                 {
-                    co_await abort_portal();
+                    co_await abort_streaming_portal(portal);
                     co_return make_error("truncated DataRow field length");
                 }
                 const auto length = read_u32(payload.subspan(position, 4));
@@ -761,7 +766,7 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
                 }
                 if (length > payload.size() - position)
                 {
-                    co_await abort_portal();
+                    co_await abort_streaming_portal(portal);
                     co_return make_error("invalid DataRow field length");
                 }
                 std::string_view value(reinterpret_cast<const char*>(payload.data() + position), length);
@@ -771,20 +776,20 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
             batch.push_back(std::move(values));
             if (batch.size() == batch_size)
             {
-                co_await deliver();
+                auto callback_failure = co_await deliver_batch(batch, consume);
                 if (callback_failure)
                 {
-                    co_await abort_portal();
+                    co_await abort_streaming_portal(portal);
                     std::rethrow_exception(callback_failure);
                 }
             }
         }
         else if (message->type == 's')
         {
-            co_await deliver();
+            auto callback_failure = co_await deliver_batch(batch, consume);
             if (callback_failure)
             {
-                co_await abort_portal();
+                co_await abort_streaming_portal(portal);
                 std::rethrow_exception(callback_failure);
             }
             auto next = detail::streaming_portal_continue_messages(portal, static_cast<std::uint32_t>(batch_size));
@@ -796,10 +801,10 @@ auto client::query_batches(std::string_view sql, std::size_t batch_size,
         }
         else if (message->type == 'C')
         {
-            co_await deliver();
+            auto callback_failure = co_await deliver_batch(batch, consume);
             if (callback_failure)
             {
-                co_await abort_portal();
+                co_await abort_streaming_portal(portal);
                 std::rethrow_exception(callback_failure);
             }
             std::size_t position{};

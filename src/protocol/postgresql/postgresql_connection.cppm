@@ -131,6 +131,11 @@ private:
     auto write_all(std::span<const std::uint8_t>) -> task<bool>;
     auto authenticate() -> task<result_set>;
     auto collect_results() -> task<result_set>;
+    auto drain_until_ready() -> task<bool>;
+    auto abort_streaming_portal(std::string_view portal) -> task<void>;
+    auto deliver_batch(std::vector<row>& batch,
+        const std::function<task<void>(std::span<const row>)>& consume)
+        -> task<std::exception_ptr>;
     void disconnect(std::error_code = {}) noexcept;
 
     io_context& context_;
