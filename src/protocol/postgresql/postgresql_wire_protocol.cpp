@@ -166,6 +166,17 @@ namespace {
         return parsed.ec == std::errc{} && parsed.ptr == text.data() + text.size();
     }
 
+    // libc++ exposes floating-point from_chars only on recent Apple SDKs.
+    // PostgreSQL numeric text is protocol data, so parse it in the classic C
+    // locale and require the complete field to be consumed on every platform.
+    auto parse_decimal(std::string_view text, double& value) -> bool
+    {
+        std::istringstream input{std::string{text}};
+        input.imbue(std::locale::classic());
+        input >> value >> std::ws;
+        return !input.fail() && input.eof();
+    }
+
 } // namespace
 
 auto startup_message(const connection_options& options) -> std::vector<std::uint8_t>
@@ -621,7 +632,7 @@ auto decode_text_field(std::uint32_t oid, std::string_view value) -> field_value
     if (oid == 700 || oid == 701)
     {
         double number{};
-        if (auto r = std::from_chars(value.data(), value.data() + value.size(), number); r.ec == std::errc{})
+        if (parse_decimal(value, number))
             return field_value::from_double(number);
     }
     if (oid == 1082 && value.size() == 10)
