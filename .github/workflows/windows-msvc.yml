@@ -2,6 +2,9 @@ name: Windows MSVC Build
 
 env:
   ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+  # Reuse vcpkg's compiled packages between workflow runs. The cache key is
+  # derived by vcpkg from the manifest, triplet and compiler ABI.
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
 on:
   push:
@@ -32,7 +35,7 @@ jobs:
           choco install cmake --version=4.2.3 -y --force
           cmake --version
 
-      - name: Install ICU through vcpkg
+      - name: Setup vcpkg binary cache
         uses: lukka/run-vcpkg@v11
         with:
           runVcpkgInstall: false

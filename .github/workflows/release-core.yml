@@ -16,6 +16,9 @@ permissions:
 
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  # Lets the Windows release build reuse manifest packages from GitHub's
+  # native Actions cache instead of compiling/downloading them every release.
+  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
 
 jobs:
   core-windows:
@@ -30,7 +33,7 @@ jobs:
       - name: Install CMake 4.2.3
         run: choco install cmake --version=4.2.3 -y --force
 
-      - name: Install ICU through vcpkg
+      - name: Setup vcpkg binary cache
         uses: lukka/run-vcpkg@v11
         with:
           runVcpkgInstall: false
