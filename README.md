@@ -1,6 +1,6 @@
 # cnetmod
 
-Cross-platform asynchronous network library using C++23 modules and native coroutines.
+Production-oriented C++23 asynchronous networking infrastructure built on native coroutines and platform-native I/O backends.
 
 > In the age of AI-assisted programming, architectural maturity has leveled the differences in development difficulty; performance and efficiency are the only decisive benchmarks.
 
