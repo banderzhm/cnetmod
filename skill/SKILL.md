@@ -14,6 +14,7 @@
 8. 字符集转换必须使用 `cnetmod.utils` 中的转换工具，禁止自行实现编码转换
 9. 程序入口**必须**先创建 `cnetmod::net_init net;`（RAII），否则 Windows 平台 socket 不可用
 10. 耗时 CPU 操作和兼容其他协程库必须通过 executor（`thread_pool`/`spawn_on`）和 bridge（`blocking_invoke`/`await_sender`/`from_awaitable`）卸载，**禁止在协程中同步阻塞** — 参见 [executor-bridge.md](coro/executor-bridge.md)
+11. C++23 模块的**导入可见性必须显式声明** — 传递 `import` **不会自动继承**可见性，在模块 A 中使用模块 B 的符号前必须直接 `import cnetmod.xxx` — 否则 Clang 报错 `declaration of 'X' must be imported from module 'Y' before it is required` — 参见 [module-conventions.md](infra/module-conventions.md)
 
 ## 我要做 X → 看哪个文件
 
