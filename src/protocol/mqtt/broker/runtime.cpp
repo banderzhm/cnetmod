@@ -301,6 +301,26 @@ void broker::set_publish_observer(publish_observer observer)
     publish_observer_ = std::move(observer);
 }
 
+void broker::set_connect_observer(connection_observer observer)
+{
+    connect_observer_ = std::move(observer);
+}
+
+void broker::set_disconnect_observer(connection_observer observer)
+{
+    disconnect_observer_ = std::move(observer);
+}
+
+void broker::set_connection_admission_handler(connection_admission_handler handler)
+{
+    connection_admission_handler_ = std::move(handler);
+}
+
+void broker::set_connection_release_observer(connection_observer observer)
+{
+    connection_release_observer_ = std::move(observer);
+}
+
 auto broker::security() noexcept -> security_config&
 {
     return security_;
@@ -933,6 +953,7 @@ auto broker::handle_connection(socket client, io_context& io, bool use_tls)
     auto conn = std::make_shared<detail::conn_state>(std::move(client), io,
         opts_.delivery_channel_size,
         opts_.write_channel_size);
+    conn->connection_id = next_connection_id_.fetch_add(1, std::memory_order_relaxed);
 
 #ifdef CNETMOD_HAS_SSL
     if (use_tls && ssl_ctx_)
@@ -1404,6 +1425,19 @@ auto broker::handle_connect(const mqtt_frame& frame,
         }
     }
 
+    if (connection_admission_handler_ &&
+        !connection_admission_handler_(cd.client_id, conn->connection_id))
+    {
+        logger::warn("mqtt connection admission rejected client={}", cd.client_id);
+        const auto rc = (cd.version == protocol_version::v5)
+            ? static_cast<std::uint8_t>(v5::connect_reason_code::server_busy)
+            : static_cast<std::uint8_t>(connect_return_code::server_unavailable);
+        (void)co_await conn->do_write(encode_connack(false, rc, cd.version),
+            outbound_priority::high);
+        co_return false;
+    }
+    conn->admission_granted = true;
+
     std::shared_ptr<detail::conn_state> takeover_conn;
     bool session_present = false;
     {
@@ -1553,6 +1587,9 @@ auto broker::handle_connect(const mqtt_frame& frame,
     if (!wr)
     {
         write_failures_.fetch_add(1, std::memory_order_relaxed);
+        if (connection_release_observer_)
+            connection_release_observer_(cd.client_id, conn->connection_id);
+        conn->admission_granted = false;
         co_return false;
     }
     accepted_connections_.fetch_add(1, std::memory_order_relaxed);
@@ -1560,6 +1597,9 @@ auto broker::handle_connect(const mqtt_frame& frame,
 
     logger::info("mqtt connected client={} version={} session_present={}",
         cd.client_id, to_string(cd.version), session_present);
+
+    if (connect_observer_)
+        connect_observer_(cd.client_id, conn->connection_id);
 
     if (session_present)
         co_await deliver_inflight_resend(conn);
@@ -2047,6 +2087,11 @@ auto broker::cleanup_connection(std::shared_ptr<detail::conn_state> conn)
     conn->cleanup_done = true;
     active_connections_.fetch_sub(1, std::memory_order_relaxed);
     auto cid = conn->session->client_id;
+    if (conn->admission_granted && connection_release_observer_)
+        connection_release_observer_(cid, conn->connection_id);
+    conn->admission_granted = false;
+    if (disconnect_observer_)
+        disconnect_observer_(cid, conn->connection_id);
     {
         co_await state_mtx_.lock();
         async_lock_guard sg(state_mtx_, std::adopt_lock);

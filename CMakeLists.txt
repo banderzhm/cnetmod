@@ -55,10 +55,13 @@ detect_stdlib_module_paths()
 if(MSVC)
     add_compile_options(/std:c++latest)
     add_compile_options(/utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj /FS /wd4737)
-    # Keep debug information in each object file. The core target contains many
-    # module translation units; a shared compiler PDB can otherwise become a
-    # point of contention even when /FS is enabled.
-    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
+    # A static library archives its object files verbatim.  Do not embed C7
+    # debug information (/Z7) in Release or MinSizeRel objects: with the large
+    # number of module translation units this makes the distributable archive
+    # hundreds of megabytes larger.  Retain the existing embedded debug info
+    # only in configurations intended for debugging.
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT
+        "$<$<CONFIG:Debug,RelWithDebInfo>:Embedded>")
 
    #[[ add_compile_options(/EHsc /W4 /utf-8 /Zc:__cplusplus /Zc:preprocessor /bigobj)
 
@@ -238,6 +241,7 @@ target_include_directories(cnetmod_core PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
+target_compile_features(cnetmod_core PUBLIC cxx_std_23)
 
 # Platform-specific macro definitions
 target_compile_definitions(cnetmod_core PUBLIC
@@ -306,6 +310,16 @@ if(CNETMOD_HAS_LEVELDB AND CNETMOD_LEVELDB_TARGET STREQUAL "leveldb")
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/leveldb/include/"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 endif()
+if(CNETMOD_HAS_PUGIXML AND CNETMOD_PUGIXML_TARGET STREQUAL "pugixml-static")
+    # pugixml is built from the bundled source when no system package is
+    # selected.  Exporting cnetmod_core without installing this archive leaves
+    # every downstream Release consumer with a dangling imported target.
+    install(TARGETS pugixml-static
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
+    )
+endif()
 install(TARGETS cnetmod_core
     EXPORT cnetmodTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -315,6 +329,14 @@ install(TARGETS cnetmod_core
 )
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+
+# Install stdexec headers (transitive dependency for cnetmod.executor.pool).
+# Consumers that import the pool module need <exec/static_thread_pool.hpp>.
+if(EXISTS "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}/exec/static_thread_pool.hpp")
+    install(DIRECTORY "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
+        FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h")
+endif()
 
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodConfig.cmake.in"
@@ -439,10 +461,10 @@ if(CNETMOD_USING_MOLD OR CNETMOD_USING_MIMALLOC)
     message(STATUS "")
     message(STATUS "Performance Optimizations Enabled:")
     if(CNETMOD_USING_MOLD)
-        message(STATUS "  鉁?mold linker: 10-20x faster linking")
+        message(STATUS "  mold linker: 10-20x faster linking")
     endif()
     if(CNETMOD_USING_MIMALLOC)
-        message(STATUS "  鉁?mimalloc: 2-3x faster memory allocation")
+        message(STATUS "  mimalloc: 2-3x faster memory allocation")
     endif()
     message(STATUS "")
 endif()

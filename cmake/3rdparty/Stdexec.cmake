@@ -28,5 +28,7 @@ macro(cnetmod_configure_stdexec)
 endmacro()
 
 function(cnetmod_link_stdexec TARGET_NAME)
-    target_include_directories(${TARGET_NAME} SYSTEM PRIVATE "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}")
+    target_include_directories(${TARGET_NAME} SYSTEM PUBLIC
+        "$<BUILD_INTERFACE:${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}>"
+        "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
 endfunction()

@@ -76,7 +76,7 @@ namespace {
 
     inline auto& file_pool()
     {
-        static exec::static_thread_pool pool;
+        static thread_pool pool;
         return pool;
     }
 

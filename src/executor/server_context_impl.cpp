@@ -58,9 +58,14 @@ auto server_context::worker_ios() -> std::vector<io_context*>
     return result;
 }
 
-auto server_context::pool() noexcept -> exec::static_thread_pool&
+auto server_context::pool() noexcept -> thread_pool&
 {
     return pool_;
+}
+
+void server_context::spawn_next(task<void> t)
+{
+    spawn_on(next_worker_io(), std::move(t));
 }
 
 void server_context::run()

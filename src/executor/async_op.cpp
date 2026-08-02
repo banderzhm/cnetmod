@@ -7,6 +7,7 @@ module cnetmod.executor.async_op;
 import std;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
+import cnetmod.core.file;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
@@ -324,5 +325,70 @@ auto async_file_write_batch(
 }
 
 #endif
+
+// =============================================================================
+// Convenience File I/O
+// =============================================================================
+
+auto async_file_read_all(io_context& ctx, const std::filesystem::path& path)
+    -> task<std::expected<std::string, std::error_code>>
+{
+    auto handle = co_await async_file_open(ctx, path, open_mode::read);
+    if (!handle)
+        co_return std::unexpected(handle.error());
+
+    auto st = co_await async_file_stat(ctx, path);
+    if (!st)
+    {
+        co_await async_file_close(ctx, *handle);
+        co_return std::unexpected(st.error());
+    }
+
+    std::string content(static_cast<std::size_t>(st->size), '\0');
+    if (st->size > 0)
+    {
+        auto n = co_await async_file_read(ctx, *handle,
+            mutable_buffer{content.data(), content.size()}, 0);
+        if (!n)
+        {
+            co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(n.error());
+        }
+        content.resize(*n);
+    }
+
+    co_await async_file_close(ctx, *handle);
+    co_return content;
+}
+
+auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
+    std::string_view content)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto handle = co_await async_file_open(ctx, path,
+        open_mode::write | open_mode::create | open_mode::truncate);
+    if (!handle)
+        co_return std::unexpected(handle.error());
+
+    if (!content.empty())
+    {
+        std::size_t written = 0;
+        while (written < content.size())
+        {
+            auto n = co_await async_file_write(ctx, *handle,
+                const_buffer{content.data() + written, content.size() - written},
+                written);
+            if (!n)
+            {
+                co_await async_file_close(ctx, *handle);
+                co_return std::unexpected(n.error());
+            }
+            written += *n;
+        }
+    }
+
+    co_await async_file_close(ctx, *handle);
+    co_return {};
+}
 
 } // namespace cnetmod
