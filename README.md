@@ -258,8 +258,9 @@ cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, regis
 
 **Scheduler/executor**: `io_context` provides `post(coroutine_handle<>)` for thread-safe task submission. Platform-specific `wake()` implementations:
 - Windows: `PostQueuedCompletionStatus` with sentinel key
-- Linux: Non-blocking pipe + io_uring read
-- macOS/epoll: eventfd/pipe drain triggers
+- Linux io_uring: Non-blocking pipe + io_uring read
+- Linux epoll: eventfd drain trigger
+- macOS kqueue: pipe drain trigger
 
 **Coroutine primitives**: `task<T>` uses symmetric transfer for tail-call optimization. `spawn()` bridges eager coroutines to the scheduler via `detached_task`.
 

@@ -253,9 +253,10 @@ cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、
 ```
 
 **调度器/执行器**: `io_context` 提供 `post(coroutine_handle<>)` 用于线程安全的任务提交。平台特定的 `wake()` 实现：
-- Windows: `PostQueuedCompletionStatus` + 哨兵键
-- Linux: 非阻塞管道 + io_uring 读取
-- macOS/epoll: eventfd/pipe 排空触发
+- Windows：`PostQueuedCompletionStatus` + 哨兵键
+- Linux io_uring：非阻塞管道 + io_uring 读取
+- Linux epoll：eventfd 排空触发
+- macOS kqueue：管道排空触发
 
 **协程原语**: `task<T>` 使用对称传输实现尾调用优化。`spawn()` 通过 `detached_task` 将急切协程桥接到调度器。
 
