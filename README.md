@@ -2,6 +2,8 @@
 
 Cross-platform asynchronous network library using C++23 modules and native coroutines.
 
+> In the age of AI-assisted programming, architectural maturity has leveled the differences in development difficulty; performance and efficiency are the only decisive benchmarks.
+
 [![Linux Build](https://github.com/banderzhm/cnetmod/actions/workflows/linux-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/linux-clang.yml)
 [![macOS Build](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml)
 [![Windows Build](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml)
@@ -19,6 +21,13 @@ English | [简体中文](README_zh.md)
 ### AI Development Skills
 
 The [`skill/`](skill/) directory contains the project-specific instructions for AI-assisted development. AI agents should read [`skill/SKILL.md`](skill/SKILL.md) first, then consult the topic-specific guidance under `skill/core`, `skill/coro`, `skill/database`, `skill/http`, `skill/infra`, `skill/protocols`, and `skill/security` as needed.
+
+### Engineering Evidence
+
+- **Architecture**: C++23 module interfaces with platform-specific implementations selected by CMake; native IOCP, io_uring, epoll, and kqueue backends share the same coroutine-facing APIs.
+- **Verification**: GitHub Actions builds target Linux, macOS, and Windows configurations. The repository includes unit, protocol interoperability, benchmark, chaos, and restart-recovery test paths.
+- **Reproducibility**: Performance sections identify hardware, compiler, backend, workload, and concurrency parameters, and point to local benchmark targets for verification.
+- **Operational behavior**: Protocol clients and brokers include reconnect, retry, flow-control, persistence, TLS/mTLS, and recovery mechanisms where applicable; asynchronous APIs use structured results and error codes.
 
 ## Features
 

@@ -2,6 +2,8 @@
 
 基于 C++23 模块和原生协程的跨平台异步网络库。
 
+> 在 AI 编程时代，架构的成熟度已抹平开发难度的差异，性能与效率才是唯一的决胜标尺。
+
 [![Linux Build](https://github.com/banderzhm/cnetmod/actions/workflows/linux-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/linux-clang.yml)
 [![macOS Build](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/macos-clang.yml)
 [![Windows Build](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml/badge.svg)](https://github.com/banderzhm/cnetmod/actions/workflows/windows-msvc.yml)
@@ -19,6 +21,13 @@
 ### AI 开发技能
 
 [`skill/`](skill/) 目录包含 AI 辅助开发所需的项目专属指导。AI 代理应先阅读 [`skill/SKILL.md`](skill/SKILL.md)，再根据需要查阅 `skill/core`、`skill/coro`、`skill/database`、`skill/http`、`skill/infra`、`skill/protocols` 和 `skill/security` 下的专题说明。
+
+### 工程化证据
+
+- **架构**：采用 C++23 模块接口，通过 CMake 选择平台特定实现；IOCP、io_uring、epoll 和 kqueue 后端共享协程接口。
+- **验证**：GitHub Actions 覆盖 Linux、macOS 和 Windows 构建配置；仓库包含单元测试、协议互操作测试、基准测试、混沌测试及重启恢复测试路径。
+- **可复现性**：性能章节明确记录硬件、编译器、后端、负载和并发参数，并提供本地基准测试目标供验证。
+- **运行特性**：协议客户端和 broker 在适用场景中提供重连、重试、流控、持久化、TLS/mTLS 和恢复机制；异步 API 使用结构化结果和错误码。
 
 ## 功能特性
 
