@@ -1,14 +1,12 @@
-module cnetmod.orm.query_wrapper;
-
 namespace cnetmod::orm {
 
 // =============================================================================
-// Anonymous helpers
+// Exported helpers used by the query-wrapper template definitions below.
 // =============================================================================
 
-namespace {
+export namespace query_wrapper_detail {
 
-auto join_type_str(join_type type) -> std::string_view
+inline auto join_type_str(join_type type) -> std::string_view
 {
     switch (type)
     {
@@ -36,8 +34,8 @@ auto aggregate_func_str(aggregate_func func) -> std::string_view
 }
 
 /// Build an aggregate SQL fragment, e.g.  COUNT(*)  or  COUNT(DISTINCT col)
-auto build_aggregate_fragment(const aggregate_column& agg,
-                              const dialect_config& cfg) -> std::string
+inline auto build_aggregate_fragment(const aggregate_column& agg,
+                                     const dialect_config& cfg) -> std::string
 {
     auto func_name = aggregate_func_str(agg.func);
     std::string sql;
@@ -60,9 +58,9 @@ auto build_aggregate_fragment(const aggregate_column& agg,
 }
 
 /// Build a HAVING aggregate fragment (without alias)
-auto build_having_aggregate_fragment(aggregate_func func,
-                                     const std::string& column,
-                                     const dialect_config& cfg) -> std::string
+inline auto build_having_aggregate_fragment(aggregate_func func,
+                                            const std::string& column,
+                                            const dialect_config& cfg) -> std::string
 {
     auto func_name = aggregate_func_str(func);
     if (func == aggregate_func::count_distinct)
@@ -75,7 +73,7 @@ auto build_having_aggregate_fragment(aggregate_func func,
                        column == "*" ? "*" : quote_identifier(column, cfg));
 }
 
-} // anonymous namespace
+} // namespace query_wrapper_detail
 
 // =============================================================================
 // query_wrapper<T> — non-template method implementations
@@ -415,7 +413,7 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
             for (auto& agg : aggregate_columns_)
             {
                 if (!first) sql += ", ";
-                sql += build_aggregate_fragment(agg, cfg);
+                sql += query_wrapper_detail::build_aggregate_fragment(agg, cfg);
                 first = false;
             }
         }
@@ -428,7 +426,7 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
     for (auto& j : joins_)
     {
         sql += std::format(" {} {} ON {}",
-                           join_type_str(j.type),
+                           query_wrapper_detail::join_type_str(j.type),
                            quote_identifier(j.table, cfg),
                            j.condition);
     }
@@ -472,7 +470,7 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
                            : " OR ";
             }
             auto& h = having_conditions_[i];
-            sql += build_having_aggregate_fragment(h.func, h.column, cfg);
+            sql += query_wrapper_detail::build_having_aggregate_fragment(h.func, h.column, cfg);
             ++param_index;
             sql += std::format(" {} {}", h.op, make_placeholder(param_index, cfg));
             params.push_back(h.value);
@@ -529,7 +527,7 @@ auto query_wrapper<T>::build_count_sql(const dialect_config& cfg) const
     for (auto& j : joins_)
     {
         sql += std::format(" {} {} ON {}",
-                           join_type_str(j.type),
+                           query_wrapper_detail::join_type_str(j.type),
                            quote_identifier(j.table, cfg),
                            j.condition);
     }

@@ -78,13 +78,13 @@ void stage_response::set_ok()
 
 auto pipeline_request::add_execute(std::string sql) -> pipeline_request&
 {
-    stages_.push_back({stage_kind::execute, std::move(sql)});
+    stages_.push_back({stage_kind::execute, std::move(sql), 0, {}});
     return *this;
 }
 
 auto pipeline_request::add_prepare(std::string sql) -> pipeline_request&
 {
-    stages_.push_back({stage_kind::prepare, std::move(sql)});
+    stages_.push_back({stage_kind::prepare, std::move(sql), 0, {}});
     return *this;
 }
 

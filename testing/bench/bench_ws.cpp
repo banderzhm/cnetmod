@@ -78,7 +78,7 @@ auto echo_handler(ws::ws_context& ctx) -> cn::task<void> {
 }
 
 auto run_ws_client(cn::io_context& ctx,
-                   const bench_case& cfg,
+                   const bench_case&,
                    std::string url,
                    std::size_t messages) -> cn::task<std::size_t>
 {

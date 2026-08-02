@@ -82,6 +82,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         -Wno-unused-command-line-argument
         -Wno-reserved-module-identifier
         -Wno-include-angled-in-module-purview
+        -Wno-missing-designated-field-initializers
     )
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wall -Wextra)
@@ -150,6 +151,14 @@ file(GLOB_RECURSE MODULE_INTERFACE_FILES CONFIGURE_DEPENDS
 # Collect implementation files (excluding main.cpp)
 file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+# query_wrapper<T> is instantiated for application-defined models. Its member
+# definitions are included by the module interface; keep the BMI dependency
+# explicit because CMake's module scanner does not track textual includes.
+set_source_files_properties(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/database/orm/query_wrapper.cppm"
+    PROPERTIES
+        OBJECT_DEPENDS
+            "${CMAKE_CURRENT_SOURCE_DIR}/src/database/orm/query_wrapper_impl.inc")
 
 # Split .cpp sources into regular translation units, module implementation units,
 # and interface units. Most interfaces use .cppm, but a renamed interface may

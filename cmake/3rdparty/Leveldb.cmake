@@ -27,6 +27,13 @@ macro(cnetmod_configure_leveldb)
                     set_target_properties(leveldb PROPERTIES ${_property} "${_options}")
                 endif()
             endforeach()
+            # Keep cnetmod's warnings enabled while suppressing diagnostics in
+            # the vendored LevelDB sources that are not actionable here.
+            if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+                target_compile_options(leveldb PRIVATE
+                    -Wno-unused-parameter
+                    -Wno-unused-but-set-variable)
+            endif()
         endif()
         if(CNETMOD_LEVELDB_TARGET)
             set(CNETMOD_HAS_LEVELDB ON)

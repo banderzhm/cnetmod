@@ -746,3 +746,7 @@ private:
 };
 
 } // namespace cnetmod::orm
+
+// Template member definitions must be reachable by importers so wrappers can
+// be instantiated for application-defined model types.
+#include "query_wrapper_impl.inc"
