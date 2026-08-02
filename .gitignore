@@ -39,6 +39,7 @@ build*
 doc
 当前任务.md
 cmake-build*
+cmake-install-release-wsl/
 *orchids
 *claude
 testing/messaging/.env.external.local
