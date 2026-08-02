@@ -261,16 +261,6 @@ cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、
 
 **异步操作**: 基于 RAII 的 async_op 基类，带平台特定的 overlap/submission 跟踪。完成回调通过 `post()` 恢复等待的协程。
 
-## 已知问题
-
-### clang 模块依赖可见性
-
-在模块之间添加新的 `import` 依赖时，clang 可能报错：
-
-> declaration of 'X' must be imported from module 'Y' before it is required
-
-确保显式导入导出所需符号的模块。与头文件不同，模块具有严格的可见性 — 传递导入不会自动可见。
-
 ## 设计理念
 
 **为什么使用模块？** 零成本的无头文件构建模型。减少编译时间，更清晰的 API 表面。与 C++23 标准库方向一致。

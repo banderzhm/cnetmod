@@ -265,16 +265,6 @@ cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, regis
 
 **Async operations**: RAII-based async_op base class with platform-specific overlap/submission tracking. Completion callbacks resume awaiting coroutines via `post()`.
 
-## Known Issues
-
-### clang module dependency visibility
-
-When adding new `import` dependencies between modules, clang may report errors like:
-
-> declaration of 'X' must be imported from module 'Y' before it is required
-
-Ensure the module that exports the needed symbol is explicitly imported. Unlike headers, modules have strict visibility — transitive imports are not automatically visible.
-
 ## Design Rationale
 
 **Why modules?** Zero-cost header-free build model. Reduced compile times and cleaner API surface. Aligns with C++23 standard library direction.
