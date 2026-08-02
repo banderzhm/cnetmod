@@ -84,19 +84,6 @@ Windows Release benchmark，硬件为 Intel Core i9-14900K，Visual Studio 2026�
 
 连续 5 轮均为 `160000 ok, 0 failed`。Broker 指标每轮均达到 `routed=160000`、`delivered=160000`。
 
-### 中间件（HTTP）
-CORS、JWT 认证、速率限制、gzip 压缩、请求体大小限制、请求 ID、访问日志、指标、超时、优雅关闭、IP 防火墙、缓存、健康检查、文件上传、panic 恢复
-
-### 同步原语
-`mutex`、`shared_mutex`、`semaphore`、`condition_variable`（均支持协程）、`channel<T>`、`wait_group`、`cancel_token`
-
-### 实用工具
-- **定时器**: `async_sleep()` / `async_sleep_until()` 为便捷封装，`with_timeout()` 用于带 `cancel_token` 的 `task<std::expected<...>>` 操作
-- **缓冲区**: 字节序感知的读写器、缓冲池
-- **日志**: 基于 `std::format` 的日志器（无外部依赖）
-- **崩溃转储**: 平台原生 minidump（Windows）/ 信号处理器（Unix）
-- **异步文件 I/O**: 全平台异步读写及文件到 Socket 的零拷贝传输；Linux io_uring 后端通过管道提交 `IORING_OP_SPLICE`，Linux epoll 后端使用非阻塞 `sendfile()` 并在背压时等待 `EPOLLOUT`，Windows 使用 `TransmitFile`，macOS/kqueue 使用 `sendfile`。元数据操作以及 readiness 后端的文件读写由工作线程池承载
-
 ## 快速开始
 
 ### 构建要求

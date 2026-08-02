@@ -85,19 +85,6 @@ Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, loc
 
 Five consecutive runs completed with `160000 ok, 0 failed` each. Broker metrics reached `routed=160000` and `delivered=160000` on every run.
 
-### Middleware (HTTP)
-CORS, JWT auth, rate limiter, gzip compress, body limit, request ID, access log, metrics, timeout, graceful shutdown, IP firewall, cache, health check, file upload, panic recovery
-
-### Synchronization Primitives
-`mutex`, `shared_mutex`, `semaphore`, `condition_variable` (all coroutine-aware), `channel<T>`, `wait_group`, `cancel_token`
-
-### Utilities
-- **Timers**: `async_sleep()` / `async_sleep_until()` are convenience wrappers, `with_timeout()` targets cancellable `task<std::expected<...>>` operations
-- **Buffer**: Endianness-aware readers/writers, buffer pool
-- **Logging**: `std::format`-based logger (no external dependency)
-- **Crash dump**: Platform-native minidump (Windows) / signal handler (Unix)
-- **Async file I/O**: Cross-platform reads/writes plus zero-copy file-to-socket transfer. The Linux io_uring backend uses `IORING_OP_SPLICE` through a pipe, while the Linux epoll backend uses non-blocking `sendfile()` and waits for `EPOLLOUT` on backpressure; Windows uses `TransmitFile`, and macOS/kqueue uses `sendfile`. Metadata operations and readiness-backend file reads/writes are offloaded to the worker pool
-
 ## Quick Start
 
 ### Build Requirements
