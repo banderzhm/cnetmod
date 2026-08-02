@@ -16,6 +16,10 @@ English | [简体中文](README_zh.md)
 | Linux | io_uring + epoll | clang-21 + libc++ | ✅ |
 | macOS | kqueue | clang-21 + libc++ | ✅ |
 
+### AI Development Skills
+
+The [`skill/`](skill/) directory contains the project-specific instructions for AI-assisted development. AI agents should read [`skill/SKILL.md`](skill/SKILL.md) first, then consult the topic-specific guidance under `skill/core`, `skill/coro`, `skill/database`, `skill/http`, `skill/infra`, `skill/protocols`, and `skill/security` as needed.
+
 ## Features
 
 ### Core Runtime
@@ -223,10 +227,6 @@ cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-21/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-21/include/c++/v1
 ```
-
-### AI Development Skills
-
-The [`skill/`](skill/) directory contains the project-specific instructions for AI-assisted development. AI agents should read [`skill/SKILL.md`](skill/SKILL.md) first, then consult the topic-specific guidance under `skill/core`, `skill/coro`, `skill/database`, `skill/http`, `skill/infra`, `skill/protocols`, and `skill/security` as needed.
 
 ## Architecture
 

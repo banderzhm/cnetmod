@@ -16,6 +16,10 @@
 | Linux | io_uring + epoll | clang-21 + libc++ | ✅ |
 | macOS | kqueue | clang-21 + libc++ | ✅ |
 
+### AI 开发技能
+
+[`skill/`](skill/) 目录包含 AI 辅助开发所需的项目专属指导。AI 代理应先阅读 [`skill/SKILL.md`](skill/SKILL.md)，再根据需要查阅 `skill/core`、`skill/coro`、`skill/database`、`skill/http`、`skill/infra`、`skill/protocols` 和 `skill/security` 下的专题说明。
+
 ## 功能特性
 
 ### 核心运行时
@@ -219,10 +223,6 @@ cmake -B build \
   -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-21/share/libc++/v1 \
   -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-21/include/c++/v1
 ```
-
-### AI 开发技能
-
-[`skill/`](skill/) 目录包含 AI 辅助开发所需的项目专属指导。AI 代理应先阅读 [`skill/SKILL.md`](skill/SKILL.md)，再根据需要查阅 `skill/core`、`skill/coro`、`skill/database`、`skill/http`、`skill/infra`、`skill/protocols` 和 `skill/security` 下的专题说明。
 
 ## 架构
 
