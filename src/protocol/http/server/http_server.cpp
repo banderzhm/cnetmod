@@ -521,6 +521,12 @@ void server::set_max_connections(std::size_t n)
     max_connections_ = n;
 }
 
+void server::set_response_header_options(
+    response_header_options options) noexcept
+{
+    response_headers_ = options;
+}
+
 auto server::active_connections() const noexcept -> std::size_t
 {
     return active_connections_.load(std::memory_order_relaxed);
@@ -695,8 +701,10 @@ auto server::make_h2_handler(io_context& io, socket& client)
             : std::string_view(uri).substr(0, query);
         auto match = router_.match(method, path);
         response output(status::ok, http_version::http_2);
-        output.set_header("Server", "cnetmod");
-        output.set_header("Date", date_cache_.get());
+        if (response_headers_.emit_server)
+            output.set_header("Server", "cnetmod");
+        if (response_headers_.emit_date)
+            output.set_header("Date", date_cache_.get());
         route_params params;
         handler_fn route;
         if (match)
@@ -760,6 +768,10 @@ auto server::handle_h1_clear(socket& client, io_context& io,
     -> task<void>
 {
     bool keep_alive = true;
+    response resp(status::ok);
+    std::string response_wire;
+    request_parser parser;
+    std::array<std::byte, 8192> buf;
 
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
@@ -798,8 +810,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 
     while (keep_alive)
     {
-        request_parser parser;
-        std::array<std::byte, 8192> buf{};
+        parser.reset();
 
         // Feed pre-read data on first iteration
         if (initial_data && initial_len > 0)
@@ -868,9 +879,11 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 
         auto mr = router_.match(parser.method(), path);
 
-        response resp(status::ok);
-        resp.set_header("Server", "cnetmod");
-        resp.set_header("Date", date_cache_.get());
+        resp.reset(status::ok, parser.version());
+        if (response_headers_.emit_server)
+            resp.set_header("Server", "cnetmod");
+        if (response_headers_.emit_date)
+            resp.set_header("Date", date_cache_.get());
 
         route_params rp;
         handler_fn handler;
@@ -911,9 +924,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             else
             {
                 // Send normal response
-                auto data = resp.serialize();
+                resp.serialize_to(response_wire);
                 auto wr = co_await async_write_all(
-                    io, client, const_buffer{data.data(), data.size()});
+                    io, client, const_buffer{response_wire.data(), response_wire.size()});
                 if (!wr)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -972,11 +985,14 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
     -> task<void>
 {
     bool keep_alive = true;
+    response resp(status::ok);
+    std::string response_wire;
+    request_parser parser;
+    std::array<std::byte, 8192> buf;
 
     while (keep_alive)
     {
-        request_parser parser;
-        std::array<std::byte, 8192> buf{};
+        parser.reset();
 
         while (!parser.ready())
         {
@@ -996,9 +1012,11 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
 
         auto mr = router_.match(parser.method(), path);
 
-        response resp(status::ok);
-        resp.set_header("Server", "cnetmod");
-        resp.set_header("Date", date_cache_.get());
+        resp.reset(status::ok, parser.version());
+        if (response_headers_.emit_server)
+            resp.set_header("Server", "cnetmod");
+        if (response_headers_.emit_date)
+            resp.set_header("Date", date_cache_.get());
 
         route_params rp;
         handler_fn handler;
@@ -1039,9 +1057,9 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
             else
             {
                 // Send normal response
-                auto data = resp.serialize();
+                resp.serialize_to(response_wire);
                 auto wr = co_await ssl.async_write_all(
-                    const_buffer{data.data(), data.size()});
+                    const_buffer{response_wire.data(), response_wire.size()});
                 if (!wr)
                     co_return;
             }

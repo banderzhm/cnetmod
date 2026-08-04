@@ -18,3 +18,4 @@ export import cnetmod.core.serial_port;
 export import cnetmod.core.log;
 export import cnetmod.core.dns;
 export import cnetmod.core.crash_dump;
+export import cnetmod.core.lazy;

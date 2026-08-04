@@ -57,6 +57,15 @@ export struct socket_options
     std::optional<bool> ipv6_only = std::nullopt; // IPV6_V6ONLY; nullopt keeps OS default
     int recv_buffer_size = 0;                     // 0 = system default
     int send_buffer_size = 0;                     // 0 = system default
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    // Bind a UDP socket to a Windows networking processor. SIO_CPU_AFFINITY
+    // permits processor-affine sockets to share one server port without
+    // relying on SO_REUSEADDR's incompatible delivery semantics.
+    std::optional<std::uint16_t> processor_affinity = std::nullopt;
+    // Avoid an IOCP packet when an overlapped operation completes inline.
+    // Callers must handle the synchronous result before suspending.
+    bool skip_completion_on_success = false;
+#endif
 };
 
 // =============================================================================
@@ -146,6 +155,13 @@ public:
         return family_;
     }
 
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    [[nodiscard]] auto skips_completion_on_success() const noexcept -> bool
+    {
+        return skip_completion_on_success_;
+    }
+#endif
+
     /// Release ownership (does not close)
     [[nodiscard]] auto release() noexcept -> native_handle_t
     {
@@ -172,6 +188,9 @@ private:
 
     native_handle_t handle_ = invalid_handle;
     address_family family_ = address_family::unspecified;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    bool skip_completion_on_success_{};
+#endif
 };
 
 } // namespace cnetmod

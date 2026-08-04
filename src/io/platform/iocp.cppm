@@ -21,6 +21,7 @@ namespace cnetmod {
 export struct iocp_overlapped : OVERLAPPED
 {
     std::coroutine_handle<> coroutine{};
+    io_context* resume_context{};
     std::error_code error{};
     DWORD bytes_transferred = 0;
 

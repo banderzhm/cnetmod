@@ -146,6 +146,41 @@ struct iocp_suspend
     void await_resume() noexcept {}
 };
 
+struct iocp_sendto_on_suspend
+{
+    iocp_overlapped& ov;
+    io_context& resume_context;
+    native_handle_t socket_handle;
+    WSABUF& buffer;
+    const ::sockaddr_storage& destination;
+    int destination_length;
+
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
+
+    void await_suspend(std::coroutine_handle<> coroutine) noexcept
+    {
+        ov.coroutine = coroutine;
+        ov.resume_context = std::addressof(resume_context);
+        const int status = ::WSASendTo(socket_handle, &buffer, 1, nullptr, 0,
+            reinterpret_cast<const ::sockaddr*>(&destination), destination_length,
+            &ov, nullptr);
+        if (status == SOCKET_ERROR)
+        {
+            const int error = ::WSAGetLastError();
+            if (error != WSA_IO_PENDING)
+            {
+                ov.error = make_error_code(from_native_error(error));
+                resume_context.post(coroutine);
+            }
+        }
+    }
+
+    void await_resume() noexcept {}
+};
+
 // =============================================================================
 // IOCP Cancel Version Suspend Awaiter
 // =============================================================================
@@ -1140,9 +1175,10 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     iocp_overlapped ov;
     ::sockaddr_storage from_addr{};
     INT from_len = sizeof(from_addr);
+    DWORD bytes_received{};
 
     int ret = ::WSARecvFrom(sock.native_handle(), &wsabuf, 1,
-        nullptr, &flags,
+        &bytes_received, &flags,
         reinterpret_cast<::sockaddr*>(&from_addr),
         &from_len, &ov, nullptr);
     if (ret == SOCKET_ERROR)
@@ -1150,6 +1186,12 @@ auto async_recvfrom(io_context& ctx, socket& sock,
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
+    }
+
+    if (ret == 0 && sock.skips_completion_on_success())
+    {
+        peer = endpoint_from_sockaddr(from_addr);
+        co_return static_cast<std::size_t>(bytes_received);
     }
 
     co_await iocp_suspend{ov};
@@ -1182,9 +1224,10 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     iocp_overlapped ov;
     ::sockaddr_storage from_addr{};
     INT from_len = sizeof(from_addr);
+    DWORD bytes_received{};
 
     int ret = ::WSARecvFrom(sock.native_handle(), &wsabuf, 1,
-        nullptr, &flags,
+        &bytes_received, &flags,
         reinterpret_cast<::sockaddr*>(&from_addr),
         &from_len, &ov, nullptr);
     if (ret == SOCKET_ERROR)
@@ -1192,6 +1235,12 @@ auto async_recvfrom(io_context& ctx, socket& sock,
         int err = ::WSAGetLastError();
         if (err != WSA_IO_PENDING)
             co_return std::unexpected(make_error_code(from_native_error(err)));
+    }
+
+    if (ret == 0 && sock.skips_completion_on_success())
+    {
+        peer = endpoint_from_sockaddr(from_addr);
+        co_return static_cast<std::size_t>(bytes_received);
     }
 
     co_await iocp_cancel_suspend{ov, token,
@@ -1223,9 +1272,10 @@ auto async_sendto(io_context& ctx, socket& sock,
     iocp_overlapped ov;
     ::sockaddr_storage dest{};
     int dest_len = fill_sockaddr(peer, dest);
+    DWORD bytes_sent{};
 
     int ret = ::WSASendTo(sock.native_handle(), &wsabuf, 1,
-        nullptr, 0,
+        &bytes_sent, 0,
         reinterpret_cast<const ::sockaddr*>(&dest),
         dest_len, &ov, nullptr);
     if (ret == SOCKET_ERROR)
@@ -1235,7 +1285,34 @@ auto async_sendto(io_context& ctx, socket& sock,
             co_return std::unexpected(make_error_code(from_native_error(err)));
     }
 
+    if (ret == 0 && sock.skips_completion_on_success())
+        co_return static_cast<std::size_t>(bytes_sent);
+
     co_await iocp_suspend{ov};
+    if (ov.error)
+        co_return std::unexpected(ov.error);
+    co_return static_cast<std::size_t>(ov.bytes_transferred);
+}
+
+auto async_sendto_on(io_context& socket_context, io_context& resume_context,
+    socket& sock, const_buffer buf, const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    auto& iocp = static_cast<iocp_context&>(socket_context);
+    if (auto result = ensure_associated(iocp,
+            reinterpret_cast<HANDLE>(sock.native_handle()));
+        !result)
+        co_return std::unexpected(result.error());
+
+    WSABUF wsabuf{};
+    wsabuf.buf = const_cast<char*>(static_cast<const char*>(buf.data));
+    wsabuf.len = static_cast<ULONG>(buf.size);
+    iocp_overlapped ov;
+    ::sockaddr_storage destination{};
+    const int destination_length = fill_sockaddr(peer, destination);
+
+    co_await iocp_sendto_on_suspend{ov, resume_context, sock.native_handle(),
+        wsabuf, destination, destination_length};
     if (ov.error)
         co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
@@ -1282,6 +1359,74 @@ auto async_sendto(io_context& ctx, socket& sock,
     if (ov.error)
         co_return std::unexpected(ov.error);
     co_return static_cast<std::size_t>(ov.bytes_transferred);
+}
+
+auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>
+{
+    if (max_datagrams == 0U || max_datagram_size == 0U)
+        co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+    std::vector<udp_received_datagram> result;
+    result.reserve(max_datagrams);
+    udp_received_datagram first{std::vector<std::byte>(max_datagram_size), {}};
+    auto received = co_await async_recvfrom(ctx, sock,
+        mutable_buffer{first.bytes.data(), first.bytes.size()}, first.peer);
+    if (!received)
+        co_return std::unexpected(received.error());
+    first.bytes.resize(*received);
+    result.push_back(std::move(first));
+
+    // The first WSARecvFrom completion establishes readiness.  Drain only
+    // immediately available datagrams; subsequent batches return to IOCP so
+    // the listener never blocks an I/O worker on an empty socket.
+    while (result.size() < max_datagrams)
+    {
+        udp_received_datagram next{std::vector<std::byte>(max_datagram_size), {}};
+        WSABUF buffer{static_cast<ULONG>(next.bytes.size()),
+            static_cast<CHAR*>(static_cast<void*>(next.bytes.data()))};
+        DWORD bytes{};
+        DWORD flags{};
+        ::sockaddr_storage sender{};
+        INT sender_length = sizeof(sender);
+        const int status = ::WSARecvFrom(sock.native_handle(), &buffer, 1, &bytes, &flags,
+            reinterpret_cast<::sockaddr*>(&sender), &sender_length, nullptr, nullptr);
+        if (status == SOCKET_ERROR)
+        {
+            const int error = ::WSAGetLastError();
+            if (error == WSAEWOULDBLOCK)
+                break;
+            co_return std::unexpected(make_error_code(from_native_error(error)));
+        }
+        next.bytes.resize(bytes);
+        next.peer = endpoint_from_sockaddr(sender);
+        result.push_back(std::move(next));
+    }
+    co_return result;
+}
+
+auto async_sendto_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    std::size_t submitted{};
+    // Each item is submitted with the existing IOCP overlapped operation.
+    // This maintains completion-driven backpressure and avoids assigning a
+    // mutable destination sockaddr to an overlapped request after its frame
+    // has gone out of scope.
+    for (const auto& datagram : datagrams)
+    {
+        auto sent = co_await async_sendto(ctx, sock, datagram.bytes, datagram.peer);
+        if (!sent)
+        {
+            if (submitted != 0U)
+                co_return submitted;
+            co_return std::unexpected(sent.error());
+        }
+        ++submitted;
+    }
+    co_return submitted;
 }
 
 #endif // CNETMOD_HAS_IOCP

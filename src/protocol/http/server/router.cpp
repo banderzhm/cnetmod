@@ -249,7 +249,7 @@ auto request_context::read_full_body() -> task<std::string_view>
 auto request_context::get_header(std::string_view key) const
     -> std::string_view
 {
-    auto it = headers_ptr_->find(std::string(key));
+    auto it = headers_ptr_->find(key);
     return it == headers_ptr_->end() ? std::string_view{}
                                      : std::string_view{it->second};
 }
@@ -387,11 +387,11 @@ void request_context::drain_available_body_chunks() const
 
 void request_context::init_path_query(std::string_view u)
 {
-    uri_ = std::string(u);
+    uri_ = u;
     auto q = u.find('?');
-    path_ = std::string(u.substr(0, q));
+    path_ = u.substr(0, q);
     if (q != std::string_view::npos)
-        query_ = std::string(u.substr(q + 1));
+        query_ = u.substr(q + 1);
 }
 
 auto router::get(std::string_view p, handler_fn f) -> router&
@@ -438,11 +438,15 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     auto stat = detail::is_static_route(segs);
     auto first = detail::first_literal_segment(segs);
     auto canonical = detail::canonical_from_segments(segs);
-    entries_.push_back({m, std::move(segs), std::move(f), {}, order});
+    entries_.push_back(
+        {m, std::move(segs), canonical, std::move(f), {}, order});
     auto& e = entries_.back();
     e.score = detail::route_specificity(e.segments, !m, order);
     if (stat)
+    {
         exact_index_[detail::method_path_key(m, canonical)].push_back(idx);
+        static_exact_indices_.push_back(idx);
+    }
     else if (first)
         first_literal_index_[detail::method_bucket_key(m, *first)].push_back(idx);
     else
@@ -454,6 +458,21 @@ auto router::find_exact(http_method m, std::string_view p) const
     -> const route_entry*
 {
     const route_entry* best = nullptr;
+    // Static routes dominate ordinary HTTP service workloads. For a small
+    // route table, compare the original request view directly and avoid
+    // allocating a canonical path plus composite hash key per request.
+    if (static_exact_indices_.size() <= 8U)
+    {
+        for (const auto index : static_exact_indices_)
+        {
+            const auto& entry = entries_[index];
+            if ((!entry.method || *entry.method == m) &&
+                entry.canonical_path == p &&
+                (!best || detail::better_score(entry.score, best->score)))
+                best = &entry;
+        }
+        return best;
+    }
     auto find = [&](std::optional<http_method> x)
     {
         auto it = exact_index_.find(detail::method_path_key(x, p));
@@ -508,6 +527,8 @@ auto router::try_match(const std::vector<detail::segment>& s,
 auto router::match(http_method m, std::string_view p) const
     -> std::optional<match_result>
 {
+    if (auto x = find_exact(m, p))
+        return match_result{x->handler, {}};
     auto parts = detail::split_path(p);
     auto canonical = detail::canonical_from_parts(parts);
     if (auto x = find_exact(m, canonical))

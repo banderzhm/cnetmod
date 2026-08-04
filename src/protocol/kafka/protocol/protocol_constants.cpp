@@ -31,6 +31,7 @@ auto make_error(error_code code, std::string message) -> error
             "Kafka error code {}", static_cast<std::int16_t>(code));
     return {.code = code,
         .message = std::move(message),
-        .retriable = is_retriable(code)};
+        .retriable = is_retriable(code),
+        .broker_id = -1};
 }
 } // namespace cnetmod::kafka

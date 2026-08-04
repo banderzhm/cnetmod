@@ -52,6 +52,36 @@ export auto make_ssl_error() -> std::error_code;
 /// Create error_code from SSL_get_error result
 export auto make_ssl_error(int ssl_err) -> std::error_code;
 
+    #ifdef CNETMOD_ENABLE_QUIC
+/// Application-owned TLS 1.3 ticket implementation. The callbacks run on the
+/// TLS handshake thread and must be safe for every connection sharing this
+/// context. `open` returns the authenticated TLS session plaintext together
+/// with a stable, server-derived ticket identity. When 0-RTT is offered,
+/// `consume_early_data` is called atomically before BoringSSL can accept it.
+/// Applications implement key rotation in `seal`/`open`; cnetmod never
+/// manufactures or persists ticket keys.
+export struct ssl_ticket_open_result
+{
+    std::vector<std::byte> plaintext;
+    std::vector<std::byte> identity;
+    std::chrono::steady_clock::time_point early_data_expires_at;
+};
+
+export struct ssl_ticket_aead_callbacks
+{
+    std::size_t max_overhead{64};
+    std::function<std::expected<std::vector<std::byte>, std::error_code>(
+        std::span<const std::byte>)>
+        seal;
+    std::function<std::expected<ssl_ticket_open_result, std::error_code>(
+        std::span<const std::byte>)>
+        open;
+    std::function<bool(std::span<const std::byte>,
+        std::chrono::steady_clock::time_point)>
+        consume_early_data;
+};
+    #endif
+
 // =============================================================================
 // ssl_context — RAII wrapper for SSL_CTX
 // =============================================================================
@@ -108,6 +138,32 @@ public:
     /// Server-side mTLS mode: verify and require a client certificate.
     void set_require_peer_certificate(bool require) noexcept;
 
+    #ifdef CNETMOD_ENABLE_QUIC
+    // =========================================================================
+    // QUIC Mode Configuration (TLS 1.3 Only)
+    // =========================================================================
+
+    /// Create context configured specifically for QUIC client connections
+    /// Requires TLS 1.3 only (as per RFC 9001)
+    [[nodiscard]] static auto quic_client()
+        -> std::expected<ssl_context, std::error_code>;
+
+    /// Create context configured specifically for QUIC server connections
+    /// Requires TLS 1.3 only (as per RFC 9001)
+    [[nodiscard]] static auto quic_server()
+        -> std::expected<ssl_context, std::error_code>;
+
+    /// Explicitly install an application-owned BoringSSL ticket AEAD bridge.
+    /// This is opt-in and does not alter a context's default ticket behavior
+    /// unless called. A non-empty anti-replay callback is required before a
+    /// server may accept 0-RTT with these tickets.
+    [[nodiscard]] auto configure_ticket_aead(ssl_ticket_aead_callbacks callbacks)
+        -> std::expected<void, std::error_code>;
+
+    // Internal lifetime anchor for the BoringSSL callback bridge.
+    struct ticket_aead_state;
+    #endif
+
     // =========================================================================
     // ALPN (Application-Layer Protocol Negotiation)
     // =========================================================================
@@ -144,6 +200,9 @@ private:
 
     SSL_CTX* ctx_ = nullptr;
     std::vector<unsigned char> alpn_wire_; // Server-side ALPN wire format
+    #ifdef CNETMOD_ENABLE_QUIC
+    std::shared_ptr<ticket_aead_state> ticket_aead_state_;
+    #endif
     bool kernel_tls_enabled_ = false;
 };
 

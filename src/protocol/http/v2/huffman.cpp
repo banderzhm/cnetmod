@@ -97,42 +97,86 @@ namespace {
         symbol{0xffffffeu, 28}, symbol{0x7ffffecu, 27}, symbol{0x7ffffedu, 27},
         symbol{0x7ffffeeu, 27}, symbol{0x7ffffefu, 27}, symbol{0x7fffff0u, 27},
         symbol{0x3ffffeeu, 26}, symbol{0x3fffffffu, 30}};
+
+    struct decode_node
+    {
+        std::array<std::int16_t, 2> child{-1, -1};
+        std::int16_t symbol{-1};
+    };
+
+    struct decode_tree
+    {
+        std::array<decode_node, 8192> nodes{};
+        std::size_t size{1};
+    };
+
+    [[nodiscard]] auto decoder_tree() -> const decode_tree&
+    {
+        static const auto tree = []
+        {
+            decode_tree result;
+            for (std::size_t symbol_index{}; symbol_index < table.size();
+                ++symbol_index)
+            {
+                const auto item = table[symbol_index];
+                std::size_t node{};
+                for (int shift = static_cast<int>(item.length) - 1;
+                    shift >= 0; --shift)
+                {
+                    const auto bit = static_cast<std::size_t>(
+                        (item.bits >> shift) & 1U);
+                    auto& next = result.nodes[node].child[bit];
+                    if (next < 0)
+                        next = static_cast<std::int16_t>(result.size++);
+                    node = static_cast<std::size_t>(next);
+                }
+                result.nodes[node].symbol =
+                    static_cast<std::int16_t>(symbol_index);
+            }
+            return result;
+        }();
+        return tree;
+    }
 } // namespace
 
 auto huffman_decode(std::span<const std::byte> input)
     -> std::expected<std::string, std::error_code>
 {
     std::string result;
-    std::uint32_t code = 0;
-    unsigned length = 0;
+    result.reserve(input.size() + input.size() / 2U);
+    const auto& tree = decoder_tree();
+    std::size_t node{};
+    unsigned pending_bits{};
+    bool pending_all_ones{true};
     for (const auto byte : input)
     {
+        const auto value = std::to_integer<std::uint8_t>(byte);
         for (int shift = 7; shift >= 0; --shift)
         {
-            code =
-                (code << 1U) | ((std::to_integer<std::uint8_t>(byte) >> shift) & 1U);
-            ++length;
-            bool matched = false;
-            for (std::size_t index = 0; index < table.size(); ++index)
+            const auto bit = static_cast<std::size_t>((value >> shift) & 1U);
+            const auto next = tree.nodes[node].child[bit];
+            if (next < 0)
+                return std::unexpected(
+                    std::make_error_code(std::errc::protocol_error));
+            node = static_cast<std::size_t>(next);
+            ++pending_bits;
+            pending_all_ones = pending_all_ones && bit != 0U;
+            const auto decoded = tree.nodes[node].symbol;
+            if (decoded >= 0)
             {
-                const auto item = table[index];
-                if (item.length != length || item.bits != code)
-                    continue;
-                if (index == 256)
+                if (decoded == 256)
                     return std::unexpected(
                         std::make_error_code(std::errc::protocol_error));
-                result.push_back(static_cast<char>(index));
-                code = 0;
-                length = 0;
-                matched = true;
-                break;
+                result.push_back(static_cast<char>(decoded));
+                node = 0U;
+                pending_bits = 0U;
+                pending_all_ones = true;
             }
-            if (!matched && length == 30)
-                return std::unexpected(std::make_error_code(std::errc::protocol_error));
         }
     }
     // RFC 7541 ?5.2: padding is at most seven one bits and must be an EOS prefix.
-    if (length != 0 && (length > 7 || code != ((1U << length) - 1U)))
+    if (pending_bits != 0U &&
+        (pending_bits > 7U || !pending_all_ones))
         return std::unexpected(std::make_error_code(std::errc::protocol_error));
     return result;
 }

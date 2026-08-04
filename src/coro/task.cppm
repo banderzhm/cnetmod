@@ -125,6 +125,8 @@ public:
         {
             if (exception_)
                 std::rethrow_exception(exception_);
+            if (!std::holds_alternative<T>(value_))
+                throw std::logic_error("task result requested before completion");
             return std::move(std::get<1>(value_));
         }
 
@@ -255,18 +257,96 @@ private:
 // sync_wait — Synchronously wait for coroutine completion
 // =============================================================================
 
-/// Block current thread waiting for task completion and return result
-export template <typename T> auto sync_wait(task<T> t) -> T
-{
-    auto handle = t.handle();
-    handle.resume();
+namespace detail {
 
-    // Coroutine should have run to final_suspend
-    return handle.promise().result();
+    template <typename T> struct sync_wait_state
+    {
+        std::mutex mutex;
+        std::condition_variable condition;
+        std::optional<T> value;
+        std::exception_ptr exception;
+        bool completed = false;
+    };
+
+    template <typename T>
+    auto sync_wait_runner(task<T> operation, sync_wait_state<T>& state) -> task<void>
+    {
+        try
+        {
+            state.value.emplace(co_await operation);
+        }
+        catch (...)
+        {
+            state.exception = std::current_exception();
+        }
+        {
+            std::lock_guard lock{state.mutex};
+            state.completed = true;
+        }
+        state.condition.notify_one();
+    }
+
+    struct sync_wait_void_state
+    {
+        std::mutex mutex;
+        std::condition_variable condition;
+        std::exception_ptr exception;
+        bool completed = false;
+    };
+
+    inline auto sync_wait_void_runner(task<void> operation, sync_wait_void_state& state)
+        -> task<void>
+    {
+        try
+        {
+            co_await operation;
+        }
+        catch (...)
+        {
+            state.exception = std::current_exception();
+        }
+        {
+            std::lock_guard lock{state.mutex};
+            state.completed = true;
+        }
+        state.condition.notify_one();
+    }
+
+} // namespace detail
+
+/// Block the current thread until a task reaches its final suspend point.
+/// The caller remains responsible for running the I/O context that resumes
+/// asynchronous operations.  This bridge deliberately waits for completion
+/// instead of reading task::promise_type::value_ after the initial resume.
+export template <typename T> auto sync_wait(task<T> operation) -> T
+{
+    detail::sync_wait_state<T> state;
+    auto runner = detail::sync_wait_runner(std::move(operation), state);
+    runner.handle().resume();
+    std::unique_lock lock{state.mutex};
+    state.condition.wait(lock, [&state]
+        {
+            return state.completed;
+        });
+    if (state.exception)
+        std::rethrow_exception(state.exception);
+    return std::move(*state.value);
 }
 
 /// sync_wait<void> specialization
-export void sync_wait(task<void> t);
+export inline void sync_wait(task<void> operation)
+{
+    detail::sync_wait_void_state state;
+    auto runner = detail::sync_wait_void_runner(std::move(operation), state);
+    runner.handle().resume();
+    std::unique_lock lock{state.mutex};
+    state.condition.wait(lock, [&state]
+        {
+            return state.completed;
+        });
+    if (state.exception)
+        std::rethrow_exception(state.exception);
+}
 
 // =============================================================================
 // when_all — True concurrent waiting for multiple tasks
@@ -342,6 +422,8 @@ namespace detail {
             {
                 if (exception_)
                     std::rethrow_exception(exception_);
+                if (!std::holds_alternative<T>(value_))
+                    throw std::logic_error("when_all task result requested before completion");
                 return std::move(std::get<1>(value_));
             }
         };

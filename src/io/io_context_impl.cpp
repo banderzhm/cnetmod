@@ -95,17 +95,22 @@ void io_context::discard_post_queue() noexcept
 
 void io_context::push_node(post_node* node)
 {
-    node->next.store(nullptr, std::memory_order_relaxed);
-    auto* previous = post_head_.exchange(node, std::memory_order_acq_rel);
-    if (previous)
+    auto* previous = post_head_.load(std::memory_order_relaxed);
+    do
+    {
         node->next.store(previous, std::memory_order_relaxed);
+    } while (!post_head_.compare_exchange_weak(previous, node,
+        std::memory_order_release, std::memory_order_relaxed));
 }
 
 void io_context::push_node_no_delete(post_node* node)
 {
-    auto* previous = post_head_.exchange(node, std::memory_order_acq_rel);
-    if (previous)
+    auto* previous = post_head_.load(std::memory_order_relaxed);
+    do
+    {
         node->next.store(previous, std::memory_order_relaxed);
+    } while (!post_head_.compare_exchange_weak(previous, node,
+        std::memory_order_release, std::memory_order_relaxed));
 }
 
 auto post_awaitable::await_ready() const noexcept -> bool

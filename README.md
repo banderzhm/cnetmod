@@ -74,6 +74,43 @@ Use `testing/bench/bench_raft.cpp` for reproducible local measurements. Actual r
 Full guide: [Raft](docs/en/protocols/raft.md). Embedding guide for host projects
 with overlapping dependencies: [Third-party Dependency Integration](docs/en/advanced/thirdparty-dependency-integration.md).
 
+### Cross-language HTTP Performance
+
+Arch Linux under WSL2, Release build, Intel Core i9-14900K, Clang 22.1.8,
+Linux 6.18, io_uring, mimalloc, and local loopback. Server and Rust `oha`
+client are isolated to separate 16-CPU sets. cnetmod enables
+`IORING_SETUP_COOP_TASKRUN`; fixed worker affinity is disabled because it
+reduced throughput in this environment. HTTP/1.1 uses 10,000,000 requests per
+run; TLS uses 3,000,000; HTTP/2 uses 1,000,000; HTTP/3 uses 100,000. Each value
+is the mean of three runs and every run completed with 100% success.
+
+Latency values are milliseconds. `P0` and `P100` are the average per-run
+minimum and maximum; they expose scheduler/outlier behavior that throughput
+and central percentiles alone do not show.
+
+| Protocol | Implementation | Throughput | vs Rust | P0 | P50 | P95 | P99 | P100 | Success |
+|----------|----------------|-----------:|--------:|---:|----:|----:|----:|-----:|--------:|
+| HTTP/1.1 | **cnetmod** | **1.660M req/s** | **+1.25%** | 0.011 | 0.128 | 0.291 | 0.505 | 65.328 | 100% |
+| HTTP/1.1 | Statico/tokio-uring | 1.639M req/s | baseline | 0.011 | 0.128 | 0.298 | 0.489 | 60.147 | 100% |
+| HTTPS/1.1 | **cnetmod** | **1.343M req/s** | **+52.0%** | 0.012 | 0.161 | 0.366 | 0.646 | 87.295 | 100% |
+| HTTPS/1.1 | Hyper | 0.884M req/s | baseline | 0.010 | 0.255 | 0.528 | 0.692 | 87.342 | 100% |
+| HTTP/2 h2c | **cnetmod** | **1.356M req/s** | **+15.4%** | 0.097 | 0.182 | 0.248 | 0.397 | 15.413 | 100% |
+| HTTP/2 h2c | monoio-h2 | 1.175M req/s | baseline | 0.103 | 0.208 | 0.312 | 0.372 | 44.077 | 100% |
+| HTTPS/2 | **cnetmod** | **1.210M req/s** | **+1,159%** | 0.104 | 0.196 | 0.271 | 0.431 | 43.521 | 100% |
+| HTTPS/2 | Hyper | 0.096M req/s | baseline | 0.023 | 0.165 | 41.304 | 44.683 | 51.715 | 100% |
+| HTTP/3 | **cnetmod** | **0.570M req/s** | **+65.5%** | 0.071 | 0.361 | 0.640 | 0.865 | 3.746 | 100% |
+| HTTP/3 | Quinn/h3 | 0.344M req/s | baseline | 0.074 | 0.641 | 1.065 | 1.333 | 7.556 | 100% |
+
+The HTTP/1.1 comparison uses the same 13-byte body and only `Content-Length`
+on both servers. cnetmod's normal `Server`, `Date`, and `Content-Type` behavior
+remains the default; the benchmark explicitly disables server-generated
+headers with `response_header_options` to match Statico. Raw JSON, latency
+percentiles, success rates, tool versions, kernel, CPU allocation, and runtime
+switches are retained under
+[`testing/bench/results/crosslang/2026-08-05-post-scheduler-regression`](testing/bench/results/crosslang/2026-08-05-post-scheduler-regression)
+and
+[`testing/bench/results/crosslang/2026-08-05-h1-equal-headers-10m`](testing/bench/results/crosslang/2026-08-05-h1-equal-headers-10m).
+
 ### HTTP / gRPC Performance
 Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, local loopback, multicore mode (`mc:16/16`):
 
@@ -88,6 +125,34 @@ Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, loc
 | gRPC unary over HTTP/2 h2c | `bench_grpc.exe 5000 16` | ~112.92K req/s |
 
 The gRPC correctness suite includes Python `grpcio` cross-process interoperability tests in both directions. Results are local-loopback numbers and vary with CPU power policy, TLS library, worker count, and concurrent system load.
+
+### Native-client HTTP/3 Benchmark (Legacy Baseline)
+
+The cross-language HTTP/3 result above is the current server-capacity result.
+The older native cnetmod client/server baseline below is retained only for
+historical reproducibility and must not be used as the current throughput
+figure.
+
+Arch Linux under WSL2, Release build, Intel Core i9-14900K, Clang 22.1.8,
+io_uring and local loopback. The server uses 16 I/O workers; the client uses
+16 I/O workers and 256 persistent QUIC connections with two concurrent request
+streams per connection. Each of five runs measures 256,000 requests after
+6,400 aggregate warm-up requests (25 per connection):
+
+| Benchmark | Command | Result |
+|-----------|---------|--------|
+| HTTP/3 GET `/health` | `h3_benchmark --connections 256 --client-workers 16 --concurrency 2 --requests 1000 --warmup 25 --runs 5` | avg ~123.22K req/s (117.96K–131.19K), avg P50 3.259 ms, avg P99 7.216 ms |
+
+All five measured runs completed with `256000/256000` successful requests and
+zero failures. This is aggregate multicore capacity measured through the public
+cnetmod HTTP/3 client/server API, including UDP, QUIC, TLS 1.3, QPACK and HTTP/3;
+it is not a frame-codec microbenchmark. A separate one-connection, one-worker
+diagnostic averages about 21.77K req/s and must not be compared with multicore
+server-capacity results. The three-byte response makes QPS and latency the
+relevant values; payload bandwidth is intentionally not presented as a network-
+throughput claim. The benchmark records its complete configuration, CPU time,
+RSS, latency distribution and failures in JSON. See
+[HTTP/3 benchmark](testing/bench/README.md) for reproduction steps.
 
 ### MQTT Performance
 Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, local loopback, 4 broker workers, 8 publishers, QoS 0, `write_batch=16`:

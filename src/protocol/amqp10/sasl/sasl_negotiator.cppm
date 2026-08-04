@@ -68,7 +68,7 @@ public:
 
 private:
     struct impl;
-    std::unique_ptr<impl> impl_;
+    std::unique_ptr<impl> impl_{};
 };
 
 [[nodiscard]] auto encode_sasl_performative(const sasl_performative&)

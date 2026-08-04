@@ -910,7 +910,7 @@ namespace {
             std::vector<file_batch_operation> operations(chunk_size);
 
             for (std::size_t item_index = 0; item_index < chunk_size;
-                 ++item_index)
+                ++item_index)
             {
                 const auto request_index = valid_indices[cursor + item_index];
                 auto& item = operations[item_index];
@@ -928,7 +928,7 @@ namespace {
             if (!submitted)
             {
                 for (std::size_t item_index = 0; item_index < chunk_size;
-                     ++item_index)
+                    ++item_index)
                 {
                     results[valid_indices[cursor + item_index]] =
                         std::unexpected(submitted.error());
@@ -1376,16 +1376,12 @@ auto async_recvfrom(io_context& ctx, socket& sock,
 
     ::sockaddr_storage from_addr{};
 
-    struct ::iovec iov
-    {
-    };
+    struct ::iovec iov{};
 
     iov.iov_base = buf.data;
     iov.iov_len = buf.size;
 
-    struct ::msghdr msg
-    {
-    };
+    struct ::msghdr msg{};
 
     msg.msg_name = &from_addr;
     msg.msg_namelen = sizeof(from_addr);
@@ -1425,16 +1421,12 @@ auto async_recvfrom(io_context& ctx, socket& sock,
 
     ::sockaddr_storage from_addr{};
 
-    struct ::iovec iov
-    {
-    };
+    struct ::iovec iov{};
 
     iov.iov_base = buf.data;
     iov.iov_len = buf.size;
 
-    struct ::msghdr msg
-    {
-    };
+    struct ::msghdr msg{};
 
     msg.msg_name = &from_addr;
     msg.msg_namelen = sizeof(from_addr);
@@ -1473,40 +1465,41 @@ auto async_sendto(io_context& ctx, socket& sock,
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
 
-    struct ::iovec iov
-    {
-    };
+    struct ::iovec iov{};
 
     iov.iov_base = const_cast<void*>(buf.data);
     iov.iov_len = buf.size;
 
-    struct ::msghdr msg
-    {
-    };
+    struct ::msghdr msg{};
 
     msg.msg_name = &dest;
     msg.msg_namelen = dest_len;
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    uring_overlapped ov;
-
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
-
-    ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
-    ::io_uring_sqe_set_data(sqe, &ov);
-
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
-
-    co_await uring_suspend{ov};
-
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
-
-    co_return static_cast<std::size_t>(ov.result);
+    for (;;)
+    {
+        uring_overlapped ov;
+        auto* sqe = uring.prepare_sqe();
+        if (!sqe)
+            co_return std::unexpected(make_error_code(errc::no_buffer_space));
+        ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
+        ::io_uring_sqe_set_data(sqe, &ov);
+        if (auto r = uring.flush(); !r)
+            co_return std::unexpected(r.error());
+        co_await uring_suspend{ov};
+        if (ov.result >= 0)
+            co_return static_cast<std::size_t>(ov.result);
+        const auto error = make_error_code(from_native_error(-ov.result));
+        if (error != std::make_error_code(std::errc::operation_would_block) &&
+            error != std::make_error_code(std::errc::resource_unavailable_try_again))
+            co_return std::unexpected(error);
+        // io_uring SENDMSG can complete EAGAIN on a non-blocking UDP socket.
+        // Park on POLLOUT before re-submitting to avoid a CQE-driven busy loop.
+        auto writable = co_await async_wait_writable(ctx, sock);
+        if (!writable)
+            co_return std::unexpected(writable.error());
+    }
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
@@ -1522,42 +1515,134 @@ auto async_sendto(io_context& ctx, socket& sock,
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
 
-    struct ::iovec iov
-    {
-    };
+    struct ::iovec iov{};
 
     iov.iov_base = const_cast<void*>(buf.data);
     iov.iov_len = buf.size;
 
-    struct ::msghdr msg
-    {
-    };
+    struct ::msghdr msg{};
 
     msg.msg_name = &dest;
     msg.msg_namelen = dest_len;
     msg.msg_iov = &iov;
     msg.msg_iovlen = 1;
 
-    uring_overlapped ov;
+    for (;;)
+    {
+        uring_overlapped ov;
+        auto* sqe = uring.prepare_sqe();
+        if (!sqe)
+            co_return std::unexpected(make_error_code(errc::no_buffer_space));
+        ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
+        ::io_uring_sqe_set_data(sqe, &ov);
+        if (auto r = uring.flush(); !r)
+            co_return std::unexpected(r.error());
+        co_await uring_cancel_suspend{ov, token, &uring};
+        if (token.is_cancelled())
+            co_return std::unexpected(make_error_code(errc::operation_aborted));
+        if (ov.result >= 0)
+            co_return static_cast<std::size_t>(ov.result);
+        const auto error = make_error_code(from_native_error(-ov.result));
+        if (error != std::make_error_code(std::errc::operation_would_block) &&
+            error != std::make_error_code(std::errc::resource_unavailable_try_again))
+            co_return std::unexpected(error);
+        auto writable = co_await async_wait_writable(ctx, sock);
+        if (!writable)
+            co_return std::unexpected(writable.error());
+    }
+}
 
-    auto* sqe = uring.prepare_sqe();
-    if (!sqe)
-        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>
+{
+    if (max_datagrams == 0U || max_datagram_size == 0U)
+        co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-    ::io_uring_prep_sendmsg(sqe, static_cast<int>(sock.native_handle()), &msg, MSG_NOSIGNAL);
-    ::io_uring_sqe_set_data(sqe, &ov);
+    std::vector<udp_received_datagram> result;
+    result.reserve(max_datagrams);
 
-    if (auto r = uring.flush(); !r)
-        co_return std::unexpected(r.error());
+    // Wait through io_uring for the first packet.  Once it completes the
+    // socket is readable, so recvmmsg drains the rest without another event
+    // loop round-trip.
+    udp_received_datagram first{std::vector<std::byte>(max_datagram_size), {}};
+    auto received = co_await async_recvfrom(ctx, sock,
+        mutable_buffer{first.bytes.data(), first.bytes.size()}, first.peer);
+    if (!received)
+        co_return std::unexpected(received.error());
+    first.bytes.resize(*received);
+    result.push_back(std::move(first));
 
-    co_await uring_cancel_suspend{ov, token, &uring};
+    const auto remaining = max_datagrams - result.size();
+    if (remaining == 0U)
+        co_return result;
 
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-    if (ov.result < 0)
-        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+    std::vector<std::vector<std::byte>> storage(remaining,
+        std::vector<std::byte>(max_datagram_size));
+    std::vector<::iovec> iovecs(remaining);
+    std::vector<::sockaddr_storage> peers(remaining);
+    std::vector<::mmsghdr> messages(remaining);
+    for (std::size_t i = 0; i < remaining; ++i)
+    {
+        iovecs[i] = {storage[i].data(), storage[i].size()};
+        messages[i].msg_hdr.msg_name = &peers[i];
+        messages[i].msg_hdr.msg_namelen = sizeof(peers[i]);
+        messages[i].msg_hdr.msg_iov = &iovecs[i];
+        messages[i].msg_hdr.msg_iovlen = 1;
+    }
+    const int count = ::recvmmsg(static_cast<int>(sock.native_handle()), messages.data(),
+        static_cast<unsigned int>(messages.size()), MSG_DONTWAIT, nullptr);
+    if (count < 0)
+    {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            co_return result;
+        co_return std::unexpected(make_error_code(from_native_error(errno)));
+    }
+    for (int i = 0; i < count; ++i)
+    {
+        storage[static_cast<std::size_t>(i)].resize(messages[static_cast<std::size_t>(i)].msg_len);
+        result.push_back({std::move(storage[static_cast<std::size_t>(i)]),
+            endpoint_from_sockaddr(peers[static_cast<std::size_t>(i)])});
+    }
+    co_return result;
+}
 
-    co_return static_cast<std::size_t>(ov.result);
+auto async_sendto_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (datagrams.empty())
+        co_return std::size_t{0};
+
+    // Submit one message through io_uring to provide proper readiness and
+    // backpressure semantics, then sendmmsg the already-ready remainder.
+    auto first = co_await async_sendto(ctx, sock, datagrams.front().bytes, datagrams.front().peer);
+    if (!first)
+        co_return std::unexpected(first.error());
+    if (datagrams.size() == 1U)
+        co_return std::size_t{1};
+
+    const auto remaining = datagrams.subspan(1);
+    std::vector<::iovec> iovecs(remaining.size());
+    std::vector<::sockaddr_storage> peers(remaining.size());
+    std::vector<::mmsghdr> messages(remaining.size());
+    for (std::size_t i = 0; i < remaining.size(); ++i)
+    {
+        iovecs[i] = {const_cast<void*>(remaining[i].bytes.data), remaining[i].bytes.size};
+        messages[i].msg_hdr.msg_name = &peers[i];
+        messages[i].msg_hdr.msg_namelen = fill_sockaddr(remaining[i].peer, peers[i]);
+        messages[i].msg_hdr.msg_iov = &iovecs[i];
+        messages[i].msg_hdr.msg_iovlen = 1;
+    }
+    const int count = ::sendmmsg(static_cast<int>(sock.native_handle()), messages.data(),
+        static_cast<unsigned int>(messages.size()), MSG_NOSIGNAL);
+    if (count < 0)
+    {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            co_return std::size_t{1};
+        co_return std::unexpected(make_error_code(from_native_error(errno)));
+    }
+    co_return 1U + static_cast<std::size_t>(count);
 }
 
 #endif // CNETMOD_HAS_IO_URING

@@ -32,6 +32,7 @@ void iocp_overlapped::reset() noexcept
     OffsetHigh = 0;
     hEvent = nullptr;
     coroutine = {};
+    resume_context = nullptr;
     error = {};
     bytes_transferred = 0;
 }
@@ -142,7 +143,12 @@ auto iocp_context::run_batch_impl(DWORD timeout_ms) -> std::size_t
         }
         iov->bytes_transferred = entry.dwNumberOfBytesTransferred;
         if (iov->coroutine)
-            iov->coroutine.resume();
+        {
+            if (iov->resume_context)
+                iov->resume_context->post(iov->coroutine);
+            else
+                iov->coroutine.resume();
+        }
         ++handled;
     }
     return handled;

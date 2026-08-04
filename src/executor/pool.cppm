@@ -158,6 +158,16 @@ namespace detail {
 // async_read/write on worker io_context automatically associates with worker's
 // IOCP.
 
+export struct thread_affinity_options
+{
+    bool enabled{false};
+    std::vector<unsigned> worker_processors;
+    std::optional<unsigned> accept_processor;
+};
+
+export auto set_current_thread_affinity(unsigned processor) noexcept
+    -> std::expected<void, std::error_code>;
+
 export class server_context
 {
 public:
@@ -165,7 +175,8 @@ public:
     /// @param pool_threads stdexec thread pool size (default = CPU cores)
     explicit server_context(
         unsigned workers = std::thread::hardware_concurrency(),
-        unsigned pool_threads = std::thread::hardware_concurrency());
+        unsigned pool_threads = std::thread::hardware_concurrency(),
+        thread_affinity_options affinity = {});
 
     ~server_context();
 
@@ -217,6 +228,7 @@ private:
     std::vector<std::unique_ptr<io_context>> workers_;
     std::vector<std::jthread> threads_;
     thread_pool pool_;
+    thread_affinity_options affinity_;
     std::atomic<std::size_t> next_{0};
 };
 

@@ -11,12 +11,10 @@ using namespace cnetmod::http;
 // request_parser — Basic GET
 // =============================================================================
 
-TEST(request_parser_simple_get) {
+TEST(request_parser_simple_get)
+{
     request_parser p;
-    std::string raw = "GET /index.html HTTP/1.1\r\n"
-                      "Host: example.com\r\n"
-                      "Connection: close\r\n"
-                      "\r\n";
+    std::string raw = "GET /index.html HTTP/1.1\r\n" "Host: example.com\r\n" "Connection: close\r\n" "\r\n";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -29,7 +27,8 @@ TEST(request_parser_simple_get) {
     ASSERT_TRUE(p.body().empty());
 }
 
-TEST(request_parser_http_1_0) {
+TEST(request_parser_http_1_0)
+{
     request_parser p;
     std::string raw = "GET / HTTP/1.0\r\n\r\n";
 
@@ -43,13 +42,10 @@ TEST(request_parser_http_1_0) {
 // request_parser — POST with body
 // =============================================================================
 
-TEST(request_parser_post_with_body) {
+TEST(request_parser_post_with_body)
+{
     request_parser p;
-    std::string raw = "POST /api/data HTTP/1.1\r\n"
-                      "Host: localhost\r\n"
-                      "Content-Length: 13\r\n"
-                      "\r\n"
-                      "Hello, World!";
+    std::string raw = "POST /api/data HTTP/1.1\r\n" "Host: localhost\r\n" "Content-Length: 13\r\n" "\r\n" "Hello, World!";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -64,7 +60,8 @@ TEST(request_parser_post_with_body) {
 // request_parser — Incremental feeding
 // =============================================================================
 
-TEST(request_parser_incremental) {
+TEST(request_parser_incremental)
+{
     request_parser p;
 
     std::string part1 = "GET /path HTTP/1.1\r\n";
@@ -84,18 +81,10 @@ TEST(request_parser_incremental) {
 // request_parser — Chunked transfer encoding
 // =============================================================================
 
-TEST(request_parser_chunked) {
+TEST(request_parser_chunked)
+{
     request_parser p;
-    std::string raw = "POST /upload HTTP/1.1\r\n"
-                      "Host: localhost\r\n"
-                      "Transfer-Encoding: chunked\r\n"
-                      "\r\n"
-                      "5\r\n"
-                      "Hello\r\n"
-                      "7\r\n"
-                      ", World\r\n"
-                      "0\r\n"
-                      "\r\n";
+    std::string raw = "POST /upload HTTP/1.1\r\n" "Host: localhost\r\n" "Transfer-Encoding: chunked\r\n" "\r\n" "5\r\n" "Hello\r\n" "7\r\n" ", World\r\n" "0\r\n" "\r\n";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -107,11 +96,10 @@ TEST(request_parser_chunked) {
 // request_parser — URI with query string
 // =============================================================================
 
-TEST(request_parser_uri_with_query) {
+TEST(request_parser_uri_with_query)
+{
     request_parser p;
-    std::string raw = "GET /search?q=hello&page=1 HTTP/1.1\r\n"
-                      "Host: example.com\r\n"
-                      "\r\n";
+    std::string raw = "GET /search?q=hello&page=1 HTTP/1.1\r\n" "Host: example.com\r\n" "\r\n";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -123,7 +111,8 @@ TEST(request_parser_uri_with_query) {
 // request_parser — method_enum
 // =============================================================================
 
-TEST(request_parser_method_enum) {
+TEST(request_parser_method_enum)
+{
     request_parser p;
     std::string raw = "DELETE /resource/42 HTTP/1.1\r\n\r\n";
 
@@ -139,10 +128,11 @@ TEST(request_parser_method_enum) {
 // request_parser — reset
 // =============================================================================
 
-TEST(request_parser_reset) {
+TEST(request_parser_reset)
+{
     request_parser p;
     std::string raw1 = "GET /first HTTP/1.1\r\n\r\n";
-    p.consume(raw1.data(), raw1.size());
+    ASSERT_TRUE(p.consume(raw1.data(), raw1.size()).has_value());
     ASSERT_TRUE(p.ready());
     ASSERT_EQ(p.uri(), std::string_view("/first"));
 
@@ -150,7 +140,7 @@ TEST(request_parser_reset) {
     ASSERT_FALSE(p.ready());
 
     std::string raw2 = "GET /second HTTP/1.1\r\n\r\n";
-    p.consume(raw2.data(), raw2.size());
+    ASSERT_TRUE(p.consume(raw2.data(), raw2.size()).has_value());
     ASSERT_TRUE(p.ready());
     ASSERT_EQ(p.uri(), std::string_view("/second"));
 }
@@ -159,32 +149,27 @@ TEST(request_parser_reset) {
 // request_parser — Multiple headers, same key
 // =============================================================================
 
-TEST(request_parser_multi_header) {
+TEST(request_parser_multi_header)
+{
     request_parser p;
-    std::string raw = "GET / HTTP/1.1\r\n"
-                      "Accept: text/html\r\n"
-                      "Accept: application/json\r\n"
-                      "\r\n";
+    std::string raw = "GET / HTTP/1.1\r\n" "Accept: text/html\r\n" "Accept: application/json\r\n" "\r\n";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
     ASSERT_TRUE(p.ready());
     // Multi-value headers are appended with ", "
     ASSERT_EQ(p.get_header("Accept"),
-              std::string_view("text/html, application/json"));
+        std::string_view("text/html, application/json"));
 }
 
 // =============================================================================
 // response_parser — 200 OK with body
 // =============================================================================
 
-TEST(response_parser_200_ok) {
+TEST(response_parser_200_ok)
+{
     response_parser p;
-    std::string raw = "HTTP/1.1 200 OK\r\n"
-                      "Content-Type: application/json\r\n"
-                      "Content-Length: 27\r\n"
-                      "\r\n"
-                      R"({"message":"Hello, World!"})";
+    std::string raw = "HTTP/1.1 200 OK\r\n" "Content-Type: application/json\r\n" "Content-Length: 27\r\n" "\r\n" R"({"message":"Hello, World!"})";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -195,11 +180,10 @@ TEST(response_parser_200_ok) {
     ASSERT_EQ(p.body(), std::string_view(R"({"message":"Hello, World!"})"));
 }
 
-TEST(response_parser_404) {
+TEST(response_parser_404)
+{
     response_parser p;
-    std::string raw = "HTTP/1.1 404 Not Found\r\n"
-                      "Content-Length: 0\r\n"
-                      "\r\n";
+    std::string raw = "HTTP/1.1 404 Not Found\r\n" "Content-Length: 0\r\n" "\r\n";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -209,7 +193,8 @@ TEST(response_parser_404) {
     ASSERT_TRUE(p.body().empty());
 }
 
-TEST(response_parser_no_body) {
+TEST(response_parser_no_body)
+{
     response_parser p;
     std::string raw = "HTTP/1.1 204 No Content\r\n\r\n";
 
@@ -224,15 +209,10 @@ TEST(response_parser_no_body) {
 // response_parser — Chunked
 // =============================================================================
 
-TEST(response_parser_chunked) {
+TEST(response_parser_chunked)
+{
     response_parser p;
-    std::string raw = "HTTP/1.1 200 OK\r\n"
-                      "Transfer-Encoding: chunked\r\n"
-                      "\r\n"
-                      "d\r\n"
-                      "Hello, World!\r\n"
-                      "0\r\n"
-                      "\r\n";
+    std::string raw = "HTTP/1.1 200 OK\r\n" "Transfer-Encoding: chunked\r\n" "\r\n" "d\r\n" "Hello, World!\r\n" "0\r\n" "\r\n";
 
     auto r = p.consume(raw.data(), raw.size());
     ASSERT_TRUE(r.has_value());
@@ -244,10 +224,11 @@ TEST(response_parser_chunked) {
 // response_parser — reset
 // =============================================================================
 
-TEST(response_parser_reset) {
+TEST(response_parser_reset)
+{
     response_parser p;
     std::string raw1 = "HTTP/1.1 200 OK\r\n\r\n";
-    p.consume(raw1.data(), raw1.size());
+    ASSERT_TRUE(p.consume(raw1.data(), raw1.size()).has_value());
     ASSERT_TRUE(p.ready());
     ASSERT_EQ(p.status_code(), 200);
 
@@ -255,7 +236,7 @@ TEST(response_parser_reset) {
     ASSERT_FALSE(p.ready());
 
     std::string raw2 = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
-    p.consume(raw2.data(), raw2.size());
+    ASSERT_TRUE(p.consume(raw2.data(), raw2.size()).has_value());
     ASSERT_TRUE(p.ready());
     ASSERT_EQ(p.status_code(), 500);
 }
@@ -264,7 +245,8 @@ TEST(response_parser_reset) {
 // Round-trip: build request → serialize → parse
 // =============================================================================
 
-TEST(roundtrip_request_serialize_parse) {
+TEST(roundtrip_request_serialize_parse)
+{
     request req(http_method::POST, "/api/test");
     req.set_header("Host", "localhost");
     req.set_header("X-Custom", "value");
@@ -283,7 +265,8 @@ TEST(roundtrip_request_serialize_parse) {
     ASSERT_EQ(p.body(), std::string_view("test body"));
 }
 
-TEST(roundtrip_response_serialize_parse) {
+TEST(roundtrip_response_serialize_parse)
+{
     response resp(200);
     resp.set_header("Server", "cnetmod");
     resp.set_header("Content-Type", "text/plain");

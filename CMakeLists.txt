@@ -7,6 +7,14 @@ project(cnetmod
     LANGUAGES CXX
 )
 
+# Cloud-sync clients can transiently lock Visual Studio's generated
+# ZERO_CHECK.lastbuildstate file.  CLion/CMake already reconfigures explicitly
+# when project inputs change, so avoid a redundant regeneration target on
+# Windows and keep ordinary builds independent of that external file lock.
+if(WIN32 AND CMAKE_GENERATOR MATCHES "Visual Studio")
+    set(CMAKE_SUPPRESS_REGENERATION ON)
+endif()
+
 # ==============================================================================
 # C++ Standard Configuration
 # ==============================================================================
@@ -113,6 +121,17 @@ option(CNETMOD_USE_SYSTEM_DEPS
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/ThirdPartyDependencies.cmake)
 cnetmod_configure_third_party_dependencies()
 
+# QUIC requires BoringSSL's QUIC API (SSL_QUIC_METHOD with
+# set_read_secret/set_write_secret). The protocol option alone is not enough;
+# downgrade it when the BoringSSL QUIC backend is unavailable so the
+# conditional QUIC sources stay excluded from the build.
+if(CNETMOD_ENABLE_QUIC AND NOT CNETMOD_HAS_QUIC)
+    message(WARNING
+        "CNETMOD_ENABLE_QUIC is ON but BoringSSL QUIC support is unavailable "
+        "(set -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON). Disabling QUIC protocol.")
+    set(CNETMOD_ENABLE_QUIC OFF)
+endif()
+
 # ==============================================================================
 # Platform-specific I/O Backend Detection
 # ==============================================================================
@@ -192,6 +211,23 @@ cnetmod_filter_disabled_component_sources(
         REGULAR_CPP_SOURCES
 )
 
+# HTTP/3 modules live under src/protocol/http/v3/ and depend on QUIC primitives
+# (e.g. http3_frame imports :semantics and ::varint).  CMake's file(STRINGS)
+# scanner detects "export module" regardless of preprocessor conditions, so when
+# QUIC is disabled these files are still misclassified as module interfaces and
+# break dyndep generation.  Exclude the entire http/v3/ directory.
+if(NOT CNETMOD_ENABLE_QUIC)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "http/v3/.*\\.cppm$")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "http/v3/.*\\.cpp$")
+    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX "http/v3/.*\\.cpp$")
+
+    # Also exclude entire QUIC protocol stack when QUIC is disabled
+    # (some .cppm files have conditional module declarations that become invalid)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "quic/.*\\.cppm$")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "quic/.*\\.cpp$")
+    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX "quic/.*\\.cpp$")
+endif()
+
 # MSVC's module scanner defaults ordinary .cpp scan output to "$(IntDir)/.d.json".
 # Multiple module implementation units then share the same dependency output and
 # make the Visual Studio target permanently out of date. Give every .cpp source a
@@ -230,6 +266,12 @@ if(NOT CNETMOD_HAS_KQUEUE)
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "platform/kqueue")
     list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "platform/kqueue")
 endif()
+
+# QUIC partition implementation units were converted to implementation units of
+# the primary module `cnetmod.protocol.quic` (see src/protocol/quic/*.cpp), so
+# they can remain in the regular source list: partition implementation units
+# would have to live in a CXX_MODULES FILE_SET and introduce an implicit
+# dependency cycle with the primary interface unit.
 # Keep the SSL and DTLS module units in non-OpenSSL builds.  Their declarations
 # and implementations are already guarded by CNETMOD_HAS_SSL, so they become
 # empty compatibility modules without introducing an OpenSSL link dependency.
@@ -263,6 +305,9 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_EPOLL}>:CNETMOD_HAS_EPOLL>
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
+    $<$<BOOL:${CNETMOD_HAS_QUIC}>:CNETMOD_HAS_SSL>
+    $<$<BOOL:${CNETMOD_HAS_QUIC}>:CNETMOD_HAS_QUIC>
+    $<$<BOOL:${CNETMOD_ENABLE_QUIC}>:CNETMOD_ENABLE_QUIC>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
     $<$<BOOL:${CNETMOD_HAS_LZ4}>:CNETMOD_HAS_LZ4>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
@@ -285,6 +330,7 @@ elseif(CNETMOD_HAS_IO_URING)
 endif()
 
 cnetmod_link_third_party_dependencies(cnetmod_core)
+cnetmod_link_mimalloc(cnetmod_core)
 
 # ==============================================================================
 # C++ Module Configuration

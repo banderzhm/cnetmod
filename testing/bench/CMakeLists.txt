@@ -19,6 +19,7 @@ set(BENCH_TARGETS
     bench_ws
     bench_mqtt
     bench_raft
+    crosslang_cnetmod_server
 )
 
 if(NOT CNETMOD_ENABLE_HTTP)
@@ -43,8 +44,24 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CNETMOD_HAS_IO_URING AND CNETMOD_ENABL
     list(APPEND BENCH_TARGETS bench_uring_recv)
 endif()
 
+# HTTP/3 over QUIC benchmark (requires QUIC + SSL support)
+if(CNETMOD_HAS_QUIC AND CNETMOD_HAS_SSL)
+    list(APPEND BENCH_TARGETS h3_benchmark)
+endif()
+
+# Map target name to source file (most targets use <name>.cpp)
+set(h3_benchmark_SOURCE h3_performance.cpp)
+
 foreach(bench_name ${BENCH_TARGETS})
-    add_executable(${bench_name} ${bench_name}.cpp)
+    # Resolve source file: use override if defined, otherwise <name>.cpp
+    set(_src_var "${bench_name}_SOURCE")
+    if(DEFINED ${_src_var})
+        set(_bench_src "${${_src_var}}")
+    else()
+        set(_bench_src "${bench_name}.cpp")
+    endif()
+
+    add_executable(${bench_name} ${_bench_src})
     target_link_libraries(${bench_name} PRIVATE cnetmod_core)
     target_include_directories(${bench_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set_property(TARGET ${bench_name} PROPERTY
@@ -61,5 +78,10 @@ foreach(bench_name ${BENCH_TARGETS})
         target_compile_options(${bench_name} PRIVATE -O3)
     endif()
 endforeach()
+
+# HTTP/3 measurements require a separately started peer and pinned machine
+# configuration.  They are intentionally not CTest tests: a benchmark that
+# cannot make real requests must never contribute a green test result.  See
+# testing/http3/ACCEPTANCE.md and h3_performance_gate.py.
 
 set(CNETMOD_BENCH_TARGETS ${BENCH_TARGETS} PARENT_SCOPE)

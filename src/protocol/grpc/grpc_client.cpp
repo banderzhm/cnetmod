@@ -31,26 +31,6 @@ namespace {
         return status{.code = status_code::internal, .message = std::move(message)};
     }
 
-    auto response_messages(const http::response& resp)
-        -> std::expected<std::vector<byte_buffer>, status>
-    {
-        auto encoding =
-            compression_from_header(header_value(resp.headers(), "grpc-encoding"))
-                .value_or(compression_algorithm::identity);
-        auto body = resp.body();
-        auto frames = decode_frames(std::span<const std::byte>{
-            reinterpret_cast<const std::byte*>(body.data()), body.size()});
-        if (!frames)
-            return std::unexpected(make_internal(frames.error().message()));
-        return frames_to_messages(
-            *frames,
-            codec_options{
-                .compression = encoding,
-                .accept_compressed = encoding != compression_algorithm::identity,
-                .max_message_bytes = default_max_message_bytes,
-            });
-    }
-
     auto response_messages(const http::response& resp, const client_options& opts)
         -> std::expected<std::vector<byte_buffer>, status>
     {

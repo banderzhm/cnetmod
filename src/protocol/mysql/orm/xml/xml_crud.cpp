@@ -9,12 +9,7 @@ import :orm_xml_crud;
 import :orm_xml_mapper;
 import cnetmod.coro.task;
 import cnetmod.core.log;
-
-#if defined(_MSC_VER)
-    #define CNETMOD_XML_PARAM_MAP std::unordered_map
-#else
-    #define CNETMOD_XML_PARAM_MAP std::flat_map
-#endif
+import cnetmod.utils.flat_map;
 
 namespace cnetmod::orm::mysql_detail {
 using namespace cnetmod::mysql;
@@ -84,7 +79,7 @@ auto mapper_session::execute(std::string_view statement_id,
 
 auto mapper_session::execute(
     std::string_view statement_id,
-    CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
+    cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
     -> task<exec_result>
 {
     co_return co_await execute(statement_id,
@@ -131,7 +126,7 @@ auto mapper_session::execute_query(std::string_view statement_id,
 
 auto mapper_session::execute_query(
     std::string_view statement_id,
-    CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
+    cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
     -> task<result_set>
 {
     co_return co_await execute_query(statement_id,

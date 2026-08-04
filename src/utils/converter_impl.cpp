@@ -8,9 +8,19 @@ module;
 #include <string_view>
 #include <vector>
 
-module cnetmod.utils;
+module cnetmod.utils.converter;
 
 namespace utils::conv {
+
+auto to_bytes(std::string_view value) noexcept -> std::span<const std::byte>
+{
+    return {reinterpret_cast<const std::byte*>(value.data()), value.size()};
+}
+
+auto to_string_view(std::span<const std::byte> value) noexcept -> std::string_view
+{
+    return {reinterpret_cast<const char*>(value.data()), value.size()};
+}
 
 // =============================================================================
 // Byte Swap Implementation

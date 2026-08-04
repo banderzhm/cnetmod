@@ -575,7 +575,7 @@ auto logical_channel::async_select_transaction() -> task<result<void>>
             error_code::precondition_failed,
             "transactions and publisher confirms are mutually exclusive"));
     auto r = co_await impl_->connection->async_rpc(
-        {.channel = impl_->number, .class_id = 90, .method_id = 10}, 90, 11);
+        {.channel = impl_->number, .class_id = 90, .method_id = 10, .arguments = {}}, 90, 11);
     if (!r)
         co_return std::unexpected(r.error());
     impl_->transaction = true;
@@ -588,7 +588,7 @@ auto logical_channel::async_commit_transaction() -> task<result<void>>
         co_return std::unexpected(make_error(error_code::precondition_failed,
             "transaction mode is not selected"));
     auto r = co_await impl_->connection->async_rpc(
-        {.channel = impl_->number, .class_id = 90, .method_id = 20}, 90, 21);
+        {.channel = impl_->number, .class_id = 90, .method_id = 20, .arguments = {}}, 90, 21);
     if (!r)
         co_return std::unexpected(r.error());
     co_return result<void>{};
@@ -600,7 +600,7 @@ auto logical_channel::async_rollback_transaction() -> task<result<void>>
         co_return std::unexpected(make_error(error_code::precondition_failed,
             "transaction mode is not selected"));
     auto r = co_await impl_->connection->async_rpc(
-        {.channel = impl_->number, .class_id = 90, .method_id = 30}, 90, 31);
+        {.channel = impl_->number, .class_id = 90, .method_id = 30, .arguments = {}}, 90, 31);
     if (!r)
         co_return std::unexpected(r.error());
     co_return result<void>{};

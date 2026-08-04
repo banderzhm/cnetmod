@@ -800,9 +800,7 @@ auto async_timer_wait(io_context& ctx,
 
         auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
         {
-            struct kevent ev
-            {
-            };
+            struct kevent ev{};
 
             EV_SET(&ev, static_cast<uintptr_t>(id), EVFILT_TIMER,
                 EV_ADD | EV_ONESHOT, 0, timeout_ms,
@@ -867,9 +865,7 @@ auto async_timer_wait(io_context& ctx,
                 return false;
             }
 
-            struct kevent ev
-            {
-            };
+            struct kevent ev{};
 
             EV_SET(&ev, static_cast<uintptr_t>(id), EVFILT_TIMER,
                 EV_ADD | EV_ONESHOT, 0, timeout_ms,
@@ -965,20 +961,22 @@ auto async_sendto(io_context& ctx, socket& sock,
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
 
-    kqueue_awaiter aw{kq, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
-    ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-        buf.data, buf.size, 0,
-        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-
-    co_return static_cast<std::size_t>(n);
+    for (;;)
+    {
+        kqueue_awaiter aw{kq, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
+        co_await aw;
+        if (aw.sync_error)
+            co_return std::unexpected(aw.sync_error);
+        const ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+            buf.data, buf.size, 0,
+            reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+        if (n >= 0)
+            co_return static_cast<std::size_t>(n);
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+            co_return std::unexpected(last_error());
+    }
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
@@ -991,23 +989,84 @@ auto async_sendto(io_context& ctx, socket& sock,
 
     auto& kq = static_cast<kqueue_context&>(ctx);
 
-    kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-        EVFILT_WRITE, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
-
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
-    ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-        buf.data, buf.size, 0,
-        reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-    if (n < 0)
-        co_return std::unexpected(last_error());
+    for (;;)
+    {
+        kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
+            EVFILT_WRITE, token};
+        co_await aw;
+        if (aw.sync_error)
+            co_return std::unexpected(aw.sync_error);
+        if (token.is_cancelled())
+            co_return std::unexpected(make_error_code(errc::operation_aborted));
+        const ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+            buf.data, buf.size, 0,
+            reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
+        if (n >= 0)
+            co_return static_cast<std::size_t>(n);
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+            co_return std::unexpected(last_error());
+    }
+}
 
-    co_return static_cast<std::size_t>(n);
+auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>
+{
+    if (max_datagrams == 0U || max_datagram_size == 0U)
+        co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+    std::vector<udp_received_datagram> result;
+    result.reserve(max_datagrams);
+    udp_received_datagram first{std::vector<std::byte>(max_datagram_size), {}};
+    auto received = co_await async_recvfrom(ctx, sock,
+        mutable_buffer{first.bytes.data(), first.bytes.size()}, first.peer);
+    if (!received)
+        co_return std::unexpected(received.error());
+    first.bytes.resize(*received);
+    result.push_back(std::move(first));
+
+    // kqueue reports readiness rather than a packet count.  Drain the
+    // non-blocking socket to a bounded budget before registering the next
+    // EVFILT_READ notification.
+    while (result.size() < max_datagrams)
+    {
+        udp_received_datagram next{std::vector<std::byte>(max_datagram_size), {}};
+        ::sockaddr_storage sender{};
+        ::socklen_t sender_length = sizeof(sender);
+        const auto count = ::recvfrom(static_cast<int>(sock.native_handle()), next.bytes.data(),
+            next.bytes.size(), 0, reinterpret_cast<::sockaddr*>(&sender), &sender_length);
+        if (count < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+            co_return std::unexpected(last_error());
+        }
+        next.bytes.resize(static_cast<std::size_t>(count));
+        next.peer = endpoint_from_sockaddr(sender);
+        result.push_back(std::move(next));
+    }
+    co_return result;
+}
+
+auto async_sendto_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    std::size_t submitted{};
+    for (const auto& datagram : datagrams)
+    {
+        auto sent = co_await async_sendto(ctx, sock, datagram.bytes, datagram.peer);
+        if (!sent)
+        {
+            if (submitted != 0U)
+                co_return submitted;
+            co_return std::unexpected(sent.error());
+        }
+        ++submitted;
+    }
+    co_return submitted;
 }
 
 #endif // CNETMOD_HAS_KQUEUE

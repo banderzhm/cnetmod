@@ -170,9 +170,9 @@ namespace detail {
             .type = static_cast<record_type>(*type),
             .cls = static_cast<record_class>(*cls),
             .ttl = *ttl,
+            .data = std::vector<std::byte>(data.begin() + static_cast<std::ptrdiff_t>(pos),
+                data.begin() + static_cast<std::ptrdiff_t>(pos + *len)),
         };
-        rr.data.assign(data.begin() + static_cast<std::ptrdiff_t>(pos),
-            data.begin() + static_cast<std::ptrdiff_t>(pos + *len));
         pos += *len;
         return rr;
     }
@@ -231,6 +231,10 @@ auto parse_message(std::span<const std::byte> data)
         .recursion_desired = (*flags & 0x0100) != 0,
         .recursion_available = (*flags & 0x0080) != 0,
         .rcode = static_cast<response_code>(*flags & 0x000f),
+        .questions = {},
+        .answers = {},
+        .authorities = {},
+        .additionals = {},
     };
 
     std::size_t pos = 12;
@@ -324,6 +328,9 @@ auto make_query(std::string_view name, record_type type, std::uint16_t id)
         .query = true,
         .recursion_desired = true,
         .questions = {question{.name = std::string(name), .type = type}},
+        .answers = {},
+        .authorities = {},
+        .additionals = {},
     };
 }
 

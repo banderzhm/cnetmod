@@ -42,7 +42,7 @@ auto response::set_header(std::string_view key, std::string_view value)
 auto response::append_header(std::string_view key, std::string_view value)
     -> response&
 {
-    auto it = headers_.find(std::string(key));
+    auto it = headers_.find(key);
     if (it != headers_.end())
     {
         it->second += ", ";
@@ -80,7 +80,7 @@ auto response::append_trailer(std::string_view key, std::string_view value)
 
 auto response::remove_header(std::string_view key) -> response&
 {
-    headers_.erase(std::string(key));
+    headers_.erase(key);
     return *this;
 }
 
@@ -102,6 +102,16 @@ auto response::set_body_preserve_headers(std::string body) -> response&
 {
     body_ = std::move(body);
     return *this;
+}
+
+void response::reset(int status_code, http_version version) noexcept
+{
+    status_code_ = status_code;
+    status_msg_.clear();
+    version_ = version;
+    headers_.clear();
+    trailers_.clear();
+    body_.clear();
 }
 
 auto response::set_cookie(std::string_view name, std::string_view value,
@@ -158,7 +168,7 @@ auto response::take_body() noexcept -> std::string
 
 auto response::get_header(std::string_view key) const -> std::string_view
 {
-    auto it = headers_.find(std::string(key));
+    auto it = headers_.find(key);
     return it != headers_.end() ? std::string_view(it->second)
                                 : std::string_view{};
 }
@@ -166,23 +176,35 @@ auto response::get_header(std::string_view key) const -> std::string_view
 auto response::serialize() const -> std::string
 {
     std::string out;
-    out.reserve(256 + body_.size());
-    out += version_to_string(version_);
-    out += ' ';
-    out += std::to_string(status_code_);
-    out += ' ';
-    out += status_msg_.empty() ? status_reason(status_code_) : status_msg_;
-    out += "\r\n";
+    serialize_to(out);
+    return out;
+}
+
+void response::serialize_to(std::string& output) const
+{
+    output.clear();
+    const auto reserve_size = 64U + body_.size() +
+        std::accumulate(headers_.begin(), headers_.end(), std::size_t{},
+            [](std::size_t total, const auto& header)
+            {
+                return total + header.first.size() + header.second.size() + 4U;
+            });
+    output.reserve(reserve_size);
+    output += version_to_string(version_);
+    output += ' ';
+    output += std::to_string(status_code_);
+    output += ' ';
+    output += status_msg_.empty() ? status_reason(status_code_) : status_msg_;
+    output += "\r\n";
     for (const auto& [key, value] : headers_)
     {
-        out += key;
-        out += ": ";
-        out += value;
-        out += "\r\n";
+        output += key;
+        output += ": ";
+        output += value;
+        output += "\r\n";
     }
-    out += "\r\n";
-    out += body_;
-    return out;
+    output += "\r\n";
+    output += body_;
 }
 
 } // namespace cnetmod::http

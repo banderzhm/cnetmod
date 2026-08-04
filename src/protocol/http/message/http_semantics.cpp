@@ -96,7 +96,7 @@ auto url::parse(std::string_view input) -> std::expected<url, std::string>
             port_text = remainder.substr(bracket + 2);
     }
     else if (const auto colon = remainder.rfind(':');
-             colon != std::string_view::npos)
+        colon != std::string_view::npos)
     {
         result.host = remainder.substr(0, colon);
         port_text = remainder.substr(colon + 1);

@@ -237,22 +237,344 @@ else
 
 对比 C++ 模型与数据库表结构，自动 ADD / DROP / MODIFY 列。
 
-## 8. XML Mapper（动态 SQL）
+## 8. MyBatis 风格 XML Mapper（动态 SQL）
 
-```cpp
-orm::mapper_registry registry;
-registry.load_file("mappers/user_mapper.xml");
-orm::mysql_mapper_session session(cli, registry);
+XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 `.xml` 文件中，
+运行时由 `mapper_registry` 加载、`dynamic_sql_processor` 根据参数上下文渲染为
+最终 SQL 并执行。
 
-auto result = co_await session.query<User>("UserMapper.findByCondition",
-    orm::param_context::from_map({
-        {"name", orm::param_value::from_string("Alice")},
-        {"status", orm::param_value::from_int(1)}}));
+### XML 文件格式
 
-co_await session.execute("UserMapper.insertUser", new_user);
+根标签必须是 `<mapper>` 且必须带 `namespace` 属性；语句标签为
+`<select>` / `<insert>` / `<update>` / `<delete>`（各需 `id` 属性），
+可复用片段用 `<sql id="...">` 定义、`<include refid="..."/>` 引用。
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<mapper namespace="UserMapper">
+
+    <!-- 可复用 SQL 片段 -->
+    <sql id="columns">
+        `id`, `name`, `email`, `status`, `created_at`
+    </sql>
+
+    <!-- 简单查询 -->
+    <select id="findById">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        WHERE `id` = #{id}
+    </select>
+
+    <!-- 动态条件查询 -->
+    <select id="findByCondition">
+        SELECT <include refid="columns"/>
+        FROM `users`
+        <where>
+            <if test="name != null and name != ''">
+                AND `name` = #{name}
+            </if>
+            <if test="status != null">
+                AND `status` = #{status}
+            </if>
+        </where>
+        ORDER BY `id` DESC
+    </select>
+
+    <insert id="insertUser">
+        INSERT INTO `users` (`name`, `email`, `status`, `created_at`)
+        VALUES (#{name}, #{email}, #{status}, #{created_at})
+    </insert>
+
+    <!-- 动态 SET（自动补 SET 关键字、去尾部逗号） -->
+    <update id="updateSelective">
+        UPDATE `users`
+        <set>
+            <if test="name != null">`name` = #{name},</if>
+            <if test="email != null">`email` = #{email},</if>
+        </set>
+        WHERE `id` = #{id}
+    </update>
+
+    <delete id="deleteByStatus">
+        DELETE FROM `users` WHERE `status` = #{status}
+    </delete>
+</mapper>
 ```
 
-XML 动态标签: `<if>`, `<where>`, `<set>`, `<trim>`, `<foreach>`, `<choose>/<when>/<otherwise>`, `<include>`, `<bind>`。
+### 支持的标签
+
+| 标签 | 用途 | 属性 |
+|------|------|------|
+| `<mapper>` | 根元素 | `namespace`（必填） |
+| `<sql>` | 可复用 SQL 片段 | `id` |
+| `<select>` / `<insert>` / `<update>` / `<delete>` | 语句定义 | `id` |
+| `<include>` | 引入 `<sql>` 片段 | `refid` |
+| `<if>` | 条件包含 | `test`（布尔表达式） |
+| `<where>` | 自动补 `WHERE`、去掉首部 `AND`/`OR` | — |
+| `<set>` | 自动补 `SET`、去掉尾部逗号 | — |
+| `<trim>` | 前后缀增删 | `prefix`、`suffix`、`prefixOverrides`、`suffixOverrides` |
+| `<foreach>` | 遍历集合 | `collection`、`item`、`open`、`close`、`separator` |
+| `<choose>` / `<when>` / `<otherwise>` | 多分支（首个匹配的 `when` 生效） | `when` 带 `test` |
+| `<bind>` | 绑定表达式到新变量 | `name`、`value` |
+
+语句标签只读取 `id` 属性，**没有 `resultType` / `resultMap` / `parameterType` 属性**
+（结果映射类型由 C++ 侧模板参数决定，见下文）。
+`<foreach>` 目前不支持 `index` 属性。XML 中 `>`、`<`、`&` 需写成
+`&gt;`、`&lt;`、`&amp;`。
+
+### namespace 与语句 ID
+
+- `<mapper namespace="UserMapper">` + `<select id="findById">` → 语句全限定 ID
+  `UserMapper.findById`。
+- `registry.find_statement()` 同时支持全限定 ID（`"namespace.id"`）和裸 ID（`"id"`，
+  全局唯一时可用），C++ 调用处写法相同。
+- namespace 与 C++ 接口/类**无绑定关系**，它只是语句 ID 的命名空间前缀；
+  `<include refid>` 只能引用同一 namespace 内的 `<sql>` 片段。
+- 一个 `mapper_registry` 可加载多个不同 namespace 的 mapper 文件。
+
+### 参数占位符
+
+| 语法 | 行为 |
+|------|------|
+| `#{name}` | 参数化占位符（安全，值进入参数列表后由 SQL 格式化层转义） |
+| `${name}` | 直接字符串替换（有注入风险，用于 ORDER BY / GROUP BY / 表名等无法参数化的位置） |
+
+- 支持点路径访问集合元素属性：`#{user.name}`、`${cond.field}`。
+- 参数值来自 `param_context`（map、模型对象或集合，见「注册与加载」）。
+- `#{}` / `${}` 均不支持 `jdbcType=` 等附加修饰符。
+
+### test 表达式
+
+`<if test>` / `<when test>` / `<bind value>` 使用内置表达式引擎，支持：
+
+- 比较：`==`、`!=`、`<`、`>`、`<=`、`>=`（XML 中写 `&lt;` `&gt;`）
+- 逻辑：`and`、`or`、`not`（不支持 `&&` / `||`）
+- 算术：`+`、`-`、`*`、`/`、`%`，括号分组
+- 字面量：整数、浮点、`'单引号'` 或 `"双引号"` 字符串、`true`、`false`、`null`
+- 属性路径：`a.b.c` 逐级解析
+
+示例：`test="name != null and name != ''"`、`test="limit &gt; 0"`、
+`test="role == 'admin'"`、`test="includeOrders == true"`。
+
+### 动态 SQL 示例
+
+**foreach — IN 子句 / 批量插入**：
+
+```xml
+<!-- 集合由 param_context::add_collection("ids", ...) 提供 -->
+<select id="findByIds">
+    SELECT <include refid="columns"/>
+    FROM `users`
+    WHERE `id` IN
+    <foreach collection="ids" item="id" open="(" close=")" separator=",">
+        #{id}
+    </foreach>
+</select>
+
+<!-- 批量插入：每个元素是带字段的 param_context -->
+<insert id="batchInsert">
+    INSERT INTO `users` (`name`, `email`, `status`, `created_at`)
+    VALUES
+    <foreach collection="users" item="user" separator=",">
+        (#{user.name}, #{user.email}, #{user.status}, #{user.created_at})
+    </foreach>
+</insert>
+```
+
+**choose/when/otherwise**：
+
+```xml
+<select id="findByRole">
+    SELECT <include refid="columns"/>
+    FROM `users`
+    <where>
+        <choose>
+            <when test="role == 'admin'">AND `status` = 1</when>
+            <when test="role == 'moderator'">AND `status` IN (1, 2)</when>
+            <otherwise>AND `status` = 0</otherwise>
+        </choose>
+    </where>
+</select>
+```
+
+**trim + bind**：
+
+```xml
+<select id="advancedFilter">
+    SELECT <include refid="columns"/>
+    FROM `users`
+    <where>
+        <!-- 输出 ( `name` LIKE ? OR `email` LIKE ? )，去掉首部 OR -->
+        <trim prefix="(" suffix=")" prefixOverrides="OR">
+            <if test="namePattern != null and namePattern != ''">
+                OR `name` LIKE #{namePattern}
+            </if>
+            <if test="emailPattern != null and emailPattern != ''">
+                OR `email` LIKE #{emailPattern}
+            </if>
+        </trim>
+    </where>
+</select>
+
+<select id="dynamicTableQuery">
+    SELECT * FROM ${tableName}
+    <where>
+        <foreach collection="filters" item="filter" separator="AND">
+            <bind name="fieldName" value="filter.field"/>
+            <bind name="fieldValue" value="filter.value"/>
+            ${fieldName} = #{fieldValue}
+        </foreach>
+    </where>
+</select>
+```
+
+### 结果集映射
+
+**没有 XML 侧 `resultType` / `resultMap`**——结果映射类型完全由 C++ 侧决定：
+
+- `session.query<T>(...)`：按**列名**匹配 `CNETMOD_MODEL` 注册的字段名
+  （列别名 `AS xxx` 只要与字段名一致即可映射），返回 `orm_result<T>`。
+- `session.query_tuple<Ts...>(...)`：按**列序**映射到 tuple 元素，适合聚合/单列查询，
+  无需定义模型。
+- `session.execute_query(...)`：返回原始 `result_set`（`columns` + `rows`），自行解析。
+
+### 注册与加载
+
+**mapper_registry API**（同步，返回 `std::expected<void, std::string>`）：
+
+| 方法 | 说明 |
+|------|------|
+| `load_file(path)` | 加载单个 `.xml` 文件 |
+| `load_xml(content)` | 从字符串加载（如嵌入式资源） |
+| `load_directory(dir)` | 加载目录下所有 `.xml` 文件 |
+| `find_statement(id)` | 查找语句节点（`"Ns.id"` 或裸 `"id"`） |
+| `statement_type(id)` | 返回语句标签名（select/insert/update/delete） |
+
+**mysql_mapper_session API**（`orm::mysql_mapper_session`）：
+
+```cpp
+mysql_mapper_session(client& cli, mapper_registry& registry);
+void set_sql_logging(bool enabled);               // 打印生成/最终 SQL
+auto last_generated_sql() const -> std::string_view;
+auto last_final_sql() const -> std::string_view;
+
+// select → 模型（参数可以是 param_context、模型对象或 map）
+template <Model T> auto query(std::string_view id, const param_context& ctx) -> task<orm_result<T>>;
+template <Model T> auto query(std::string_view id, const T& model) -> task<orm_result<T>>;
+
+// select → tuple（按列序）
+template <typename... Ts> auto query_tuple(std::string_view id, const param_context& ctx)
+    -> task<orm_result<std::tuple<Ts...>>>;
+
+// insert/update/delete → exec_result{affected_rows, last_insert_id, error_msg}
+auto execute(std::string_view id, const param_context& ctx) -> task<exec_result>;
+template <Model T> auto execute(std::string_view id, const T& model) -> task<exec_result>;
+
+// 任意语句 → 原始 result_set
+auto execute_query(std::string_view id, const param_context& ctx) -> task<result_set>;
+```
+
+**参数传递（param_context）**：
+
+```cpp
+// 1. map 参数
+auto ctx = orm::param_context::from_map({
+    {"name", orm::param_value::from_string("Alice")},
+    {"status", orm::param_value::from_int(1)},
+    {"limit", orm::param_value::from_int(10)}});
+
+// 2. 模型对象作为参数源（按字段名映射）
+auto ctx2 = orm::param_context::from_model(user);
+
+// 3. 集合参数（供 <foreach> 使用）
+auto ctx3 = orm::param_context::from_map({});
+std::vector<orm::param_context> items;
+items.push_back(orm::param_context::from_map({{"id", orm::param_value::from_int(1)}}));
+items.push_back(orm::param_context::from_map({{"id", orm::param_value::from_int(2)}}));
+ctx3.add_collection("ids", std::move(items));
+```
+
+**完整示例**（加载 → 建表 → 查询 → 插入 → foreach）：
+
+```cpp
+import std;
+import cnetmod.io;
+import cnetmod.coro;
+import cnetmod.protocol.mysql;
+#include <cnetmod/orm.hpp>
+
+using namespace cnetmod;
+using namespace cnetmod::orm;
+
+struct User
+{
+    std::int64_t id = 0;
+    std::string name;
+    std::optional<std::string> email;
+    int status = 0;
+    std::time_t created_at = 0;
+};
+
+CNETMOD_MODEL(User, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(email, "email", varchar, NULLABLE),
+    CNETMOD_FIELD(status, "status", int_),
+    CNETMOD_FIELD(created_at, "created_at", timestamp, NULLABLE))
+
+auto work(mysql::client& cli) -> task<void>
+{
+    // 1. 加载 mapper（文件 / 目录 / 字符串三种方式）
+    mapper_registry registry;
+    if (auto r = registry.load_file("mappers/user_mapper.xml"); !r)
+        std::println("load failed: {}", r.error());
+    // registry.load_directory("mappers");
+    // registry.load_xml(xml_string);
+
+    // 2. （可选）确保表存在
+    co_await orm::mysql_synchronize_schema<User>(cli);
+
+    // 3. 创建 session，打开 SQL 日志
+    mysql_mapper_session session(cli, registry);
+    session.set_sql_logging(true);
+
+    // 4. select —— map 参数
+    auto r1 = co_await session.query<User>("UserMapper.findByCondition",
+        param_context::from_map({{"name", param_value::from_string("Alice")},
+            {"status", param_value::from_int(1)},
+            {"limit", param_value::from_int(10)}}));
+    if (r1.ok())
+        std::println("found {} users", r1.data.size());
+
+    // 5. insert —— 模型作为参数源，回填 last_insert_id
+    User nu;
+    nu.name = "Charlie";
+    nu.email = "charlie@example.com";
+    nu.status = 1;
+    nu.created_at = std::time(nullptr);
+    auto r2 = co_await session.execute("UserMapper.insertUser", nu);
+    if (r2.ok())
+        std::println("inserted id={}", r2.last_insert_id);
+
+    // 6. foreach —— 集合参数
+    auto ctx = param_context::from_map({});
+    std::vector<param_context> ids;
+    for (int i = 1; i <= 5; ++i)
+        ids.push_back(param_context::from_map({{"id", param_value::from_int(i)}}));
+    ctx.add_collection("ids", std::move(ids));
+    auto r3 = co_await session.query<User>("UserMapper.findByIds", ctx);
+
+    // 7. query_tuple —— 聚合查询按列序映射，无需模型
+    auto r4 = co_await session.query_tuple<std::int64_t, double>(
+        "ProjectMapper.selectStats",
+        param_context::from_map({{"start_date", param_value::from_string("2026-01-01")},
+            {"end_date", param_value::from_string("2026-12-31")}}));
+}
+```
+
+> **生产模式**：`mapper_registry` 通常在启动时全局构建一次（`static` 全局变量或
+> `load_xml` 加载嵌入式资源），之后每个请求用连接池取出的 `mysql::client&`
+> 临时构造 `mysql_mapper_session`（构造开销极低）。
 
 ## 9. 自动填充 / 软删除 / 多租户
 

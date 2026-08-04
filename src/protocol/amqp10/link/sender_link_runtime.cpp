@@ -119,9 +119,9 @@ struct sender_link::impl : recovery_observer
                     pending.payload.begin() +
                         static_cast<std::ptrdiff_t>(offset + count));
                 if (first && pending.options.transaction_id)
-                    resumed.state = delivery_outcome{.kind = outcome_kind::transactional,
-                        .transaction_id =
-                            *pending.options.transaction_id};
+                    resumed.state = delivery_outcome{
+                        .kind = outcome_kind::transactional,
+                        .transaction_id = *pending.options.transaction_id};
                 auto replayed = co_await owner->send(
                     channel, performative{std::move(resumed)}, token);
                 if (!replayed)
@@ -266,7 +266,8 @@ auto sender_link::begin_send(const message& m, send_options options,
             encoded.begin() + static_cast<std::ptrdiff_t>(offset + count));
         if (first && options.transaction_id)
             request.state =
-                delivery_outcome{.kind = outcome_kind::transactional,
+                delivery_outcome{
+                    .kind = outcome_kind::transactional,
                     .transaction_id = *options.transaction_id};
         auto sent = co_await impl_->owner->send(
             impl_->channel, performative{std::move(request)}, token);
@@ -337,7 +338,7 @@ auto sender_link::send(const message& m, send_options options,
         co_return std::unexpected(started.error());
     if (options.settled)
         co_return send_result{*started,
-            delivery_outcome{.kind = outcome_kind::accepted}};
+            delivery_outcome{.kind = outcome_kind::accepted, .error = {}}};
     co_return co_await await_outcome(*started, token);
 }
 
@@ -348,8 +349,11 @@ auto sender_link::detach(bool close_link, cancel_token& token)
         co_return {};
     auto sent = co_await impl_->owner->send(
         impl_->channel,
-        performative{cnetmod::amqp10::detach{.handle = impl_->handle,
-            .closed = close_link}},
+        performative{
+            cnetmod::amqp10::detach{
+                .handle = impl_->handle,
+                .closed = close_link,
+                .error = {}}},
         token);
     if (!sent)
         co_return std::unexpected(sent.error());

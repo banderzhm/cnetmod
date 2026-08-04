@@ -5,8 +5,10 @@ module;
 export module cnetmod.protocol.http:semantics;
 
 import std;
+import cnetmod.core.buffer;
 import cnetmod.coro.task;
 import cnetmod.coro.channel;
+import cnetmod.utils.flat_map;
 
 namespace cnetmod::http {
 
@@ -14,7 +16,7 @@ namespace cnetmod::http {
 // Request Body Streaming
 // =============================================================================
 
-export using request_body_chunk = std::vector<std::byte>;
+export using request_body_chunk = byte_buffer;
 
 export class request_body_stream
 {
@@ -280,7 +282,7 @@ export struct case_insensitive_less
 };
 
 export using header_map =
-    std::map<std::string, std::string, case_insensitive_less>;
+    cnetmod::flat_map<std::string, std::string, case_insensitive_less>;
 
 // =============================================================================
 // Simple URL Structure

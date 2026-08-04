@@ -96,6 +96,115 @@ auto make_ssl_error(int ssl_err) -> std::error_code
         detail::ssl_category()};
 }
 
+    #ifdef CNETMOD_ENABLE_QUIC
+struct ssl_context::ticket_aead_state
+{
+    ssl_ticket_aead_callbacks callbacks;
+};
+
+namespace {
+
+    auto ticket_aead_ex_index() -> int
+    {
+        static const int index = SSL_CTX_get_ex_new_index(0, nullptr, nullptr, nullptr, nullptr);
+        return index;
+    }
+
+    auto ticket_aead_state_for(SSL* ssl) noexcept -> ssl_context::ticket_aead_state*
+    {
+        auto* context = SSL_get_SSL_CTX(ssl);
+        return context == nullptr ? nullptr : static_cast<ssl_context::ticket_aead_state*>(SSL_CTX_get_ex_data(context, ticket_aead_ex_index()));
+    }
+
+    auto ticket_aead_max_overhead(SSL* ssl) -> std::size_t
+    {
+        const auto* state = ticket_aead_state_for(ssl);
+        return state == nullptr ? 0U : state->callbacks.max_overhead;
+    }
+
+    auto ticket_aead_seal(SSL* ssl, std::uint8_t* out, std::size_t* out_len,
+        std::size_t max_out_len, const std::uint8_t* in, std::size_t in_len) -> int
+    {
+        const auto* state = ticket_aead_state_for(ssl);
+        if (state == nullptr || !state->callbacks.seal)
+            return 0;
+        try
+        {
+            const auto sealed = state->callbacks.seal(std::as_bytes(std::span{in, in_len}));
+            if (!sealed || sealed->size() > max_out_len)
+                return 0;
+            std::memcpy(out, sealed->data(), sealed->size());
+            *out_len = sealed->size();
+            return 1;
+        }
+        catch (...)
+        {
+            return 0;
+        }
+    }
+
+    auto ticket_aead_open(SSL* ssl, std::uint8_t* out, std::size_t* out_len,
+        std::size_t max_out_len, const std::uint8_t* in, std::size_t in_len)
+        -> ssl_ticket_aead_result_t
+    {
+        const auto* state = ticket_aead_state_for(ssl);
+        if (state == nullptr || !state->callbacks.open)
+            return ssl_ticket_aead_ignore_ticket;
+        try
+        {
+            const auto opened = state->callbacks.open(std::as_bytes(std::span{in, in_len}));
+            if (!opened || opened->plaintext.size() > max_out_len)
+                return ssl_ticket_aead_ignore_ticket;
+
+            // A ticket may still resume a normal 1-RTT handshake repeatedly. It
+            // becomes single-use only when BoringSSL has actually entered the
+            // early-data path, so ordinary session resumption is not consumed.
+            if (SSL_in_early_data(ssl) == 1 &&
+                (!state->callbacks.consume_early_data || opened->identity.empty() ||
+                    !state->callbacks.consume_early_data(opened->identity,
+                        opened->early_data_expires_at)))
+            {
+                return ssl_ticket_aead_ignore_ticket;
+            }
+
+            std::memcpy(out, opened->plaintext.data(), opened->plaintext.size());
+            *out_len = opened->plaintext.size();
+            return ssl_ticket_aead_success;
+        }
+        catch (...)
+        {
+            return ssl_ticket_aead_ignore_ticket;
+        }
+    }
+
+    const SSL_TICKET_AEAD_METHOD ticket_aead_method{
+        ticket_aead_max_overhead,
+        ticket_aead_seal,
+        ticket_aead_open,
+    };
+
+} // namespace
+
+auto ssl_context::configure_ticket_aead(ssl_ticket_aead_callbacks callbacks)
+    -> std::expected<void, std::error_code>
+{
+    if (ctx_ == nullptr || !callbacks.seal || !callbacks.open ||
+        callbacks.max_overhead == 0)
+    {
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    }
+
+    auto state = std::make_shared<ticket_aead_state>();
+    state->callbacks = std::move(callbacks);
+    if (SSL_CTX_set_ex_data(ctx_, ticket_aead_ex_index(), state.get()) != 1)
+        return std::unexpected(make_ssl_error());
+
+    ticket_aead_state_ = std::move(state);
+    SSL_CTX_set_ticket_aead_method(ctx_, &ticket_aead_method);
+    return {};
+}
+    #endif
+
 ssl_context::~ssl_context()
 {
     if (ctx_)
@@ -105,7 +214,13 @@ ssl_context::~ssl_context()
 }
 
 ssl_context::ssl_context(ssl_context&& other) noexcept
-    : ctx_(std::exchange(other.ctx_, nullptr)), alpn_wire_(std::move(other.alpn_wire_)), kernel_tls_enabled_(std::exchange(other.kernel_tls_enabled_, false))
+    : ctx_(std::exchange(other.ctx_, nullptr)), alpn_wire_(std::move(other.alpn_wire_))
+    #ifdef CNETMOD_ENABLE_QUIC
+      ,
+      ticket_aead_state_(std::move(other.ticket_aead_state_))
+    #endif
+      ,
+      kernel_tls_enabled_(std::exchange(other.kernel_tls_enabled_, false))
 {
     if (ctx_ && !alpn_wire_.empty())
     {
@@ -126,6 +241,9 @@ auto ssl_context::operator=(ssl_context&& other) noexcept -> ssl_context&
     }
     ctx_ = std::exchange(other.ctx_, nullptr);
     alpn_wire_ = std::move(other.alpn_wire_);
+    #ifdef CNETMOD_ENABLE_QUIC
+    ticket_aead_state_ = std::move(other.ticket_aead_state_);
+    #endif
     kernel_tls_enabled_ = std::exchange(other.kernel_tls_enabled_, false);
     if (ctx_ && !alpn_wire_.empty())
     {
@@ -187,10 +305,52 @@ auto ssl_context::dtls_server() -> std::expected<ssl_context, std::error_code>
     }
 
     SSL_CTX_set_min_proto_version(context, DTLS1_2_VERSION);
+    #ifndef CNETMOD_HAS_QUIC
     SSL_CTX_set_cookie_generate_cb(context, dtls_generate_cookie);
     SSL_CTX_set_cookie_verify_cb(context, dtls_verify_cookie);
+    #endif
     return ssl_context{context};
 }
+
+    #ifdef CNETMOD_ENABLE_QUIC
+auto ssl_context::quic_client()
+    -> std::expected<ssl_context, std::error_code>
+{
+    detail::ssl_global_init();
+    auto* context = SSL_CTX_new(TLS_client_method());
+    if (!context)
+    {
+        return std::unexpected(make_ssl_error());
+    }
+
+    // QUIC requires TLS 1.3 only
+    SSL_CTX_set_min_proto_version(context, TLS1_3_VERSION);
+    SSL_CTX_set_max_proto_version(context, TLS1_3_VERSION);
+
+    auto result = ssl_context{context};
+    result.set_kernel_tls(false); // kTLS not supported with QUIC
+    return result;
+}
+
+auto ssl_context::quic_server()
+    -> std::expected<ssl_context, std::error_code>
+{
+    detail::ssl_global_init();
+    auto* context = SSL_CTX_new(TLS_server_method());
+    if (!context)
+    {
+        return std::unexpected(make_ssl_error());
+    }
+
+    // QUIC requires TLS 1.3 only
+    SSL_CTX_set_min_proto_version(context, TLS1_3_VERSION);
+    SSL_CTX_set_max_proto_version(context, TLS1_3_VERSION);
+
+    auto result = ssl_context{context};
+    result.set_kernel_tls(false); // kTLS not supported with QUIC
+    return result;
+}
+    #endif
 
 auto ssl_context::load_cert_file(std::string_view path)
     -> std::expected<void, std::error_code>
@@ -665,7 +825,7 @@ auto ssl_stream::async_shutdown()
             continue;
         }
 
-        switch (const int error = SSL_get_error(ssl_, ret))
+        switch (SSL_get_error(ssl_, ret))
         {
         case SSL_ERROR_WANT_WRITE:
         {
@@ -747,27 +907,24 @@ auto ssl_stream::flush_wbio()
         // The socket BIO has already handed encrypted records to the kernel.
         co_return {};
     }
-    char buffer[8192];
     for (;;)
     {
-        const int pending = static_cast<int>(BIO_ctrl_pending(wbio_));
+        char* encrypted = nullptr;
+        const auto pending = BIO_get_mem_data(wbio_, &encrypted);
         if (pending <= 0)
         {
             break;
         }
-
-        const int read = BIO_read(
-            wbio_, buffer, std::min(pending, static_cast<int>(sizeof(buffer))));
-        if (read <= 0)
-        {
-            break;
-        }
-
         auto written = co_await cnetmod::async_write_all(
-            io_ctx_, sock_, const_buffer{buffer, static_cast<std::size_t>(read)});
+            io_ctx_, sock_,
+            const_buffer{encrypted, static_cast<std::size_t>(pending)});
         if (!written)
         {
             co_return std::unexpected(written.error());
+        }
+        if (BIO_reset(wbio_) != 1)
+        {
+            co_return std::unexpected(make_ssl_error(SSL_ERROR_SSL));
         }
     }
     co_return {};

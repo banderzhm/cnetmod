@@ -111,7 +111,7 @@ void encoder::write_bytes(std::span<const std::byte> v)
 
 void encoder::write_value(const value& input)
 {
-    auto& out = impl_->output;
+    [[maybe_unused]] auto& out = impl_->output;
     std::visit(
         [&](const auto& item)
         {

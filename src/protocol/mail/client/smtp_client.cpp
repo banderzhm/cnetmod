@@ -8,6 +8,7 @@ module cnetmod.protocol.mail;
 
 import std;
 import cnetmod.core.buffer;
+import cnetmod.utils.converter;
 import cnetmod.core.dns;
 import cnetmod.core.socket;
 import cnetmod.coro.task;
@@ -363,14 +364,15 @@ auto client::impl::write(std::string_view text)
 #ifdef CNETMOD_HAS_SSL
     if (ssl_stream_)
     {
-        auto result = co_await ssl_stream_->async_write_all(buffer(text));
+        auto result = co_await ssl_stream_->async_write_all(
+            const_buffer{::utils::conv::to_bytes(text)});
         if (!result)
             co_return std::unexpected(result.error().message());
         co_return std::expected<void, std::string>{};
     }
 #endif
     auto result = co_await async_write_all(context_, connection_.native_socket(),
-        buffer(text));
+        const_buffer{::utils::conv::to_bytes(text)});
     if (!result)
         co_return std::unexpected(result.error().message());
     co_return std::expected<void, std::string>{};

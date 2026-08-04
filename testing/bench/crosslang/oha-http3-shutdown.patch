@@ -1,0 +1,22 @@
+diff --git a/src/client_h3.rs b/src/client_h3.rs
+--- a/src/client_h3.rs
++++ b/src/client_h3.rs
+@@ -400,14 +400,10 @@ pub(crate) fn spawn_http3_driver(
+             // Listen for shutdown condition
+             _ = shutdown_rx => {
+                 // Initiate shutdown
+                 h3_connection.shutdown(0).await?;
+-                // Wait for ongoing work to complete
+-                let closed = std::future::poll_fn(|cx| h3_connection.poll_close(cx)).await;
+-                if closed.is_h3_no_error() {
+-                    Ok(())
+-                } else {
+-                    Err(Http3Error::H3Connection(closed))
+-                }
++                // Request workers have already completed. The peer's idle
++                // close timeout is connection teardown, not request time.
++                Ok(())
+             }
+         }
+     })
+ }

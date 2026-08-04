@@ -132,10 +132,54 @@ export auto async_sendto(io_context& ctx, socket& sock,
     const_buffer buf, const endpoint& peer)
     -> task<std::expected<std::size_t, std::error_code>>;
 
+#ifdef CNETMOD_HAS_IOCP
+/// Submit on the socket's IOCP while resuming the awaiting coroutine on its
+/// connection-affine executor. This is used by shared UDP listeners whose
+/// protocol state is sharded across worker contexts.
+export auto async_sendto_on(io_context& socket_context,
+    io_context& resume_context, socket& sock, const_buffer buf,
+    const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>;
+#endif
+
 /// Cancellable async sendto
 export auto async_sendto(io_context& ctx, socket& sock,
     const_buffer buf, const endpoint& peer,
     cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+// =============================================================================
+// Batched UDP I/O
+// =============================================================================
+//
+// QUIC listeners commonly receive a burst of independent datagrams after a
+// single readiness notification.  These operations preserve datagram
+// boundaries and use the platform batch facility where one exists
+// (recvmmsg/sendmmsg on Linux).  The other backends retain the same API and
+// submit their datagrams through their native asynchronous transport.
+
+export struct udp_received_datagram
+{
+    std::vector<std::byte> bytes;
+    endpoint peer;
+};
+
+export struct udp_send_datagram
+{
+    const_buffer bytes;
+    endpoint peer;
+};
+
+/// Receive at least one UDP datagram, then drain up to max_datagrams packets.
+/// max_datagrams and max_datagram_size must both be non-zero.
+export auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size)
+    -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>;
+
+/// Submit a bounded batch of UDP datagrams.  The result is the number accepted
+/// by the operating system; a partial result is normal under UDP backpressure.
+export auto async_sendto_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams)
     -> task<std::expected<std::size_t, std::error_code>>;
 
 // =============================================================================

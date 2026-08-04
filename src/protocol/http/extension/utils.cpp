@@ -37,9 +37,10 @@ auto parse_query_param(std::string_view q, std::string_view key) -> std::string
     return {};
 }
 
-auto parse_query_params(std::string_view q) -> std::unordered_map<std::string, std::string>
+auto parse_query_params(std::string_view q)
+    -> cnetmod::flat_map<std::string, std::string>
 {
-    std::unordered_map<std::string, std::string> r;
+    cnetmod::flat_map<std::string, std::string> r;
     for (std::size_t p = 0; p < q.size();)
     {
         auto a = q.find('&', p);

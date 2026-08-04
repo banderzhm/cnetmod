@@ -26,13 +26,6 @@ void promise_base::set_caller(std::coroutine_handle<> caller) noexcept
     caller_ = caller;
 }
 
-void sync_wait(task<void> task)
-{
-    auto handle = task.handle();
-    handle.resume();
-    handle.promise().result();
-}
-
 namespace detail {
 
     when_all_state::when_all_state(int count) noexcept

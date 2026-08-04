@@ -8,9 +8,14 @@ module;
 #include <string_view>
 #include <vector>
 
-export module cnetmod.utils:converter;
+export module cnetmod.utils.converter;
 
 export namespace utils::conv {
+
+/// Zero-copy character/byte representation views. Ownership remains with the
+/// caller; protocol code should use these instead of representation casts.
+std::span<const std::byte> to_bytes(std::string_view value) noexcept;
+std::string_view to_string_view(std::span<const std::byte> value) noexcept;
 
 // =============================================================================
 // Endian Type

@@ -159,5 +159,59 @@ void assert_ne_impl(const A& a, const B& b,
             cnetmod::test::detail::assert_fail(#expr " should throw", __FILE__, __LINE__); \
     } while(0)
 
+#define ASSERT_NEAR(a, b, tol) \
+    do { \
+        ++cnetmod::test::total_count(); \
+        auto _a_val = (a); auto _b_val = (b); auto _tol_val = (tol); \
+        auto _diff_val = (_a_val > _b_val) ? (_a_val - _b_val) : (_b_val - _a_val); \
+        if (_diff_val > _tol_val) { \
+            std::ostringstream _oss; \
+            _oss << #a << " ≈ " << #b \
+                 << " (got: " << _a_val << " vs " << _b_val \
+                 << ", diff: " << _diff_val << ", tol: " << _tol_val << ")"; \
+            cnetmod::test::detail::assert_fail(_oss.str().c_str(), __FILE__, __LINE__); \
+        } \
+    } while(0)
+
+#define ASSERT_GE(a, b) \
+    do { \
+        ++cnetmod::test::total_count(); \
+        if (!((a) >= (b))) { \
+            std::ostringstream _oss; \
+            _oss << #a << " >= " << #b << " (got: " << (a) << " vs " << (b) << ")"; \
+            cnetmod::test::detail::assert_fail(_oss.str().c_str(), __FILE__, __LINE__); \
+        } \
+    } while(0)
+
+#define ASSERT_LE(a, b) \
+    do { \
+        ++cnetmod::test::total_count(); \
+        if (!((a) <= (b))) { \
+            std::ostringstream _oss; \
+            _oss << #a << " <= " << #b << " (got: " << (a) << " vs " << (b) << ")"; \
+            cnetmod::test::detail::assert_fail(_oss.str().c_str(), __FILE__, __LINE__); \
+        } \
+    } while(0)
+
+#define ASSERT_GT(a, b) \
+    do { \
+        ++cnetmod::test::total_count(); \
+        if (!((a) > (b))) { \
+            std::ostringstream _oss; \
+            _oss << #a << " > " << #b << " (got: " << (a) << " vs " << (b) << ")"; \
+            cnetmod::test::detail::assert_fail(_oss.str().c_str(), __FILE__, __LINE__); \
+        } \
+    } while(0)
+
+#define ASSERT_LT(a, b) \
+    do { \
+        ++cnetmod::test::total_count(); \
+        if (!((a) < (b))) { \
+            std::ostringstream _oss; \
+            _oss << #a << " < " << #b << " (got: " << (a) << " vs " << (b) << ")"; \
+            cnetmod::test::detail::assert_fail(_oss.str().c_str(), __FILE__, __LINE__); \
+        } \
+    } while(0)
+
 #define RUN_TESTS() \
     int main() { return cnetmod::test::run_all(); }

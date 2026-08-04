@@ -47,6 +47,11 @@ public:
 
     auto set_body_preserve_headers(std::string body) -> response&;
 
+    /// Reset this builder while retaining allocated storage for connection-local
+    /// response reuse.
+    void reset(int status_code = 200,
+        http_version version = http_version::http_1_1) noexcept;
+
     /// Set cookie (simplified interface)
     auto set_cookie(std::string_view name, std::string_view value,
         std::string_view domain = {}, std::string_view path = "/",
@@ -72,6 +77,10 @@ public:
 
     /// Serialize to complete HTTP response string
     [[nodiscard]] auto serialize() const -> std::string;
+
+    /// Serialize into caller-owned storage. Reusing the storage avoids a
+    /// transient allocation for every response on a keep-alive connection.
+    void serialize_to(std::string& output) const;
 
 private:
     int status_code_ = 200;

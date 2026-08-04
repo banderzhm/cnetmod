@@ -7,6 +7,7 @@ export module cnetmod.protocol.http.middleware.metrics;
 import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
+import cnetmod.utils.flat_map;
 
 namespace cnetmod {
 
@@ -56,7 +57,7 @@ export enum class metric_type
     gauge,
     histogram
 };
-export using labels = std::map<std::string, std::string>;
+export using labels = cnetmod::flat_map<std::string, std::string, std::less<>>;
 
 struct metric_sample
 {

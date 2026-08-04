@@ -12,12 +12,7 @@ import :orm_reflect;
 import :orm_dynamic_sql;
 import :orm_xml_mapper;
 import cnetmod.coro.task;
-
-#if defined(_MSC_VER)
-    #define CNETMOD_XML_PARAM_MAP std::unordered_map
-#else
-    #define CNETMOD_XML_PARAM_MAP std::flat_map
-#endif
+import cnetmod.utils.flat_map;
 
 namespace cnetmod::orm::mysql_detail {
 using namespace cnetmod::mysql;
@@ -86,7 +81,7 @@ public:
 
     template <Model T>
     auto query(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
+        cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
         -> task<orm_result<T>>
     {
         co_return co_await query<T>(statement_id,
@@ -149,7 +144,7 @@ public:
 
     template <typename... Ts>
     auto query_tuple(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
+        cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
         -> task<orm_result<std::tuple<Ts...>>>
     {
         co_return co_await query_tuple<Ts...>(
@@ -182,7 +177,7 @@ public:
     }
 
     auto execute(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
+        cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
         -> task<exec_result>;
 
     template <typename Map>
@@ -204,7 +199,7 @@ public:
         -> task<result_set>;
 
     auto execute_query(std::string_view statement_id,
-        CNETMOD_XML_PARAM_MAP<std::string, cnetmod::orm::param_value> params)
+        cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
         -> task<result_set>;
 
     template <typename Map>

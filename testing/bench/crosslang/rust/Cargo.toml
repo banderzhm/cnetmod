@@ -1,0 +1,21 @@
+[package]
+name = "cnetmod-crosslang-rust"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bytes = "1.10"
+env_logger = "0.11"
+h3 = "0.0.8"
+h3-quinn = "0.0.10"
+http-body-util = "0.1"
+http = "1.3"
+hyper = { version = "1.11", features = ["http1", "http2", "server"] }
+hyper-util = { version = "0.1", features = ["server-auto", "tokio"] }
+quinn = "0.11.11"
+rustls-pemfile = "2.2"
+tokio = { version = "1.47", features = ["macros", "net", "rt-multi-thread", "time"] }
+tokio-rustls = "0.26"
+monoio = "0.2.4"
+monoio-http = "0.3.12"
+socket2 = { version = "0.6", features = ["all"] }

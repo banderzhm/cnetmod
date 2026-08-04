@@ -16,11 +16,12 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.utils.flat_map;
 
 namespace cnetmod::http {
 export struct route_params
 {
-    std::unordered_map<std::string, std::string> named;
+    cnetmod::flat_map<std::string, std::string, std::less<>> named;
     std::string wildcard;
     [[nodiscard]] auto get(std::string_view key) const noexcept
         -> std::string_view;
@@ -80,9 +81,9 @@ private:
     mutable std::string body_storage_;
     mutable std::string_view body_;
     std::shared_ptr<request_body_stream> body_stream_;
-    std::string uri_;
-    std::string path_;
-    std::string query_;
+    std::string_view uri_;
+    std::string_view path_;
+    std::string_view query_;
     std::optional<form_data> form_cache_;
     mutable bool body_stream_drained_ = false;
     bool sse_started_ = false;
@@ -144,6 +145,7 @@ private:
     {
         std::optional<http_method> method;
         std::vector<detail::segment> segments;
+        std::string canonical_path;
         handler_fn handler;
         detail::route_score score;
         std::uint64_t order = 0;
@@ -160,6 +162,7 @@ private:
         const std::vector<std::string_view>& parts,
         route_params& out) -> bool;
     std::vector<route_entry> entries_;
+    std::vector<std::size_t> static_exact_indices_;
     std::unordered_map<std::string, std::vector<std::size_t>> exact_index_;
     std::unordered_map<std::string, std::vector<std::size_t>>
         first_literal_index_;

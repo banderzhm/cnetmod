@@ -16,3 +16,6 @@
 [submodule "3rdparty/pugixml"]
 	path = 3rdparty/pugixml
 	url = https://github.com/zeux/pugixml.git
+[submodule "3rdparty/boringssl"]
+	path = 3rdparty/boringssl
+	url = https://boringssl.googlesource.com/boringssl

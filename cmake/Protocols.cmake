@@ -19,6 +19,7 @@ set(CNETMOD_PROTOCOLS
     MYSQL
     OPENAI
     POSTGRESQL
+    QUIC
     RAFT
     REDIS
     SOCKS5
@@ -43,6 +44,7 @@ set(CNETMOD_PROTOCOL_RAFT_DIRECTORY "raft")
 set(CNETMOD_PROTOCOL_REDIS_DIRECTORY "redis")
 set(CNETMOD_PROTOCOL_SOCKS5_DIRECTORY "socks5")
 set(CNETMOD_PROTOCOL_WEBSOCKET_DIRECTORY "websocket")
+set(CNETMOD_PROTOCOL_QUIC_DIRECTORY "quic")
 
 # Direct C++ module dependencies.  PostgreSQL intentionally has no MySQL
 # dependency: database-neutral ORM contracts live under src/orm.
@@ -51,6 +53,7 @@ set(CNETMOD_PROTOCOL_MQTT_DEPENDS HTTP WEBSOCKET)
 set(CNETMOD_PROTOCOL_OPENAI_DEPENDS HTTP)
 set(CNETMOD_PROTOCOL_WEBSOCKET_DEPENDS HTTP)
 set(CNETMOD_PROTOCOL_DNS_DEPENDS HTTP)
+set(CNETMOD_PROTOCOL_QUIC_DEPENDS HTTP)
 
 option(CNETMOD_ENABLE_ORM
     "Build the protocol-neutral SQL ORM and XML mapper support"

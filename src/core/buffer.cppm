@@ -18,14 +18,23 @@ export struct const_buffer
     const void* data = nullptr;
     std::size_t size = 0;
 
-    constexpr const_buffer() noexcept = default;
-
-    constexpr const_buffer(const void* p, std::size_t n) noexcept
-        : data(p), size(n) {}
+    const_buffer() noexcept;
+    const_buffer(const void* pointer, std::size_t size) noexcept;
 
     /// Construct from span
-    constexpr const_buffer(std::span<const std::byte> s) noexcept
-        : data(s.data()), size(s.size()) {}
+    const_buffer(std::span<const std::byte> bytes) noexcept;
+    [[nodiscard]] auto empty() const noexcept -> bool;
+    [[nodiscard]] auto bytes() const noexcept -> std::span<const std::byte>;
+
+    [[nodiscard]] auto subspan(std::size_t offset,
+        std::size_t count = std::dynamic_extent) const noexcept -> const_buffer;
+    [[nodiscard]] auto begin() const noexcept -> const std::byte*;
+    [[nodiscard]] auto end() const noexcept -> const std::byte*;
+    [[nodiscard]] auto front() const noexcept -> const std::byte&;
+
+    [[nodiscard]] auto operator[](std::size_t index) const noexcept
+        -> const std::byte&;
+    operator std::span<const std::byte>() const noexcept;
 };
 
 /// Writable buffer view (does not own data)
@@ -34,20 +43,134 @@ export struct mutable_buffer
     void* data = nullptr;
     std::size_t size = 0;
 
-    constexpr mutable_buffer() noexcept = default;
-
-    constexpr mutable_buffer(void* p, std::size_t n) noexcept
-        : data(p), size(n) {}
+    mutable_buffer() noexcept;
+    mutable_buffer(void* pointer, std::size_t size) noexcept;
 
     /// Construct from span
-    constexpr mutable_buffer(std::span<std::byte> s) noexcept
-        : data(s.data()), size(s.size()) {}
+    mutable_buffer(std::span<std::byte> bytes) noexcept;
 
     /// Implicit conversion to const_buffer
-    constexpr operator const_buffer() const noexcept
+    operator const_buffer() const noexcept;
+    [[nodiscard]] auto bytes() const noexcept -> std::span<std::byte>;
+    operator std::span<std::byte>() const noexcept;
+};
+
+/// Typed, non-owning read-only byte view for protocol parsers. This is the
+/// span-like counterpart to const_buffer and keeps std::byte representation
+/// details inside the core buffer module.
+export class byte_view
+{
+public:
+    byte_view() noexcept;
+    byte_view(const std::byte* data, std::size_t size) noexcept;
+    byte_view(std::span<const std::byte> bytes) noexcept;
+    byte_view(const_buffer buffer) noexcept;
+    [[nodiscard]] auto data() const noexcept -> const std::byte*;
+    [[nodiscard]] auto size() const noexcept -> std::size_t;
+    [[nodiscard]] auto empty() const noexcept -> bool;
+    [[nodiscard]] auto begin() const noexcept -> const std::byte*;
+    [[nodiscard]] auto end() const noexcept -> const std::byte*;
+    [[nodiscard]] auto front() const noexcept -> const std::byte&;
+    [[nodiscard]] auto operator[](std::size_t index) const noexcept
+        -> const std::byte&;
+
+    [[nodiscard]] auto subspan(std::size_t offset,
+        std::size_t count = std::dynamic_extent) const noexcept -> byte_view;
+
+    [[nodiscard]] auto first(std::size_t count) const noexcept -> byte_view;
+    operator const_buffer() const noexcept;
+    operator std::span<const std::byte>() const noexcept;
+
+private:
+    const std::byte* data_{};
+    std::size_t size_{};
+};
+
+// =============================================================================
+// Owning byte buffer
+// =============================================================================
+
+/// Project-owned contiguous byte storage. Protocol APIs use this type instead
+/// of exposing std::vector<std::byte>, allowing allocation and pooling policy
+/// to evolve without changing every protocol interface.
+export class byte_buffer
+{
+public:
+    using value_type = std::byte;
+    using size_type = std::size_t;
+    using iterator = std::vector<std::byte>::iterator;
+    using const_iterator = std::vector<std::byte>::const_iterator;
+
+    byte_buffer();
+    explicit byte_buffer(size_type size);
+    byte_buffer(size_type size, std::byte value);
+    byte_buffer(std::initializer_list<std::byte> values);
+
+    template <std::input_iterator Iterator,
+        std::sentinel_for<Iterator> Sentinel>
+    byte_buffer(Iterator first, Sentinel last)
+        : storage_(first, last) {}
+
+    [[nodiscard]] auto data() noexcept -> std::byte*;
+    [[nodiscard]] auto data() const noexcept -> const std::byte*;
+    [[nodiscard]] auto size() const noexcept -> size_type;
+    [[nodiscard]] auto capacity() const noexcept -> size_type;
+    [[nodiscard]] auto empty() const noexcept -> bool;
+    [[nodiscard]] auto begin() noexcept -> iterator;
+    [[nodiscard]] auto begin() const noexcept -> const_iterator;
+    [[nodiscard]] auto end() noexcept -> iterator;
+    [[nodiscard]] auto end() const noexcept -> const_iterator;
+    [[nodiscard]] auto front() noexcept -> std::byte&;
+    [[nodiscard]] auto front() const noexcept -> const std::byte&;
+    [[nodiscard]] auto back() noexcept -> std::byte&;
+    [[nodiscard]] auto back() const noexcept -> const std::byte&;
+    [[nodiscard]] auto operator[](size_type index) noexcept -> std::byte&;
+    [[nodiscard]] auto operator[](size_type index) const noexcept -> const std::byte&;
+
+    void reserve(size_type capacity);
+    void resize(size_type size);
+    void resize(size_type size, std::byte value);
+    void clear() noexcept;
+    void push_back(std::byte value);
+    void pop_back();
+
+    template <class... Arguments>
+    auto emplace_back(Arguments&&... arguments) -> std::byte&
     {
-        return {data, size};
+        return storage_.emplace_back(std::forward<Arguments>(arguments)...);
     }
+
+    template <std::input_iterator Iterator,
+        std::sentinel_for<Iterator> Sentinel>
+    auto insert(const_iterator position, Iterator first, Sentinel last)
+        -> iterator
+    {
+        return storage_.insert(position, first, last);
+    }
+
+    auto insert(const_iterator position, std::byte value) -> iterator;
+    auto erase(const_iterator position) -> iterator;
+    auto erase(const_iterator first, const_iterator last) -> iterator;
+
+    template <std::input_iterator Iterator,
+        std::sentinel_for<Iterator> Sentinel>
+    void assign(Iterator first, Sentinel last)
+    {
+        storage_.assign(first, last);
+    }
+
+    void append(byte_view source);
+    void append(const_buffer source);
+    void append(std::span<const std::byte> source);
+    [[nodiscard]] auto view() const noexcept -> byte_view;
+    [[nodiscard]] auto writable_view() noexcept -> mutable_buffer;
+    operator byte_view() const noexcept;
+    operator const_buffer() const noexcept;
+    operator std::span<const std::byte>() const noexcept;
+    operator std::span<std::byte>() noexcept;
+
+private:
+    std::vector<std::byte> storage_;
 };
 
 // =============================================================================
@@ -55,31 +178,10 @@ export struct mutable_buffer
 // =============================================================================
 
 /// Create const_buffer from raw pointer and size
-export constexpr auto buffer(const void* data, std::size_t size) noexcept
-    -> const_buffer
-{
-    return {data, size};
-}
+export auto buffer(const void* data, std::size_t size) noexcept -> const_buffer;
 
 /// Create mutable_buffer from raw pointer and size
-export constexpr auto buffer(void* data, std::size_t size) noexcept
-    -> mutable_buffer
-{
-    return {data, size};
-}
-
-/// Create const_buffer from string_view
-export constexpr auto buffer(std::string_view sv) noexcept
-    -> const_buffer
-{
-    return {sv.data(), sv.size()};
-}
-
-/// Create mutable_buffer from vector<byte>
-export auto buffer(std::vector<std::byte>& v) noexcept -> mutable_buffer;
-
-/// Create const_buffer from vector<byte>
-export auto buffer(const std::vector<std::byte>& v) noexcept -> const_buffer;
+export auto buffer(void* data, std::size_t size) noexcept -> mutable_buffer;
 
 /// Owning buffer with explicit power-of-two alignment. Useful with
 /// open_mode::direct, where platforms require aligned addresses and sizes.
@@ -141,6 +243,17 @@ public:
     /// Number of readable bytes
     [[nodiscard]] auto readable_bytes() const noexcept -> std::size_t;
 
+    [[nodiscard]] auto readable_view() const noexcept -> byte_view;
+
+    /// Append bytes while retaining geometric storage growth internally.
+    void append(byte_view bytes);
+
+    /// Remove all readable bytes while retaining capacity for reuse.
+    void clear() noexcept;
+
+    /// Reserve storage without changing the readable byte count.
+    void reserve(std::size_t capacity);
+
 private:
     std::vector<std::byte> data_;
     std::size_t read_pos_ = 0;
@@ -152,136 +265,21 @@ private:
 // =============================================================================
 
 /// Byte order enum
-export enum class byte_order
-{
-    little_endian,
-    big_endian,
-    native =
-#if defined(_MSC_VER) || defined(__LITTLE_ENDIAN__) || \
-    (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
-        little_endian
-#else
-        big_endian
-#endif
-};
-
-namespace detail {
-
-    constexpr auto bswap16(std::uint16_t v) noexcept -> std::uint16_t
-    {
-        return static_cast<std::uint16_t>((v >> 8) | (v << 8));
-    }
-
-    constexpr auto bswap32(std::uint32_t v) noexcept -> std::uint32_t
-    {
-        return ((v >> 24) & 0x000000FF) | ((v >> 8) & 0x0000FF00) | ((v << 8) & 0x00FF0000) | ((v << 24) & 0xFF000000);
-    }
-
-    constexpr auto bswap64(std::uint64_t v) noexcept -> std::uint64_t
-    {
-        return ((v >> 56) & 0x00000000000000FF) | ((v >> 40) & 0x000000000000FF00) | ((v >> 24) & 0x0000000000FF0000) | ((v >> 8) & 0x00000000FF000000) | ((v << 8) & 0x000000FF00000000) | ((v << 24) & 0x0000FF0000000000) | ((v << 40) & 0x00FF000000000000) | ((v << 56) & 0xFF00000000000000);
-    }
-
-} // namespace detail
-
-// --- host <-> network (big-endian) ---
-
-export constexpr auto hton(std::uint16_t v) noexcept -> std::uint16_t
-{
-    if constexpr (byte_order::native == byte_order::big_endian)
-        return v;
-    else
-        return detail::bswap16(v);
-}
-
-export constexpr auto hton(std::uint32_t v) noexcept -> std::uint32_t
-{
-    if constexpr (byte_order::native == byte_order::big_endian)
-        return v;
-    else
-        return detail::bswap32(v);
-}
-
-export constexpr auto hton(std::uint64_t v) noexcept -> std::uint64_t
-{
-    if constexpr (byte_order::native == byte_order::big_endian)
-        return v;
-    else
-        return detail::bswap64(v);
-}
-
-export constexpr auto ntoh(std::uint16_t v) noexcept -> std::uint16_t
-{
-    return hton(v);
-}
-
-export constexpr auto ntoh(std::uint32_t v) noexcept -> std::uint32_t
-{
-    return hton(v);
-}
-
-export constexpr auto ntoh(std::uint64_t v) noexcept -> std::uint64_t
-{
-    return hton(v);
-}
-
-// --- host <-> little-endian ---
-
-export constexpr auto htole(std::uint16_t v) noexcept -> std::uint16_t
-{
-    if constexpr (byte_order::native == byte_order::little_endian)
-        return v;
-    else
-        return detail::bswap16(v);
-}
-
-export constexpr auto htole(std::uint32_t v) noexcept -> std::uint32_t
-{
-    if constexpr (byte_order::native == byte_order::little_endian)
-        return v;
-    else
-        return detail::bswap32(v);
-}
-
-export constexpr auto htole(std::uint64_t v) noexcept -> std::uint64_t
-{
-    if constexpr (byte_order::native == byte_order::little_endian)
-        return v;
-    else
-        return detail::bswap64(v);
-}
-
-export constexpr auto letoh(std::uint16_t v) noexcept -> std::uint16_t
-{
-    return htole(v);
-}
-
-export constexpr auto letoh(std::uint32_t v) noexcept -> std::uint32_t
-{
-    return htole(v);
-}
-
-export constexpr auto letoh(std::uint64_t v) noexcept -> std::uint64_t
-{
-    return htole(v);
-}
-
-// --- Generic byte_swap ---
-
-export constexpr auto byte_swap(std::uint16_t v) noexcept -> std::uint16_t
-{
-    return detail::bswap16(v);
-}
-
-export constexpr auto byte_swap(std::uint32_t v) noexcept -> std::uint32_t
-{
-    return detail::bswap32(v);
-}
-
-export constexpr auto byte_swap(std::uint64_t v) noexcept -> std::uint64_t
-{
-    return detail::bswap64(v);
-}
+export auto hton(std::uint16_t value) noexcept -> std::uint16_t;
+export auto hton(std::uint32_t value) noexcept -> std::uint32_t;
+export auto hton(std::uint64_t value) noexcept -> std::uint64_t;
+export auto ntoh(std::uint16_t value) noexcept -> std::uint16_t;
+export auto ntoh(std::uint32_t value) noexcept -> std::uint32_t;
+export auto ntoh(std::uint64_t value) noexcept -> std::uint64_t;
+export auto htole(std::uint16_t value) noexcept -> std::uint16_t;
+export auto htole(std::uint32_t value) noexcept -> std::uint32_t;
+export auto htole(std::uint64_t value) noexcept -> std::uint64_t;
+export auto letoh(std::uint16_t value) noexcept -> std::uint16_t;
+export auto letoh(std::uint32_t value) noexcept -> std::uint32_t;
+export auto letoh(std::uint64_t value) noexcept -> std::uint64_t;
+export auto byte_swap(std::uint16_t value) noexcept -> std::uint16_t;
+export auto byte_swap(std::uint32_t value) noexcept -> std::uint32_t;
+export auto byte_swap(std::uint64_t value) noexcept -> std::uint64_t;
 
 // =============================================================================
 // buffer_reader — Read integers from buffer in specified byte order

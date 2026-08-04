@@ -60,7 +60,13 @@ auto transaction_controller::declare(cancel_token& token)
             .link_role = role::sender,
             .snd_settle = sender_settle_mode::unsettled,
             .rcv_settle = receiver_settle_mode::first,
-            .transaction_coordinator = true};
+            .source_terminus = {},
+            .target_terminus = {},
+            .transaction_coordinator = true,
+            .unsettled = {},
+            .incomplete_unsettled = false,
+            .initial_delivery_count = {},
+            .properties = {}};
         auto sent =
             co_await impl_->owner->send(impl_->channel, performative{a}, token);
         if (!sent)

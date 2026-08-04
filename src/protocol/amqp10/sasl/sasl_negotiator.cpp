@@ -109,7 +109,7 @@ struct sasl_negotiator::impl
 };
 
 sasl_negotiator::sasl_negotiator(credentials c)
-    : impl_(std::make_unique<impl>(impl{std::move(c)})) {}
+    : impl_(std::make_unique<impl>(impl{.credentials = std::move(c), .mechanism = "", .nonce = "", .client_first_bare = {}, .server_signature = {}, .awaiting_challenge = false})) {}
 
 sasl_negotiator::~sasl_negotiator() = default;
 sasl_negotiator::sasl_negotiator(sasl_negotiator&&) noexcept = default;
@@ -204,7 +204,7 @@ auto sasl_negotiator::respond(std::span<const std::byte> challenge)
             "invalid SCRAM iteration count"));
     const EVP_MD* md =
         impl_->mechanism == "SCRAM-SHA-512" ? EVP_sha512() : EVP_sha256();
-    const auto length = static_cast<std::size_t>(EVP_MD_get_size(md));
+    const auto length = static_cast<std::size_t>(EVP_MD_size(md));
     binary salted(length);
     if (PKCS5_PBKDF2_HMAC(impl_->credentials.password.data(),
             static_cast<int>(impl_->credentials.password.size()),

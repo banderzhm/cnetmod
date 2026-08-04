@@ -73,6 +73,41 @@ Intel Core i9-14900K 上的 Release benchmark 结果：
 
 完整说明见：[Raft](docs/zh/protocols/raft.md)。宿主项目存在相同第三方库时的接入方式见：[第三方依赖集成](docs/zh/advanced/thirdparty-dependency-integration.md)。
 
+### HTTP 1–3 跨语言性能对比
+
+测试环境为 Arch Linux / WSL2、Intel Core i9-14900K、Linux 6.18、Clang
+22.1.8、Release、io_uring、mimalloc 和本机 loopback。服务端与 Rust
+`oha` 客户端分别固定在两组互不重叠的 16 个 CPU 上。cnetmod 开启
+`IORING_SETUP_COOP_TASKRUN`；固定 worker 亲和性在该环境中会降低吞吐，
+因此保持关闭。HTTP/1.1 每轮 1000 万请求，TLS 每轮 300 万请求，HTTP/2
+每轮 100 万请求，HTTP/3 每轮 10 万请求。表中均为 3 轮平均值，所有轮次
+成功率均为 100%。
+
+延迟单位均为毫秒。`P0` 与 `P100` 是三轮中每轮最小值和最大值的平均，
+用于展示吞吐和中间分位数无法体现的调度抖动与极端长尾。
+
+| 协议 | 实现 | 吞吐 | 相对 Rust | P0 | P50 | P95 | P99 | P100 | 成功率 |
+|------|------|-----:|----------:|---:|----:|----:|----:|-----:|------:|
+| HTTP/1.1 | **cnetmod** | **1.660M req/s** | **+1.25%** | 0.011 | 0.128 | 0.291 | 0.505 | 65.328 | 100% |
+| HTTP/1.1 | Statico/tokio-uring | 1.639M req/s | 基线 | 0.011 | 0.128 | 0.298 | 0.489 | 60.147 | 100% |
+| HTTPS/1.1 | **cnetmod** | **1.343M req/s** | **+52.0%** | 0.012 | 0.161 | 0.366 | 0.646 | 87.295 | 100% |
+| HTTPS/1.1 | Hyper | 0.884M req/s | 基线 | 0.010 | 0.255 | 0.528 | 0.692 | 87.342 | 100% |
+| HTTP/2 h2c | **cnetmod** | **1.356M req/s** | **+15.4%** | 0.097 | 0.182 | 0.248 | 0.397 | 15.413 | 100% |
+| HTTP/2 h2c | monoio-h2 | 1.175M req/s | 基线 | 0.103 | 0.208 | 0.312 | 0.372 | 44.077 | 100% |
+| HTTPS/2 | **cnetmod** | **1.210M req/s** | **+1,159%** | 0.104 | 0.196 | 0.271 | 0.431 | 43.521 | 100% |
+| HTTPS/2 | Hyper | 0.096M req/s | 基线 | 0.023 | 0.165 | 41.304 | 44.683 | 51.715 | 100% |
+| HTTP/3 | **cnetmod** | **0.570M req/s** | **+65.5%** | 0.071 | 0.361 | 0.640 | 0.865 | 3.746 | 100% |
+| HTTP/3 | Quinn/h3 | 0.344M req/s | 基线 | 0.074 | 0.641 | 1.065 | 1.333 | 7.556 | 100% |
+
+HTTP/1.1 对比中，两端使用相同的 13 字节响应体，并且都只返回
+`Content-Length`。cnetmod 默认的 `Server`、`Date` 和 `Content-Type`
+行为没有改变；基准通过 `response_header_options` 显式关闭服务端自动响应头，
+以匹配 Statico 的响应语义。原始 JSON、延迟分位数、成功率、工具版本、内核、
+CPU 分配及运行开关保存在
+[`testing/bench/results/crosslang/2026-08-05-post-scheduler-regression`](testing/bench/results/crosslang/2026-08-05-post-scheduler-regression)
+和
+[`testing/bench/results/crosslang/2026-08-05-h1-equal-headers-10m`](testing/bench/results/crosslang/2026-08-05-h1-equal-headers-10m)。
+
 ### HTTP / gRPC 性能
 Windows Release benchmark，硬件为 Intel Core i9-14900K，Visual Studio 2026，IOCP，本机 loopback，多核模式（`mc:16/16`）：
 

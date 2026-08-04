@@ -61,7 +61,7 @@ auto request_parser::body() const noexcept -> std::string_view
 
 auto request_parser::get_header(std::string_view k) const -> std::string_view
 {
-    auto it = headers_.find(std::string(k));
+    const auto it = headers_.find(k);
     return it == headers_.end() ? std::string_view{} : std::string_view{it->second};
 }
 
@@ -105,7 +105,7 @@ auto request_parser::parse_header_line(std::string_view l) -> std::expected<void
     auto v = detail::trim(l.substr(c + 1));
     if (k.empty())
         return std::unexpected(make_error_code(http_errc::invalid_header));
-    auto it = headers_.find(std::string(k));
+    auto it = headers_.find(k);
     if (it == headers_.end())
         headers_.emplace(std::string(k), std::string(v));
     else
@@ -360,7 +360,7 @@ auto response_parser::body() const noexcept -> std::string_view
 
 auto response_parser::get_header(std::string_view k) const -> std::string_view
 {
-    auto it = headers_.find(std::string(k));
+    const auto it = headers_.find(k);
     return it == headers_.end() ? std::string_view{} : std::string_view{it->second};
 }
 
@@ -406,7 +406,7 @@ auto response_parser::parse_header_line(std::string_view l) -> std::expected<voi
     auto v = detail::trim(l.substr(c + 1));
     if (k.empty())
         return std::unexpected(make_error_code(http_errc::invalid_header));
-    auto it = headers_.find(std::string(k));
+    auto it = headers_.find(k);
     if (it == headers_.end())
         headers_.emplace(std::string(k), std::string(v));
     else

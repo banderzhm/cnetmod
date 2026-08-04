@@ -13,101 +13,150 @@ using namespace cnetmod;
 // Helper coroutines
 // =============================================================================
 
-static auto return_42() -> task<int> {
+static auto return_42() -> task<int>
+{
     co_return 42;
 }
 
-static auto return_string() -> task<std::string> {
+static auto return_string() -> task<std::string>
+{
     co_return std::string("hello");
 }
 
-static auto return_void() -> task<void> {
+static auto return_void() -> task<void>
+{
     co_return;
 }
 
-static auto add(int a, int b) -> task<int> {
+static auto add(int a, int b) -> task<int>
+{
     co_return a + b;
 }
 
-static auto chain_add() -> task<int> {
+static auto chain_add() -> task<int>
+{
     auto x = co_await return_42();
     auto y = co_await add(x, 8);
     co_return y;
 }
 
-static auto throwing_task() -> task<int> {
+static auto throwing_task() -> task<int>
+{
     throw std::runtime_error("test error");
     co_return 0;
 }
 
-static auto void_throwing_task() -> task<void> {
+static auto void_throwing_task() -> task<void>
+{
     throw std::runtime_error("void error");
     co_return;
+}
+
+struct delayed_resume_awaitable
+{
+    auto await_ready() const noexcept -> bool
+    {
+        return false;
+    }
+
+    void await_suspend(std::coroutine_handle<> continuation) const
+    {
+        std::thread([continuation]
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds{10});
+                continuation.resume();
+            })
+            .detach();
+    }
+
+    void await_resume() const noexcept {}
+};
+
+static auto completes_after_external_resume() -> task<int>
+{
+    co_await delayed_resume_awaitable{};
+    co_return 7;
 }
 
 // =============================================================================
 // Tests
 // =============================================================================
 
-TEST(task_int_basic) {
+TEST(task_int_basic)
+{
     auto result = sync_wait(return_42());
     ASSERT_EQ(result, 42);
 }
 
-TEST(task_string_basic) {
+TEST(task_string_basic)
+{
     auto result = sync_wait(return_string());
     ASSERT_EQ(result, std::string("hello"));
 }
 
-TEST(task_void_basic) {
+TEST(task_void_basic)
+{
     // Should not throw
     sync_wait(return_void());
     ASSERT_TRUE(true);
 }
 
-TEST(task_chained_await) {
+TEST(task_chained_await)
+{
     auto result = sync_wait(chain_add());
     ASSERT_EQ(result, 50);
 }
 
-TEST(task_exception_propagation) {
+TEST(task_exception_propagation)
+{
     ASSERT_THROWS(sync_wait(throwing_task()));
 }
 
-TEST(task_void_exception_propagation) {
+TEST(task_void_exception_propagation)
+{
     ASSERT_THROWS(sync_wait(void_throwing_task()));
 }
 
-TEST(task_move_semantics) {
+TEST(task_move_semantics)
+{
     auto t = return_42();
     auto t2 = std::move(t);
     auto result = sync_wait(std::move(t2));
     ASSERT_EQ(result, 42);
 }
 
-TEST(spawn_releases_unstarted_coroutine_when_context_is_destroyed) {
+TEST(sync_wait_waits_for_asynchronous_completion)
+{
+    ASSERT_EQ(sync_wait(completes_after_external_resume()), 7);
+}
+
+TEST(spawn_releases_unstarted_coroutine_when_context_is_destroyed)
+{
     std::weak_ptr<int> retained;
     {
         auto ctx = make_io_context();
         auto value = std::make_shared<int>(42);
         retained = value;
-        spawn(*ctx, [](std::shared_ptr<int> captured) -> task<void> {
-            (void)captured;
-            co_return;
-        }(value));
+        spawn(*ctx, [](std::shared_ptr<int> captured) -> task<void>
+            {
+                (void)captured;
+                co_return;
+            }(value));
         value.reset();
     }
     ASSERT_TRUE(retained.expired());
 }
 
-TEST(when_all_two_ints) {
+TEST(when_all_two_ints)
+{
     auto both = when_all(return_42(), add(10, 20));
     auto [a, b] = sync_wait(std::move(both));
     ASSERT_EQ(a, 42);
     ASSERT_EQ(b, 30);
 }
 
-TEST(when_all_three_ints) {
+TEST(when_all_three_ints)
+{
     auto all = when_all(return_42(), add(1, 2), add(10, 10));
     auto [a, b, c] = sync_wait(std::move(all));
     ASSERT_EQ(a, 42);
@@ -115,7 +164,8 @@ TEST(when_all_three_ints) {
     ASSERT_EQ(c, 20);
 }
 
-TEST(when_all_void) {
+TEST(when_all_void)
+{
     // Should not throw
     sync_wait(when_all(return_void(), return_void()));
     ASSERT_TRUE(true);
@@ -125,21 +175,25 @@ TEST(when_all_void) {
 // Extended Tests
 // =============================================================================
 
-static auto return_expected_ok() -> task<std::expected<int, std::string>> {
+static auto return_expected_ok() -> task<std::expected<int, std::string>>
+{
     co_return 42;
 }
 
-static auto return_expected_err() -> task<std::expected<int, std::string>> {
+static auto return_expected_err() -> task<std::expected<int, std::string>>
+{
     co_return std::unexpected(std::string("fail"));
 }
 
-TEST(task_expected_ok) {
+TEST(task_expected_ok)
+{
     auto result = sync_wait(return_expected_ok());
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(*result, 42);
 }
 
-TEST(task_expected_error) {
+TEST(task_expected_error)
+{
     auto result = sync_wait(return_expected_err());
     ASSERT_FALSE(result.has_value());
     ASSERT_EQ(result.error(), std::string("fail"));
@@ -147,20 +201,24 @@ TEST(task_expected_error) {
 
 // 10-level nested co_await
 template <int N>
-static auto nested() -> task<int> {
+static auto nested() -> task<int>
+{
     if constexpr (N <= 0)
         co_return 1;
     else
         co_return co_await nested<N - 1>() + 1;
 }
 
-TEST(task_nested_co_await_10) {
+TEST(task_nested_co_await_10)
+{
     auto result = sync_wait(nested<10>());
     ASSERT_EQ(result, 11);
 }
 
-TEST(task_move_only_type) {
-    auto make_ptr = []() -> task<std::unique_ptr<int>> {
+TEST(task_move_only_type)
+{
+    auto make_ptr = []() -> task<std::unique_ptr<int>>
+    {
         co_return std::make_unique<int>(99);
     };
     auto result = sync_wait(make_ptr());
@@ -168,25 +226,32 @@ TEST(task_move_only_type) {
     ASSERT_EQ(*result, 99);
 }
 
-TEST(when_all_mixed_types) {
+TEST(when_all_mixed_types)
+{
     auto [i, s] = sync_wait(when_all(return_42(), return_string()));
     ASSERT_EQ(i, 42);
     ASSERT_EQ(s, std::string("hello"));
 }
 
-TEST(when_all_exception_propagation) {
+TEST(when_all_exception_propagation)
+{
     // Exception in one task should propagate when extracting result
     bool caught = false;
-    try {
+    try
+    {
         auto [a, b] = sync_wait(when_all(throwing_task(), return_42()));
-        (void)a; (void)b;
-    } catch (const std::runtime_error&) {
+        (void)a;
+        (void)b;
+    }
+    catch (const std::runtime_error&)
+    {
         caught = true;
     }
     ASSERT_TRUE(caught);
 }
 
-TEST(when_all_single_task) {
+TEST(when_all_single_task)
+{
     // when_all requires >= 2 tasks; test single task via direct sync_wait
     auto r = sync_wait(return_42());
     ASSERT_EQ(r, 42);

@@ -50,7 +50,7 @@ public:
 
     auto& append_header(std::string_view key, std::string_view value)
     {
-        auto it = headers_.find(std::string(key));
+        auto it = headers_.find(key);
         if (it != headers_.end())
         {
             it->second += ", ";
@@ -65,7 +65,7 @@ public:
 
     auto& remove_header(std::string_view key)
     {
-        headers_.erase(std::string(key));
+        headers_.erase(key);
         return *this;
     }
 
@@ -113,7 +113,7 @@ public:
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view
     {
-        auto it = headers_.find(std::string(key));
+        auto it = headers_.find(key);
         if (it != headers_.end())
             return it->second;
         return {};

@@ -35,7 +35,8 @@ struct session::impl : recovery_observer
         if (current == session_state::unmapped || current == session_state::ended)
             co_return {};
         current = session_state::unmapped;
-        cnetmod::amqp10::begin request{.next_outgoing_id = next_outgoing_id,
+        cnetmod::amqp10::begin request{.remote_channel = {},
+            .next_outgoing_id = next_outgoing_id,
             .incoming_window = options.incoming_window,
             .outgoing_window = options.outgoing_window,
             .handle_max = options.handle_max};

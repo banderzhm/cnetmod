@@ -103,10 +103,17 @@ socket::~socket()
 }
 
 socket::socket(socket&& other) noexcept
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    : handle_(other.handle_), family_(other.family_), skip_completion_on_success_(other.skip_completion_on_success_)
+#else
     : handle_(other.handle_), family_(other.family_)
+#endif
 {
     other.handle_ = invalid_handle;
     other.family_ = address_family::unspecified;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    other.skip_completion_on_success_ = false;
+#endif
 }
 
 auto socket::operator=(socket&& other) noexcept -> socket&
@@ -116,8 +123,14 @@ auto socket::operator=(socket&& other) noexcept -> socket&
         close();
         handle_ = other.handle_;
         family_ = other.family_;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        skip_completion_on_success_ = other.skip_completion_on_success_;
+#endif
         other.handle_ = invalid_handle;
         other.family_ = address_family::unspecified;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        other.skip_completion_on_success_ = false;
+#endif
     }
     return *this;
 }
@@ -193,6 +206,29 @@ auto socket::set_non_blocking(bool enabled) -> std::expected<void, std::error_co
 auto socket::apply_options(const socket_options& opts)
     -> std::expected<void, std::error_code>
 {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    if (opts.processor_affinity)
+    {
+        // SIO_CPU_AFFINITY is a Windows networking-stack extension used by
+        // high-throughput UDP servers to create per-processor sockets for one
+        // local port. Older SDKs do not always publish the symbolic constant.
+        constexpr DWORD sio_cpu_affinity = _WSAIOW(IOC_VENDOR, 21);
+        DWORD bytes_returned{};
+        auto processor = *opts.processor_affinity;
+        if (::WSAIoctl(handle_, sio_cpu_affinity, &processor, sizeof(processor),
+                nullptr, 0, &bytes_returned, nullptr, nullptr) != 0)
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+    }
+    if (opts.skip_completion_on_success)
+    {
+        if (!::SetFileCompletionNotificationModes(
+                reinterpret_cast<HANDLE>(handle_),
+                FILE_SKIP_COMPLETION_PORT_ON_SUCCESS | FILE_SKIP_SET_EVENT_ON_HANDLE))
+            return std::unexpected(make_error_code(from_native_error(last_error())));
+        skip_completion_on_success_ = true;
+    }
+#endif
+
     // SO_REUSEADDR
     if (opts.reuse_address)
     {
@@ -202,8 +238,13 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
-    // SO_REUSEPORT (POSIX only)
-#ifndef CNETMOD_PLATFORM_WINDOWS
+    // Port-sharing socket groups let UDP protocols shard one listening
+    // endpoint across independent event loops. POSIX exposes SO_REUSEPORT.
+    // Windows server sockets use SIO_CPU_AFFINITY instead; SO_REUSEADDR has
+    // different ownership and delivery semantics and must not emulate it.
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    (void)opts.reuse_port;
+#else
     if (opts.reuse_port)
     {
         int val = 1;
@@ -480,6 +521,9 @@ void socket::close() noexcept
     ::close(handle_);
 #endif
     handle_ = invalid_handle;
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    skip_completion_on_success_ = false;
+#endif
 }
 
 } // namespace cnetmod

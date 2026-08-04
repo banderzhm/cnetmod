@@ -5,7 +5,9 @@ enable_testing()
 
 # Test source files — each file produces an independent executable
 set(TEST_SOURCES
+    test_flat_map.cpp
     test_task.cpp
+    test_lazy.cpp
     test_channel.cpp
     test_mutex.cpp
     test_circuit_breaker.cpp
@@ -35,7 +37,23 @@ set(TEST_SOURCES
     test_socks5.cpp
     test_mail.cpp
     test_redis.cpp
+
+    # QUIC/HTTP3 tests
+    test_quic_varint.cpp
+    test_quic_frame.cpp
+    test_quic_packet.cpp
+    test_quic_stream.cpp
+    test_quic_loss_detection.cpp
+    test_quic_congestion.cpp
+    test_quic_early_data.cpp
+    test_http3_qpack.cpp
+    test_http3_frame.cpp
 )
+
+# Filter out QUIC/HTTP3 tests if QUIC not available
+if(NOT CNETMOD_HAS_QUIC)
+    list(FILTER TEST_SOURCES EXCLUDE REGEX "^(test_quic|test_http3)")
+endif()
 
 if(NOT CNETMOD_ENABLE_RAFT)
     list(REMOVE_ITEM TEST_SOURCES test_raft.cpp)
@@ -254,5 +272,9 @@ if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MQTT)
             "$<TARGET_FILE:mqtt_interop_client>"
     )
 endif()
+
+# HTTP/3 targets and the only HTTP/3 interoperability CTest are owned by
+# testing/http3/CMakeLists.txt.  Keeping a second, older Python runner here
+# allowed a process-start check to be confused with protocol interoperability.
 
 set(CNETMOD_TEST_TARGETS ${CNETMOD_TEST_TARGETS} PARENT_SCOPE)

@@ -43,5 +43,15 @@ cmake-install-release-wsl/
 *orchids
 *claude
 testing/messaging/.env.external.local
+testing/bench/crosslang/go/crosslang-go
+testing/bench/crosslang/java/*.class
+testing/bench/crosslang/java-jetty/target/
+testing/bench/crosslang/rust/target/
 examples/test_ssl/*.pem
 examples/test_ssl/*.p12
+
+# BoringSSL submodule
+3rdparty/boringssl/build/**
+3rdparty/boringssl/*.a
+3rdparty/boringssl/*.so
+3rdparty/boringssl/out/

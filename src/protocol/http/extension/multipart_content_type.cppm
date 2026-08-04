@@ -1,13 +1,14 @@
 export module cnetmod.protocol.http:multipart_content_type;
 
 import std;
+import cnetmod.utils.flat_map;
 
 export namespace cnetmod::http {
 
 struct content_type
 {
     std::string mime;
-    std::unordered_map<std::string, std::string> params;
+    cnetmod::flat_map<std::string, std::string, std::less<>> params;
 
     [[nodiscard]] auto param(std::string_view key) const -> std::string_view;
 };

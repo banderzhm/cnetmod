@@ -96,7 +96,7 @@ namespace {
     auto digest(const EVP_MD* md, std::span<const std::uint8_t> data)
         -> std::vector<std::uint8_t>
     {
-        std::vector<std::uint8_t> out(static_cast<std::size_t>(EVP_MD_get_size(md)));
+        std::vector<std::uint8_t> out(static_cast<std::size_t>(EVP_MD_size(md)));
         unsigned int size{};
         if (EVP_Digest(data.data(), data.size(), out.data(), &size, md, nullptr) != 1)
             return {};

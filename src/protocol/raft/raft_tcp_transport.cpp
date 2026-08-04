@@ -171,7 +171,10 @@ namespace tcp_transport_detail {
     inline auto peer_certificate_sha256(ssl_stream& stream)
         -> std::expected<std::string, std::error_code>
     {
-        auto* cert = SSL_get1_peer_certificate(stream.native());
+        // BoringSSL exposes the OpenSSL-1.0-compatible spelling.  It returns
+        // an owned X509 reference, so the existing X509_free calls remain
+        // correct on both supported TLS backends.
+        auto* cert = SSL_get_peer_certificate(stream.native());
         if (!cert)
             return std::unexpected(std::make_error_code(std::errc::permission_denied));
 

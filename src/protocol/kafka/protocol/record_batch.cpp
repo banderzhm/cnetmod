@@ -345,7 +345,8 @@ auto decode_record_batch(std::span<const std::byte> input,
         .last_offset = *base + *last_delta,
         .producer_id = *pid,
         .transactional = (*attrs & 0x10) != 0,
-        .control = (*attrs & 0x20) != 0};
+        .control = (*attrs & 0x20) != 0,
+        .records = {}};
     out.records.reserve(*count);
     for (std::int32_t i = 0; i < *count; ++i)
     {

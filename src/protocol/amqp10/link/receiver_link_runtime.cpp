@@ -46,7 +46,12 @@ struct receiver_link::impl : recovery_observer
             .snd_settle = snd,
             .rcv_settle = rcv,
             .source_terminus = terminus,
-            .initial_delivery_count = delivery_count};
+            .target_terminus = {},
+            .transaction_coordinator = false,
+            .unsettled = {},
+            .incomplete_unsettled = false,
+            .initial_delivery_count = delivery_count,
+            .properties = {}};
         for (const auto& [id, tag] : unsettled)
             request.unsettled.emplace_back(tag, std::nullopt);
         auto sent = co_await owner->send(channel, performative{request}, token);
@@ -62,12 +67,15 @@ struct receiver_link::impl : recovery_observer
                            "expected receiver Attach during recovery")
                      : peer.error());
         current = link_state::attached;
-        flow restored{.incoming_window = 2048,
+        flow restored{.next_incoming_id = {},
+            .incoming_window = 2048,
             .next_outgoing_id = 1,
             .outgoing_window = 2048,
             .handle = handle,
             .delivery_count = delivery_count,
-            .link_credit = available_credit};
+            .link_credit = available_credit,
+            .drain = false,
+            .echo = false};
         co_return co_await owner->send(channel, performative{restored}, token);
     }
 };

@@ -118,10 +118,10 @@ auto frame_parser::feed(std::span<const std::byte> bytes)
             return std::unexpected(malformed("invalid frame end marker"));
         if (*type != 1 && *type != 2 && *type != 3 && *type != 8)
             return std::unexpected(malformed("unknown frame type"));
-        frame value{.type = static_cast<frame_type>(*type), .channel = *channel};
-        value.payload.assign(
-            pending_.begin() + static_cast<std::ptrdiff_t>(used + 7),
-            pending_.begin() + static_cast<std::ptrdiff_t>(used + 7 + *size));
+        frame value{.type = static_cast<frame_type>(*type), .channel = *channel,
+            .payload = std::vector<std::byte>(
+                pending_.begin() + static_cast<std::ptrdiff_t>(used + 7),
+                pending_.begin() + static_cast<std::ptrdiff_t>(used + 7 + *size))};
         output.push_back(std::move(value));
         used += 8 + *size;
     }
@@ -173,8 +173,8 @@ auto decode_method(const frame& value) -> result<method_frame>
     method_frame method{
         .channel = value.channel,
         .class_id = *cls,
-        .method_id = *id};
-    method.arguments.assign(value.payload.begin() + 4, value.payload.end());
+        .method_id = *id,
+        .arguments = std::vector<std::byte>(value.payload.begin() + 4, value.payload.end())};
     return method;
 }
 
@@ -250,7 +250,8 @@ auto decode_content_header(const frame& value) -> result<content_header>
     content_header header{
         .channel = value.channel,
         .class_id = *cls,
-        .body_size = *size};
+        .body_size = *size,
+        .properties = {}};
     auto text = [&]() -> result<std::string>
     {
         auto v = in.short_string();
