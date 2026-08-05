@@ -421,6 +421,22 @@ auto async_wait_readable(io_context& ctx, socket& sock)
     co_return std::expected<void, std::error_code>{};
 }
 
+auto async_wait_readable(io_context& ctx, socket& sock, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    auto& epoll = static_cast<epoll_context&>(ctx);
+    epoll_cancel_awaiter awaiter{epoll, static_cast<int>(sock.native_handle()),
+        EPOLLIN, token};
+    co_await awaiter;
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return std::expected<void, std::error_code>{};
+}
+
 auto async_wait_writable(io_context& ctx, socket& sock)
     -> task<std::expected<void, std::error_code>>
 {
@@ -429,6 +445,22 @@ auto async_wait_writable(io_context& ctx, socket& sock)
     co_await awaiter;
     if (awaiter.sync_error)
         co_return std::unexpected(awaiter.sync_error);
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_writable(io_context& ctx, socket& sock, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    auto& epoll = static_cast<epoll_context&>(ctx);
+    epoll_cancel_awaiter awaiter{epoll, static_cast<int>(sock.native_handle()),
+        EPOLLOUT, token};
+    co_await awaiter;
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     co_return std::expected<void, std::error_code>{};
 }
 

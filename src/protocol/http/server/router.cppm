@@ -16,6 +16,8 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.utils.flat_map;
 
 namespace cnetmod::http {
@@ -68,6 +70,22 @@ public:
     [[nodiscard]] auto resp() noexcept -> response&;
     [[nodiscard]] auto io_ctx() noexcept -> io_context&;
     [[nodiscard]] auto raw_socket() noexcept -> socket&;
+    /// Request-scoped budget. Nested services should constrain and forward it
+    /// instead of starting independent relative timeouts.
+    [[nodiscard]] auto request_deadline() const noexcept -> const cnetmod::deadline&;
+    void set_deadline(cnetmod::deadline value) noexcept;
+    [[nodiscard]] auto cancellation_token() noexcept -> cnetmod::cancel_token&;
+    /// Run one token-aware downstream operation in this request's remaining
+    /// budget. A fresh token is supplied to the factory for this operation.
+    template <class Factory>
+    auto with_deadline(Factory&& operation)
+    {
+        return cnetmod::with_deadline(ctx_, deadline_,
+            std::forward<Factory>(operation));
+    }
+    [[nodiscard]] auto trace_id() const noexcept -> std::string_view;
+    void set_trace_id(std::string value);
+    [[nodiscard]] auto client_address() const -> std::string;
 
 private:
     void drain_available_body_chunks() const;
@@ -87,6 +105,9 @@ private:
     std::optional<form_data> form_cache_;
     mutable bool body_stream_drained_ = false;
     bool sse_started_ = false;
+    cnetmod::deadline deadline_{};
+    cnetmod::cancel_token cancellation_;
+    std::string trace_id_;
 };
 
 export using handler_fn = std::function<task<void>(request_context&)>;

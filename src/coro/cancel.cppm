@@ -4,6 +4,14 @@ import std;
 
 namespace cnetmod {
 
+/// Why a cancellable operation was stopped. The first cancellation wins.
+export enum class cancellation_reason : std::uint8_t
+{
+    none,
+    caller_cancelled,
+    deadline_exceeded,
+};
+
 // =============================================================================
 // cancel_token — Async operation cancellation handle
 // =============================================================================
@@ -31,8 +39,15 @@ public:
     /// Safe to call multiple times (only first call takes effect).
     void cancel() noexcept;
 
+    /// Request cancellation because the enclosing deadline elapsed.
+    /// This is separate from `cancel()` so callers can map a deadline to a
+    /// timeout response without losing an explicit caller cancellation.
+    void cancel_due_to_deadline() noexcept;
+
     /// Whether cancellation has been requested
     [[nodiscard]] auto is_cancelled() const noexcept -> bool;
+
+    [[nodiscard]] auto reason() const noexcept -> cancellation_reason;
 
     /// Reset token (reuse for next operation)
     /// Prerequisite: no pending operation currently
@@ -43,6 +58,7 @@ public:
     // =================================================================
 
     std::atomic<bool> cancelled_{false}; // Whether cancellation has been requested
+    std::atomic<cancellation_reason> reason_{cancellation_reason::none};
     std::atomic<bool> pending_{false};   // Whether an operation is pending
 
     /// Platform-specific cancel function (set by cancel awaiter)

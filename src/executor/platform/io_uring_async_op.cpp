@@ -563,6 +563,28 @@ auto async_wait_readable(io_context& ctx, socket& sock)
     co_return std::expected<void, std::error_code>{};
 }
 
+auto async_wait_readable(io_context& ctx, socket& sock, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    uring_overlapped ov;
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+    ::io_uring_prep_poll_add(sqe, static_cast<int>(sock.native_handle()), POLLIN);
+    ::io_uring_sqe_set_data(sqe, &ov);
+    if (auto result = uring.flush(); !result)
+        co_return std::unexpected(result.error());
+    co_await uring_cancel_suspend{ov, token, &uring};
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+    co_return std::expected<void, std::error_code>{};
+}
+
 auto async_wait_writable(io_context& ctx, socket& sock)
     -> task<std::expected<void, std::error_code>>
 {
@@ -576,6 +598,28 @@ auto async_wait_writable(io_context& ctx, socket& sock)
     if (auto result = uring.flush(); !result)
         co_return std::unexpected(result.error());
     co_await uring_suspend{ov};
+    if (ov.result < 0)
+        co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_writable(io_context& ctx, socket& sock, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    auto& uring = static_cast<io_uring_context&>(ctx);
+    uring_overlapped ov;
+    auto* sqe = uring.prepare_sqe();
+    if (!sqe)
+        co_return std::unexpected(make_error_code(errc::no_buffer_space));
+    ::io_uring_prep_poll_add(sqe, static_cast<int>(sock.native_handle()), POLLOUT);
+    ::io_uring_sqe_set_data(sqe, &ov);
+    if (auto result = uring.flush(); !result)
+        co_return std::unexpected(result.error());
+    co_await uring_cancel_suspend{ov, token, &uring};
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (ov.result < 0)
         co_return std::unexpected(make_error_code(from_native_error(-ov.result)));
     co_return std::expected<void, std::error_code>{};

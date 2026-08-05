@@ -22,6 +22,7 @@ export module cnetmod.protocol.http.middleware.timeout;
 
 import std;
 import cnetmod.coro.task;
+import cnetmod.coro.timer;
 import cnetmod.protocol.http;
 import cnetmod.core.log;
 
@@ -37,6 +38,7 @@ export inline auto request_timeout(std::chrono::steady_clock::duration max_time)
     return [max_time](http::request_context& ctx, http::next_fn next) -> task<void>
     {
         auto start = std::chrono::steady_clock::now();
+        ctx.set_deadline(deadline::after(max_time));
 
         co_await next();
 

@@ -71,16 +71,12 @@ auto async_sleep_until(io_context& ctx,
 
 namespace detail {
 
-    auto timeout_timer_task(io_context& ctx,
-        std::chrono::steady_clock::duration duration,
-        cancel_token& timer_token,
-        cancel_token& operation_token) -> task<int>
+    auto deadline_timer_task(io_context& ctx, deadline value,
+        cancel_token& timer_token, cancel_token& operation_token) -> task<int>
     {
-        (void)co_await async_timer_wait(ctx, duration, timer_token);
+        (void)co_await async_timer_wait(ctx, value.remaining(), timer_token);
         if (!timer_token.is_cancelled())
-        {
-            operation_token.cancel();
-        }
+            operation_token.cancel_due_to_deadline();
         co_return 0;
     }
 

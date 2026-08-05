@@ -12,8 +12,10 @@ module cnetmod.protocol.http.v3.session;
 
 import std;
 import cnetmod.core.buffer;
+import cnetmod.core.error;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.frame;
@@ -30,6 +32,41 @@ using quic::quic_connection;
 using quic::stream_id;
 
 namespace {
+
+    struct qpack_wait_cancel_state
+    {
+        channel<std::monostate>* progress{};
+    };
+
+    void cancel_qpack_wait(cnetmod::cancel_token& token) noexcept
+    {
+        auto* state = static_cast<qpack_wait_cancel_state*>(token.ctx_);
+        if (state && state->progress)
+            (void)state->progress->try_send({});
+    }
+
+    auto wait_for_qpack_progress(channel<std::monostate>& progress,
+        cnetmod::cancel_token& token)
+        -> task<std::expected<void, std::error_code>>
+    {
+        if (token.is_cancelled())
+            co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+        qpack_wait_cancel_state cancel_state{&progress};
+        token.ctx_ = &cancel_state;
+        token.cancel_fn_ = &cancel_qpack_wait;
+        token.pending_.store(true, std::memory_order_release);
+        if (token.is_cancelled())
+            cancel_qpack_wait(token);
+        const auto notification = co_await progress.receive();
+        token.pending_.store(false, std::memory_order_release);
+        token.cancel_fn_ = nullptr;
+        token.ctx_ = nullptr;
+        if (token.is_cancelled())
+            co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+        if (!notification)
+            co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+        co_return {};
+    }
 
     // A peer request stream is discovered while already executing on this
     // connection's I/O context. Posting it again inserts a full reactor turn
@@ -836,6 +873,8 @@ auto http3_client_session::close_all() -> task<void>
 auto http3_client_session::send_request(const http3_request& request)
     -> task<std::expected<http3_response, std::error_code>>
 {
+    // Preserve the established hot path exactly: a normal HTTP/3 request
+    // neither creates a cancellation token nor registers a wake-up callback.
     if (received_goaway_)
         co_return std::unexpected(std::make_error_code(std::errc::connection_aborted));
     auto connected = co_await connect();
@@ -857,8 +896,7 @@ auto http3_client_session::send_request(const http3_request& request)
         co_return std::unexpected(sent.error());
     if (!request.body.empty())
     {
-        auto data = encode_http3_frame(
-            data_frame{::utils::conv::to_bytes(request.body)});
+        auto data = encode_http3_frame(data_frame{::utils::conv::to_bytes(request.body)});
         sent = co_await conn_.async_send(*stream, data, request.trailers.empty());
         if (!sent)
             co_return std::unexpected(sent.error());
@@ -888,8 +926,7 @@ auto http3_client_session::send_request(const http3_request& request)
     dynamic_buffer wire{stream_read_chunk_size};
     for (;;)
     {
-        auto received = co_await conn_.async_recv(
-            *stream, wire.prepare(stream_read_chunk_size));
+        auto received = co_await conn_.async_recv(*stream, wire.prepare(stream_read_chunk_size));
         if (!received)
         {
             if (received.error() == std::make_error_code(std::errc::operation_would_block))
@@ -913,6 +950,131 @@ auto http3_client_session::send_request(const http3_request& request)
         const auto progress = co_await qpack_progress_.receive();
         if (!progress)
             co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+        response = response_from_frames(decoder_, wire.readable_view(), *stream,
+            completed_headers);
+    }
+    completed_headers_.erase(*stream);
+    if (!response)
+        co_return std::unexpected(response.error());
+    auto decoder_flush = co_await flush_qpack_decoder_instructions(conn_, decoder_, qpack_decoder_stream_);
+    if (!decoder_flush)
+        co_return std::unexpected(decoder_flush.error());
+    (void)conn_.retire_stream(*stream);
+    co_return *response;
+}
+
+auto http3_client_session::send_request(const http3_request& request,
+    cnetmod::cancel_token& token)
+    -> task<std::expected<http3_response, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+    if (received_goaway_)
+        co_return std::unexpected(std::make_error_code(std::errc::connection_aborted));
+    auto connected = co_await connect();
+    if (!connected)
+        co_return std::unexpected(connected.error());
+
+    auto stream = co_await conn_.async_open_stream(true);
+    if (!stream)
+        co_return std::unexpected(stream.error());
+    auto cancel_stream = [&]() -> task<void> {
+        (void)co_await conn_.async_cancel_stream(*stream);
+    };
+    auto block = encoder_.encode(headers_for(request), *stream);
+    if (!block)
+        co_return std::unexpected(block.error());
+    auto encoder_flush = co_await flush_qpack_encoder_instructions(conn_, encoder_, qpack_encoder_stream_);
+    if (!encoder_flush)
+        co_return std::unexpected(encoder_flush.error());
+    if (token.is_cancelled())
+    {
+        co_await cancel_stream();
+        co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+    }
+    auto headers = encode_http3_frame(headers_frame{*block});
+    auto sent = co_await conn_.async_send(*stream, headers, request.body.empty() && request.trailers.empty());
+    if (!sent)
+        co_return std::unexpected(sent.error());
+    if (token.is_cancelled())
+    {
+        co_await cancel_stream();
+        co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+    }
+    if (!request.body.empty())
+    {
+        auto data = encode_http3_frame(
+            data_frame{::utils::conv::to_bytes(request.body)});
+        sent = co_await conn_.async_send(*stream, data, request.trailers.empty());
+        if (!sent)
+            co_return std::unexpected(sent.error());
+        if (token.is_cancelled())
+        {
+            co_await cancel_stream();
+            co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+        }
+    }
+    if (!request.trailers.empty())
+    {
+        std::vector<header_field> trailers;
+        trailers.reserve(request.trailers.size());
+        for (const auto& [name, value] : request.trailers)
+        {
+            if (name.starts_with(':'))
+                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            trailers.push_back({name, value});
+        }
+        auto trailer_block = encoder_.encode(trailers, *stream);
+        if (!trailer_block)
+            co_return std::unexpected(trailer_block.error());
+        encoder_flush = co_await flush_qpack_encoder_instructions(conn_, encoder_, qpack_encoder_stream_);
+        if (!encoder_flush)
+            co_return std::unexpected(encoder_flush.error());
+        auto trailer_frame = encode_http3_frame(headers_frame{*trailer_block});
+        sent = co_await conn_.async_send(*stream, trailer_frame, true);
+        if (!sent)
+            co_return std::unexpected(sent.error());
+        if (token.is_cancelled())
+        {
+            co_await cancel_stream();
+            co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+        }
+    }
+
+    dynamic_buffer wire{stream_read_chunk_size};
+    for (;;)
+    {
+        auto received = co_await conn_.async_recv(
+            *stream, wire.prepare(stream_read_chunk_size));
+        if (!received)
+        {
+            if (received.error() == std::make_error_code(std::errc::operation_would_block))
+            {
+                auto ready = co_await conn_.async_wait_readable(*stream, token);
+                if (ready)
+                    continue;
+                if (token.is_cancelled())
+                    co_await cancel_stream();
+                co_return std::unexpected(ready.error());
+            }
+            co_return std::unexpected(received.error());
+        }
+        if (*received == 0U)
+            break;
+        wire.commit(*received);
+    }
+    auto& completed_headers = completed_headers_[*stream];
+    auto response = response_from_frames(decoder_, wire.readable_view(), *stream,
+        completed_headers);
+    while (!response && response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+    {
+        const auto progress = co_await wait_for_qpack_progress(qpack_progress_, token);
+        if (!progress)
+        {
+            if (token.is_cancelled())
+                co_await cancel_stream();
+            co_return std::unexpected(progress.error());
+        }
         response = response_from_frames(decoder_, wire.readable_view(), *stream,
             completed_headers);
     }

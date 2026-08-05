@@ -14,10 +14,23 @@ import std;
 
 import :connection;
 import :stream;
+import cnetmod.core.error;
 
 namespace cnetmod::quic {
 
 namespace {
+
+    struct stream_wait_cancel_state
+    {
+        channel<std::monostate>* readiness{};
+    };
+
+    void cancel_stream_wait(cancel_token& token) noexcept
+    {
+        auto* state = static_cast<stream_wait_cancel_state*>(token.ctx_);
+        if (state && state->readiness)
+            (void)state->readiness->try_send({});
+    }
 
     // RFC 9000 §19.3 encodes ACK ranges from the largest packet number down.
     // Keep this transformation beside the transport state rather than relying on
@@ -2426,6 +2439,62 @@ auto quic_connection::async_wait_readable(stream_id sid)
     const auto notification = co_await readiness->second->receive();
     if (!notification)
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    co_return {};
+}
+
+auto quic_connection::async_wait_readable(stream_id sid, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (is_closed())
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+
+    const auto stream = impl_->streams.find(sid);
+    const auto readiness = impl_->readable_streams.find(sid);
+    if (stream == impl_->streams.end() || readiness == impl_->readable_streams.end())
+        co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+    if (stream->second->is_readable())
+        co_return {};
+
+    stream_wait_cancel_state cancel_state{readiness->second.get()};
+    token.ctx_ = &cancel_state;
+    token.cancel_fn_ = &cancel_stream_wait;
+    token.pending_.store(true, std::memory_order_release);
+    if (token.is_cancelled())
+        cancel_stream_wait(token);
+
+    const auto notification = co_await readiness->second->receive();
+    token.pending_.store(false, std::memory_order_release);
+    token.cancel_fn_ = nullptr;
+    token.ctx_ = nullptr;
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (!notification)
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    co_return {};
+}
+
+auto quic_connection::async_cancel_stream(stream_id sid,
+    std::uint64_t application_error_code)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (is_closed())
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    const auto stream = impl_->streams.find(sid);
+    if (stream == impl_->streams.end())
+        co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+
+    const auto final_size = stream->second->bytes_sent();
+    stream->second->stop_local();
+    impl_->encoded_send_frames.push_back(encode_frame(reset_stream_frame{
+        sid, application_error_code, final_size}));
+    impl_->encoded_send_frames.push_back(encode_frame(stop_sending_frame{
+        sid, application_error_code}));
+    if (const auto readiness = impl_->readable_streams.find(sid);
+        readiness != impl_->readable_streams.end())
+        (void)readiness->second->try_send({});
+    co_await flush_send_queue();
     co_return {};
 }
 

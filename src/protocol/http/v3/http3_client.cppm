@@ -8,6 +8,8 @@ import cnetmod.core.ssl;
 import cnetmod.io.io_context;
 import cnetmod.coro.channel;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.protocol.http;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.session;
@@ -36,6 +38,12 @@ public:
     [[nodiscard]] auto connect(std::string_view host, std::uint16_t port)
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto send_request(const http3_request& request)
+        -> task<std::expected<http3_response, std::error_code>>;
+    [[nodiscard]] auto send_request(const http3_request& request,
+        cnetmod::cancel_token& token)
+        -> task<std::expected<http3_response, std::error_code>>;
+    [[nodiscard]] auto send_request(const http3_request& request,
+        cnetmod::deadline deadline)
         -> task<std::expected<http3_response, std::error_code>>;
     [[nodiscard]] auto close() -> task<void>;
     [[nodiscard]] auto is_connected() const noexcept -> bool;

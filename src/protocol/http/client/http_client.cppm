@@ -12,6 +12,8 @@ import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.protocol.tcp;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.settings;
@@ -99,6 +101,14 @@ public:
 
     /// Send HTTP request and receive response (async)
     [[nodiscard]] auto send(const request& req)
+        -> task<std::expected<response, std::error_code>>;
+
+    /// Send with cancellation propagated through request I/O and TLS records.
+    [[nodiscard]] auto send(const request& req, cnetmod::cancel_token& token)
+        -> task<std::expected<response, std::error_code>>;
+
+    /// Enforce an absolute deadline and cancel the active request I/O.
+    [[nodiscard]] auto send(const request& req, cnetmod::deadline deadline)
         -> task<std::expected<response, std::error_code>>;
 
     /// Send HTTP request to specific URL (async)
@@ -259,12 +269,19 @@ private:
     [[nodiscard]] auto connect(std::string_view host, std::uint16_t port,
         bool use_ssl)
         -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto connect(std::string_view host, std::uint16_t port,
+        bool use_ssl, cnetmod::cancel_token& token)
+        -> task<std::expected<void, std::error_code>>;
 
     /// Send HTTP/1.1 request (async)
     [[nodiscard]] auto send_http1(const request& req)
         -> task<std::expected<response, std::error_code>>;
+    [[nodiscard]] auto send_http1(const request& req, cnetmod::cancel_token& token)
+        -> task<std::expected<response, std::error_code>>;
 
     [[nodiscard]] auto send_http2(const request& req)
+        -> task<std::expected<response, std::error_code>>;
+    [[nodiscard]] auto send_http2(const request& req, cnetmod::cancel_token& token)
         -> task<std::expected<response, std::error_code>>;
 
     [[nodiscard]] auto send_http2_batch(std::span<const request> requests)
@@ -274,12 +291,20 @@ private:
     [[nodiscard]] auto send_with_redirects(const request& req,
         std::size_t redirect_count)
         -> task<std::expected<response, std::error_code>>;
+    [[nodiscard]] auto send_with_redirects(const request& req,
+        std::size_t redirect_count, cnetmod::cancel_token& token)
+        -> task<std::expected<response, std::error_code>>;
 
     /// Low-level I/O helpers (async)
     [[nodiscard]] auto write_data(std::string_view data)
         -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto write_data(std::string_view data, cnetmod::cancel_token& token)
+        -> task<std::expected<void, std::error_code>>;
 
     [[nodiscard]] auto read_data(void* buffer, std::size_t size)
+        -> task<std::expected<std::size_t, std::error_code>>;
+    [[nodiscard]] auto read_data(void* buffer, std::size_t size,
+        cnetmod::cancel_token& token)
         -> task<std::expected<std::size_t, std::error_code>>;
 };
 

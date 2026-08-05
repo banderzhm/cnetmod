@@ -28,6 +28,7 @@ namespace {
         const auto existing = context.get_header(header_name);
         const auto identifier =
             existing.empty() ? generate_request_id() : std::string(existing);
+        context.set_trace_id(identifier);
         context.resp().set_header(header_name, identifier);
         co_await next();
     }

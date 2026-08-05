@@ -15,37 +15,17 @@ macro(cnetmod_configure_icu)
             if(NOT _cnetmod_icu_msbuild)
                 set(_cnetmod_icu_msbuild "${CMAKE_COMMAND}")
             endif()
-            # ICU's Visual Studio solution writes its import libraries and DLLs
-            # into the submodule tree.  A custom target without declared
-            # outputs is always out of date, so it used to invoke MSBuild for
-            # every cnetmod build (and produced a very large, mostly-no-op log).
-            #
-            # Treat a complete ICU runtime as reusable.  The CI cache restores
-            # these four files before configuration; local reconfigures get the
-            # same fast path.  A missing or partial runtime still builds ICU
-            # normally and then becomes reusable on the next build.
-            set(_cnetmod_icu_runtime_files
-                "${_cnetmod_icu_source}/../lib64/icuuc.lib"
-                "${_cnetmod_icu_source}/../lib64/icuin.lib"
-                "${_cnetmod_icu_source}/../bin64/icuuc78.dll"
-                "${_cnetmod_icu_source}/../bin64/icuin78.dll")
-            set(_cnetmod_icu_ready TRUE)
-            foreach(_cnetmod_icu_runtime_file IN LISTS _cnetmod_icu_runtime_files)
-                if(NOT EXISTS "${_cnetmod_icu_runtime_file}")
-                    set(_cnetmod_icu_ready FALSE)
-                    break()
-                endif()
-            endforeach()
-
-            if(_cnetmod_icu_ready)
-                add_custom_target(cnetmod_icu
-                    COMMENT "Using existing bundled ICU libraries")
-            else()
-                add_custom_target(cnetmod_icu
-                    COMMAND "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
-                        /target:common /target:i18n /property:Configuration=$<CONFIG> /property:Platform=x64
-                    COMMENT "Building bundled ICU libraries")
-            endif()
+            # ICU's Debug outputs deliberately use the `d` suffix
+            # (icuucd.lib/icuind.lib and icuuc78d.dll/icuin78d.dll), while
+            # Release outputs do not.  Building only Release and mapping its
+            # files into Debug causes a link-time LNK1104 on clean CI runners.
+            # Keep the ICU MSBuild invocation configuration-aware; MSBuild is
+            # incremental, so an already-built matching configuration is a
+            # no-op while a Debug build always materializes its debug imports.
+            add_custom_target(cnetmod_icu
+                COMMAND "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
+                    /target:common /target:i18n /property:Configuration=$<CONFIG> /property:Platform=x64
+                COMMENT "Building bundled ICU libraries for $<CONFIG>")
             foreach(_cnetmod_icu_lib IN ITEMS uc i18n)
                 add_library(ICU::${_cnetmod_icu_lib} SHARED IMPORTED GLOBAL)
                 set(_cnetmod_icu_project "${_cnetmod_icu_lib}")
@@ -58,8 +38,8 @@ macro(cnetmod_configure_icu)
                 endif()
                 set_target_properties(ICU::${_cnetmod_icu_lib} PROPERTIES
                     INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_icu_source}/common"
-                    IMPORTED_IMPLIB_DEBUG "${_cnetmod_icu_source}/../lib64/${_cnetmod_icu_name}.lib"
-                    IMPORTED_LOCATION_DEBUG "${_cnetmod_icu_source}/../bin64/${_cnetmod_icu_name}78.dll"
+                    IMPORTED_IMPLIB_DEBUG "${_cnetmod_icu_source}/../lib64/${_cnetmod_icu_name}d.lib"
+                    IMPORTED_LOCATION_DEBUG "${_cnetmod_icu_source}/../bin64/${_cnetmod_icu_name}78d.dll"
                     IMPORTED_IMPLIB_RELEASE "${_cnetmod_icu_source}/../lib64/${_cnetmod_icu_name}.lib"
                     IMPORTED_LOCATION_RELEASE "${_cnetmod_icu_source}/../bin64/${_cnetmod_icu_name}78.dll"
                     MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release

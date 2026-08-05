@@ -12,6 +12,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.error;
 import cnetmod.coro.channel;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.coro.wait_group;
 import cnetmod.protocol.http;
 import cnetmod.protocol.quic;
@@ -105,6 +106,8 @@ public:
     auto close() -> task<void>;
     auto close_all() -> task<void>;
     auto send_request(const http3_request& req) -> task<std::expected<http3_response, std::error_code>>;
+    auto send_request(const http3_request& req, cnetmod::cancel_token& token)
+        -> task<std::expected<http3_response, std::error_code>>;
     [[nodiscard]] auto process_peer_unidirectional_stream(stream_id id,
         byte_view bytes) -> std::expected<void, std::error_code>;
     [[nodiscard]] auto accepting_requests() const noexcept -> bool;

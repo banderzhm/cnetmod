@@ -7,6 +7,7 @@ module cnetmod.protocol.grpc.client;
 import std;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.codec;
@@ -24,6 +25,16 @@ namespace {
     {
         return status{.code = status_code::unavailable,
             .message = std::move(message)};
+    }
+
+    auto cancelled_status(const cancel_token& token, std::string message) -> status
+    {
+        return status{
+            .code = token.reason() == cancellation_reason::deadline_exceeded
+                ? status_code::deadline_exceeded
+                : status_code::cancelled,
+            .message = std::move(message),
+        };
     }
 
     auto make_internal(std::string message) -> status
@@ -168,6 +179,13 @@ client::client(io_context& ctx, std::string base_url, client_options opts)
 auto client::send_streaming(streaming_request req)
     -> task<std::expected<streaming_response, status>>
 {
+    cancel_token token;
+    co_return co_await send_streaming(std::move(req), token);
+}
+
+auto client::send_streaming(streaming_request req, cancel_token& token)
+    -> task<std::expected<streaming_response, status>>
+{
     if (req.compression == compression_algorithm::identity)
     {
         req.compression = opts_.default_compression;
@@ -213,9 +231,11 @@ auto client::send_streaming(streaming_request req)
     http_req.set_body(std::string(reinterpret_cast<const char*>(encoded->data()),
         encoded->size()));
 
-    auto resp = co_await http_.send(http_req);
+    auto resp = co_await http_.send(http_req, token);
     if (!resp)
-        co_return std::unexpected(make_unavailable(resp.error().message()));
+        co_return std::unexpected(token.is_cancelled()
+            ? cancelled_status(token, "grpc call cancelled")
+            : make_unavailable(resp.error().message()));
 
     streaming_response out;
     out.headers = metadata_from_headers(resp->headers());
@@ -234,6 +254,13 @@ auto client::send_streaming(streaming_request req)
 }
 
 auto client::unary(unary_request req)
+    -> task<std::expected<unary_response, status>>
+{
+    cancel_token token;
+    co_return co_await unary(std::move(req), token);
+}
+
+auto client::unary(unary_request req, cancel_token& token)
     -> task<std::expected<unary_response, status>>
 {
     if (req.compression == compression_algorithm::identity &&
@@ -280,9 +307,11 @@ auto client::unary(unary_request req)
         append_metadata_headers(http_req, call.headers);
         http_req.set_body(std::move(*body));
 
-        auto resp = co_await http_.send(http_req);
+        auto resp = co_await http_.send(http_req, token);
         if (!resp)
-            co_return std::unexpected(make_unavailable(resp.error().message()));
+            co_return std::unexpected(token.is_cancelled()
+                ? cancelled_status(token, "grpc call cancelled")
+                : make_unavailable(resp.error().message()));
 
         unary_response out{
             .st = status_from_response(*resp),
@@ -308,7 +337,7 @@ auto client::unary(unary_request req)
         .messages = {std::move(req.payload)},
         .timeout = req.timeout,
     };
-    auto r = co_await send_streaming(std::move(sr));
+    auto r = co_await send_streaming(std::move(sr), token);
     if (!r)
         co_return std::unexpected(r.error());
     if (r->messages.size() > 1)

@@ -129,6 +129,17 @@ public:
     [[nodiscard]] auto async_wait_readable(stream_id sid)
         -> task<std::expected<void, std::error_code>>;
 
+    /// Cancellable stream-readiness wait. Cancellation affects only this
+    /// waiter; use async_cancel_stream to notify the peer as well.
+    [[nodiscard]] auto async_wait_readable(stream_id sid, cancel_token& token)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Abort one stream without closing the multiplexed QUIC connection.
+    /// Sends RESET_STREAM and STOP_SENDING with the application error code.
+    [[nodiscard]] auto async_cancel_stream(stream_id sid,
+        std::uint64_t application_error_code = 0x010c)
+        -> task<std::expected<void, std::error_code>>;
+
     /// Open a new stream
     [[nodiscard]] auto async_open_stream(
         bool bidirectional = true)

@@ -14,6 +14,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 
 namespace cnetmod {
 
@@ -242,17 +243,25 @@ public:
 
     /// Async TLS handshake
     auto async_handshake() -> task<std::expected<void, std::error_code>>;
+    /// Cancellable TLS handshake. Cancellation is forwarded to memory-BIO socket I/O.
+    auto async_handshake(cancel_token& token) -> task<std::expected<void, std::error_code>>;
 
     /// Async read decrypted plaintext
     auto async_read(mutable_buffer buf)
+        -> task<std::expected<std::size_t, std::error_code>>;
+    auto async_read(mutable_buffer buf, cancel_token& token)
         -> task<std::expected<std::size_t, std::error_code>>;
 
     /// Async write plaintext (SSL encrypts then sends)
     auto async_write(const_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
+    auto async_write(const_buffer buf, cancel_token& token)
+        -> task<std::expected<std::size_t, std::error_code>>;
 
     /// Async write all plaintext bytes
     auto async_write_all(const_buffer buf)
+        -> task<std::expected<void, std::error_code>>;
+    auto async_write_all(const_buffer buf, cancel_token& token)
         -> task<std::expected<void, std::error_code>>;
 
     /// Async TLS shutdown
@@ -274,9 +283,11 @@ private:
 
     /// Write encrypted data from wbio_ to socket
     auto flush_wbio() -> task<std::expected<void, std::error_code>>;
+    auto flush_wbio(cancel_token& token) -> task<std::expected<void, std::error_code>>;
 
     /// Read data from socket and write to rbio_
     auto fill_rbio() -> task<std::expected<void, std::error_code>>;
+    auto fill_rbio(cancel_token& token) -> task<std::expected<void, std::error_code>>;
 
     io_context& io_ctx_;
     socket& sock_;

@@ -7,12 +7,14 @@ import std;
 import cnetmod.core.buffer;
 import cnetmod.core.ssl;
 import cnetmod.core.address;
+import cnetmod.core.error;
 import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.channel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 import cnetmod.protocol.udp;
 import cnetmod.protocol.quic;
@@ -196,6 +198,39 @@ auto http3_client::send_request(const http3_request& r) -> task<std::expected<ht
             co_return std::unexpected(reconnected.error());
     }
     co_return co_await session_->send_request(r);
+}
+
+auto http3_client::send_request(const http3_request& r,
+    cnetmod::cancel_token& token) -> task<std::expected<http3_response, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+    if (!session_)
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    // A QUIC connection is pooled per origin.  Do not silently coalesce an
+    // authority without proving certificate and origin-set eligibility.
+    if ((!r.host.empty() && r.host != host_) || (r.port != 0U && r.port != port_))
+        co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    if (!session_->accepting_requests())
+    {
+        if (!options_.retry_idempotent_requests || !detail::is_replay_safe(r.method))
+            co_return std::unexpected(std::make_error_code(std::errc::connection_aborted));
+        const auto origin = host_;
+        const auto origin_port = port_;
+        co_await close();
+        auto reconnected = co_await connect(origin, origin_port);
+        if (!reconnected)
+            co_return std::unexpected(reconnected.error());
+    }
+    co_return co_await session_->send_request(r, token);
+}
+
+auto http3_client::send_request(const http3_request& r,
+    cnetmod::deadline request_deadline)
+    -> task<std::expected<http3_response, std::error_code>>
+{
+    co_return co_await cnetmod::with_deadline(ctx_, request_deadline,
+        [&](cnetmod::cancel_token& token) { return send_request(r, token); });
 }
 
 auto http3_client::close() -> task<void>

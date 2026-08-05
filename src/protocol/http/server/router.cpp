@@ -186,6 +186,37 @@ auto request_context::method() const noexcept -> std::string_view
     return method_;
 }
 
+auto request_context::request_deadline() const noexcept -> const cnetmod::deadline&
+{
+    return deadline_;
+}
+
+void request_context::set_deadline(cnetmod::deadline value) noexcept
+{
+    deadline_ = deadline_.constrain(value);
+}
+
+auto request_context::cancellation_token() noexcept -> cnetmod::cancel_token&
+{
+    return cancellation_;
+}
+
+auto request_context::trace_id() const noexcept -> std::string_view
+{
+    return trace_id_;
+}
+
+void request_context::set_trace_id(std::string value)
+{
+    trace_id_ = std::move(value);
+}
+
+auto request_context::client_address() const -> std::string
+{
+    auto peer = sock_.remote_endpoint();
+    return peer ? peer->to_string() : std::string{};
+}
+
 auto request_context::method_enum() const noexcept
     -> std::optional<http_method>
 {

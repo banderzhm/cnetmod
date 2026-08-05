@@ -4,8 +4,35 @@
 
 import std;
 import cnetmod.protocol.http;
+import cnetmod.utils;
 
 using namespace cnetmod::http;
+using cnetmod::utils::R;
+
+TEST(application_result_http_adapter)
+{
+    auto success = to_http_response(R<std::string>::ok("alice"),
+        [](const std::string& value) { return R"({"user":")" + value + R"("})"; },
+        [](const auto& error) { return R"({"error":")" + error.message + R"("})"; });
+    ASSERT_EQ(success.status_code(), status::ok);
+    ASSERT_EQ(success.get_header("Content-Type"), std::string_view("application/json"));
+    ASSERT_EQ(success.body(), std::string_view(R"({"user":"alice"})"));
+
+    auto failure = to_http_response(R<std::string>::error(404, "missing"),
+        [](const std::string& value) { return value; },
+        [](const auto& error) { return R"({"error":")" + error.message + R"("})"; },
+        {.error_status = status::not_found});
+    ASSERT_EQ(failure.status_code(), status::not_found);
+    ASSERT_EQ(failure.body(), std::string_view(R"({"error":"missing"})"));
+
+    auto no_content = to_http_response(R<void>::success(),
+        [] { return std::string{}; },
+        [](const auto& error) { return error.message; },
+        {.success_status = status::no_content, .content_type = "text/plain"});
+    ASSERT_EQ(no_content.status_code(), status::no_content);
+    ASSERT_EQ(no_content.get_header("Content-Type"), std::string_view("text/plain"));
+    ASSERT_TRUE(no_content.body().empty());
+}
 
 // =============================================================================
 // response builder

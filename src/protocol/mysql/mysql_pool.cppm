@@ -111,6 +111,9 @@ public:
     auto async_run() -> task<void>;
     auto async_get_connection(cancel_token& token)
         -> task<std::expected<pooled_connection, std::error_code>>;
+    /// Acquires a connection using the remaining request budget.
+    auto async_get_connection(cnetmod::deadline value)
+        -> task<std::expected<pooled_connection, std::error_code>>;
     auto async_get_connection()
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto try_get_connection()
@@ -166,6 +169,8 @@ public:
     auto async_get_connection()
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto async_get_connection(cancel_token& token)
+        -> task<std::expected<pooled_connection, std::error_code>>;
+    auto async_get_connection(cnetmod::deadline value)
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto async_get_connection(io_context& io)
         -> task<std::expected<pooled_connection, std::error_code>>;

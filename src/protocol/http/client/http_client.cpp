@@ -19,6 +19,8 @@ import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.protocol.tcp;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.settings;
@@ -115,6 +117,18 @@ void client::close() noexcept
 auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
     -> task<std::expected<void, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await connect(host, port, use_ssl, token);
+}
+
+auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl,
+    cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+    {
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    }
     // Reuse connection if same host:port:ssl
     if (state_ && state_->conn && state_->conn->is_open() &&
         state_->host == host && state_->port == port && state_->is_ssl == use_ssl)
@@ -129,10 +143,16 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
     state_->port = port;
     state_->is_ssl = use_ssl;
 
-    auto connect_r = co_await async_connect_happy_eyeballs(*ctx_, host, port);
+    auto connect_r = co_await async_connect_happy_eyeballs(
+        *ctx_, host, port, {}, token);
     if (!connect_r)
     {
         co_return std::unexpected(connect_r.error());
+    }
+
+    if (token.is_cancelled())
+    {
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
     }
 
     auto sock = std::move(connect_r->sock);
@@ -153,7 +173,7 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
         state_->ssl->set_connect_state();
 
         // Async SSL handshake
-        auto handshake_result = co_await state_->ssl->async_handshake();
+        auto handshake_result = co_await state_->ssl->async_handshake(token);
         if (!handshake_result)
         {
             close();
@@ -198,6 +218,13 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
 auto client::write_data(std::string_view data)
     -> task<std::expected<void, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await write_data(data, token);
+}
+
+auto client::write_data(std::string_view data, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
     if (!state_ || !state_->conn || !state_->conn->is_open())
     {
         co_return std::unexpected(make_error_code(std::errc::not_connected));
@@ -207,16 +234,23 @@ auto client::write_data(std::string_view data)
     if (state_->is_ssl && state_->ssl)
     {
         co_return co_await state_->ssl->async_write_all(
-            const_buffer{data.data(), data.size()});
+            const_buffer{data.data(), data.size()}, token);
     }
 #endif
 
     auto& sock = state_->conn->native_socket();
     co_return co_await async_write_all(*ctx_, sock,
-        const_buffer{data.data(), data.size()});
+        const_buffer{data.data(), data.size()}, token);
 }
 
 auto client::read_data(void* buffer, std::size_t size)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    cancel_token token;
+    co_return co_await read_data(buffer, size, token);
+}
+
+auto client::read_data(void* buffer, std::size_t size, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     if (!state_ || !state_->conn || !state_->conn->is_open())
@@ -227,12 +261,12 @@ auto client::read_data(void* buffer, std::size_t size)
 #ifdef CNETMOD_HAS_SSL
     if (state_->is_ssl && state_->ssl)
     {
-        co_return co_await state_->ssl->async_read(mutable_buffer{buffer, size});
+        co_return co_await state_->ssl->async_read(mutable_buffer{buffer, size}, token);
     }
 #endif
 
     auto& sock = state_->conn->native_socket();
-    co_return co_await async_read(*ctx_, sock, mutable_buffer{buffer, size});
+    co_return co_await async_read(*ctx_, sock, mutable_buffer{buffer, size}, token);
 }
 
 // =============================================================================
@@ -240,6 +274,13 @@ auto client::read_data(void* buffer, std::size_t size)
 // =============================================================================
 
 auto client::send_http1(const request& req)
+    -> task<std::expected<response, std::error_code>>
+{
+    cancel_token token;
+    co_return co_await send_http1(req, token);
+}
+
+auto client::send_http1(const request& req, cancel_token& token)
     -> task<std::expected<response, std::error_code>>
 {
     if (!state_)
@@ -333,7 +374,7 @@ auto client::send_http1(const request& req)
     }
 
     // Send request
-    auto send_result = co_await write_data(request_data);
+    auto send_result = co_await write_data(request_data, token);
     if (!send_result)
     {
         co_return std::unexpected(send_result.error());
@@ -348,7 +389,7 @@ auto client::send_http1(const request& req)
     while (header_end == std::string::npos)
     {
         char temp[4096];
-        auto result = co_await read_data(temp, sizeof(temp));
+        auto result = co_await read_data(temp, sizeof(temp), token);
         if (!result)
         {
             co_return std::unexpected(result.error());
@@ -486,7 +527,7 @@ auto client::send_http1(const request& req)
             {
                 char temp[4096];
                 auto to_read = std::min(sizeof(temp), content_length - body.size());
-                auto result = co_await read_data(temp, to_read);
+                auto result = co_await read_data(temp, to_read, token);
                 if (!result)
                 {
                     co_return std::unexpected(result.error());
@@ -514,7 +555,7 @@ auto client::send_http1(const request& req)
             while (crlf_pos == std::string::npos)
             {
                 char temp[4096];
-                auto result = co_await read_data(temp, sizeof(temp));
+                auto result = co_await read_data(temp, sizeof(temp), token);
                 if (!result)
                 {
                     co_return std::unexpected(result.error());
@@ -561,7 +602,7 @@ auto client::send_http1(const request& req)
                     if (trailer_crlf == std::string::npos)
                     {
                         char temp[4096];
-                        auto result = co_await read_data(temp, sizeof(temp));
+                        auto result = co_await read_data(temp, sizeof(temp), token);
                         if (!result || *result == 0)
                             break;
                         remaining_data.append(temp, *result);
@@ -588,7 +629,7 @@ auto client::send_http1(const request& req)
             while (remaining_data.size() < chunk_size + 2)
             {
                 char temp[4096];
-                auto result = co_await read_data(temp, sizeof(temp));
+                auto result = co_await read_data(temp, sizeof(temp), token);
                 if (!result)
                 {
                     co_return std::unexpected(result.error());
@@ -637,6 +678,13 @@ auto client::send_http1(const request& req)
 // =============================================================================
 
 auto client::send_http2(const request& req)
+    -> task<std::expected<response, std::error_code>>
+{
+    cancel_token token;
+    co_return co_await send_http2(req, token);
+}
+
+auto client::send_http2(const request& req, cancel_token& token)
     -> task<std::expected<response, std::error_code>>
 {
     if (!state_ || !state_->conn)
@@ -718,7 +766,7 @@ auto client::send_http2(const request& req)
         append_frame(outbound, {.type = v2::frame_type::data, .flags = 0x1, .stream_id = stream_id},
             {reinterpret_cast<const std::byte*>(body.data()), body.size()});
     }
-    const auto write = co_await write_data({reinterpret_cast<const char*>(outbound.data()), outbound.size()});
+    const auto write = co_await write_data({reinterpret_cast<const char*>(outbound.data()), outbound.size()}, token);
     if (!write)
         co_return std::unexpected(write.error());
 
@@ -732,7 +780,7 @@ auto client::send_http2(const request& req)
     {
         while (input.size() < v2::frame_header_size)
         {
-            const auto read = co_await read_data(buffer.data(), buffer.size());
+            const auto read = co_await read_data(buffer.data(), buffer.size(), token);
             if (!read || *read == 0)
                 co_return std::unexpected(read ? make_error_code(std::errc::connection_reset) : read.error());
             input.insert(input.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(*read));
@@ -743,7 +791,7 @@ auto client::send_http2(const request& req)
         const auto required = v2::frame_header_size + static_cast<std::size_t>(header->length);
         while (input.size() < required)
         {
-            const auto read = co_await read_data(buffer.data(), buffer.size());
+            const auto read = co_await read_data(buffer.data(), buffer.size(), token);
             if (!read || *read == 0)
                 co_return std::unexpected(read ? make_error_code(std::errc::connection_reset) : read.error());
             input.insert(input.end(), buffer.begin(), buffer.begin() + static_cast<std::ptrdiff_t>(*read));
@@ -758,7 +806,7 @@ auto client::send_http2(const request& req)
             const std::array<std::byte, 0> empty{};
             std::vector<std::byte> ack;
             append_frame(ack, {.type = v2::frame_type::settings, .flags = 0x1}, empty);
-            const auto ack_write = co_await write_data({reinterpret_cast<const char*>(ack.data()), ack.size()});
+            const auto ack_write = co_await write_data({reinterpret_cast<const char*>(ack.data()), ack.size()}, token);
             if (!ack_write)
                 co_return std::unexpected(ack_write.error());
         }
@@ -1040,6 +1088,14 @@ auto client::send_http2_batch(std::span<const request> requests)
 auto client::send_with_redirects(const request& req, std::size_t redirect_count)
     -> task<std::expected<response, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await send_with_redirects(req, redirect_count, token);
+}
+
+auto client::send_with_redirects(const request& req, std::size_t redirect_count,
+    cancel_token& token)
+    -> task<std::expected<response, std::error_code>>
+{
     if (redirect_count > options_.max_redirects)
     {
         co_return std::unexpected(make_error_code(std::errc::too_many_links));
@@ -1086,7 +1142,7 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
             state_->is_ssl != use_ssl;
         if (need_connect)
         {
-            auto connect_result = co_await connect(host, port, use_ssl);
+            auto connect_result = co_await connect(host, port, use_ssl, token);
             if (!connect_result)
             {
                 co_return std::unexpected(connect_result.error());
@@ -1099,11 +1155,11 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
 
     if (state_->protocol == protocol_type::http1)
     {
-        result = co_await send_http1(req);
+        result = co_await send_http1(req, token);
     }
     else if (state_->protocol == protocol_type::http2)
     {
-        result = co_await send_http2(req);
+        result = co_await send_http2(req, token);
     }
     else
     {
@@ -1193,7 +1249,7 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
 
                 redirect_req.set_uri(redirect_url);
 
-                co_return co_await send_with_redirects(redirect_req, redirect_count + 1);
+                co_return co_await send_with_redirects(redirect_req, redirect_count + 1, token);
             }
         }
     }
@@ -1208,7 +1264,21 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count)
 auto client::send(const request& req)
     -> task<std::expected<response, std::error_code>>
 {
-    co_return co_await send_with_redirects(req, 0);
+    cancel_token token;
+    co_return co_await send(req, token);
+}
+
+auto client::send(const request& req, cancel_token& token)
+    -> task<std::expected<response, std::error_code>>
+{
+    co_return co_await send_with_redirects(req, 0, token);
+}
+
+auto client::send(const request& req, deadline request_deadline)
+    -> task<std::expected<response, std::error_code>>
+{
+    co_return co_await with_deadline(*ctx_, request_deadline,
+        [&](cancel_token& token) { return send(req, token); });
 }
 
 auto client::send(http_method method, std::string_view url, std::string_view body)

@@ -217,6 +217,11 @@ export struct connect_result
     connect_metrics metrics;
 };
 
+export auto async_connect_happy_eyeballs(io_context& ctx,
+    std::string_view host, std::uint16_t port,
+    happy_eyeballs_options opts, cancel_token& token)
+    -> task<std::expected<connect_result, std::error_code>>;
+
 export void configure_dns_cache(dns_cache_config cfg)
 {
     auto& state = detail::resolver_state_instance();
@@ -513,6 +518,29 @@ namespace detail {
         }
     }
 
+    void cancel_connect_race(cancel_token& token) noexcept
+    {
+        auto* state = static_cast<connect_race_state*>(token.ctx_);
+        if (!state)
+            return;
+
+        std::vector<std::shared_ptr<cancel_token>> attempts;
+        std::coroutine_handle<> waiter;
+        {
+            std::scoped_lock lock(state->mutex);
+            if (state->completed)
+                return;
+            state->completed = true;
+            state->last_error_code = make_error_code(errc::operation_aborted);
+            attempts = state->tokens;
+            waiter = std::exchange(state->waiter, {});
+        }
+        for (auto& attempt : attempts)
+            attempt->cancel();
+        if (waiter)
+            state->ctx->post(waiter);
+    }
+
     inline auto connect_attempt(io_context& ctx,
         std::shared_ptr<connect_race_state> state,
         endpoint remote,
@@ -678,6 +706,26 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
     happy_eyeballs_options opts = {})
     -> task<std::expected<connect_result, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await async_connect_happy_eyeballs(ctx, host, port, opts, token);
+}
+
+/// The DNS resolver may already be executing a blocking system lookup when a
+/// cancellation arrives. Once resolution completes, all in-flight Happy
+/// Eyeballs connect attempts are cancelled and the caller is resumed.
+export auto async_connect_happy_eyeballs(io_context& ctx,
+    std::string_view host,
+    std::uint16_t port,
+    happy_eyeballs_options opts,
+    cancel_token& token)
+    -> task<std::expected<connect_result, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    auto resolved = co_await async_resolve_addresses(ctx, host, std::to_string(port));
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (!resolved || resolved->empty())
     auto resolved = co_await async_resolve_addresses(ctx, host, std::to_string(port));
     if (!resolved || resolved->empty())
     {
@@ -690,13 +738,25 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
     state->remaining = ordered.size();
     state->metrics.resolved_address_count = ordered.size();
 
+    // A Happy Eyeballs race owns several child connect tokens, so the caller's
+    // token is a cancellation relay rather than a platform I/O token itself.
+    token.ctx_ = state.get();
+    token.cancel_fn_ = &detail::cancel_connect_race;
+    token.pending_.store(true, std::memory_order_release);
+    if (token.is_cancelled())
+        detail::cancel_connect_race(token);
+
     for (std::size_t i = 0; i < ordered.size(); ++i)
     {
         auto delay = opts.fallback_delay * static_cast<int>(i);
         spawn(ctx, detail::connect_attempt(ctx, state, endpoint{ordered[i], port}, opts.socket_opts, delay, opts.connect_timeout));
     }
 
-    co_return co_await detail::connect_race_awaitable{state};
+    auto result = co_await detail::connect_race_awaitable{state};
+    token.pending_.store(false, std::memory_order_release);
+    token.cancel_fn_ = nullptr;
+    token.ctx_ = nullptr;
+    co_return result;
 }
 
 } // namespace cnetmod

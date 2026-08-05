@@ -652,6 +652,13 @@ void connection_pool::return_connection(conn_node& node, bool needs_reset)
         }());
 }
 
+auto connection_pool::async_get_connection(cnetmod::deadline value)
+    -> task<std::expected<pooled_connection, std::error_code>>
+{
+    co_return co_await with_deadline(ctx_, value,
+        [this](cancel_token& token) { return async_get_connection(token); });
+}
+
 auto connection_pool::async_get_connection(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
@@ -854,6 +861,17 @@ auto sharded_connection_pool::async_get_connection(cancel_token& token)
 
     auto wait_idx = select_wait_shard(primary);
     co_return co_await shards_[wait_idx]->async_get_connection(token);
+}
+
+auto sharded_connection_pool::async_get_connection(cnetmod::deadline value)
+    -> task<std::expected<pooled_connection, std::error_code>>
+{
+    auto primary =
+        next_shard_.fetch_add(1, std::memory_order_relaxed) % shards_.size();
+    if (auto fast = try_borrow_immediate(primary))
+        co_return std::move(*fast);
+    auto wait_index = select_wait_shard(primary);
+    co_return co_await shards_[wait_index]->async_get_connection(value);
 }
 
 auto sharded_connection_pool::async_get_connection(io_context& io)

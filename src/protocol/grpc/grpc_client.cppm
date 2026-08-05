@@ -7,6 +7,7 @@ export module cnetmod.protocol.grpc.client;
 import std;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 import cnetmod.protocol.grpc.types;
 
@@ -48,6 +49,8 @@ public:
 
     [[nodiscard]] auto unary(unary_request req)
         -> task<std::expected<unary_response, status>>;
+    [[nodiscard]] auto unary(unary_request req, cnetmod::cancel_token& token)
+        -> task<std::expected<unary_response, status>>;
 
     [[nodiscard]] auto client_streaming(streaming_request req)
         -> task<std::expected<unary_response, status>>;
@@ -62,6 +65,9 @@ public:
 
 private:
     [[nodiscard]] auto send_streaming(streaming_request req)
+        -> task<std::expected<streaming_response, status>>;
+    [[nodiscard]] auto send_streaming(streaming_request req,
+        cnetmod::cancel_token& token)
         -> task<std::expected<streaming_response, status>>;
 
     http::client http_;

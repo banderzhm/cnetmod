@@ -257,6 +257,47 @@ if (result.ok()) { result.data(); }
 else { result.failure().code; result.message(); }
 ```
 
+`R` 仅表达业务层成功/失败；底层 I/O、数据库和协议仍优先返回
+`std::expected<T, std::error_code>`。在应用边界通过 `from_error_code()`
+将传输错误映射为业务错误码，避免协议细节泄漏到服务接口。
+
+```cpp
+using api_result = R<User, app_error>;
+
+auto result = api_result::from_error_code(network_ec,
+    [](const std::error_code& ec) { return map_network_error(ec); });
+```
+
+`R<void, E>` 用于成功但没有返回实体的操作。由于 C++ 不允许静态
+`ok()` 工厂与实例谓词 `result.ok()` 同时使用无参重载，其成功工厂为
+`R<void, E>::success()`：
+
+```cpp
+auto updated = R<void, app_error>::success()
+    .and_then([&] { return save_profile(profile); });
+```
+
+支持的组合操作：
+
+| 操作 | 用途 |
+|------|------|
+| `map(f)` | 仅转换成功值，失败原样透传 |
+| `and_then(f)` | 链接返回相同错误码类型 `R<U, E>` 的下一步 |
+| `map_error(f)` | 仅转换错误码，保留 message / diagnostic |
+| `data() &&` | 从成功结果零额外拷贝地移动取出值 |
+
+HTTP 输出使用 `import cnetmod.protocol.http;` 后的
+`http::to_http_response()`。由调用方提供成功/失败序列化器，框架不耦合
+具体 JSON 库或错误响应 schema：
+
+```cpp
+auto response = cnetmod::http::to_http_response(
+    result,
+    [](const User& user) { return encode_user_json(user); },
+    [](const auto& error) { return encode_error_json(error); },
+    {.error_status = cnetmod::http::status::bad_request});
+```
+
 ## Do's & Don'ts
 
 | ✅ 正确 | ❌ 错误 |

@@ -108,10 +108,14 @@ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
 /// Used by the OpenSSL socket BIO path required for optional Linux kTLS.
 export auto async_wait_readable(io_context& ctx, socket& sock)
     -> task<std::expected<void, std::error_code>>;
+export auto async_wait_readable(io_context& ctx, socket& sock,
+    cancel_token& token) -> task<std::expected<void, std::error_code>>;
 
 /// Wait for a non-blocking socket to become writable without writing bytes.
 export auto async_wait_writable(io_context& ctx, socket& sock)
     -> task<std::expected<void, std::error_code>>;
+export auto async_wait_writable(io_context& ctx, socket& sock,
+    cancel_token& token) -> task<std::expected<void, std::error_code>>;
 #endif
 
 /// Async recvfrom — Receive UDP datagram and get sender address

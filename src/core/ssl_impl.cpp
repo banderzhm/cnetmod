@@ -17,6 +17,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.error;
 import cnetmod.core.socket;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 
@@ -74,6 +75,14 @@ namespace {
             co_return co_await async_wait_writable(context, socket);
         }
         co_return co_await async_wait_readable(context, socket);
+    }
+
+    auto wait_for_ssl_socket(io_context& context, socket& socket, bool writable,
+        cancel_token& token) -> task<std::expected<void, std::error_code>>
+    {
+        if (writable)
+            co_return co_await async_wait_writable(context, socket, token);
+        co_return co_await async_wait_readable(context, socket, token);
     }
     #endif
 
@@ -566,6 +575,13 @@ void ssl_stream::set_accept_state() noexcept
 auto ssl_stream::async_handshake()
     -> task<std::expected<void, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await async_handshake(token);
+}
+
+auto ssl_stream::async_handshake(cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
     for (;;)
     {
         const int ret = SSL_do_handshake(ssl_);
@@ -573,7 +589,7 @@ auto ssl_stream::async_handshake()
         {
             if (!direct_socket_bio_)
             {
-                auto flushed = co_await flush_wbio();
+                auto flushed = co_await flush_wbio(token);
                 if (!flushed)
                 {
                     co_return std::unexpected(flushed.error());
@@ -592,13 +608,13 @@ auto ssl_stream::async_handshake()
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true);
+                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true, token);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush_wbio(token);
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
@@ -610,18 +626,18 @@ auto ssl_stream::async_handshake()
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false);
+                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false, token);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush_wbio(token);
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
             }
-            auto filled = co_await fill_rbio();
+            auto filled = co_await fill_rbio(token);
             if (!filled)
             {
                 co_return std::unexpected(filled.error());
@@ -635,6 +651,13 @@ auto ssl_stream::async_handshake()
 }
 
 auto ssl_stream::async_read(mutable_buffer buffer)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    cancel_token token;
+    co_return co_await async_read(buffer, token);
+}
+
+auto ssl_stream::async_read(mutable_buffer buffer, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     for (;;)
@@ -652,18 +675,18 @@ auto ssl_stream::async_read(mutable_buffer buffer)
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false);
+                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false, token);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush_wbio(token);
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
             }
-            auto filled = co_await fill_rbio();
+            auto filled = co_await fill_rbio(token);
             if (!filled)
             {
                 co_return std::unexpected(filled.error());
@@ -675,13 +698,13 @@ auto ssl_stream::async_read(mutable_buffer buffer)
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true);
+                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true, token);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush_wbio(token);
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
@@ -699,6 +722,13 @@ auto ssl_stream::async_read(mutable_buffer buffer)
 auto ssl_stream::async_write(const_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await async_write(buffer, token);
+}
+
+auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
     for (;;)
     {
         const int ret = SSL_write(ssl_, buffer.data, static_cast<int>(buffer.size));
@@ -706,7 +736,7 @@ auto ssl_stream::async_write(const_buffer buffer)
         {
             if (!direct_socket_bio_)
             {
-                auto flushed = co_await flush_wbio();
+                auto flushed = co_await flush_wbio(token);
                 if (!flushed)
                 {
                     co_return std::unexpected(flushed.error());
@@ -722,13 +752,13 @@ auto ssl_stream::async_write(const_buffer buffer)
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true);
+                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true, token);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush_wbio(token);
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
@@ -740,18 +770,18 @@ auto ssl_stream::async_write(const_buffer buffer)
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false);
+                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false, token);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush_wbio(token);
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
             }
-            auto filled = co_await fill_rbio();
+            auto filled = co_await fill_rbio(token);
             if (!filled)
             {
                 co_return std::unexpected(filled.error());
@@ -767,12 +797,19 @@ auto ssl_stream::async_write(const_buffer buffer)
 auto ssl_stream::async_write_all(const_buffer buffer)
     -> task<std::expected<void, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await async_write_all(buffer, token);
+}
+
+auto ssl_stream::async_write_all(const_buffer buffer, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
     const auto* data = static_cast<const std::byte*>(buffer.data);
     std::size_t written = 0;
     while (written < buffer.size)
     {
         auto result = co_await async_write(
-            const_buffer{data + written, buffer.size - written});
+            const_buffer{data + written, buffer.size - written}, token);
         if (!result)
         {
             co_return std::unexpected(result.error());
@@ -903,6 +940,13 @@ auto ssl_stream::native() const noexcept -> SSL*
 auto ssl_stream::flush_wbio()
     -> task<std::expected<void, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await flush_wbio(token);
+}
+
+auto ssl_stream::flush_wbio(cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
     if (direct_socket_bio_)
     {
         // The socket BIO has already handed encrypted records to the kernel.
@@ -918,7 +962,7 @@ auto ssl_stream::flush_wbio()
         }
         auto written = co_await cnetmod::async_write_all(
             io_ctx_, sock_,
-            const_buffer{encrypted, static_cast<std::size_t>(pending)});
+            const_buffer{encrypted, static_cast<std::size_t>(pending)}, token);
         if (!written)
         {
             co_return std::unexpected(written.error());
@@ -934,6 +978,13 @@ auto ssl_stream::flush_wbio()
 auto ssl_stream::fill_rbio()
     -> task<std::expected<void, std::error_code>>
 {
+    cancel_token token;
+    co_return co_await fill_rbio(token);
+}
+
+auto ssl_stream::fill_rbio(cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
     if (direct_socket_bio_)
     {
     #if defined(CNETMOD_PLATFORM_LINUX)
@@ -944,7 +995,7 @@ auto ssl_stream::fill_rbio()
     }
     std::array<std::byte, 8192> buffer{};
     auto read = co_await cnetmod::async_read(
-        io_ctx_, sock_, mutable_buffer{buffer.data(), buffer.size()});
+        io_ctx_, sock_, mutable_buffer{buffer.data(), buffer.size()}, token);
     if (!read)
     {
         co_return std::unexpected(read.error());

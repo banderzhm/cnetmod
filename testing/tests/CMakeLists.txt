@@ -6,6 +6,9 @@ enable_testing()
 # Test source files — each file produces an independent executable
 set(TEST_SOURCES
     test_flat_map.cpp
+    test_application_result.cpp
+    test_deadline.cpp
+    test_task_group.cpp
     test_task.cpp
     test_lazy.cpp
     test_channel.cpp
