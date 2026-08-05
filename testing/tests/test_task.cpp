@@ -78,6 +78,12 @@ static auto completes_after_external_resume() -> task<int>
     co_return 7;
 }
 
+static auto records_execution_thread(std::thread::id& execution_thread) -> task<int>
+{
+    execution_thread = std::this_thread::get_id();
+    co_return 9;
+}
+
 // =============================================================================
 // Tests
 // =============================================================================
@@ -128,6 +134,26 @@ TEST(task_move_semantics)
 TEST(sync_wait_waits_for_asynchronous_completion)
 {
     ASSERT_EQ(sync_wait(completes_after_external_resume()), 7);
+}
+
+TEST(starts_on_starts_task_on_target_io_context)
+{
+    auto context = make_io_context();
+    std::thread::id context_thread;
+    std::thread runner{[&]
+        {
+            context_thread = std::this_thread::get_id();
+            context->run();
+        }};
+
+    std::thread::id execution_thread;
+    const auto result = sync_wait(
+        starts_on(*context, records_execution_thread(execution_thread)));
+
+    context->stop();
+    runner.join();
+    ASSERT_EQ(result, 9);
+    ASSERT_EQ(execution_thread, context_thread);
 }
 
 TEST(spawn_releases_unstarted_coroutine_when_context_is_destroyed)

@@ -15,10 +15,37 @@ macro(cnetmod_configure_icu)
             if(NOT _cnetmod_icu_msbuild)
                 set(_cnetmod_icu_msbuild "${CMAKE_COMMAND}")
             endif()
-            add_custom_target(cnetmod_icu
-                COMMAND "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
-                    /target:common /target:i18n /property:Configuration=$<CONFIG> /property:Platform=x64
-                COMMENT "Building bundled ICU libraries")
+            # ICU's Visual Studio solution writes its import libraries and DLLs
+            # into the submodule tree.  A custom target without declared
+            # outputs is always out of date, so it used to invoke MSBuild for
+            # every cnetmod build (and produced a very large, mostly-no-op log).
+            #
+            # Treat a complete ICU runtime as reusable.  The CI cache restores
+            # these four files before configuration; local reconfigures get the
+            # same fast path.  A missing or partial runtime still builds ICU
+            # normally and then becomes reusable on the next build.
+            set(_cnetmod_icu_runtime_files
+                "${_cnetmod_icu_source}/../lib64/icuuc.lib"
+                "${_cnetmod_icu_source}/../lib64/icuin.lib"
+                "${_cnetmod_icu_source}/../bin64/icuuc78.dll"
+                "${_cnetmod_icu_source}/../bin64/icuin78.dll")
+            set(_cnetmod_icu_ready TRUE)
+            foreach(_cnetmod_icu_runtime_file IN LISTS _cnetmod_icu_runtime_files)
+                if(NOT EXISTS "${_cnetmod_icu_runtime_file}")
+                    set(_cnetmod_icu_ready FALSE)
+                    break()
+                endif()
+            endforeach()
+
+            if(_cnetmod_icu_ready)
+                add_custom_target(cnetmod_icu
+                    COMMENT "Using existing bundled ICU libraries")
+            else()
+                add_custom_target(cnetmod_icu
+                    COMMAND "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
+                        /target:common /target:i18n /property:Configuration=$<CONFIG> /property:Platform=x64
+                    COMMENT "Building bundled ICU libraries")
+            endif()
             foreach(_cnetmod_icu_lib IN ITEMS uc i18n)
                 add_library(ICU::${_cnetmod_icu_lib} SHARED IMPORTED GLOBAL)
                 set(_cnetmod_icu_project "${_cnetmod_icu_lib}")

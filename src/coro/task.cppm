@@ -5,6 +5,7 @@ module;
 export module cnetmod.coro.task;
 
 import std;
+import cnetmod.io.io_context;
 
 namespace cnetmod {
 
@@ -252,6 +253,34 @@ private:
 
     std::coroutine_handle<promise_type> handle_;
 };
+
+// =============================================================================
+// starts_on -- schedule task start without exposing a sender implementation
+// =============================================================================
+
+/// Return a cold task whose first user instruction runs on @p context.
+///
+/// This is cnetmod's stable coroutine-facing scheduling API. Its name and
+/// semantics intentionally mirror C++26 `starts_on`, but it returns task so
+/// applications do not depend on a particular Sender/Receiver library before
+/// the standard library provides one.
+///
+/// It only controls where the operation starts. A third-party awaitable may
+/// resume its awaiting coroutine on another thread; cnetmod I/O awaitables
+/// resume through their associated io_context.
+export template <typename T>
+auto starts_on(io_context& context, task<T> operation) -> task<T>
+{
+    co_await post_awaitable{context};
+    if constexpr (std::is_void_v<T>)
+    {
+        co_await std::move(operation);
+    }
+    else
+    {
+        co_return co_await std::move(operation);
+    }
+}
 
 // =============================================================================
 // sync_wait — Synchronously wait for coroutine completion

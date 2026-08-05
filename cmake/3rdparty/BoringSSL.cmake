@@ -56,8 +56,19 @@ macro(cnetmod_configure_boringssl_submodule)
                 message(STATUS "BoringSSL: FIPS mode enabled")
             endif()
 
-            # Build BoringSSL
+            # Build BoringSSL. The root project deliberately uses broad MSVC
+            # compile options for C++ modules (/std:c++latest, /utf-8, etc.).
+            # CMake propagates directory compile options to subdirectories;
+            # if they reach BoringSSL, the Visual Studio generator also passes
+            # them to NASM. NASM then rejects the MSVC-only switches and the
+            # build fails with MSB3721 on GitHub's Windows runner.
+            #
+            # Keep third-party compiler flags isolated while adding BoringSSL,
+            # then restore cnetmod's options for all subsequent project targets.
+            get_directory_property(_cnetmod_saved_compile_options COMPILE_OPTIONS)
+            set_property(DIRECTORY PROPERTY COMPILE_OPTIONS "")
             add_subdirectory("${CNETMOD_BORINGSSL_DIR}" third_party/boringssl/build EXCLUDE_FROM_ALL)
+            set_property(DIRECTORY PROPERTY COMPILE_OPTIONS "${_cnetmod_saved_compile_options}")
 
             # cnetmod enables broad warnings globally.  BoringSSL deliberately
             # keeps compatibility no-op parameters, so do not promote its
