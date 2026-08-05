@@ -40,6 +40,10 @@ constexpr bench_case cases[] = {
 };
 
 auto make_cert_path(std::string_view file) -> std::string {
+    if (const auto* directory = std::getenv("CNETMOD_BENCH_TLS_DIR");
+        directory != nullptr && *directory != '\0') {
+        return (std::filesystem::path(directory) / file).string();
+    }
     auto root = std::filesystem::path(__FILE__).parent_path().parent_path().parent_path();
     return (root / "examples" / "test_ssl" / file).string();
 }

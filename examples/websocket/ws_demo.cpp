@@ -1,12 +1,11 @@
 /// cnetmod example — WebSocket Server + Client
-/// Demonstrates ws::connection + exec::async_scope concurrent
+/// Demonstrates ws::connection with structured coroutine concurrency
 /// Server accept Client
 /// Async_scope.spawn() task, scope.on_empty() wait forcomplete
 
 #include <cnetmod/config.hpp>
 #include <new>
-#include <exec/async_scope.hpp>
-#include <stdexec/execution.hpp>
+#include <cstdio>
 
 import std;
 import cnetmod.core;
@@ -77,8 +76,8 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
 // =============================================================================
 
 auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
-               exec::async_scope& scope, std::atomic<int>& done,
-               std::atomic<bool>& server_ready) -> cn::task<void>
+               std::atomic<int>& done, std::atomic<bool>& server_ready)
+    -> cn::task<void>
 {
     server_ready.store(true);
     std::println("  [WS Server] Listening on port {}", PORT);
@@ -92,11 +91,9 @@ auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
         co_return;
     }
 
-    // Async_scope.spawn session tasklifetime
-    cn::io_scheduler sch(ctx);
-    scope.spawn(
-        stdexec::starts_on(sch,
-            cn::as_sender(ws_session(ctx, std::move(*r), done))));
+    // This is already the owning I/O context. Native spawn preserves the
+    // session lifetime without triggering Homebrew LLVM 22's starts_on crash.
+    cn::spawn(ctx, ws_session(ctx, std::move(*r), done));
 }
 
 // =============================================================================
@@ -166,21 +163,11 @@ auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // Exec::async_scope - concurrent
-    // Server_task, session_task, client_task task scope
-    exec::async_scope scope;
-    cn::io_scheduler sch(ctx);
     std::atomic<bool> server_ready{false};
     std::atomic<int>  done{0}; // session + client = 2
 
-    // Scope.spawn + starts_on + as_sender: -> sender -> scope lifetime
-    scope.spawn(
-        stdexec::starts_on(sch,
-            cn::as_sender(ws_server(ctx, acc, scope, done, server_ready))));
-
-    scope.spawn(
-        stdexec::starts_on(sch,
-            cn::as_sender(ws_client(ctx, server_ready, done))));
+    cn::spawn(ctx, ws_server(ctx, acc, done, server_ready));
+    cn::spawn(ctx, ws_client(ctx, server_ready, done));
 
     // Wait for session + client complete (server accept )
     while (done.load() < 2) {

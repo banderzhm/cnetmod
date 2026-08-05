@@ -1,13 +1,12 @@
 /// cnetmod example — HTTP Server + Client
 /// Demonstrates http::request/response parsebuild + async TCP I/O
-/// Exec::async_scope + io_scheduler concurrent
+/// Structured coroutine concurrency on one I/O context
 /// Server, return "Hello from cnetmod!"
 /// Client GET request, response
 
 #include <cnetmod/config.hpp>
 #include <new>
-#include <exec/async_scope.hpp>
-#include <stdexec/execution.hpp>
+#include <cstdio>
 
 import std;
 import cnetmod.core;
@@ -176,21 +175,13 @@ auto run_http_demo(cn::io_context& ctx) -> cn::task<void> {
         co_return;
     }
 
-    // Exec::async_scope - concurrent: server/client lifetime
-    exec::async_scope scope;
-    cn::io_scheduler sch(ctx);
-
     std::atomic<bool> server_ready{false};
     std::atomic<int>  done{0};
 
-    // Async_scope.spawn + starts_on + as_sender bridge stdexec
-    scope.spawn(
-        stdexec::starts_on(sch,
-            cn::as_sender(http_server(ctx, acc, server_ready, done))));
-
-    scope.spawn(
-        stdexec::starts_on(sch,
-            cn::as_sender(http_client(ctx, server_ready, done))));
+    // Both operations belong to ctx. Native spawn avoids Homebrew LLVM 22's
+    // starts_on template-instantiation crash while preserving concurrency.
+    cn::spawn(ctx, http_server(ctx, acc, server_ready, done));
+    cn::spawn(ctx, http_client(ctx, server_ready, done));
 
     // Wait for server + client complete
     while (done.load() < 2) {

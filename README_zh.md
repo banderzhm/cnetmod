@@ -91,38 +91,60 @@ Intel Core i9-14900K 上的 Release benchmark 结果：
 每轮 1 万请求。表中均为 3 轮平均值，包含本批次实际测量的全部实现/协议
 端点；不可用端点会明确标注。
 
-延迟单位均为毫秒。`P0` 与 `P100` 是三轮中每轮最小值和最大值的平均，
-用于展示吞吐和中间分位数无法体现的调度抖动与极端长尾。
+下表按协议分组显示。延迟列只保留最常用的 `P50 / P99`（毫秒）；完整
+`P0/P50/P95/P99/P100` 已保留在链接的原始 JSON 和 CSV 中，避免 README 过宽。
 
-| 协议 | 实现 | 吞吐 | 相对 Rust 基线 | P0 | P50 | P95 | P99 | P100 | 成功率 |
-|------|------|-----:|---------------:|---:|----:|----:|----:|-----:|------:|
-| HTTP/1.1 | **cnetmod** | **1.501M req/s** | **+41.7%** | 0.012 | 0.132 | 0.358 | 0.682 | 33.372 | 100.00% |
-| HTTP/1.1 | Statico/tokio-uring | 1.485M req/s | +40.2% | 0.012 | 0.138 | 0.328 | 0.551 | 40.426 | 100.00% |
-| HTTP/1.1 | Statico/monoio | 1.439M req/s | +35.8% | 0.012 | 0.144 | 0.335 | 0.489 | 42.769 | 100.00% |
-| HTTP/1.1 | Rust Hyper | 1.059M req/s | 基线 | 0.011 | 0.215 | 0.442 | 0.561 | 33.366 | 100.00% |
-| HTTP/1.1 | Go fasthttp | 1.112M req/s | +4.9% | 0.009 | 0.167 | 0.563 | 0.853 | 28.496 | 100.00% |
-| HTTP/1.1 | Java 26 / Jetty | 678K req/s | -36.0% | 0.011 | 0.157 | 0.979 | 1.489 | 1047.306 | 100.00% |
-| HTTP/1.1 | Go net/http | 510K req/s | -51.8% | 0.009 | 0.117 | 3.514 | 5.277 | 36.192 | 100.00% |
-| HTTP/1.1 | Java 26 / JDK 虚拟线程 | 482K req/s | **不参与排名** | 0.038 | 0.464 | 0.932 | 2.020 | 40.498 | **99.34%** |
-| HTTPS/1.1 | **cnetmod** | **1.192M req/s** | **+34.0%** | 0.013 | 0.165 | 0.418 | 0.804 | 86.655 | 100.00% |
-| HTTPS/1.1 | Rust Hyper | 889K req/s | 基线 | 0.011 | 0.246 | 0.502 | 0.640 | 86.872 | 100.00% |
-| HTTPS/1.1 | Go fasthttp | 1.021M req/s | +14.8% | 0.011 | 0.185 | 0.556 | 0.838 | 77.575 | 100.00% |
-| HTTPS/1.1 | Go net/http | 587K req/s | -33.9% | 0.012 | 0.161 | 2.132 | 3.529 | 82.236 | 100.00% |
-| HTTPS/1.1 | Java 26 / Jetty | 455K req/s | -48.9% | 0.016 | 0.247 | 1.529 | 2.791 | 1061.236 | 100.00% |
-| HTTPS/1.1 | Java 26 / JDK 虚拟线程 | 56K req/s | **不参与排名** | 0.021 | 0.364 | 47.675 | 51.770 | 115.778 | **90.29%** |
-| HTTP/2 h2c | **cnetmod** | **1.354M req/s** | **+18.6%** | 0.097 | 0.180 | 0.249 | 0.393 | 4.149 | 100.00% |
-| HTTP/2 h2c | Rust monoio-h2 | 1.142M req/s | 基线 | 0.102 | 0.209 | 0.326 | 0.400 | 43.976 | 100.00% |
-| HTTP/2 h2c | Java 26 / Jetty | 558K req/s | -51.2% | 0.023 | 0.318 | 1.330 | 2.889 | 27.371 | 100.00% |
-| HTTP/2 h2c | Go net/http | 240K req/s | -79.0% | 0.036 | 0.767 | 2.761 | 4.181 | 9.822 | 100.00% |
-| HTTP/2 h2c | Rust Hyper | 104K req/s | -90.9% | 0.023 | 0.163 | 40.637 | 44.086 | 49.270 | 100.00% |
-| HTTPS/2 | **cnetmod** | **1.106M req/s** | **+1067.5%** | 0.103 | 0.194 | 0.266 | 0.404 | 46.649 | 100.00% |
-| HTTPS/2 | Java 26 / Jetty | 379K req/s | +299.8% | 0.028 | 0.455 | 1.962 | 4.097 | 57.020 | 100.00% |
-| HTTPS/2 | Go net/http | 247K req/s | +160.3% | 0.033 | 0.740 | 2.777 | 3.961 | 9.264 | 100.00% |
-| HTTPS/2 | Rust Hyper | 95K req/s | 基线 | 0.026 | 0.172 | 41.237 | 44.782 | 48.343 | 100.00% |
-| HTTP/3 | **cnetmod** | **259K req/s** | **+39.7%** | 0.086 | 0.359 | 0.699 | 1.589 | 3.686 | 100.00% |
-| HTTP/3 | Rust Quinn/h3 | 185K req/s | 基线 | 0.097 | 0.601 | 1.196 | 4.012 | 6.138 | 100.00% |
-| HTTP/3 | Go quic-go | 332 req/s | -99.8% | 0.077 | 0.905 | 2.706 | 4.147 | 5.878 | 100.00% |
-| HTTP/3 | Java 26 / Jetty | 不可用 | 请求超时 | — | — | — | — | — | 0.00% |
+#### HTTP/1.1
+
+| 实现 | 吞吐 | P50 / P99 ms | 成功率 | 相对 Rust | 结论 |
+|---|---:|---:|---:|---:|---|
+| **cnetmod** | **1.501M req/s** | 0.132 / 0.682 | 100.00% | **+41.7%** | 通过 |
+| Statico/tokio-uring | 1.485M req/s | 0.138 / 0.551 | 100.00% | +40.2% | 通过 |
+| Statico/monoio | 1.439M req/s | 0.144 / 0.489 | 100.00% | +35.8% | 通过 |
+| Go fasthttp | 1.112M req/s | 0.167 / 0.853 | 100.00% | +4.9% | 通过 |
+| Rust Hyper | 1.059M req/s | 0.215 / 0.561 | 100.00% | 基线 | 通过 |
+| Java 26 / Jetty | 678K req/s | 0.157 / 1.489 | 100.00% | -36.0% | 通过 |
+| Go net/http | 510K req/s | 0.117 / 5.277 | 100.00% | -51.8% | 通过 |
+| Java 26 / JDK 虚拟线程 | 482K req/s | 0.464 / 2.020 | **99.34%** | — | **部分失败，不参与排名** |
+
+#### HTTPS/1.1
+
+| 实现 | 吞吐 | P50 / P99 ms | 成功率 | 相对 Rust | 结论 |
+|---|---:|---:|---:|---:|---|
+| **cnetmod** | **1.192M req/s** | 0.165 / 0.804 | 100.00% | **+34.0%** | 通过 |
+| Go fasthttp | 1.021M req/s | 0.185 / 0.838 | 100.00% | +14.8% | 通过 |
+| Rust Hyper | 889K req/s | 0.246 / 0.640 | 100.00% | 基线 | 通过 |
+| Go net/http | 587K req/s | 0.161 / 3.529 | 100.00% | -33.9% | 通过 |
+| Java 26 / Jetty | 455K req/s | 0.247 / 2.791 | 100.00% | -48.9% | 通过 |
+| Java 26 / JDK 虚拟线程 | 56K req/s | 0.364 / 51.770 | **90.29%** | — | **部分失败，不参与排名** |
+
+#### HTTP/2 h2c
+
+| 实现 | 吞吐 | P50 / P99 ms | 成功率 | 相对 Rust | 结论 |
+|---|---:|---:|---:|---:|---|
+| **cnetmod** | **1.354M req/s** | 0.180 / 0.393 | 100.00% | **+18.6%** | 通过 |
+| Rust monoio-h2 | 1.142M req/s | 0.209 / 0.400 | 100.00% | 基线 | 通过 |
+| Java 26 / Jetty | 558K req/s | 0.318 / 2.889 | 100.00% | -51.2% | 通过 |
+| Go net/http | 240K req/s | 0.767 / 4.181 | 100.00% | -79.0% | 通过 |
+| Rust Hyper | 104K req/s | 0.163 / 44.086 | 100.00% | -90.9% | 通过 |
+
+#### HTTPS/2
+
+| 实现 | 吞吐 | P50 / P99 ms | 成功率 | 相对 Rust | 结论 |
+|---|---:|---:|---:|---:|---|
+| **cnetmod** | **1.106M req/s** | 0.194 / 0.404 | 100.00% | **+1067.5%** | 通过 |
+| Java 26 / Jetty | 379K req/s | 0.455 / 4.097 | 100.00% | +299.8% | 通过 |
+| Go net/http | 247K req/s | 0.740 / 3.961 | 100.00% | +160.3% | 通过 |
+| Rust Hyper | 95K req/s | 0.172 / 44.782 | 100.00% | 基线 | 通过 |
+
+#### HTTP/3
+
+| 实现 | 吞吐 | P50 / P99 ms | 成功率 | 相对 Rust | 结论 |
+|---|---:|---:|---:|---:|---|
+| **cnetmod** | **259K req/s** | 0.359 / 1.589 | 100.00% | **+39.7%** | 通过 |
+| Rust Quinn/h3 | 185K req/s | 0.601 / 4.012 | 100.00% | 基线 | 通过 |
+| Go quic-go | 332 req/s | 0.905 / 4.147 | 100.00% | -99.8% | 通过 |
+| Java 26 / Jetty | 不可用 | — | 0.00% | — | **请求超时** |
 
 HTTP/1.1 对比中，两端使用相同的 13 字节响应体，并且都只返回
 `Content-Length`。cnetmod 默认的 `Server`、`Date` 和 `Content-Type`
@@ -136,15 +158,24 @@ Windows Release benchmark，硬件为 Intel Core i9-14900K，Visual Studio 2026�
 
 | Benchmark | 命令 | 吞吐 |
 |----------|---------|------------|
-| HTTP/1.1 cleartext | `bench_http.exe 1000 16` | ~117.69K req/s |
-| HTTP/2 h2c | `bench_http.exe 1000 16` | ~100.66K req/s |
-| HTTPS/1.1 | `bench_http.exe 1000 16` | ~41.54K req/s |
-| HTTPS/2 | `bench_http.exe 1000 16` | ~41.24K req/s |
-| WebSocket echo | `bench_ws.exe 1000 16` | ~290.00K msg/s |
-| WebSocket Secure echo | `bench_ws.exe 1000 16` | ~73.52K msg/s |
-| gRPC unary over HTTP/2 h2c | `bench_grpc.exe 5000 16` | ~112.92K req/s |
+| HTTP/1.1 cleartext | `bench_http.exe 1000 16 multicore` | **338.66K req/s** |
+| HTTP/2 h2c | `bench_http.exe 1000 16 multicore` | **255.04K req/s** |
+| HTTPS/1.1 | `bench_http.exe 1000 16 multicore` | **306.28K req/s** |
+| HTTPS/2 | `bench_http.exe 1000 16 multicore` | **235.49K req/s** |
+| WebSocket echo | `bench_ws.exe 1000 16` | **456.59K msg/s** |
+| WebSocket Secure echo | `bench_ws.exe 1000 16` | **400.70K msg/s** |
+| gRPC unary over HTTP/2 h2c | `bench_grpc.exe 5000 16 multicore` | **220.84K req/s** |
+| HTTP/3 GET `/health` | `h3_benchmark --connections 256 --client-workers 16 --concurrency 2 --requests 1000 --warmup 25 --runs 5` | **77.59K req/s**，P50 6.404 ms，P99 9.276 ms，**100.00%** |
 
-gRPC 正确性测试包含 Python `grpcio` 跨进程双向互操作测试。以上为本机 loopback 结果，实际性能会受 CPU 电源策略、TLS 库、worker 数和系统并发负载影响。
+HTTP/1.1 至 gRPC 行均为连续 3 轮均值：每轮每个 HTTP/HTTPS 协议均为
+16,000/16,000 成功，每轮每个 WS/WSS 协议均为 16,000/16,000 完整回显，
+每轮 gRPC 均为 80,000/80,000 unary 成功。逐轮结果保存在
+[`testing/bench/results/windows-http-grpc-2026-08-05.md`](testing/bench/results/windows-http-grpc-2026-08-05.md)。
+HTTP/3 行为同一台 Windows 机器连续 5 轮的均值：共 1,280,000/1,280,000
+成功。它使用 256 条持久 QUIC 连接、每连接 2 条并发流；计时不包含 6,400
+次 warmup 请求。连接启动斜坡仅发生在 warmup 前，用于避免 IOCP 的 UDP
+握手突发；不会改变与 `oha` 对比所使用的连接数、流并发、请求数、响应或
+成功判定。gRPC 正确性测试包含 Python `grpcio` 跨进程双向互操作测试。以上为本机 loopback 结果，实际性能会受 CPU 电源策略、TLS 库、worker 数和系统并发负载影响。
 
 ### MQTT 性能
 Windows Release benchmark，硬件为 Intel Core i9-14900K，Visual Studio 2026，IOCP，本机 loopback，4 个 broker worker，8 个 publisher，QoS 0，`write_batch=16`：

@@ -40,6 +40,14 @@ namespace {
 using clock_type = std::chrono::steady_clock;
 using microseconds = std::chrono::microseconds;
 
+// On IOCP, beginning hundreds of UDP handshakes in the same event-loop turn
+// can exhaust the receive-posting burst before any of the connections has
+// installed its HTTP/3 control streams.  This is deliberately a setup-only
+// ramp: every configured connection still completes its warmup, and timed
+// measurement does not start until all of them are ready.
+constexpr std::size_t connection_start_batch = 4U;
+constexpr auto connection_start_interval = std::chrono::milliseconds{2};
+
 struct benchmark_config
 {
     std::string host{"127.0.0.1"};
@@ -196,7 +204,8 @@ auto request_worker(cnetmod::http::v3::http3_client& client,
 
 auto run_connection(cnetmod::io_context& context, const benchmark_config& config,
     std::atomic<std::size_t>& ready_connections, run_result& result,
-    std::atomic<std::size_t>& remaining_connections) -> cnetmod::task<void>
+    std::atomic<std::size_t>& remaining_connections,
+    std::atomic<std::size_t>& connection_start_slots) -> cnetmod::task<void>
 {
     result.requested = config.requests;
     const auto finish = [&context, &remaining_connections]
@@ -204,6 +213,11 @@ auto run_connection(cnetmod::io_context& context, const benchmark_config& config
         if (remaining_connections.fetch_sub(1U, std::memory_order_acq_rel) == 1U)
             context.stop();
     };
+    const auto start_slot = connection_start_slots.fetch_add(1U, std::memory_order_relaxed);
+    const auto start_delay = connection_start_interval *
+        static_cast<std::int64_t>(start_slot / connection_start_batch);
+    if (start_delay.count() != 0)
+        co_await cnetmod::async_sleep(context, start_delay);
     auto tls_result = cnetmod::ssl_context::quic_client();
     if (!tls_result)
     {
@@ -291,6 +305,7 @@ auto run_connection(cnetmod::io_context& context, const benchmark_config& config
     result.requested = config.requests * config.connections;
     cnetmod::net_init network;
     std::atomic<std::size_t> ready_connections{};
+    std::atomic<std::size_t> connection_start_slots{};
     std::vector<run_result> connections(config.connections);
     const auto worker_count = std::min(config.client_workers, config.connections);
     std::vector<std::unique_ptr<cnetmod::io_context>> contexts;
@@ -307,7 +322,9 @@ auto run_connection(cnetmod::io_context& context, const benchmark_config& config
     for (std::size_t connection{}; connection < config.connections; ++connection)
     {
         const auto worker = connection % worker_count;
-        cnetmod::spawn(*contexts[worker], run_connection(*contexts[worker], config, ready_connections, connections[connection], *remaining[worker]));
+        cnetmod::spawn(*contexts[worker], run_connection(*contexts[worker], config,
+            ready_connections, connections[connection], *remaining[worker],
+            connection_start_slots));
     }
     std::vector<std::jthread> threads;
     threads.reserve(worker_count);

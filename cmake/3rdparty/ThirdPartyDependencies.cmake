@@ -40,7 +40,14 @@ function(cnetmod_link_third_party_dependencies TARGET_NAME)
     if(BoringSSL_FOUND AND DEFINED BoringSSL_LIBRARIES)
         target_link_libraries(${TARGET_NAME} PRIVATE ${BoringSSL_LIBRARIES})
         if(DEFINED BoringSSL_INCLUDE_DIRS)
-            target_include_directories(${TARGET_NAME} PRIVATE ${BoringSSL_INCLUDE_DIRS})
+            # OpenSSL and BoringSSL install identically named <openssl/...>
+            # headers.  The BoringSSL headers use direct replacement APIs
+            # (for example SSL_CTX_set_options), whereas OpenSSL expands some
+            # calls to legacy SSL*_ctrl symbols that BoringSSL does not export.
+            # Put the selected provider ahead of incidental package-manager
+            # include paths on every platform, especially Homebrew/macOS.
+            target_include_directories(${TARGET_NAME} BEFORE PRIVATE
+                ${BoringSSL_INCLUDE_DIRS})
         endif()
     endif()
 

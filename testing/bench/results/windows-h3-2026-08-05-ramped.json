@@ -1,0 +1,20 @@
+{
+  "benchmark": "cnetmod HTTP/3 end-to-end",
+  "platform": "Windows/IOCP",
+  "compiler": "MSVC 195136252",
+  "build_type": "Release",
+  "logical_cores": 32,
+  "target": "127.0.0.1:45443/health",
+  "connections": 256,
+  "client_workers": 16,
+  "concurrency": 2,
+  "requests_per_connection": 1000,
+  "warmup_requests_per_connection": 25,
+  "runs": [
+    {"index": 1, "successful": 256000, "failed": 0, "elapsed_us": 2982343, "qps": 85838.6, "response_mib_per_second": 0.245586, "latency_p50_us": 5703, "latency_p95_us": 7704, "latency_p99_us": 8640, "latency_min_us": 113, "latency_max_us": 14303, "client_cpu_seconds": 3.164, "rss_kib": 0, "errors": []},
+    {"index": 2, "successful": 256000, "failed": 0, "elapsed_us": 3524562, "qps": 72633.1, "response_mib_per_second": 0.207805, "latency_p50_us": 6934, "latency_p95_us": 8824, "latency_p99_us": 9597, "latency_min_us": 144, "latency_max_us": 18798, "client_cpu_seconds": 3.699, "rss_kib": 0, "errors": []},
+    {"index": 3, "successful": 256000, "failed": 0, "elapsed_us": 3282944, "qps": 77978.8, "response_mib_per_second": 0.223099, "latency_p50_us": 6327, "latency_p95_us": 8399, "latency_p99_us": 9395, "latency_min_us": 105, "latency_max_us": 19714, "client_cpu_seconds": 3.483, "rss_kib": 0, "errors": []},
+    {"index": 4, "successful": 256000, "failed": 0, "elapsed_us": 3369997, "qps": 75964.5, "response_mib_per_second": 0.217336, "latency_p50_us": 6572, "latency_p95_us": 8508, "latency_p99_us": 9247, "latency_min_us": 88, "latency_max_us": 17154, "client_cpu_seconds": 3.587, "rss_kib": 0, "errors": []},
+    {"index": 5, "successful": 256000, "failed": 0, "elapsed_us": 3388468, "qps": 75550.4, "response_mib_per_second": 0.216151, "latency_p50_us": 6486, "latency_p95_us": 8661, "latency_p99_us": 9501, "latency_min_us": 88, "latency_max_us": 18190, "client_cpu_seconds": 3.606, "rss_kib": 0, "errors": []}
+  ]
+}
