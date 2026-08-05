@@ -6,6 +6,8 @@ repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)
 cert="${repo}/.h3probe/cert.pem"
 key="${repo}/.h3probe/key.pem"
 key_store=/root/.local/cnetmod-crosslang.p12
+java_bin=${CNETMOD_JAVA:-java}
+experimental_jetty_h3=${CNETMOD_BENCH_ENABLE_EXPERIMENTAL_JETTY_H3:-0}
 openssl pkcs12 -export -out "${key_store}" -inkey "${key}" -in "${cert}" \
     -passout pass:changeit >/dev/null 2>&1
 
@@ -178,10 +180,10 @@ smoke_http1 go-fasthttp 18106 \
     "${repo}/testing/bench/crosslang/go/crosslang-go" \
     --mode fasthttp --port 18106
 smoke_http1 java26-virtual-thread 18103 \
-    java -cp "${repo}/testing/bench/crosslang/java" JdkVirtualThreadServer \
+    "${java_bin}" -cp "${repo}/testing/bench/crosslang/java" JdkVirtualThreadServer \
     --port 18103
 smoke_http1 java26-jetty 18107 \
-    java -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
+    "${java_bin}" -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
     dev.cnetmod.bench.JettyServer --mode http1 --port 18107
 smoke_http1 statico-tokio-uring 18104 \
     /root/.local/cnetmod-statico/bin/statico --runtime tokio-uring --threads 16 \
@@ -203,7 +205,7 @@ smoke_h2c rust-monoio-http 18203 \
     "${repo}/testing/bench/crosslang/rust/target/release/monoio_h2" \
     --port 18203 --workers 16
 smoke_h2c java26-jetty 18204 \
-    java -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
+    "${java_bin}" -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
     dev.cnetmod.bench.JettyServer --mode http2 --port 18204
 
 smoke_tls cnetmod 18300 1.1 \
@@ -219,10 +221,10 @@ smoke_tls go-fasthttp 18305 1.1 \
     "${repo}/testing/bench/crosslang/go/crosslang-go" \
     --mode fasthttp --port 18305 --cert "${cert}" --key "${key}"
 smoke_tls java26-virtual-thread 18303 1.1 \
-    java -cp "${repo}/testing/bench/crosslang/java" JdkVirtualThreadServer \
+    "${java_bin}" -cp "${repo}/testing/bench/crosslang/java" JdkVirtualThreadServer \
     --port 18303 --keystore "${key_store}" --password changeit
 smoke_tls java26-jetty 18304 1.1 \
-    java -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
+    "${java_bin}" -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
     dev.cnetmod.bench.JettyServer --mode http1 --port 18304 \
     --keystore "${key_store}" --password changeit
 
@@ -236,7 +238,7 @@ smoke_tls go-net-http 18402 2 \
     "${repo}/testing/bench/crosslang/go/crosslang-go" \
     --mode http2 --port 18402 --cert "${cert}" --key "${key}"
 smoke_tls java26-jetty 18403 2 \
-    java -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
+    "${java_bin}" -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
     dev.cnetmod.bench.JettyServer --mode http2 --port 18403 \
     --keystore "${key_store}" --password changeit
 
@@ -249,8 +251,12 @@ smoke_h3 rust-h3-quinn 18501 \
 smoke_h3 go-quic-go 18502 \
     "${repo}/testing/bench/crosslang/go/crosslang-go" \
     --mode http3 --port 18502 --cert "${cert}" --key "${key}"
-smoke_h3 java26-jetty 18503 \
-    java -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
-    dev.cnetmod.bench.JettyServer --mode http3 --port 18503 \
-    --keystore "${key_store}" --password changeit \
-    --pem-dir /root/.local/cnetmod-jetty-quiche
+if [[ ${experimental_jetty_h3} != 0 ]]; then
+    smoke_h3 java26-jetty 18503 \
+        "${java_bin}" -cp "${repo}/testing/bench/crosslang/java-jetty/target/classes:${repo}/testing/bench/crosslang/java-jetty/target/dependency/*" \
+        dev.cnetmod.bench.JettyServer --mode http3 --port 18503 \
+        --keystore "${key_store}" --password changeit \
+        --pem-dir "${CNETMOD_JETTY_QUICHE_PEM_DIR:-/root/.local/cnetmod-jetty-quiche}"
+else
+    printf 'java26-jetty HTTP/3 skipped (experimental; set CNETMOD_BENCH_ENABLE_EXPERIMENTAL_JETTY_H3=1)\n'
+fi

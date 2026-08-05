@@ -75,6 +75,16 @@ Intel Core i9-14900K 上的 Release benchmark 结果：
 
 ### HTTP 1–3 跨语言性能对比
 
+[`testing/bench/crosslang`](testing/bench/crosslang) 提供可复现的统一执行器：除 cnetmod 和 Rust 外，还覆盖 Go 1.26（`net/http`、`fasthttp`、`quic-go`）与 Java 26（JDK 虚拟线程、Jetty）。已在 Arch Linux/WSL2（Go 1.26.5、OpenJDK 26.0.2）完成构建和冒烟验证：Go 的 HTTP/1.1、h2c、HTTPS/2、HTTP/3 均通过；Java 虚拟线程的 HTTP/1.1/TLS 及 Jetty 的 HTTP/1.1、h2c、HTTPS/2 均通过。Jetty 12.1.11 的 HTTP/3 虽可启动，但本机 curl HTTP/3 请求超时，因此默认不纳入正式计量，也没有发布其吞吐结论。运行命令、环境记录及该实验路径的诊断方式见执行器 README。
+
+下图是可直接横向比较的完整实测：cnetmod、Rust、Statico、Go 与 Java 使用同一组服务器 16 CPU / 客户端 16 CPU、`oha 1.15.0`、每场景 3 轮以及统一的 `/hello` 响应。红色行代表成功率不完整，不能作为吞吐排名；其中 JDK 虚拟线程在 HTTP/1.1 仅 99.34%，HTTPS/1.1 仅 90.29%。Jetty HTTP/3 可以启动但请求超时，因此没有作为有效 HTTP/3 测量行列出。
+
+![HTTP 跨语言吞吐性能柱状图](docs/assets/crosslang-http-throughput-arch-2026-08-05.png)
+
+原始 JSON、机器环境与生成的 CSV/Markdown 汇总保存在 `testing/bench/results/crosslang/2026-08-05-arch-go-java26`。
+
+下表是此前更长请求量的 cnetmod/Rust 历史批次，仅作历史证据保留，不能与上图混合排名。
+
 测试环境为 Arch Linux / WSL2、Intel Core i9-14900K、Linux 6.18、Clang
 22.1.8、Release、io_uring、mimalloc 和本机 loopback。服务端与 Rust
 `oha` 客户端分别固定在两组互不重叠的 16 个 CPU 上。cnetmod 开启

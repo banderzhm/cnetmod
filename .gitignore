@@ -36,6 +36,7 @@ CMakeUserPresets.json
 .idea
 .history
 build*
+!testing/bench/crosslang/build_servers.sh
 doc
 当前任务.md
 cmake-build*

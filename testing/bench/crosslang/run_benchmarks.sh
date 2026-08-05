@@ -20,6 +20,8 @@ cnetmod_affinity=${CNETMOD_BENCH_CNETMOD_AFFINITY:-0}
 cnetmod_minimal_headers=${CNETMOD_BENCH_CNETMOD_MINIMAL_HEADERS:-1}
 result_dir=${CNETMOD_BENCH_RESULT_DIR:-"${repo}/testing/bench/results/crosslang/2026-08-04-wsl"}
 selected=${CNETMOD_BENCH_SCENARIOS:-all}
+java_bin=${CNETMOD_JAVA:-java}
+experimental_jetty_h3=${CNETMOD_BENCH_ENABLE_EXPERIMENTAL_JETTY_H3:-0}
 
 cert="${repo}/.h3probe/cert.pem"
 key="${repo}/.h3probe/key.pem"
@@ -30,6 +32,23 @@ go_server="${repo}/testing/bench/crosslang/go/crosslang-go"
 statico=/root/.local/cnetmod-statico/bin/statico
 oha_bin=${CNETMOD_OHA:-/root/.local/cnetmod-oha/bin/oha}
 cnetmod_h3_server=${CNETMOD_H3_SERVER:-"${repo}/cmake-build-quic-verify-linux/bin/h3_interop_server"}
+
+require_file()
+{
+    local path=$1
+    local hint=$2
+    if [[ ! -e ${path} ]]; then
+        printf 'missing %s; %s\n' "${path}" "${hint}" >&2
+        exit 2
+    fi
+}
+
+require_file "${cert}" 'create .h3probe/cert.pem and .h3probe/key.pem first'
+require_file "${key}" 'create .h3probe/cert.pem and .h3probe/key.pem first'
+if ! command -v "${oha_bin}" >/dev/null 2>&1 && [[ ! -x ${oha_bin} ]]; then
+    printf 'missing oha executable: %s (set CNETMOD_OHA)\n' "${oha_bin}" >&2
+    exit 2
+fi
 
 mkdir -p "${result_dir}/raw" "${result_dir}/logs"
 openssl pkcs12 -export -out "${key_store}" -inkey "${key}" -in "${cert}" \
@@ -50,6 +69,9 @@ trap cleanup EXIT INT TERM
 is_selected()
 {
     local id=$1
+    if [[ ${id} == java26-jetty-h3 && ${selected} == all && ${experimental_jetty_h3} == 0 ]]; then
+        return 1
+    fi
     [[ ${selected} == all || ",${selected}," == *",${id},"* ]]
 }
 
@@ -98,13 +120,13 @@ start_server()
                 "${go_server}" --mode fasthttp --port "${port}"
             ;;
         java26-virtual-h1)
-            taskset -c "${server_cpus}" java -XX:ActiveProcessorCount=16 \
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
                 -Djdk.virtualThreadScheduler.parallelism=16 \
                 -cp "${repo}/testing/bench/crosslang/java" JdkVirtualThreadServer \
                 --port "${port}"
             ;;
         java26-jetty-h1)
-            taskset -c "${server_cpus}" java -XX:ActiveProcessorCount=16 \
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
                 -cp "${jetty_classpath}" dev.cnetmod.bench.JettyServer \
                 --mode http1 --port "${port}"
             ;;
@@ -129,13 +151,13 @@ start_server()
                 "${go_server}" --mode fasthttp --port "${port}" --cert "${cert}" --key "${key}"
             ;;
         java26-virtual-h1-tls)
-            taskset -c "${server_cpus}" java -XX:ActiveProcessorCount=16 \
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
                 -Djdk.virtualThreadScheduler.parallelism=16 \
                 -cp "${repo}/testing/bench/crosslang/java" JdkVirtualThreadServer \
                 --port "${port}" --keystore "${key_store}" --password changeit
             ;;
         java26-jetty-h1-tls)
-            taskset -c "${server_cpus}" java -XX:ActiveProcessorCount=16 \
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
                 -cp "${jetty_classpath}" dev.cnetmod.bench.JettyServer \
                 --mode http1 --port "${port}" --keystore "${key_store}" --password changeit
             ;;
@@ -160,7 +182,7 @@ start_server()
                 --port "${port}" --workers 16
             ;;
         java26-jetty-h2c)
-            taskset -c "${server_cpus}" java -XX:ActiveProcessorCount=16 \
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
                 -cp "${jetty_classpath}" dev.cnetmod.bench.JettyServer \
                 --mode http2 --port "${port}"
             ;;
@@ -181,7 +203,7 @@ start_server()
                 "${go_server}" --mode http2 --port "${port}" --cert "${cert}" --key "${key}"
             ;;
         java26-jetty-h2-tls)
-            taskset -c "${server_cpus}" java -XX:ActiveProcessorCount=16 \
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
                 -cp "${jetty_classpath}" dev.cnetmod.bench.JettyServer \
                 --mode http2 --port "${port}" --keystore "${key_store}" --password changeit
             ;;
@@ -199,6 +221,12 @@ start_server()
         go-quic-go-h3)
             taskset -c "${server_cpus}" env GOMAXPROCS=16 \
                 "${go_server}" --mode http3 --port "${port}" --cert "${cert}" --key "${key}"
+            ;;
+        java26-jetty-h3)
+            taskset -c "${server_cpus}" "${java_bin}" -XX:ActiveProcessorCount=16 \
+                -cp "${jetty_classpath}" dev.cnetmod.bench.JettyServer \
+                --mode http3 --port "${port}" --keystore "${key_store}" --password changeit \
+                --pem-dir "${CNETMOD_JETTY_QUICHE_PEM_DIR:-/root/.local/cnetmod-jetty-quiche}"
             ;;
         *)
             printf 'unknown scenario %s\n' "${id}" >&2
@@ -287,7 +315,7 @@ cnetmod_minimal_headers=${cnetmod_minimal_headers}
 clang=$(clang++ --version | head -1)
 rust=$(rustc --version)
 go=$(go version)
-java=$(java -version 2>&1 | head -1)
+java=$(${java_bin} -version 2>&1 | head -1)
 oha=$(${oha_bin} --version), cargo feature http3 enabled
 curl=$(curl --version | head -1)
 EOF
@@ -320,6 +348,7 @@ scenarios=(
     'cnetmod-h3|h3|19400'
     'rust-h3-quinn|h3|19401'
     'go-quic-go-h3|h3|19402'
+    'java26-jetty-h3|h3|19403'
 )
 
 for scenario in "${scenarios[@]}"; do

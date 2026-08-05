@@ -76,6 +76,31 @@ with overlapping dependencies: [Third-party Dependency Integration](docs/en/adva
 
 ### Cross-language HTTP Performance
 
+The reproducible runner in [testing/bench/crosslang](testing/bench/crosslang)
+covers cnetmod and Rust together with Go 1.26 (`net/http`, `fasthttp`,
+`quic-go`) and Java 26 (JDK virtual threads and Jetty). On Arch Linux/WSL2 with
+Go 1.26.5 and OpenJDK 26.0.2, the Go HTTP/1.1, h2c, HTTPS/2, and HTTP/3 smoke
+paths passed; Java virtual-thread HTTP/1.1/TLS and Jetty HTTP/1.1, h2c, and
+HTTPS/2 passed. Jetty 12.1.11 HTTP/3 starts but times out with the local curl
+HTTP/3 client, so it is intentionally excluded from the default measured set
+and has no published throughput claim. See the runner README for commands,
+environment capture, and the experimental diagnosis command.
+
+This is the directly comparable full run: cnetmod, Rust, Statico, Go, and Java
+share the pinned 16-server-CPU / 16-client-CPU layout, `oha 1.15.0`, three runs,
+and the `/hello` response. Red rows are incomplete results and must not be used
+as throughput rankings. In particular, JDK virtual threads reached only 99.34%
+for HTTP/1.1 and 90.29% for HTTPS/1.1; Jetty HTTP/3 starts but times out, so it
+does not appear as a measured HTTP/3 row.
+
+![Cross-language HTTP throughput comparison](docs/assets/crosslang-http-throughput-arch-2026-08-05.png)
+
+Raw JSON, the machine environment, and the generated CSV/Markdown summary are
+kept in `testing/bench/results/crosslang/2026-08-05-arch-go-java26`.
+
+The table below is an earlier, longer-request cnetmod/Rust campaign. It is kept
+as historical evidence and must not be mixed with the image above.
+
 Arch Linux under WSL2, Release build, Intel Core i9-14900K, Clang 22.1.8,
 Linux 6.18, io_uring, mimalloc, and local loopback. Server and Rust `oha`
 client are isolated to separate 16-CPU sets. cnetmod enables
