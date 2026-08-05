@@ -7,7 +7,6 @@ module;
     #include <openssl/err.h>
     #include <openssl/ssl.h>
     #include <openssl/x509.h>
-    #include <cnetmod/detail/boringssl_compat.hpp>
 #endif
 
 module cnetmod.core.ssl;

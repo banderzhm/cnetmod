@@ -30,7 +30,11 @@ function(cnetmod_link_jwt_cpp TARGET_NAME)
         # therefore needs BoringSSL's OpenSSL-compatible include directory,
         # not only the one used while compiling cnetmod_core.
         if(BoringSSL_FOUND AND DEFINED BoringSSL_INCLUDE_DIRS)
-            target_include_directories(${TARGET_NAME} SYSTEM PRIVATE ${BoringSSL_INCLUDE_DIRS})
+            # This must be a normal BEFORE include, not SYSTEM: Clang searches
+            # all -I paths before -isystem paths. A Homebrew OpenSSL -I path
+            # would otherwise win and generate incompatible SSL*_ctrl calls.
+            target_include_directories(${TARGET_NAME} BEFORE PRIVATE
+                ${BoringSSL_INCLUDE_DIRS})
         endif()
         if(BoringSSL_FOUND AND DEFINED BoringSSL_LIBRARIES)
             target_link_libraries(${TARGET_NAME} PRIVATE ${BoringSSL_LIBRARIES})

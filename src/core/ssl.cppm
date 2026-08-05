@@ -5,7 +5,6 @@ module;
 #ifdef CNETMOD_HAS_SSL
     #include <openssl/bio.h>
     #include <openssl/ssl.h>
-    #include <cnetmod/detail/boringssl_compat.hpp>
 #endif
 
 export module cnetmod.core.ssl;

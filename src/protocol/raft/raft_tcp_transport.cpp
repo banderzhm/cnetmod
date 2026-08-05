@@ -5,7 +5,6 @@ module;
     #include <openssl/evp.h>
     #include <openssl/ssl.h>
     #include <openssl/x509.h>
-    #include <cnetmod/detail/boringssl_compat.hpp>
 #endif
 
 module cnetmod.protocol.raft;
