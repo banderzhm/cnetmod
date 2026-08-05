@@ -158,8 +158,8 @@ macro(cnetmod_configure_boringssl_quic)
             set(CNETMOD_HAS_QUIC FALSE)
         endif()
     elseif(CNETMOD_ENABLE_SSL AND NOT CNETMOD_ENABLE_BORINGSSL_QUIC)
-        # Standard OpenSSL without QUIC support
-        message(STATUS "Standard OpenSSL detected - QUIC support not available")
+        # The bundled provider is available for TLS; its QUIC API is opt-in.
+        message(STATUS "BoringSSL TLS enabled - QUIC support not requested")
         set(CNETMOD_HAS_QUIC FALSE)
     else()
         set(CNETMOD_HAS_QUIC FALSE)

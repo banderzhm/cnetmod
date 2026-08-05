@@ -138,6 +138,62 @@ co_await db.remove(a);
 co_await db.remove_by_id<Article>(orm::param_value::from_int(1));
 ```
 
+## ORM JSON：纯 import、零实体样板
+
+`CNETMOD_MODEL` 的字段元数据可直接用于 JSON，不需要 `#include <nlohmann/json.hpp>`，也不需要
+`NLOHMANN_DEFINE_TYPE_*` 宏：
+
+```cpp
+import nlohmann.json;
+import cnetmod.orm;
+
+auto payload = orm::to_json(article).dump();
+auto decoded = orm::from_json<Article>(nlohmann::json::parse(payload, nullptr, false));
+```
+
+`from_json<T>` 返回 `std::expected<T, std::string>`；缺失字段保留模型默认值，类型不匹配返回错误。
+当前覆盖数值、布尔、字符串、枚举与可空字段；日期/时间和二进制字段需要显式边界格式后再加入。
+
+## XML ResultMap
+
+`mapper_registry` 会加载 `<resultMap>`，并支持 `namespace.id` 查询：
+
+```xml
+<resultMap id="UserMap" type="User" autoMapping="false">
+  <id property="id" column="id" jdbcType="BIGINT"/>
+  <result property="displayName" column="display_name" jdbcType="VARCHAR"/>
+</resultMap>
+<select id="findById" resultMap="UserMap">SELECT ...</select>
+```
+
+`<id>`、`<result>`、`<association>` 与 `<collection>` 的映射元数据已解析并注册。
+
+`mysql_mapper_session::query_object_graph()` 提供 XML 对象图执行：连接查询会按根和 collection 的
+`<id>` 去重聚合；`association` / `collection` 带 `select` 时，会以父行的 `column` 值作为同名参数执行
+引用语句，并将结果填回动态 `mapped_object`。例如：
+
+```xml
+<resultMap id="UserGraph" type="User">
+  <id property="id" column="user_id"/>
+  <result property="name" column="user_name"/>
+  <!-- JOIN 查询：同一 user_id 的多行会聚合为一个用户和多个 roles -->
+  <collection property="roles" resultMap="RoleMap"/>
+</resultMap>
+
+<resultMap id="UserWithOrders" type="User">
+  <id property="id" column="id"/>
+  <!-- 嵌套查询：父行 id 会作为 #{id} 传给 findOrdersByUserId -->
+  <collection property="orders" column="id" select="findOrdersByUserId" resultMap="OrderMap"/>
+</resultMap>
+<select id="findOrdersByUserId" resultMap="OrderMap">
+  SELECT id, user_id, total FROM orders WHERE user_id = #{id}
+</select>
+```
+
+嵌套 select 当前为显式的 eager N+1 执行；面向类型 DTO 的自动绑定与 XML 自动延迟代理尚未实现。
+`lazy_relation<T>` 可用于 C++ 业务层显式协程按需加载，访问必须 `co_await get()`，不会在普通属性访问中阻塞。
+因此这里不是 MyBatis / MyBatis-Plus 的完整 XML 运行时兼容。
+
 ## 4. base_mapper<T> — MyBatis-Plus 风格
 
 ```cpp
@@ -317,8 +373,8 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 | `<choose>` / `<when>` / `<otherwise>` | 多分支（首个匹配的 `when` 生效） | `when` 带 `test` |
 | `<bind>` | 绑定表达式到新变量 | `name`、`value` |
 
-语句标签只读取 `id` 属性，**没有 `resultType` / `resultMap` / `parameterType` 属性**
-（结果映射类型由 C++ 侧模板参数决定，见下文）。
+语句标签读取 `id`；`<select>` 还支持 `resultMap`，供对象图查询使用。尚未实现
+`resultType` / `parameterType`。
 `<foreach>` 目前不支持 `index` 属性。XML 中 `>`、`<`、`&` 需写成
 `&gt;`、`&lt;`、`&amp;`。
 
@@ -430,13 +486,15 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 
 ### 结果集映射
 
-**没有 XML 侧 `resultType` / `resultMap`**——结果映射类型完全由 C++ 侧决定：
+普通查询的结果类型仍由 C++ 侧决定；XML `<select resultMap="...">` 则可用于动态对象图：
 
 - `session.query<T>(...)`：按**列名**匹配 `CNETMOD_MODEL` 注册的字段名
   （列别名 `AS xxx` 只要与字段名一致即可映射），返回 `orm_result<T>`。
 - `session.query_tuple<Ts...>(...)`：按**列序**映射到 tuple 元素，适合聚合/单列查询，
   无需定义模型。
 - `session.execute_query(...)`：返回原始 `result_set`（`columns` + `rows`），自行解析。
+- `session.query_object_graph(...)`：返回 `std::expected<std::vector<mapped_object>, std::string>`；支持
+  join 行按 `<id>` 去重聚合，以及 `association` / `collection` 的 eager 嵌套 select。
 
 ### 注册与加载
 
@@ -472,6 +530,10 @@ template <Model T> auto execute(std::string_view id, const T& model) -> task<exe
 
 // 任意语句 → 原始 result_set
 auto execute_query(std::string_view id, const param_context& ctx) -> task<result_set>;
+
+// select(resultMap) -> 动态对象图
+auto query_object_graph(std::string_view id, const param_context& ctx)
+    -> task<std::expected<std::vector<mapped_object>, std::string>>;
 ```
 
 **参数传递（param_context）**：

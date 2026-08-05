@@ -3,7 +3,9 @@
 
 import std;
 import cnetmod.core.net_init;
+#ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
+#endif
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.executor.pool;
@@ -134,6 +136,7 @@ auto main(int argc, char** argv) -> int
         });
     server.set_router(std::move(router));
 
+#ifdef CNETMOD_HAS_SSL
     std::optional<cn::ssl_context> tls_context;
     if (configuration->tls)
     {
@@ -148,6 +151,13 @@ auto main(int argc, char** argv) -> int
             {configuration->http2 ? "h2" : "http/1.1"});
         server.set_ssl_context(*tls_context);
     }
+#else
+    if (configuration->tls)
+    {
+        std::println(stderr, "TLS requested, but this build has no SSL support");
+        return 3;
+    }
+#endif
 
     if (!server.listen("127.0.0.1", configuration->port))
         return 5;

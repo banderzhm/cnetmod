@@ -12,6 +12,10 @@ include(${CMAKE_CURRENT_LIST_DIR}/Leveldb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Icu.cmake)
 
 macro(cnetmod_configure_third_party_dependencies)
+    # BoringSSL is configured before the system OpenSSL fallback.  Declare the
+    # shared provider switch first; otherwise an undefined CNETMOD_ENABLE_SSL
+    # makes the bundled submodule silently skip its initial configuration.
+    option(CNETMOD_ENABLE_SSL "Enable SSL/TLS and cryptographic authentication" ON)
     cnetmod_configure_stdexec()
     cnetmod_configure_nlohmann_json()
     cnetmod_configure_jwt_cpp()

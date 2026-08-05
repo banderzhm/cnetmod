@@ -85,6 +85,41 @@ auto mapper_registry::statement_type(std::string_view id) const
     return {};
 }
 
+auto mapper_registry::find_result_map(std::string_view id) const
+    -> const result_map_def*
+{
+    const auto dot = id.find('.');
+    if (dot != std::string_view::npos)
+    {
+        const auto namespace_id = id.substr(0, dot);
+        const auto local_id = id.substr(dot + 1);
+        if (const auto mapper = mappers_.find(std::string(namespace_id));
+            mapper != mappers_.end())
+            return mapper->second.result_maps.find(local_id);
+        return nullptr;
+    }
+
+    // An unqualified resultMap ID is accepted only when it is unambiguous.
+    const result_map_def* found = nullptr;
+    for (const auto& [_, mapper] : mappers_)
+    {
+        if (const auto* candidate = mapper.result_maps.find(id))
+        {
+            if (found)
+                return nullptr;
+            found = candidate;
+        }
+    }
+    return found;
+}
+
+auto mapper_registry::result_maps(std::string_view namespace_id) const
+    -> const result_map_registry*
+{
+    const auto it = mappers_.find(std::string(namespace_id));
+    return it == mappers_.end() ? nullptr : &it->second.result_maps;
+}
+
 auto mapper_registry::get_namespace(std::string_view id) const
     -> std::string_view
 {
@@ -118,6 +153,13 @@ auto mapper_registry::load_mapper_node(std::unique_ptr<xml_node> root)
         if (tag == "sql")
         {
             def.fragment_nodes[id_string] = std::move(*child.element);
+        }
+        else if (tag == "resultMap")
+        {
+            auto loaded = def.result_maps.load_from_xml(*child.element);
+            if (!loaded)
+                return std::unexpected(std::format(
+                    "invalid <resultMap id='{}'>: {}", id, loaded.error()));
         }
         else if (tag == "select" || tag == "insert" || tag == "update" ||
             tag == "delete")

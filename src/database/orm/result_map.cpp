@@ -167,6 +167,35 @@ namespace {
         }
         return value;
     }
+
+    auto mapped_identity(const result_map_def& result_map,
+        const std::unordered_map<std::string, param_value>& values,
+        std::size_t row_index) -> std::string
+    {
+        if (result_map.id_mappings.empty())
+            return std::format("#{}", row_index);
+        std::string key;
+        for (const auto& id : result_map.id_mappings)
+        {
+            const auto it = values.find(id.property);
+            if (it == values.end())
+                return std::format("#{}", row_index);
+            key += id.property;
+            key += '=';
+            switch (it->second.kind)
+            {
+            case param_value::kind_t::int64_kind: key += std::to_string(it->second.int_val); break;
+            case param_value::kind_t::uint64_kind: key += std::to_string(it->second.uint_val); break;
+            case param_value::kind_t::double_kind: key += std::to_string(it->second.double_val); break;
+            case param_value::kind_t::string_kind:
+            case param_value::kind_t::blob_kind: key += it->second.str_val; break;
+            case param_value::kind_t::null_kind: key += "<null>"; break;
+            default: key += "<temporal>"; break;
+            }
+            key += ';';
+        }
+        return key;
+    }
 } // namespace
 
 auto result_map_applier::apply_to_row(
@@ -200,6 +229,59 @@ auto result_map_applier::apply_to_row(
         }
     }
     return properties;
+}
+
+auto result_map_applier::materialize_joined(const result_map_def& result_map,
+    const result_set& result, const result_map_registry& registry)
+    -> std::vector<mapped_object>
+{
+    std::vector<std::string> names;
+    names.reserve(result.columns.size());
+    for (const auto& column : result.columns)
+        names.push_back(column.name);
+
+    std::vector<mapped_object> roots;
+    std::unordered_map<std::string, std::size_t> root_indexes;
+    for (std::size_t row_index = 0; row_index < result.rows.size(); ++row_index)
+    {
+        const auto& row = result.rows[row_index];
+        auto values = apply_to_row(result_map, row, names);
+        const auto key = mapped_identity(result_map, values, row_index);
+        const auto [root_it, inserted] = root_indexes.emplace(key, roots.size());
+        if (inserted)
+            roots.push_back({.values = std::move(values)});
+        auto& root = roots[root_it->second];
+
+        for (const auto& relation : result_map.associations)
+        {
+            // A `select` relation is populated by mapper_session after the
+            // parent query; its columns do not belong to this joined row.
+            if (!relation.select.empty() || relation.result_map.empty() ||
+                root.associations.contains(relation.property))
+                continue;
+            if (const auto* nested_map = registry.find(relation.result_map))
+                root.associations.emplace(relation.property,
+                    mapped_object{.values = apply_to_row(*nested_map, row, names)});
+        }
+        for (const auto& relation : result_map.collections)
+        {
+            if (!relation.select.empty() || relation.result_map.empty())
+                continue;
+            const auto* nested_map = registry.find(relation.result_map);
+            if (!nested_map)
+                continue;
+            auto child_values = apply_to_row(*nested_map, row, names);
+            const auto child_key = mapped_identity(*nested_map, child_values, row_index);
+            auto& children = root.collections[relation.property];
+            const auto duplicate = std::ranges::any_of(children,
+                [&](const mapped_object& child) {
+                    return mapped_identity(*nested_map, child.values, row_index) == child_key;
+                });
+            if (!duplicate)
+                children.push_back({.values = std::move(child_values)});
+        }
+    }
+    return roots;
 }
 
 auto result_map_applier::snake_to_camel(std::string_view snake) -> std::string

@@ -54,6 +54,7 @@
 | HTTP 服务器（路由、SSE、Swagger） | [http-server.md](http/http-server.md) |
 | HTTP 客户端（请求、响应、流式） | [http-client.md](http/http-client.md) |
 | HTTP 中间件（认证、限流、CORS 等 17 个） | [http-middleware.md](http/http-middleware.md) |
+| HTTP/3 / QUIC（H3、QPACK、ALPN） | [http3-quic.md](http/http3-quic.md) |
 
 ### 数据库
 
@@ -97,6 +98,7 @@
 | 开关 | 协议 | 依赖 |
 |------|------|------|
 | `-DCNETMOD_ENABLE_HTTP=ON` | HTTP/1.1 + HTTP/2 | 无 |
+| `-DCNETMOD_ENABLE_QUIC=ON` | HTTP/3 / QUIC | HTTP、SSL、BoringSSL QUIC API |
 | `-DCNETMOD_ENABLE_WEBSOCKET=ON` | WebSocket | HTTP |
 | `-DCNETMOD_ENABLE_GRPC=ON` | gRPC | HTTP |
 | `-DCNETMOD_ENABLE_MQTT=ON` | MQTT v3/v5 | HTTP, WebSocket |

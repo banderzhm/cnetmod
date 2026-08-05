@@ -37,6 +37,7 @@ set(TEST_SOURCES
     test_socks5.cpp
     test_mail.cpp
     test_redis.cpp
+    test_orm_json_result_map.cpp
 
     # QUIC/HTTP3 tests
     test_quic_varint.cpp

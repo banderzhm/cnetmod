@@ -3,6 +3,7 @@ export module cnetmod.orm.xml_mapper_registry;
 import std;
 import cnetmod.orm.xml_mapper_parser;
 import cnetmod.orm.dynamic_sql;
+import cnetmod.orm.result_map;
 
 namespace cnetmod::orm {
 
@@ -17,6 +18,7 @@ export struct mapper_def
     std::unordered_map<std::string, xml_node>
         fragment_nodes;     // Own the fragment nodes
     fragment_map fragments; // Pointers to fragment_nodes
+    result_map_registry result_maps;
 };
 
 // =============================================================================
@@ -48,6 +50,14 @@ public:
 
     /// Get the statement type (select/insert/update/delete)
     auto statement_type(std::string_view id) const -> std::string_view;
+
+    /// Look up a MyBatis-style <resultMap>. Both "MapId" (when unique in the
+    /// requested namespace) and "namespace.MapId" forms are accepted.
+    auto find_result_map(std::string_view id) const -> const result_map_def*;
+
+    /// Expose a mapper's result-map registry to the joined-row materializer.
+    auto result_maps(std::string_view namespace_id) const
+        -> const result_map_registry*;
 
     /// Get namespace from statement ID
     auto get_namespace(std::string_view id) const -> std::string_view;

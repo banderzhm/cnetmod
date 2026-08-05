@@ -133,6 +133,78 @@ auto mapper_session::execute_query(
         param_context::from_map(std::move(params)));
 }
 
+auto mapper_session::query_object_graph(std::string_view statement_id,
+    const param_context& ctx)
+    -> task<std::expected<std::vector<mapped_object>, std::string>>
+{
+    const auto* statement = registry_.find_statement(statement_id);
+    if (!statement)
+        co_return std::unexpected("statement not found: " + std::string(statement_id));
+    const auto result_map_id = statement->attr("resultMap");
+    if (result_map_id.empty())
+        co_return std::unexpected("select statement requires a resultMap attribute");
+
+    const auto namespace_id = registry_.get_namespace(statement_id);
+    const auto* maps = registry_.result_maps(namespace_id);
+    const auto* root_map = maps ? maps->find(result_map_id)
+                                : registry_.find_result_map(result_map_id);
+    if (!root_map || !maps)
+        co_return std::unexpected("resultMap not found: " + std::string(result_map_id));
+
+    auto rows = co_await execute_query(statement_id, ctx);
+    if (rows.is_err())
+        co_return std::unexpected(rows.error_msg);
+    auto graph = result_map_applier::materialize_joined(*root_map, rows, *maps);
+
+    // `column` becomes the parameter name for the referenced nested select.
+    for (auto& parent : graph)
+    {
+        auto load_relation = [&](std::string_view property, std::string_view column,
+                                 std::string_view select, std::string_view nested_map_id,
+                                 bool many) -> task<std::expected<void, std::string>> {
+            if (select.empty())
+                co_return {};
+            const auto* source = root_map->find_by_column(column);
+            const auto value_it = parent.values.find(
+                source ? source->property : std::string(column));
+            if (value_it == parent.values.end())
+                co_return {};
+            const auto* nested_statement = registry_.find_statement(select);
+            if (!nested_statement)
+                co_return std::unexpected("nested statement not found: " + std::string(select));
+            const auto nested_namespace = registry_.get_namespace(select);
+            const auto* nested_maps = registry_.result_maps(nested_namespace);
+            const auto resolved_map_id = nested_map_id.empty()
+                ? nested_statement->attr("resultMap") : nested_map_id;
+            const auto* nested_map = nested_maps ? nested_maps->find(resolved_map_id)
+                : registry_.find_result_map(resolved_map_id);
+            if (!nested_map || !nested_maps)
+                co_return std::unexpected("nested resultMap not found: " + std::string(resolved_map_id));
+
+            auto nested = co_await execute_query(select,
+                param_context::from_map({{std::string(column), value_it->second}}));
+            if (nested.is_err())
+                co_return std::unexpected(nested.error_msg);
+            auto objects = result_map_applier::materialize_joined(*nested_map, nested, *nested_maps);
+            if (many)
+                parent.collections[std::string(property)] = std::move(objects);
+            else if (!objects.empty())
+                parent.associations[std::string(property)] = std::move(objects.front());
+            co_return {};
+        };
+
+        for (const auto& relation : root_map->associations)
+            if (auto loaded = co_await load_relation(relation.property, relation.column,
+                    relation.select, relation.result_map, false); !loaded)
+                co_return std::unexpected(loaded.error());
+        for (const auto& relation : root_map->collections)
+            if (auto loaded = co_await load_relation(relation.property, relation.column,
+                    relation.select, relation.result_map, true); !loaded)
+                co_return std::unexpected(loaded.error());
+    }
+    co_return graph;
+}
+
 auto mapper_session::underlying() noexcept -> client&
 {
     return cli_;

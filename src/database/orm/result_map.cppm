@@ -4,6 +4,7 @@ import std;
 import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.xml_mapper_parser;
+import cnetmod.coro.task;
 
 namespace cnetmod::orm {
 
@@ -71,6 +72,46 @@ export struct result_map_def
     auto find_by_column(std::string_view col) const -> const result_mapping*;
 };
 
+// Runtime object graph used by XML mappers. XML carries property names, not
+// C++ member pointers, therefore this is the type-safe boundary between the
+// dynamic mapper layer and application-specific DTOs.
+export struct mapped_object
+{
+    std::unordered_map<std::string, param_value> values;
+    std::unordered_map<std::string, mapped_object> associations;
+    std::unordered_map<std::string, std::vector<mapped_object>> collections;
+};
+
+// Explicit coroutine lazy loader. Unlike Java proxy interception this never
+// blocks a property access; callers must co_await get().
+export template <class T> class lazy_relation
+{
+public:
+    using loader_type = std::function<task<std::expected<T, std::string>>() >;
+
+    lazy_relation() = default;
+    explicit lazy_relation(loader_type loader) : loader_(std::move(loader)) {}
+
+    auto get() -> task<std::expected<const T*, std::string>>
+    {
+        if (value_)
+            co_return &*value_;
+        if (!loader_)
+            co_return std::unexpected("lazy relation has no loader");
+        auto loaded = co_await loader_();
+        if (!loaded)
+            co_return std::unexpected(loaded.error());
+        value_ = std::move(*loaded);
+        co_return &*value_;
+    }
+
+    [[nodiscard]] auto loaded() const noexcept -> bool { return value_.has_value(); }
+
+private:
+    loader_type loader_;
+    std::optional<T> value_;
+};
+
 // =============================================================================
 // result_map_parser — Parse <resultMap> from XML
 // =============================================================================
@@ -120,6 +161,12 @@ public:
         const row& result_row,
         const std::vector<std::string>& column_names)
         -> std::unordered_map<std::string, param_value>;
+
+    // Materialize one-to-one and one-to-many nested resultMaps from joined
+    // rows. Parent and collection identity use <id> mappings for de-duplication.
+    static auto materialize_joined(const result_map_def& result_map,
+        const result_set& result, const result_map_registry& registry)
+        -> std::vector<mapped_object>;
 
 private:
     // Convert snake_case to camelCase

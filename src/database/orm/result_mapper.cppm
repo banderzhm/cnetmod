@@ -1,11 +1,113 @@
 export module cnetmod.orm.result_mapper;
 
 import std;
+import nlohmann.json;
 import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.model_metadata;
 
 namespace cnetmod::orm {
+
+namespace detail {
+
+inline auto json_from_param(const param_value& value) -> nlohmann::json
+{
+    using kind = param_value::kind_t;
+    switch (value.kind)
+    {
+    case kind::null_kind: return nullptr;
+    case kind::int64_kind: return value.int_val;
+    case kind::uint64_kind: return value.uint_val;
+    case kind::double_kind: return value.double_val;
+    case kind::string_kind:
+    case kind::blob_kind: return value.str_val;
+    case kind::date_kind: return value.date_val.to_string();
+    case kind::datetime_kind: return value.datetime_val.to_string();
+    case kind::time_kind: return value.time_val.to_string();
+    }
+    return nullptr;
+}
+
+inline auto field_from_json(const nlohmann::json& value, column_type type)
+    -> std::expected<field_value, std::string>
+{
+    if (value.is_null())
+        return field_value::null();
+    try
+    {
+        switch (type)
+        {
+        case column_type::tinyint:
+        case column_type::smallint:
+        case column_type::mediumint:
+        case column_type::int_:
+        case column_type::bigint:
+        case column_type::year:
+            return field_value::from_int64(value.get<std::int64_t>());
+        case column_type::float_:
+            return field_value::from_float(value.get<float>());
+        case column_type::double_:
+        case column_type::decimal:
+            return field_value::from_double(value.get<double>());
+        case column_type::boolean:
+        case column_type::bit:
+            return field_value::from_int64(value.get<bool>() ? 1 : 0);
+        case column_type::char_:
+        case column_type::varchar:
+        case column_type::text:
+        case column_type::json:
+        case column_type::enum_:
+        case column_type::set:
+        case column_type::uuid:
+            return field_value::from_string(value.get<std::string>());
+        default:
+            return std::unexpected("orm::from_json does not support this column type yet");
+        }
+    }
+    catch (const nlohmann::json::exception& error)
+    {
+        return std::unexpected(error.what());
+    }
+}
+
+} // namespace detail
+
+// Convert an ORM model through CNETMOD_MODEL metadata. No nlohmann macro or
+// per-model serializer is necessary, so consumers only need `import
+// nlohmann.json; import cnetmod.orm;`.
+export template <Model T>
+auto to_json(const T& model) -> nlohmann::json
+{
+    nlohmann::json result = nlohmann::json::object();
+    for (const auto& field : model_traits<T>::meta().fields)
+        if (field.getter)
+            result[std::string(field.col.field_name)] =
+                detail::json_from_param(field.getter(model));
+    return result;
+}
+
+// Populate a model through the same metadata. Missing fields retain their
+// default value, which makes this suitable for forward-compatible cache data.
+export template <Model T>
+auto from_json(const nlohmann::json& source) -> std::expected<T, std::string>
+{
+    if (!source.is_object())
+        return std::unexpected("orm::from_json requires a JSON object");
+    T model{};
+    for (const auto& field : model_traits<T>::meta().fields)
+    {
+        const auto it = source.find(std::string(field.col.field_name));
+        if (it == source.end())
+            continue;
+        auto value = detail::field_from_json(*it, field.col.type);
+        if (!value)
+            return std::unexpected(std::format("field '{}': {}",
+                field.col.field_name, value.error()));
+        if (field.setter)
+            field.setter(model, *value);
+    }
+    return model;
+}
 
 // =============================================================================
 // from_row — result_set row → model object

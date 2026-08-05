@@ -18,7 +18,8 @@ endif()
 # Generate embedded mappers header for account_server_demo
 # ==============================================================================
 if(CNETMOD_ENABLE_HTTP AND CNETMOD_ENABLE_OPENAI AND
-   CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
+   CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM AND
+   CNETMOD_HAS_SSL AND CNETMOD_HAS_JWT_CPP)
     include(${CMAKE_SOURCE_DIR}/cmake/utils/EmbedMappers.cmake)
     cnetmod_embed_mappers(
         OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/embedded_mappers.hpp
@@ -70,7 +71,10 @@ if(CNETMOD_ENABLE_HTTP)
     )
     if(CNETMOD_ENABLE_MYSQL)
         list(APPEND HTTP_EXAMPLES http/tfb_benchmark)
-        if(CNETMOD_ENABLE_OPENAI AND CNETMOD_ENABLE_ORM)
+        # jwt-cpp requires the TLS provider's OpenSSL-compatible headers.
+        # Do not add this optional HTTPS/JWT demo to no-SSL builds.
+        if(CNETMOD_ENABLE_OPENAI AND CNETMOD_ENABLE_ORM AND
+           CNETMOD_HAS_SSL AND CNETMOD_HAS_JWT_CPP)
             list(APPEND HTTP_EXAMPLES http/account_server_demo)
         endif()
     endif()

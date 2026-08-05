@@ -5,8 +5,18 @@
         `id`, `name`, `email`, `status`, `created_at`
     </sql>
 
+    <!-- MyBatis-compatible explicit column/property mapping. The mapper
+         registry now loads this block and exposes it as UserMapper.UserMap. -->
+    <resultMap id="UserMap" type="User" autoMapping="false">
+        <id property="id" column="id" jdbcType="BIGINT"/>
+        <result property="name" column="name" jdbcType="VARCHAR"/>
+        <result property="email" column="email" jdbcType="VARCHAR"/>
+        <result property="status" column="status" jdbcType="INTEGER"/>
+        <result property="created_at" column="created_at" jdbcType="TIMESTAMP"/>
+    </resultMap>
+
     <!-- Simple SELECT by ID -->
-    <select id="findById">
+    <select id="findById" resultMap="UserMap">
         SELECT <include refid="columns"/>
         FROM `users`
         WHERE `id` = #{id}

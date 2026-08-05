@@ -198,6 +198,13 @@ public:
     auto execute_query(std::string_view statement_id, const param_context& ctx)
         -> task<result_set>;
 
+    // Execute a select using its XML resultMap, merge joined rows by <id>, and
+    // eagerly execute association/collection nested selects when declared.
+    // The return type is dynamic because XML property names cannot safely be
+    // projected into arbitrary C++ members without an application binding.
+    auto query_object_graph(std::string_view statement_id, const param_context& ctx)
+        -> task<std::expected<std::vector<mapped_object>, std::string>>;
+
     auto execute_query(std::string_view statement_id,
         cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
         -> task<result_set>;
