@@ -3,7 +3,7 @@ export module cnetmod.protocol.http:application_result;
 
 import std;
 import :response;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import cnetmod.utils;
 
 namespace cnetmod::http {

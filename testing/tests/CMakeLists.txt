@@ -28,6 +28,7 @@ set(TEST_SOURCES
     test_http_sse.cpp
     test_http_swagger.cpp
     test_http_utils.cpp
+    http_client_test.cpp
     test_http_ip_filter.cpp
     test_http2_hpack.cpp
     test_dns.cpp

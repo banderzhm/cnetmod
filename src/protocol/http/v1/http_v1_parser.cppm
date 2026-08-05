@@ -2,7 +2,7 @@ module;
 #include <cnetmod/config.hpp>
 export module cnetmod.protocol.http:parser;
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod::http {
 namespace detail {

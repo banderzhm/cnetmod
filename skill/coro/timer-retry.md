@@ -70,6 +70,24 @@ export auto async_sleep_until(io_context& ctx,
 
 ---
 
+### `deadline` / `with_deadline` — 统一请求时间预算
+
+`deadline` 是可复制的单调时钟截止时间，默认无限期。在入口创建一次后传给下游；子调用使用 `constrain()` 取更早的截止时间，不要在每层重新启动独立的相对计时器。
+
+```cpp
+import cnetmod.coro;
+
+auto request_deadline = cnetmod::deadline::after(std::chrono::seconds{2});
+auto db_deadline = request_deadline.constrain(
+    cnetmod::deadline::after(std::chrono::milliseconds{300}));
+
+cnetmod::cancel_token token;
+auto result = co_await cnetmod::with_deadline(ctx, db_deadline,
+    operation(token), token);
+```
+
+`with_deadline()` 与 `with_timeout()` 只包装可取消的 `task<std::expected<T, std::error_code>>`。超时会触发传入的 `cancel_token`，并返回 `std::errc::timed_out`；调用方显式取消仍为 `std::errc::operation_canceled`。底层 I/O 必须遵守 token，才能真正中止读写。
+
 ### `with_timeout` — 超时包装
 
 为异步操作添加超时控制：
@@ -81,7 +99,7 @@ auto with_timeout(io_context& ctx, std::chrono::steady_clock::duration timeout,
     -> task<std::expected<T, std::error_code>>;
 ```
 
-超时后通过 `cancel_token` 取消被包装的操作，通常返回 `errc::operation_aborted`。内部用 `when_all` 并行启动定时器和操作任务，任一完成即取消另一方。
+超时后通过 `cancel_token` 取消被包装的操作，返回 `std::errc::timed_out`。内部并行启动定时器和操作任务，任一完成即取消另一方；调用方显式取消则仍返回 `std::errc::operation_canceled`。
 
 ---
 
@@ -198,7 +216,7 @@ open 状态下立即返回错误；从 open 到 half_open 在下次 execute 时�
 
 - **不要在热循环中使用 `async_sleep`**：高频调用请用计数器或令牌桶
 - **不要把 `retry` 用于幂等性不满足的操作**：确保操作可安全重复
-- **不要忽略 `with_timeout` 的 `cancel_token`**：超时后操作不会自动停止
+- **不要忽略 `with_timeout` 的 `cancel_token`**：只有底层操作遵守 token，超时才能真正中止 I/O
 - **不要在 open 状态下强行调用**：返回 `circuit_open` 时应在上层做降级处理
 - **不要共用 `circuit_breaker` 实例跨不同服务**：每个下游服务应有独立的断路器
 

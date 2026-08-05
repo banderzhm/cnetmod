@@ -43,6 +43,26 @@ int main() {
 
 ---
 
+### `task_group` — 有边界的并发 fan-out
+
+`task_group` 为一组子任务建立生命周期边界：每个子任务拿到独立的 `cancel_token`；第一个失败的子任务会取消同组其余任务；`join()` 始终等待全部已启动任务收束。需要由请求整体等待的工作不要改用 detached `spawn()`。
+
+```cpp
+cnetmod::task_group group{ctx, cnetmod::deadline::after(std::chrono::seconds{1})};
+group.run([&](cnetmod::cancel_token& token)
+    -> task<std::expected<void, std::error_code>> {
+    co_return co_await refresh_cache(token);
+});
+group.run([&](cnetmod::cancel_token& token)
+    -> task<std::expected<void, std::error_code>> {
+    co_return co_await load_profile(token);
+});
+if (auto done = co_await group.join(); !done)
+    co_return std::unexpected(done.error());
+```
+
+`cancel()` 表示调用方取消；构造时给出的 `deadline` 到期时取消整组，`join()` 返回 `std::errc::timed_out`。`run()` 在开始 `join()` 后返回 `false`，因此应先提交全部子任务再等待。
+
 ### `when_all`
 
 **签名**:

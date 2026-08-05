@@ -1,6 +1,6 @@
 export module cnetmod.protocol.http:sse;
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :response;
 
 export namespace cnetmod::http::sse {

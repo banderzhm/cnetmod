@@ -343,6 +343,13 @@ public:
         };
     }
 
+    impl(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_server_request_handler handler, bool shared_port = false)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{}, shared_port)
+    {
+        async_handler_ = std::move(handler);
+    }
+
     impl(io_context& context, io_context& socket_context, ssl_context& tls,
         endpoint listen_endpoint, server_request_handler handler,
         udp::udp_socket& shared_socket,
@@ -354,6 +361,18 @@ public:
         {
             return tokens->issue_stateless_reset_token(cid);
         };
+    }
+
+    impl(io_context& context, io_context& socket_context, ssl_context& tls,
+        endpoint listen_endpoint, async_server_request_handler handler,
+        udp::udp_socket& shared_socket,
+        std::shared_ptr<detail::retry_token_manager> retry_tokens,
+        std::shared_ptr<dispatch_state> dispatcher)
+        : impl(context, socket_context, tls, std::move(listen_endpoint),
+              server_request_handler{}, shared_socket, std::move(retry_tokens),
+              std::move(dispatcher))
+    {
+        async_handler_ = std::move(handler);
     }
 
     impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
@@ -383,6 +402,19 @@ public:
                 handler_, true));
         }
         #endif
+    }
+
+    impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_server_request_handler handler)
+        : impl(context, tls, std::move(listen_endpoint), server_request_handler{})
+    {
+        handler_ = {};
+        async_handler_ = std::move(handler);
+        for (auto& shard : shards_)
+        {
+            shard->handler_ = {};
+            shard->async_handler_ = async_handler_;
+        }
     }
 
     [[nodiscard]] auto start() -> std::expected<void, std::error_code>
@@ -545,8 +577,9 @@ private:
     {
         if (connection->state() != quic::connection_state::connected || sessions_.contains(connection.get()))
             return;
-        auto session = std::shared_ptr<http3_server_session>{
-            make_http3_server_session(*connection, handler_)};
+        auto session = std::shared_ptr<http3_server_session>{async_handler_
+                ? make_http3_server_session(*connection, async_handler_)
+                : make_http3_server_session(*connection, handler_)};
         sessions_.emplace(connection.get(), session);
         // The listener map is bookkeeping, not coroutine ownership.  Keep the
         // session and its referenced QUIC connection alive until run() has
@@ -854,6 +887,7 @@ private:
     ssl_context& tls_;
     endpoint endpoint_;
     server_request_handler handler_;
+    async_server_request_handler async_handler_;
     udp::udp_socket socket_;
     udp::udp_socket* datagram_socket_{};
     std::unordered_map<quic::connection_id, std::shared_ptr<quic::quic_connection>> connections_;
@@ -878,8 +912,17 @@ http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpo
     server_request_handler handler)
     : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handler))) {}
 
+http3_server::http3_server(io_context& context, ssl_context& tls, endpoint endpoint,
+    async_server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint), std::move(handler))) {}
+
 http3_server::http3_server(server_context& context, ssl_context& tls,
     endpoint endpoint, server_request_handler handler)
+    : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
+          std::move(handler))) {}
+
+http3_server::http3_server(server_context& context, ssl_context& tls,
+    endpoint endpoint, async_server_request_handler handler)
     : impl_(std::make_unique<impl>(context, tls, std::move(endpoint),
           std::move(handler))) {}
 
@@ -906,8 +949,21 @@ auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
     return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
 }
 
+auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep), std::move(handler));
+}
+
 auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
     server_request_handler handler) -> std::unique_ptr<http3_server>
+{
+    return std::make_unique<http3_server>(ctx, tls, std::move(ep),
+        std::move(handler));
+}
+
+auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server>
 {
     return std::make_unique<http3_server>(ctx, tls, std::move(ep),
         std::move(handler));

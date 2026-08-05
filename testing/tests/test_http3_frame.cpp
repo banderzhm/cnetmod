@@ -1,6 +1,9 @@
 #include "test_framework.hpp"
 
 import cnetmod.protocol.http.v3.frame;
+import cnetmod.protocol.http.v3.session;
+import cnetmod.coro.cancel;
+import cnetmod.coro.task;
 import cnetmod.core.buffer;
 import std;
 
@@ -20,6 +23,32 @@ TEST(http3_data_frame_roundtrip)
 
     // Should have: 1 byte type (0x00) + varint length + data bytes
     ASSERT_TRUE(encoded.size() >= 2 + data.size());
+}
+
+TEST(http3_async_server_handler_contract)
+{
+    cnetmod::http::v3::async_server_request_handler handler =
+        [](cnetmod::http::v3::http3_request& request,
+            cnetmod::http::v3::http3_response& response,
+            cnetmod::cancel_token& token)
+            -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            if (token.is_cancelled())
+                co_return std::unexpected(
+                    std::make_error_code(std::errc::operation_canceled));
+            response.status = cnetmod::http::status::ok;
+            response.body = request.path;
+            co_return {};
+        };
+
+    cnetmod::http::v3::http3_request request;
+    request.path = "/dynamic";
+    cnetmod::http::v3::http3_response response;
+    cnetmod::cancel_token token;
+    auto handled = cnetmod::sync_wait(handler(request, response, token));
+    ASSERT_TRUE(handled.has_value());
+    ASSERT_EQ(response.status, cnetmod::http::status::ok);
+    ASSERT_EQ(response.body, "/dynamic");
 }
 
 TEST(http3_headers_frame_with_qpack)

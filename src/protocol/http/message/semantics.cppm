@@ -2,7 +2,7 @@ module;
 
 #include <cnetmod/config.hpp>
 
-export module cnetmod.protocol.http:semantics;
+export module cnetmod.protocol.http.semantics;
 
 import std;
 import cnetmod.core.buffer;

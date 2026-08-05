@@ -16,7 +16,7 @@ import cnetmod.core.error;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.frame;
 import cnetmod.protocol.http.v3.qpack;
@@ -457,6 +457,10 @@ namespace {
 http3_server_session::http3_server_session(quic_connection& connection, server_request_handler handler)
     : conn_(connection), handler_(std::move(handler)), encoder_(0), decoder_(0) {}
 
+http3_server_session::http3_server_session(quic_connection& connection,
+    async_server_request_handler handler)
+    : conn_(connection), async_handler_(std::move(handler)), encoder_(0), decoder_(0) {}
+
 auto http3_server_session::run() -> task<void>
 {
     if (!control_stream_sent_ && !closing_)
@@ -577,7 +581,25 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         co_return;
     }
     http3_response response;
-    if (handler_(*request, response))
+    if (async_handler_)
+    {
+        cancel_token request_token;
+        conn_.register_stream_cancellation(id, request_token);
+        scope_guard unregister{[this, id]
+            { conn_.unregister_stream_cancellation(id); }};
+        auto handled = co_await async_handler_(*request, response, request_token);
+        if (!handled)
+        {
+            if (request_token.is_cancelled())
+            {
+                (void)conn_.retire_stream(id);
+                co_return;
+            }
+            response.status = status::internal_server_error;
+            response.body.clear();
+        }
+    }
+    else if (handler_(*request, response))
     {
         response.status = status::internal_server_error;
         response.body.clear();
@@ -1121,6 +1143,12 @@ auto http3_client_session::accepting_requests() const noexcept -> bool
 
 auto make_http3_server_session(quic_connection& connection, server_request_handler handler)
     -> std::unique_ptr<http3_server_session>
+{
+    return std::make_unique<http3_server_session>(connection, std::move(handler));
+}
+
+auto make_http3_server_session(quic_connection& connection,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server_session>
 {
     return std::make_unique<http3_server_session>(connection, std::move(handler));
 }

@@ -14,7 +14,7 @@ import cnetmod.coro.channel;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.wait_group;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.qpack;
 import cnetmod.utils.flat_map;
@@ -48,6 +48,12 @@ export struct http3_response
 
 export using server_request_handler =
     std::function<std::error_code(http3_request&, http3_response&)>;
+/// Coroutine request handler for dynamic HTTP/3 endpoints. The token is
+/// cancelled when the peer abandons the request stream or the connection is
+/// closed; handlers must propagate it to downstream I/O.
+export using async_server_request_handler = std::function<
+    task<std::expected<void, std::error_code>>(http3_request&, http3_response&,
+        cnetmod::cancel_token&)>;
 export using client_request_handler =
     std::function<task<std::expected<http3_response, std::error_code>>(const http3_request&)>;
 
@@ -62,6 +68,7 @@ export class http3_server_session
 {
 public:
     http3_server_session(quic_connection& conn, server_request_handler handler);
+    http3_server_session(quic_connection& conn, async_server_request_handler handler);
     auto run() -> task<void>;
     auto close() -> task<void>;
     auto send_goaway(stream_id last_stream) -> task<void>;
@@ -77,6 +84,7 @@ private:
     auto service_peer_stream(stream_id id) -> task<void>;
     quic_connection& conn_;
     server_request_handler handler_;
+    async_server_request_handler async_handler_;
     qpack_encoder encoder_;
     qpack_decoder decoder_;
     http3_settings local_settings_{};
@@ -138,6 +146,8 @@ private:
 
 export auto make_http3_server_session(quic_connection& conn, server_request_handler handler)
     -> std::unique_ptr<http3_server_session>;
+export auto make_http3_server_session(quic_connection& conn,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server_session>;
 export auto make_http3_client_session(quic_connection& conn, client_request_handler handler)
     -> std::unique_ptr<http3_client_session>;
 } // namespace cnetmod::http::v3

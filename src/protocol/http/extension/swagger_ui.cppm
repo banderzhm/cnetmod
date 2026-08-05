@@ -1,7 +1,7 @@
 export module cnetmod.protocol.http:swagger_ui;
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :router;
 
 export namespace cnetmod::http {

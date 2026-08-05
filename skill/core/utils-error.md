@@ -314,3 +314,4 @@ auto response = cnetmod::http::to_http_response(
 - `src/core/error.cppm` — 错误码定义与转换
 - `src/utils/converter.cppm` — 字节序、寄存器、CRC、Hex 工具
 - `src/utils/json.cppm` — JSON 安全读取辅助
+- `src/protocol/http/extension/application_result.cppm` — `utils::R` 到 HTTP 响应的无框架耦合适配

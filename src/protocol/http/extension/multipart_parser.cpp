@@ -6,7 +6,7 @@ module;
 module cnetmod.protocol.http;
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :multipart_parser;
 import :multipart_url;
 import :multipart_content_type;

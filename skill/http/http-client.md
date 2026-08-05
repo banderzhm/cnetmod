@@ -1,6 +1,6 @@
 # HTTP Client
 
-> 统一异步 HTTP/HTTPS 客户端，内置 HTTP/1.1 与 HTTP/2 双栈、Cookie 管理、自动重定向与连接池。
+> 统一异步 HTTP/HTTPS 客户端，支持 HTTP/1.1、HTTP/2、HTTP/3（QUIC），并内置 Cookie、重定向与连接复用。
 
 **import**: `import cnetmod.protocol.http;`
 **CMake**: `-DCNETMOD_ENABLE_HTTP=ON`
@@ -10,6 +10,7 @@
 - 我要发送 GET/POST 请求 → [看这里](#快捷请求方法)
 - 我要自定义请求头和请求体 → [看这里](#request--请求构建)
 - 我要配置超时和 SSL → [看这里](#client_options--配置)
+- 我要通过统一客户端发 HTTP/3 请求 → [看这里](#http3统一-httpclient)
 - 我要管理 Cookie → [看这里](#cookie--cookie-管理)
 - 我要复用连接（连接池）→ [看这里](#client_pool--连接池)
 - 我要发送并发 HTTP/2 请求 → [看这里](#send_batch--http2-并发)
@@ -39,6 +40,11 @@ struct client_options {
     std::uint32_t h2_max_concurrent_streams = 100;
     std::uint32_t h2_initial_window_size = 1 * 1024 * 1024;
 
+    // HTTP/3 / QUIC
+    std::uint64_t h3_qpack_max_table_capacity = 64 * 1024;
+    std::uint64_t h3_qpack_blocked_streams = 100;
+    bool http3_fallback_to_tcp = false;
+
     // Cookie
     bool enable_cookies = true;
 };
@@ -53,6 +59,9 @@ struct client_options {
 | `keep_alive` | `true` | 保持 TCP 连接（HTTP/1.1 Keep-Alive） |
 | `verify_peer` | `true` | 验证服务器证书 |
 | `version_pref` | `http2_preferred` | HTTP 版本偏好 |
+| `h3_qpack_max_table_capacity` | 64 KiB | HTTP/3 QPACK 动态表容量 |
+| `h3_qpack_blocked_streams` | 100 | HTTP/3 QPACK 允许阻塞的 stream 数 |
+| `http3_fallback_to_tcp` | `false` | 仅为安全方法显式允许 HTTP/3 到 TCP 回退 |
 
 **`http_version_preference` 枚举**:
 | 值 | 说明 |
@@ -61,6 +70,26 @@ struct client_options {
 | `http2_only` | 仅使用 HTTP/2（需 ALPN） |
 | `http2_preferred` | 优先 HTTP/2，回退 HTTP/1.1 |
 | `http1_preferred` | 优先 HTTP/1.1，接受 HTTP/2 |
+| `http3_only` | 仅使用 HTTP/3/QUIC；失败不降级 |
+| `http3_preferred` | 优先 HTTP/3；默认不降级，避免隐式重放 |
+
+### HTTP/3（统一 `http::client`）
+
+HTTP/3 与 HTTP/1.1、HTTP/2 使用同一个 `client`。设置版本偏好后，现有的 `get`、`post`、`send` 会自动经 QUIC 发送请求，并仍然返回 `http::response`。
+
+```cpp
+import cnetmod.protocol.http;
+
+using namespace cnetmod::http;
+
+client_options options;
+options.version_pref = http_version_preference::http3_only;
+client http_client(*ctx, options);
+
+auto result = co_await http_client.get("https://api.example.com/v1/profile");
+```
+
+`http3_only` 只接受绝对 `https://` URL，绝不降级。`http3_preferred` 同样默认不降级，避免请求已到达服务端时被静默重放。业务明确允许 GET、HEAD、OPTIONS 回退时，才设置 `http3_fallback_to_tcp = true`；POST、PUT、PATCH 等非幂等请求不会自动重放。
 
 ---
 
@@ -109,6 +138,22 @@ auto main() -> int {
 ---
 
 ### 快捷请求方法
+
+## 请求级 deadline 与取消
+
+除 `client_options::request_timeout` 的默认保护外，业务入口可把一个绝对 deadline 直接传给单个请求。它会创建本次请求专属的取消 token，并向 HTTP、TLS 以及底层 I/O 传播；超时时返回 `std::errc::timed_out`。
+
+```cpp
+import cnetmod.coro;
+import cnetmod.protocol.http;
+
+cnetmod::http::request request{cnetmod::http::http_method::GET,
+    "https://api.example.com/profile"};
+auto result = co_await http_client.send(request,
+    cnetmod::deadline::after(std::chrono::milliseconds{800}));
+```
+
+当上层已经管理取消时，使用 `send(request, cancel_token&)`。需要为多个下游共享总预算时传递同一个 `deadline`，下游用 `constrain()` 缩短自身预算。
 
 #### `client::get`
 **签名**: `[[nodiscard]] auto get(std::string_view url) -> task<std::expected<response, std::error_code>>`

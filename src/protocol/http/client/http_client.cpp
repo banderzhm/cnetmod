@@ -5,7 +5,7 @@ module;
 module cnetmod.protocol.http;
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :request;
 import :response;
 import :parser;
@@ -28,6 +28,9 @@ import cnetmod.protocol.http.v2.header_compression;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
+#ifdef CNETMOD_ENABLE_QUIC
+import cnetmod.protocol.http.v3.client;
+#endif
 #endif
 
 namespace cnetmod::http {
@@ -82,7 +85,34 @@ void client::init_ssl_context()
     case http_version_preference::http1_preferred:
         ssl_ctx_->configure_alpn_client({"http/1.1", "h2"});
         break;
+    case http_version_preference::http3_only:
+    case http_version_preference::http3_preferred:
+        // QUIC uses a separate TLS context and ALPN negotiation. Keep the
+        // TCP context usable for the explicit fallback policy.
+        ssl_ctx_->configure_alpn_client({"h2", "http/1.1"});
+        break;
     }
+
+#ifdef CNETMOD_ENABLE_QUIC
+    if (options_.version_pref == http_version_preference::http3_only ||
+        options_.version_pref == http_version_preference::http3_preferred)
+    {
+        auto h3_context = ssl_context::quic_client();
+        if (!h3_context)
+            return;
+        h3_ssl_ctx_ = std::move(*h3_context);
+        if (!options_.ca_file.empty())
+            (void)h3_ssl_ctx_->load_ca_file(options_.ca_file);
+        else
+            (void)h3_ssl_ctx_->set_default_ca();
+        if (!options_.cert_file.empty())
+            (void)h3_ssl_ctx_->load_cert_file(options_.cert_file);
+        if (!options_.key_file.empty())
+            (void)h3_ssl_ctx_->load_key_file(options_.key_file);
+        h3_ssl_ctx_->set_verify_peer(options_.verify_peer);
+        h3_ssl_ctx_->configure_alpn_client({"h3"});
+    }
+#endif
 }
 #endif
 
@@ -92,6 +122,12 @@ void client::init_ssl_context()
 
 void client::close() noexcept
 {
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    // Destruction releases the per-origin QUIC connection. `close()` is a
+    // legacy synchronous API, so graceful QUIC shutdown is available through
+    // the dedicated v3 client while this unified facade remains non-blocking.
+    h3_client_.reset();
+#endif
     if (!state_)
         return;
 
@@ -1129,9 +1165,14 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
         use_ssl = state_->is_ssl;
     }
 
+    bool use_http3 = options_.version_pref == http_version_preference::http3_only ||
+        options_.version_pref == http_version_preference::http3_preferred;
+    if (use_http3 && !use_ssl)
+        co_return std::unexpected(make_error_code(std::errc::not_supported));
+
     // Connect if needed. A request with an absolute URL should still reuse the
     // existing keep-alive / HTTP/2 connection when it targets the same origin.
-    if (!host.empty())
+    if (!use_http3 && !host.empty())
     {
         const bool need_connect =
             !state_ ||
@@ -1153,17 +1194,41 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
     // Dispatch based on protocol
     std::expected<response, std::error_code> result;
 
-    if (state_->protocol == protocol_type::http1)
+    if (use_http3)
     {
-        result = co_await send_http1(req, token);
-    }
-    else if (state_->protocol == protocol_type::http2)
-    {
-        result = co_await send_http2(req, token);
-    }
-    else
-    {
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+        result = co_await send_http3(req, token);
+        if (!result)
+        {
+            const bool replay_safe = req.method() == http_method::GET ||
+                req.method() == http_method::HEAD || req.method() == http_method::OPTIONS;
+            if (options_.version_pref == http_version_preference::http3_only ||
+                !options_.http3_fallback_to_tcp || !replay_safe)
+                co_return std::unexpected(result.error());
+            use_http3 = false;
+            const auto connected = co_await connect(host, port, use_ssl, token);
+            if (!connected)
+                co_return std::unexpected(connected.error());
+        }
+#else
         co_return std::unexpected(make_error_code(std::errc::not_supported));
+#endif
+    }
+
+    if (!use_http3)
+    {
+        if (state_->protocol == protocol_type::http1)
+        {
+            result = co_await send_http1(req, token);
+        }
+        else if (state_->protocol == protocol_type::http2)
+        {
+            result = co_await send_http2(req, token);
+        }
+        else
+        {
+            co_return std::unexpected(make_error_code(std::errc::not_supported));
+        }
     }
 
     // Handle redirects
@@ -1256,6 +1321,60 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
 
     co_return result;
 }
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+auto client::send_http3(const request& req, cancel_token& token)
+    -> task<std::expected<response, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    const auto parsed = url::parse(req.uri());
+    if (!parsed || parsed->scheme != "https" || parsed->host.empty())
+        co_return std::unexpected(make_error_code(http_errc::invalid_uri));
+    if (!h3_ssl_ctx_)
+        co_return std::unexpected(make_error_code(std::errc::not_supported));
+
+    const auto port = parsed->port == 0U ? std::uint16_t{443} : parsed->port;
+    if (!h3_client_ || !h3_client_->can_reuse_origin(parsed->host, port))
+    {
+        v3::http3_client_options options;
+        options.connect_timeout = options_.connect_timeout;
+        options.request_timeout = options_.request_timeout;
+        options.h3_qpack_max_table_capacity = options_.h3_qpack_max_table_capacity;
+        options.h3_qpack_blocked_streams = options_.h3_qpack_blocked_streams;
+        options.verify_certificate = options_.verify_peer;
+        options.tls_sni_host = parsed->host;
+        h3_client_ = std::make_unique<v3::http3_client>(*ctx_, *h3_ssl_ctx_,
+            std::move(options));
+        const auto connected = co_await h3_client_->connect(parsed->host, port);
+        if (!connected)
+            co_return std::unexpected(connected.error());
+    }
+
+    v3::http3_request h3_request;
+    h3_request.method = req.method();
+    h3_request.scheme = parsed->scheme;
+    h3_request.host = parsed->host;
+    h3_request.port = port;
+    h3_request.path = parsed->path.empty() ? "/" : parsed->path;
+    if (!parsed->query.empty())
+        h3_request.path += "?" + parsed->query;
+    h3_request.headers = req.headers();
+    h3_request.body = std::string(req.body());
+
+    const auto h3_response = co_await h3_client_->send_request(h3_request, token);
+    if (!h3_response)
+        co_return std::unexpected(h3_response.error());
+
+    response output{h3_response->status, http_version::http_3};
+    for (const auto& [name, value] : h3_response->headers)
+        output.append_header(name, value);
+    for (const auto& [name, value] : h3_response->trailers)
+        output.append_trailer(name, value);
+    output.set_body(h3_response->body);
+    co_return output;
+}
+#endif
 
 // =============================================================================
 // Main Send Methods

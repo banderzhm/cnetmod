@@ -24,8 +24,12 @@ export class http3_server
 public:
     http3_server(io_context& context, ssl_context& tls, endpoint listen_endpoint,
         server_request_handler handler);
+    http3_server(io_context& context, ssl_context& tls, endpoint listen_endpoint,
+        async_server_request_handler handler);
     http3_server(server_context& context, ssl_context& tls,
         endpoint listen_endpoint, server_request_handler handler);
+    http3_server(server_context& context, ssl_context& tls,
+        endpoint listen_endpoint, async_server_request_handler handler);
     ~http3_server();
     http3_server(const http3_server&) = delete;
     auto operator=(const http3_server&) -> http3_server& = delete;
@@ -40,8 +44,12 @@ private:
 
 export auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
     server_request_handler handler) -> std::unique_ptr<http3_server>;
+export auto make_http3_server(io_context& ctx, ssl_context& tls, endpoint ep,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server>;
 export auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
     server_request_handler handler) -> std::unique_ptr<http3_server>;
+export auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
+    async_server_request_handler handler) -> std::unique_ptr<http3_server>;
 
 } // namespace cnetmod::http::v3
 

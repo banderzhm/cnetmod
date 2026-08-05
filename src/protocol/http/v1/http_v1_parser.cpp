@@ -2,7 +2,7 @@ module cnetmod.protocol.http;
 
 import std;
 import :parser;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod::http {
 namespace detail {

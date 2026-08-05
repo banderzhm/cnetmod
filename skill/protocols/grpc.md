@@ -43,6 +43,25 @@ struct status {
 
 **`grpc::streaming_request` / `streaming_response`** — Streaming 请求/响应载体（多消息）
 
+## 客户端超时与取消
+
+`unary_request::timeout` 会写入标准 `grpc-timeout` 请求头，让服务端可从 `call_context` 感知剩余调用时间。该字段是协议级 deadline；客户端如需主动中止本地 HTTP/2 I/O，则使用带 `cancel_token` 的 unary 重载：
+
+```cpp
+import cnetmod.coro;
+import cnetmod.protocol.grpc.client;
+
+cnetmod::cancel_token token;
+cnetmod::grpc::unary_request request{
+    .service = "profile.ProfileService",
+    .method = "Get",
+    .timeout = std::chrono::milliseconds{800},
+};
+auto response = co_await grpc_client.unary(std::move(request), token);
+```
+
+当请求存在统一 `deadline` 时，先用其 `remaining()` 填充 `timeout`，再把同一业务取消源传给 `unary()`；不要只发送 `grpc-timeout` 而让本地 I/O 无限等待。由 deadline 导致的取消映射为 gRPC `deadline_exceeded`，调用方取消映射为 `cancelled`。
+
 ## API 参考
 
 ### protobuf 编解码

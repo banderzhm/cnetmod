@@ -10,7 +10,6 @@ import cnetmod.coro.channel;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
-import cnetmod.protocol.http;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.session;
 

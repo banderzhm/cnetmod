@@ -2,11 +2,10 @@ module;
 
 #include <cnetmod/config.hpp>
 
-module cnetmod.protocol.http;
+module cnetmod.protocol.http.semantics;
 
 import std;
 import cnetmod.coro.task;
-import :semantics;
 
 namespace cnetmod::http {
 

@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.http:server;
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :parser;
 import :request;
 import :response;

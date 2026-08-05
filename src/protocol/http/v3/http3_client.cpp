@@ -15,7 +15,7 @@ import cnetmod.coro.channel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.udp;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.session;

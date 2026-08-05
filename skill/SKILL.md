@@ -121,6 +121,10 @@
 > 依赖关系来源: `cmake/Protocols.cmake`。
 > 例如启用 MQTT 必须同时启用 HTTP 和 WEBSOCKET；启用 OPENAI 必须同时启用 HTTP。
 
+## Windows 构建
+
+启用 PostgreSQL 且在 Windows 上构建时，查看 [windows-build.md](infra/windows-build.md)。其中说明 bundled ICU 的 Debug/Release 文件名，避免 Debug 链接到 Release ICU。
+
 ## 快速上手
 
 ```cpp

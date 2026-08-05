@@ -18,7 +18,7 @@ import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.settings;
 import cnetmod.protocol.http.v2.header_compression;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :request;
 import :response;
 import :parser;
@@ -26,6 +26,9 @@ import :cookie;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
+#ifdef CNETMOD_ENABLE_QUIC
+import cnetmod.protocol.http.v3.client;
+#endif
 #endif
 
 namespace cnetmod::http {
@@ -40,6 +43,8 @@ export enum class http_version_preference
     http2_only,      // Only use HTTP/2 (requires ALPN)
     http2_preferred, // Prefer HTTP/2, fallback to HTTP/1.1
     http1_preferred, // Prefer HTTP/1.1, but accept HTTP/2
+    http3_only,      // Require HTTP/3 over QUIC
+    http3_preferred, // Prefer HTTP/3, then use the configured TCP preference
 };
 
 // =============================================================================
@@ -66,6 +71,12 @@ export struct client_options
         http_version_preference::http2_preferred;
     std::uint32_t h2_max_concurrent_streams = 100;
     std::uint32_t h2_initial_window_size = 1 * 1024 * 1024; // 1MB
+
+    // HTTP/3 options. TCP fallback is opt-in and restricted to replay-safe
+    // requests; `http3_only` never falls back.
+    std::uint64_t h3_qpack_max_table_capacity = 64 * 1024;
+    std::uint64_t h3_qpack_blocked_streams = 100;
+    bool http3_fallback_to_tcp = false;
 
     // Cookie options
     bool enable_cookies = true; // Implementation note: cookies.
@@ -261,8 +272,17 @@ private:
 
 #ifdef CNETMOD_HAS_SSL
     std::optional<ssl_context> ssl_ctx_;
+#ifdef CNETMOD_ENABLE_QUIC
+    std::optional<ssl_context> h3_ssl_ctx_;
+    std::unique_ptr<v3::http3_client> h3_client_;
+#endif
 
     void init_ssl_context();
+#endif
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    [[nodiscard]] auto send_http3(const request& req, cnetmod::cancel_token& token)
+        -> task<std::expected<response, std::error_code>>;
 #endif
 
     /// Connect to host:port with protocol negotiation (async)

@@ -140,6 +140,12 @@ public:
         std::uint64_t application_error_code = 0x010c)
         -> task<std::expected<void, std::error_code>>;
 
+    /// Bind an application cancellation token to one peer stream. A remote
+    /// RESET_STREAM or STOP_SENDING cancels the token on the connection's I/O
+    /// context. Register only for the dynamic lifetime of a request handler.
+    void register_stream_cancellation(stream_id sid, cancel_token& token) noexcept;
+    void unregister_stream_cancellation(stream_id sid) noexcept;
+
     /// Open a new stream
     [[nodiscard]] auto async_open_stream(
         bool bidirectional = true)

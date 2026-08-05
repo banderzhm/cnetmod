@@ -6,7 +6,7 @@ export module cnetmod.protocol.http:response;
 // Protocol-qualified filename prevents duplicate source basenames.
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :cookie;
 
 namespace cnetmod::http {

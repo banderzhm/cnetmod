@@ -11,7 +11,7 @@ module;
 module cnetmod.protocol.http;
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 import :parser;
 import :request;
 import :response;

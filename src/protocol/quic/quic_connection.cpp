@@ -198,6 +198,10 @@ struct quic_connection::quic_connection_impl
     // It is intentionally bounded: a fast peer cannot accumulate unbounded
     // wake notifications while an application is processing a previous read.
     std::map<stream_id, std::unique_ptr<channel<std::monostate>>> readable_streams;
+    // Request handlers own these tokens; entries are removed before a handler
+    // returns. QUIC packet processing and handlers share the same io_context,
+    // so raw observer pointers need no cross-thread synchronization.
+    std::map<stream_id, cancel_token*> stream_cancellation_observers;
 
     struct retired_stream_info
     {
@@ -1720,6 +1724,12 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
 
 auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>
 {
+    if (const auto observer = impl_->stream_cancellation_observers.find(frame.stream_id);
+        observer != impl_->stream_cancellation_observers.end())
+    {
+        observer->second->cancel();
+        impl_->stream_cancellation_observers.erase(observer);
+    }
     if (const auto retired = impl_->retired_streams.find(frame.stream_id);
         retired != impl_->retired_streams.end())
     {
@@ -1747,6 +1757,12 @@ auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame
 
 auto quic_connection::process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>
 {
+    if (const auto observer = impl_->stream_cancellation_observers.find(frame.stream_id);
+        observer != impl_->stream_cancellation_observers.end())
+    {
+        observer->second->cancel();
+        impl_->stream_cancellation_observers.erase(observer);
+    }
     const auto it = impl_->streams.find(frame.stream_id);
     if (it == impl_->streams.end())
     {
@@ -1772,6 +1788,9 @@ auto quic_connection::process_stop_sending_frame(const stop_sending_frame& frame
 
 auto quic_connection::process_connection_close_frame(const connection_close_frame&) -> task<void>
 {
+    for (auto& [_, token] : impl_->stream_cancellation_observers)
+        token->cancel();
+    impl_->stream_cancellation_observers.clear();
     impl_->connection_state = connection_state::draining;
     impl_->draining_deadline = std::chrono::steady_clock::now() +
         impl_->recovery.pto_duration() * 3;
@@ -2498,6 +2517,17 @@ auto quic_connection::async_cancel_stream(stream_id sid,
     co_return {};
 }
 
+void quic_connection::register_stream_cancellation(stream_id sid,
+    cancel_token& token) noexcept
+{
+    impl_->stream_cancellation_observers.insert_or_assign(sid, std::addressof(token));
+}
+
+void quic_connection::unregister_stream_cancellation(stream_id sid) noexcept
+{
+    impl_->stream_cancellation_observers.erase(sid);
+}
+
 auto quic_connection::async_open_stream(bool bidirectional)
     -> task<std::expected<stream_id, std::error_code>>
 {
@@ -2573,6 +2603,9 @@ auto quic_connection::async_close(std::error_code error, std::string_view reason
     impl_->connection_state = connection_state::closing;
     co_await flush_send_queue();
     impl_->connection_state = connection_state::closed;
+    for (auto& [_, token] : impl_->stream_cancellation_observers)
+        token->cancel();
+    impl_->stream_cancellation_observers.clear();
     impl_->accepted_streams.close();
     close_stream_readiness();
     if (impl_->owned_socket)

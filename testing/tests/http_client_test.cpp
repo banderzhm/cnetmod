@@ -71,7 +71,7 @@ auto test_request_with_body() -> bool {
     
     request req(http_method::POST, "/api/data");
     req.set_header("Content-Type", "application/json");
-    req.set_body(R"({"key":"value"})");
+    req.set_body(std::string_view{R"({"key":"value"})"});
     
     auto serialized = req.serialize();
     
@@ -95,7 +95,7 @@ auto test_response_building() -> bool {
     
     response resp(200);
     resp.set_header("Content-Type", "text/plain");
-    resp.set_body("Hello, World!");
+    resp.set_body(std::string_view{"Hello, World!"});
     
     auto serialized = resp.serialize();
     
@@ -122,7 +122,7 @@ auto test_response_building() -> bool {
 auto test_client_options() -> bool {
     std::println("Testing client options...");
     
-    io_context ctx;
+    auto ctx = make_io_context();
     
     client_options opts;
     opts.connect_timeout = std::chrono::seconds(10);
@@ -130,8 +130,12 @@ auto test_client_options() -> bool {
     opts.follow_redirects = false;
     opts.keep_alive = false;
     opts.user_agent = "custom-agent/1.0";
+    opts.version_pref = http_version_preference::http3_preferred;
+    opts.h3_qpack_max_table_capacity = 32 * 1024;
+    opts.h3_qpack_blocked_streams = 32;
+    opts.http3_fallback_to_tcp = true;
     
-    client http_client(ctx, opts);
+    client http_client(*ctx, opts);
     
     const auto& retrieved_opts = http_client.options();
     if (retrieved_opts.connect_timeout != std::chrono::seconds(10)) {
@@ -141,6 +145,14 @@ auto test_client_options() -> bool {
     
     if (retrieved_opts.user_agent != "custom-agent/1.0") {
         std::println("  FAIL: User agent not set correctly");
+        return false;
+    }
+
+    if (retrieved_opts.version_pref != http_version_preference::http3_preferred ||
+        retrieved_opts.h3_qpack_max_table_capacity != 32 * 1024 ||
+        retrieved_opts.h3_qpack_blocked_streams != 32 ||
+        !retrieved_opts.http3_fallback_to_tcp) {
+        std::println("  FAIL: HTTP/3 options not set correctly");
         return false;
     }
     

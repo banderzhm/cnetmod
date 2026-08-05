@@ -1,7 +1,7 @@
 export module cnetmod.protocol.http:multipart_form;
 
 import std;
-import :semantics;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod::http {
 struct form_field
