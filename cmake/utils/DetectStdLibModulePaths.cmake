@@ -104,6 +104,7 @@ function(detect_stdlib_module_paths)
                 message(STATUS "LLVM libc++ library path: ${LLVM_LIB_PATH}")
 
                 add_compile_options(
+                    -stdlib=libc++
                     -nostdinc++
                     -isystem ${STDLIB_INCLUDE_DIRS}
                     -isysroot ${MACOS_SDK_PATH}
@@ -113,16 +114,15 @@ function(detect_stdlib_module_paths)
                     -stdlib=libc++
                     -L${LLVM_LIB_PATH}
                     -Wl,-rpath,${LLVM_LIB_PATH}
-                    -lc++
-                    -lc++abi
                 )
             else()
                 # Linux
                 add_compile_options(
+                    -stdlib=libc++
                     -nostdinc++
                     -isystem ${STDLIB_INCLUDE_DIRS}
                 )
-                add_link_options(-stdlib=libc++ -lc++ -lc++abi)
+                add_link_options(-stdlib=libc++)
             endif()
         else()
             message(WARNING "Unable to auto-detect libc++ paths. Please set manually:")
@@ -194,6 +194,20 @@ function(detect_stdlib_module_paths)
     # Backward compatibility: also export legacy names
     set(LIBCXX_MODULE_DIRS "${STDLIB_MODULE_DIRS}" PARENT_SCOPE)
     set(LIBCXX_INCLUDE_DIRS "${STDLIB_INCLUDE_DIRS}" PARENT_SCOPE)
+endfunction()
+
+#[[
+  Link a target against the selected libc++ runtime.
+
+  The runtime must be a target link dependency rather than a global link
+  option: static third-party archives (notably BoringSSL) can introduce C++
+  symbols after global link options have already been emitted. GNU ld does not
+  revisit a runtime library that appears before those archives.
+]]
+function(cnetmod_link_selected_stdlib TARGET_NAME)
+    if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
+        target_link_libraries(${TARGET_NAME} PUBLIC c++ c++abi)
+    endif()
 endfunction()
 
 #[[

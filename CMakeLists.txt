@@ -331,6 +331,7 @@ elseif(CNETMOD_HAS_IO_URING)
 endif()
 
 cnetmod_link_third_party_dependencies(cnetmod_core)
+cnetmod_link_selected_stdlib(cnetmod_core)
 cnetmod_link_mimalloc(cnetmod_core)
 
 # ==============================================================================
