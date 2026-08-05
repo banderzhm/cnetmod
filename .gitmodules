@@ -19,3 +19,7 @@
 [submodule "3rdparty/boringssl"]
 	path = 3rdparty/boringssl
 	url = https://boringssl.googlesource.com/boringssl
+[submodule "3rdparty/icu"]
+	path = 3rdparty/icu
+	url = https://github.com/unicode-org/icu.git
+	branch = release-78.1

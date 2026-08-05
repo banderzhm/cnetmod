@@ -305,7 +305,8 @@ auto ssl_context::dtls_server() -> std::expected<ssl_context, std::error_code>
     }
 
     SSL_CTX_set_min_proto_version(context, DTLS1_2_VERSION);
-    #ifndef CNETMOD_HAS_QUIC
+    // BoringSSL does not expose OpenSSL's DTLS cookie callback API.
+    #if !defined(CNETMOD_USING_BORINGSSL)
     SSL_CTX_set_cookie_generate_cb(context, dtls_generate_cookie);
     SSL_CTX_set_cookie_verify_cb(context, dtls_verify_cookie);
     #endif

@@ -87,7 +87,7 @@ auto run_client(cn::io_context& ctx, std::atomic<bool>& ready,
 
     // Send messages
     auto msg = std::format("Hello from client {}", id);
-    auto wr = co_await cn::async_write(ctx, sock, cn::buffer(std::string_view{msg}));
+    auto wr = co_await cn::async_write(ctx, sock, cn::const_buffer{msg.data(), msg.size()});
     if (wr)
         std::println("  [Client-{}] sent: {}", id, msg);
 

@@ -16,8 +16,8 @@ macro(cnetmod_configure_third_party_dependencies)
     cnetmod_configure_nlohmann_json()
     cnetmod_configure_jwt_cpp()
     cnetmod_configure_pugixml()
-    cnetmod_configure_openssl()
     cnetmod_configure_boringssl_quic()
+    cnetmod_configure_openssl()
     cnetmod_configure_zlib()
     cnetmod_configure_lz4()
     cnetmod_configure_leveldb()
@@ -31,8 +31,9 @@ function(cnetmod_link_third_party_dependencies TARGET_NAME)
     cnetmod_link_pugixml(${TARGET_NAME})
     cnetmod_link_openssl(${TARGET_NAME})
 
-    # Link BoringSSL if QUIC is enabled
-    if(CNETMOD_HAS_QUIC AND DEFINED BoringSSL_LIBRARIES)
+    # BoringSSL is the default TLS provider when its bundled submodule is
+    # available. It also supplies the crypto API consumed by jwt-cpp.
+    if(BoringSSL_FOUND AND DEFINED BoringSSL_LIBRARIES)
         target_link_libraries(${TARGET_NAME} PRIVATE ${BoringSSL_LIBRARIES})
         if(DEFINED BoringSSL_INCLUDE_DIRS)
             target_include_directories(${TARGET_NAME} PRIVATE ${BoringSSL_INCLUDE_DIRS})

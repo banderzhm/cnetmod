@@ -4,7 +4,12 @@
  */
 module;
 
+// Select jwt-cpp's nlohmann::json traits before including its main header.
+// Without this, jwt-cpp defaults to picojson even when nlohmann/json is the
+// project's configured JSON provider.
+#define JWT_DISABLE_PICOJSON
 #include <jwt-cpp/jwt.h>
+#include <jwt-cpp/traits/nlohmann-json/defaults.h>
 
 module cnetmod.security.jwt;
 
@@ -51,12 +56,12 @@ namespace {
                     scope_str += opts.scopes[i];
                 }
                 builder.set_payload_claim("scope",
-                    picojson::value(scope_str));
+                    nlohmann::json(scope_str));
             }
 
             // Inject custom claims
             for (auto& [key, value] : opts.custom_claims)
-                builder.set_payload_claim(key, picojson::value(value));
+                builder.set_payload_claim(key, nlohmann::json(value));
 
             std::string token;
             switch (opts.algorithm)

@@ -26,9 +26,26 @@ macro(cnetmod_configure_boringssl_submodule)
                 message(STATUS "BoringSSL: Building static libraries")
             endif()
 
+            # BoringSSL requires NASM for optimized x86/x64 Windows builds.
+            # A standard Visual Studio Build Tools installation does not ship it,
+            # so make the portable C++ implementation the automatic fallback.
+            set(_cnetmod_boringssl_disable_asm OFF)
             if(NOT BORINGSSL_ENABLE_ASM)
+                set(_cnetmod_boringssl_disable_asm ON)
+            endif()
+            if(WIN32 AND BORINGSSL_ENABLE_ASM)
+                find_program(_cnetmod_boringssl_nasm NAMES nasm nasm.exe)
+                if(NOT _cnetmod_boringssl_nasm)
+                    set(_cnetmod_boringssl_disable_asm ON)
+                    message(STATUS "BoringSSL: NASM not found; using portable C++ implementation")
+                endif()
+            endif()
+
+            if(_cnetmod_boringssl_disable_asm)
                 set(FORCE_DO_ASM OFF CACHE BOOL "" FORCE)
                 set(NO_ASM ON CACHE BOOL "" FORCE)
+                # This is the BoringSSL option that controls enable_language(ASM_NASM).
+                set(OPENSSL_NO_ASM "1")
                 message(STATUS "BoringSSL: Assembly optimizations disabled")
             else()
                 message(STATUS "BoringSSL: Assembly optimizations enabled")
@@ -59,6 +76,7 @@ macro(cnetmod_configure_boringssl_submodule)
             # Find the targets directly - BoringSSL exports 'crypto' and 'ssl' targets
             if(TARGET crypto AND TARGET ssl)
                 set(BoringSSL_FOUND TRUE)
+                set(CNETMOD_HAS_SSL ON)
                 set(BoringSSL_INCLUDE_DIRS "${CNETMOD_BORINGSSL_DIR}/include")
                 set(BoringSSL_LIBRARIES ssl crypto)
 

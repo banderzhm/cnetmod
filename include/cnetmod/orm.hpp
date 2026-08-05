@@ -1,7 +1,5 @@
 #pragma once
 
-#include <cstddef>
-
 // =============================================================================
 // CNETMOD_MODEL / CNETMOD_FIELD Macros
 // =============================================================================
@@ -57,7 +55,7 @@
         {#M, COL, ::cnetmod::orm::column_type::CT,                \
             ::cnetmod::orm::col_flag::none,                       \
             ::cnetmod::orm::id_strategy::none,                    \
-            offsetof(_cnetmod_model_type, M)},                    \
+            __builtin_offsetof(_cnetmod_model_type, M)},          \
             [](auto& obj, const ::cnetmod::orm::field_value& v) { \
                 ::cnetmod::orm::detail::set_member(obj.M, v);     \
             },                                                    \
@@ -72,7 +70,7 @@
     {                                                             \
         {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS,         \
             ::cnetmod::orm::id_strategy::none,                    \
-            offsetof(_cnetmod_model_type, M)},                    \
+            __builtin_offsetof(_cnetmod_model_type, M)},          \
             [](auto& obj, const ::cnetmod::orm::field_value& v) { \
                 ::cnetmod::orm::detail::set_member(obj.M, v);     \
             },                                                    \
@@ -86,7 +84,7 @@
     ::cnetmod::orm::field_mapping<_cnetmod_model_type>               \
     {                                                                \
         {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY,  \
-            offsetof(_cnetmod_model_type, M)},                       \
+            __builtin_offsetof(_cnetmod_model_type, M)},             \
             [](auto& obj, const ::cnetmod::orm::field_value& v) {    \
                 ::cnetmod::orm::detail::set_member(obj.M, v);        \
             },                                                       \
