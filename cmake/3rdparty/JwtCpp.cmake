@@ -24,5 +24,16 @@ endmacro()
 function(cnetmod_link_jwt_cpp TARGET_NAME)
     if(CNETMOD_HAS_JWT_CPP)
         target_include_directories(${TARGET_NAME} SYSTEM PRIVATE "${CNETMOD_JWT_CPP_INCLUDE_DIR}")
+
+        # jwt-cpp includes <openssl/...> in its public headers.  A consumer
+        # which includes jwt-cpp directly (for example account_server_demo)
+        # therefore needs BoringSSL's OpenSSL-compatible include directory,
+        # not only the one used while compiling cnetmod_core.
+        if(BoringSSL_FOUND AND DEFINED BoringSSL_INCLUDE_DIRS)
+            target_include_directories(${TARGET_NAME} SYSTEM PRIVATE ${BoringSSL_INCLUDE_DIRS})
+        endif()
+        if(BoringSSL_FOUND AND DEFINED BoringSSL_LIBRARIES)
+            target_link_libraries(${TARGET_NAME} PRIVATE ${BoringSSL_LIBRARIES})
+        endif()
     endif()
 endfunction()
