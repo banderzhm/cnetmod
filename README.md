@@ -98,33 +98,48 @@ does not appear as a measured HTTP/3 row.
 Raw JSON, the machine environment, and the generated CSV/Markdown summary are
 kept in `testing/bench/results/crosslang/2026-08-05-arch-go-java26`.
 
-The table below is an earlier, longer-request cnetmod/Rust campaign. It is kept
-as historical evidence and must not be mixed with the image above.
-
 Arch Linux under WSL2, Release build, Intel Core i9-14900K, Clang 22.1.8,
 Linux 6.18, io_uring, mimalloc, and local loopback. Server and Rust `oha`
 client are isolated to separate 16-CPU sets. cnetmod enables
 `IORING_SETUP_COOP_TASKRUN`; fixed worker affinity is disabled because it
-reduced throughput in this environment. HTTP/1.1 uses 10,000,000 requests per
-run; TLS uses 3,000,000; HTTP/2 uses 1,000,000; HTTP/3 uses 100,000. Each value
-is the mean of three runs and every run completed with 100% success.
+reduced throughput in this environment. HTTP/1.1 uses 1,000,000 requests per
+run; HTTP/2 uses 250,000; HTTP/3 uses 10,000. Each value is the mean of three
+runs. The table includes every implementation/protocol endpoint measured in
+this campaign; unavailable endpoints are stated explicitly.
 
 Latency values are milliseconds. `P0` and `P100` are the average per-run
 minimum and maximum; they expose scheduler/outlier behavior that throughput
 and central percentiles alone do not show.
 
-| Protocol | Implementation | Throughput | vs Rust | P0 | P50 | P95 | P99 | P100 | Success |
-|----------|----------------|-----------:|--------:|---:|----:|----:|----:|-----:|--------:|
-| HTTP/1.1 | **cnetmod** | **1.660M req/s** | **+1.25%** | 0.011 | 0.128 | 0.291 | 0.505 | 65.328 | 100% |
-| HTTP/1.1 | Statico/tokio-uring | 1.639M req/s | baseline | 0.011 | 0.128 | 0.298 | 0.489 | 60.147 | 100% |
-| HTTPS/1.1 | **cnetmod** | **1.343M req/s** | **+52.0%** | 0.012 | 0.161 | 0.366 | 0.646 | 87.295 | 100% |
-| HTTPS/1.1 | Hyper | 0.884M req/s | baseline | 0.010 | 0.255 | 0.528 | 0.692 | 87.342 | 100% |
-| HTTP/2 h2c | **cnetmod** | **1.356M req/s** | **+15.4%** | 0.097 | 0.182 | 0.248 | 0.397 | 15.413 | 100% |
-| HTTP/2 h2c | monoio-h2 | 1.175M req/s | baseline | 0.103 | 0.208 | 0.312 | 0.372 | 44.077 | 100% |
-| HTTPS/2 | **cnetmod** | **1.210M req/s** | **+1,159%** | 0.104 | 0.196 | 0.271 | 0.431 | 43.521 | 100% |
-| HTTPS/2 | Hyper | 0.096M req/s | baseline | 0.023 | 0.165 | 41.304 | 44.683 | 51.715 | 100% |
-| HTTP/3 | **cnetmod** | **0.570M req/s** | **+65.5%** | 0.071 | 0.361 | 0.640 | 0.865 | 3.746 | 100% |
-| HTTP/3 | Quinn/h3 | 0.344M req/s | baseline | 0.074 | 0.641 | 1.065 | 1.333 | 7.556 | 100% |
+| Protocol | Implementation | Throughput | vs Rust baseline | P0 | P50 | P95 | P99 | P100 | Success |
+|----------|----------------|-----------:|-----------------:|---:|----:|----:|----:|-----:|--------:|
+| HTTP/1.1 | **cnetmod** | **1.501M req/s** | **+41.7%** | 0.012 | 0.132 | 0.358 | 0.682 | 33.372 | 100.00% |
+| HTTP/1.1 | Statico/tokio-uring | 1.485M req/s | +40.2% | 0.012 | 0.138 | 0.328 | 0.551 | 40.426 | 100.00% |
+| HTTP/1.1 | Statico/monoio | 1.439M req/s | +35.8% | 0.012 | 0.144 | 0.335 | 0.489 | 42.769 | 100.00% |
+| HTTP/1.1 | Rust Hyper | 1.059M req/s | baseline | 0.011 | 0.215 | 0.442 | 0.561 | 33.366 | 100.00% |
+| HTTP/1.1 | Go fasthttp | 1.112M req/s | +4.9% | 0.009 | 0.167 | 0.563 | 0.853 | 28.496 | 100.00% |
+| HTTP/1.1 | Java 26 / Jetty | 678K req/s | -36.0% | 0.011 | 0.157 | 0.979 | 1.489 | 1047.306 | 100.00% |
+| HTTP/1.1 | Go net/http | 510K req/s | -51.8% | 0.009 | 0.117 | 3.514 | 5.277 | 36.192 | 100.00% |
+| HTTP/1.1 | Java 26 / JDK virtual threads | 482K req/s | **not ranked** | 0.038 | 0.464 | 0.932 | 2.020 | 40.498 | **99.34%** |
+| HTTPS/1.1 | **cnetmod** | **1.192M req/s** | **+34.0%** | 0.013 | 0.165 | 0.418 | 0.804 | 86.655 | 100.00% |
+| HTTPS/1.1 | Rust Hyper | 889K req/s | baseline | 0.011 | 0.246 | 0.502 | 0.640 | 86.872 | 100.00% |
+| HTTPS/1.1 | Go fasthttp | 1.021M req/s | +14.8% | 0.011 | 0.185 | 0.556 | 0.838 | 77.575 | 100.00% |
+| HTTPS/1.1 | Go net/http | 587K req/s | -33.9% | 0.012 | 0.161 | 2.132 | 3.529 | 82.236 | 100.00% |
+| HTTPS/1.1 | Java 26 / Jetty | 455K req/s | -48.9% | 0.016 | 0.247 | 1.529 | 2.791 | 1061.236 | 100.00% |
+| HTTPS/1.1 | Java 26 / JDK virtual threads | 56K req/s | **not ranked** | 0.021 | 0.364 | 47.675 | 51.770 | 115.778 | **90.29%** |
+| HTTP/2 h2c | **cnetmod** | **1.354M req/s** | **+18.6%** | 0.097 | 0.180 | 0.249 | 0.393 | 4.149 | 100.00% |
+| HTTP/2 h2c | Rust monoio-h2 | 1.142M req/s | baseline | 0.102 | 0.209 | 0.326 | 0.400 | 43.976 | 100.00% |
+| HTTP/2 h2c | Java 26 / Jetty | 558K req/s | -51.2% | 0.023 | 0.318 | 1.330 | 2.889 | 27.371 | 100.00% |
+| HTTP/2 h2c | Go net/http | 240K req/s | -79.0% | 0.036 | 0.767 | 2.761 | 4.181 | 9.822 | 100.00% |
+| HTTP/2 h2c | Rust Hyper | 104K req/s | -90.9% | 0.023 | 0.163 | 40.637 | 44.086 | 49.270 | 100.00% |
+| HTTPS/2 | **cnetmod** | **1.106M req/s** | **+1067.5%** | 0.103 | 0.194 | 0.266 | 0.404 | 46.649 | 100.00% |
+| HTTPS/2 | Java 26 / Jetty | 379K req/s | +299.8% | 0.028 | 0.455 | 1.962 | 4.097 | 57.020 | 100.00% |
+| HTTPS/2 | Go net/http | 247K req/s | +160.3% | 0.033 | 0.740 | 2.777 | 3.961 | 9.264 | 100.00% |
+| HTTPS/2 | Rust Hyper | 95K req/s | baseline | 0.026 | 0.172 | 41.237 | 44.782 | 48.343 | 100.00% |
+| HTTP/3 | **cnetmod** | **259K req/s** | **+39.7%** | 0.086 | 0.359 | 0.699 | 1.589 | 3.686 | 100.00% |
+| HTTP/3 | Rust Quinn/h3 | 185K req/s | baseline | 0.097 | 0.601 | 1.196 | 4.012 | 6.138 | 100.00% |
+| HTTP/3 | Go quic-go | 332 req/s | -99.8% | 0.077 | 0.905 | 2.706 | 4.147 | 5.878 | 100.00% |
+| HTTP/3 | Java 26 / Jetty | unavailable | request timeout | — | — | — | — | — | 0.00% |
 
 The HTTP/1.1 comparison uses the same 13-byte body and only `Content-Length`
 on both servers. cnetmod's normal `Server`, `Date`, and `Content-Type` behavior
@@ -132,9 +147,7 @@ remains the default; the benchmark explicitly disables server-generated
 headers with `response_header_options` to match Statico. Raw JSON, latency
 percentiles, success rates, tool versions, kernel, CPU allocation, and runtime
 switches are retained under
-[`testing/bench/results/crosslang/2026-08-05-post-scheduler-regression`](testing/bench/results/crosslang/2026-08-05-post-scheduler-regression)
-and
-[`testing/bench/results/crosslang/2026-08-05-h1-equal-headers-10m`](testing/bench/results/crosslang/2026-08-05-h1-equal-headers-10m).
+[`testing/bench/results/crosslang/2026-08-05-arch-go-java26`](testing/bench/results/crosslang/2026-08-05-arch-go-java26).
 
 ### HTTP / gRPC Performance
 Windows Release benchmark on Intel Core i9-14900K, Visual Studio 2026, IOCP, local loopback, multicore mode (`mc:16/16`):
