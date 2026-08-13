@@ -24,6 +24,20 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_SCAN_FOR_MODULES ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# Some package/toolchain setups clear CMAKE_CXX_FLAGS_RELEASE.  Keep the
+# language-level Release contract intact even in that case: the standard
+# library and cnetmod both use NDEBUG to remove assertion-only work.  MSVC
+# already supplies it for these configurations; a duplicate definition is
+# harmless, while single-config Unix generators need this explicit fallback.
+if(CMAKE_CONFIGURATION_TYPES)
+    add_compile_definitions(
+        "$<$<CONFIG:Release>:NDEBUG>"
+        "$<$<CONFIG:RelWithDebInfo>:NDEBUG>"
+        "$<$<CONFIG:MinSizeRel>:NDEBUG>")
+elseif(CMAKE_BUILD_TYPE MATCHES "^(Release|RelWithDebInfo|MinSizeRel)$")
+    add_compile_definitions(NDEBUG)
+endif()
+
 include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Protocols.cmake)
@@ -40,8 +54,8 @@ endif()
 # Memory Allocator Optimization: Use mimalloc if available
 # ==============================================================================
 option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/Mimalloc.cmake)
 if(CNETMOD_USE_MIMALLOC)
-    include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/Mimalloc.cmake)
     cnetmod_use_mimalloc()
 endif()
 
@@ -310,6 +324,8 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_QUIC}>:CNETMOD_HAS_QUIC>
     $<$<BOOL:${CNETMOD_ENABLE_QUIC}>:CNETMOD_ENABLE_QUIC>
     $<$<BOOL:${CNETMOD_HAS_ZLIB}>:CNETMOD_HAS_ZLIB>
+    $<$<BOOL:${CNETMOD_HAS_ZSTD}>:CNETMOD_HAS_ZSTD>
+    $<$<BOOL:${CNETMOD_HAS_BROTLI}>:CNETMOD_HAS_BROTLI>
     $<$<BOOL:${CNETMOD_HAS_LZ4}>:CNETMOD_HAS_LZ4>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
     $<$<BOOL:${CNETMOD_HAS_ICU}>:CNETMOD_HAS_ICU>
@@ -351,6 +367,51 @@ set_property(TARGET cnetmod_core PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE"
 )
 
+# ==============================================================================
+# C ABI bindings
+# ==============================================================================
+# The C ABI is deliberately a separate library: Rust/Python native extensions
+# can link it without exposing compiler-specific C++ module BMIs. Keep it
+# static by default: the C++ module core owns process-level initialization and
+# is safely embedded in the extension/application that owns its event loop.
+option(CNETMOD_BUILD_C_API "Build the stable C ABI library" ON)
+if(CNETMOD_BUILD_C_API)
+    set_target_properties(cnetmod_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    add_library(cnetmod_c STATIC
+        "${CMAKE_CURRENT_SOURCE_DIR}/bindings/c_api/cnetmod_c_api.cpp")
+    target_link_libraries(cnetmod_c PRIVATE cnetmod_core)
+    target_compile_features(cnetmod_c PRIVATE cxx_std_23)
+    target_compile_definitions(cnetmod_c PUBLIC CNETMOD_C_API_STATIC)
+    target_include_directories(cnetmod_c PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    set_property(TARGET cnetmod_c PROPERTY
+        CXX_MODULE_GENERATION_MODE "SEPARATE")
+endif()
+
+# CPython extension built on the stable C ABI. It deliberately links the
+# static cnetmod_c target into the extension, so Python imports no C++ module
+# DLL and owns the same event-loop lifetime as the binding.
+option(CNETMOD_BUILD_PYTHON_BINDINGS "Build the CPython native extension" ON)
+if(CNETMOD_BUILD_C_API AND CNETMOD_BUILD_PYTHON_BINDINGS)
+    find_package(Python3 COMPONENTS Interpreter Development.Module QUIET)
+    if(Python3_Development.Module_FOUND)
+        add_library(cnetmod_python MODULE
+            "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/cnetmod_native.cpp")
+        target_link_libraries(cnetmod_python PRIVATE cnetmod_c Python3::Module)
+        target_compile_features(cnetmod_python PRIVATE cxx_std_23)
+        target_include_directories(cnetmod_python PRIVATE
+            "${CMAKE_CURRENT_SOURCE_DIR}/include")
+        set_target_properties(cnetmod_python PROPERTIES PREFIX ""
+            OUTPUT_NAME "cnetmod_native")
+        if(WIN32)
+            set_target_properties(cnetmod_python PROPERTIES SUFFIX ".pyd")
+        endif()
+    else()
+        message(STATUS "CPython development headers not found; skipping cnetmod_python")
+    endif()
+endif()
+
 # ============================================================================== 
 # Installable binary package / GitHub Release asset
 # ============================================================================== 
@@ -384,6 +445,13 @@ install(TARGETS cnetmod_core
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     FILE_SET cxx_modules DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules"
 )
+if(CNETMOD_BUILD_C_API)
+    install(TARGETS cnetmod_c
+        EXPORT cnetmodTargets
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+        RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
@@ -444,6 +512,12 @@ option(CNETMOD_BUILD_BENCH "Build performance benchmarks" ON)
 if(CNETMOD_BUILD_TESTS)
     enable_testing()
 endif()
+if(CNETMOD_BUILD_TESTS AND TARGET cnetmod_python AND Python3_Interpreter_FOUND)
+    add_test(NAME python_cnetmod_native_binding
+        COMMAND Python3::Interpreter
+            "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/test_cnetmod_native.py"
+            "$<TARGET_FILE:cnetmod_python>")
+endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/testing/CMakeLists.txt")
     add_subdirectory(testing)
 endif()
@@ -476,6 +550,12 @@ set(CNETMOD_ALL_TARGETS
     ${CNETMOD_BENCH_TARGETS}
     ${CNETMOD_EXAMPLE_TARGETS}
 )
+if(CNETMOD_BUILD_C_API)
+    list(APPEND CNETMOD_ALL_TARGETS cnetmod_c)
+endif()
+if(TARGET cnetmod_python)
+    list(APPEND CNETMOD_ALL_TARGETS cnetmod_python)
+endif()
 
 list(REMOVE_DUPLICATES CNETMOD_ALL_TARGETS)
 

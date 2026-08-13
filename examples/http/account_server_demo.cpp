@@ -1218,8 +1218,10 @@ auto handle_upload_files(http::request_context& ctx) -> cn::task<void>
             continue;
 
         // Asyncflushclosefile
-        co_await cn::async_file_flush(ctx.io_ctx(), *f);
-        co_await cn::async_file_close(ctx.io_ctx(), *f);
+        const auto flushed = co_await cn::async_file_flush(ctx.io_ctx(), *f);
+        const auto closed = co_await cn::async_file_close(ctx.io_ctx(), *f);
+        if (!flushed || !closed)
+            continue;
 
         // Insert DB (ORM)
         ProjectFile file_model;
@@ -1428,7 +1430,9 @@ auto handle_download_file(http::request_context& ctx) -> cn::task<void>
     }
 
     // Asyncclosefile
-    co_await cn::async_file_close(ctx.io_ctx(), *f);
+    const auto closed = co_await cn::async_file_close(ctx.io_ctx(), *f);
+    if (!closed)
+        co_return;
 
     resp.set_header("X-Streamed", "1");
 }

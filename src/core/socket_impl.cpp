@@ -104,7 +104,7 @@ socket::~socket()
 
 socket::socket(socket&& other) noexcept
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    : handle_(other.handle_), family_(other.family_), skip_completion_on_success_(other.skip_completion_on_success_)
+    : handle_(other.handle_), family_(other.family_), skip_completion_on_success_(other.skip_completion_on_success_), registered_io_requested_(other.registered_io_requested_), registered_io_enabled_(other.registered_io_enabled_), iocp_association_(other.iocp_association_.load(std::memory_order_relaxed)), async_state_(std::move(other.async_state_))
 #else
     : handle_(other.handle_), family_(other.family_)
 #endif
@@ -113,6 +113,9 @@ socket::socket(socket&& other) noexcept
     other.family_ = address_family::unspecified;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     other.skip_completion_on_success_ = false;
+    other.registered_io_requested_ = false;
+    other.registered_io_enabled_ = false;
+    other.iocp_association_.store(0, std::memory_order_relaxed);
 #endif
 }
 
@@ -125,21 +128,67 @@ auto socket::operator=(socket&& other) noexcept -> socket&
         family_ = other.family_;
 #ifdef CNETMOD_PLATFORM_WINDOWS
         skip_completion_on_success_ = other.skip_completion_on_success_;
+        registered_io_requested_ = other.registered_io_requested_;
+        registered_io_enabled_ = other.registered_io_enabled_;
+        iocp_association_.store(
+            other.iocp_association_.load(std::memory_order_relaxed),
+            std::memory_order_relaxed);
+        async_state_ = std::move(other.async_state_);
 #endif
         other.handle_ = invalid_handle;
         other.family_ = address_family::unspecified;
 #ifdef CNETMOD_PLATFORM_WINDOWS
         other.skip_completion_on_success_ = false;
+        other.registered_io_requested_ = false;
+        other.registered_io_enabled_ = false;
+        other.iocp_association_.store(0, std::memory_order_relaxed);
 #endif
     }
     return *this;
 }
 
+#ifdef CNETMOD_PLATFORM_WINDOWS
+
+auto socket::claim_iocp_association(std::uintptr_t port) noexcept
+    -> iocp_association_claim
+{
+    // The pending marker is never a Windows HANDLE. It lets another coroutine
+    // wait for the single CreateIoCompletionPort call instead of racing it.
+    constexpr std::uintptr_t pending = 1;
+    for (;;)
+    {
+        auto observed = iocp_association_.load(std::memory_order_acquire);
+        if (observed == port)
+            return iocp_association_claim::already_associated;
+        if (observed == 0)
+        {
+            if (iocp_association_.compare_exchange_weak(observed, pending,
+                    std::memory_order_acq_rel, std::memory_order_acquire))
+                return iocp_association_claim::claimed;
+            continue;
+        }
+        if (observed == pending)
+        {
+            iocp_association_.wait(pending, std::memory_order_relaxed);
+            continue;
+        }
+        return iocp_association_claim::different_context;
+    }
+}
+
+void socket::complete_iocp_association(std::uintptr_t port, bool succeeded) noexcept
+{
+    iocp_association_.store(succeeded ? port : 0, std::memory_order_release);
+    iocp_association_.notify_all();
+}
+
+#endif
+
 // =============================================================================
 // Creation
 // =============================================================================
 
-auto socket::create(address_family family, socket_type type)
+auto socket::create(address_family family, socket_type type, bool registered_io)
     -> std::expected<socket, std::error_code>
 {
     int af = to_native_family(family);
@@ -147,8 +196,21 @@ auto socket::create(address_family family, socket_type type)
     int proto = (type == socket_type::stream) ? IPPROTO_TCP : IPPROTO_UDP;
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    // WSA_FLAG_OVERLAPPED allows handle to be associated with IOCP
-    SOCKET fd = ::WSASocketW(af, st, proto, nullptr, 0, WSA_FLAG_OVERLAPPED);
+    // WSA_FLAG_OVERLAPPED allows handle to be associated with IOCP. RIO is a
+    // creation-time opt-in and is valid only for datagram sockets.
+    DWORD flags = WSA_FLAG_OVERLAPPED;
+    if (registered_io && type == socket_type::datagram)
+        flags |= WSA_FLAG_REGISTERED_IO;
+    SOCKET fd = ::WSASocketW(af, st, proto, nullptr, 0, flags);
+    bool registered_socket = registered_io && type == socket_type::datagram;
+    // RIO is optional on older Windows providers. The public socket contract
+    // must still open a normal overlapped UDP socket rather than make HTTP/3
+    // startup dependent on one acceleration capability.
+    if (fd == INVALID_SOCKET && registered_socket)
+    {
+        fd = ::WSASocketW(af, st, proto, nullptr, 0, WSA_FLAG_OVERLAPPED);
+        registered_socket = false;
+    }
     if (fd == INVALID_SOCKET)
         return std::unexpected(make_error_code(from_native_error(last_error())));
 #else
@@ -157,7 +219,14 @@ auto socket::create(address_family family, socket_type type)
         return std::unexpected(make_error_code(from_native_error(last_error())));
 #endif
 
-    return socket{fd, family};
+    socket result{fd, family};
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    result.registered_io_requested_ = registered_io && type == socket_type::datagram;
+    result.registered_io_enabled_ = registered_socket;
+#else
+    (void)registered_io;
+#endif
+    return result;
 }
 
 // =============================================================================
@@ -272,8 +341,16 @@ auto socket::apply_options(const socket_options& opts)
             return std::unexpected(make_error_code(from_native_error(last_error())));
     }
 
-    // Non-blocking
-    if (opts.non_blocking)
+    // RIO sockets are submitted exclusively through registered-I/O calls.
+    // Winsock rejects FIONBIO on these handles with WSAEOPNOTSUPP, while
+    // overlapped and RIO submissions themselves never block a worker thread.
+    // A normal socket (including a provider fallback) keeps the established
+    // non-blocking configuration.
+    if (opts.non_blocking
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        && !registered_io_enabled_
+#endif
+    )
     {
         if (auto r = set_non_blocking(true); !r)
             return r;
@@ -516,6 +593,8 @@ void socket::close() noexcept
     if (handle_ == invalid_handle)
         return;
 #ifdef CNETMOD_PLATFORM_WINDOWS
+    if (async_state_)
+        async_state_->on_socket_close();
     ::closesocket(handle_);
 #else
     ::close(handle_);
@@ -523,6 +602,9 @@ void socket::close() noexcept
     handle_ = invalid_handle;
 #ifdef CNETMOD_PLATFORM_WINDOWS
     skip_completion_on_success_ = false;
+    registered_io_requested_ = false;
+    registered_io_enabled_ = false;
+    async_state_.reset();
 #endif
 }
 

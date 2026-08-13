@@ -33,6 +33,8 @@ export struct server_options
     std::size_t max_send_message_bytes = default_max_message_bytes;
     std::size_t max_metadata_bytes = default_max_metadata_bytes;
     bool accept_gzip = true;
+    bool accept_zstd = true;
+    bool accept_brotli = true;
     compression_algorithm default_response_compression = compression_algorithm::identity;
     std::vector<server_interceptor> interceptors;
     std::shared_ptr<governance::server_policy> governance;

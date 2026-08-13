@@ -15,6 +15,7 @@
 - 我要 gzip 压缩响应 → [compress](#5-compress--gzip-压缩)
 - 我要限制请求体大小 → [body_limit](#6-body_limit--请求体限制)
 - 我要注入请求 ID → [request_id](#7-request_id--请求-id)
+- 我要接入 W3C Trace Context / OpenTelemetry → [tracing](#w3c-trace-context--opentelemetry-bridge)
 - 我要记录访问日志 → [access_log](#8-access_log--访问日志)
 - 我要采集 Prometheus 指标 → [metrics](#9-metrics--指标采集)
 - 我要控制请求超时 → [timeout](#10-timeout--超时控制)
@@ -43,20 +44,21 @@ using middleware_fn = std::function<task<void>(request_context&, next_fn)>;
 ```
 1. recover         ← 最外层：捕获所有异常
 2. request_timeout ← 超时检测（包裹 handler 执行）
-3. access_log      ← 记录请求/响应日志
-4. cors            ← 处理 OPTIONS 预检
-5. request_id      ← 注入 X-Request-ID
-6. ip_firewall     ← IP 封禁检查（check_middleware）
-7. ip_filter       ← IP 黑白名单
-8. rate_limiter    ← 频率限制
-9. body_limit      ← 请求体大小
-10. compress       ← gzip 压缩
-11. metrics        ← 指标采集
-12. jwt_auth       ← 认证
-13. authorization  ← 授权
-14. upload         ← 文件上传解析
-15. handler        ← 业务逻辑
-16. ip_firewall    ← 违规追踪（track_middleware，最内层）
+3. tracing         ← 解析 traceparent，建立 server span
+4. access_log      ← 记录请求/响应日志
+5. cors            ← 处理 OPTIONS 预检
+6. request_id      ← 注入 X-Request-ID
+7. ip_firewall     ← IP 封禁检查（check_middleware）
+8. ip_filter       ← IP 黑白名单
+9. rate_limiter    ← 频率限制
+10. body_limit     ← 请求体大小
+11. compress       ← gzip 压缩
+12. metrics        ← 指标采集
+13. jwt_auth       ← 认证
+14. authorization  ← 授权
+15. upload         ← 文件上传解析
+16. handler        ← 业务逻辑
+17. ip_firewall    ← 违规追踪（track_middleware，最内层）
 ```
 
 ```cpp
@@ -480,3 +482,106 @@ srv.use(recover());
 - `examples/http/hight_http.cpp` — 中间件链完整示例（recover + access_log + cors + request_id + body_limit）
 - `examples/http/http2_demo.cpp` — HTTP/2 + 中间件组合
 - `examples/http/account_server_demo.cpp` — 认证、授权、防火墙综合示例
+## W3C Trace Context / OpenTelemetry bridge
+
+Use the optional tracing middleware when an HTTP service needs standard
+`traceparent` propagation. It creates one server span, preserves an incoming
+trace ID, generates a fresh span ID, and exposes a completed-span callback for
+an application OpenTelemetry exporter. No tracing work is performed unless the
+middleware is installed.
+
+```cpp
+import cnetmod.protocol.http;
+import cnetmod.protocol.http.middleware.tracing;
+
+namespace trace = cnetmod::http::tracing;
+
+server.use(trace::tracing_middleware({
+    .on_end = [](const trace::completed_span& span) {
+        // Forward span to the application's OpenTelemetry exporter or logger.
+        // Never throw from this callback.
+    },
+}));
+
+router.get("/orders/:id", [&client](cnetmod::http::request_context& ctx)
+    -> cnetmod::task<void> {
+    cnetmod::http::request upstream(cnetmod::http::http_method::GET,
+        "https://inventory.internal/v1/stock");
+
+    if (auto current = trace::context_from(ctx)) {
+        auto child = trace::child_context(*current);
+        trace::inject(upstream, child);
+    }
+    auto response = co_await client.send(upstream, ctx.request_deadline());
+    // Handle response...
+});
+```
+
+`tracestate` is propagated only when `tracing_options::accept_tracestate` is
+enabled (the default). Disable it at an untrusted boundary when vendor state
+must not cross that boundary. `baggage` is intentionally not propagated by
+default because it needs application-specific allowlists and size limits.
+
+### OTLP/HTTP exporter
+
+`cnetmod.observability.otlp` provides a bounded asynchronous OTLP/HTTP JSON
+exporter. `submit()` is lock-free on the request path and never waits for the
+collector. During orderly shutdown, stop accepting new spans with `close()`
+and await `flush()` before stopping the `io_context`; the latter waits until
+already accepted spans have either been exported or accounted for as a failed
+batch.
+
+```cpp
+import cnetmod.observability.otlp;
+
+cnetmod::observability::otlp_http_exporter exporter{
+    context,
+    {.endpoint = "http://otel-collector:4318/v1/traces",
+     .service_name = "orders-api"},
+};
+
+srv.use(trace::tracing_middleware({
+    .on_end = [&exporter](const trace::completed_span& span) {
+        (void)exporter.submit(span); // bounded queue: drops are counted
+    },
+}));
+
+// Service shutdown coroutine, before context.stop().
+exporter.close();
+if (auto flushed = co_await exporter.flush(std::chrono::seconds{5}); !flushed) {
+    // Use the application's cnetmod logger to record the timeout/failure.
+}
+```
+
+The exporter deliberately has no retry loop on the request path. A collector
+outage increments `failed_batches`; applications can inspect `statistics()` to
+alert on drops or failed deliveries without amplifying an outage with retries.
+
+### HTTP → SQL / Redis / gRPC trace chain
+
+Trace context is an explicit value rather than thread-local state, so it is
+safe across coroutine worker migration. Pass the handler's context to each
+downstream operation; SQL and Redis create local child spans and report them to
+the same bounded exporter, while gRPC also injects W3C headers for the remote
+service.
+
+```cpp
+if (auto parent = trace::context_from(ctx)) {
+    auto report = [&exporter](const trace::completed_span& span) {
+        (void)exporter.submit(span);
+    };
+
+    auto user = co_await session.query(
+        "SELECT id, name FROM users WHERE id = ?", *parent, report);
+    auto cached = co_await redis.cmd({"GET", "user:42"}, *parent, report);
+
+    grpc::unary_request rpc{/* ... */};
+    auto profile = co_await grpc_client.unary(std::move(rpc), *parent);
+}
+```
+
+SQL and Redis do not define a `traceparent` wire field, so their child spans
+remain local telemetry. gRPC transmits the child `traceparent` and
+`tracestate`; HTTP uses `trace::inject()` for the same purpose. Exporter
+callbacks are isolated from business results: an exception in a callback is
+ignored and never changes the database or Redis operation outcome.

@@ -131,6 +131,17 @@ TEST(task_move_semantics)
     ASSERT_EQ(result, 42);
 }
 
+TEST(task_empty_await_is_deterministic)
+{
+    // Default construction and a moved-from task are valid object states.
+    // Awaiting either must report a normal logic error instead of
+    // dereferencing a null coroutine handle.
+    task<int> empty_int;
+    ASSERT_THROWS(sync_wait(std::move(empty_int)));
+    task<void> empty_void;
+    ASSERT_THROWS(sync_wait(std::move(empty_void)));
+}
+
 TEST(sync_wait_waits_for_asynchronous_completion)
 {
     ASSERT_EQ(sync_wait(completes_after_external_resume()), 7);
@@ -195,6 +206,17 @@ TEST(when_all_void)
     // Should not throw
     sync_wait(when_all(return_void(), return_void()));
     ASSERT_TRUE(true);
+}
+
+TEST(when_all_waits_for_external_resumes)
+{
+    // Both children complete from independent external threads.  This covers
+    // the handoff from when_all's startup phase to a genuinely suspended
+    // parent, where resuming inline during await_suspend would be unsafe.
+    auto [first, second] = sync_wait(when_all(completes_after_external_resume(),
+        completes_after_external_resume()));
+    ASSERT_EQ(first, 7);
+    ASSERT_EQ(second, 7);
 }
 
 // =============================================================================

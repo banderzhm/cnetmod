@@ -194,7 +194,18 @@ auto make_status(status_code code, std::string message, metadata trailers)
 
 auto compression_name(compression_algorithm algorithm) -> std::string_view
 {
-    return algorithm == compression_algorithm::gzip ? "gzip" : "identity";
+    switch (algorithm)
+    {
+    case compression_algorithm::gzip:
+        return "gzip";
+    case compression_algorithm::zstd:
+        return "zstd";
+    case compression_algorithm::brotli:
+        return "br";
+    case compression_algorithm::identity:
+        return "identity";
+    }
+    return "identity";
 }
 
 auto compression_from_header(std::string_view text)
@@ -205,6 +216,10 @@ auto compression_from_header(std::string_view text)
         return compression_algorithm::identity;
     if (value == "gzip")
         return compression_algorithm::gzip;
+    if (value == "zstd")
+        return compression_algorithm::zstd;
+    if (value == "br" || value == "brotli")
+        return compression_algorithm::brotli;
     return std::nullopt;
 }
 
@@ -230,6 +245,34 @@ auto accepts_compression(std::string_view header,
         if (comma == std::string_view::npos)
             break;
         start = comma + 1;
+    }
+    return false;
+}
+
+auto compression_supported(compression_algorithm algorithm) noexcept -> bool
+{
+    switch (algorithm)
+    {
+    case compression_algorithm::identity:
+        return true;
+    case compression_algorithm::gzip:
+#ifdef CNETMOD_HAS_ZLIB
+        return true;
+#else
+        return false;
+#endif
+    case compression_algorithm::zstd:
+#ifdef CNETMOD_HAS_ZSTD
+        return true;
+#else
+        return false;
+#endif
+    case compression_algorithm::brotli:
+#ifdef CNETMOD_HAS_BROTLI
+        return true;
+#else
+        return false;
+#endif
     }
     return false;
 }
@@ -373,6 +416,32 @@ auto get_binary_metadata(const metadata& md, std::string_view key)
         if (auto decoded = base64_decode(it->second))
             out.push_back(std::move(*decoded));
     return out;
+}
+
+auto inject_trace_context(metadata& md,
+    const http::tracing::trace_context& parent) -> http::tracing::trace_context
+{
+    auto context = http::tracing::child_context(parent);
+    const auto traceparent = http::tracing::format_traceparent(context);
+    // Trace Context fields are single-valued. Retrying an RPC must replace a
+    // previous attempt's child span rather than emit multiple traceparents.
+    std::erase_if(md,
+        [](const auto& entry)
+        {
+            return entry.first == "traceparent" || entry.first == "tracestate";
+        });
+    if (!traceparent.empty())
+        md.emplace("traceparent", traceparent);
+    if (!context.tracestate.empty())
+        md.emplace("tracestate", context.tracestate);
+    return context;
+}
+
+auto extract_trace_context(const metadata& md)
+    -> std::optional<http::tracing::trace_context>
+{
+    return http::tracing::parse_traceparent(metadata_value(md, "traceparent"),
+        metadata_value(md, "tracestate"));
 }
 
 } // namespace cnetmod::grpc

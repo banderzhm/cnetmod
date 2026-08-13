@@ -54,7 +54,7 @@ auto uniform_sticky_partitioner::select(std::string_view topic,
 {
     if (p.empty())
         return std::unexpected(make_error(error_code::unknown_topic_or_partition));
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard l{latch_};
     auto it = sticky_.find(topic);
     if (it != sticky_.end() && std::ranges::find(p, it->second) != p.end())
         return it->second;
@@ -64,7 +64,7 @@ auto uniform_sticky_partitioner::select(std::string_view topic,
 
 void uniform_sticky_partitioner::rotate(std::string_view t)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard l{latch_};
     sticky_.erase(std::string(t));
 }
 } // namespace cnetmod::kafka

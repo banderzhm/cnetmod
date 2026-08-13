@@ -735,4 +735,88 @@ TEST(chacha20_header_protection_uses_little_endian_counter)
     ASSERT_EQ(std::to_integer<unsigned>(packet[4]), 0x03U);
 }
 
+// draft-ietf-quic-multipath-12 makes the Path ID part of the 1-RTT AEAD
+// nonce.  Path zero remains the RFC 9001 wire format so single-path peers and
+// existing captures are unaffected.
+TEST(multipath_payload_nonce_scopes_packet_numbers_by_path_id)
+{
+    const std::array<std::byte, 8> cid_bytes{
+        std::byte{0x83}, std::byte{0x94}, std::byte{0xc8}, std::byte{0xf0},
+        std::byte{0x3e}, std::byte{0x51}, std::byte{0x57}, std::byte{0x08}};
+    const cnetmod::quic::connection_id cid{cid_bytes};
+    const auto initial_keys = cnetmod::quic::derive_initial_keys(
+        cnetmod::quic::quic_version::v1, cid);
+    ASSERT_TRUE(initial_keys.has_value());
+
+    const std::array<std::byte, 4> header{
+        std::byte{0x43}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}};
+    const std::array<std::byte, 5> payload{
+        std::byte{0x68}, std::byte{0x65}, std::byte{0x6c}, std::byte{0x6c},
+        std::byte{0x6f}};
+    constexpr std::uint64_t packet_number = 17;
+
+    const auto legacy = cnetmod::quic::seal_payload(
+        initial_keys->client, payload, header, packet_number);
+    const auto path_zero = cnetmod::quic::seal_payload(
+        initial_keys->client, payload, header, packet_number, 0);
+    const auto path_one = cnetmod::quic::seal_payload(
+        initial_keys->client, payload, header, packet_number, 1);
+    const auto path_two = cnetmod::quic::seal_payload(
+        initial_keys->client, payload, header, packet_number, 2);
+
+    ASSERT_TRUE(legacy.has_value());
+    ASSERT_TRUE(path_zero.has_value());
+    ASSERT_TRUE(path_one.has_value());
+    ASSERT_TRUE(path_two.has_value());
+    ASSERT_TRUE(*legacy == *path_zero);
+    ASSERT_TRUE(*path_one != *path_two);
+
+    const auto opened = cnetmod::quic::open_payload(
+        initial_keys->client, *path_one, header, packet_number, 1);
+    const auto wrong_path = cnetmod::quic::open_payload(
+        initial_keys->client, *path_one, header, packet_number, 2);
+    ASSERT_TRUE(opened.has_value());
+    ASSERT_TRUE(*opened == std::vector<std::byte>(payload.begin(), payload.end()));
+    ASSERT_FALSE(wrong_path.has_value());
+}
+
+TEST(quic_payload_seals_directly_into_packet_storage)
+{
+    const std::array<std::byte, 8> cid_bytes{
+        std::byte{0x83}, std::byte{0x94}, std::byte{0xc8}, std::byte{0xf0},
+        std::byte{0x3e}, std::byte{0x51}, std::byte{0x57}, std::byte{0x08}};
+    const cnetmod::quic::connection_id cid{cid_bytes};
+    const auto initial_keys = cnetmod::quic::derive_initial_keys(
+        cnetmod::quic::quic_version::v1, cid);
+    ASSERT_TRUE(initial_keys.has_value());
+
+    const std::array<std::byte, 7> header{
+        std::byte{0x43}, std::byte{0x01}, std::byte{0x02}, std::byte{0x03},
+        std::byte{0x04}, std::byte{0x05}, std::byte{0x06}};
+    const std::array<std::byte, 5> payload{
+        std::byte{0x68}, std::byte{0x65}, std::byte{0x6c}, std::byte{0x6c},
+        std::byte{0x6f}};
+    constexpr std::uint64_t packet_number = 29;
+
+    const auto separate = cnetmod::quic::seal_payload(
+        initial_keys->client, payload, header, packet_number);
+    ASSERT_TRUE(separate.has_value());
+
+    std::vector<std::byte> packet{header.begin(), header.end()};
+    const auto appended = cnetmod::quic::append_sealed_payload(
+        initial_keys->client, payload, packet, packet_number);
+    ASSERT_TRUE(appended.has_value());
+    ASSERT_TRUE(packet.size() == header.size() + separate->size());
+    ASSERT_TRUE(std::equal(packet.begin(), packet.begin() + header.size(),
+        header.begin(), header.end()));
+    ASSERT_TRUE(std::equal(packet.begin() + header.size(), packet.end(),
+        separate->begin(), separate->end()));
+
+    const auto opened = cnetmod::quic::open_payload(initial_keys->client,
+        std::span<const std::byte>{packet}.subspan(header.size()), header,
+        packet_number);
+    ASSERT_TRUE(opened.has_value());
+    ASSERT_TRUE(*opened == std::vector<std::byte>(payload.begin(), payload.end()));
+}
+
 RUN_TESTS();

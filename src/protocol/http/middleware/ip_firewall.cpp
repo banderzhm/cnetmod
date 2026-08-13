@@ -22,7 +22,7 @@ auto ip_firewall::check_middleware() -> http::middleware_fn
         auto ip = http::resolve_client_ip(ctx);
         if (co_await is_banned(ip))
         {
-            std::println(std::cerr, "[firewall] blocked banned IP: {}", ip);
+            logger::warn{"firewall blocked banned IP: {}", ip};
             ctx.resp().set_header("Connection", "close");
             ctx.json(opts_.banned_status,
                 std::format(R"({{"error":"ip banned","ip":"{}"}})", ip));
@@ -75,8 +75,7 @@ auto ip_firewall::ban(std::string_view ip, std::chrono::seconds duration)
     -> task<void>
 {
     co_await store_.set(ban_key(std::string(ip)), "1", duration);
-    std::println(std::cerr, "[firewall] banned IP: {} for {}s", ip,
-        duration.count());
+    logger::info{"firewall banned IP: {} for {}s", ip, duration.count()};
 }
 
 auto ip_firewall::unban(std::string_view ip) -> task<void>
@@ -84,7 +83,7 @@ auto ip_firewall::unban(std::string_view ip) -> task<void>
     const auto value = std::string(ip);
     co_await store_.del(ban_key(value));
     co_await store_.del(violation_key(value));
-    std::println(std::cerr, "[firewall] unbanned IP: {}", ip);
+    logger::info{"firewall unbanned IP: {}", ip};
 }
 
 auto ip_firewall::is_banned(std::string_view ip) -> task<bool>

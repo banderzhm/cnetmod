@@ -149,7 +149,6 @@ private:
     auto try_get_idle_locked() -> conn_node*;
     void notify_waiters_with_idle_locked();
     auto remove_waiter(pool_waiter* target) -> bool;
-    auto try_get_idle_lockfree() -> conn_node*;
     void return_connection(conn_node& node, bool needs_reset);
 };
 

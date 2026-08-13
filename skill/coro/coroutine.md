@@ -84,6 +84,8 @@ export auto when_all(task<void>, task<void>) -> task<void>;
 ```
 
 所有子任务**真正并发**启动（非顺序 await），全部完成后恢复调用者。
+即使子任务在启动阶段同步完成、或从不同工作线程恢复，`when_all` 也会先完成
+启动/挂起交接再恢复父协程；不会在 `await_suspend()` 尚未返回时销毁组合器状态。
 
 ```cpp
 auto [a, b] = co_await when_all(fetch_a(), fetch_b());

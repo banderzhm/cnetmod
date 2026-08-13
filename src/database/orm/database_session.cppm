@@ -4,6 +4,7 @@ import std;
 import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
 import cnetmod.coro.task;
+import cnetmod.protocol.http.middleware.tracing;
 
 export namespace cnetmod::orm {
 
@@ -43,6 +44,51 @@ public:
     auto execute(parameterized_query query) -> task<query_result>
     {
         co_return co_await client_->execute(std::move(query));
+    }
+
+    /// Database protocols do not carry W3C headers, so tracing is explicit at
+    /// this boundary: it derives a child context and hands the completed
+    /// client span to the same exporter used by the enclosing HTTP request.
+    auto query(std::string_view sql, const http::tracing::trace_context& parent,
+        http::tracing::span_exporter on_end) -> task<query_result>
+    {
+        auto span = http::tracing::start_client_span(parent, "SQL QUERY",
+            {{"db.system", "sql"}, {"db.operation", "query"},
+                {"db.statement", std::string(sql)}});
+        auto result = co_await client_->query(sql);
+        if (on_end)
+        {
+            try
+            {
+                on_end(http::tracing::finish_client_span(std::move(span), result.is_err()));
+            }
+            catch (...)
+            {
+                // Observability must not alter database semantics.
+            }
+        }
+        co_return result;
+    }
+
+    auto execute(std::string_view sql, const http::tracing::trace_context& parent,
+        http::tracing::span_exporter on_end) -> task<query_result>
+    {
+        auto span = http::tracing::start_client_span(parent, "SQL EXECUTE",
+            {{"db.system", "sql"}, {"db.operation", "execute"},
+                {"db.statement", std::string(sql)}});
+        auto result = co_await client_->execute(sql);
+        if (on_end)
+        {
+            try
+            {
+                on_end(http::tracing::finish_client_span(std::move(span), result.is_err()));
+            }
+            catch (...)
+            {
+                // Observability must not alter database semantics.
+            }
+        }
+        co_return result;
     }
 
     template <typename Function>

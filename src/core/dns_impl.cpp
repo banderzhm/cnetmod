@@ -34,6 +34,7 @@ import cnetmod.core.error;
 import cnetmod.core.socket;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod {
 
@@ -71,7 +72,9 @@ namespace detail {
 
     struct resolver_state
     {
-        std::mutex mutex;
+        // Cache and address-health updates have compound invariants. Keep
+        // their short synchronous transactions in the project atomic latch.
+        mutable concurrent_containers::atomic_rw_latch state_latch;
         bool cache_enabled = true;
         std::chrono::milliseconds ttl{60000};
         std::unordered_map<std::string, dns_cache_entry> cache;
@@ -111,7 +114,7 @@ namespace detail {
 
         std::unordered_map<std::string, address_health> health;
         {
-            std::scoped_lock lock(state.mutex);
+            concurrent_containers::shared_latch_guard lock{state.state_latch};
             health = state.health;
         }
 
@@ -225,7 +228,7 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
 export void configure_dns_cache(dns_cache_config cfg)
 {
     auto& state = detail::resolver_state_instance();
-    std::scoped_lock lock(state.mutex);
+    concurrent_containers::exclusive_latch_guard lock{state.state_latch};
     state.cache_enabled = cfg.enabled;
     state.ttl = cfg.ttl;
     if (!state.cache_enabled)
@@ -237,7 +240,7 @@ export void configure_dns_cache(dns_cache_config cfg)
 export void clear_dns_cache()
 {
     auto& state = detail::resolver_state_instance();
-    std::scoped_lock lock(state.mutex);
+    concurrent_containers::exclusive_latch_guard lock{state.state_latch};
     state.cache.clear();
 }
 
@@ -245,7 +248,7 @@ export auto get_dns_cache_metrics() -> dns_cache_metrics
 {
     auto& state = detail::resolver_state_instance();
     const auto now = std::chrono::steady_clock::now();
-    std::scoped_lock lock(state.mutex);
+    concurrent_containers::shared_latch_guard lock{state.state_latch};
     std::size_t downgraded = 0;
     for (const auto& [_, health] : state.health)
     {
@@ -269,7 +272,7 @@ export auto get_dns_cache_metrics() -> dns_cache_metrics
 export void report_address_connect_success(const ip_address& addr)
 {
     auto& state = detail::resolver_state_instance();
-    std::scoped_lock lock(state.mutex);
+    concurrent_containers::exclusive_latch_guard lock{state.state_latch};
     auto& health = state.health[detail::address_key(addr)];
     ++health.successes;
     health.failures = 0;
@@ -286,7 +289,7 @@ export void report_address_connect_failure(const ip_address& addr,
 {
     auto& state = detail::resolver_state_instance();
     const auto now = std::chrono::steady_clock::now();
-    std::scoped_lock lock(state.mutex);
+    concurrent_containers::exclusive_latch_guard lock{state.state_latch};
     auto& health = state.health[detail::address_key(addr)];
     ++health.failures;
     ++state.connection_failures;
@@ -425,30 +428,37 @@ export auto async_resolve_addresses(io_context& ctx,
 
     const auto key = detail::cache_key(host, service);
     const auto now = std::chrono::steady_clock::now();
+    std::optional<std::vector<ip_address>> cached_addresses;
     {
         auto& state = detail::resolver_state_instance();
-        std::scoped_lock lock(state.mutex);
+        concurrent_containers::exclusive_latch_guard lock{state.state_latch};
         if (state.cache_enabled)
         {
             auto it = state.cache.find(key);
             if (it != state.cache.end() && it->second.expires_at > now)
             {
                 ++state.cache_hits;
-                co_return detail::apply_address_policy(it->second.addresses);
+                cached_addresses = it->second.addresses;
             }
-            if (it != state.cache.end())
+            else if (it != state.cache.end())
             {
                 state.cache.erase(it);
             }
         }
-        ++state.cache_misses;
+        if (!cached_addresses)
+            ++state.cache_misses;
     }
+    // Address ordering reads health through the same latch. Do it only after
+    // releasing the cache transaction; the previous implementation attempted
+    // to reacquire the same non-recursive lock on every cache hit.
+    if (cached_addresses)
+        co_return detail::apply_address_policy(std::move(*cached_addresses));
 
     auto resolved = co_await async_resolve(ctx, host, service);
     if (!resolved)
     {
         auto& state = detail::resolver_state_instance();
-        std::scoped_lock lock(state.mutex);
+        concurrent_containers::exclusive_latch_guard lock{state.state_latch};
         ++state.resolve_failures;
         co_return std::unexpected(resolved.error());
     }
@@ -476,7 +486,7 @@ export auto async_resolve_addresses(io_context& ctx,
 
     {
         auto& state = detail::resolver_state_instance();
-        std::scoped_lock lock(state.mutex);
+        concurrent_containers::exclusive_latch_guard lock{state.state_latch};
         if (state.cache_enabled && state.ttl.count() > 0)
         {
             state.cache[key] = detail::dns_cache_entry{
@@ -494,7 +504,9 @@ namespace detail {
     struct connect_race_state
     {
         io_context* ctx = nullptr;
-        std::mutex mutex;
+        // Every race transition (winner, terminal failure and cancellation)
+        // publishes metrics and the waiter outcome atomically.
+        concurrent_containers::atomic_rw_latch state_latch;
         std::coroutine_handle<> waiter{};
         bool completed = false;
         std::size_t remaining = 0;
@@ -509,7 +521,7 @@ namespace detail {
     {
         std::coroutine_handle<> waiter;
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             waiter = std::exchange(state->waiter, {});
         }
         if (waiter)
@@ -527,7 +539,7 @@ namespace detail {
         std::vector<std::shared_ptr<cancel_token>> attempts;
         std::coroutine_handle<> waiter;
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             if (state->completed)
                 return;
             state->completed = true;
@@ -555,7 +567,7 @@ namespace detail {
         }
 
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             if (state->completed)
             {
                 co_return;
@@ -574,7 +586,7 @@ namespace detail {
             report_address_connect_failure(remote.address(), sock_r.error().message());
             bool done = false;
             {
-                std::scoped_lock lock(state->mutex);
+                concurrent_containers::exclusive_latch_guard lock{state->state_latch};
                 state->metrics.last_error = sock_r.error().message();
                 state->last_error_code = sock_r.error();
                 done = (--state->remaining == 0 && !state->completed);
@@ -592,7 +604,7 @@ namespace detail {
             report_address_connect_failure(remote.address(), opts_r.error().message());
             bool done = false;
             {
-                std::scoped_lock lock(state->mutex);
+                concurrent_containers::exclusive_latch_guard lock{state->state_latch};
                 state->metrics.last_error = opts_r.error().message();
                 state->last_error_code = opts_r.error();
                 done = (--state->remaining == 0 && !state->completed);
@@ -606,7 +618,7 @@ namespace detail {
 
         auto token = std::make_shared<cancel_token>();
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             state->tokens.push_back(token);
         }
 
@@ -619,8 +631,9 @@ namespace detail {
         {
             report_address_connect_success(remote.address());
             bool won = false;
+            std::vector<std::shared_ptr<cancel_token>> attempts_to_cancel;
             {
-                std::scoped_lock lock(state->mutex);
+                concurrent_containers::exclusive_latch_guard lock{state->state_latch};
                 if (!state->completed)
                 {
                     state->completed = true;
@@ -631,13 +644,14 @@ namespace detail {
                         .remote = remote,
                         .metrics = state->metrics,
                     });
-                    for (auto& other : state->tokens)
-                    {
-                        other->cancel();
-                    }
+                    attempts_to_cancel = state->tokens;
                     won = true;
                 }
             }
+            // A token callback can synchronously re-enter cancel_connect_race.
+            // Cancel only after dropping the latch to avoid self-deadlock.
+            for (auto& other : attempts_to_cancel)
+                other->cancel();
             if (won)
                 resume_connect_waiter(std::move(state));
             co_return;
@@ -646,7 +660,7 @@ namespace detail {
         report_address_connect_failure(remote.address(), cr.error().message());
         bool done = false;
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             state->metrics.last_error = cr.error().message();
             state->last_error_code = cr.error();
             done = (--state->remaining == 0 && !state->completed);
@@ -663,7 +677,7 @@ namespace detail {
 
         auto await_ready() const noexcept -> bool
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::shared_latch_guard lock{state->state_latch};
             return state->completed;
         }
 
@@ -671,7 +685,7 @@ namespace detail {
         {
             bool resume_now = false;
             {
-                std::scoped_lock lock(state->mutex);
+                concurrent_containers::exclusive_latch_guard lock{state->state_latch};
                 if (state->completed)
                 {
                     resume_now = true;
@@ -689,7 +703,7 @@ namespace detail {
 
         auto await_resume() -> std::expected<connect_result, std::error_code>
         {
-            std::scoped_lock lock(state->mutex);
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             if (state->winner)
             {
                 return std::move(*state->winner);
@@ -726,11 +740,7 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (!resolved || resolved->empty())
-    auto resolved = co_await async_resolve_addresses(ctx, host, std::to_string(port));
-    if (!resolved || resolved->empty())
-    {
         co_return std::unexpected(make_error_code(std::errc::host_unreachable));
-    }
 
     auto ordered = detail::happy_order(*resolved);
     auto state = std::make_shared<detail::connect_race_state>();

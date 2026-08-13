@@ -54,6 +54,13 @@ all exposed protocol endpoints return the common response before a timed run.
 `run_benchmarks.sh` writes raw oha JSON, logs, and `environment.txt`.
 `summarize.py` generates `summary.csv` and `summary.md` after the benchmark.
 
+On Linux, the runner automatically preloads an installed `libmimalloc.so` for
+the cnetmod server. This makes allocation interposition process-wide, including
+BoringSSL and other static third-party code. Set
+`CNETMOD_BENCH_CNETMOD_SERVER_PRELOAD=/path/to/libmimalloc.so` to choose a
+specific build, or `CNETMOD_BENCH_DISABLE_MIMALLOC_PRELOAD=1` for an explicit
+system-allocator comparison.
+
 ## Fair comparison rules
 
 Compare rows only within the same protocol table. HTTP/1.1 uses 256 connections;

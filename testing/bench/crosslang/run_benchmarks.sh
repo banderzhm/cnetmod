@@ -18,6 +18,18 @@ cnetmod_server_preload=${CNETMOD_BENCH_CNETMOD_SERVER_PRELOAD:-}
 cnetmod_iouring_coop=${CNETMOD_BENCH_IOURING_COOP_TASKRUN:-1}
 cnetmod_affinity=${CNETMOD_BENCH_CNETMOD_AFFINITY:-0}
 cnetmod_minimal_headers=${CNETMOD_BENCH_CNETMOD_MINIMAL_HEADERS:-1}
+
+# cnetmod links mimalloc when it is available, but ELF symbol-version lookup
+# still lets statically linked third-party code resolve malloc/free in libc.
+# Preloading makes the allocator process-wide, which is the configuration a
+# production Linux service needs and prevents benchmark results from silently
+# measuring two allocators.  An explicit path wins; callers can opt out for
+# allocator A/B tests with CNETMOD_BENCH_DISABLE_MIMALLOC_PRELOAD=1.
+if [[ -z ${cnetmod_server_preload} && ${CNETMOD_BENCH_DISABLE_MIMALLOC_PRELOAD:-0} != 1 &&
+      $(uname -s) == Linux ]]; then
+    cnetmod_server_preload=$(ldconfig -p 2>/dev/null |
+        awk '/libmimalloc\.so([[:space:]]|\.|$)/ { print $NF; exit }')
+fi
 result_dir=${CNETMOD_BENCH_RESULT_DIR:-"${repo}/testing/bench/results/crosslang/2026-08-04-wsl"}
 selected=${CNETMOD_BENCH_SCENARIOS:-all}
 java_bin=${CNETMOD_JAVA:-java}

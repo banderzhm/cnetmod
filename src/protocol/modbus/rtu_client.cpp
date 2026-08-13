@@ -220,7 +220,7 @@ private:
     rtu_config config_;
 
     // Calculate response timeout based on request size and baudrate
-    auto calculate_response_timeout(const modbus_request& request) const
+    auto calculate_response_timeout(const modbus_request&) const
         -> std::chrono::steady_clock::duration
     {
         // Estimate: request size + response size + processing time

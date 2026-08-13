@@ -5,11 +5,13 @@ import cnetmod.core.net_init;
 import cnetmod.io.io_context;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 
 namespace cn = cnetmod;
 
-auto run(cn::io_context& context, std::uint16_t port, bool verify_body, int& exit_code) -> cn::task<void> {
+auto run(cn::io_context& context, std::uint16_t port, bool verify_body, int& exit_code) -> cn::task<void>
+{
     cn::http::client_options options;
     options.version_pref = cn::http::http_version_preference::http2_only;
     options.keep_alive = true;
@@ -21,7 +23,8 @@ auto run(cn::io_context& context, std::uint16_t port, bool verify_body, int& exi
     auto first = co_await client.send(cn::http::http_method::GET,
         std::format("http://127.0.0.1:{}/hello", port));
     if (!first || first->status_code() != 200 || first->version() != cn::http::http_version::http_2 ||
-        (verify_body && first->body() != "Hello, World!")) {
+        (verify_body && first->body() != "Hello, World!"))
+    {
         exit_code = 1;
         context.stop();
         co_return;
@@ -31,30 +34,95 @@ auto run(cn::io_context& context, std::uint16_t port, bool verify_body, int& exi
     if (!second || second->status_code() != 200 || second->version() != cn::http::http_version::http_2 ||
         (verify_body && second->body() != "received: payload"))
         exit_code = 1;
+    cn::http::request streaming{
+        cn::http::http_method::POST,
+        std::format("http://127.0.0.1:{}/native-client-post", port)};
+    auto part_index = std::make_shared<std::size_t>(0);
+    streaming.set_body_stream(cn::http::request_body_source{
+        [part_index](cn::cancel_token& token)
+            -> cn::task<std::optional<cn::http::request_body_chunk>>
+        {
+            if (token.is_cancelled() || *part_index >= 3)
+                co_return std::nullopt;
+            const std::array<std::string_view, 3> parts{
+                "stream-", "upload-", "body"};
+            const auto part = parts[(*part_index)++];
+            cn::http::request_body_chunk chunk;
+            chunk.insert(chunk.end(),
+                reinterpret_cast<const std::byte*>(part.data()),
+                reinterpret_cast<const std::byte*>(part.data()) + part.size());
+            co_return chunk;
+        }});
+    auto streamed = co_await client.send(streaming);
+    if (!streamed || streamed->status_code() != 200 ||
+        streamed->version() != cn::http::http_version::http_2 ||
+        (verify_body && streamed->body() != "received: stream-upload-body"))
+        exit_code = 1;
     std::vector<cn::http::request> batch;
     batch.reserve(16);
-    for (unsigned index = 0; index < 16; ++index) {
+    for (unsigned index = 0; index < 16; ++index)
+    {
         batch.emplace_back(cn::http::http_method::GET, "/hello");
     }
     const auto responses = co_await client.send_batch(batch);
-    if (responses.size() != batch.size()) {
+    if (responses.size() != batch.size())
+    {
         exit_code = 1;
     }
-    for (const auto& response : responses) {
+    for (const auto& response : responses)
+    {
         if (!response || response->status_code() != 200 ||
-            (verify_body && response->body() != "Hello, World!")) {
+            (verify_body && response->body() != "Hello, World!"))
+        {
             exit_code = 1;
         }
+    }
+
+    // Exercise the same producer over HTTP/1.1 chunked framing.  The server
+    // accepts both protocols, so this remains a single-process regression.
+    {
+        cn::http::client_options http1_options;
+        http1_options.version_pref = cn::http::http_version_preference::http1_only;
+        http1_options.keep_alive = false;
+        http1_options.enable_cookies = false;
+        http1_options.follow_redirects = false;
+        auto http1 = cn::http::client(context, http1_options);
+        cn::http::request http1_streaming{
+            cn::http::http_method::POST,
+            std::format("http://127.0.0.1:{}/native-client-post", port)};
+        auto http1_index = std::make_shared<std::size_t>(0);
+        http1_streaming.set_body_stream(cn::http::request_body_source{
+            [http1_index](cn::cancel_token& token)
+                -> cn::task<std::optional<cn::http::request_body_chunk>>
+            {
+                if (token.is_cancelled() || *http1_index >= 3)
+                    co_return std::nullopt;
+                const std::array<std::string_view, 3> parts{
+                    "h1-", "stream-", "body"};
+                const auto part = parts[(*http1_index)++];
+                cn::http::request_body_chunk chunk;
+                chunk.insert(chunk.end(),
+                    reinterpret_cast<const std::byte*>(part.data()),
+                    reinterpret_cast<const std::byte*>(part.data()) + part.size());
+                co_return chunk;
+            }});
+        auto http1_result = co_await http1.send(http1_streaming);
+        if (!http1_result || http1_result->status_code() != 200 ||
+            (verify_body && http1_result->body() != "received: h1-stream-body"))
+            exit_code = 1;
     }
     context.stop();
 }
 
-int main(int argc, char** argv) {
-    if (argc != 2 && argc != 3) return 2;
+int main(int argc, char** argv)
+{
+    if (argc != 2 && argc != 3)
+        return 2;
     std::uint16_t port{};
     const auto text = std::string_view(argv[1]);
     const auto [end, error] = std::from_chars(text.data(), text.data() + text.size(), port);
-    if (error != std::errc{} || end != text.data() + text.size() || port == 0) return 2;
+    if (error != std::errc{} || end != text.data() + text.size() || port == 0)
+        return 2;
     cn::net_init network;
     auto context = cn::make_io_context();
     int exit_code{};

@@ -50,12 +50,16 @@ auto change_stream::read_batch(std::string_view field, const bson_document& resp
     if (auto token = cursor->find("postBatchResumeToken"); token && token->as_document())
         resume_token_ = *token->as_document();
     if (auto batch = cursor->find(field); batch && batch->as_array())
+    {
         for (const auto& event : *batch->as_array())
+        {
             if (auto document = event.as_document())
                 buffered_events_.push_back(*document);
             else
                 return std::unexpected(make_error(error_code::protocol_error,
                     "MongoDB change stream batch contains a non-document event"));
+        }
+    }
     return {};
 }
 

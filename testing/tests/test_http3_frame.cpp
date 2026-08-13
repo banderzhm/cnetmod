@@ -2,6 +2,8 @@
 
 import cnetmod.protocol.http.v3.frame;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.semantics;
+import cnetmod.protocol.quic;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.core.buffer;
@@ -31,15 +33,15 @@ TEST(http3_async_server_handler_contract)
         [](cnetmod::http::v3::http3_request& request,
             cnetmod::http::v3::http3_response& response,
             cnetmod::cancel_token& token)
-            -> cnetmod::task<std::expected<void, std::error_code>>
-        {
-            if (token.is_cancelled())
-                co_return std::unexpected(
-                    std::make_error_code(std::errc::operation_canceled));
-            response.status = cnetmod::http::status::ok;
-            response.body = request.path;
-            co_return {};
-        };
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        if (token.is_cancelled())
+            co_return std::unexpected(
+                std::make_error_code(std::errc::operation_canceled));
+        response.status = cnetmod::http::status::ok;
+        response.body = request.path;
+        co_return {};
+    };
 
     cnetmod::http::v3::http3_request request;
     request.path = "/dynamic";
@@ -49,6 +51,24 @@ TEST(http3_async_server_handler_contract)
     ASSERT_TRUE(handled.has_value());
     ASSERT_EQ(response.status, cnetmod::http::status::ok);
     ASSERT_EQ(response.body, "/dynamic");
+}
+
+TEST(webtransport_async_server_handler_contract)
+{
+    cnetmod::http::v3::async_webtransport_handler handler =
+        [](cnetmod::http::v3::http3_request& request,
+            cnetmod::http::v3::webtransport_session& session,
+            cnetmod::cancel_token& token)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        if (token.is_cancelled() || !session.is_open() ||
+            request.protocol != "webtransport")
+            co_return std::unexpected(
+                std::make_error_code(std::errc::operation_canceled));
+        co_return {};
+    };
+
+    ASSERT_TRUE(static_cast<bool>(handler));
 }
 
 TEST(http3_headers_frame_with_qpack)
@@ -308,6 +328,179 @@ TEST(http3_settings_reject_duplicate_identifier)
     const auto decoded = cnetmod::http::v3::decode_http3_frame(frame.view());
     ASSERT_FALSE(decoded.has_value());
     ASSERT_EQ(decoded.error(), std::make_error_code(std::errc::protocol_error));
+}
+
+TEST(http3_priority_update_frame_roundtrip)
+{
+    using namespace cnetmod::http::v3;
+
+    priority_update_frame frame{.prioritized_element_id = 12U,
+        .priority_field_value = "u=1, i"};
+    auto encoded = encode_http3_frame(frame);
+    ASSERT_TRUE(!encoded.empty());
+
+    auto decoded = decode_http3_frame(encoded.view());
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::holds_alternative<priority_update_frame>(decoded->first));
+    const auto& priority = std::get<priority_update_frame>(decoded->first);
+    ASSERT_EQ(priority.prioritized_element_id, 12U);
+    ASSERT_EQ(priority.priority_field_value, "u=1, i");
+
+    const auto parsed = parse_http_priority(priority.priority_field_value);
+    ASSERT_TRUE(parsed.has_value());
+    ASSERT_EQ(parsed->urgency, 1U);
+    ASSERT_TRUE(parsed->incremental);
+    ASSERT_EQ(format_http_priority(*parsed), "u=1, i");
+}
+
+TEST(http3_priority_field_rejects_invalid_urgency)
+{
+    using namespace cnetmod::http::v3;
+
+    ASSERT_FALSE(parse_http_priority("u=8").has_value());
+    ASSERT_FALSE(parse_http_priority("u=1, u=2").has_value());
+    ASSERT_FALSE(parse_http_priority("i, i").has_value());
+}
+
+TEST(http3_request_priority_contract)
+{
+    using namespace cnetmod::http::v3;
+
+    http3_request request;
+    ASSERT_FALSE(request.priority.has_value());
+    ASSERT_FALSE(request.request_stream.has_value());
+
+    request.priority = http_priority{.urgency = 0U, .incremental = true};
+    ASSERT_EQ(request.priority->urgency, 0U);
+    ASSERT_TRUE(request.priority->incremental);
+
+    using server_priority_api = cnetmod::task<std::expected<void, std::error_code>> (
+        http3_server_session::*)(cnetmod::quic::stream_id, http_priority);
+    using client_priority_api = cnetmod::task<std::expected<void, std::error_code>> (
+        http3_client_session::*)(cnetmod::quic::stream_id, http_priority);
+    static_assert(std::is_same_v<decltype(&http3_server_session::update_priority), server_priority_api>);
+    static_assert(std::is_same_v<decltype(&http3_client_session::update_priority), client_priority_api>);
+}
+
+TEST(http3_settings_h3_datagram_roundtrip)
+{
+    cnetmod::http::v3::settings_frame frame;
+    frame.settings[static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::h3_datagram)] = std::uint64_t{1};
+
+    const auto encoded = cnetmod::http::v3::encode_http3_frame(frame);
+    const auto decoded = cnetmod::http::v3::decode_http3_frame(encoded.view());
+    ASSERT_TRUE(decoded.has_value());
+    const auto& settings = std::get<cnetmod::http::v3::settings_frame>(decoded->first);
+    const auto found = settings.settings.find(static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::h3_datagram));
+    ASSERT_TRUE(found != settings.settings.end());
+    ASSERT_EQ(std::get<std::uint64_t>(found->second), 1U);
+}
+
+TEST(http3_settings_extended_connect_roundtrip)
+{
+    cnetmod::http::v3::settings_frame frame;
+    frame.settings[static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::enable_connect_protocol)] = std::uint64_t{1};
+
+    const auto encoded = cnetmod::http::v3::encode_http3_frame(frame);
+    const auto decoded = cnetmod::http::v3::decode_http3_frame(encoded.view());
+    ASSERT_TRUE(decoded.has_value());
+    const auto& settings = std::get<cnetmod::http::v3::settings_frame>(decoded->first);
+    const auto found = settings.settings.find(static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::enable_connect_protocol));
+    ASSERT_TRUE(found != settings.settings.end());
+    ASSERT_EQ(std::get<std::uint64_t>(found->second), 1U);
+}
+
+TEST(http3_settings_enable_webtransport_roundtrip)
+{
+    cnetmod::http::v3::settings_frame frame;
+    frame.settings[static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::enable_webtransport)] = std::uint64_t{1};
+
+    const auto encoded = cnetmod::http::v3::encode_http3_frame(frame);
+    const auto decoded = cnetmod::http::v3::decode_http3_frame(encoded.view());
+    ASSERT_TRUE(decoded.has_value());
+    const auto& settings = std::get<cnetmod::http::v3::settings_frame>(decoded->first);
+    const auto found = settings.settings.find(static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::enable_webtransport));
+    ASSERT_TRUE(found != settings.settings.end());
+    ASSERT_EQ(std::get<std::uint64_t>(found->second), 1U);
+}
+
+TEST(http3_settings_webtransport_max_sessions_roundtrip)
+{
+    cnetmod::http::v3::settings_frame frame;
+    frame.settings[static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::webtransport_max_sessions)] = std::uint64_t{1};
+
+    const auto encoded = cnetmod::http::v3::encode_http3_frame(frame);
+    const auto decoded = cnetmod::http::v3::decode_http3_frame(encoded.view());
+    ASSERT_TRUE(decoded.has_value());
+    const auto& settings = std::get<cnetmod::http::v3::settings_frame>(decoded->first);
+    const auto found = settings.settings.find(static_cast<std::uint64_t>(
+        cnetmod::http::v3::http3_setting_key::webtransport_max_sessions));
+    ASSERT_TRUE(found != settings.settings.end());
+    ASSERT_EQ(std::get<std::uint64_t>(found->second), 1U);
+}
+
+TEST(http3_datagram_context_id_roundtrip)
+{
+    const cnetmod::byte_buffer payload{std::byte{0xaa}, std::byte{0xbb}};
+    const auto encoded = cnetmod::http::v3::encode_http_datagram(
+        {0x1234U, payload.view()});
+    const auto decoded = cnetmod::http::v3::decode_http_datagram(encoded.view());
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->context_id, 0x1234U);
+    ASSERT_EQ(decoded->payload.size(), 2U);
+    ASSERT_EQ(std::to_integer<unsigned>(decoded->payload[1]), 0xbbU);
+}
+
+TEST(webtransport_extended_connect_request_shape)
+{
+    const auto request = cnetmod::http::v3::make_webtransport_connect_request(
+        "example.test", "/chat");
+    ASSERT_TRUE(request.method == cnetmod::http::http_method::CONNECT);
+    ASSERT_EQ(request.host, "example.test");
+    ASSERT_EQ(request.path, "/chat");
+    ASSERT_EQ(request.protocol, "webtransport");
+    ASSERT_EQ(request.headers.at("sec-webtransport-http3-draft02"), "1");
+}
+
+TEST(webtransport_stream_prefaces_roundtrip_and_validate_session_id)
+{
+    constexpr std::uint64_t session_id = 12U;
+    const auto bidi = cnetmod::http::v3::encode_webtransport_bidirectional_stream_preface(session_id);
+    ASSERT_TRUE(bidi.has_value());
+    const auto decoded_bidi = cnetmod::http::v3::decode_webtransport_stream_preface(
+        {bidi->data(), bidi->size()}, false);
+    ASSERT_TRUE(decoded_bidi.has_value());
+    ASSERT_EQ(decoded_bidi->first, session_id);
+    ASSERT_EQ(decoded_bidi->second, bidi->size());
+
+    // aioquic emits its deployed draft marker (0x41) before the RFC 9220
+    // session ID. Accept it on input without changing cnetmod's RFC encoder.
+    const cnetmod::byte_buffer aioquic_bidi = {
+        std::byte{0x40}, std::byte{0x41},
+        std::byte{static_cast<unsigned char>(session_id)}};
+    const auto decoded_aioquic_bidi = cnetmod::http::v3::decode_webtransport_stream_preface(
+        aioquic_bidi.view(), false);
+    ASSERT_TRUE(decoded_aioquic_bidi.has_value());
+    ASSERT_EQ(decoded_aioquic_bidi->first, session_id);
+    ASSERT_EQ(decoded_aioquic_bidi->second, aioquic_bidi.size());
+
+    const auto uni = cnetmod::http::v3::encode_webtransport_unidirectional_stream_preface(session_id);
+    ASSERT_TRUE(uni.has_value());
+    const auto decoded_uni = cnetmod::http::v3::decode_webtransport_stream_preface(
+        {uni->data(), uni->size()}, true);
+    ASSERT_TRUE(decoded_uni.has_value());
+    ASSERT_EQ(decoded_uni->first, session_id);
+    ASSERT_EQ(decoded_uni->second, uni->size());
+
+    const auto invalid = cnetmod::http::v3::encode_webtransport_bidirectional_stream_preface(1U);
+    ASSERT_FALSE(invalid.has_value());
 }
 
 TEST(http3_frame_rejects_truncated_varint_length)

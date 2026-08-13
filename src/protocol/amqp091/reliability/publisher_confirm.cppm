@@ -2,6 +2,7 @@ module;
 #include <cnetmod/config.hpp>
 export module cnetmod.protocol.amqp091:publisher_confirm;
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :protocol_constants;
 
 export namespace cnetmod::amqp091 {
@@ -31,7 +32,10 @@ public:
     [[nodiscard]] auto pending() const noexcept -> std::size_t;
 
 private:
-    mutable std::mutex mutex_;
+    // Confirmation settlement mutates both the sequence set and observer
+    // registry.  Keep those mutations in one project-owned atomic latch so a
+    // multi-ack cannot race sequence allocation or observer pruning.
+    mutable concurrent_containers::atomic_rw_latch state_latch_;
     std::uint64_t next_ = 1;
     std::set<std::uint64_t> pending_;
     std::vector<std::weak_ptr<publisher_confirm_observer>> observers_;

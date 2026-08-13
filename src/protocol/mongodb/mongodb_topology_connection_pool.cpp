@@ -2,6 +2,7 @@ module cnetmod.protocol.mongodb;
 
 import std;
 import cnetmod.coro.timer;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :error;
 import :bson_document;
 import :connection;
@@ -22,7 +23,7 @@ topology_connection_pool::topology_connection_pool(io_context& context,
 auto topology_connection_pool::pool_for(const server_address& address)
     -> connection_pool&
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{pools_latch_};
     auto found = pools_.find(address);
     if (found != pools_.end())
         return *found->second;
@@ -159,7 +160,7 @@ auto topology_connection_pool::topology() noexcept -> topology_monitor&
 
 auto topology_connection_pool::statistics() -> topology_connection_pool_statistics
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{pools_latch_};
     topology_connection_pool_statistics result;
     result.server_pool_count = pools_.size();
     for (const auto& [_, pool] : pools_)
@@ -174,7 +175,7 @@ auto topology_connection_pool::statistics() -> topology_connection_pool_statisti
 
 void topology_connection_pool::close() noexcept
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{pools_latch_};
     for (auto& [_, pool] : pools_)
         pool->close();
 }

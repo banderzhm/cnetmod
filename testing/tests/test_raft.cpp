@@ -21,11 +21,12 @@ static auto make_node(std::string id, std::vector<std::string> peers = {})
     return {store, raft_node{std::move(cfg), store}};
 }
 
-static auto reserve_loopback_endpoint() -> cnetmod::endpoint {
+static auto reserve_loopback_endpoint() -> cnetmod::endpoint
+{
     auto ctx = cnetmod::make_io_context();
     cnetmod::tcp::acceptor acc{*ctx};
     auto opened = acc.open(cnetmod::endpoint{cnetmod::ipv4_address::loopback(), 0},
-                           cnetmod::socket_options{.reuse_address = true});
+        cnetmod::socket_options{.reuse_address = true});
     if (!opened)
         throw std::runtime_error("failed to reserve loopback port");
     auto local = acc.native_socket().local_endpoint();
@@ -45,8 +46,8 @@ static auto touch_file_async(cnetmod::io_context& ctx, const std::filesystem::pa
 }
 
 static auto write_text_file_async(cnetmod::io_context& ctx,
-                                  const std::filesystem::path& path,
-                                  std::string_view text)
+    const std::filesystem::path& path,
+    std::string_view text)
     -> cnetmod::task<bool>
 {
     auto opened = co_await cnetmod::async_file_open(ctx, path,
@@ -55,11 +56,13 @@ static auto write_text_file_async(cnetmod::io_context& ctx,
         co_return false;
 
     std::size_t written = 0;
-    while (written < text.size()) {
+    while (written < text.size())
+    {
         auto n = co_await cnetmod::async_file_write(ctx, *opened,
             cnetmod::const_buffer{text.data() + written, text.size() - written},
             written);
-        if (!n || *n == 0) {
+        if (!n || *n == 0)
+        {
             (void)co_await cnetmod::async_file_close(ctx, *opened);
             co_return false;
         }
@@ -190,22 +193,26 @@ QevtCq73NgTVlXzdSYQ4wzMs86p7CO33q1ERxX0724UDF72i9w==
 )PEM";
 static constexpr std::string_view n1_fp = "31f3cd637305721516dfaceb7f2d1e635e50812de45811829a3738b99a497261";
 static constexpr std::string_view n2_fp = "2943f0976470c63e6ce1cf8efb4c6461e7d3bf2ee3caa293f9c79d39fa1aec55";
-}
+} // namespace raft_tls_test_material
 #endif
 
-class recording_machine final : public state_machine {
+class recording_machine final : public state_machine
+{
 public:
-    void on_apply(const log_entry& entry) override {
+    void on_apply(const log_entry& entry) override
+    {
         applied.push_back(entry.command);
     }
 
-    auto save_snapshot(const snapshot_writer& writer) -> std::expected<void, raft_error> override {
+    auto save_snapshot(const snapshot_writer& writer) -> std::expected<void, raft_error> override
+    {
         saved = writer.metadata;
         saved_uri = writer.uri;
         return {};
     }
 
-    auto load_snapshot(const snapshot_reader& reader) -> std::expected<void, raft_error> override {
+    auto load_snapshot(const snapshot_reader& reader) -> std::expected<void, raft_error> override
+    {
         loaded = reader.metadata;
         loaded_uri = reader.uri;
         return {};
@@ -218,34 +225,72 @@ public:
     std::string loaded_uri;
 };
 
-class throwing_append_store final : public raft_storage {
+class throwing_append_store final : public raft_storage
+{
 public:
-    auto load_hard_state() -> hard_state override { return inner_.load_hard_state(); }
-    void save_hard_state(const hard_state& state) override { inner_.save_hard_state(state); }
-    auto load_snapshot_metadata() -> snapshot_metadata override { return inner_.load_snapshot_metadata(); }
-    void save_snapshot_metadata(const snapshot_metadata& metadata) override {
+    auto load_hard_state() -> hard_state override
+    {
+        return inner_.load_hard_state();
+    }
+
+    void save_hard_state(const hard_state& state) override
+    {
+        inner_.save_hard_state(state);
+    }
+
+    auto load_snapshot_metadata() -> snapshot_metadata override
+    {
+        return inner_.load_snapshot_metadata();
+    }
+
+    void save_snapshot_metadata(const snapshot_metadata& metadata) override
+    {
         inner_.save_snapshot_metadata(metadata);
     }
-    auto first_log_index() const -> log_index override { return inner_.first_log_index(); }
-    auto last_log_index() const -> log_index override { return inner_.last_log_index(); }
-    auto term_at(log_index index) const -> term_t override { return inner_.term_at(index); }
-    auto entry_at(log_index index) const -> std::optional<log_entry> override {
+
+    auto first_log_index() const -> log_index override
+    {
+        return inner_.first_log_index();
+    }
+
+    auto last_log_index() const -> log_index override
+    {
+        return inner_.last_log_index();
+    }
+
+    auto term_at(log_index index) const -> term_t override
+    {
+        return inner_.term_at(index);
+    }
+
+    auto entry_at(log_index index) const -> std::optional<log_entry> override
+    {
         return inner_.entry_at(index);
     }
+
     auto entries(log_index first_index, std::size_t max_entries) const
-        -> std::vector<log_entry> override {
+        -> std::vector<log_entry> override
+    {
         return inner_.entries(first_index, max_entries);
     }
-    void append(const std::vector<log_entry>&) override {
+
+    void append(const std::vector<log_entry>&) override
+    {
         throw std::runtime_error("injected append failure");
     }
-    void truncate_prefix(log_index first_kept_index) override {
+
+    void truncate_prefix(log_index first_kept_index) override
+    {
         inner_.truncate_prefix(first_kept_index);
     }
-    void truncate_suffix(log_index first_removed_index) override {
+
+    void truncate_suffix(log_index first_removed_index) override
+    {
         inner_.truncate_suffix(first_removed_index);
     }
-    void reset_to_snapshot(const snapshot_metadata& metadata) override {
+
+    void reset_to_snapshot(const snapshot_metadata& metadata) override
+    {
         inner_.reset_to_snapshot(metadata);
     }
 
@@ -253,32 +298,72 @@ private:
     memory_store inner_;
 };
 
-class throwing_snapshot_store final : public raft_storage {
+class throwing_snapshot_store final : public raft_storage
+{
 public:
-    auto load_hard_state() -> hard_state override { return inner_.load_hard_state(); }
-    void save_hard_state(const hard_state& state) override { inner_.save_hard_state(state); }
-    auto load_snapshot_metadata() -> snapshot_metadata override { return inner_.load_snapshot_metadata(); }
-    void save_snapshot_metadata(const snapshot_metadata&) override {
+    auto load_hard_state() -> hard_state override
+    {
+        return inner_.load_hard_state();
+    }
+
+    void save_hard_state(const hard_state& state) override
+    {
+        inner_.save_hard_state(state);
+    }
+
+    auto load_snapshot_metadata() -> snapshot_metadata override
+    {
+        return inner_.load_snapshot_metadata();
+    }
+
+    void save_snapshot_metadata(const snapshot_metadata&) override
+    {
         throw std::runtime_error("injected snapshot metadata failure");
     }
-    auto first_log_index() const -> log_index override { return inner_.first_log_index(); }
-    auto last_log_index() const -> log_index override { return inner_.last_log_index(); }
-    auto term_at(log_index index) const -> term_t override { return inner_.term_at(index); }
-    auto entry_at(log_index index) const -> std::optional<log_entry> override {
+
+    auto first_log_index() const -> log_index override
+    {
+        return inner_.first_log_index();
+    }
+
+    auto last_log_index() const -> log_index override
+    {
+        return inner_.last_log_index();
+    }
+
+    auto term_at(log_index index) const -> term_t override
+    {
+        return inner_.term_at(index);
+    }
+
+    auto entry_at(log_index index) const -> std::optional<log_entry> override
+    {
         return inner_.entry_at(index);
     }
+
     auto entries(log_index first_index, std::size_t max_entries) const
-        -> std::vector<log_entry> override {
+        -> std::vector<log_entry> override
+    {
         return inner_.entries(first_index, max_entries);
     }
-    void append(const std::vector<log_entry>& entries) override { inner_.append(entries); }
-    void truncate_prefix(log_index first_kept_index) override {
+
+    void append(const std::vector<log_entry>& entries) override
+    {
+        inner_.append(entries);
+    }
+
+    void truncate_prefix(log_index first_kept_index) override
+    {
         inner_.truncate_prefix(first_kept_index);
     }
-    void truncate_suffix(log_index first_removed_index) override {
+
+    void truncate_suffix(log_index first_removed_index) override
+    {
         inner_.truncate_suffix(first_removed_index);
     }
-    void reset_to_snapshot(const snapshot_metadata&) override {
+
+    void reset_to_snapshot(const snapshot_metadata&) override
+    {
         throw std::runtime_error("injected snapshot restore failure");
     }
 
@@ -286,7 +371,8 @@ private:
     memory_store inner_;
 };
 
-TEST(raft_single_node_election_becomes_leader) {
+TEST(raft_single_node_election_becomes_leader)
+{
     auto [store, node] = make_node("n1");
 
     auto req = node.begin_election();
@@ -298,7 +384,8 @@ TEST(raft_single_node_election_becomes_leader) {
     ASSERT_EQ(std::string(node.voted_for()), std::string("n1"));
 }
 
-TEST(raft_leader_appends_and_commits_single_node_command) {
+TEST(raft_leader_appends_and_commits_single_node_command)
+{
     auto [store, node] = make_node("n1");
     node.begin_election();
 
@@ -312,7 +399,8 @@ TEST(raft_leader_appends_and_commits_single_node_command) {
     ASSERT_EQ(store->entry_at(2)->command, std::string("set x=1"));
 }
 
-TEST(raft_rejects_stale_vote_request) {
+TEST(raft_rejects_stale_vote_request)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
     node.begin_election();
 
@@ -330,7 +418,8 @@ TEST(raft_rejects_stale_vote_request) {
     ASSERT_EQ(std::string(node.voted_for()), std::string("n1"));
 }
 
-TEST(raft_append_entries_appends_log_and_updates_commit) {
+TEST(raft_append_entries_appends_log_and_updates_commit)
+{
     auto [store, node] = make_node("n2", {"n1", "n3"});
 
     append_entries_request req{
@@ -354,16 +443,17 @@ TEST(raft_append_entries_appends_log_and_updates_commit) {
     ASSERT_EQ(store->entry_at(2)->command, std::string("cmd-2"));
 }
 
-TEST(raft_leader_commits_after_majority_replication) {
+TEST(raft_leader_commits_after_majority_replication)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.role() == node_role::candidate);
 
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     auto appended = node.append_command("cmd-majority");
@@ -371,15 +461,16 @@ TEST(raft_leader_commits_after_majority_replication) {
     ASSERT_EQ(node.commit_index(), 0u);
 
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = appended->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = appended->index,
+                                                          }));
 
     ASSERT_EQ(node.commit_index(), appended->index);
 }
 
-TEST(raft_pre_vote_does_not_persist_term_or_vote) {
+TEST(raft_pre_vote_does_not_persist_term_or_vote)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     auto req = node.begin_pre_vote();
@@ -390,7 +481,8 @@ TEST(raft_pre_vote_does_not_persist_term_or_vote) {
     ASSERT_EQ(std::string(node.voted_for()), std::string(""));
 }
 
-TEST(raft_installs_snapshot_and_recovers_configuration) {
+TEST(raft_installs_snapshot_and_recovers_configuration)
+{
     auto [store, node] = make_node("n2", {"n1", "n3"});
 
     install_snapshot_request req{
@@ -413,7 +505,8 @@ TEST(raft_installs_snapshot_and_recovers_configuration) {
     ASSERT_EQ(store->term_at(12), 3u);
 }
 
-TEST(raft_fsm_snapshot_save_and_load_round_trip_metadata) {
+TEST(raft_fsm_snapshot_save_and_load_round_trip_metadata)
+{
     auto store = std::make_shared<memory_store>();
     recording_machine machine;
     raft_node node{raft_config{.id = "n1"}, store, &machine};
@@ -447,30 +540,31 @@ TEST(raft_fsm_snapshot_save_and_load_round_trip_metadata) {
     ASSERT_EQ(follower_store->load_snapshot_metadata().uri, std::string("materialized.snapshot"));
 }
 
-TEST(raft_joint_configuration_requires_both_majorities) {
+TEST(raft_joint_configuration_requires_both_majorities)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
 
     auto change = node.enter_joint_configuration({"n1", "n2", "n3", "n4"});
     ASSERT_TRUE(change.has_value());
 
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = change->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = change->index,
+                                                          }));
     ASSERT_EQ(node.commit_index(), 0u);
 
     ASSERT_TRUE(node.handle_append_entries_response("n3", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = change->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = change->index,
+                                                          }));
     ASSERT_EQ(node.commit_index(), change->index);
     ASSERT_TRUE(node.current_configuration().joint());
     auto leave_entry = store->entry_at(change->index + 1);
@@ -479,14 +573,15 @@ TEST(raft_joint_configuration_requires_both_majorities) {
     ASSERT_FALSE(leave_entry->configuration.joint());
 }
 
-TEST(raft_rejects_concurrent_configuration_change) {
+TEST(raft_rejects_concurrent_configuration_change)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
 
     auto first = node.enter_joint_configuration({"n1", "n2", "n3", "n4"});
     ASSERT_TRUE(first.has_value());
@@ -496,7 +591,8 @@ TEST(raft_rejects_concurrent_configuration_change) {
     ASSERT_TRUE(second.error().code == raft_errc::configuration_error);
 }
 
-TEST(raft_storage_exception_stops_node) {
+TEST(raft_storage_exception_stops_node)
+{
     auto store = std::make_shared<throwing_append_store>();
     raft_node node{raft_config{.id = "n1"}, store};
 
@@ -509,7 +605,8 @@ TEST(raft_storage_exception_stops_node) {
     ASSERT_TRUE(appended.error().code == raft_errc::storage_error);
 }
 
-TEST(raft_wire_round_trips_append_entries) {
+TEST(raft_wire_round_trips_append_entries)
+{
     raft_rpc_message msg{
         .type = raft_rpc_type::append_entries,
         .from = "n1",
@@ -549,7 +646,8 @@ TEST(raft_wire_round_trips_append_entries) {
     ASSERT_EQ(decoded.append.entries[0].configuration.learners.size(), 1u);
 }
 
-TEST(raft_wire_round_trips_timeout_now) {
+TEST(raft_wire_round_trips_timeout_now)
+{
     raft_rpc_message msg{
         .type = raft_rpc_type::timeout_now,
         .from = "n1",
@@ -567,7 +665,8 @@ TEST(raft_wire_round_trips_timeout_now) {
     ASSERT_EQ(decoded.timeout_now.leader_id, std::string("n1"));
 }
 
-TEST(raft_wire_rejects_corrupt_or_truncated_frames) {
+TEST(raft_wire_rejects_corrupt_or_truncated_frames)
+{
     raft_rpc_message msg{
         .type = raft_rpc_type::append_entries,
         .from = "n1",
@@ -589,7 +688,8 @@ TEST(raft_wire_rejects_corrupt_or_truncated_frames) {
     ASSERT_THROWS(decode_raft_message(bad_size));
 }
 
-TEST(raft_runtime_tick_drives_single_node_election) {
+TEST(raft_runtime_tick_drives_single_node_election)
+{
     auto ctx = cnetmod::make_io_context();
     auto store = std::make_shared<memory_store>();
     raft_config cfg{
@@ -618,7 +718,8 @@ TEST(raft_runtime_tick_drives_single_node_election) {
     runtime.stop();
 }
 
-TEST(raft_runtime_async_read_index_returns_ready_for_single_node) {
+TEST(raft_runtime_async_read_index_returns_ready_for_single_node)
+{
     auto ctx = cnetmod::make_io_context();
     auto store = std::make_shared<memory_store>();
     raft_node node{raft_config{.id = "n1"}, store};
@@ -644,14 +745,15 @@ TEST(raft_runtime_async_read_index_returns_ready_for_single_node) {
     ASSERT_EQ(node.pending_read_count(), 0u);
 }
 
-TEST(raft_read_index_waits_for_quorum_ack) {
+TEST(raft_read_index_waits_for_quorum_ack)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     auto read = node.read_index(read_index_request{.id = 42, .context = "linear-read"});
@@ -677,14 +779,15 @@ TEST(raft_read_index_waits_for_quorum_ack) {
     ASSERT_EQ(node.pending_read_count(), 0u);
 }
 
-TEST(raft_read_index_timeout_expires_pending_request) {
+TEST(raft_read_index_timeout_expires_pending_request)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
 
     auto read = node.read_index(read_index_request{.id = 99, .context = "timeout"});
     ASSERT_TRUE(read.has_value());
@@ -697,14 +800,15 @@ TEST(raft_read_index_timeout_expires_pending_request) {
     ASSERT_EQ(node.pending_read_count(), 0u);
 }
 
-TEST(raft_learner_replicates_without_voting_or_quorum_power) {
+TEST(raft_learner_replicates_without_voting_or_quorum_power)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     auto learners = node.set_learners({"n4"});
@@ -712,10 +816,10 @@ TEST(raft_learner_replicates_without_voting_or_quorum_power) {
     ASSERT_EQ(node.current_configuration().learners.size(), 1u);
 
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = learners->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = learners->index,
+                                                          }));
     ASSERT_EQ(node.commit_index(), learners->index);
 
     auto vote = node.handle_request_vote(request_vote_request{
@@ -731,15 +835,16 @@ TEST(raft_learner_replicates_without_voting_or_quorum_power) {
     auto append = node.make_append_entries("n4");
     ASSERT_FALSE(append.entries.empty());
     ASSERT_TRUE(node.handle_append_entries_response("n4", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = entry->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = entry->index,
+                                                          }));
     ASSERT_EQ(node.commit_index(), learners->index);
     ASSERT_EQ(node.metrics().learners, 1u);
 }
 
-TEST(raft_learner_cannot_start_election) {
+TEST(raft_learner_cannot_start_election)
+{
     auto store = std::make_shared<memory_store>();
     store->save_snapshot_metadata(snapshot_metadata{
         .last_included_index = 1,
@@ -758,22 +863,23 @@ TEST(raft_learner_cannot_start_election) {
     ASSERT_EQ(node.current_term(), 0u);
 }
 
-TEST(raft_promotes_learner_via_joint_consensus) {
+TEST(raft_promotes_learner_via_joint_consensus)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
 
     auto learner = node.set_learners({"n4"});
     ASSERT_TRUE(learner.has_value());
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = learner->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = learner->index,
+                                                          }));
 
     auto promoted = node.promote_learner("n4");
     ASSERT_TRUE(promoted.has_value());
@@ -781,30 +887,31 @@ TEST(raft_promotes_learner_via_joint_consensus) {
     ASSERT_EQ(promoted->configuration.learners.size(), 0u);
 
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = promoted->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = promoted->index,
+                                                          }));
     ASSERT_EQ(node.commit_index(), learner->index);
 
     ASSERT_TRUE(node.handle_append_entries_response("n3", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = promoted->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = promoted->index,
+                                                          }));
     ASSERT_EQ(node.commit_index(), promoted->index);
     ASSERT_TRUE(node.current_configuration().joint());
     ASSERT_TRUE(node.current_configuration().learners.empty());
 }
 
-TEST(raft_remove_leader_steps_down_after_leave_joint_commits) {
+TEST(raft_remove_leader_steps_down_after_leave_joint_commits)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     auto removal = node.remove_node("n1");
@@ -812,56 +919,58 @@ TEST(raft_remove_leader_steps_down_after_leave_joint_commits) {
     ASSERT_TRUE(removal->configuration.joint());
 
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = removal->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = removal->index,
+                                                          }));
     ASSERT_TRUE(node.handle_append_entries_response("n3", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = removal->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = removal->index,
+                                                          }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     auto leave = store->entry_at(removal->index + 1);
     ASSERT_TRUE(leave.has_value());
     ASSERT_FALSE(leave->configuration.joint());
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = leave->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = leave->index,
+                                                          }));
     ASSERT_TRUE(node.handle_append_entries_response("n3", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = leave->index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = leave->index,
+                                                          }));
 
     ASSERT_TRUE(node.role() == node_role::follower);
     ASSERT_FALSE(node.current_configuration().joint());
 }
 
-TEST(raft_leader_lease_and_check_quorum_step_down) {
+TEST(raft_leader_lease_and_check_quorum_step_down)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = node.last_log_index(),
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = node.last_log_index(),
+                                                          }));
     ASSERT_TRUE(node.leader_lease_valid(std::chrono::seconds{10}));
     ASSERT_FALSE(node.check_leader_quorum(std::chrono::milliseconds{-1}));
     ASSERT_TRUE(node.role() == node_role::follower);
 }
 
-TEST(raft_lease_read_requires_check_quorum) {
+TEST(raft_lease_read_requires_check_quorum)
+{
     auto store = std::make_shared<memory_store>();
     raft_config cfg{
         .id = "n1",
@@ -875,29 +984,30 @@ TEST(raft_lease_read_requires_check_quorum) {
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = node.last_log_index(),
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = node.last_log_index(),
+                                                          }));
 
     auto read = node.read_index(read_index_request{.id = 7, .context = "lease"});
     ASSERT_TRUE(read.has_value());
     ASSERT_FALSE(read->ready);
 }
 
-TEST(raft_leader_transfer_to_caught_up_voter_returns_timeout_now) {
+TEST(raft_leader_transfer_to_caught_up_voter_returns_timeout_now)
+{
     auto [leader_store, leader] = make_node("n1", {"n2", "n3"});
     auto [follower_store, follower] = make_node("n2", {"n1", "n3"});
 
     leader.begin_election();
     ASSERT_TRUE(leader.handle_vote_response("n2", {
-        .term = leader.current_term(),
-        .vote_granted = true,
-    }));
+                                                      .term = leader.current_term(),
+                                                      .vote_granted = true,
+                                                  }));
     ASSERT_TRUE(leader.role() == node_role::leader);
 
     auto append = leader.make_append_entries("n2");
@@ -913,14 +1023,15 @@ TEST(raft_leader_transfer_to_caught_up_voter_returns_timeout_now) {
     ASSERT_EQ((*transfer)->leader_id, std::string("n1"));
 }
 
-TEST(raft_leader_transfer_waits_until_target_catches_up) {
+TEST(raft_leader_transfer_waits_until_target_catches_up)
+{
     auto [leader_store, leader] = make_node("n1", {"n2", "n3"});
 
     leader.begin_election();
     ASSERT_TRUE(leader.handle_vote_response("n2", {
-        .term = leader.current_term(),
-        .vote_granted = true,
-    }));
+                                                      .term = leader.current_term(),
+                                                      .vote_granted = true,
+                                                  }));
     auto entry = leader.append_command("pending-transfer");
     ASSERT_TRUE(entry.has_value());
 
@@ -929,24 +1040,25 @@ TEST(raft_leader_transfer_waits_until_target_catches_up) {
     ASSERT_FALSE(transfer->has_value());
 
     ASSERT_TRUE(leader.handle_append_entries_response("n2", {
-        .term = leader.current_term(),
-        .success = true,
-        .match_index = leader.last_log_index(),
-    }));
+                                                                .term = leader.current_term(),
+                                                                .success = true,
+                                                                .match_index = leader.last_log_index(),
+                                                            }));
     auto timeout_now = leader.take_pending_leader_transfer("n2");
 
     ASSERT_TRUE(timeout_now.has_value());
     ASSERT_EQ(timeout_now->leader_id, std::string("n1"));
 }
 
-TEST(raft_leader_transfer_rejects_learner_target) {
+TEST(raft_leader_transfer_rejects_learner_target)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     auto learners = node.set_learners({"n4"});
     ASSERT_TRUE(learners.has_value());
 
@@ -956,7 +1068,8 @@ TEST(raft_leader_transfer_rejects_learner_target) {
     ASSERT_TRUE(transfer.error().code == raft_errc::not_voter);
 }
 
-TEST(raft_timeout_now_starts_immediate_election) {
+TEST(raft_timeout_now_starts_immediate_election)
+{
     auto [store, node] = make_node("n2", {"n1", "n3"});
     auto append = node.handle_append_entries(append_entries_request{
         .term = 3,
@@ -977,14 +1090,15 @@ TEST(raft_timeout_now_starts_immediate_election) {
     ASSERT_TRUE(node.role() == node_role::candidate);
 }
 
-TEST(raft_read_index_pending_request_is_cleared_on_stepdown) {
+TEST(raft_read_index_pending_request_is_cleared_on_stepdown)
+{
     auto [store, node] = make_node("n1", {"n2", "n3"});
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     auto read = node.read_index(read_index_request{.id = 700, .context = "stepdown"});
     ASSERT_TRUE(read.has_value());
     ASSERT_EQ(node.pending_read_count(), 1u);
@@ -1002,7 +1116,8 @@ TEST(raft_read_index_pending_request_is_cleared_on_stepdown) {
     ASSERT_FALSE(node.query_read_index(700).has_value());
 }
 
-TEST(raft_auto_snapshot_compacts_when_threshold_is_reached) {
+TEST(raft_auto_snapshot_compacts_when_threshold_is_reached)
+{
     auto store = std::make_shared<memory_store>();
     recording_machine machine;
     raft_node node{raft_config{.id = "n1"}, store, &machine};
@@ -1030,7 +1145,8 @@ TEST(raft_auto_snapshot_compacts_when_threshold_is_reached) {
     ASSERT_FALSE(second->has_value());
 }
 
-TEST(raft_snapshot_storage_failure_stops_node) {
+TEST(raft_snapshot_storage_failure_stops_node)
+{
     auto store = std::make_shared<throwing_snapshot_store>();
     recording_machine machine;
     raft_node node{raft_config{.id = "n1"}, store, &machine};
@@ -1046,12 +1162,13 @@ TEST(raft_snapshot_storage_failure_stops_node) {
     ASSERT_TRUE(snapshot.error().code == raft_errc::storage_error);
 }
 
-TEST(raft_tcp_transport_records_backpressure_metrics) {
+TEST(raft_tcp_transport_records_backpressure_metrics)
+{
     auto ctx = cnetmod::make_io_context();
     raft_tcp_transport transport{*ctx, "n1", raft_tcp_transport_options{
-        .max_send_attempts = 1,
-        .max_outbound_queue = 0,
-    }};
+                                                 .max_send_attempts = 1,
+                                                 .max_outbound_queue = 0,
+                                             }};
     cnetmod::endpoint ep{cnetmod::ip_address{cnetmod::ipv4_address::loopback()}, 65000};
     transport.add_peer(raft_tcp_peer{.id = "n2", .address = ep});
 
@@ -1064,7 +1181,8 @@ TEST(raft_tcp_transport_records_backpressure_metrics) {
     ASSERT_TRUE(metrics->last_error == std::make_error_code(std::errc::no_buffer_space));
 }
 
-TEST(raft_pipeline_inflight_window_sends_heartbeat_when_full) {
+TEST(raft_pipeline_inflight_window_sends_heartbeat_when_full)
+{
     auto store = std::make_shared<memory_store>();
     raft_config cfg{
         .id = "n1",
@@ -1078,9 +1196,9 @@ TEST(raft_pipeline_inflight_window_sends_heartbeat_when_full) {
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     for (int i = 0; i < 12; ++i)
         ASSERT_TRUE(node.append_command(std::format("cmd-{}", i)).has_value());
 
@@ -1088,10 +1206,10 @@ TEST(raft_pipeline_inflight_window_sends_heartbeat_when_full) {
     ASSERT_EQ(first.entries.size(), 4u);
     node.mark_append_sent("n2", first.entries.back().index);
     ASSERT_TRUE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-        .match_index = first.entries.back().index,
-    }));
+                                                              .term = node.current_term(),
+                                                              .success = true,
+                                                              .match_index = first.entries.back().index,
+                                                          }));
 
     auto second = node.make_append_entries("n2");
     ASSERT_EQ(second.entries.size(), 4u);
@@ -1105,7 +1223,8 @@ TEST(raft_pipeline_inflight_window_sends_heartbeat_when_full) {
     ASSERT_EQ(heartbeat_only.prev_log_index, third.entries.back().index);
 }
 
-TEST(raft_five_node_partition_restart_catches_up_lagging_followers) {
+TEST(raft_five_node_partition_restart_catches_up_lagging_followers)
+{
     auto s1 = std::make_shared<memory_store>();
     auto s2 = std::make_shared<memory_store>();
     auto s3 = std::make_shared<memory_store>();
@@ -1118,16 +1237,17 @@ TEST(raft_five_node_partition_restart_catches_up_lagging_followers) {
 
     n1.begin_election();
     ASSERT_FALSE(n1.handle_vote_response("n2", {
-        .term = n1.current_term(),
-        .vote_granted = true,
-    }));
+                                                   .term = n1.current_term(),
+                                                   .vote_granted = true,
+                                               }));
     ASSERT_TRUE(n1.handle_vote_response("n3", {
-        .term = n1.current_term(),
-        .vote_granted = true,
-    }));
+                                                  .term = n1.current_term(),
+                                                  .vote_granted = true,
+                                              }));
     ASSERT_TRUE(n1.role() == node_role::leader);
 
-    auto replicate_one = [&](raft_node& follower, const node_id& peer) {
+    auto replicate_one = [&](raft_node& follower, const node_id& peer)
+    {
         auto req = n1.make_append_entries(peer);
         if (!req.entries.empty())
             n1.mark_append_sent(peer, req.entries.back().index);
@@ -1136,7 +1256,8 @@ TEST(raft_five_node_partition_restart_catches_up_lagging_followers) {
         ASSERT_TRUE(n1.handle_append_entries_response(peer, ack));
     };
 
-    for (int i = 0; i < 25; ++i) {
+    for (int i = 0; i < 25; ++i)
+    {
         auto entry = n1.append_command(std::format("partitioned-{}", i));
         ASSERT_TRUE(entry.has_value());
         replicate_one(n2, "n2");
@@ -1146,8 +1267,8 @@ TEST(raft_five_node_partition_restart_catches_up_lagging_followers) {
 
     raft_node n4{raft_config{.id = "n4", .peers = {"n1", "n2", "n3", "n5"}}, s4};
     raft_node n5{raft_config{.id = "n5", .peers = {"n1", "n2", "n3", "n4"}}, s5};
-    for (int i = 0; i < 16 && (n4.commit_index() < n1.commit_index() ||
-                               n5.commit_index() < n1.commit_index()); ++i) {
+    for (int i = 0; i < 16 && (n4.commit_index() < n1.commit_index() || n5.commit_index() < n1.commit_index()); ++i)
+    {
         replicate_one(n4, "n4");
         replicate_one(n5, "n5");
     }
@@ -1158,23 +1279,26 @@ TEST(raft_five_node_partition_restart_catches_up_lagging_followers) {
     ASSERT_EQ(s5->entry_at(n1.commit_index())->command, std::string("partitioned-24"));
 }
 
-TEST(raft_snapshot_retention_removes_old_files_beyond_keep_last) {
+TEST(raft_snapshot_retention_removes_old_files_beyond_keep_last)
+{
     auto ctx = cnetmod::make_io_context();
     auto dir = std::filesystem::temp_directory_path() /
         std::format("cnetmod-raft-retention-{}", std::chrono::steady_clock::now().time_since_epoch().count());
     std::filesystem::create_directories(dir);
 
     raft_tcp_transport transport{*ctx, "n1", raft_tcp_transport_options{
-        .snapshot_directory = dir,
-        .snapshot_retention = raft_snapshot_retention_options{
-            .keep_last = 2,
-            .min_age = std::chrono::seconds{0},
-        },
-    }};
+                                                 .snapshot_directory = dir,
+                                                 .snapshot_retention = raft_snapshot_retention_options{
+                                                     .keep_last = 2,
+                                                     .min_age = std::chrono::seconds{0},
+                                                 },
+                                             }};
 
     bool cleaned = false;
-    auto scenario = [&]() -> cnetmod::task<void> {
-        for (int i = 0; i < 4; ++i) {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
+        for (int i = 0; i < 4; ++i)
+        {
             auto path = dir / std::format("n1-{}-1-snap.snapshot", i);
             co_await touch_file_async(*ctx, path);
             std::filesystem::last_write_time(path,
@@ -1189,7 +1313,8 @@ TEST(raft_snapshot_retention_removes_old_files_beyond_keep_last) {
 
     ASSERT_TRUE(cleaned);
     std::size_t remaining = 0;
-    for (const auto& item : std::filesystem::directory_iterator{dir}) {
+    for (const auto& item : std::filesystem::directory_iterator{dir})
+    {
         if (item.path().extension() == ".snapshot")
             ++remaining;
     }
@@ -1199,7 +1324,8 @@ TEST(raft_snapshot_retention_removes_old_files_beyond_keep_last) {
     std::filesystem::remove_all(dir, ec);
 }
 
-TEST(raft_tcp_transport_rejects_bad_auth_token) {
+TEST(raft_tcp_transport_rejects_bad_auth_token)
+{
     cnetmod::net_init net;
     auto ctx = cnetmod::make_io_context();
     auto ep1 = reserve_loopback_endpoint();
@@ -1208,19 +1334,19 @@ TEST(raft_tcp_transport_rejects_bad_auth_token) {
     raft_node follower{raft_config{.id = "n2", .peers = {"n1"}}, store};
 
     raft_tcp_transport sender{*ctx, "n1", raft_tcp_transport_options{
-        .retry_backoff = std::chrono::milliseconds{1},
-        .security = raft_tcp_security_options{
-            .shared_secret = "good",
-            .require_auth_token = true,
-        },
-    }};
+                                              .retry_backoff = std::chrono::milliseconds{1},
+                                              .security = raft_tcp_security_options{
+                                                  .shared_secret = "good",
+                                                  .require_auth_token = true,
+                                              },
+                                          }};
     raft_tcp_transport receiver{*ctx, "n2", raft_tcp_transport_options{
-        .retry_backoff = std::chrono::milliseconds{1},
-        .security = raft_tcp_security_options{
-            .shared_secret = "bad",
-            .require_auth_token = true,
-        },
-    }};
+                                                .retry_backoff = std::chrono::milliseconds{1},
+                                                .security = raft_tcp_security_options{
+                                                    .shared_secret = "bad",
+                                                    .require_auth_token = true,
+                                                },
+                                            }};
     sender.add_peer(raft_tcp_peer{.id = "n2", .address = ep2});
     receiver.add_peer(raft_tcp_peer{.id = "n1", .address = ep1});
     raft_node_runtime runtime{
@@ -1232,15 +1358,16 @@ TEST(raft_tcp_transport_rejects_bad_auth_token) {
         raft_runtime_options{.auto_election = false, .auto_heartbeat = false},
     };
 
-    auto scenario = [&]() -> cnetmod::task<void> {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
         runtime.start();
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{30});
         sender.send_append_entries("n2", append_entries_request{
-            .term = 7,
-            .leader_id = "n1",
-            .prev_log_index = 0,
-            .prev_log_term = 0,
-        });
+                                             .term = 7,
+                                             .leader_id = "n1",
+                                             .prev_log_index = 0,
+                                             .prev_log_term = 0,
+                                         });
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{80});
         co_await runtime.async_stop();
         ctx->stop();
@@ -1252,25 +1379,27 @@ TEST(raft_tcp_transport_rejects_bad_auth_token) {
     ASSERT_EQ(follower.commit_index(), 0u);
 }
 
-TEST(raft_tcp_transport_tls_requires_configured_context) {
+TEST(raft_tcp_transport_tls_requires_configured_context)
+{
     auto ctx = cnetmod::make_io_context();
     raft_tcp_transport transport{*ctx, "n1", raft_tcp_transport_options{
-        .max_send_attempts = 1,
-        .retry_backoff = std::chrono::milliseconds{1},
-        .security = raft_tcp_security_options{
-            .enable_tls = true,
-        },
-    }};
+                                                 .max_send_attempts = 1,
+                                                 .retry_backoff = std::chrono::milliseconds{1},
+                                                 .security = raft_tcp_security_options{
+                                                     .enable_tls = true,
+                                                 },
+                                             }};
     cnetmod::endpoint ep{cnetmod::ip_address{cnetmod::ipv4_address::loopback()}, 65001};
     transport.add_peer(raft_tcp_peer{.id = "n2", .address = ep});
 
     bool done = false;
-    auto scenario = [&]() -> cnetmod::task<void> {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
         transport.send_append_entries("n2", append_entries_request{
-            .term = 1,
-            .leader_id = "n1",
-            .entries = {},
-        });
+                                                .term = 1,
+                                                .leader_id = "n1",
+                                                .entries = {},
+                                            });
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{20});
         done = true;
         ctx->stop();
@@ -1285,7 +1414,8 @@ TEST(raft_tcp_transport_tls_requires_configured_context) {
     ASSERT_TRUE(metrics->last_error == std::make_error_code(std::errc::protocol_not_supported));
 }
 
-TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
+TEST(raft_tcp_transport_mtls_authenticates_peer_certificate)
+{
 #ifdef CNETMOD_HAS_SSL
     cnetmod::net_init net;
     auto ctx = cnetmod::make_io_context();
@@ -1299,10 +1429,12 @@ TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
     bool received = false;
     bool metrics_ok = false;
 
-    auto scenario = [&]() -> cnetmod::task<void> {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
         std::error_code ec;
         std::filesystem::create_directories(dir, ec);
-        if (ec) {
+        if (ec)
+        {
             ctx->stop();
             co_return;
         }
@@ -1319,14 +1451,16 @@ TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
             co_await write_text_file_async(*ctx, n1_key_path, raft_tls_test_material::n1_key) &&
             co_await write_text_file_async(*ctx, n2_cert_path, raft_tls_test_material::n2_cert) &&
             co_await write_text_file_async(*ctx, n2_key_path, raft_tls_test_material::n2_key);
-        if (!files_ok) {
+        if (!files_ok)
+        {
             ctx->stop();
             co_return;
         }
 
         auto client_ctx_r = cnetmod::ssl_context::client();
         auto server_ctx_r = cnetmod::ssl_context::server();
-        if (!client_ctx_r || !server_ctx_r) {
+        if (!client_ctx_r || !server_ctx_r)
+        {
             ctx->stop();
             co_return;
         }
@@ -1340,7 +1474,8 @@ TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
             server_ctx.load_cert_file(n2_cert_path.string()).has_value() &&
             server_ctx.load_key_file(n2_key_path.string()).has_value() &&
             server_ctx.load_ca_file(ca_path.string()).has_value();
-        if (!contexts_ok) {
+        if (!contexts_ok)
+        {
             ctx->stop();
             co_return;
         }
@@ -1354,25 +1489,25 @@ TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
         raft_node n2{raft_config{.id = "n2", .peers = {"n1"}, .options = options}, s2};
 
         raft_tcp_transport t1{*ctx, "n1", raft_tcp_transport_options{
-            .max_send_attempts = 1,
-            .retry_backoff = std::chrono::milliseconds{1},
-            .security = raft_tcp_security_options{
-                .enable_tls = true,
-                .require_peer_certificate = true,
-                .peer_certificate_sha256 = {{"n2", std::string{raft_tls_test_material::n2_fp}}},
-                .client_tls = &client_ctx,
-            },
-        }};
+                                              .max_send_attempts = 1,
+                                              .retry_backoff = std::chrono::milliseconds{1},
+                                              .security = raft_tcp_security_options{
+                                                  .enable_tls = true,
+                                                  .require_peer_certificate = true,
+                                                  .peer_certificate_sha256 = {{"n2", std::string{raft_tls_test_material::n2_fp}}},
+                                                  .client_tls = &client_ctx,
+                                              },
+                                          }};
         raft_tcp_transport t2{*ctx, "n2", raft_tcp_transport_options{
-            .max_send_attempts = 1,
-            .retry_backoff = std::chrono::milliseconds{1},
-            .security = raft_tcp_security_options{
-                .enable_tls = true,
-                .require_peer_certificate = true,
-                .peer_certificate_sha256 = {{"n1", std::string{raft_tls_test_material::n1_fp}}},
-                .server_tls = &server_ctx,
-            },
-        }};
+                                              .max_send_attempts = 1,
+                                              .retry_backoff = std::chrono::milliseconds{1},
+                                              .security = raft_tcp_security_options{
+                                                  .enable_tls = true,
+                                                  .require_peer_certificate = true,
+                                                  .peer_certificate_sha256 = {{"n1", std::string{raft_tls_test_material::n1_fp}}},
+                                                  .server_tls = &server_ctx,
+                                              },
+                                          }};
         t1.add_peer(raft_tcp_peer{.id = "n2", .address = ep2});
         t2.add_peer(raft_tcp_peer{.id = "n1", .address = ep1});
 
@@ -1382,23 +1517,36 @@ TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{30});
 
         t1.send_append_entries("n2", append_entries_request{
-            .term = 3,
-            .leader_id = "n1",
-            .prev_log_index = 0,
-            .prev_log_term = 0,
-        });
-        for (auto i = 0; i < 50; ++i) {
-            if (n2.current_term() == 3) {
+                                         .term = 3,
+                                         .leader_id = "n1",
+                                         .prev_log_index = 0,
+                                         .prev_log_term = 0,
+                                     });
+        for (auto i = 0; i < 50; ++i)
+        {
+            if (n2.current_term() == 3)
+            {
                 received = true;
                 break;
             }
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{10});
         }
 
-        auto metrics = t1.peer_metrics("n2");
-        metrics_ok = metrics.has_value() &&
-                     metrics->send_successes == 1 &&
-                     metrics->last_error == std::error_code{};
+        // The receiver may dispatch the request before the client finishes
+        // TLS shutdown and records the completed outbound write.  Wait for
+        // that terminal sender-side state instead of observing the queue
+        // midway through its asynchronous completion path.
+        for (auto i = 0; i < 50; ++i)
+        {
+            auto metrics = t1.peer_metrics("n2");
+            if (metrics && metrics->send_successes == 1 &&
+                metrics->last_error == std::error_code{})
+            {
+                metrics_ok = true;
+                break;
+            }
+            (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{10});
+        }
         co_await r2.async_stop();
         ctx->stop();
     };
@@ -1418,7 +1566,8 @@ TEST(raft_tcp_transport_mtls_authenticates_peer_certificate) {
 #endif
 }
 
-TEST(raft_tcp_three_node_loopback_replicates_and_commits_command) {
+TEST(raft_tcp_three_node_loopback_replicates_and_commits_command)
+{
     cnetmod::net_init net;
     auto ctx = cnetmod::make_io_context();
     auto ep1 = reserve_loopback_endpoint();
@@ -1461,7 +1610,8 @@ TEST(raft_tcp_three_node_loopback_replicates_and_commits_command) {
     bool elected = false;
     bool replicated = false;
     bool metrics_ok = false;
-    auto scenario = [&]() -> cnetmod::task<void> {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
         r1.start();
         r2.start();
         r3.start();
@@ -1472,16 +1622,20 @@ TEST(raft_tcp_three_node_loopback_replicates_and_commits_command) {
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{10});
         elected = n1.role() == node_role::leader;
 
-        if (elected) {
+        if (elected)
+        {
             auto entry = n1.append_command("tcp-commit");
-            if (entry) {
-                for (auto i = 0; i < 80; ++i) {
+            if (entry)
+            {
+                for (auto i = 0; i < 80; ++i)
+                {
                     r1.tick_now();
                     r2.tick_now();
                     r3.tick_now();
                     if (n1.commit_index() >= entry->index &&
                         n2.commit_index() >= entry->index &&
-                        n3.commit_index() >= entry->index) {
+                        n3.commit_index() >= entry->index)
+                    {
                         replicated = true;
                         break;
                     }
@@ -1493,7 +1647,7 @@ TEST(raft_tcp_three_node_loopback_replicates_and_commits_command) {
         auto m2 = t1.peer_metrics("n2");
         auto m3 = t1.peer_metrics("n3");
         metrics_ok = m2.has_value() && m3.has_value() &&
-                     (m2->send_successes + m3->send_successes) != 0;
+            (m2->send_successes + m3->send_successes) != 0;
         co_await r1.async_stop();
         co_await r2.async_stop();
         co_await r3.async_stop();
@@ -1510,7 +1664,8 @@ TEST(raft_tcp_three_node_loopback_replicates_and_commits_command) {
     ASSERT_EQ(s3->entry_at(2)->command, std::string("tcp-commit"));
 }
 
-TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
+TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers)
+{
     cnetmod::net_init net;
     auto ctx = cnetmod::make_io_context();
     std::array<cnetmod::endpoint, 5> endpoints{
@@ -1548,16 +1703,21 @@ TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
     raft_tcp_transport t5{*ctx, "n5", raft_tcp_transport_options{.retry_backoff = std::chrono::milliseconds{1}}};
     std::array<raft_tcp_transport*, 5> transports{&t1, &t2, &t3, &t4, &t5};
 
-    auto connect_all = [&] {
-        for (std::size_t i = 0; i < transports.size(); ++i) {
-            for (std::size_t j = 0; j < transports.size(); ++j) {
-                if (i == j) continue;
+    auto connect_all = [&]
+    {
+        for (std::size_t i = 0; i < transports.size(); ++i)
+        {
+            for (std::size_t j = 0; j < transports.size(); ++j)
+            {
+                if (i == j)
+                    continue;
                 transports[i]->add_peer(raft_tcp_peer{.id = ids[j], .address = endpoints[j]});
             }
         }
     };
     auto disconnect_between = [&](std::span<const std::size_t> left,
-                                  std::span<const std::size_t> right) {
+                                  std::span<const std::size_t> right)
+    {
         for (auto l : left)
             for (auto r : right)
                 transports[l]->remove_peer(ids[r]);
@@ -1582,7 +1742,8 @@ TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
     log_index last_index = 0;
     cnetmod::cancel_token watchdog_token;
     bool watchdog_done = false;
-    auto scenario = [&]() -> cnetmod::task<void> {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
         r1.start();
         r2.start();
         r3.start();
@@ -1595,20 +1756,25 @@ TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{10});
         elected = n1.role() == node_role::leader;
 
-        if (elected) {
+        if (elected)
+        {
             std::array majority{std::size_t{0}, std::size_t{1}, std::size_t{2}};
             std::array minority{std::size_t{3}, std::size_t{4}};
             disconnect_between(majority, minority);
 
-            for (auto i = 0; i < 25; ++i) {
+            for (auto i = 0; i < 25; ++i)
+            {
                 auto entry = n1.append_command(std::format("tcp-partition-{}", i));
-                if (entry) last_index = entry->index;
+                if (entry)
+                    last_index = entry->index;
             }
-            for (auto i = 0; i < 120; ++i) {
+            for (auto i = 0; i < 120; ++i)
+            {
                 r1.tick_now();
                 if (n1.commit_index() >= last_index &&
                     n2.commit_index() >= last_index &&
-                    n3.commit_index() >= last_index) {
+                    n3.commit_index() >= last_index)
+                {
                     majority_committed = true;
                     break;
                 }
@@ -1616,10 +1782,12 @@ TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
             }
 
             connect_all();
-            for (auto i = 0; i < 160; ++i) {
+            for (auto i = 0; i < 160; ++i)
+            {
                 r1.tick_now();
                 if (n4.commit_index() >= last_index &&
-                    n5.commit_index() >= last_index) {
+                    n5.commit_index() >= last_index)
+                {
                     healed = true;
                     break;
                 }
@@ -1638,9 +1806,11 @@ TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{1});
         ctx->stop();
     };
-    auto watchdog = [&]() -> cnetmod::task<void> {
+    auto watchdog = [&]() -> cnetmod::task<void>
+    {
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::seconds{5}, watchdog_token);
-        if (!finished) {
+        if (!finished)
+        {
             timed_out = true;
             co_await r1.async_stop();
             co_await r2.async_stop();
@@ -1663,7 +1833,8 @@ TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers) {
     ASSERT_EQ(s5->entry_at(last_index)->command, std::string("tcp-partition-24"));
 }
 
-TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
+TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal)
+{
     cnetmod::net_init net;
     auto ctx = cnetmod::make_io_context();
     std::array<cnetmod::endpoint, 5> endpoints{
@@ -1705,22 +1876,28 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
     std::array<std::shared_ptr<memory_store>, 5> stores{s1, s2, s3, s4, s5};
     std::array<std::array<bool, 5>, 5> connected{};
 
-    auto connect_link = [&](std::size_t from, std::size_t to) {
-        if (from == to || connected[from][to]) return;
+    auto connect_link = [&](std::size_t from, std::size_t to)
+    {
+        if (from == to || connected[from][to])
+            return;
         transports[from]->add_peer(raft_tcp_peer{.id = ids[to], .address = endpoints[to]});
         connected[from][to] = true;
     };
-    auto disconnect_link = [&](std::size_t from, std::size_t to) {
-        if (from == to || !connected[from][to]) return;
+    auto disconnect_link = [&](std::size_t from, std::size_t to)
+    {
+        if (from == to || !connected[from][to])
+            return;
         transports[from]->remove_peer(ids[to]);
         connected[from][to] = false;
     };
-    auto connect_all = [&] {
+    auto connect_all = [&]
+    {
         for (std::size_t i = 0; i < transports.size(); ++i)
             for (std::size_t j = 0; j < transports.size(); ++j)
                 connect_link(i, j);
     };
-    auto disconnect_all = [&] {
+    auto disconnect_all = [&]
+    {
         for (std::size_t i = 0; i < transports.size(); ++i)
             for (std::size_t j = 0; j < transports.size(); ++j)
                 disconnect_link(i, j);
@@ -1743,7 +1920,8 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
     std::size_t appended = 0;
     cnetmod::cancel_token watchdog_token;
     bool watchdog_done = false;
-    auto scenario = [&]() -> cnetmod::task<void> {
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
         for (auto* runtime : runtimes)
             runtime->start();
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{40});
@@ -1753,12 +1931,15 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{5});
         elected = n1.role() == node_role::leader;
 
-        if (elected) {
+        if (elected)
+        {
             std::mt19937_64 rng{0xc0ffee5eedULL};
-            for (auto round = 0; round < 160; ++round) {
+            for (auto round = 0; round < 160; ++round)
+            {
                 auto from = static_cast<std::size_t>(rng() % ids.size());
                 auto to = static_cast<std::size_t>(rng() % ids.size());
-                if (from != to) {
+                if (from != to)
+                {
                     if ((rng() % 100) < 35)
                         disconnect_link(from, to);
                     else
@@ -1769,14 +1950,17 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
                     static_cast<std::size_t>((round % 2) + 1),
                     static_cast<std::size_t>(((round + 1) % 2) + 1),
                 };
-                for (auto peer : majority_followers) {
+                for (auto peer : majority_followers)
+                {
                     connect_link(0, peer);
                     connect_link(peer, 0);
                 }
 
-                if (round % 3 == 0) {
+                if (round % 3 == 0)
+                {
                     auto entry = n1.append_command(std::format("chaos-{}", appended));
-                    if (entry) {
+                    if (entry)
+                    {
                         last_index = entry->index;
                         ++appended;
                     }
@@ -1789,12 +1973,15 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
             disconnect_all();
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{50});
             connect_all();
-            for (auto i = 0; i < 1000; ++i) {
+            for (auto i = 0; i < 1000; ++i)
+            {
                 r1.tick_now();
                 if (last_index != 0 &&
-                    std::ranges::all_of(nodes, [last_index](raft_node* node) {
-                        return node->commit_index() >= last_index;
-                    })) {
+                    std::ranges::all_of(nodes, [last_index](raft_node* node)
+                        {
+                            return node->commit_index() >= last_index;
+                        }))
+                {
                     converged = true;
                     break;
                 }
@@ -1810,9 +1997,11 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{1});
         ctx->stop();
     };
-    auto watchdog = [&]() -> cnetmod::task<void> {
+    auto watchdog = [&]() -> cnetmod::task<void>
+    {
         (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::seconds{30}, watchdog_token);
-        if (!finished) {
+        if (!finished)
+        {
             timed_out = true;
             for (auto* runtime : runtimes)
                 co_await runtime->async_stop();
@@ -1828,14 +2017,16 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal) {
     ASSERT_TRUE(elected);
     ASSERT_TRUE(appended > 20);
     ASSERT_TRUE(converged);
-    for (std::size_t i = 1; i < stores.size(); ++i) {
+    for (std::size_t i = 1; i < stores.size(); ++i)
+    {
         auto entry = stores[i]->entry_at(last_index);
         ASSERT_TRUE(entry.has_value());
         ASSERT_EQ(entry->command, std::format("chaos-{}", appended - 1));
     }
 }
 
-TEST(raft_wire_round_trips_snapshot_payload) {
+TEST(raft_wire_round_trips_snapshot_payload)
+{
     raft_rpc_message msg{
         .type = raft_rpc_type::install_snapshot,
         .from = "n1",
@@ -1862,7 +2053,8 @@ TEST(raft_wire_round_trips_snapshot_payload) {
     ASSERT_EQ(static_cast<int>(decoded.snapshot.data[1]), 2);
 }
 
-TEST(raft_wire_round_trips_snapshot_chunk_metadata) {
+TEST(raft_wire_round_trips_snapshot_chunk_metadata)
+{
     raft_rpc_message msg{
         .type = raft_rpc_type::install_snapshot,
         .from = "n1",
@@ -1896,7 +2088,8 @@ TEST(raft_wire_round_trips_snapshot_chunk_metadata) {
     ASSERT_EQ(decoded.snapshot.data.size(), 2u);
 }
 
-TEST(raft_wire_round_trips_snapshot_response_resume_metadata) {
+TEST(raft_wire_round_trips_snapshot_response_resume_metadata)
+{
     raft_rpc_message msg{
         .type = raft_rpc_type::install_snapshot_response,
         .from = "n2",
@@ -1913,7 +2106,7 @@ TEST(raft_wire_round_trips_snapshot_response_resume_metadata) {
     auto decoded = decode_raft_message(encode_raft_message(msg));
 
     ASSERT_EQ(static_cast<int>(decoded.type),
-              static_cast<int>(raft_rpc_type::install_snapshot_response));
+        static_cast<int>(raft_rpc_type::install_snapshot_response));
     ASSERT_EQ(decoded.snapshot_response.term, 8u);
     ASSERT_FALSE(decoded.snapshot_response.success);
     ASSERT_EQ(decoded.snapshot_response.snapshot_id, std::string("snap-64"));
@@ -1921,7 +2114,8 @@ TEST(raft_wire_round_trips_snapshot_response_resume_metadata) {
     ASSERT_EQ(decoded.snapshot_response.error, std::string("out-of-order snapshot chunk"));
 }
 
-TEST(raft_leader_switches_to_snapshot_when_follower_is_behind_compaction) {
+TEST(raft_leader_switches_to_snapshot_when_follower_is_behind_compaction)
+{
     auto store = std::make_shared<memory_store>();
     store->save_snapshot_metadata(snapshot_metadata{
         .last_included_index = 12,
@@ -1932,41 +2126,42 @@ TEST(raft_leader_switches_to_snapshot_when_follower_is_behind_compaction) {
 
     node.begin_election();
     ASSERT_TRUE(node.handle_vote_response("n2", {
-        .term = node.current_term(),
-        .vote_granted = true,
-    }));
+                                                    .term = node.current_term(),
+                                                    .vote_granted = true,
+                                                }));
     ASSERT_TRUE(node.role() == node_role::leader);
 
     ASSERT_FALSE(node.handle_append_entries_response("n2", {
-        .term = node.current_term(),
-        .success = false,
-        .match_index = 0,
-        .conflict_index = 1,
-    }));
+                                                               .term = node.current_term(),
+                                                               .success = false,
+                                                               .match_index = 0,
+                                                               .conflict_index = 1,
+                                                           }));
     ASSERT_TRUE(node.should_send_snapshot("n2"));
 
     auto snapshot = node.make_install_snapshot("n2");
     ASSERT_EQ(snapshot.metadata.last_included_index, 12u);
     node.mark_snapshot_sent("n2");
     ASSERT_TRUE(node.handle_install_snapshot_response("n2", {
-        .term = node.current_term(),
-        .success = true,
-    }));
+                                                                .term = node.current_term(),
+                                                                .success = true,
+                                                            }));
 
     auto next = node.make_append_entries("n2");
     ASSERT_EQ(next.prev_log_index, 12u);
     ASSERT_FALSE(node.should_send_snapshot("n2"));
 }
 
-TEST(raft_fault_injection_dropped_append_does_not_commit_until_retry) {
+TEST(raft_fault_injection_dropped_append_does_not_commit_until_retry)
+{
     auto [leader_store, leader] = make_node("n1", {"n2", "n3"});
     auto [follower_store, follower] = make_node("n2", {"n1", "n3"});
 
     leader.begin_election();
     ASSERT_TRUE(leader.handle_vote_response("n2", {
-        .term = leader.current_term(),
-        .vote_granted = true,
-    }));
+                                                      .term = leader.current_term(),
+                                                      .vote_granted = true,
+                                                  }));
     auto entry = leader.append_command("must-survive-retry");
     ASSERT_TRUE(entry.has_value());
 
@@ -1981,7 +2176,8 @@ TEST(raft_fault_injection_dropped_append_does_not_commit_until_retry) {
 }
 
 #ifdef CNETMOD_HAS_LEVELDB
-TEST(raft_leveldb_recovers_hard_state_and_log_after_restart) {
+TEST(raft_leveldb_recovers_hard_state_and_log_after_restart)
+{
     auto dir = std::filesystem::temp_directory_path() /
         std::format("cnetmod-raft-test-{}", std::chrono::steady_clock::now().time_since_epoch().count());
 

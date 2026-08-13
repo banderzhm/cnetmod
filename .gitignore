@@ -48,6 +48,7 @@ testing/bench/crosslang/go/crosslang-go
 testing/bench/crosslang/java/*.class
 testing/bench/crosslang/java-jetty/target/
 testing/bench/crosslang/rust/target/
+bindings/rust/*/target/
 examples/test_ssl/*.pem
 examples/test_ssl/*.p12
 

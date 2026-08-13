@@ -7,6 +7,7 @@ export module cnetmod.executor.async_op;
 import std;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
+import cnetmod.core.buffer_pool;
 import cnetmod.core.socket;
 import cnetmod.core.address;
 import cnetmod.core.file;
@@ -162,9 +163,189 @@ export auto async_sendto(io_context& ctx, socket& sock,
 // (recvmmsg/sendmmsg on Linux).  The other backends retain the same API and
 // submit their datagrams through their native asynchronous transport.
 
+/// Move-only datagram storage used by batched UDP receive APIs.
+///
+/// UDP/QUIC receivers keep a bounded cache of full-size receive buffers.  A
+/// completed datagram transfers the lease all the way to the consumer instead
+/// of allocating a vector for every packet.  Payloads larger than the pool
+/// block retain the same interface and use an isolated heap buffer; this is a
+/// correctness fallback, not part of the usual QUIC packet path.
+export class udp_datagram_buffer
+{
+public:
+    using value_type = std::byte;
+    using size_type = std::size_t;
+    using iterator = std::byte*;
+    using const_iterator = const std::byte*;
+
+    udp_datagram_buffer() = default;
+    explicit udp_datagram_buffer(size_type capacity);
+
+    udp_datagram_buffer(const udp_datagram_buffer&) = delete;
+    auto operator=(const udp_datagram_buffer&) -> udp_datagram_buffer& = delete;
+    udp_datagram_buffer(udp_datagram_buffer&&) noexcept = default;
+    auto operator=(udp_datagram_buffer&&) noexcept -> udp_datagram_buffer& = default;
+
+    [[nodiscard]] auto data() noexcept -> std::byte*;
+    [[nodiscard]] auto data() const noexcept -> const std::byte*;
+    [[nodiscard]] auto size() const noexcept -> size_type;
+    [[nodiscard]] auto capacity() const noexcept -> size_type;
+    [[nodiscard]] auto empty() const noexcept -> bool;
+    [[nodiscard]] auto is_pooled() const noexcept -> bool;
+    [[nodiscard]] auto begin() noexcept -> iterator;
+    [[nodiscard]] auto begin() const noexcept -> const_iterator;
+    [[nodiscard]] auto end() noexcept -> iterator;
+    [[nodiscard]] auto end() const noexcept -> const_iterator;
+    [[nodiscard]] auto front() noexcept -> std::byte&;
+    [[nodiscard]] auto front() const noexcept -> const std::byte&;
+    [[nodiscard]] auto operator[](size_type index) noexcept -> std::byte&;
+    [[nodiscard]] auto operator[](size_type index) const noexcept -> const std::byte&;
+
+    /// Changes the visible payload length without reallocating the pooled
+    /// lease. Expanding a heap-backed buffer keeps byte_buffer semantics.
+    void resize(size_type size);
+
+    template <std::forward_iterator Iterator,
+        std::sentinel_for<Iterator> Sentinel>
+    void assign(Iterator first, Sentinel last)
+    {
+        const auto count = static_cast<size_type>(std::ranges::distance(first, last));
+        resize(count);
+        std::ranges::copy(first, last, begin());
+    }
+
+    operator std::span<const std::byte>() const noexcept;
+    operator std::span<std::byte>() noexcept;
+
+private:
+    pooled_buffer pooled_;
+    byte_buffer heap_;
+    size_type size_{};
+};
+
+namespace detail {
+
+    /// Deliberately process-lifetime storage: datagram leases can outlive an I/O
+    /// context while they are queued in a connection inbox.  Leaking this bounded
+    /// cache on process shutdown prevents static-destruction ordering from racing
+    /// a final cross-worker lease return.
+    inline auto udp_datagram_pool() noexcept -> buffer_pool&
+    {
+        static auto* const pool = new buffer_pool{65536U, 512U};
+        return *pool;
+    }
+
+} // namespace detail
+
+inline udp_datagram_buffer::udp_datagram_buffer(size_type requested_capacity)
+{
+    auto& pool = detail::udp_datagram_pool();
+    if (requested_capacity <= pool.block_size())
+    {
+        pooled_ = pool.acquire();
+        size_ = requested_capacity;
+        return;
+    }
+    heap_.resize(requested_capacity);
+    size_ = requested_capacity;
+}
+
+inline auto udp_datagram_buffer::data() noexcept -> std::byte*
+{
+    return pooled_.valid() ? static_cast<std::byte*>(pooled_.data()) : heap_.data();
+}
+
+inline auto udp_datagram_buffer::data() const noexcept -> const std::byte*
+{
+    return pooled_.valid() ? static_cast<const std::byte*>(pooled_.data()) : heap_.data();
+}
+
+inline auto udp_datagram_buffer::size() const noexcept -> size_type
+{
+    return size_;
+}
+
+inline auto udp_datagram_buffer::capacity() const noexcept -> size_type
+{
+    return pooled_.valid() ? pooled_.size() : heap_.capacity();
+}
+
+inline auto udp_datagram_buffer::empty() const noexcept -> bool
+{
+    return size_ == 0U;
+}
+
+inline auto udp_datagram_buffer::is_pooled() const noexcept -> bool
+{
+    return pooled_.valid();
+}
+
+inline auto udp_datagram_buffer::begin() noexcept -> iterator
+{
+    return data();
+}
+
+inline auto udp_datagram_buffer::begin() const noexcept -> const_iterator
+{
+    return data();
+}
+
+inline auto udp_datagram_buffer::end() noexcept -> iterator
+{
+    return data() + size_;
+}
+
+inline auto udp_datagram_buffer::end() const noexcept -> const_iterator
+{
+    return data() + size_;
+}
+
+inline auto udp_datagram_buffer::front() noexcept -> std::byte&
+{
+    return *data();
+}
+
+inline auto udp_datagram_buffer::front() const noexcept -> const std::byte&
+{
+    return *data();
+}
+
+inline auto udp_datagram_buffer::operator[](size_type index) noexcept -> std::byte&
+{
+    return data()[index];
+}
+
+inline auto udp_datagram_buffer::operator[](size_type index) const noexcept -> const std::byte&
+{
+    return data()[index];
+}
+
+inline void udp_datagram_buffer::resize(size_type requested_size)
+{
+    if (pooled_.valid())
+    {
+        if (requested_size > pooled_.size())
+            throw std::length_error("udp datagram exceeds pooled receive block");
+        size_ = requested_size;
+        return;
+    }
+    heap_.resize(requested_size);
+    size_ = requested_size;
+}
+
+inline udp_datagram_buffer::operator std::span<const std::byte>() const noexcept
+{
+    return {data(), size_};
+}
+
+inline udp_datagram_buffer::operator std::span<std::byte>() noexcept
+{
+    return {data(), size_};
+}
+
 export struct udp_received_datagram
 {
-    std::vector<std::byte> bytes;
+    udp_datagram_buffer bytes;
     endpoint peer;
 };
 
@@ -180,11 +361,48 @@ export auto async_recvfrom_batch(io_context& ctx, socket& sock,
     std::size_t max_datagrams, std::size_t max_datagram_size)
     -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>;
 
+/// Cancellable counterpart. Cancellation interrupts the caller's wait for a
+/// batch; registered-I/O receive rings remain posted for the listener and are
+/// reclaimed only by socket close.
+export auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size, cancel_token& token)
+    -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>;
+
 /// Submit a bounded batch of UDP datagrams.  The result is the number accepted
 /// by the operating system; a partial result is normal under UDP backpressure.
 export auto async_sendto_batch(io_context& ctx, socket& sock,
     std::span<const udp_send_datagram> datagrams)
     -> task<std::expected<std::size_t, std::error_code>>;
+
+/// Cancellable batch submission. A partial successful count is preserved when
+/// cancellation arrives after the operating system accepted earlier packets.
+export auto async_sendto_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// Pre-initialize the platform UDP backend selected by `socket_options::registered_io`.
+/// On Windows this creates the RIO queues before a listener becomes visible to
+/// callers, so an unavailable RIO provider can be replaced by a normal IOCP
+/// socket during `udp_socket::open` rather than failing on the first packet.
+/// Other platforms have no equivalent eager setup and return success.
+export auto prepare_async_datagram_io(io_context& ctx, socket& sock,
+    std::size_t max_datagram_size = 65536U, std::size_t receive_depth = 64U)
+    -> std::expected<void, std::error_code>;
+
+#ifndef CNETMOD_HAS_IOCP
+inline auto prepare_async_datagram_io(io_context& ctx, socket& sock,
+    std::size_t max_datagram_size, std::size_t receive_depth)
+    -> std::expected<void, std::error_code>
+{
+    // epoll, io_uring and kqueue initialize UDP work lazily on the first
+    // operation. Keep the same cross-platform API without adding setup work.
+    (void)ctx;
+    (void)sock;
+    (void)max_datagram_size;
+    (void)receive_depth;
+    return {};
+}
+#endif
 
 // =============================================================================
 // Async File I/O Operations (Coroutine Version)

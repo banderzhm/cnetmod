@@ -324,6 +324,35 @@ auto connection::command(bson_document document) -> task<result<bson_document>>
     co_return co_await command(options_.database, std::move(document));
 }
 
+auto connection::command_stream(std::string_view database, bson_document document,
+    command_stream_handler on_message) -> task<result<void>>
+{
+    if (!connected_ || !authenticated_)
+        co_return std::unexpected(make_error(error_code::connection_closed,
+            "MongoDB connection is not ready"));
+    if (!on_message)
+        co_return std::unexpected(make_error(error_code::protocol_error,
+            "MongoDB command stream requires a message handler"));
+    if (command_in_progress_)
+        co_return std::unexpected(make_error(error_code::protocol_error,
+            "concurrent commands on one MongoDB connection are not allowed"));
+
+    command_in_progress_ = true;
+    active_command_.store(true, std::memory_order_release);
+    command_cancel_requested_.store(false, std::memory_order_release);
+    auto streamed = co_await execute_command_stream(database, std::move(document),
+        std::move(on_message));
+    active_command_.store(false, std::memory_order_release);
+    command_in_progress_ = false;
+    if (command_cancel_requested_.load(std::memory_order_acquire))
+    {
+        close();
+        co_return std::unexpected(make_error(error_code::operation_cancelled,
+            "MongoDB command stream was cancelled"));
+    }
+    co_return streamed;
+}
+
 auto connection::execute_command_with_timer(std::string database,
     bson_document document, cancel_token& timer_token)
     -> task<result<bson_document>>
@@ -455,6 +484,62 @@ auto connection::execute_command_without_deadline(std::string_view database,
     co_return response;
 }
 
+auto connection::execute_command_stream(std::string_view database,
+    bson_document document, command_stream_handler on_message)
+    -> task<result<void>>
+{
+    document.set("$db", std::string(database));
+    if (next_request_id_ <= 0 ||
+        next_request_id_ == std::numeric_limits<std::int32_t>::max())
+        next_request_id_ = 1;
+    const auto request_id = next_request_id_++;
+    auto encoded = encode_command_message(request_id, document, options_.max_message_bytes,
+        op_message_exhaust_allowed);
+    if (!encoded)
+        co_return std::unexpected(encoded.error());
+    std::vector<std::byte> compressed;
+    std::span<const std::byte> outgoing = *encoded;
+    if (selected_compressor_ && encoded->size() >= options_.compression_minimum_bytes)
+    {
+        auto compressed_result = encode_compressed_message(*encoded, *selected_compressor_,
+            options_.max_message_bytes);
+        if (!compressed_result)
+            co_return std::unexpected(compressed_result.error());
+        compressed = std::move(*compressed_result);
+        outgoing = compressed;
+    }
+    auto written = co_await write_all(outgoing);
+    if (!written)
+    {
+        close();
+        co_return std::unexpected(written.error());
+    }
+
+    for (;;)
+    {
+        auto message = co_await receive_message(request_id);
+        if (!message)
+        {
+            close();
+            co_return std::unexpected(message.error());
+        }
+        if (auto failure = command_error(message->body))
+        {
+            close();
+            co_return std::unexpected(std::move(*failure));
+        }
+        const bool more_to_come = (message->flags & op_message_more_to_come) != 0;
+        auto consumed = co_await on_message(std::move(message->body));
+        if (!consumed)
+        {
+            close();
+            co_return std::unexpected(consumed.error());
+        }
+        if (!more_to_come)
+            co_return result<void>{};
+    }
+}
+
 void connection::cancel_active_command() noexcept
 {
     if (!active_command_.load(std::memory_order_acquire))
@@ -463,7 +548,7 @@ void connection::cancel_active_command() noexcept
     socket_.close();
 }
 
-auto connection::receive_response(std::int32_t expected) -> task<result<bson_document>>
+auto connection::receive_message(std::int32_t expected) -> task<result<decoded_message>>
 {
     std::array<std::byte, 16> header_bytes{};
     auto header_read = co_await read_exact(header_bytes);
@@ -494,6 +579,14 @@ auto connection::receive_response(std::int32_t expected) -> task<result<bson_doc
     if (decoded->header.response_to != expected)
         co_return std::unexpected(make_error(error_code::protocol_error,
             "MongoDB response correlation id mismatch"));
+    co_return std::move(*decoded);
+}
+
+auto connection::receive_response(std::int32_t expected) -> task<result<bson_document>>
+{
+    auto decoded = co_await receive_message(expected);
+    if (!decoded)
+        co_return std::unexpected(decoded.error());
     if ((decoded->flags & op_message_more_to_come) != 0)
         co_return std::unexpected(make_error(error_code::protocol_error,
             "streaming MongoDB responses are not supported by command()"));

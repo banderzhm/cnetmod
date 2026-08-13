@@ -3,6 +3,7 @@ export module cnetmod.protocol.mongodb:connection_pool;
 import std;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.mutex;
 import :error;
 import :connection;
 import :connection_options;

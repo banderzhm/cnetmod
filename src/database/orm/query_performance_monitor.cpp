@@ -7,6 +7,7 @@ performance_interceptor::performance_interceptor(performance_config c)
 auto performance_interceptor::start_timing()
     -> std::chrono::steady_clock::time_point
 {
+    concurrent_containers::shared_latch_guard lock{latch_};
     return config_.enabled ? std::chrono::steady_clock::now()
                            : std::chrono::steady_clock::time_point{};
 }
@@ -15,11 +16,11 @@ void performance_interceptor::end_timing(
     std::chrono::steady_clock::time_point s, std::string_view sql,
     std::uint64_t rows)
 {
-    if (!config_.enabled)
+    concurrent_containers::exclusive_latch_guard lock{latch_};
+    if (!config_.enabled || s == std::chrono::steady_clock::time_point{})
         return;
-    auto d = std::chrono::duration_cast<std::chrono::microseconds>(
+    const auto d = std::chrono::duration_cast<std::chrono::microseconds>(
         std::chrono::steady_clock::now() - s);
-    std::lock_guard lock(mutex_);
     history_.push_back({std::string(sql), d, std::chrono::system_clock::now(),
         rows, d >= config_.slow_query_threshold});
     if (history_.size() > config_.max_history)
@@ -34,7 +35,7 @@ void performance_interceptor::end_timing(
 auto performance_interceptor::get_slow_queries() const
     -> std::vector<sql_stat>
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     std::vector<sql_stat> r;
     for (auto const& s : history_)
         if (s.is_slow)
@@ -44,21 +45,21 @@ auto performance_interceptor::get_slow_queries() const
 
 auto performance_interceptor::get_history() const -> std::vector<sql_stat>
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     return history_;
 }
 
 auto performance_interceptor::get_summary() const
     -> std::tuple<std::uint64_t, std::uint64_t, std::chrono::microseconds>
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     return {total_queries_, slow_queries_, total_execution_time_};
 }
 
 auto performance_interceptor::get_average_time() const
     -> std::chrono::microseconds
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     return total_queries_ ? std::chrono::duration_cast<std::chrono::microseconds>(
                                 total_execution_time_ / total_queries_)
                           : std::chrono::microseconds{};
@@ -66,7 +67,7 @@ auto performance_interceptor::get_average_time() const
 
 void performance_interceptor::clear()
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     history_.clear();
     total_queries_ = slow_queries_ = 0;
     total_execution_time_ = {};
@@ -80,11 +81,13 @@ auto performance_interceptor::config() const noexcept
 
 void performance_interceptor::set_config(performance_config c)
 {
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     config_ = std::move(c);
 }
 
 void performance_interceptor::set_enabled(bool e)
 {
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     config_.enabled = e;
 }
 

@@ -22,7 +22,7 @@ namespace {
 auto load_balancer::pick(std::span<const endpoint> endpoints)
     -> std::optional<endpoint>
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
 
     std::optional<std::uint32_t> selected_priority;
     for (const auto& value : endpoints)

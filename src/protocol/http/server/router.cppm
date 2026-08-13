@@ -75,6 +75,7 @@ public:
     [[nodiscard]] auto request_deadline() const noexcept -> const cnetmod::deadline&;
     void set_deadline(cnetmod::deadline value) noexcept;
     [[nodiscard]] auto cancellation_token() noexcept -> cnetmod::cancel_token&;
+
     /// Run one token-aware downstream operation in this request's remaining
     /// budget. A fresh token is supplied to the factory for this operation.
     template <class Factory>
@@ -83,8 +84,16 @@ public:
         return cnetmod::with_deadline(ctx_, deadline_,
             std::forward<Factory>(operation));
     }
+
     [[nodiscard]] auto trace_id() const noexcept -> std::string_view;
     void set_trace_id(std::string value);
+    /// W3C Trace Context fields. They are populated by the optional tracing
+    /// middleware and remain empty for applications that do not opt in.
+    [[nodiscard]] auto trace_span_id() const noexcept -> std::string_view;
+    [[nodiscard]] auto trace_flags() const noexcept -> std::uint8_t;
+    [[nodiscard]] auto trace_state() const noexcept -> std::string_view;
+    void set_trace_context(std::string trace_id, std::string span_id,
+        std::uint8_t flags, std::string state = {});
     [[nodiscard]] auto client_address() const -> std::string;
 
 private:
@@ -108,6 +117,9 @@ private:
     cnetmod::deadline deadline_{};
     cnetmod::cancel_token cancellation_;
     std::string trace_id_;
+    std::string trace_span_id_;
+    std::string trace_state_;
+    std::uint8_t trace_flags_{};
 };
 
 export using handler_fn = std::function<task<void>(request_context&)>;

@@ -33,7 +33,13 @@ namespace detail {
 
     void when_all_state::notify_one_done() noexcept
     {
-        if (remaining.fetch_sub(1, std::memory_order_acq_rel) == 1 && caller)
+        if (remaining.fetch_sub(1, std::memory_order_acq_rel) != 1)
+            return;
+        unsigned char expected = 0;
+        if (completion_handoff.compare_exchange_strong(expected, 2,
+                std::memory_order_acq_rel, std::memory_order_acquire))
+            return;
+        if (expected == 1 && caller)
         {
             caller.resume();
         }

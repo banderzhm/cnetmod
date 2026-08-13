@@ -662,3 +662,23 @@ auto main() -> int
 - `examples/database/mongodb/mongodb_production_service.cpp` — 生产级架构
 - `examples/http/multicore_http.cpp` — `server_context` 多核架构参考
 - 更多示例参见 `examples/database/mongodb/` 目录
+## Exhaust / `moreToCome` 连续响应
+
+普通 `connection::command()` 只适用于一问一答；若服务端 OP_MSG 设置
+`moreToCome`，它会返回协议错误，避免后续命令误读同一 socket 中残留的响应。
+对于 exhaust cursor 等连续响应场景，使用 `command_stream()`：
+
+```cpp
+auto streamed = co_await conn.command_stream("analytics",
+    bson_document{{"find", "events"}, {"filter", bson_document{}}},
+    [](bson_document response) -> task<result<void>> {
+        // 处理每一条 OP_MSG 响应；这里可 co_await 异步写入或业务处理。
+        co_return result<void>{};
+    });
+```
+
+流期间连接是独占的，不能并发执行其他命令。处理回调返回错误、网络错误或调用
+`cancel_active_command()` 时，连接会被关闭并从连接池中淘汰；这是必要的，因为
+尚未读取的连续响应不能安全地留给下一位租户。`command_stream()` 不使用普通命令
+的整体超时，长流应通过 MongoDB 命令本身的 `maxTimeMS`、应用 deadline 和取消来
+控制生命周期。

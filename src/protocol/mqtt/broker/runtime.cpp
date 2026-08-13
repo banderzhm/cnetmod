@@ -21,6 +21,7 @@ import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.protocol.tcp;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -53,7 +54,8 @@ namespace {
         {
             if (target)
             {
-                std::scoped_lock lock(target->cross_delivery_mtx);
+                concurrent_containers::exclusive_latch_guard lock{
+                    target->cross_delivery_latch};
                 target->cross_delivery_pending.clear();
                 target->cross_delivery_scheduled = false;
             }
@@ -62,7 +64,8 @@ namespace {
 
         bool should_reschedule = false;
         {
-            std::scoped_lock lock(target->cross_delivery_mtx);
+            concurrent_containers::exclusive_latch_guard lock{
+                target->cross_delivery_latch};
             if (target->cross_delivery_pending.empty())
             {
                 target->cross_delivery_scheduled = false;
@@ -106,7 +109,8 @@ namespace {
 
         if (target && target->connected)
         {
-            std::scoped_lock lock(target->cross_delivery_mtx);
+            concurrent_containers::exclusive_latch_guard lock{
+                target->cross_delivery_latch};
             while (!target->cross_delivery_pending.empty() &&
                 batch.size() < max_flush_items)
             {
@@ -157,7 +161,8 @@ namespace {
 
         bool should_schedule = false;
         {
-            std::scoped_lock lock(target->cross_delivery_mtx);
+            concurrent_containers::exclusive_latch_guard lock{
+                target->cross_delivery_latch};
             target->cross_delivery_pending.push_back(detail::cross_delivery_item{
                 .msg = std::move(msg),
             });

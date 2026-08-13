@@ -25,6 +25,16 @@ void mapper_session::set_sql_logging(bool enabled) noexcept
     log_sql_ = enabled;
 }
 
+void mapper_session::set_native_prepared_statements(bool enabled) noexcept
+{
+    native_prepared_statements_ = enabled;
+}
+
+auto mapper_session::native_prepared_statements() const noexcept -> bool
+{
+    return native_prepared_statements_;
+}
+
 auto mapper_session::last_generated_sql() const noexcept -> std::string_view
 {
     return last_sql_;
@@ -46,29 +56,7 @@ auto mapper_session::execute(std::string_view statement_id,
         co_return result;
     }
 
-    auto& [sql, params] = *sql_result;
-    last_sql_ = sql;
-
-    auto final_sql_result = format_sql(cli_.current_format_opts(), sql, params);
-    if (!final_sql_result)
-    {
-        exec_result result;
-        result.error_msg = "SQL formatting error";
-        co_return result;
-    }
-
-    last_final_sql_ = *final_sql_result;
-
-    if (log_sql_ && final_sql_result->size() < 500)
-    {
-        logger::detail::write_log_no_src(logger::level::debug,
-            std::format("[SQL] Generated: {}", sql));
-        logger::detail::write_log_no_src(
-            logger::level::debug,
-            std::format("[SQL] Final: {}", *final_sql_result));
-    }
-
-    auto rs = co_await cli_.execute(*final_sql_result);
+    auto rs = co_await execute_built(*sql_result);
 
     exec_result result;
     result.affected_rows = rs.affected_rows;
@@ -98,30 +86,70 @@ auto mapper_session::execute_query(std::string_view statement_id,
         co_return result;
     }
 
-    auto& [sql, params] = *sql_result;
-    last_sql_ = sql;
-
-    auto final_sql_result = format_sql(cli_.current_format_opts(), sql, params);
-    if (!final_sql_result)
-    {
-        result_set result;
-        result.error_msg = "SQL formatting error";
-        co_return result;
-    }
-
-    last_final_sql_ = *final_sql_result;
-
-    if (log_sql_ && final_sql_result->size() < 500)
-    {
-        logger::detail::write_log_no_src(logger::level::debug,
-            std::format("[SQL] Generated: {}", sql));
-        logger::detail::write_log_no_src(
-            logger::level::debug,
-            std::format("[SQL] Final: {}", *final_sql_result));
-    }
-
-    auto mysql_result = co_await cli_.execute(*final_sql_result);
+    auto mysql_result = co_await execute_built(*sql_result);
     co_return mysql_adapt_result(mysql_result);
+}
+
+auto mapper_session::execute_built(const built_dynamic_sql& built)
+    -> task<cnetmod::mysql::result_set>
+{
+    last_sql_ = built.sql;
+
+    // No parameters means both wire paths are equivalent. Keep COM_QUERY for
+    // that case so a plain XML statement pays no PREPARE/CLOSE round trips.
+    if (!native_prepared_statements_ || built.params.empty())
+    {
+        auto final_sql = format_sql(cli_.current_format_opts(), built.sql,
+            built.params);
+        if (!final_sql)
+        {
+            cnetmod::mysql::result_set error;
+            error.error_msg = "SQL formatting error";
+            co_return error;
+        }
+        last_final_sql_ = *final_sql;
+        if (log_sql_ && final_sql->size() < 500U)
+        {
+            logger::detail::write_log_no_src(logger::level::debug,
+                std::format("[SQL] Generated: {}", built.sql));
+            logger::detail::write_log_no_src(logger::level::debug,
+                std::format("[SQL] Final: {}", *final_sql));
+        }
+        co_return co_await cli_.execute(*final_sql);
+    }
+
+    // `prepared_sql` contains only parser-authored `?` markers. Parameter
+    // bytes are encoded by COM_STMT_EXECUTE, so values never become SQL text.
+    last_final_sql_ = built.prepared_sql;
+    if (log_sql_)
+        logger::detail::write_log_no_src(logger::level::debug,
+            std::format("[SQL] Prepared: {} ({} parameter(s))",
+                built.prepared_sql, built.params.size()));
+
+    auto statement = co_await cli_.prepare(built.prepared_sql);
+    if (!statement)
+    {
+        cnetmod::mysql::result_set error;
+        error.error_msg = "prepare failed: " + statement.error();
+        co_return error;
+    }
+    if (statement->num_params != built.params.size())
+    {
+        cnetmod::mysql::result_set error;
+        error.error_msg = std::format(
+            "prepared parameter count mismatch: statement expects {}, mapper bound {}",
+            statement->num_params, built.params.size());
+        co_await cli_.close_stmt(*statement);
+        co_return error;
+    }
+
+    std::vector<cnetmod::mysql::param_value> parameters;
+    parameters.reserve(built.params.size());
+    for (const auto& parameter : built.params)
+        parameters.push_back(mysql_adapt_parameter(parameter));
+    auto result = co_await cli_.execute_stmt(*statement, parameters);
+    co_await cli_.close_stmt(*statement);
+    co_return result;
 }
 
 auto mapper_session::execute_query(
@@ -161,7 +189,8 @@ auto mapper_session::query_object_graph(std::string_view statement_id,
     {
         auto load_relation = [&](std::string_view property, std::string_view column,
                                  std::string_view select, std::string_view nested_map_id,
-                                 bool many) -> task<std::expected<void, std::string>> {
+                                 bool many) -> task<std::expected<void, std::string>>
+        {
             if (select.empty())
                 co_return {};
             const auto* source = root_map->find_by_column(column);
@@ -175,9 +204,10 @@ auto mapper_session::query_object_graph(std::string_view statement_id,
             const auto nested_namespace = registry_.get_namespace(select);
             const auto* nested_maps = registry_.result_maps(nested_namespace);
             const auto resolved_map_id = nested_map_id.empty()
-                ? nested_statement->attr("resultMap") : nested_map_id;
+                ? nested_statement->attr("resultMap")
+                : nested_map_id;
             const auto* nested_map = nested_maps ? nested_maps->find(resolved_map_id)
-                : registry_.find_result_map(resolved_map_id);
+                                                 : registry_.find_result_map(resolved_map_id);
             if (!nested_map || !nested_maps)
                 co_return std::unexpected("nested resultMap not found: " + std::string(resolved_map_id));
 
@@ -195,11 +225,13 @@ auto mapper_session::query_object_graph(std::string_view statement_id,
 
         for (const auto& relation : root_map->associations)
             if (auto loaded = co_await load_relation(relation.property, relation.column,
-                    relation.select, relation.result_map, false); !loaded)
+                    relation.select, relation.result_map, false);
+                !loaded)
                 co_return std::unexpected(loaded.error());
         for (const auto& relation : root_map->collections)
             if (auto loaded = co_await load_relation(relation.property, relation.column,
-                    relation.select, relation.result_map, true); !loaded)
+                    relation.select, relation.result_map, true);
+                !loaded)
                 co_return std::unexpected(loaded.error());
     }
     co_return graph;

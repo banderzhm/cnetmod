@@ -63,6 +63,7 @@ foreach(bench_name ${BENCH_TARGETS})
 
     add_executable(${bench_name} ${_bench_src})
     target_link_libraries(${bench_name} PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(${bench_name})
     target_include_directories(${bench_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set_property(TARGET ${bench_name} PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE"

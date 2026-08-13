@@ -799,7 +799,13 @@ auto qpack_decoder::decode(byte_view in, std::uint64_t stream_id)
         impl_->blocked_header_blocks.emplace(stream_id, byte_buffer{encoded.begin(), encoded.end()});
         return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
     }
+    // A header representation occupies at least one byte, so the encoded
+    // block size is a safe upper bound for the number of decoded fields.
+    // Reserve a modest common-case capacity up front: this is the per-request
+    // HTTP/3 hot path and avoids the geometric vector growth for ordinary
+    // pseudo-header blocks without over-reserving unusually large requests.
     std::vector<header_field> out;
+    out.reserve(std::min<std::size_t>(in.size(), 16U));
     while (!in.empty())
     {
         auto f = std::to_integer<std::uint8_t>(in.front());

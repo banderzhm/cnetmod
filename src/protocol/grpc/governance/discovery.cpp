@@ -16,14 +16,12 @@ static_discovery::static_discovery(std::vector<endpoint> endpoints)
 
 void static_discovery::replace_snapshot(std::vector<endpoint> endpoints)
 {
-    std::unique_lock lock(mutex_);
-    endpoints_ = std::move(endpoints);
+    endpoints_.store(std::move(endpoints));
 }
 
 auto static_discovery::snapshot() const -> std::vector<endpoint>
 {
-    std::shared_lock lock(mutex_);
-    return endpoints_;
+    return endpoints_.snapshot();
 }
 
 } // namespace cnetmod::grpc::governance

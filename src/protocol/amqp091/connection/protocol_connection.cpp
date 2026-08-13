@@ -14,6 +14,7 @@ import cnetmod.coro.mutex;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -223,7 +224,10 @@ struct protocol_connection::impl
     std::uint16_t channel_max = 0, next_channel = 1;
     std::uint32_t frame_max = 131072;
     std::chrono::seconds heartbeat{0};
-    std::mutex state_mutex;
+    // Reader, RPC registration and recovery all touch the same connection
+    // bookkeeping. Keep each map transaction atomic without a platform
+    // mutex; no coroutine suspension is permitted while this latch is held.
+    concurrent_containers::atomic_rw_latch state_latch;
     std::atomic<std::int64_t> last_received_ns{0};
     std::shared_ptr<std::atomic_bool> run_active;
     std::atomic_bool reader_claimed{false};
@@ -244,7 +248,7 @@ struct protocol_connection::impl
         current.store(value);
         std::vector<std::shared_ptr<connection_observer>> listeners;
         {
-            std::scoped_lock l(state_mutex);
+            concurrent_containers::exclusive_latch_guard lock{state_latch};
             for (auto it = observers.begin(); it != observers.end();)
                 if (auto p = it->lock())
                 {
@@ -262,7 +266,7 @@ struct protocol_connection::impl
     {
         std::vector<std::shared_ptr<connection_observer>> listeners;
         {
-            std::scoped_lock l(state_mutex);
+            concurrent_containers::shared_latch_guard lock{state_latch};
             for (auto& o : observers)
                 if (auto p = o.lock())
                     listeners.push_back(std::move(p));
@@ -392,7 +396,7 @@ auto protocol_connection::negotiated_channel_max() const noexcept
 
 void protocol_connection::observe(std::weak_ptr<connection_observer> o)
 {
-    std::scoped_lock l(impl_->state_mutex);
+    concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
     impl_->observers.push_back(std::move(o));
 }
 
@@ -664,7 +668,7 @@ auto protocol_connection::async_rpc(method_frame request,
     pending->expected_class = expected_class;
     pending->expected_method = expected_method;
     {
-        std::scoped_lock l(impl_->state_mutex);
+        concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
         if (impl_->pending.contains(channel))
             co_return std::unexpected(
                 make_error(error_code::command_invalid,
@@ -675,7 +679,7 @@ auto protocol_connection::async_rpc(method_frame request,
     if (!sent)
     {
         {
-            std::scoped_lock l(impl_->state_mutex);
+            concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
             impl_->pending.erase(channel);
         }
         co_return std::unexpected(sent.error());
@@ -718,14 +722,14 @@ void protocol_connection::register_delivery_handler(std::uint16_t channel,
     std::string tag,
     delivery_handler handler)
 {
-    std::scoped_lock l(impl_->state_mutex);
+    concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
     impl_->delivery_handlers[channel][std::move(tag)] = std::move(handler);
 }
 
 void protocol_connection::unregister_delivery_handler(std::uint16_t channel,
     std::string_view tag)
 {
-    std::scoped_lock l(impl_->state_mutex);
+    concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
     if (auto it = impl_->delivery_handlers.find(channel);
         it != impl_->delivery_handlers.end())
         it->second.erase(std::string(tag));
@@ -734,7 +738,7 @@ void protocol_connection::unregister_delivery_handler(std::uint16_t channel,
 auto protocol_connection::confirm_tracker(std::uint16_t channel)
     -> std::shared_ptr<publisher_confirm_tracker>
 {
-    std::scoped_lock l(impl_->state_mutex);
+    concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
     auto& v = impl_->confirms[channel];
     if (!v)
         v = std::make_shared<publisher_confirm_tracker>();
@@ -837,7 +841,7 @@ auto protocol_connection::async_run(cancel_token& token) -> task<result<void>>
                 co_return std::unexpected(method.error());
             std::shared_ptr<pending_rpc> rpc;
             {
-                std::scoped_lock l(impl_->state_mutex);
+                concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
                 auto it = impl_->pending.find(f.channel);
                 if (it != impl_->pending.end() &&
                     it->second->expected_class == method->class_id &&
@@ -942,7 +946,7 @@ auto protocol_connection::async_run(cancel_token& token) -> task<result<void>>
                     {.channel = f.channel, .class_id = 20, .method_id = 41});
                 std::shared_ptr<pending_rpc> failed;
                 {
-                    std::scoped_lock l(impl_->state_mutex);
+                    concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
                     if (auto it = impl_->pending.find(f.channel);
                         it != impl_->pending.end())
                     {
@@ -978,7 +982,7 @@ auto protocol_connection::async_run(cancel_token& token) -> task<result<void>>
                 std::vector<std::shared_ptr<pending_rpc>> pending_calls;
                 std::vector<std::shared_ptr<publisher_confirm_tracker>> trackers;
                 {
-                    std::scoped_lock l(impl_->state_mutex);
+                    concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
                     for (auto& [channel, pending] : impl_->pending)
                         pending_calls.push_back(pending);
                     impl_->pending.clear();
@@ -1020,7 +1024,7 @@ auto protocol_connection::async_run(cancel_token& token) -> task<result<void>>
                 {
                     delivery_handler handler;
                     {
-                        std::scoped_lock l(impl_->state_mutex);
+                        concurrent_containers::shared_latch_guard lock{impl_->state_latch};
                         if (auto c = impl_->delivery_handlers.find(f.channel);
                             c != impl_->delivery_handlers.end())
                             if (auto h = c->second.find(content.delivered.consumer_tag);
@@ -1047,7 +1051,7 @@ auto protocol_connection::async_run(cancel_token& token) -> task<result<void>>
                 {
                     delivery_handler handler;
                     {
-                        std::scoped_lock l(impl_->state_mutex);
+                        concurrent_containers::shared_latch_guard lock{impl_->state_latch};
                         if (auto c = impl_->delivery_handlers.find(f.channel);
                             c != impl_->delivery_handlers.end())
                             if (auto h = c->second.find(content.delivered.consumer_tag);
@@ -1076,7 +1080,7 @@ auto protocol_connection::async_close(std::string text) -> task<result<void>>
         co_return result<void>{};
     std::shared_ptr<cancel_token> managed_reader;
     {
-        std::scoped_lock lock(impl_->state_mutex);
+        concurrent_containers::shared_latch_guard lock{impl_->state_latch};
         managed_reader = impl_->managed_reader_token;
     }
     if (managed_reader)
@@ -1125,7 +1129,7 @@ auto protocol_connection::async_recover(cancel_token& token)
         }
         auto managed_reader = std::make_shared<cancel_token>();
         {
-            std::scoped_lock lock(impl_->state_mutex);
+            concurrent_containers::exclusive_latch_guard lock{impl_->state_latch};
             impl_->managed_reader_token = managed_reader;
         }
         auto self = shared_from_this();

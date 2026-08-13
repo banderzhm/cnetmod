@@ -22,7 +22,7 @@ auto udp_server::make_discovery_response(const inbound_request& req) -> std::opt
 
     std::vector<resource_description> resources;
     {
-        std::scoped_lock lock(resources_mutex_);
+        concurrent_containers::shared_latch_guard lock{resources_latch_};
         resources = resources_;
     }
 

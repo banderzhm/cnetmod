@@ -79,7 +79,7 @@ retry_budget::retry_budget(retry_budget_config config) noexcept
 
 auto retry_budget::try_acquire() noexcept -> bool
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     if (tokens_ <= config_.retry_threshold)
         return false;
     --tokens_;
@@ -88,26 +88,26 @@ auto retry_budget::try_acquire() noexcept -> bool
 
 void retry_budget::record_success() noexcept
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     const auto remaining = config_.max_tokens - tokens_;
     tokens_ += std::min(config_.token_ratio, remaining);
 }
 
 void retry_budget::reset() noexcept
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     tokens_ = config_.max_tokens;
 }
 
 auto retry_budget::available_tokens() const noexcept -> std::uint32_t
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     return tokens_;
 }
 
 auto retry_budget::allows_retry() const noexcept -> bool
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     return tokens_ > config_.retry_threshold;
 }
 

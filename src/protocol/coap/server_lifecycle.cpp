@@ -76,7 +76,7 @@ void udp_server::route(method m, std::string path, request_handler handler)
 void udp_server::register_resource(resource_description desc)
 {
     desc.path = normalize_path(std::move(desc.path));
-    std::scoped_lock lock(resources_mutex_);
+    concurrent_containers::exclusive_latch_guard lock{resources_latch_};
     auto it = std::ranges::find_if(resources_, [&](const auto& item)
         {
             return item.path == desc.path;

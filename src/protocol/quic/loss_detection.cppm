@@ -235,6 +235,26 @@ public:
         ++state.pto_count_;
     }
 
+    /// Retire an acknowledged-or-lost packet from recovery without waiting
+    /// for an ACK range. PLPMTUD uses this for a padded probe that reached
+    /// its PTO: the probe is intentionally not retransmitted as payload.
+    void discard_inflight_packet(std::uint64_t pn, pn_space space) noexcept
+    {
+        (void)remove_if_inflight(pn, space);
+    }
+
+    /// Forget a packet number space once QUIC has discarded its keys.  The
+    /// peer can no longer acknowledge packets in that space, so retaining
+    /// them would leave an already-expired PTO armed forever.
+    [[nodiscard]] auto discard_packet_number_space(pn_space space) noexcept
+        -> std::uint64_t
+    {
+        auto& state = get_pn_space_state(space);
+        const auto bytes = state.bytes_in_flight_;
+        state = pn_space_state{};
+        return bytes;
+    }
+
     /// Calculate PTO duration
     auto pto_duration() const noexcept -> std::chrono::steady_clock::duration
     {

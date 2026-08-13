@@ -31,16 +31,35 @@ public:
     [[nodiscard]] auto modify(int fd, uint32_t events, void* user_data)
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto remove(int fd) -> std::expected<void, std::error_code>;
+    /// Remove only the matching directional readiness waiter.  A UDP socket
+    /// commonly has an always-pending EPOLLIN receive and an occasional
+    /// EPOLLOUT send waiter; cancelling one must not discard the other.
+    [[nodiscard]] auto remove(int fd, uint32_t events, void* user_data)
+        -> std::expected<void, std::error_code>;
 
 protected:
     void wake() override;
 
 private:
+    struct readiness_registration
+    {
+        int fd{};
+        uint32_t events{};
+        void* read_waiter{};
+        void* write_waiter{};
+    };
+
+    [[nodiscard]] auto arm(readiness_registration& registration)
+        -> std::expected<void, std::error_code>;
+    [[nodiscard]] auto disarm_or_rearm(readiness_registration& registration)
+        -> std::expected<void, std::error_code>;
+
     auto run_one_impl(int timeout_ms) -> std::size_t;
 
     int epoll_fd_ = -1;
     int event_fd_ = -1;
     std::vector<::epoll_event> events_;
+    std::unordered_map<int, std::unique_ptr<readiness_registration>> registrations_;
     std::atomic<bool> stopped_{false};
 };
 

@@ -71,6 +71,7 @@ public:
 
     auto& set_body(std::string_view body)
     {
+        body_source_.reset();
         body_ = std::string(body);
         // Automatically set Content-Length
         headers_["Content-Length"] = std::to_string(body_.size());
@@ -79,9 +80,37 @@ public:
 
     auto& set_body(std::string body)
     {
+        body_source_.reset();
         headers_["Content-Length"] = std::to_string(body.size());
         body_ = std::move(body);
         return *this;
+    }
+
+    /// Attach a pull-based streaming request body.  The source is consumed
+    /// once by send(); it is intentionally shared so request copies (for
+    /// example internal dispatch wrappers) retain the same producer state.
+    /// With no length, HTTP/1.1 uses chunked transfer encoding; HTTP/2 and
+    /// HTTP/3 send DATA frames until the producer returns nullopt.
+    auto& set_body_stream(std::shared_ptr<request_body_source> source)
+    {
+        body_.clear();
+        body_source_ = std::move(source);
+        headers_.erase("Content-Length");
+        if (body_source_ && body_source_->content_length())
+            headers_["Content-Length"] =
+                std::to_string(*body_source_->content_length());
+        return *this;
+    }
+
+    auto& set_body_stream(request_body_source source)
+    {
+        return set_body_stream(
+            std::make_shared<request_body_source>(std::move(source)));
+    }
+
+    auto& set_body_source(std::shared_ptr<request_body_source> source)
+    {
+        return set_body_stream(std::move(source));
     }
 
     // --- Access ---
@@ -109,6 +138,17 @@ public:
     [[nodiscard]] auto body() const noexcept -> std::string_view
     {
         return body_;
+    }
+
+    [[nodiscard]] auto body_source() const noexcept
+        -> const std::shared_ptr<request_body_source>&
+    {
+        return body_source_;
+    }
+
+    [[nodiscard]] auto has_streaming_body() const noexcept -> bool
+    {
+        return static_cast<bool>(body_source_);
     }
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view
@@ -162,6 +202,7 @@ private:
     http_version version_ = http_version::http_1_1;
     header_map headers_;
     std::string body_;
+    std::shared_ptr<request_body_source> body_source_;
 };
 
 } // namespace cnetmod::http

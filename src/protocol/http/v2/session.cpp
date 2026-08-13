@@ -24,6 +24,8 @@ namespace {
             (std::to_integer<std::uint32_t>(value[2]) << 8) |
             std::to_integer<std::uint32_t>(value[3]);
     }
+
+    constexpr std::size_t input_compaction_threshold = 4096;
 } // namespace
 
 session::session(cnetmod::io_context& context, cnetmod::socket& socket,
@@ -71,6 +73,31 @@ void session::queue_frame(frame_header header,
     const auto encoded = encode_frame_header(header);
     outbound_.insert(outbound_.end(), encoded.begin(), encoded.end());
     outbound_.insert(outbound_.end(), payload.begin(), payload.end());
+}
+
+void session::compact_input()
+{
+    if (input_offset_ == 0)
+        return;
+
+    if (input_offset_ == input_.size())
+    {
+        input_.clear();
+        input_offset_ = 0;
+        return;
+    }
+
+    // Keep an unread tail in place until enough consumed prefix has accrued.
+    // Erasing from a vector for every small HTTP/2 frame turns a coalesced
+    // receive into repeated memmoves on the connection hot path.
+    if (input_offset_ < input_compaction_threshold && input_offset_ * 2 < input_.size())
+        return;
+
+    const auto unread = input_.size() - input_offset_;
+    std::move(input_.begin() + static_cast<std::ptrdiff_t>(input_offset_), input_.end(),
+        input_.begin());
+    input_.resize(unread);
+    input_offset_ = 0;
 }
 
 void session::queue_connection_error(std::uint32_t code)
@@ -191,34 +218,42 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                             .stream_id = stream_id},
                 *encoded_trailers);
         }
+        // This request has already supplied END_STREAM and its complete
+        // response has been queued. Retaining it makes the per-connection
+        // stream map grow without bound for ordinary sequential RPC traffic.
+        streams_.erase(stream_id);
     }
 }
 
 auto session::receive(std::span<const std::byte> bytes)
     -> std::expected<void, std::error_code>
 {
+    compact_input();
     input_.insert(input_.end(), bytes.begin(), bytes.end());
     if (!received_preface_)
     {
-        if (input_.size() < client_preface.size())
+        if (input_.size() - input_offset_ < client_preface.size())
             return {};
-        if (std::string_view(reinterpret_cast<const char*>(input_.data()),
+        if (std::string_view(reinterpret_cast<const char*>(input_.data() + input_offset_),
                 client_preface.size()) != client_preface)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        input_.erase(input_.begin(), input_.begin() + static_cast<std::ptrdiff_t>(client_preface.size()));
+        input_offset_ += client_preface.size();
         received_preface_ = true;
         queue_frame({.type = frame_type::settings, .stream_id = 0},
             encode_settings(local_));
     }
-    while (input_.size() >= frame_header_size)
+    while (input_.size() - input_offset_ >= frame_header_size)
     {
         auto header =
-            decode_frame_header(std::span{input_.data(), frame_header_size});
+            decode_frame_header(std::span{input_.data() + input_offset_, frame_header_size});
         if (!header)
             return std::unexpected(header.error());
-        if (input_.size() < frame_header_size + header->length)
+        if (input_.size() - input_offset_ < frame_header_size + header->length)
+        {
+            compact_input();
             return {};
-        auto payload = std::span{input_.data() + frame_header_size,
+        }
+        auto payload = std::span{input_.data() + input_offset_ + frame_header_size,
             static_cast<std::size_t>(header->length)};
         auto result = process_frame(*header, payload);
         if (!result)
@@ -229,9 +264,9 @@ auto session::receive(std::span<const std::byte> bytes)
                     : error_protocol);
             return result;
         }
-        input_.erase(input_.begin(),
-            input_.begin() + static_cast<std::ptrdiff_t>(frame_header_size + header->length));
+        input_offset_ += frame_header_size + header->length;
     }
+    compact_input();
     return {};
 }
 
@@ -394,15 +429,17 @@ auto session::run(std::span<const std::byte> initial) -> cnetmod::task<void>
             co_return;
         }
         co_await dispatch_ready();
-        auto output = take_outbound();
-        if (!output.empty())
+        if (!outbound_.empty())
         {
-            auto written = co_await writer_({output.data(), output.size()});
+            auto written = co_await writer_({outbound_.data(), outbound_.size()});
             if (!written)
                 co_return;
+            outbound_.clear();
         }
     }
-    std::array<std::byte, 16 * 1024> buffer{};
+    // The transport reader fills the returned range before receive() observes
+    // it; do not zero an otherwise opaque receive scratch buffer.
+    std::array<std::byte, 16 * 1024> buffer;
     while (true)
     {
         auto read = co_await reader_({buffer.data(), buffer.size()});
@@ -416,12 +453,12 @@ auto session::run(std::span<const std::byte> initial) -> cnetmod::task<void>
             co_return;
         }
         co_await dispatch_ready();
-        auto output = take_outbound();
-        if (!output.empty())
+        if (!outbound_.empty())
         {
-            auto written = co_await writer_({output.data(), output.size()});
+            auto written = co_await writer_({outbound_.data(), outbound_.size()});
             if (!written)
                 co_return;
+            outbound_.clear();
         }
     }
 }

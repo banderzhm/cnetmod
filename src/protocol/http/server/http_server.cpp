@@ -425,11 +425,11 @@ auto save_upload(upload_options opts) -> handler_fn
 // Date Cache Implementation
 // =============================================================================
 
-auto date_cache::get() -> std::string
+auto date_cache::get() -> std::array<char, 29U>
 {
-    auto now = std::time(nullptr);
-    auto cached = cached_time_.load(std::memory_order_relaxed);
-    if (now != cached)
+    const auto now = std::time(nullptr);
+    if (now != cached_time_.load(std::memory_order_acquire) &&
+        !refreshing_.test_and_set(std::memory_order_acquire))
     {
         std::tm gmt{};
 #ifdef CNETMOD_PLATFORM_WINDOWS
@@ -439,15 +439,41 @@ auto date_cache::get() -> std::string
 #endif
         char buf[30];
         std::strftime(buf, sizeof(buf), "%a, %d %b %Y %H:%M:%S GMT", &gmt);
-        auto s = std::string(buf);
-        {
-            std::lock_guard lk(mtx_);
-            cached_str_ = std::move(s);
-        }
-        cached_time_.store(now, std::memory_order_relaxed);
+
+        // Odd means that a refresh owns the words.  The words themselves are
+        // atomic so this is a standard C++ data-race-free seqlock, rather
+        // than relying on an unsafe concurrent memcpy of ordinary chars.
+        sequence_.fetch_add(1U, std::memory_order_acq_rel);
+        std::array<std::uint64_t, word_count> snapshot{};
+        std::memcpy(snapshot.data(), buf, date_size);
+        for (std::size_t index{}; index < word_count; ++index)
+            words_[index].store(snapshot[index], std::memory_order_relaxed);
+        cached_time_.store(now, std::memory_order_release);
+        sequence_.fetch_add(1U, std::memory_order_release);
+        sequence_.notify_all();
+        refreshing_.clear(std::memory_order_release);
     }
-    std::lock_guard lk(mtx_);
-    return cached_str_;
+
+    for (;;)
+    {
+        const auto before = sequence_.load(std::memory_order_acquire);
+        if ((before & 1U) != 0U)
+        {
+            sequence_.wait(before, std::memory_order_relaxed);
+            continue;
+        }
+
+        std::array<std::uint64_t, word_count> snapshot{};
+        for (std::size_t index{}; index < word_count; ++index)
+            snapshot[index] = words_[index].load(std::memory_order_relaxed);
+
+        if (sequence_.load(std::memory_order_acquire) == before)
+        {
+            std::array<char, date_size> result{};
+            std::memcpy(result.data(), snapshot.data(), result.size());
+            return result;
+        }
+    }
 }
 
 // =============================================================================
@@ -561,11 +587,13 @@ auto server::run() -> task<void>
             active_connections_.load(std::memory_order_relaxed) >=
                 max_connections_)
         {
-            // Reject: send 503 and close
-            response resp(status::service_unavailable);
+            // This is admission control, not a server outage: tell the
+            // caller it exceeded the listener's accepted-connection budget.
+            response resp(status::too_many_requests);
             resp.set_header("Connection", "close");
+            resp.set_header("Retry-After", "1");
             resp.set_body(
-                std::string_view{"503 Service Unavailable: too many connections"});
+                std::string_view{"429 Too Many Requests: too many connections"});
             auto data = resp.serialize();
             (void)co_await async_write_all(ctx_, *r,
                 const_buffer{data.data(), data.size()});
@@ -594,6 +622,17 @@ auto server::run() -> task<void>
 auto server::handle_connection(socket client, io_context& io) -> task<void>
 {
     conn_count_guard cg(active_connections_);
+
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    // A local, small HTTP response commonly completes WSASend inline.  The
+    // IOCP awaiters already handle that path without suspension, but Windows
+    // only suppresses the otherwise redundant completion-port notification
+    // when this mode is enabled on the connected socket.  This is a best
+    // effort capability: an unusual Winsock provider may decline it without
+    // changing HTTP semantics.
+    (void)client.apply_options(
+        {.non_blocking = false, .skip_completion_on_success = true});
+#endif
 
 #ifdef CNETMOD_HAS_SSL
     // --- TLS path ---
@@ -680,12 +719,19 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
 auto server::make_h2_handler(io_context& io, socket& client)
     -> v2::server_handler
 {
-    return [this, &io,
-               &client](v2::server_request request) -> task<v2::server_response>
+    // session::dispatch_ready awaits each server_handler invocation before it
+    // starts the next one. Keep one builder per H2 connection just like the
+    // HTTP/1 keep-alive path does, so normal response headers do not allocate
+    // a new flat-map backing store for every stream.
+    auto output = std::make_shared<response>(status::ok, http_version::http_2);
+    return [this, &io, &client,
+               output = std::move(output)](v2::server_request request)
+               -> task<v2::server_response>
     {
         std::string method = "GET";
         std::string uri = "/";
         header_map headers;
+        headers.reserve(request.headers.size());
         for (const auto& field : request.headers)
         {
             if (field.name == ":method")
@@ -700,11 +746,11 @@ auto server::make_h2_handler(io_context& io, socket& client)
             ? std::string_view(uri)
             : std::string_view(uri).substr(0, query);
         auto match = router_.match(method, path);
-        response output(status::ok, http_version::http_2);
+        output->reset(status::ok, http_version::http_2);
         if (response_headers_.emit_server)
-            output.set_header("Server", "cnetmod");
+            output->set_header("Server", "cnetmod");
         if (response_headers_.emit_date)
-            output.set_header("Date", date_cache_.get());
+            output->set_cached_date_header(date_cache_.get());
         route_params params;
         handler_fn route;
         if (match)
@@ -719,18 +765,23 @@ auto server::make_h2_handler(io_context& io, socket& client)
                 return detail::not_found_handler(context);
             };
         }
-        const std::string body(reinterpret_cast<const char*>(request.body.data()),
-            request.body.size());
-        request_context context(io, client, method, uri, headers, body, output,
+        const auto body = std::string_view{
+            reinterpret_cast<const char*>(request.body.data()), request.body.size()};
+        request_context context(io, client, method, uri, headers, body, *output,
             std::move(params));
         co_await execute_chain(context, route);
         v2::server_response result;
-        result.status = static_cast<std::uint32_t>(output.status_code());
+        result.status = static_cast<std::uint32_t>(output->status_code());
         result.body.assign(
-            reinterpret_cast<const std::byte*>(output.body().data()),
-            reinterpret_cast<const std::byte*>(output.body().data()) +
-                output.body().size());
-        for (const auto& [name, value] : output.headers())
+            reinterpret_cast<const std::byte*>(output->body().data()),
+            reinterpret_cast<const std::byte*>(output->body().data()) +
+                output->body().size());
+        // HTTP/2 owns this response until HPACK has encoded it, so reserve the
+        // exact number of application headers before copying them.  The usual
+        // response has Date, Server and Content-Length; growing from an empty
+        // vector otherwise allocates repeatedly on every request.
+        result.headers.reserve(output->headers().size());
+        for (const auto& [name, value] : output->headers())
         {
             std::string lowercase;
             lowercase.reserve(name.size());
@@ -739,7 +790,10 @@ auto server::make_h2_handler(io_context& io, socket& client)
                     std::tolower(static_cast<unsigned char>(character))));
             result.headers.push_back({std::move(lowercase), value});
         }
-        for (const auto& [name, value] : output.trailers())
+        if (const auto date = output->cached_date_header(); !date.empty())
+            result.headers.push_back({"date", std::string{date}});
+        result.trailers.reserve(output->trailers().size());
+        for (const auto& [name, value] : output->trailers())
         {
             std::string lowercase;
             lowercase.reserve(name.size());
@@ -883,8 +937,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
         if (response_headers_.emit_server)
             resp.set_header("Server", "cnetmod");
         if (response_headers_.emit_date)
-            resp.set_header("Date", date_cache_.get());
-
+            resp.set_cached_date_header(date_cache_.get());
         route_params rp;
         handler_fn handler;
 
@@ -903,7 +956,6 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 
         request_context rctx(io, client, parser, resp, std::move(rp));
         co_await execute_chain(rctx, handler);
-
         // Check if chunked encoding is needed
         bool use_chunked = false;
         if (resp.get_header("X-Streamed") != "1")
@@ -1016,8 +1068,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
         if (response_headers_.emit_server)
             resp.set_header("Server", "cnetmod");
         if (response_headers_.emit_date)
-            resp.set_header("Date", date_cache_.get());
-
+            resp.set_cached_date_header(date_cache_.get());
         route_params rp;
         handler_fn handler;
 
@@ -1036,7 +1087,6 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
 
         request_context rctx(io, client, parser, resp, std::move(rp));
         co_await execute_chain(rctx, handler);
-
         // Check if chunked encoding is needed
         bool use_chunked = false;
         if (resp.get_header("X-Streamed") != "1")

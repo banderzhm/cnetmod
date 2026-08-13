@@ -54,7 +54,7 @@ namespace {
     {
         return frames_to_messages(frames, codec_options{
                                               .compression = encoding,
-                                              .accept_compressed = options.accept_gzip && encoding == compression_algorithm::gzip,
+                                              .accept_compressed = (options.accept_gzip && encoding == compression_algorithm::gzip) || (options.accept_zstd && encoding == compression_algorithm::zstd && compression_supported(compression_algorithm::zstd)) || (options.accept_brotli && encoding == compression_algorithm::brotli && compression_supported(compression_algorithm::brotli)),
                                               .max_message_bytes = options.max_receive_message_bytes,
                                           });
     }
@@ -91,7 +91,8 @@ namespace {
         auto desired = options.default_response_compression;
         if (desired == compression_algorithm::identity)
             return desired;
-        if (accepts_compression(ctx.get_header("grpc-accept-encoding"), desired))
+        if (compression_supported(desired) &&
+            accepts_compression(ctx.get_header("grpc-accept-encoding"), desired))
             return desired;
         return compression_algorithm::identity;
     }

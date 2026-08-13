@@ -3,6 +3,7 @@ module;
 export module cnetmod.protocol.kafka.partitioner;
 import std;
 import cnetmod.protocol.kafka.protocol_constants;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 export namespace cnetmod::kafka {
 class partitioner
@@ -33,7 +34,7 @@ public:
     void rotate(std::string_view);
 
 private:
-    std::mutex mutex_;
+    concurrent_containers::atomic_rw_latch latch_;
     std::map<std::string, std::int32_t, std::less<>> sticky_;
     std::mt19937 engine_{std::random_device{}()};
 };

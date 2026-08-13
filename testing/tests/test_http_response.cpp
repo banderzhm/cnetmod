@@ -11,23 +11,38 @@ using cnetmod::utils::R;
 
 TEST(application_result_http_adapter)
 {
-    auto success = to_http_response(R<std::string>::ok("alice"),
-        [](const std::string& value) { return R"({"user":")" + value + R"("})"; },
-        [](const auto& error) { return R"({"error":")" + error.message + R"("})"; });
+    auto success = to_http_response(R<std::string>::ok("alice"), [](const std::string& value)
+        {
+            return R"({"user":")" + value + R"("})";
+        },
+        [](const auto& error)
+        {
+            return R"({"error":")" + error.message + R"("})";
+        });
     ASSERT_EQ(success.status_code(), status::ok);
     ASSERT_EQ(success.get_header("Content-Type"), std::string_view("application/json"));
     ASSERT_EQ(success.body(), std::string_view(R"({"user":"alice"})"));
 
-    auto failure = to_http_response(R<std::string>::error(404, "missing"),
-        [](const std::string& value) { return value; },
-        [](const auto& error) { return R"({"error":")" + error.message + R"("})"; },
+    auto failure = to_http_response(R<std::string>::error(404, "missing"), [](const std::string& value)
+        {
+            return value;
+        },
+        [](const auto& error)
+        {
+            return R"({"error":")" + error.message + R"("})";
+        },
         {.error_status = status::not_found});
     ASSERT_EQ(failure.status_code(), status::not_found);
     ASSERT_EQ(failure.body(), std::string_view(R"({"error":"missing"})"));
 
-    auto no_content = to_http_response(R<void>::success(),
-        [] { return std::string{}; },
-        [](const auto& error) { return error.message; },
+    auto no_content = to_http_response(R<void>::success(), []
+        {
+            return std::string{};
+        },
+        [](const auto& error)
+        {
+            return error.message;
+        },
         {.success_status = status::no_content, .content_type = "text/plain"});
     ASSERT_EQ(no_content.status_code(), status::no_content);
     ASSERT_EQ(no_content.get_header("Content-Type"), std::string_view("text/plain"));
@@ -72,6 +87,16 @@ TEST(response_set_header)
     response resp;
     resp.set_header("Content-Type", "text/plain");
     ASSERT_EQ(resp.get_header("Content-Type"), std::string_view("text/plain"));
+}
+
+TEST(response_set_header_owned)
+{
+    response resp;
+    auto date = std::string{"Mon, 10 Aug 2026 12:34:56 GMT"};
+    resp.set_header_owned("Date", std::move(date));
+    ASSERT_TRUE(date.empty());
+    ASSERT_EQ(resp.get_header("Date"),
+        std::string_view("Mon, 10 Aug 2026 12:34:56 GMT"));
 }
 
 TEST(response_append_header)
@@ -178,6 +203,36 @@ TEST(response_reset_and_serialize_to_reuse_storage)
     ASSERT_TRUE(wire.contains("Content-Length: 6\r\n"));
     ASSERT_TRUE(wire.ends_with("\r\n\r\nsecond"));
     ASSERT_FALSE(wire.contains("first"));
+}
+
+TEST(response_cached_date_header_serializes_without_duplicate)
+{
+    response response{200};
+    std::array<char, 29U> date{};
+    std::memcpy(date.data(), "Mon, 10 Aug 2026 12:34:56 GMT", date.size());
+    response.set_cached_date_header(date);
+    response.set_body(std::string_view{"Hello, World!"});
+    std::string wire;
+    response.serialize_to(wire);
+
+    ASSERT_TRUE(wire.contains("Date: Mon, 10 Aug 2026 12:34:56 GMT\r\n"));
+    ASSERT_TRUE(wire.contains("Content-Length: 13\r\n"));
+    ASSERT_EQ(wire.find("Date:"), wire.rfind("Date:"));
+    ASSERT_TRUE(wire.ends_with("\r\n\r\nHello, World!"));
+}
+
+TEST(response_explicit_date_overrides_cached_date)
+{
+    response response{200};
+    std::array<char, 29U> date{};
+    std::memcpy(date.data(), "Mon, 10 Aug 2026 12:34:56 GMT", date.size());
+    response.set_cached_date_header(date);
+    response.set_header("Date", "route-supplied-date");
+    ASSERT_EQ(response.get_header("Date"), std::string_view{"route-supplied-date"});
+
+    const auto wire = response.serialize();
+    ASSERT_TRUE(wire.contains("Date: route-supplied-date\r\n"));
+    ASSERT_FALSE(wire.contains("Mon, 10 Aug 2026 12:34:56 GMT"));
 }
 
 // =============================================================================

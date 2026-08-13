@@ -20,6 +20,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
 import cnetmod.coro.channel;
+import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
 import cnetmod.protocol.udp;
 import :types;
@@ -44,6 +45,57 @@ export enum class connection_state
     closing,     // Closing initiated locally
     draining,    // Draining in progress (no new connections)
     closed       // Closed completely
+};
+
+/// Weighted RFC 9218 service budget used by the connection-local stream
+/// scheduler. Urgency 0 keeps its first-packet preference, while every
+/// non-empty lower-priority class receives service in the same bounded epoch.
+/// It contains no synchronization: one QUIC connection owns it through its
+/// serialized protocol execution domain.
+export class priority_service_budget
+{
+public:
+    static constexpr std::array<std::uint8_t, 8> quantum{
+        16U, 8U, 4U, 2U, 1U, 1U, 1U, 1U};
+
+    [[nodiscard]] auto take_next(const std::array<bool, 8>& ready)
+        -> std::optional<std::uint8_t>
+    {
+        for (unsigned epoch{}; epoch < 2U; ++epoch)
+        {
+            for (std::uint8_t urgency{}; urgency < credits_.size(); ++urgency)
+            {
+                if (ready[urgency] && credits_[urgency] != 0U)
+                {
+                    --credits_[urgency];
+                    return urgency;
+                }
+            }
+            if (!std::ranges::any_of(ready, [](bool value)
+                    {
+                        return value;
+                    }))
+                return std::nullopt;
+            credits_ = quantum;
+        }
+        return std::nullopt;
+    }
+
+    /// Return a reservation when packet construction did not consume it.
+    void restore(std::uint8_t urgency) noexcept
+    {
+        urgency = std::min<std::uint8_t>(urgency, 7U);
+        credits_[urgency] = std::min<std::uint8_t>(quantum[urgency],
+            static_cast<std::uint8_t>(credits_[urgency] + 1U));
+    }
+
+    void reset() noexcept
+    {
+        credits_ = quantum;
+    }
+
+private:
+    std::array<std::uint8_t, 8> credits_{quantum};
 };
 
 // =============================================================================
@@ -105,6 +157,12 @@ public:
     /// shared listener socket. Dedicated-socket connections do this in run().
     [[nodiscard]] auto async_poll_timers() -> task<void>;
 
+    /// Earliest listener-owned timer deadline. `nullopt` means the shared
+    /// listener has no timer work for this connection until another packet or
+    /// application write changes its state.
+    [[nodiscard]] auto next_timer_deadline() const
+        -> std::optional<std::chrono::steady_clock::time_point>;
+
     // =========================================================================
     // Public API - Stream Operations
     // =========================================================================
@@ -115,6 +173,22 @@ public:
         std::span<const std::byte> data,
         bool fin = false)
         -> task<std::expected<void, std::error_code>>;
+
+    /// Transfers an already-owned wire buffer into the packet-owner queue
+    /// without a second payload copy.
+    [[nodiscard]] auto async_send(
+        stream_id sid,
+        std::vector<std::byte>&& data,
+        bool fin = false)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Update the RFC 9218 scheduling policy for subsequent data on one
+    /// stream. Calls are serialized by the connection's I/O domain; urgency
+    /// is clamped to the protocol range [0, 7].
+    /// Returns false only when the bounded packet-owner command queue is
+    /// saturated; callers may retry without racing QUIC stream state.
+    [[nodiscard]] auto set_stream_priority(stream_id sid, std::uint8_t urgency,
+        bool incremental) noexcept -> bool;
 
     /// Receive data from a stream
     [[nodiscard]] auto async_recv(
@@ -128,6 +202,17 @@ public:
     /// coroutine consumers should await this operation after would_block.
     [[nodiscard]] auto async_wait_readable(stream_id sid)
         -> task<std::expected<void, std::error_code>>;
+
+    /// Send one unreliable RFC 9221 QUIC DATAGRAM. Both endpoints must have
+    /// advertised a non-zero `max_datagram_frame_size`; congestion control
+    /// still applies, but loss is intentionally never retransmitted.
+    [[nodiscard]] auto async_send_datagram(std::span<const std::byte> data)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Await the next peer DATAGRAM. A full receive queue drops new datagrams
+    /// rather than stalling packet processing, as required for unreliable data.
+    [[nodiscard]] auto async_receive_datagram()
+        -> task<std::expected<std::vector<std::byte>, std::error_code>>;
 
     /// Cancellable stream-readiness wait. Cancellation affects only this
     /// waiter; use async_cancel_stream to notify the peer as well.
@@ -176,6 +261,12 @@ public:
 
     [[nodiscard]] auto early_data_status() const noexcept -> early_data_state;
 
+    /// True only after TLS has installed the client 0-RTT write secret. A
+    /// caller may queue replay-safe bytes once this is true; merely enabling
+    /// early data is not sufficient because the Initial flight is still being
+    /// created on the transport driver.
+    [[nodiscard]] auto early_data_write_ready() const noexcept -> bool;
+
     /// Request an RFC 9001 1-RTT key update.  The new write generation is
     /// used by the next short-header packet; handshake keys are unaffected.
     [[nodiscard]] auto initiate_key_update() -> std::expected<void, std::error_code>;
@@ -191,6 +282,57 @@ public:
 
     /// Get current connection state
     [[nodiscard]] auto state() const noexcept -> connection_state;
+
+    /// Start validation of an additional peer endpoint for a negotiated
+    /// draft-ietf-quic-multipath-12 Path ID.  The caller supplies the remote
+    /// endpoint; the connection keeps using its existing UDP socket, so this
+    /// also works for NAT rebinding and multi-homed peers. The returned task
+    /// succeeds only after a matching PATH_RESPONSE authenticates the tuple;
+    /// it retries the same challenge for at most three PTOs. Application data
+    /// is never scheduled on the path before that boundary.
+    [[nodiscard]] auto async_probe_path(std::uint32_t path_id, endpoint peer)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Validate a path through an additional application-owned UDP socket.
+    /// The caller must keep the socket alive and feed its received datagrams
+    /// back through process_datagram() until the path is abandoned or the
+    /// connection closes. This overload gives a Multipath path a distinct
+    /// local address/port without creating an unowned receive coroutine.
+    [[nodiscard]] auto async_probe_path(std::uint32_t path_id, endpoint peer,
+        udp::udp_socket& local_socket)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Advertise the local scheduling preference for one negotiated path.
+    /// A backup path remains validated and available for PTO/explicit use,
+    /// but the automatic scheduler selects available paths first.
+    [[nodiscard]] auto set_path_backup(std::uint32_t path_id, bool backup)
+        -> std::expected<void, std::error_code>;
+
+    /// Stop using one negotiated non-zero Path ID and notify the peer with
+    /// PATH_ABANDON.  Path IDs are never reused; remaining validated paths
+    /// continue to carry the connection.
+    [[nodiscard]] auto async_abandon_path(std::uint32_t path_id,
+        std::uint64_t error_code = 0)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Current ACK-validated Datagram PLPMTUD ceiling for one path. A value
+    /// of 1200 is the RFC 9000 baseline; larger values are published only
+    /// after a padded PING probe has been acknowledged.
+    [[nodiscard]] auto discovered_path_mtu(std::uint32_t path_id) const
+        -> std::optional<std::size_t>;
+
+    /// Whether PATH_RESPONSE has authenticated the peer tuple for this Path
+    /// ID. Application scheduling never uses a false path.
+    [[nodiscard]] auto path_is_validated(std::uint32_t path_id) const noexcept -> bool;
+
+    /// Return the currently bound local UDP endpoint for one Path ID. A
+    /// non-zero path can use an application-owned socket supplied to
+    /// async_probe_path().
+    [[nodiscard]] auto local_path_endpoint(std::uint32_t path_id)
+        -> std::expected<endpoint, std::error_code>;
+
+    /// Whether this endpoint advertised RFC 9221 DATAGRAM support locally.
+    [[nodiscard]] auto datagrams_configured() const noexcept -> bool;
 
     /// Executor that owns this connection. Protocol sessions use it to
     /// service peer-opened streams independently.
@@ -224,6 +366,11 @@ public:
     /// Snapshot every CID currently routable by a listener, including the
     /// stateless-reset token that was advertised for that CID.
     [[nodiscard]] auto local_cid_routes() const -> std::vector<local_cid_route>;
+
+    /// Monotonically changes whenever the listener-visible local CID set
+    /// changes. Shared-socket HTTP/3 listeners use it to avoid rebuilding
+    /// their route table for every received UDP packet.
+    [[nodiscard]] auto local_cid_route_generation() const noexcept -> std::uint64_t;
 
     /// Drain CIDs retired by the peer since the preceding call.  A shared
     /// listener retains their tokens for a bounded period so a delayed packet
@@ -304,6 +451,7 @@ private:
         const new_connection_id_frame& frame) -> task<void>;
     [[nodiscard]] auto process_retire_connection_id_frame(
         const retire_connection_id_frame& frame) -> task<void>;
+    [[nodiscard]] auto process_datagram_frame(const datagram_frame& frame) -> task<void>;
 
     [[nodiscard]] auto validate_peer_transport_parameters()
         -> std::expected<void, std::error_code>;
@@ -319,6 +467,9 @@ private:
 
     /// Pack and send packets
     [[nodiscard]] auto pack_and_send_packet() -> task<void>;
+    /// Packet-owner fast path for the common single-path case. It batches only
+    /// datagrams already admitted by the congestion controller and pacer.
+    [[nodiscard]] auto pack_and_send_packets() -> task<void>;
     [[nodiscard]] auto pack_initial_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_zero_rtt_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_handshake_packet() -> std::vector<std::byte>;
@@ -333,16 +484,34 @@ private:
     [[nodiscard]] auto handle_pto() -> task<void>;
 
     [[nodiscard]] auto send_datagram(std::span<const std::byte> datagram,
-        const endpoint& destination)
+        const endpoint& destination, udp::udp_socket* path_socket = nullptr)
         -> task<std::expected<std::size_t, std::error_code>>;
+    [[nodiscard]] auto send_datagram_batch(
+        std::span<const udp_send_datagram> datagrams)
+        -> task<std::expected<std::size_t, std::error_code>>;
+
+    [[nodiscard]] auto async_probe_path_impl(std::uint32_t path_id,
+        endpoint peer, udp::udp_socket* path_socket)
+        -> task<std::expected<void, std::error_code>>;
 
     /// Flow control helpers
     [[nodiscard]] auto can_write_to_stream(stream_id sid) noexcept -> bool;
+    /// Executed only by the connection packet-owner after a producer command
+    /// has been dequeued.  It is deliberately separate from async_send(), so
+    /// callers never mutate stream or flow-control state directly.
+    [[nodiscard]] auto apply_stream_write(stream_id sid, std::vector<std::byte> data,
+        bool fin) -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
+        -> task<std::expected<void, std::error_code>>;
     /// Send queued frames
     auto flush_send_queue() -> task<void>;
     /// Serialize application packets according to the controller's current
     /// pacing rate.  Control/path-validation packets are not delayed here.
     auto await_application_pacing(std::size_t packet_size) -> task<void>;
+    /// Reserve immediately available pacing credit without sleeping. This is
+    /// used only by packet batches; a false result leaves pacing state intact.
+    [[nodiscard]] auto try_reserve_application_pacing(std::size_t packet_size)
+        -> bool;
 };
 
 } // namespace cnetmod::quic

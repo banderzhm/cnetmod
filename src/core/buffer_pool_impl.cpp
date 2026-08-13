@@ -72,39 +72,28 @@ void pooled_buffer::release() noexcept
 }
 
 buffer_pool::buffer_pool(std::size_t block_size, std::size_t max_blocks) noexcept
-    : block_size_(block_size), max_blocks_(max_blocks)
+    : block_size_(std::max<std::size_t>(block_size, 1U)),
+      max_blocks_(std::max<std::size_t>(max_blocks, 2U)),
+      free_blocks_(max_blocks_)
 {
 }
 
 buffer_pool::~buffer_pool()
 {
-    auto* node = free_head_.load(std::memory_order_relaxed);
-    while (node)
-    {
-        auto* next = node->next;
-        ::operator delete(node);
-        node = next;
-    }
+    while (auto node = free_blocks_.try_dequeue())
+        ::operator delete(*node);
 }
 
 auto buffer_pool::acquire() -> pooled_buffer
 {
-    auto* node = free_head_.load(std::memory_order_acquire);
-    while (node)
-    {
-        if (free_head_.compare_exchange_weak(node, node->next, std::memory_order_acq_rel,
-                std::memory_order_acquire))
-        {
-            pool_size_.fetch_sub(1, std::memory_order_relaxed);
-            return {this, reinterpret_cast<char*>(node) + sizeof(block_node), block_size_};
-        }
-    }
+    if (auto node = free_blocks_.try_dequeue())
+        return {this, reinterpret_cast<char*>(*node) + sizeof(block_node), block_size_};
     return allocate_new();
 }
 
 auto buffer_pool::pool_size() const noexcept -> std::size_t
 {
-    return pool_size_.load(std::memory_order_relaxed);
+    return free_blocks_.approximate_size();
 }
 
 auto buffer_pool::block_size() const noexcept -> std::size_t
@@ -115,24 +104,13 @@ auto buffer_pool::block_size() const noexcept -> std::size_t
 void buffer_pool::return_block(void* data) noexcept
 {
     auto* node = reinterpret_cast<block_node*>(static_cast<char*>(data) - sizeof(block_node));
-    if (pool_size_.load(std::memory_order_relaxed) >= max_blocks_)
-    {
+    if (!free_blocks_.try_enqueue(node))
         ::operator delete(node);
-        return;
-    }
-    node->next = free_head_.load(std::memory_order_relaxed);
-    while (!free_head_.compare_exchange_weak(node->next, node, std::memory_order_release,
-        std::memory_order_relaxed))
-    {
-    }
-    pool_size_.fetch_add(1, std::memory_order_relaxed);
 }
 
 auto buffer_pool::allocate_new() -> pooled_buffer
 {
     auto* mem = ::operator new(sizeof(block_node) + block_size_);
-    auto* node = static_cast<block_node*>(mem);
-    node->next = nullptr;
     return {this, static_cast<char*>(mem) + sizeof(block_node), block_size_};
 }
 } // namespace cnetmod

@@ -11,6 +11,7 @@ export import :topology_connection_pool;
 export import :retryable_operation;
 export import :client_session;
 export import :change_stream;
-
-import :wire_protocol;
+/// OP_MSG framing is useful to protocol tooling and permits applications to
+/// verify exhaust/moreToCome compatibility without relying on private headers.
+export import :wire_protocol;
 import :scram_sha256;

@@ -13,6 +13,7 @@ import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
+import cnetmod.protocol.http.middleware.tracing;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -54,6 +55,16 @@ public:
     auto cmd(std::initializer_list<std::string_view> args)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto cmd(std::span<const std::string> args)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    /// Run a command as a child of an HTTP/request trace. Redis itself has no
+    /// traceparent field, so completion is emitted locally through `on_end`.
+    auto cmd(std::initializer_list<std::string_view> args,
+        const http::tracing::trace_context& parent,
+        http::tracing::span_exporter on_end)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto cmd(std::span<const std::string> args,
+        const http::tracing::trace_context& parent,
+        http::tracing::span_exporter on_end)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto cmd_follow_redirect(std::vector<std::string> args,
         std::size_t max_redirects = 3)

@@ -60,9 +60,9 @@ query_cache::query_cache(cache_config config)
 
 auto query_cache::get(const cache_key& key) -> std::optional<result_set>
 {
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     if (!config_.enabled)
         return std::nullopt;
-    std::lock_guard lock(mutex_);
     const auto it = cache_.find(key);
     if (it == cache_.end())
         return std::nullopt;
@@ -78,9 +78,9 @@ auto query_cache::get(const cache_key& key) -> std::optional<result_set>
 
 void query_cache::put(const cache_key& key, const result_set& data)
 {
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     if (!config_.enabled)
         return;
-    std::lock_guard lock(mutex_);
     if (cache_.size() >= config_.max_size)
         evict_one();
     cache_entry entry{data, std::chrono::steady_clock::now(), {}, 0};
@@ -90,13 +90,13 @@ void query_cache::put(const cache_key& key, const result_set& data)
 
 void query_cache::clear()
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     cache_.clear();
 }
 
 void query_cache::clear_statement(std::string_view statement_id)
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     for (auto it = cache_.begin(); it != cache_.end();)
         it = it->first.statement_id == statement_id ? cache_.erase(it)
                                                     : std::next(it);
@@ -105,7 +105,7 @@ void query_cache::clear_statement(std::string_view statement_id)
 auto query_cache::stats() const
     -> std::tuple<std::size_t, std::size_t, std::size_t>
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     std::size_t accesses{};
     for (const auto& [_, entry] : cache_)
         accesses += entry.access_count;
@@ -114,6 +114,7 @@ auto query_cache::stats() const
 
 void query_cache::set_enabled(bool enabled)
 {
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     config_.enabled = enabled;
 }
 
@@ -154,24 +155,19 @@ second_level_cache::~second_level_cache()
 auto second_level_cache::get(const cache_key& key)
     -> std::optional<result_set>
 {
+    // Reads update LRU metadata, so this operation is a write transaction.
+    // A single short CAS latch avoids a racy shared-to-exclusive upgrade.
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     if (!config_.enabled)
         return std::nullopt;
-    std::shared_lock read_lock(mutex_);
-    const auto it = cache_.find(key);
-    if (it == cache_.end())
-        return std::nullopt;
-    if (it->second.is_expired(config_.ttl))
-    {
-        read_lock.unlock();
-        std::unique_lock write_lock(mutex_);
-        cache_.erase(key);
-        return std::nullopt;
-    }
-    read_lock.unlock();
-    std::unique_lock write_lock(mutex_);
     const auto current = cache_.find(key);
     if (current == cache_.end())
         return std::nullopt;
+    if (current->second.is_expired(config_.ttl))
+    {
+        cache_.erase(current);
+        return std::nullopt;
+    }
     current->second.last_accessed = std::chrono::steady_clock::now();
     ++current->second.access_count;
     return current->second.data;
@@ -179,9 +175,9 @@ auto second_level_cache::get(const cache_key& key)
 
 void second_level_cache::put(const cache_key& key, const result_set& data)
 {
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     if (!config_.enabled)
         return;
-    std::unique_lock lock(mutex_);
     if (cache_.size() >= config_.max_size)
         evict_one();
     cache_entry entry{data, std::chrono::steady_clock::now(), {}, 0};
@@ -191,13 +187,13 @@ void second_level_cache::put(const cache_key& key, const result_set& data)
 
 void second_level_cache::clear()
 {
-    std::unique_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     cache_.clear();
 }
 
 void second_level_cache::clear_statement(std::string_view statement_id)
 {
-    std::unique_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     for (auto it = cache_.begin(); it != cache_.end();)
         it = it->first.statement_id == statement_id ? cache_.erase(it)
                                                     : std::next(it);
@@ -205,7 +201,10 @@ void second_level_cache::clear_statement(std::string_view statement_id)
 
 void second_level_cache::set_enabled(bool enabled)
 {
-    config_.enabled = enabled;
+    {
+        concurrent_containers::exclusive_latch_guard lock{latch_};
+        config_.enabled = enabled;
+    }
     if (enabled && !eviction_thread_.joinable())
         start_eviction_thread();
     else if (!enabled && eviction_thread_.joinable())
@@ -254,7 +253,7 @@ void second_level_cache::stop_eviction_thread()
 
 void second_level_cache::evict_expired()
 {
-    std::unique_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     for (auto it = cache_.begin(); it != cache_.end();)
         it = it->second.is_expired(config_.ttl) ? cache_.erase(it) : std::next(it);
 }

@@ -28,6 +28,7 @@ export module cnetmod.coro.circuit_breaker;
 
 import std;
 import cnetmod.coro.task;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod {
 
@@ -95,7 +96,7 @@ public:
     /// Fn must return task<expected<T, E>>
     template <typename T, typename E, typename Fn>
     requires std::invocable<Fn> &&
-                 std::same_as<std::invoke_result_t<Fn>, task<std::expected<T, E>>>
+        std::same_as<std::invoke_result_t<Fn>, task<std::expected<T, E>>>
     auto execute(Fn fn) -> task<std::expected<T, E>>
     {
         // Check state transition: open → half_open on timeout
@@ -124,7 +125,7 @@ public:
     /// Execute with std::error_code as error type (convenience overload)
     template <typename T, typename Fn>
     requires std::invocable<Fn> &&
-                 std::same_as<std::invoke_result_t<Fn>, task<std::expected<T, std::error_code>>>
+        std::same_as<std::invoke_result_t<Fn>, task<std::expected<T, std::error_code>>>
     auto execute_ec(Fn fn) -> task<std::expected<T, std::error_code>>
     {
         auto action = pre_execute();
@@ -177,11 +178,14 @@ private:
     void on_failure() noexcept;
 
     /// Check if open → half_open transition should occur (based on timeout)
-    /// Must be called with mtx_ held
+    /// Must be called with latch_ held.
     auto maybe_transition_state() const noexcept -> circuit_breaker_state;
 
     circuit_breaker_options opts_;
-    mutable std::mutex mtx_;
+    // Circuit-breaker transitions update a small coherent state tuple.  Use
+    // the project atomic latch rather than a platform mutex: uncontended
+    // paths are a CAS and contention parks through atomic::wait.
+    mutable concurrent_containers::atomic_rw_latch latch_;
     mutable circuit_breaker_state state_ = circuit_breaker_state::closed;
     mutable std::uint32_t failure_count_ = 0;
     mutable std::uint32_t success_count_ = 0;

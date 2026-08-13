@@ -6,6 +6,7 @@ export module cnetmod.core.buffer_pool;
 
 import std;
 import cnetmod.core.buffer;
+import cnetmod.utils.concurrent_containers.queue;
 
 namespace cnetmod {
 
@@ -59,7 +60,6 @@ private:
 
     struct block_node
     {
-        block_node* next = nullptr;
     };
 
     void return_block(void* data) noexcept;
@@ -67,8 +67,9 @@ private:
 
     std::size_t block_size_;
     std::size_t max_blocks_;
-    std::atomic<block_node*> free_head_{nullptr};
-    std::atomic<std::size_t> pool_size_{0};
+    /// A sequence-number MPMC queue avoids the ABA/reclamation race inherent
+    /// in a raw Treiber free-list when leases are returned by another worker.
+    concurrent_containers::bounded_mpmc_queue<block_node*> free_blocks_;
 };
 
 } // namespace cnetmod

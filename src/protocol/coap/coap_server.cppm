@@ -14,6 +14,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::coap {
 
@@ -212,13 +213,13 @@ private:
     resource_router router_;
     std::atomic<std::uint16_t> message_id_{1};
     std::atomic<std::uint32_t> observe_sequence_{1};
-    std::mutex observers_mutex_;
+    concurrent_containers::atomic_rw_latch observers_latch_;
     std::unordered_map<observer_key, observe_subscription, observer_hash>
         observers_;
     std::unordered_map<std::string, observe_delivery> pending_observe_;
-    std::mutex resources_mutex_;
+    concurrent_containers::atomic_rw_latch resources_latch_;
     std::vector<resource_description> resources_;
-    std::mutex block1_mutex_;
+    concurrent_containers::atomic_rw_latch block1_latch_;
     std::unordered_map<block1_key, block1_transfer, block1_hash> block1_;
 };
 

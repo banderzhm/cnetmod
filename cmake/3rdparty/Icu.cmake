@@ -15,6 +15,14 @@ macro(cnetmod_configure_icu)
             if(NOT _cnetmod_icu_msbuild)
                 set(_cnetmod_icu_msbuild "${CMAKE_COMMAND}")
             endif()
+            find_package(Python3 REQUIRED COMPONENTS Interpreter)
+            # ICU's Visual Studio data project invokes `py -3` directly.
+            # Some supported Windows toolchains ship Python without the
+            # launcher, so provide a tiny build-local compatibility shim.
+            set(_cnetmod_icu_python_dir "${CMAKE_CURRENT_BINARY_DIR}/cnetmod_icu_python")
+            file(MAKE_DIRECTORY "${_cnetmod_icu_python_dir}")
+            file(GENERATE OUTPUT "${_cnetmod_icu_python_dir}/py.cmd" CONTENT
+                "@echo off\nset args=%*\nif \"%~1\"==\"-3\" set args=%args:~3%\n\"${Python3_EXECUTABLE}\" %args%\n")
             # ICU's Debug outputs deliberately use the `d` suffix
             # (icuucd.lib/icuind.lib and icuuc78d.dll/icuin78d.dll), while
             # Release outputs do not.  Building only Release and mapping its
@@ -23,9 +31,22 @@ macro(cnetmod_configure_icu)
             # incremental, so an already-built matching configuration is a
             # no-op while a Debug build always materializes its debug imports.
             add_custom_target(cnetmod_icu
-                COMMAND "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
-                    /target:common /target:i18n /property:Configuration=$<CONFIG> /property:Platform=x64
-                COMMENT "Building bundled ICU libraries for $<CONFIG>")
+                COMMAND "${CMAKE_COMMAND}" -E env "PATH=${_cnetmod_icu_python_dir}\;$ENV{PATH}"
+                    "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
+                    /target:common,i18n,genrb,gencnval,gencfu,icupkg,makeconv,pkgdata
+                    /property:Configuration=$<CONFIG> /property:Platform=x64
+                # ICU's makedata project declares its own test projects as
+                # ProjectReferences.  They are irrelevant to the production
+                # data DLL and can concurrently link to the same output path
+                # on Windows.  Build just the data tools above, then run the
+                # data project's NMake recipe without traversing those test
+                # references.
+                COMMAND "${CMAKE_COMMAND}" -E env "PATH=${_cnetmod_icu_python_dir}\;$ENV{PATH}"
+                    "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/data/makedata.vcxproj"
+                    /property:Configuration=$<CONFIG> /property:Platform=x64
+                    /property:BuildProjectReferences=false
+                    /property:SolutionDir=${_cnetmod_icu_source}/allinone/
+                    COMMENT "Building bundled ICU libraries and data for $<CONFIG>")
             foreach(_cnetmod_icu_lib IN ITEMS uc i18n)
                 add_library(ICU::${_cnetmod_icu_lib} SHARED IMPORTED GLOBAL)
                 set(_cnetmod_icu_project "${_cnetmod_icu_lib}")
@@ -37,6 +58,7 @@ macro(cnetmod_configure_icu)
                     set(_cnetmod_icu_name "icuuc")
                 endif()
                 set_target_properties(ICU::${_cnetmod_icu_lib} PROPERTIES
+                    IMPORTED_CONFIGURATIONS "DEBUG;RELEASE;RELWITHDEBINFO;MINSIZEREL"
                     INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_icu_source}/common"
                     IMPORTED_IMPLIB_DEBUG "${_cnetmod_icu_source}/../lib64/${_cnetmod_icu_name}d.lib"
                     IMPORTED_LOCATION_DEBUG "${_cnetmod_icu_source}/../bin64/${_cnetmod_icu_name}78d.dll"
@@ -46,6 +68,11 @@ macro(cnetmod_configure_icu)
                     MAP_IMPORTED_CONFIG_MINSIZEREL Release)
                 add_dependencies(ICU::${_cnetmod_icu_lib} cnetmod_icu)
             endforeach()
+
+            # ICU's data DLL is intentionally configuration-independent, unlike
+            # icuuc/icuin which carry a Debug suffix.  Remember its location so
+            # each Windows executable can receive the complete runtime set.
+            set(CNETMOD_BUNDLED_ICU_RUNTIME_DIR "${_cnetmod_icu_source}/../bin64")
         else()
             find_package(ICU COMPONENTS uc i18n QUIET)
         endif()
@@ -58,6 +85,92 @@ macro(cnetmod_configure_icu)
         endif()
     endif()
 endmacro()
+
+# Imported shared libraries provide import libraries to the linker but CMake
+# does not copy their DLLs next to consumers.  This is especially visible with
+# the Visual Studio Debug configuration: executables link icuuc78d.dll and
+# icuin78d.dll successfully, then fail at process creation with 0xC0000135.
+#
+# Schedule this after every subdirectory has declared its targets so tests,
+# examples, benchmarks and the main application all get the same deployment
+# behaviour.  CMake requires POST_BUILD commands to be declared in the same
+# source directory as their target, so a single deployment target is used
+# instead.  Every executable depends on it and it copies the runtime set before
+# the executable is linked or launched.
+function(cnetmod_deploy_bundled_icu_runtime)
+    if(NOT WIN32 OR NOT CNETMOD_HAS_ICU OR
+       NOT DEFINED CNETMOD_BUNDLED_ICU_RUNTIME_DIR)
+        return()
+    endif()
+
+    set(_cnetmod_icu_directories "${CMAKE_SOURCE_DIR}")
+    set(_cnetmod_icu_executables)
+    set(_cnetmod_icu_index 0)
+    list(LENGTH _cnetmod_icu_directories _cnetmod_icu_directory_count)
+    while(_cnetmod_icu_index LESS _cnetmod_icu_directory_count)
+        list(GET _cnetmod_icu_directories ${_cnetmod_icu_index} _cnetmod_icu_directory)
+        get_property(_cnetmod_icu_targets DIRECTORY "${_cnetmod_icu_directory}"
+            PROPERTY BUILDSYSTEM_TARGETS)
+        foreach(_cnetmod_icu_target IN LISTS _cnetmod_icu_targets)
+            get_target_property(_cnetmod_icu_target_type ${_cnetmod_icu_target} TYPE)
+            if(NOT _cnetmod_icu_target_type STREQUAL "EXECUTABLE")
+                continue()
+            endif()
+
+            # Do not spray a 33 MiB ICU data DLL into bundled third-party
+            # tools (for example BoringSSL's own test programs).  cnetmod
+            # executables consume the core library directly, which carries
+            # ICU through its public link interface.
+            get_target_property(_cnetmod_icu_link_libraries
+                ${_cnetmod_icu_target} LINK_LIBRARIES)
+            if(NOT _cnetmod_icu_link_libraries MATCHES
+               "(^|;)cnetmod(_core|::core)(;|$)")
+                continue()
+            endif()
+            list(APPEND _cnetmod_icu_executables ${_cnetmod_icu_target})
+        endforeach()
+
+        get_property(_cnetmod_icu_subdirectories DIRECTORY "${_cnetmod_icu_directory}"
+            PROPERTY SUBDIRECTORIES)
+        list(APPEND _cnetmod_icu_directories ${_cnetmod_icu_subdirectories})
+        math(EXPR _cnetmod_icu_index "${_cnetmod_icu_index} + 1")
+        list(LENGTH _cnetmod_icu_directories _cnetmod_icu_directory_count)
+    endwhile()
+
+    if(NOT _cnetmod_icu_executables)
+        return()
+    endif()
+
+    set(_cnetmod_icu_deploy_commands)
+    foreach(_cnetmod_icu_target IN LISTS _cnetmod_icu_executables)
+        list(APPEND _cnetmod_icu_deploy_commands
+            COMMAND "${CMAKE_COMMAND}" -E make_directory
+                "$<TARGET_FILE_DIR:${_cnetmod_icu_target}>"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:ICU::uc>"
+                "$<TARGET_FILE_DIR:${_cnetmod_icu_target}>"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "$<TARGET_FILE:ICU::i18n>"
+                "$<TARGET_FILE_DIR:${_cnetmod_icu_target}>"
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                "${CNETMOD_BUNDLED_ICU_RUNTIME_DIR}/icudt78.dll"
+                "$<TARGET_FILE_DIR:${_cnetmod_icu_target}>")
+    endforeach()
+
+    add_custom_target(cnetmod_icu_runtime_deploy ALL
+        DEPENDS cnetmod_icu
+        ${_cnetmod_icu_deploy_commands}
+        COMMENT "Deploying bundled ICU runtime DLLs"
+        VERBATIM)
+    foreach(_cnetmod_icu_target IN LISTS _cnetmod_icu_executables)
+        add_dependencies(${_cnetmod_icu_target} cnetmod_icu_runtime_deploy)
+    endforeach()
+endfunction()
+
+if(WIN32)
+    cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}"
+        CALL cnetmod_deploy_bundled_icu_runtime)
+endif()
 
 function(cnetmod_link_icu TARGET_NAME)
     if(CNETMOD_HAS_ICU)

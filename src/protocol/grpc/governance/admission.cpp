@@ -76,7 +76,7 @@ auto token_bucket::try_consume(double tokens) noexcept -> bool
         !(limit_.burst > 0.0))
         return false;
 
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     const auto now = std::chrono::steady_clock::now();
     const auto elapsed =
         std::chrono::duration<double>(now - last_refill_).count();
@@ -90,6 +90,7 @@ auto token_bucket::try_consume(double tokens) noexcept -> bool
 
 auto token_bucket::limit() const noexcept -> rate_limit
 {
+    concurrent_containers::shared_latch_guard lock{latch_};
     return limit_;
 }
 
@@ -97,14 +98,14 @@ void rate_limit_registry::set_limit(std::string service, std::string method,
     rate_limit limit)
 {
     auto bucket = std::make_shared<token_bucket>(limit);
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     limits_[std::move(service)][std::move(method)] = std::move(bucket);
 }
 
 void rate_limit_registry::clear_limit(std::string_view service,
     std::string_view method)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     const auto service_it = limits_.find(service);
     if (service_it == limits_.end())
         return;
@@ -121,7 +122,7 @@ auto rate_limit_registry::try_consume(std::string_view service,
 {
     std::shared_ptr<token_bucket> bucket;
     {
-        std::scoped_lock lock(mutex_);
+        concurrent_containers::shared_latch_guard lock{latch_};
         const auto service_it = limits_.find(service);
         if (service_it == limits_.end())
             return true;
@@ -137,7 +138,7 @@ auto rate_limit_registry::limit(std::string_view service,
     std::string_view method) const
     -> std::optional<rate_limit>
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     const auto service_it = limits_.find(service);
     if (service_it == limits_.end())
         return std::nullopt;

@@ -16,4 +16,5 @@ export import cnetmod.protocol.http.middleware.rate_limiter;
 export import cnetmod.protocol.http.middleware.recover;
 export import cnetmod.protocol.http.middleware.request_id;
 export import cnetmod.protocol.http.middleware.timeout;
+export import cnetmod.protocol.http.middleware.tracing;
 export import cnetmod.protocol.http.middleware.upload;

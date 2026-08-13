@@ -3,8 +3,10 @@ export module cnetmod.orm.result_map;
 import std;
 import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
+import cnetmod.orm.model_metadata;
 import cnetmod.orm.xml_mapper_parser;
 import cnetmod.coro.task;
+import cnetmod.coro.mutex;
 
 namespace cnetmod::orm {
 
@@ -82,34 +84,155 @@ export struct mapped_object
     std::unordered_map<std::string, std::vector<mapped_object>> collections;
 };
 
+namespace detail {
+
+    inline auto mapped_param_to_field_value(const param_value& value) -> field_value
+    {
+        using kind = param_value::kind_t;
+        switch (value.kind)
+        {
+        case kind::null_kind:
+            return field_value::null();
+        case kind::int64_kind:
+            return field_value::from_int64(value.int_val);
+        case kind::uint64_kind:
+            return field_value::from_uint64(value.uint_val);
+        case kind::double_kind:
+            return field_value::from_double(value.double_val);
+        case kind::string_kind:
+            return field_value::from_string(value.str_val);
+        case kind::blob_kind:
+            return field_value::from_blob(value.str_val);
+        case kind::date_kind:
+            return field_value::from_date(value.date_val);
+        case kind::datetime_kind:
+            return field_value::from_datetime(value.datetime_val);
+        case kind::time_kind:
+            return field_value::from_time(value.time_val);
+        }
+        return field_value::null();
+    }
+
+} // namespace detail
+
+/// Extension point for the part of a resultMap that cannot be inferred from
+/// XML: the concrete C++ member which receives an association or collection.
+/// Keep this explicit instead of guessing member offsets from property strings.
+/// A specialization can use mapped_association_as()/mapped_collection_as().
+export template <Model T> struct xml_object_graph_binder
+{
+    static void bind(T&, const mapped_object&) {}
+};
+
+/// Type-safe final projection for XML resultMap output. The XML layer owns
+/// property names and joins; the C++ model owns actual members through the
+/// existing CNETMOD_MODEL setters. Both resultMap property names and declared
+/// database column names are accepted, which keeps aliases explicit in XML.
+/// xml_object_graph_binder<T> completes any explicitly-declared typed relations.
+export template <Model T>
+auto from_mapped_object(const mapped_object& source) -> T
+{
+    T result{};
+    for (const auto& field : model_traits<T>::meta().fields)
+    {
+        const auto property = source.values.find(std::string(field.col.field_name));
+        const auto value = property != source.values.end() ? property
+                                                           : source.values.find(std::string(field.col.column_name));
+        if (value != source.values.end() && field.setter)
+            field.setter(result, detail::mapped_param_to_field_value(value->second));
+    }
+    xml_object_graph_binder<T>::bind(result, source);
+    return result;
+}
+
+export template <Model T>
+auto from_mapped_objects(const std::vector<mapped_object>& source)
+    -> std::vector<T>
+{
+    std::vector<T> result;
+    result.reserve(source.size());
+    for (const auto& object : source)
+        result.push_back(from_mapped_object<T>(object));
+    return result;
+}
+
+/// Convert one named <association> to the application model, if the joined
+/// result contained a child object. This deliberately returns optional so a
+/// nullable SQL join is represented without a sentinel DTO.
+export template <Model T>
+auto mapped_association_as(const mapped_object& source,
+    std::string_view property) -> std::optional<T>
+{
+    const auto found = source.associations.find(std::string(property));
+    if (found == source.associations.end())
+        return std::nullopt;
+    return from_mapped_object<T>(found->second);
+}
+
+/// Convert one named <collection> to a vector of application models. Joined
+/// row de-duplication has already happened in result_map_applier, so the
+/// vector preserves the mapper's object-graph semantics.
+export template <Model T>
+auto mapped_collection_as(const mapped_object& source,
+    std::string_view property) -> std::vector<T>
+{
+    const auto found = source.collections.find(std::string(property));
+    if (found == source.collections.end())
+        return {};
+    return from_mapped_objects<T>(found->second);
+}
+
 // Explicit coroutine lazy loader. Unlike Java proxy interception this never
 // blocks a property access; callers must co_await get().
 export template <class T> class lazy_relation
 {
 public:
-    using loader_type = std::function<task<std::expected<T, std::string>>() >;
+    using loader_type = std::function<task<std::expected<T, std::string>>()>;
 
-    lazy_relation() = default;
-    explicit lazy_relation(loader_type loader) : loader_(std::move(loader)) {}
+    lazy_relation() : state_(std::make_shared<state>()) {}
+
+    explicit lazy_relation(loader_type loader)
+        : state_(std::make_shared<state>(std::move(loader))) {}
 
     auto get() -> task<std::expected<const T*, std::string>>
     {
-        if (value_)
-            co_return &*value_;
-        if (!loader_)
+        auto state = state_;
+        if (state->value)
+            co_return &*state->value;
+        // This coroutine mutex establishes a single-flight boundary for one
+        // relation only. It suspends competing coroutines rather than tying up
+        // an I/O worker, then rechecks after the first loader completes.
+        co_await state->mutex.lock();
+        cnetmod::async_lock_guard guard{state->mutex, std::adopt_lock};
+        if (state->value)
+            co_return &*state->value;
+        if (!state->loader)
             co_return std::unexpected("lazy relation has no loader");
-        auto loaded = co_await loader_();
+        auto loaded = co_await state->loader();
         if (!loaded)
             co_return std::unexpected(loaded.error());
-        value_ = std::move(*loaded);
-        co_return &*value_;
+        state->value = std::move(*loaded);
+        co_return &*state->value;
     }
 
-    [[nodiscard]] auto loaded() const noexcept -> bool { return value_.has_value(); }
+    [[nodiscard]] auto loaded() const noexcept -> bool
+    {
+        return state_->value.has_value();
+    }
 
 private:
-    loader_type loader_;
-    std::optional<T> value_;
+    struct state
+    {
+        state() = default;
+
+        explicit state(loader_type value) : loader(std::move(value)) {}
+
+        loader_type loader;
+        std::optional<T> value;
+        cnetmod::async_mutex mutex;
+    };
+
+    std::shared_ptr<state> state_;
 };
 
 // =============================================================================

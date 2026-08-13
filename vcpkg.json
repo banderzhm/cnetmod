@@ -6,6 +6,7 @@
   "license": "MIT",
   "builtin-baseline": "a7bd30319eeac16afbe18d64a855303a0a425e84",
   "dependencies": [
+    "brotli",
     "jwt-cpp",
     "icu",
     "leveldb",
@@ -15,6 +16,7 @@
     "pugixml",
     "stdexec",
     "zlib",
+    "zstd",
     {
       "name": "liburing",
       "platform": "linux"

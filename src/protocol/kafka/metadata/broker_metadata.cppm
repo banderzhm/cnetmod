@@ -4,6 +4,7 @@ export module cnetmod.protocol.kafka.broker_metadata;
 import std;
 import cnetmod.protocol.kafka.protocol_constants;
 import cnetmod.protocol.kafka.broker_request_codec;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 export namespace cnetmod::kafka {
 class metadata_observer
@@ -27,7 +28,7 @@ public:
     void add_observer(std::weak_ptr<metadata_observer>);
 
 private:
-    mutable std::shared_mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     protocol::metadata_response data_;
     std::vector<std::weak_ptr<metadata_observer>> observers_;
 };

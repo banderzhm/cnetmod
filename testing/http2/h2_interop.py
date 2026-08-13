@@ -8,9 +8,22 @@ import sys
 import time
 from contextlib import closing
 
-from h2.config import H2Configuration
-from h2.connection import H2Connection
-from h2.events import ConnectionTerminated, DataReceived, PingAckReceived, ResponseReceived, StreamEnded, SettingsAcknowledged
+try:
+    from h2.config import H2Configuration
+    from h2.connection import H2Connection
+    from h2.events import (
+        ConnectionTerminated,
+        DataReceived,
+        PingAckReceived,
+        ResponseReceived,
+        SettingsAcknowledged,
+        StreamEnded,
+    )
+except ModuleNotFoundError as error:
+    if error.name == "h2":
+        print("[  SKIPPED ] python-h2 interop requires: pip install h2")
+        raise SystemExit(77) from None
+    raise
 
 
 def free_port() -> int:

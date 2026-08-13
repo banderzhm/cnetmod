@@ -1019,7 +1019,7 @@ auto async_recvfrom_batch(io_context& ctx, socket& sock,
 
     std::vector<udp_received_datagram> result;
     result.reserve(max_datagrams);
-    udp_received_datagram first{std::vector<std::byte>(max_datagram_size), {}};
+    udp_received_datagram first{udp_datagram_buffer{max_datagram_size}, {}};
     auto received = co_await async_recvfrom(ctx, sock,
         mutable_buffer{first.bytes.data(), first.bytes.size()}, first.peer);
     if (!received)
@@ -1032,7 +1032,7 @@ auto async_recvfrom_batch(io_context& ctx, socket& sock,
     // EVFILT_READ notification.
     while (result.size() < max_datagrams)
     {
-        udp_received_datagram next{std::vector<std::byte>(max_datagram_size), {}};
+        udp_received_datagram next{udp_datagram_buffer{max_datagram_size}, {}};
         ::sockaddr_storage sender{};
         ::socklen_t sender_length = sizeof(sender);
         const auto count = ::recvfrom(static_cast<int>(sock.native_handle()), next.bytes.data(),
@@ -1058,6 +1058,70 @@ auto async_sendto_batch(io_context& ctx, socket& sock,
     for (const auto& datagram : datagrams)
     {
         auto sent = co_await async_sendto(ctx, sock, datagram.bytes, datagram.peer);
+        if (!sent)
+        {
+            if (submitted != 0U)
+                co_return submitted;
+            co_return std::unexpected(sent.error());
+        }
+        ++submitted;
+    }
+    co_return submitted;
+}
+
+auto async_recvfrom_batch(io_context& ctx, socket& sock,
+    std::size_t max_datagrams, std::size_t max_datagram_size, cancel_token& token)
+    -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (max_datagrams == 0U || max_datagram_size == 0U)
+        co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+    std::vector<udp_received_datagram> result;
+    result.reserve(max_datagrams);
+    udp_received_datagram first{udp_datagram_buffer{max_datagram_size}, {}};
+    auto received = co_await async_recvfrom(ctx, sock,
+        mutable_buffer{first.bytes.data(), first.bytes.size()}, first.peer, token);
+    if (!received)
+        co_return std::unexpected(received.error());
+    first.bytes.resize(*received);
+    result.push_back(std::move(first));
+
+    while (result.size() < max_datagrams && !token.is_cancelled())
+    {
+        udp_received_datagram next{udp_datagram_buffer{max_datagram_size}, {}};
+        ::sockaddr_storage sender{};
+        ::socklen_t sender_length = sizeof(sender);
+        const auto count = ::recvfrom(static_cast<int>(sock.native_handle()), next.bytes.data(),
+            next.bytes.size(), 0, reinterpret_cast<::sockaddr*>(&sender), &sender_length);
+        if (count < 0)
+        {
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                break;
+            co_return std::unexpected(last_error());
+        }
+        next.bytes.resize(static_cast<std::size_t>(count));
+        next.peer = endpoint_from_sockaddr(sender);
+        result.push_back(std::move(next));
+    }
+    co_return result;
+}
+
+auto async_sendto_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    std::size_t submitted{};
+    for (const auto& datagram : datagrams)
+    {
+        if (token.is_cancelled())
+        {
+            if (submitted != 0U)
+                co_return submitted;
+            co_return std::unexpected(make_error_code(errc::operation_aborted));
+        }
+        auto sent = co_await async_sendto(ctx, sock, datagram.bytes, datagram.peer, token);
         if (!sent)
         {
             if (submitted != 0U)

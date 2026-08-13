@@ -130,6 +130,17 @@ def test_cnetmod_mongodb_retryable_read_write(
         ].delete_one({"_id": marker})
 
 
+@pytest.mark.cnetmod_driver
+def test_cnetmod_mongodb_exhaust_cursor_streams_all_batches(
+    mongodb_native_options: dict[str, object], mongodb_driver
+) -> None:
+    result = mongodb_driver.request(
+        "exhaust_stream", **mongodb_native_options, marker=f"exhaust-{uuid.uuid4()}"
+    )
+    assert result["document_count"] == 4
+    assert result["batch_count"] >= 2
+
+
 def _require_replica_set(client: MongoClient) -> None:
     if "setName" not in client.admin.command({"hello": 1}):
         pytest.skip("MongoDB transactions and change streams require a replica set")

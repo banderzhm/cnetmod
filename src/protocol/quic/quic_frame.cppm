@@ -40,15 +40,34 @@ export enum class frame_type : std::uint64_t
     connection_close = 0x1C,
     connection_close_app = 0x1D,
     handshake_done = 0x1E,
+    /// RFC 9221: DATAGRAM without an explicit length (must be last in packet).
+    datagram = 0x30,
+    /// RFC 9221: DATAGRAM with an explicit length.
+    datagram_with_length = 0x31,
+    /// draft-ietf-quic-multipath-12 experimental frame types.
+    path_ack = 0x15228c00,
+    path_ack_ecn = 0x15228c01,
+    path_abandon = 0x15228c05,
+    path_backup = 0x15228c07,
+    path_available = 0x15228c08,
+    path_new_connection_id = 0x15228c09,
+    path_retire_connection_id = 0x15228c0a,
+    max_path_id = 0x15228c0c,
+    paths_blocked = 0x15228c0d,
+    path_cids_blocked = 0x15228c0e,
 };
 
 // =============================================================================
 // Frame Structs
 // =============================================================================
 
-export struct padding_frame {};
+export struct padding_frame
+{
+};
 
-export struct ping_frame {};
+export struct ping_frame
+{
+};
 
 export struct ack_range
 {
@@ -167,7 +186,67 @@ export struct connection_close_frame
     bool is_application_error{false};
 };
 
-export struct handshake_done_frame {};
+export struct handshake_done_frame
+{
+};
+
+/// Unreliable application payload carried by RFC 9221 QUIC DATAGRAM frames.
+/// The transport owns a copy before packet serialization; `data` is only a
+/// view used by the codec.
+export struct datagram_frame
+{
+    std::span<const std::byte> data{};
+    bool has_length{true};
+};
+
+/// The following frame records are codecs for draft-ietf-quic-multipath-12.
+/// They are not emitted or processed by a connection until the draft
+/// extension is negotiated and per-path transport state is available.
+export struct path_ack_frame
+{
+    std::uint32_t path_id{};
+    ack_frame acknowledgment{};
+};
+
+export struct path_abandon_frame
+{
+    std::uint32_t path_id{};
+    std::uint64_t error_code{};
+};
+
+export struct path_status_frame
+{
+    std::uint32_t path_id{};
+    std::uint64_t sequence_number{};
+    bool backup{};
+};
+
+export struct path_new_connection_id_frame
+{
+    std::uint32_t path_id{};
+    new_connection_id_frame connection_id{};
+};
+
+export struct path_retire_connection_id_frame
+{
+    std::uint32_t path_id{};
+    std::uint64_t sequence_number{};
+};
+
+export struct max_path_id_frame
+{
+    std::uint32_t maximum_path_id{};
+};
+
+export struct paths_blocked_frame
+{
+    std::uint32_t maximum_path_id{};
+};
+
+export struct path_cids_blocked_frame
+{
+    std::uint32_t path_id{};
+};
 
 // =============================================================================
 // Frame Variant
@@ -193,7 +272,16 @@ export using quic_frame_variant = std::variant<
     path_challenge_frame,
     path_response_frame,
     connection_close_frame,
-    handshake_done_frame>;
+    handshake_done_frame,
+    datagram_frame,
+    path_ack_frame,
+    path_abandon_frame,
+    path_status_frame,
+    path_new_connection_id_frame,
+    path_retire_connection_id_frame,
+    max_path_id_frame,
+    paths_blocked_frame,
+    path_cids_blocked_frame>;
 
 // =============================================================================
 // Frame Decoding / Encoding
@@ -234,6 +322,16 @@ export auto encode_frame(const connection_close_frame& f)
     -> std::vector<std::byte>;
 export auto encode_frame(const handshake_done_frame& f)
     -> std::vector<std::byte>;
+export auto encode_frame(const datagram_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const path_ack_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const path_abandon_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const path_status_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const path_new_connection_id_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const path_retire_connection_id_frame& f)
+    -> std::vector<std::byte>;
+export auto encode_frame(const max_path_id_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const paths_blocked_frame& f) -> std::vector<std::byte>;
+export auto encode_frame(const path_cids_blocked_frame& f) -> std::vector<std::byte>;
 
 // =============================================================================
 // Frame Helpers

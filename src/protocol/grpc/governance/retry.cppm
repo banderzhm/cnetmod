@@ -6,6 +6,7 @@ export module cnetmod.protocol.grpc.governance.retry;
 
 import std;
 import cnetmod.protocol.grpc.types;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::governance {
 
@@ -48,7 +49,7 @@ public:
 
 private:
     retry_budget_config config_;
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::uint32_t tokens_ = 0;
 };
 

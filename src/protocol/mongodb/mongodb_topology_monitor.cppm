@@ -3,6 +3,7 @@ export module cnetmod.protocol.mongodb:topology_monitor;
 import std;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :error;
 import :server_description;
 import :connection_options;
@@ -51,7 +52,9 @@ public:
 private:
     void recompute_kind_locked();
     std::optional<std::string> required_replica_set_;
-    mutable std::mutex mutex_;
+    // Server discovery publishes a consistent view: server descriptions and
+    // derived topology kind are changed under the same atomic latch.
+    mutable concurrent_containers::atomic_rw_latch topology_latch_;
     std::map<server_address, server_description> servers_;
     topology_kind kind_ = topology_kind::unknown;
 };

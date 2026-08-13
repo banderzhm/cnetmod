@@ -15,6 +15,7 @@ import cnetmod.core.socket;
 import cnetmod.core.ssl;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::coap {
 
@@ -55,7 +56,7 @@ private:
     socket& sock_;
     coaps_session_manager_options options_;
     coaps_response_handler response_handler_;
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::unordered_map<std::string, std::shared_ptr<session_state>> sessions_;
     bool stopping_ = false;
 };

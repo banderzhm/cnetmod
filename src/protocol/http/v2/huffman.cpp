@@ -104,9 +104,30 @@ namespace {
         std::int16_t symbol{-1};
     };
 
+    // Decode four wire bits at a time.  A nibble can emit at most one HPACK
+    // symbol (the shortest code is five bits), while preserving the remaining
+    // prefix needed to validate RFC 7541 padding.  This avoids eight
+    // branch-heavy tree walks for every input byte on the QPACK hot path.
+    struct decode_step
+    {
+        std::int16_t next{-1};
+        std::int16_t emitted{-1};
+        std::uint8_t trailing_bits{};
+        bool trailing_all_ones{true};
+    };
+
     struct decode_tree
     {
         std::array<decode_node, 8192> nodes{};
+        // Keep the lookup table out of the static-initializer stack frame:
+        // Windows' default executable stack is commonly only 1 MiB.
+        std::unique_ptr<std::array<decode_step, 16>[]> nibble_steps{
+            std::make_unique<std::array<decode_step, 16>[]>(8192U)};
+        // Most short HTTP field names end on a Huffman symbol boundary.  The
+        // root-state byte table folds the two nibble lookups for that common
+        // case while retaining the compact nibble table for every partial
+        // prefix state.
+        std::array<decode_step, 256> root_byte_steps{};
         std::size_t size{1};
     };
 
@@ -133,6 +154,75 @@ namespace {
                 result.nodes[node].symbol =
                     static_cast<std::int16_t>(symbol_index);
             }
+            for (std::size_t start{}; start < result.size; ++start)
+            {
+                for (std::size_t nibble{}; nibble < 16U; ++nibble)
+                {
+                    auto& step = result.nibble_steps[start][nibble];
+                    step.next = 0;
+                    std::size_t node = start;
+                    for (int shift = 3; shift >= 0; --shift)
+                    {
+                        const auto bit = static_cast<std::size_t>(
+                            (nibble >> shift) & 1U);
+                        const auto next = result.nodes[node].child[bit];
+                        if (next < 0)
+                        {
+                            step.next = -1;
+                            break;
+                        }
+                        node = static_cast<std::size_t>(next);
+                        const auto decoded = result.nodes[node].symbol;
+                        if (decoded >= 0)
+                        {
+                            // EOS is never legal as an encoded data symbol.
+                            if (decoded == 256)
+                            {
+                                step.next = -1;
+                                break;
+                            }
+                            step.emitted = decoded;
+                            node = 0U;
+                            step.trailing_bits = 0U;
+                            step.trailing_all_ones = true;
+                        }
+                        else
+                        {
+                            ++step.trailing_bits;
+                            step.trailing_all_ones =
+                                step.trailing_all_ones && bit != 0U;
+                        }
+                    }
+                    if (step.next != -1)
+                        step.next = static_cast<std::int16_t>(node);
+                }
+            }
+            for (std::size_t byte{}; byte < result.root_byte_steps.size(); ++byte)
+            {
+                const auto& high = result.nibble_steps[0U][byte >> 4U];
+                auto& combined = result.root_byte_steps[byte];
+                if (high.next < 0 || high.emitted >= 0)
+                {
+                    // HPACK's shortest code is five bits, so a root-state
+                    // high nibble cannot emit. Keep this guard so a table
+                    // change cannot silently invalidate the fast path.
+                    combined.next = -1;
+                    continue;
+                }
+                const auto& low = result.nibble_steps[static_cast<std::size_t>(high.next)]
+                                                     [byte & 0x0fU];
+                combined = low;
+                // A low nibble that does not complete a symbol inherits the
+                // high nibble's partial prefix.  Retaining it is essential
+                // for the RFC 7541 padding validation at end of input.
+                if (combined.next >= 0 && combined.emitted < 0)
+                {
+                    combined.trailing_bits = static_cast<std::uint8_t>(
+                        high.trailing_bits + low.trailing_bits);
+                    combined.trailing_all_ones = high.trailing_all_ones &&
+                        low.trailing_all_ones;
+                }
+            }
             return result;
         }();
         return tree;
@@ -151,28 +241,46 @@ auto huffman_decode(std::span<const std::byte> input)
     for (const auto byte : input)
     {
         const auto value = std::to_integer<std::uint8_t>(byte);
-        for (int shift = 7; shift >= 0; --shift)
+        if (node == 0U)
         {
-            const auto bit = static_cast<std::size_t>((value >> shift) & 1U);
-            const auto next = tree.nodes[node].child[bit];
-            if (next < 0)
-                return std::unexpected(
-                    std::make_error_code(std::errc::protocol_error));
-            node = static_cast<std::size_t>(next);
-            ++pending_bits;
-            pending_all_ones = pending_all_ones && bit != 0U;
-            const auto decoded = tree.nodes[node].symbol;
-            if (decoded >= 0)
+            const auto& step = tree.root_byte_steps[value];
+            if (step.next < 0)
+                return std::unexpected(std::make_error_code(std::errc::protocol_error));
+            node = static_cast<std::size_t>(step.next);
+            if (step.emitted >= 0)
             {
-                if (decoded == 256)
-                    return std::unexpected(
-                        std::make_error_code(std::errc::protocol_error));
-                result.push_back(static_cast<char>(decoded));
-                node = 0U;
-                pending_bits = 0U;
-                pending_all_ones = true;
+                result.push_back(static_cast<char>(step.emitted));
+                pending_bits = step.trailing_bits;
+                pending_all_ones = step.trailing_all_ones;
             }
+            else
+            {
+                pending_bits += step.trailing_bits;
+                pending_all_ones = pending_all_ones && step.trailing_all_ones;
+            }
+            continue;
         }
+        const auto apply_nibble = [&](std::size_t nibble) -> bool
+        {
+            const auto& step = tree.nibble_steps[node][nibble];
+            if (step.next < 0)
+                return false;
+            node = static_cast<std::size_t>(step.next);
+            if (step.emitted >= 0)
+            {
+                result.push_back(static_cast<char>(step.emitted));
+                pending_bits = step.trailing_bits;
+                pending_all_ones = step.trailing_all_ones;
+            }
+            else
+            {
+                pending_bits += step.trailing_bits;
+                pending_all_ones = pending_all_ones && step.trailing_all_ones;
+            }
+            return true;
+        };
+        if (!apply_nibble(value >> 4U) || !apply_nibble(value & 0x0fU))
+            return std::unexpected(std::make_error_code(std::errc::protocol_error));
     }
     // RFC 7541 ?5.2: padding is at most seven one bits and must be an EOS prefix.
     if (pending_bits != 0U &&

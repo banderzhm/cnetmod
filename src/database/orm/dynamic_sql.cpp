@@ -21,10 +21,17 @@ auto dynamic_sql_processor::process(const xml_node& stmt_node,
 {
     sql_buf_.clear();
     params_.clear();
+    parameter_mappings_.clear();
     // Create mutable copy for bind support
     param_context mutable_ctx = ctx;
     process_children(stmt_node, mutable_ctx, fragments);
-    return {std::move(sql_buf_), std::move(params_)};
+    std::string prepared_sql = sql_buf_;
+    for (std::size_t marker = prepared_sql.find("{}");
+        marker != std::string::npos;
+        marker = prepared_sql.find("{}", marker + 1))
+        prepared_sql.replace(marker, 2, "?");
+    return {std::move(sql_buf_), std::move(params_),
+        std::move(parameter_mappings_), std::move(prepared_sql)};
 }
 
 auto dynamic_sql_processor::param_value_to_string(const param_value& val)
@@ -243,15 +250,9 @@ void dynamic_sql_processor::process_text(std::string_view text,
             break;
         }
 
-        // Extract param name
-        auto param_name = text.substr(start + 2, end - start - 2);
-        // Trim whitespace
-        while (!param_name.empty() &&
-            std::isspace(static_cast<unsigned char>(param_name.front())))
-            param_name.remove_prefix(1);
-        while (!param_name.empty() &&
-            std::isspace(static_cast<unsigned char>(param_name.back())))
-            param_name.remove_suffix(1);
+        const auto expression = text.substr(start + 2, end - start - 2);
+        const auto mapping = parse_parameter_mapping(expression);
+        const auto param_name = std::string_view(mapping.property);
 
         if (is_parameterized)
         {
@@ -269,6 +270,7 @@ void dynamic_sql_processor::process_text(std::string_view text,
 
             sql_buf_.append("{}");
             params_.push_back(param_val);
+            parameter_mappings_.push_back(mapping);
             ORM_DEBUG_LOG("[DEBUG] Parameterized: #{{{}}}", param_name);
         }
         else
@@ -284,6 +286,63 @@ void dynamic_sql_processor::process_text(std::string_view text,
 
         i = end + 1;
     }
+}
+
+auto dynamic_sql_processor::parse_parameter_mapping(std::string_view expression)
+    -> dynamic_parameter_mapping
+{
+    auto trim = [](std::string_view value)
+    {
+        while (!value.empty() &&
+            std::isspace(static_cast<unsigned char>(value.front())))
+            value.remove_prefix(1);
+        while (!value.empty() &&
+            std::isspace(static_cast<unsigned char>(value.back())))
+            value.remove_suffix(1);
+        return value;
+    };
+
+    dynamic_parameter_mapping mapping;
+    bool first = true;
+    while (!expression.empty())
+    {
+        const auto comma = expression.find(',');
+        const auto token = trim(expression.substr(0, comma));
+        expression = comma == std::string_view::npos ? std::string_view{}
+                                                     : expression.substr(comma + 1);
+        if (token.empty())
+            continue;
+
+        if (first)
+        {
+            mapping.property = token;
+            first = false;
+            continue;
+        }
+
+        const auto equals = token.find('=');
+        if (equals == std::string_view::npos)
+            continue;
+        const auto key = trim(token.substr(0, equals));
+        const auto value = trim(token.substr(equals + 1));
+        if (key == "jdbcType")
+            mapping.jdbc_type = value;
+        else if (key == "javaType")
+            mapping.java_type = value;
+        else if (key == "typeHandler")
+            mapping.type_handler = value;
+        else if (key == "mode")
+            mapping.mode = value;
+        else if (key == "numericScale")
+        {
+            std::uint32_t scale{};
+            const auto [_, error] = std::from_chars(value.data(),
+                value.data() + value.size(), scale);
+            if (error == std::errc{})
+                mapping.numeric_scale = scale;
+        }
+    }
+    return mapping;
 }
 
 // Helper: append text with whitespace normalization
@@ -430,6 +489,8 @@ void dynamic_sql_processor::process_foreach(const xml_node& node,
         sql_buf_.append(open);
 
     bool first = true;
+    std::size_t index{};
+    const auto index_name = node.attr("index");
     for (auto& item_ctx : *collection)
     {
         if (!first && !separator.empty())
@@ -452,8 +513,14 @@ void dynamic_sql_processor::process_foreach(const xml_node& node,
         {
             merged.add_nested(std::string(item_name), item_ctx);
         }
+        // MyBatis exposes a zero-based position through the optional index
+        // attribute. It must remain scoped to this iteration for nested loops.
+        if (!index_name.empty())
+            merged.set(std::string(index_name),
+                to_query_parameter(static_cast<std::int64_t>(index)));
 
         process_children(node, merged, fragments);
+        ++index;
     }
 
     if (!close.empty())

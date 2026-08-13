@@ -31,6 +31,10 @@ public:
 
     auto set_header(std::string_view key, std::string_view value) -> response&;
 
+    /// Set a header from an already-owned value. This avoids a second
+    /// allocation when a server-side cache has just produced the value.
+    auto set_header_owned(std::string_view key, std::string value) -> response&;
+
     auto append_header(std::string_view key, std::string_view value)
         -> response&;
 
@@ -82,6 +86,13 @@ public:
     /// transient allocation for every response on a keep-alive connection.
     void serialize_to(std::string& output) const;
 
+    /// Install a fixed-width, server-generated IMF-fixdate without allocating
+    /// a header-map value. A later explicit `set_header("Date", ...)` retains
+    /// the normal response-builder override semantics.
+    void set_cached_date_header(std::array<char, 29U> value) noexcept;
+
+    [[nodiscard]] auto cached_date_header() const noexcept -> std::string_view;
+
 private:
     int status_code_ = 200;
     std::string status_msg_;
@@ -89,6 +100,8 @@ private:
     header_map headers_;
     header_map trailers_;
     std::string body_;
+    std::array<char, 29U> cached_date_header_{};
+    bool has_cached_date_header_ = false;
 };
 
 } // namespace cnetmod::http

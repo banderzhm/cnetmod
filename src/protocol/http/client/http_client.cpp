@@ -12,6 +12,7 @@ import :parser;
 import :cookie;
 import :client;
 import cnetmod.core.error;
+import cnetmod.core.log;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
@@ -28,16 +29,248 @@ import cnetmod.protocol.http.v2.header_compression;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
-#ifdef CNETMOD_ENABLE_QUIC
+    #ifdef CNETMOD_ENABLE_QUIC
 import cnetmod.protocol.http.v3.client;
-#endif
+import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.quic;
+    #endif
 #endif
 
 namespace cnetmod::http {
 
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+namespace {
+    auto as_http3_client(const std::shared_ptr<void>& value)
+        -> std::shared_ptr<v3::http3_client>
+    {
+        return std::static_pointer_cast<v3::http3_client>(value);
+    }
+
+    auto hex_digit(unsigned value) noexcept -> char
+    {
+        return value < 10U ? static_cast<char>('0' + value)
+                           : static_cast<char>('a' + value - 10U);
+    }
+
+    auto encode_ticket(std::span<const std::byte> bytes) -> std::string
+    {
+        std::string output;
+        output.reserve(bytes.size() * 2U);
+        for (const auto byte : bytes)
+        {
+            const auto value = std::to_integer<unsigned>(byte);
+            output.push_back(hex_digit(value >> 4U));
+            output.push_back(hex_digit(value & 0x0fU));
+        }
+        return output;
+    }
+
+    auto decode_ticket(std::string_view text)
+        -> std::optional<std::vector<std::byte>>
+    {
+        if (text.empty() || (text.size() & 1U) != 0U)
+            return std::nullopt;
+        std::vector<std::byte> output;
+        output.reserve(text.size() / 2U);
+        for (std::size_t index = 0; index < text.size(); index += 2U)
+        {
+            const auto nibble = [](char value) -> int
+            {
+                if (value >= '0' && value <= '9')
+                    return value - '0';
+                if (value >= 'a' && value <= 'f')
+                    return value - 'a' + 10;
+                if (value >= 'A' && value <= 'F')
+                    return value - 'A' + 10;
+                return -1;
+            };
+            const int high = nibble(text[index]);
+            const int low = nibble(text[index + 1U]);
+            if (high < 0 || low < 0)
+                return std::nullopt;
+            output.push_back(static_cast<std::byte>((high << 4) | low));
+        }
+        return output;
+    }
+} // namespace
+#endif
+
 // =============================================================================
 // SSL Context Initialization
 // =============================================================================
+
+void client::load_alt_svc_cache()
+{
+    if (options_.alt_svc_cache_file.empty())
+        return;
+    std::ifstream input(options_.alt_svc_cache_file);
+    if (!input)
+        return;
+
+    const auto now_system = std::chrono::system_clock::now();
+    const auto now_steady = std::chrono::steady_clock::now();
+    std::string line;
+    while (std::getline(input, line))
+    {
+        const auto first_tab = line.find('\t');
+        const auto second_tab = line.find('\t', first_tab == std::string::npos ? first_tab : first_tab + 1);
+        if (first_tab == std::string::npos || second_tab == std::string::npos)
+            continue;
+        const auto third_tab = line.find('\t', second_tab + 1);
+        if (third_tab != std::string::npos)
+            continue;
+        const std::string_view key{line.data(), first_tab};
+        const std::string_view peer_text{line.data() + first_tab + 1,
+            second_tab - first_tab - 1};
+        const std::string_view expiry_text{line.data() + second_tab + 1,
+            line.size() - second_tab - 1};
+        unsigned peer_port{};
+        long long expiry_ms{};
+        const auto [peer_end, peer_error] = std::from_chars(
+            peer_text.data(), peer_text.data() + peer_text.size(), peer_port);
+        const auto [expiry_end, expiry_error] = std::from_chars(
+            expiry_text.data(), expiry_text.data() + expiry_text.size(), expiry_ms);
+        if (key.empty() || peer_error != std::errc{} ||
+            peer_end != peer_text.data() + peer_text.size() || peer_port == 0U ||
+            peer_port > 65535U || expiry_error != std::errc{} ||
+            expiry_end != expiry_text.data() + expiry_text.size())
+            continue;
+        const auto expiry_system = std::chrono::system_clock::time_point{
+            std::chrono::milliseconds{expiry_ms}};
+        if (expiry_system <= now_system)
+            continue;
+        const auto remaining = expiry_system - now_system;
+        h3_alt_svc_[std::string(key)] = {
+            now_steady + std::chrono::duration_cast<std::chrono::steady_clock::duration>(remaining),
+            static_cast<std::uint16_t>(peer_port)};
+    }
+}
+
+void client::persist_alt_svc_cache() const
+{
+    if (options_.alt_svc_cache_file.empty())
+        return;
+    const auto temporary = options_.alt_svc_cache_file + ".tmp";
+    std::ofstream output(temporary, std::ios::trunc);
+    if (!output)
+        return;
+    const auto now_system = std::chrono::system_clock::now();
+    const auto now_steady = std::chrono::steady_clock::now();
+    for (const auto& [key, entry] : h3_alt_svc_)
+    {
+        if (entry.expires_at <= now_steady || key.contains('\t'))
+            continue;
+        const auto remaining = entry.expires_at - now_steady;
+        const auto expiry = now_system +
+            std::chrono::duration_cast<std::chrono::system_clock::duration>(remaining);
+        const auto expiry_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+            expiry.time_since_epoch())
+                                   .count();
+        output << key << '\t' << entry.peer_port << '\t' << expiry_ms << '\n';
+    }
+    output.close();
+    if (!output)
+        return;
+    std::error_code error;
+    std::filesystem::rename(temporary, options_.alt_svc_cache_file, error);
+    if (error)
+    {
+        std::filesystem::remove(options_.alt_svc_cache_file, error);
+        error.clear();
+        std::filesystem::rename(temporary, options_.alt_svc_cache_file, error);
+    }
+}
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+auto load_http3_resumption_ticket(std::string_view cache_file, std::string_view host,
+    std::uint16_t port) -> std::optional<cnetmod::quic::session_ticket>
+{
+    if (cache_file.empty() || host.empty() || port == 0U ||
+        host.find_first_of("\t\r\n") != std::string_view::npos)
+        return std::nullopt;
+    std::ifstream input{std::string(cache_file)};
+    if (!input)
+        return std::nullopt;
+    std::string line;
+    while (std::getline(input, line))
+    {
+        const auto first_tab = line.find('\t');
+        const auto second_tab = line.find('\t', first_tab == std::string::npos ? first_tab : first_tab + 1U);
+        if (first_tab == std::string::npos || second_tab == std::string::npos ||
+            line.find('\t', second_tab + 1U) != std::string::npos)
+            continue;
+        const std::string_view line_host{line.data(), first_tab};
+        const std::string_view line_port{line.data() + first_tab + 1U,
+            second_tab - first_tab - 1U};
+        unsigned parsed_port{};
+        const auto [end, error] = std::from_chars(line_port.data(),
+            line_port.data() + line_port.size(), parsed_port);
+        if (line_host != host || error != std::errc{} ||
+            end != line_port.data() + line_port.size() || parsed_port != port)
+            continue;
+        if (const auto bytes = decode_ticket(
+                std::string_view{line.data() + second_tab + 1U,
+                    line.size() - second_tab - 1U}))
+            return cnetmod::quic::session_ticket{std::move(*bytes)};
+    }
+    return std::nullopt;
+}
+
+void persist_http3_resumption_ticket(std::string_view cache_file, std::string_view host,
+    std::uint16_t port, const cnetmod::quic::session_ticket& ticket)
+{
+    if (cache_file.empty() || host.empty() || port == 0U ||
+        ticket.empty() || host.find_first_of("\t\r\n") != std::string_view::npos)
+        return;
+
+    std::vector<std::string> lines;
+    {
+        std::ifstream input{std::string(cache_file)};
+        std::string line;
+        while (input && std::getline(input, line))
+        {
+            const auto first_tab = line.find('\t');
+            const auto second_tab = line.find('\t', first_tab == std::string::npos ? first_tab : first_tab + 1U);
+            bool replace = false;
+            if (first_tab != std::string::npos && second_tab != std::string::npos &&
+                line.find('\t', second_tab + 1U) == std::string::npos)
+            {
+                unsigned parsed_port{};
+                const std::string_view line_port{line.data() + first_tab + 1U,
+                    second_tab - first_tab - 1U};
+                const auto [end, error] = std::from_chars(line_port.data(),
+                    line_port.data() + line_port.size(), parsed_port);
+                replace = std::string_view{line.data(), first_tab} == host &&
+                    error == std::errc{} && end == line_port.data() + line_port.size() &&
+                    parsed_port == port;
+            }
+            if (!replace && !line.empty())
+                lines.push_back(std::move(line));
+        }
+    }
+    lines.push_back(std::string(host) + '\t' + std::to_string(port) + '\t' +
+        encode_ticket(ticket.serialized));
+
+    const auto cache_path = std::string(cache_file);
+    const auto temporary = cache_path + ".tmp";
+    std::ofstream output(temporary, std::ios::trunc);
+    if (!output)
+        return;
+    for (const auto& line : lines)
+        output << line << '\n';
+    output.close();
+    if (!output)
+        return;
+    std::error_code error;
+    std::filesystem::rename(temporary, cache_path, error);
+    if (error)
+    {
+        std::filesystem::remove(cache_path, error);
+        error.clear();
+        std::filesystem::rename(temporary, cache_path, error);
+    }
+}
+#endif
 
 #ifdef CNETMOD_HAS_SSL
 void client::init_ssl_context()
@@ -93,9 +326,10 @@ void client::init_ssl_context()
         break;
     }
 
-#ifdef CNETMOD_ENABLE_QUIC
+    #ifdef CNETMOD_ENABLE_QUIC
     if (options_.version_pref == http_version_preference::http3_only ||
-        options_.version_pref == http_version_preference::http3_preferred)
+        options_.version_pref == http_version_preference::http3_preferred ||
+        options_.enable_alt_svc_http3)
     {
         auto h3_context = ssl_context::quic_client();
         if (!h3_context)
@@ -112,7 +346,7 @@ void client::init_ssl_context()
         h3_ssl_ctx_->set_verify_peer(options_.verify_peer);
         h3_ssl_ctx_->configure_alpn_client({"h3"});
     }
-#endif
+    #endif
 }
 #endif
 
@@ -122,6 +356,7 @@ void client::init_ssl_context()
 
 void client::close() noexcept
 {
+    raced_use_http3_.reset();
 #if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
     // Destruction releases the per-origin QUIC connection. `close()` is a
     // legacy synchronous API, so graceful QUIC shutdown is available through
@@ -155,6 +390,21 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl)
 {
     cancel_token token;
     co_return co_await connect(host, port, use_ssl, token);
+}
+
+auto client::close_async() -> task<void>
+{
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    co_await h3_lifecycle_mutex_.lock();
+    cnetmod::async_lock_guard h3_guard{h3_lifecycle_mutex_, std::adopt_lock};
+    if (h3_client_)
+    {
+        co_await as_http3_client(h3_client_)->close();
+        h3_client_.reset();
+    }
+#endif
+    close();
+    co_return;
 }
 
 auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl,
@@ -192,6 +442,15 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl,
     }
 
     auto sock = std::move(connect_r->sock);
+
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    // Keep inline Winsock completions on this coroutine instead of enqueuing
+    // an IOCP packet just to resume it.  apply_options is deliberately best
+    // effort here: this is a performance capability, not a connection or
+    // protocol requirement.
+    (void)sock.apply_options(
+        {.non_blocking = false, .skip_completion_on_success = true});
+#endif
 
     state_->conn.emplace(*ctx_, std::move(sock));
 
@@ -367,12 +626,21 @@ auto client::send_http1(const request& req, cancel_token& token)
     request_data += version_to_string(req.version());
     request_data += "\r\n";
 
+    bool has_content_length = false;
+    bool has_transfer_encoding = false;
     for (const auto& [key, value] : req.headers())
     {
         request_data += key;
         request_data += ": ";
         request_data += value;
         request_data += "\r\n";
+        std::string lower_key;
+        lower_key.reserve(key.size());
+        for (const auto ch : key)
+            lower_key.push_back(static_cast<char>(std::tolower(
+                static_cast<unsigned char>(ch))));
+        has_content_length |= lower_key == "content-length";
+        has_transfer_encoding |= lower_key == "transfer-encoding";
     }
 
     if (req.get_header("Host").empty())
@@ -403,8 +671,25 @@ auto client::send_http1(const request& req, cancel_token& token)
         request_data += "\r\n";
     }
 
+    if (const auto& source = req.body_source(); source &&
+        ((has_content_length && !source->content_length()) ||
+            (has_content_length && has_transfer_encoding)))
+    {
+        co_return std::unexpected(make_error_code(std::errc::invalid_argument));
+    }
+
+    // A pull body without a declared length uses RFC 9112 chunked framing.
+    // Never emit both framing headers, and preserve an explicitly supplied
+    // length so callers can stream a known-size upload without buffering it.
+    if (req.has_streaming_body() && !has_content_length &&
+        !has_transfer_encoding)
+    {
+        request_data += "Transfer-Encoding: chunked\r\n";
+        has_transfer_encoding = true;
+    }
+
     request_data += "\r\n";
-    if (!req.body().empty())
+    if (!req.has_streaming_body() && !req.body().empty())
     {
         request_data += req.body();
     }
@@ -414,6 +699,70 @@ auto client::send_http1(const request& req, cancel_token& token)
     if (!send_result)
     {
         co_return std::unexpected(send_result.error());
+    }
+
+    if (const auto& source = req.body_source())
+    {
+        const auto expected_length = source->content_length();
+        std::uint64_t sent_length = 0;
+        for (;;)
+        {
+            if (token.is_cancelled())
+            {
+                close();
+                co_return std::unexpected(make_error_code(errc::operation_aborted));
+            }
+            auto next = co_await source->next(token);
+            if (!next)
+            {
+                if (token.is_cancelled())
+                {
+                    close();
+                    co_return std::unexpected(make_error_code(errc::operation_aborted));
+                }
+                break;
+            }
+            const auto chunk = next->view();
+            if (chunk.empty())
+                continue;
+            if (expected_length &&
+                (sent_length > *expected_length ||
+                    chunk.size() > *expected_length - sent_length))
+            {
+                close();
+                co_return std::unexpected(make_error_code(http_errc::body_too_large));
+            }
+
+            if (has_transfer_encoding)
+            {
+                const auto prefix = std::format("{:X}\r\n", chunk.size());
+                auto prefix_result = co_await write_data(prefix, token);
+                if (!prefix_result)
+                    co_return std::unexpected(prefix_result.error());
+            }
+            auto data_result = co_await write_data(
+                {reinterpret_cast<const char*>(chunk.data()), chunk.size()}, token);
+            if (!data_result)
+                co_return std::unexpected(data_result.error());
+            if (has_transfer_encoding)
+            {
+                auto suffix_result = co_await write_data("\r\n", token);
+                if (!suffix_result)
+                    co_return std::unexpected(suffix_result.error());
+            }
+            sent_length += chunk.size();
+        }
+        if (expected_length && sent_length != *expected_length)
+        {
+            close();
+            co_return std::unexpected(make_error_code(http_errc::incomplete_message));
+        }
+        if (has_transfer_encoding)
+        {
+            auto end_result = co_await write_data("0\r\n\r\n", token);
+            if (!end_result)
+                co_return std::unexpected(end_result.error());
+        }
     }
 
     // Receive response - read until we have complete headers
@@ -794,9 +1143,10 @@ auto client::send_http2(const request& req, cancel_token& token)
     {
         co_return std::unexpected(block ? make_error_code(std::errc::message_size) : block.error());
     }
-    const bool has_body = !req.body().empty();
+    const bool has_streaming_body = req.has_streaming_body();
+    const bool has_body = has_streaming_body || !req.body().empty();
     append_frame(outbound, {.type = v2::frame_type::headers, .flags = static_cast<std::uint8_t>(0x4 | (has_body ? 0 : 0x1)), .stream_id = stream_id}, *block);
-    if (has_body)
+    if (has_body && !has_streaming_body)
     {
         const auto body = req.body();
         append_frame(outbound, {.type = v2::frame_type::data, .flags = 0x1, .stream_id = stream_id},
@@ -806,12 +1156,84 @@ auto client::send_http2(const request& req, cancel_token& token)
     if (!write)
         co_return std::unexpected(write.error());
 
+    if (const auto& source = req.body_source())
+    {
+        const auto expected_length = source->content_length();
+        std::uint64_t sent_length = 0;
+        for (;;)
+        {
+            if (token.is_cancelled())
+            {
+                close();
+                co_return std::unexpected(make_error_code(errc::operation_aborted));
+            }
+            auto next = co_await source->next(token);
+            if (!next)
+            {
+                if (token.is_cancelled())
+                {
+                    close();
+                    co_return std::unexpected(make_error_code(errc::operation_aborted));
+                }
+                break;
+            }
+            const auto chunk = next->view();
+            if (chunk.empty())
+                continue;
+            if (expected_length &&
+                (sent_length > *expected_length ||
+                    chunk.size() > *expected_length - sent_length))
+            {
+                close();
+                co_return std::unexpected(make_error_code(http_errc::body_too_large));
+            }
+
+            // DATA payloads are kept below the default peer frame size.  The
+            // write is awaited before asking the producer for more data,
+            // providing bounded memory and socket-level back-pressure.
+            constexpr std::size_t max_data_payload = 16 * 1024;
+            for (std::size_t offset = 0; offset < chunk.size();)
+            {
+                const auto count = std::min(max_data_payload, chunk.size() - offset);
+                std::vector<std::byte> frame;
+                append_frame(frame,
+                    {.type = v2::frame_type::data, .stream_id = stream_id},
+                    chunk.subspan(offset, count));
+                const auto data_write = co_await write_data(
+                    {reinterpret_cast<const char*>(frame.data()), frame.size()}, token);
+                if (!data_write)
+                    co_return std::unexpected(data_write.error());
+                offset += count;
+            }
+            sent_length += chunk.size();
+        }
+        if (expected_length && sent_length != *expected_length)
+        {
+            close();
+            co_return std::unexpected(make_error_code(http_errc::incomplete_message));
+        }
+
+        // A streaming request has no END_STREAM on HEADERS.  Close it with an
+        // empty DATA frame once the producer reaches EOF.
+        std::vector<std::byte> end_frame;
+        append_frame(end_frame,
+            {.type = v2::frame_type::data, .flags = 0x1, .stream_id = stream_id},
+            {});
+        const auto end_write = co_await write_data(
+            {reinterpret_cast<const char*>(end_frame.data()), end_frame.size()}, token);
+        if (!end_write)
+            co_return std::unexpected(end_write.error());
+    }
+
     response result(200, http_version::http_2);
     bool received_headers = false;
     bool completed = false;
     std::vector<std::byte> input;
     input.reserve(16 * 1024);
-    std::array<std::byte, 16 * 1024> buffer{};
+    // read_data writes the exact range subsequently appended to input.  This
+    // request-local scratch space must not clear 16 KiB before every HTTP/2
+    // response, particularly when a one-frame response is read per request.
+    std::array<std::byte, 16 * 1024> buffer;
     while (!completed)
     {
         while (input.size() < v2::frame_header_size)
@@ -1009,7 +1431,8 @@ auto client::send_http2_batch(std::span<const request> requests)
     std::size_t pending = requests.size();
     std::vector<std::byte> input;
     input.reserve(16 * 1024);
-    std::array<std::byte, 16 * 1024> buffer{};
+    // Only the byte count returned by read_data is consumed below.
+    std::array<std::byte, 16 * 1024> buffer;
     while (pending != 0)
     {
         while (input.size() < v2::frame_header_size)
@@ -1121,6 +1544,102 @@ auto client::send_http2_batch(std::span<const request> requests)
 // Redirect Handling
 // =============================================================================
 
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+auto client::send_http3_tcp_race(const request& req, cancel_token& token)
+    -> task<std::expected<response, std::error_code>>
+{
+    // Only replay-safe requests may be sent on both transports.  A streaming
+    // body is one-shot and is intentionally excluded by the caller as well.
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    client_options h3_options = options_;
+    h3_options.version_pref = http_version_preference::http3_only;
+    h3_options.enable_alt_svc_http3 = false;
+    h3_options.http3_fallback_to_tcp = false;
+    client_options tcp_options = options_;
+    tcp_options.version_pref = http_version_preference::http2_preferred;
+    tcp_options.enable_alt_svc_http3 = false;
+    tcp_options.http3_fallback_to_tcp = false;
+
+    client h3_candidate{*ctx_, std::move(h3_options)};
+    client tcp_candidate{*ctx_, std::move(tcp_options)};
+    cancel_token h3_token;
+    cancel_token tcp_token;
+
+    struct race_outcome
+    {
+        int lane{};
+        std::expected<response, std::error_code> result;
+    };
+
+    auto outcomes = std::make_shared<channel<race_outcome>>(2);
+
+    auto run_candidate = [&, outcomes](int lane, client& candidate,
+                             cancel_token& candidate_token) -> task<void>
+    {
+        auto result = co_await candidate.send(req, candidate_token);
+        (void)co_await outcomes->send(
+            race_outcome{lane, std::move(result)});
+    };
+    spawn(*ctx_, run_candidate(0, h3_candidate, h3_token));
+    spawn(*ctx_, run_candidate(1, tcp_candidate, tcp_token));
+
+    std::optional<race_outcome> winner;
+    std::error_code first_error = make_error_code(std::errc::host_unreachable);
+    std::size_t completed = 0;
+    while (completed < 2 && !winner)
+    {
+        auto outcome = co_await outcomes->receive();
+        if (!outcome)
+            break;
+        ++completed;
+        if (outcome->result)
+        {
+            winner = std::move(*outcome);
+            if (winner->lane == 0)
+                tcp_token.cancel();
+            else
+                h3_token.cancel();
+            break;
+        }
+        if (completed == 1)
+            first_error = outcome->result.error();
+    }
+
+    // Keep both detached candidate coroutines alive until they have reported
+    // completion.  This makes loser cancellation deterministic and keeps
+    // their socket/TLS state valid while the cancellation propagates.
+    while (completed < 2)
+    {
+        auto outcome = co_await outcomes->receive();
+        if (!outcome)
+            break;
+        ++completed;
+        if (!winner && outcome->result)
+            winner = std::move(*outcome);
+        else if (!winner && completed == 2)
+            first_error = outcome->result.error();
+    }
+
+    if (winner)
+    {
+        raced_use_http3_ = winner->lane == 0;
+        // Learn Alt-Svc from a successful raced response so subsequent
+        // requests can use the already-proven QUIC endpoint directly.
+        if (const auto parsed = url::parse(req.uri()); parsed &&
+            parsed->scheme == "https" && options_.enable_alt_svc_http3)
+        {
+            const auto origin_port = parsed->port == 0U ? std::uint16_t{443} : parsed->port;
+            remember_http3_alt_svc(parsed->host, origin_port,
+                winner->result->get_header("Alt-Svc"));
+        }
+        co_return std::move(winner->result);
+    }
+    co_return std::unexpected(first_error);
+}
+#endif
+
 auto client::send_with_redirects(const request& req, std::size_t redirect_count)
     -> task<std::expected<response, std::error_code>>
 {
@@ -1165,8 +1684,37 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
         use_ssl = state_->is_ssl;
     }
 
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    const bool replay_safe = req.method() == http_method::GET ||
+        req.method() == http_method::HEAD || req.method() == http_method::OPTIONS;
+    if (redirect_count == 0 && options_.version_pref == http_version_preference::http3_preferred &&
+        options_.enable_alt_svc_http3 && use_ssl && replay_safe &&
+        !req.has_streaming_body() && !state_ && !h3_client_ &&
+        !raced_use_http3_)
+    {
+        co_return co_await send_http3_tcp_race(req, token);
+    }
+#endif
+
     bool use_http3 = options_.version_pref == http_version_preference::http3_only ||
         options_.version_pref == http_version_preference::http3_preferred;
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    if (options_.version_pref == http_version_preference::http3_preferred &&
+        raced_use_http3_)
+        use_http3 = *raced_use_http3_;
+#endif
+    std::uint16_t http3_peer_port{};
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    if (options_.version_pref == http_version_preference::http2_preferred &&
+        options_.enable_alt_svc_http3)
+    {
+        if (const auto alternative = http3_alt_svc_port(host, port))
+        {
+            use_http3 = true;
+            http3_peer_port = *alternative;
+        }
+    }
+#endif
     if (use_http3 && !use_ssl)
         co_return std::unexpected(make_error_code(std::errc::not_supported));
 
@@ -1197,7 +1745,7 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
     if (use_http3)
     {
 #if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
-        result = co_await send_http3(req, token);
+        result = co_await send_http3(req, token, http3_peer_port);
         if (!result)
         {
             const bool replay_safe = req.method() == http_method::GET ||
@@ -1242,6 +1790,12 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
 
             if (!location.empty())
             {
+                // A request body source is deliberately one-shot.  Following
+                // a 307/308 (or replaying after a method-preserving redirect)
+                // would silently send an empty or partial body.
+                if (req.has_streaming_body())
+                    co_return std::unexpected(
+                        make_error_code(std::errc::operation_not_supported));
                 request redirect_req = req;
 
                 http_method new_method = req.method();
@@ -1319,11 +1873,17 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
         }
     }
 
+    // Alt-Svc is learned only from a successful HTTPS TCP response. A
+    // subsequent request to this origin may then select HTTP/3.
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    if (result && !use_http3 && use_ssl && options_.enable_alt_svc_http3)
+        remember_http3_alt_svc(host, port, result->get_header("Alt-Svc"));
+#endif
     co_return result;
 }
 
 #if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
-auto client::send_http3(const request& req, cancel_token& token)
+auto client::send_http3(const request& req, cancel_token& token, std::uint16_t peer_port)
     -> task<std::expected<response, std::error_code>>
 {
     if (token.is_cancelled())
@@ -1335,21 +1895,46 @@ auto client::send_http3(const request& req, cancel_token& token)
         co_return std::unexpected(make_error_code(std::errc::not_supported));
 
     const auto port = parsed->port == 0U ? std::uint16_t{443} : parsed->port;
-    if (!h3_client_ || !h3_client_->can_reuse_origin(parsed->host, port))
+    const auto connect_port = peer_port == 0U ? port : peer_port;
     {
-        v3::http3_client_options options;
-        options.connect_timeout = options_.connect_timeout;
-        options.request_timeout = options_.request_timeout;
-        options.h3_qpack_max_table_capacity = options_.h3_qpack_max_table_capacity;
-        options.h3_qpack_blocked_streams = options_.h3_qpack_blocked_streams;
-        options.verify_certificate = options_.verify_peer;
-        options.tls_sni_host = parsed->host;
-        h3_client_ = std::make_unique<v3::http3_client>(*ctx_, *h3_ssl_ctx_,
-            std::move(options));
-        const auto connected = co_await h3_client_->connect(parsed->host, port);
-        if (!connected)
-            co_return std::unexpected(connected.error());
+        co_await h3_lifecycle_mutex_.lock();
+        cnetmod::async_lock_guard h3_guard{h3_lifecycle_mutex_, std::adopt_lock};
+        const bool reusable = h3_client_ &&
+            as_http3_client(h3_client_)->can_reuse_origin(parsed->host, port);
+
+        if (!reusable)
+        {
+            v3::http3_client_options options;
+            options.connect_timeout = options_.connect_timeout;
+            options.request_timeout = options_.request_timeout;
+            options.h3_qpack_max_table_capacity = options_.h3_qpack_max_table_capacity;
+            options.h3_qpack_blocked_streams = options_.h3_qpack_blocked_streams;
+            options.verify_certificate = options_.verify_peer;
+            options.tls_sni_host = parsed->host;
+            options.resumption_ticket = load_http3_resumption_ticket(
+                options_.http3_resumption_ticket_file, parsed->host, port);
+            options.enable_early_data = options_.enable_http3_early_data;
+            options.max_push_id = options_.http3_max_push_id;
+            options.on_server_push = options_.on_http3_push;
+            h3_client_ = std::make_shared<v3::http3_client>(*ctx_, *h3_ssl_ctx_,
+                std::move(options));
+            const auto h3_client = as_http3_client(h3_client_);
+            const auto connected = co_await h3_client->connect(parsed->host, connect_port,
+                parsed->host, port);
+
+            if (!connected)
+                co_return std::unexpected(connected.error());
+            if (const auto ticket = h3_client->take_resumption_ticket())
+                persist_http3_resumption_ticket(options_.http3_resumption_ticket_file,
+                    parsed->host, port, *ticket);
+        }
     }
+
+    // Keep the selected connection object alive for the complete request even
+    // if another concurrent request replaces the client's pool entry.
+    const auto h3_client = as_http3_client(h3_client_);
+    if (!h3_client)
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
 
     v3::http3_request h3_request;
     h3_request.method = req.method();
@@ -1361,8 +1946,9 @@ auto client::send_http3(const request& req, cancel_token& token)
         h3_request.path += "?" + parsed->query;
     h3_request.headers = req.headers();
     h3_request.body = std::string(req.body());
+    h3_request.body_source = req.body_source();
 
-    const auto h3_response = co_await h3_client_->send_request(h3_request, token);
+    const auto h3_response = co_await h3_client->send_request(h3_request, token);
     if (!h3_response)
         co_return std::unexpected(h3_response.error());
 
@@ -1372,7 +1958,153 @@ auto client::send_http3(const request& req, cancel_token& token)
     for (const auto& [name, value] : h3_response->trailers)
         output.append_trailer(name, value);
     output.set_body(h3_response->body);
+    // NewSessionTicket is post-handshake and may arrive while requests are
+    // in flight. Refresh the optional cross-process cache after each
+    // successful response; an unavailable ticket is intentionally ignored.
+    if (const auto ticket = h3_client->take_resumption_ticket())
+        persist_http3_resumption_ticket(options_.http3_resumption_ticket_file,
+            parsed->host, port, *ticket);
+
     co_return output;
+}
+
+auto client::send_http3_batch_item(std::span<const request> requests,
+    std::vector<std::expected<response, std::error_code>>& results,
+    async_wait_group& completed, async_semaphore& permits, std::size_t index)
+    -> task<void>
+{
+    co_await permits.acquire();
+
+    cancel_token token;
+    results[index] = co_await send_http3(requests[index], token);
+
+    permits.release();
+    completed.done();
+}
+
+auto client::send_http3_batch(std::span<const request> requests)
+    -> task<std::vector<std::expected<response, std::error_code>>>
+{
+    std::vector<std::expected<response, std::error_code>> results;
+    if (requests.empty())
+        co_return results;
+
+    const auto first = url::parse(requests.front().uri());
+    if (!first || first->scheme != "https" || first->host.empty())
+    {
+        results.assign(requests.size(),
+            std::unexpected(make_error_code(http_errc::invalid_uri)));
+        co_return results;
+    }
+    const auto port = first->port == 0U ? std::uint16_t{443} : first->port;
+    for (const auto& value : requests)
+    {
+        const auto parsed = url::parse(value.uri());
+        if (!parsed || parsed->scheme != "https" || parsed->host != first->host ||
+            (parsed->port == 0U ? std::uint16_t{443} : parsed->port) != port)
+        {
+            results.assign(requests.size(),
+                std::unexpected(make_error_code(http_errc::invalid_uri)));
+            co_return results;
+        }
+    }
+
+    results.assign(requests.size(),
+        std::unexpected(make_error_code(std::errc::operation_canceled)));
+    // A cold batch still uses the first request to establish the QUIC/H3
+    // session. Once an origin session is already ready, all batch items can be
+    // submitted together; the session write gate is released after each FIN
+    // and response reads proceed independently.
+    std::size_t first_concurrent_index = 0U;
+    const bool h3_ready = h3_client_ &&
+        as_http3_client(h3_client_)->can_reuse_origin(first->host, port);
+    if (!h3_ready)
+    {
+        cancel_token first_token;
+        results[0] = co_await send_http3(requests.front(), first_token);
+
+        first_concurrent_index = 1U;
+    }
+    async_wait_group completed;
+    async_semaphore permits{std::max<std::size_t>(1, options_.h3_max_concurrent_streams)};
+    for (std::size_t index = first_concurrent_index; index < requests.size(); ++index)
+    {
+        completed.add();
+        spawn(*ctx_, send_http3_batch_item(requests, results, completed, permits, index));
+    }
+    co_await completed.wait();
+    co_return results;
+}
+
+auto client::has_http3_alt_svc(std::string_view host, std::uint16_t port) const -> bool
+{
+    const auto key = std::string(host) + ":" + std::to_string(port);
+    const auto found = h3_alt_svc_.find(key);
+    return found != h3_alt_svc_.end() &&
+        found->second.expires_at > std::chrono::steady_clock::now();
+}
+
+auto client::http3_alt_svc_port(std::string_view host, std::uint16_t port) const
+    -> std::optional<std::uint16_t>
+{
+    const auto key = std::string(host) + ":" + std::to_string(port);
+    const auto found = h3_alt_svc_.find(key);
+    if (found == h3_alt_svc_.end() || found->second.expires_at <= std::chrono::steady_clock::now())
+        return std::nullopt;
+    return found->second.peer_port;
+}
+
+void client::remember_http3_alt_svc(std::string_view host, std::uint16_t port,
+    std::string_view value)
+{
+    const auto h3 = value.find("h3=");
+    if (h3 == std::string_view::npos)
+        return;
+    auto peer_port = port;
+    auto advertised = value.substr(h3 + 3);
+    if (!advertised.empty() && advertised.front() == '"')
+    {
+        advertised.remove_prefix(1);
+        advertised = advertised.substr(0, advertised.find('"'));
+    }
+    else
+    {
+        advertised = advertised.substr(0, advertised.find(';'));
+    }
+    // RFC 7838 permits the compact form h3=":443". Host changes are not
+    // accepted: the certificate/origin authorization model remains strict.
+    if (advertised.starts_with(":"))
+    {
+        unsigned parsed_port{};
+        const auto first = advertised.data() + 1;
+        const auto last = advertised.data() + advertised.size();
+        const auto [end, error] = std::from_chars(first, last, parsed_port);
+        if (error != std::errc{} || end != last || parsed_port == 0U || parsed_port > 65535U)
+            return;
+        peer_port = static_cast<std::uint16_t>(parsed_port);
+    }
+    else if (!advertised.empty())
+    {
+        return;
+    }
+    std::chrono::seconds max_age{86400};
+    if (const auto marker = value.find("ma="); marker != std::string_view::npos)
+    {
+        const auto digits = value.substr(marker + 3).substr(0, value.substr(marker + 3).find_first_not_of("0123456789"));
+        unsigned long long seconds{};
+        const auto [end, error] = std::from_chars(digits.data(), digits.data() + digits.size(), seconds);
+        if (!digits.empty() && error == std::errc{} && end == digits.data() + digits.size())
+            max_age = std::chrono::seconds{std::min<unsigned long long>(seconds, 7U * 24U * 60U * 60U)};
+    }
+    const auto key = std::string(host) + ":" + std::to_string(port);
+    if (max_age == std::chrono::seconds::zero())
+    {
+        h3_alt_svc_.erase(key);
+        persist_alt_svc_cache();
+        return;
+    }
+    h3_alt_svc_[key] = {std::chrono::steady_clock::now() + max_age, peer_port};
+    persist_alt_svc_cache();
 }
 #endif
 
@@ -1397,7 +2129,10 @@ auto client::send(const request& req, deadline request_deadline)
     -> task<std::expected<response, std::error_code>>
 {
     co_return co_await with_deadline(*ctx_, request_deadline,
-        [&](cancel_token& token) { return send(req, token); });
+        [&](cancel_token& token)
+        {
+            return send(req, token);
+        });
 }
 
 auto client::send(http_method method, std::string_view url, std::string_view body)
@@ -1424,6 +2159,29 @@ auto client::send_batch(std::span<const request> requests)
     if (requests.empty())
         co_return results;
 
+    if (std::ranges::any_of(requests,
+            [](const request& req)
+            {
+                return req.has_streaming_body();
+            }))
+    {
+        results.assign(requests.size(),
+            std::unexpected(make_error_code(std::errc::operation_not_supported)));
+        co_return results;
+    }
+
+    if (options_.version_pref == http_version_preference::http3_only ||
+        options_.version_pref == http_version_preference::http3_preferred)
+    {
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+        co_return co_await send_http3_batch(requests);
+#else
+        results.assign(requests.size(),
+            std::unexpected(make_error_code(std::errc::not_supported)));
+        co_return results;
+#endif
+    }
+
     const auto first_uri = requests.front().uri();
     std::string host;
     std::uint16_t port{};
@@ -1440,6 +2198,13 @@ auto client::send_batch(std::span<const request> requests)
         host = parsed->host;
         port = parsed->port;
         use_ssl = parsed->scheme == "https";
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+        if (use_ssl && options_.version_pref == http_version_preference::http2_preferred &&
+            options_.enable_alt_svc_http3 && has_http3_alt_svc(host, port))
+        {
+            co_return co_await send_http3_batch(requests);
+        }
+#endif
         const auto connected = co_await connect(host, port, use_ssl);
         if (!connected)
         {

@@ -8,6 +8,7 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
 import cnetmod.utils.flat_map;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod {
 
@@ -96,7 +97,7 @@ public:
     [[nodiscard]] auto render_openmetrics() const -> std::string;
 
 private:
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::map<std::string, metric_family> families_;
 };
 

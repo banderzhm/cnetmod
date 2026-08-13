@@ -188,6 +188,52 @@ auto client::cmd(std::span<const std::string> args)
     co_return co_await parse_one_response();
 }
 
+auto client::cmd(std::initializer_list<std::string_view> args,
+    const http::tracing::trace_context& parent, http::tracing::span_exporter on_end)
+    -> task<std::expected<std::vector<resp3_node>, std::string>>
+{
+    const auto operation = args.size() == 0U ? std::string{"UNKNOWN"} : std::string{*args.begin()};
+    auto span = http::tracing::start_client_span(parent, "REDIS " + operation,
+        {{"db.system", "redis"}, {"db.operation", operation}});
+    auto response = co_await cmd(args);
+    if (on_end)
+    {
+        try
+        {
+            on_end(http::tracing::finish_client_span(std::move(span), !response));
+        }
+        catch (...)
+        {
+            // Instrumentation must never turn a completed Redis operation
+            // into an application failure.
+        }
+    }
+    co_return response;
+}
+
+auto client::cmd(std::span<const std::string> args,
+    const http::tracing::trace_context& parent, http::tracing::span_exporter on_end)
+    -> task<std::expected<std::vector<resp3_node>, std::string>>
+{
+    const auto operation = args.empty() ? std::string{"UNKNOWN"} : args.front();
+    auto span = http::tracing::start_client_span(parent, "REDIS " + operation,
+        {{"db.system", "redis"}, {"db.operation", operation}});
+    auto response = co_await cmd(args);
+    if (on_end)
+    {
+        try
+        {
+            on_end(http::tracing::finish_client_span(std::move(span), !response));
+        }
+        catch (...)
+        {
+            // Instrumentation must never turn a completed Redis operation
+            // into an application failure.
+        }
+    }
+    co_return response;
+}
+
 auto client::cmd_follow_redirect(std::vector<std::string> args,
     std::size_t limit)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
@@ -723,7 +769,7 @@ namespace detail {
             return std::unexpected(
                 std::string("cluster slots endpoint host/port invalid"));
         for (std::size_t skipped = 2; skipped < fields && index < nodes.size();
-             ++skipped)
+            ++skipped)
             ++index;
         return endpoint_info{.host = std::string(host), .port = *port};
     }
@@ -802,7 +848,7 @@ auto client::parse_cluster_slots(const std::vector<resp3_node>& nodes)
     ranges.reserve(nodes.front().aggregate_size);
     std::size_t index = 1;
     for (std::size_t range_index{}; range_index < nodes.front().aggregate_size;
-         ++range_index)
+        ++range_index)
     {
         if (index >= nodes.size() || !nodes[index].is_aggregate())
             return std::unexpected(
@@ -823,7 +869,7 @@ auto client::parse_cluster_slots(const std::vector<resp3_node>& nodes)
             .master = *master,
             .replicas = {}};
         for (std::size_t field = 3; field < fields && index < nodes.size();
-             ++field)
+            ++field)
         {
             auto replica = detail::parse_cluster_endpoint(nodes, index);
             if (!replica)

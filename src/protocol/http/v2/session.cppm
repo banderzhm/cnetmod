@@ -62,6 +62,7 @@ private:
     [[nodiscard]] auto dispatch_ready() -> cnetmod::task<void>;
     void queue_connection_error(std::uint32_t code);
     void queue_frame(frame_header header, std::span<const std::byte> payload);
+    void compact_input();
 
     cnetmod::io_context* context_{};
     cnetmod::socket* socket_{};
@@ -75,6 +76,7 @@ private:
     std::vector<std::uint32_t> ready_streams_;
     server_handler handler_;
     std::vector<std::byte> input_;
+    std::size_t input_offset_ = 0;
     std::vector<std::byte> outbound_;
     std::vector<std::byte> header_block_;
     std::uint32_t continuation_stream_id_ = 0;

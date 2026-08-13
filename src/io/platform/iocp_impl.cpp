@@ -35,6 +35,8 @@ void iocp_overlapped::reset() noexcept
     resume_context = nullptr;
     error = {};
     bytes_transferred = 0;
+    completion_callback = nullptr;
+    completion_context = nullptr;
 }
 
 void iocp_overlapped::set_offset(std::uint64_t offset) noexcept
@@ -134,12 +136,32 @@ auto iocp_context::run_batch_impl(DWORD timeout_ms) -> std::size_t
             continue;
         }
         auto* iov = static_cast<iocp_overlapped*>(entry.lpOverlapped);
+        if (iov->completion_callback != nullptr)
+        {
+            iov->completion_callback(*iov);
+            ++handled;
+            continue;
+        }
         if (entry.lpOverlapped->Internal != 0)
         {
-            iov->error =
-                std::error_code(static_cast<int>(ntstatus_to_win32(
-                                    static_cast<long>(entry.lpOverlapped->Internal))),
-                    std::system_category());
+            const auto native_error = static_cast<int>(ntstatus_to_win32(
+                static_cast<long>(entry.lpOverlapped->Internal)));
+            // IOCP completion status is normally exposed as a Win32 system
+            // error. UDP ICMP errors need the same normalized network code
+            // as synchronous Winsock calls, otherwise QUIC cannot classify
+            // a failed candidate path without treating the connection as
+            // terminal.
+            switch (native_error)
+            {
+            case ERROR_HOST_UNREACHABLE:
+            case ERROR_PROTOCOL_UNREACHABLE:
+            case ERROR_PORT_UNREACHABLE:
+                iov->error = make_error_code(from_native_error(native_error));
+                break;
+            default:
+                iov->error = std::error_code(native_error, std::system_category());
+                break;
+            }
         }
         iov->bytes_transferred = entry.dwNumberOfBytesTransferred;
         if (iov->coroutine)

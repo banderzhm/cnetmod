@@ -6,6 +6,7 @@ enable_testing()
 # Test source files — each file produces an independent executable
 set(TEST_SOURCES
     test_flat_map.cpp
+    test_concurrent_containers.cpp
     test_application_result.cpp
     test_deadline.cpp
     test_task_group.cpp
@@ -21,6 +22,9 @@ set(TEST_SOURCES
     test_raft.cpp
     test_log.cpp
     test_http_types.cpp
+    test_http_tracing.cpp
+    test_otlp_exporter.cpp
+    test_c_api.cpp
     test_http_request.cpp
     test_http_response.cpp
     test_http_parser.cpp
@@ -32,6 +36,7 @@ set(TEST_SOURCES
     test_http_ip_filter.cpp
     test_http2_hpack.cpp
     test_dns.cpp
+    test_udp_batch.cpp
     test_coap.cpp
     test_grpc.cpp
     test_grpc_proto.cpp
@@ -41,6 +46,7 @@ set(TEST_SOURCES
     test_socks5.cpp
     test_mail.cpp
     test_redis.cpp
+    test_mongodb_wire.cpp
     test_orm_json_result_map.cpp
 
     # QUIC/HTTP3 tests
@@ -97,7 +103,11 @@ foreach(test_src ${TEST_SOURCES})
 
     add_executable(${test_name} ${test_src})
     list(APPEND CNETMOD_TEST_TARGETS ${test_name})
-    target_link_libraries(${test_name} PRIVATE cnetmod_core)
+    if(test_name STREQUAL "test_c_api")
+        target_link_libraries(${test_name} PRIVATE cnetmod_c)
+    else()
+        target_link_libraries(${test_name} PRIVATE cnetmod_core)
+    endif()
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set_property(TARGET ${test_name} PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE"
@@ -158,6 +168,7 @@ if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_HTTP)
     add_test(NAME python_h2_interop
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/../http2/h2_interop.py"
                 "$<TARGET_FILE:http2_interop_server>")
+    set_tests_properties(python_h2_interop PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 if(Python3_Interpreter_FOUND AND TARGET test_grpc_proto)
     add_executable(grpc_interop_server
@@ -214,6 +225,11 @@ if(Python3_Interpreter_FOUND AND TARGET test_grpc_proto)
             "${CMAKE_CURRENT_SOURCE_DIR}/../grpc/grpcio_server_to_cnetmod_client_interop.py"
             "$<TARGET_FILE:grpc_interop_client>"
             "${CMAKE_CURRENT_SOURCE_DIR}/../grpc/echo.proto"
+    )
+    set_tests_properties(
+        test_grpcio_cross_process_interop_python
+        test_grpcio_server_to_cnetmod_client_interop_python
+        PROPERTIES SKIP_RETURN_CODE 77
     )
 endif()
 

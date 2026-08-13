@@ -157,6 +157,19 @@ namespace {
         return batch && !batch->empty() ? batch->front().as_document() : nullptr;
     }
 
+    auto cursor_batch_size(const mongodb::bson_document& reply) -> std::size_t
+    {
+        const auto* cursor_value = reply.find("cursor");
+        const auto* cursor = cursor_value ? cursor_value->as_document() : nullptr;
+        if (!cursor)
+            return 0;
+        const auto* batch_value = cursor->find("firstBatch");
+        if (!batch_value)
+            batch_value = cursor->find("nextBatch");
+        const auto* batch = batch_value ? batch_value->as_array() : nullptr;
+        return batch ? batch->size() : 0;
+    }
+
     auto pool_options(mongodb::connection_options connection,
         const json& parameters) -> mongodb::connection_pool_options
     {
@@ -371,6 +384,53 @@ auto execute_mongodb_interoperability_request(io_context& context,
                 co_return failure(error_name(healthy.error().code), healthy.error().message);
             co_return success({{"cancelled", true}, {"pool_still_open", true},
                 {"elapsed_milliseconds", elapsed.count()}});
+        }
+
+        if (operation == "exhaust_stream")
+        {
+            mongodb::connection stream_connection(context);
+            auto connected = co_await stream_connection.connect(options);
+            if (!connected)
+                co_return failure(error_name(connected.error().code), connected.error().message);
+
+            const auto marker = parameters.at("marker").get<std::string>();
+            mongodb::bson_array documents;
+            for (std::int32_t index = 0; index != 4; ++index)
+                documents.emplace_back(mongodb::bson_document{{"_id", marker + "-" + std::to_string(index)},
+                    {"marker", marker}, {"index", index}});
+            auto inserted = co_await stream_connection.command(options.database,
+                mongodb::bson_document{{"insert", "cnetmod_exhaust_interop"},
+                    {"documents", std::move(documents)}});
+            if (!inserted)
+            {
+                stream_connection.close();
+                co_return failure(error_name(inserted.error().code), inserted.error().message);
+            }
+
+            std::size_t batch_count = 0;
+            std::size_t document_count = 0;
+            auto streamed = co_await stream_connection.command_stream(options.database,
+                mongodb::bson_document{{"find", "cnetmod_exhaust_interop"},
+                    {"filter", mongodb::bson_document{{"marker", marker}}},
+                    {"batchSize", std::int32_t{1}}},
+                [&batch_count, &document_count](mongodb::bson_document reply)
+                    -> task<std::expected<void, mongodb::error>>
+                {
+                    ++batch_count;
+                    document_count += cursor_batch_size(reply);
+                    co_return std::expected<void, mongodb::error>{};
+                });
+
+            auto cleanup = co_await stream_connection.command(options.database,
+                mongodb::bson_document{{"delete", "cnetmod_exhaust_interop"},
+                    {"deletes", mongodb::bson_array{mongodb::bson_value{mongodb::bson_document{{"q", mongodb::bson_document{{"marker", marker}}}, {"limit", std::int32_t{0}}}}}}});
+            (void)cleanup;
+            stream_connection.close();
+            if (!streamed)
+                co_return failure(error_name(streamed.error().code), streamed.error().message);
+            if (batch_count < 2 || document_count != 4)
+                co_return failure("protocol_error", "MongoDB exhaust cursor did not produce every batch");
+            co_return success({{"batch_count", batch_count}, {"document_count", document_count}});
         }
 
         if (operation == "bson_types")

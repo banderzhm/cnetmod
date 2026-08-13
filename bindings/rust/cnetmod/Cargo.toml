@@ -1,0 +1,19 @@
+[package]
+name = "cnetmod"
+version = "2.0.0"
+edition = "2024"
+description = "Safe Rust bindings for cnetmod's caller-driven C ABI"
+license = "MIT"
+repository = "https://github.com/banderzhm/cnetmod"
+links = "cnetmod_c"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = []
+
+[package.metadata.cnetmod]
+# cargo check validates the wrapper without a native library. For a final link,
+# set CNETMOD_C_API_LIB_DIR to CMake's configuration-specific output directory.
+c_api_library = "cnetmod_c"

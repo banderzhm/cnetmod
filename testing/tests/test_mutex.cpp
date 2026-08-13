@@ -5,6 +5,7 @@
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.mutex;
+import cnetmod.coro.striped_mutex;
 
 using namespace cnetmod;
 
@@ -12,31 +13,36 @@ using namespace cnetmod;
 // Tests
 // =============================================================================
 
-TEST(mutex_try_lock_unlocked) {
+TEST(mutex_try_lock_unlocked)
+{
     async_mutex mtx;
     ASSERT_TRUE(mtx.try_lock());
     mtx.unlock();
 }
 
-TEST(mutex_try_lock_locked) {
+TEST(mutex_try_lock_locked)
+{
     async_mutex mtx;
     ASSERT_TRUE(mtx.try_lock());
-    ASSERT_FALSE(mtx.try_lock());  // Already locked
+    ASSERT_FALSE(mtx.try_lock()); // Already locked
     mtx.unlock();
 }
 
-TEST(mutex_try_lock_after_unlock) {
+TEST(mutex_try_lock_after_unlock)
+{
     async_mutex mtx;
     ASSERT_TRUE(mtx.try_lock());
     mtx.unlock();
-    ASSERT_TRUE(mtx.try_lock());  // Should succeed again
+    ASSERT_TRUE(mtx.try_lock()); // Should succeed again
     mtx.unlock();
 }
 
-TEST(mutex_coro_lock_unlock) {
+TEST(mutex_coro_lock_unlock)
+{
     async_mutex mtx;
 
-    auto task_fn = [&]() -> task<int> {
+    auto task_fn = [&]() -> task<int>
+    {
         co_await mtx.lock();
         // In critical section
         int value = 42;
@@ -48,10 +54,12 @@ TEST(mutex_coro_lock_unlock) {
     ASSERT_EQ(result, 42);
 }
 
-TEST(mutex_lock_guard_basic) {
+TEST(mutex_lock_guard_basic)
+{
     async_mutex mtx;
 
-    auto task_fn = [&]() -> task<int> {
+    auto task_fn = [&]() -> task<int>
+    {
         co_await mtx.lock();
         async_lock_guard guard(mtx, std::adopt_lock);
         co_return 100;
@@ -66,10 +74,12 @@ TEST(mutex_lock_guard_basic) {
     mtx.unlock();
 }
 
-TEST(mutex_lock_guard_move) {
+TEST(mutex_lock_guard_move)
+{
     async_mutex mtx;
 
-    auto task_fn = [&]() -> task<void> {
+    auto task_fn = [&]() -> task<void>
+    {
         co_await mtx.lock();
         async_lock_guard guard(mtx, std::adopt_lock);
 
@@ -85,10 +95,12 @@ TEST(mutex_lock_guard_move) {
     mtx.unlock();
 }
 
-TEST(mutex_lock_guard_release) {
+TEST(mutex_lock_guard_release)
+{
     async_mutex mtx;
 
-    auto task_fn = [&]() -> task<void> {
+    auto task_fn = [&]() -> task<void>
+    {
         co_await mtx.lock();
         async_lock_guard guard(mtx, std::adopt_lock);
         guard.release();
@@ -102,11 +114,13 @@ TEST(mutex_lock_guard_release) {
     mtx.unlock();
 }
 
-TEST(mutex_sequential_lock) {
+TEST(mutex_sequential_lock)
+{
     async_mutex mtx;
     int counter = 0;
 
-    auto increment = [&]() -> task<void> {
+    auto increment = [&]() -> task<void>
+    {
         co_await mtx.lock();
         async_lock_guard guard(mtx, std::adopt_lock);
         ++counter;
@@ -124,12 +138,14 @@ TEST(mutex_sequential_lock) {
 // Extended Tests
 // =============================================================================
 
-TEST(mutex_when_all_contention) {
+TEST(mutex_when_all_contention)
+{
     // Two coroutines competing for the same mutex via when_all
     async_mutex mtx;
     int counter = 0;
 
-    auto increment = [&]() -> task<int> {
+    auto increment = [&]() -> task<int>
+    {
         co_await mtx.lock();
         async_lock_guard guard(mtx, std::adopt_lock);
         ++counter;
@@ -142,10 +158,27 @@ TEST(mutex_when_all_contention) {
     ASSERT_TRUE((a == 1 && b == 2) || (a == 2 && b == 1));
 }
 
-TEST(mutex_lock_guard_exception_safety) {
+TEST(striped_async_mutex_serializes_the_same_business_key)
+{
+    striped_async_mutex<std::string> gates{16};
+    int counter = 0;
+
+    auto increment = [&]() -> task<int>
+    {
+        auto guard = co_await gates.lock("user:42");
+        co_return ++counter;
+    };
+
+    sync_wait(when_all(increment(), increment(), increment()));
+    ASSERT_EQ(counter, 3);
+}
+
+TEST(mutex_lock_guard_exception_safety)
+{
     async_mutex mtx;
 
-    auto task_fn = [&]() -> task<void> {
+    auto task_fn = [&]() -> task<void>
+    {
         co_await mtx.lock();
         async_lock_guard guard(mtx, std::adopt_lock);
         throw std::runtime_error("test");
@@ -153,9 +186,12 @@ TEST(mutex_lock_guard_exception_safety) {
     };
 
     bool caught = false;
-    try {
+    try
+    {
         sync_wait(task_fn());
-    } catch (const std::runtime_error&) {
+    }
+    catch (const std::runtime_error&)
+    {
         caught = true;
     }
     ASSERT_TRUE(caught);
@@ -165,11 +201,13 @@ TEST(mutex_lock_guard_exception_safety) {
     mtx.unlock();
 }
 
-TEST(mutex_many_sequential_cycles) {
+TEST(mutex_many_sequential_cycles)
+{
     async_mutex mtx;
     int counter = 0;
 
-    auto increment = [&]() -> task<void> {
+    auto increment = [&]() -> task<void>
+    {
         co_await mtx.lock();
         ++counter;
         mtx.unlock();

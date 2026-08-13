@@ -7,6 +7,7 @@ import cnetmod.coro.mutex;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :socket_transport;
 import :transport_frame_codec;
 import :performative_codec;
@@ -28,7 +29,11 @@ struct client::impl
     std::uint16_t next_channel = 1;
     async_mutex write_mutex;
     async_mutex read_mutex;
-    std::mutex pending_mutex;
+    // The read pump and individual session receivers concurrently mutate the
+    // per-channel queue.  This is a short synchronous critical section, so a
+    // project atomic latch avoids a platform mutex while retaining atomic
+    // pop/push and reconnect-clear transactions.
+    concurrent_containers::atomic_rw_latch pending_latch;
     std::map<std::uint16_t, std::deque<performative>> pending;
     std::shared_ptr<cancel_token> heartbeat_cancel;
     std::shared_ptr<cancel_token> pump_cancel;
@@ -277,7 +282,7 @@ auto client::reconnect(cancel_token& token)
     impl_->transport = std::make_unique<socket_transport>(impl_->ctx);
     impl_->current = connection_state::closed;
     {
-        std::scoped_lock lock(impl_->pending_mutex);
+        concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
         impl_->pending.clear();
     }
     reconnect_context context;
@@ -401,7 +406,7 @@ auto client::receive(std::uint16_t channel, cancel_token& token)
         while (!token.is_cancelled())
         {
             {
-                std::scoped_lock lock(impl_->pending_mutex);
+                concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
                 auto it = impl_->pending.find(channel);
                 if (it != impl_->pending.end() && !it->second.empty())
                 {
@@ -448,7 +453,7 @@ auto client::receive(std::uint16_t channel, cancel_token& token)
                     .message = "cannot decode AMQP performative"});
         if (incoming->channel == channel)
             co_return std::move(*decoded);
-        std::scoped_lock lock(impl_->pending_mutex);
+        concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
         impl_->pending[incoming->channel].push_back(std::move(*decoded));
     }
 }
@@ -504,7 +509,7 @@ auto client::read_pump(std::shared_ptr<cancel_token> token) -> task<void>
             impl_->transport->close();
             co_return;
         }
-        std::scoped_lock lock(impl_->pending_mutex);
+        concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
         impl_->pending[incoming->channel].push_back(std::move(*decoded));
     }
 }

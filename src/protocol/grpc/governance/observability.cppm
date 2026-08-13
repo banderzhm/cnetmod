@@ -5,6 +5,7 @@ module;
 export module cnetmod.protocol.grpc.governance.observability;
 
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::governance {
 
@@ -55,7 +56,7 @@ private:
     using method_statistics =
         std::map<std::string, std::shared_ptr<call_statistics>, std::less<>>;
 
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::map<std::string, method_statistics, std::less<>> statistics_;
 };
 

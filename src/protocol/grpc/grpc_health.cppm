@@ -6,6 +6,7 @@ import cnetmod.coro.task;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.server;
 import cnetmod.protocol.grpc.proto;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::health {
 export enum class serving_status : std::uint64_t
@@ -24,7 +25,7 @@ public:
     void set_default(serving_status status);
 
 private:
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::map<std::string, serving_status> statuses_;
     serving_status default_status_ = serving_status::serving;
 };

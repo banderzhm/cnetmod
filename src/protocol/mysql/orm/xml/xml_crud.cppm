@@ -42,6 +42,13 @@ public:
 
     void set_sql_logging(bool enabled) noexcept;
 
+    /// Use COM_STMT_PREPARE/COM_STMT_EXECUTE for XML `#{...}` parameters.
+    /// Enabled by default so XML values never need text interpolation. It can
+    /// be disabled only for compatibility with servers/proxies that reject
+    /// the MySQL binary prepared-statement protocol.
+    void set_native_prepared_statements(bool enabled) noexcept;
+    [[nodiscard]] auto native_prepared_statements() const noexcept -> bool;
+
     auto last_generated_sql() const noexcept -> std::string_view;
     auto last_final_sql() const noexcept -> std::string_view;
 
@@ -53,16 +60,7 @@ public:
         if (!sql_result)
             co_return make_err<T>(sql_result.error());
 
-        auto& [sql, params] = *sql_result;
-        last_sql_ = sql;
-
-        auto final_sql_result = format_sql(cli_.current_format_opts(), sql, params);
-        if (!final_sql_result)
-            co_return make_err<T>("SQL formatting error");
-
-        last_final_sql_ = *final_sql_result;
-
-        auto rs = co_await cli_.execute(*final_sql_result);
+        auto rs = co_await execute_built(*sql_result);
         if (rs.is_err())
             co_return make_err<T>(rs.error_msg);
 
@@ -115,20 +113,7 @@ public:
             co_return result;
         }
 
-        auto& [sql, params] = *sql_result;
-        last_sql_ = sql;
-
-        auto final_sql_result = format_sql(cli_.current_format_opts(), sql, params);
-        if (!final_sql_result)
-        {
-            orm_result<std::tuple<Ts...>> result;
-            result.error_msg = "SQL formatting error";
-            co_return result;
-        }
-
-        last_final_sql_ = *final_sql_result;
-
-        auto rs = co_await cli_.execute(*final_sql_result);
+        auto rs = co_await execute_built(*sql_result);
         if (rs.is_err())
         {
             orm_result<std::tuple<Ts...>> result;
@@ -205,6 +190,28 @@ public:
     auto query_object_graph(std::string_view statement_id, const param_context& ctx)
         -> task<std::expected<std::vector<mapped_object>, std::string>>;
 
+    /// Execute a resultMap-backed XML select and project its scalar root
+    /// properties into a CNETMOD_MODEL DTO. Association/collection graphs
+    /// remain available through query_object_graph(), because XML cannot
+    /// infer arbitrary nested C++ member types safely.
+    template <Model T>
+    auto query_object_graph_as(std::string_view statement_id,
+        const param_context& ctx) -> task<std::expected<std::vector<T>, std::string>>
+    {
+        auto graph = co_await query_object_graph(statement_id, ctx);
+        if (!graph)
+            co_return std::unexpected(graph.error());
+        co_return from_mapped_objects<T>(*graph);
+    }
+
+    template <Model T>
+    auto query_object_graph_as(std::string_view statement_id, const T& parameters)
+        -> task<std::expected<std::vector<T>, std::string>>
+    {
+        co_return co_await query_object_graph_as<T>(statement_id,
+            param_context::from_model(parameters));
+    }
+
     auto execute_query(std::string_view statement_id,
         cnetmod::flat_map<std::string, cnetmod::orm::param_value> params)
         -> task<result_set>;
@@ -231,11 +238,14 @@ private:
     client& cli_;
     mapper_registry& registry_;
     bool log_sql_ = false;
+    bool native_prepared_statements_ = true;
     std::string last_sql_;
     std::string last_final_sql_;
 
     auto build_sql(std::string_view statement_id, const param_context& ctx)
         -> std::expected<built_dynamic_sql, std::string>;
+    auto execute_built(const built_dynamic_sql& built)
+        -> task<cnetmod::mysql::result_set>;
 
     template <class T> static auto make_err(std::string msg) -> orm_result<T>
     {

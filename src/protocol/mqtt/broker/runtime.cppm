@@ -24,6 +24,7 @@ import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.protocol.tcp;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -160,7 +161,9 @@ namespace detail {
         channel<outbound_packet> write_ch;
         channel<std::monostate> write_wake_ch;
         async_mutex write_mtx;
-        std::mutex cross_delivery_mtx;
+        // Foreign workers enqueue delivery work while the owning I/O worker
+        // drains it. The queue and scheduled edge must change together.
+        concurrent_containers::atomic_rw_latch cross_delivery_latch;
         std::deque<cross_delivery_item> cross_delivery_pending;
         std::size_t cross_delivery_pending_limit = 0;
         bool cross_delivery_scheduled = false;

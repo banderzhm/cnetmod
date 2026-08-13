@@ -2,6 +2,7 @@ export module cnetmod.orm.query_performance_monitor;
 import std;
 import cnetmod.orm.sql_query_data;
 import cnetmod.core.log;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 export namespace cnetmod::orm {
 struct sql_stat
@@ -44,7 +45,7 @@ private:
     std::vector<sql_stat> history_;
     std::uint64_t total_queries_{}, slow_queries_{};
     std::chrono::microseconds total_execution_time_{};
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     static auto truncate_sql(std::string_view, std::size_t) -> std::string;
 };
 

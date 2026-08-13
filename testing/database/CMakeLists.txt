@@ -37,12 +37,15 @@ endif()
 if(Python3_Interpreter_FOUND AND TARGET postgresql_interoperability_driver)
     add_test(
         NAME python_postgresql_interoperability
-        COMMAND Python3::Interpreter -m pytest -c pytest.ini postgresql
+        COMMAND Python3::Interpreter
+            "${CMAKE_CURRENT_SOURCE_DIR}/run_optional_pytest.py"
+            --config pytest.ini --module psycopg postgresql
     )
     set_tests_properties(python_postgresql_interoperability PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         ENVIRONMENT "CNETMOD_POSTGRESQL_DRIVER=$<TARGET_FILE:postgresql_interoperability_driver>"
         LABELS "interoperability;database;postgresql"
+        SKIP_RETURN_CODE 77
         TIMEOUT 900
     )
 endif()
@@ -50,12 +53,15 @@ endif()
 if(Python3_Interpreter_FOUND AND TARGET mongodb_interoperability_driver)
     add_test(
         NAME python_mongodb_interoperability
-        COMMAND Python3::Interpreter -m pytest -c pytest.ini mongodb
+        COMMAND Python3::Interpreter
+            "${CMAKE_CURRENT_SOURCE_DIR}/run_optional_pytest.py"
+            --config pytest.ini --module pymongo mongodb
     )
     set_tests_properties(python_mongodb_interoperability PROPERTIES
         WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
         ENVIRONMENT "CNETMOD_MONGODB_DRIVER=$<TARGET_FILE:mongodb_interoperability_driver>"
         LABELS "interoperability;database;mongodb"
+        SKIP_RETURN_CODE 77
         TIMEOUT 900
     )
 endif()

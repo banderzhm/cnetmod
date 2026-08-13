@@ -37,45 +37,45 @@ circuit_breaker::circuit_breaker(circuit_breaker_options opts) noexcept
 
 auto circuit_breaker::state() const noexcept -> circuit_breaker_state
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::exclusive_latch_guard lock(latch_);
     return maybe_transition_state();
 }
 
 auto circuit_breaker::failure_count() const noexcept -> std::uint32_t
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::shared_latch_guard lock(latch_);
     return failure_count_;
 }
 
 auto circuit_breaker::success_count() const noexcept -> std::uint32_t
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::shared_latch_guard lock(latch_);
     return success_count_;
 }
 
 void circuit_breaker::reset() noexcept
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::exclusive_latch_guard lock(latch_);
     state_ = circuit_breaker_state::closed;
     failure_count_ = success_count_ = 0;
 }
 
 void circuit_breaker::trip() noexcept
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::exclusive_latch_guard lock(latch_);
     state_ = circuit_breaker_state::open;
     open_time_ = std::chrono::steady_clock::now();
 }
 
 auto circuit_breaker::pre_execute() noexcept -> execute_action
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::exclusive_latch_guard lock(latch_);
     return maybe_transition_state() == circuit_breaker_state::open ? execute_action::reject : execute_action::allow;
 }
 
 void circuit_breaker::on_success() noexcept
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::exclusive_latch_guard lock(latch_);
     const auto effective = maybe_transition_state();
     if (effective == circuit_breaker_state::half_open && ++success_count_ >= opts_.success_threshold)
     {
@@ -88,7 +88,7 @@ void circuit_breaker::on_success() noexcept
 
 void circuit_breaker::on_failure() noexcept
 {
-    std::lock_guard lock(mtx_);
+    concurrent_containers::exclusive_latch_guard lock(latch_);
     const auto effective = maybe_transition_state();
     if (effective == circuit_breaker_state::half_open)
     {

@@ -12,6 +12,7 @@ import std;
 import :types;
 import cnetmod.coro.channel;
 import cnetmod.coro.task;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::modbus {
 
@@ -39,7 +40,7 @@ public:
     auto read_coil(std::uint16_t address)
         -> std::expected<bool, exception_code> override
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::shared_latch_guard lock{coils_latch_};
         if (address >= coils_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -50,7 +51,7 @@ public:
     auto write_coil(std::uint16_t address, bool value)
         -> std::expected<void, exception_code> override
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::exclusive_latch_guard lock{coils_latch_};
         if (address >= coils_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -63,7 +64,7 @@ public:
     auto read_discrete_input(std::uint16_t address)
         -> std::expected<bool, exception_code> override
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::shared_latch_guard lock{discrete_inputs_latch_};
         if (address >= discrete_inputs_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -75,7 +76,7 @@ public:
     auto read_holding_register(std::uint16_t address)
         -> std::expected<std::uint16_t, exception_code> override
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::shared_latch_guard lock{holding_registers_latch_};
         if (address >= holding_registers_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -86,7 +87,7 @@ public:
     auto write_holding_register(std::uint16_t address, std::uint16_t value)
         -> std::expected<void, exception_code> override
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::exclusive_latch_guard lock{holding_registers_latch_};
         if (address >= holding_registers_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -99,7 +100,7 @@ public:
     auto read_input_register(std::uint16_t address)
         -> std::expected<std::uint16_t, exception_code> override
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::shared_latch_guard lock{input_registers_latch_};
         if (address >= input_registers_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -133,7 +134,7 @@ public:
         std::span<const bool> values)
         -> std::expected<void, exception_code>
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::exclusive_latch_guard lock{coils_latch_};
         if (start_address + values.size() > coils_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -149,7 +150,7 @@ public:
         std::span<const std::uint16_t> values)
         -> std::expected<void, exception_code>
     {
-        std::lock_guard lock(mtx_);
+        concurrent_containers::exclusive_latch_guard lock{holding_registers_latch_};
         if (start_address + values.size() > holding_registers_.size())
         {
             return std::unexpected(exception_code::illegal_data_address);
@@ -162,7 +163,13 @@ public:
     }
 
 private:
-    std::mutex mtx_;
+    // The Modbus address spaces are independent.  Per-space CAS latches keep
+    // a batch atomic within its space without serialising coil traffic behind
+    // register traffic.
+    concurrent_containers::atomic_rw_latch coils_latch_;
+    concurrent_containers::atomic_rw_latch discrete_inputs_latch_;
+    concurrent_containers::atomic_rw_latch holding_registers_latch_;
+    concurrent_containers::atomic_rw_latch input_registers_latch_;
     std::vector<bool> coils_;
     std::vector<bool> discrete_inputs_;
     std::vector<std::uint16_t> holding_registers_;

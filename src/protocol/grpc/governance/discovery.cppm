@@ -6,6 +6,7 @@ export module cnetmod.protocol.grpc.governance.discovery;
 
 import std;
 import cnetmod.protocol.grpc.governance.endpoint;
+import cnetmod.utils.concurrent_containers.copy_on_write_value;
 
 namespace cnetmod::grpc::governance {
 
@@ -19,8 +20,7 @@ public:
     [[nodiscard]] auto snapshot() const -> std::vector<endpoint>;
 
 private:
-    mutable std::shared_mutex mutex_;
-    std::vector<endpoint> endpoints_;
+    concurrent_containers::copy_on_write_value<std::vector<endpoint>> endpoints_;
 };
 
 } // namespace cnetmod::grpc::governance

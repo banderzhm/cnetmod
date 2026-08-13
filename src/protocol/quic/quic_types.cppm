@@ -217,19 +217,65 @@ export struct server_early_data_ticket_callbacks
 // QUIC Configuration
 // =============================================================================
 
+/// Congestion controller used by a QUIC connection. NewReno remains the
+/// interoperable default; CUBIC can be selected for long-lived, high-bandwidth
+/// paths where its faster probing is beneficial.
+export enum class quic_congestion_algorithm : std::uint8_t
+{
+    new_reno,
+    cubic,
+    /// BBRv1-style bottleneck-bandwidth and RTT controller.  It is selected
+    /// once during connection construction, exactly like NewReno and CUBIC.
+    bbr
+};
+
 export struct quic_config
 {
     std::chrono::milliseconds idle_timeout{30000};
     /// Largest UDP datagram this endpoint accepts and advertises to its peer.
     std::uint64_t max_udp_payload_size{max_udp_receive_payload};
+    /// Enable RFC 9000-compatible datagram PLPMTUD for validated 1-RTT paths.
+    /// The transport starts at the mandatory 1200-byte baseline and only raises
+    /// a path's send ceiling after an acknowledged padded PING probe.
+    // Kept opt-in until an application has chosen a suitable ceiling for its
+    // network. RFC 9000's 1200-byte baseline remains the safe default.
+    bool enable_path_mtu_discovery{false};
+    /// Largest probe target used by the built-in PLPMTUD state machine. This
+    /// is deliberately conservative for Internet paths; applications with a
+    /// controlled jumbo-frame network can raise it, but it is always capped
+    /// by both local and peer max_udp_payload_size transport parameters.
+    std::uint64_t max_path_mtu{1452};
+    /// Minimum spacing between successful or failed probes on one path.
+    std::chrono::milliseconds path_mtu_probe_interval{1000};
+    /// Optional quiet period after a path becomes validated before its first
+    /// PLPMTUD probe. Zero preserves immediate probing; a non-zero delay is
+    /// useful on paths whose post-validation control traffic is still
+    /// settling (for example, relayed or newly migrated paths).
+    std::chrono::milliseconds path_mtu_initial_probe_delay{};
+    /// RFC 9221 transport parameter. Zero keeps QUIC DATAGRAM disabled.
+    std::uint64_t max_datagram_frame_size{0};
     std::uint64_t max_data{1048576};
     std::uint64_t max_stream_data{262144};
     std::uint64_t max_streams_bidi{100};
     std::uint64_t max_streams_uni{100};
+    /// Selected once at connection construction. It never changes while a
+    /// connection is live, so packet processing does not require locking.
+    quic_congestion_algorithm congestion_algorithm{
+        quic_congestion_algorithm::new_reno};
     std::uint8_t cid_length{8};
     /// Maximum locally issued CIDs kept active in parallel.  The peer's
     /// active_connection_id_limit remains the authoritative upper bound.
     std::uint64_t active_connection_id_limit{4};
+    /// Enable the draft-ietf-quic-multipath-12 experiment. Both endpoints
+    /// must opt in; zero retains RFC 9000 single-path behavior.
+    std::optional<std::uint32_t> multipath_initial_max_path_id;
+    /// Number of simultaneously probed peer addresses retained while an
+    /// endpoint is migrating. This is deliberately bounded: path validation
+    /// packets are unauthenticated until their PATH_RESPONSE arrives and must
+    /// never become an attacker-controlled allocation surface. It prepares
+    /// the transport for multipath-capable peers while RFC 9000 deployments
+    /// continue to select one validated active path.
+    std::uint8_t max_pending_path_validations{4};
     /// Optional listener-owned token generator.  Servers use this to derive
     /// reset tokens from a rotating secret instead of creating per-connection
     /// opaque state; connections retain each issued value for its CID life.

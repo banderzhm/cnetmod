@@ -87,7 +87,7 @@ auto connection_pool::async_run() -> task<void>
     running_ = true;
     // Spawn initial connection tasks
     for (std::size_t i = 0; i < params_.initial_size && i < params_.max_size;
-         ++i)
+        ++i)
     {
         spawn_connection();
     }
@@ -121,14 +121,6 @@ auto connection_pool::async_get_connection()
 auto connection_pool::try_get_connection()
     -> std::expected<pooled_connection, std::error_code>
 {
-    if (waiters_count_.load(std::memory_order_acquire) == 0)
-    {
-        if (auto* node = try_get_idle_lockfree())
-        {
-            return pooled_connection(this, node);
-        }
-    }
-
     if (!mtx_.try_lock())
     {
         return std::unexpected(
@@ -464,10 +456,17 @@ void connection_pool::notify_waiters_with_idle_locked()
         if (num_pending_requests_ > 0)
             --num_pending_requests_;
 
-        if (w->token)
+        // A cancellation callback may race a connection return from another
+        // executor.  Claim the waiter before publishing the connection.  If
+        // cancellation already owns it, put the slot back and let its queued
+        // cleanup resume the waiter.  In particular, never leave an in-use
+        // slot assigned to a coroutine that will report a timeout.
+        if (w->token &&
+            !w->token->pending_.exchange(false, std::memory_order_acq_rel))
         {
-            w->token->pending_.store(false, std::memory_order_release);
-            w->token->cancel_fn_ = nullptr;
+            node->state.store(conn_state::idle, std::memory_order_release);
+            set_idle_bit(node->index);
+            continue;
         }
         *w->result_node = node;
         if (w->handle)
@@ -496,61 +495,6 @@ auto connection_pool::remove_waiter(pool_waiter* target) -> bool
         }
     }
     return false;
-}
-
-auto connection_pool::try_get_idle_lockfree() -> conn_node*
-{
-    // Scan bitmaps to find idle connection (64 connections per iteration)
-    for (std::size_t i = 0; i < MAX_BITMAPS; ++i)
-    {
-        uint64_t bits = idle_bitmap_[i].load(std::memory_order_acquire);
-        if (bits == 0)
-            continue; // No idle connections in this bitmap
-
-        while (bits != 0)
-        {
-            // Find first set bit (idle connection)
-            int bit_pos = -1;
-#if defined(_MSC_VER)
-            unsigned long pos;
-            if (_BitScanForward64(&pos, bits))
-            {
-                bit_pos = static_cast<int>(pos);
-            }
-#elif defined(__GNUC__) || defined(__clang__)
-            bit_pos = __builtin_ctzll(bits); // Count trailing zeros
-#else
-            // Fallback: linear scan
-            for (int j = 0; j < 64; ++j)
-            {
-                if (bits & (1ULL << j))
-                {
-                    bit_pos = j;
-                    break;
-                }
-            }
-#endif
-            if (bit_pos < 0)
-                break;
-            bits &= (bits - 1);
-
-            std::size_t idx = i * BITMAP_BITS + static_cast<std::size_t>(bit_pos);
-            if (idx >= conns_.size())
-                continue;
-
-            auto& node = conns_[idx];
-            conn_state expected = conn_state::idle;
-            if (node.state.compare_exchange_strong(expected, conn_state::in_use,
-                    std::memory_order_acquire,
-                    std::memory_order_relaxed))
-            {
-                clear_idle_bit(idx);
-                node.last_used = std::chrono::steady_clock::now();
-                return &node;
-            }
-        }
-    }
-    return nullptr;
 }
 
 void connection_pool::return_connection(conn_node& node, bool needs_reset)
@@ -656,23 +600,18 @@ auto connection_pool::async_get_connection(cnetmod::deadline value)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
     co_return co_await with_deadline(ctx_, value,
-        [this](cancel_token& token) { return async_get_connection(token); });
+        [this](cancel_token& token)
+        {
+            return async_get_connection(token);
+        });
 }
 
 auto connection_pool::async_get_connection(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    // P4: Try lock-free fast path first (no lock needed), but preserve FIFO
-    // fairness.
-    if (waiters_count_.load(std::memory_order_acquire) == 0)
-    {
-        if (auto* node = try_get_idle_lockfree())
-        {
-            co_return pooled_connection(this, node);
-        }
-    }
-
-    // Slow path: need lock for queue operations
+    // All pool metadata, including deque growth and FIFO ordering, is
+    // serialized by this coroutine mutex. It is never held while a caller
+    // owns a connection or while any I/O is awaited.
     co_await mtx_.lock();
     async_lock_guard guard(mtx_, std::adopt_lock);
 
@@ -732,14 +671,30 @@ auto connection_pool::async_get_connection(cancel_token& token)
             token.coroutine_ = h;
             token.cancel_fn_ = [](cancel_token& tok) noexcept
             {
+                if (!tok.pending_.exchange(false, std::memory_order_acq_rel))
+                    return;
                 auto* p = static_cast<connection_pool*>(tok.ctx_);
                 auto* wt = static_cast<pool_waiter*>(tok.io_handle_);
                 if (p->mtx_.try_lock())
                 {
                     p->remove_waiter(wt);
                     p->mtx_.unlock();
+                    p->ctx_.post(tok.coroutine_);
+                    return;
                 }
-                p->ctx_.post(tok.coroutine_);
+
+                // Cancellation may originate from another thread and cannot
+                // suspend on the pool mutex.  Keep the waiter alive by
+                // resuming it only after an owner-context coroutine removed
+                // it from the FIFO queue.
+                auto handle = tok.coroutine_;
+                spawn(p->ctx_, [p, wt, handle]() -> task<void>
+                    {
+                        co_await p->mtx_.lock();
+                        p->remove_waiter(wt);
+                        p->mtx_.unlock();
+                        p->ctx_.post(handle);
+                    }());
             };
             token.pending_.store(true, std::memory_order_release);
             guard.release();
@@ -747,12 +702,11 @@ auto connection_pool::async_get_connection(cancel_token& token)
 
             if (token.is_cancelled())
             {
-                if (pool.mtx_.try_lock())
-                {
-                    pool.remove_waiter(&w);
-                    pool.mtx_.unlock();
-                }
-                pool.ctx_.post(h);
+                // Cancellation may have happened immediately before the
+                // waiter was armed. Route it through the same one-shot
+                // cleanup path; posting first would let the stack waiter die
+                // while it was still linked in the pool queue.
+                token.cancel_fn_(token);
             }
         }
 
@@ -764,17 +718,23 @@ auto connection_pool::async_get_connection(cancel_token& token)
 
     co_await waiter_awaitable{*this, waiter, guard, token};
 
+    // Assignment wins when it raced cancellation: the connection has already
+    // been transferred atomically under the pool mutex and must be returned by
+    // the pooled_connection RAII handle, not silently leaked on a timeout.
+    if (assigned)
+    {
+        co_return pooled_connection(this, assigned);
+    }
+
     if (token.is_cancelled())
     {
         co_await mtx_.lock();
         remove_waiter(&waiter);
         mtx_.unlock();
-        co_return std::unexpected(make_error_code(std::errc::timed_out));
-    }
-
-    if (assigned)
-    {
-        co_return pooled_connection(this, assigned);
+        co_return std::unexpected(make_error_code(
+            token.reason() == cancellation_reason::deadline_exceeded
+                ? std::errc::timed_out
+                : std::errc::operation_canceled));
     }
     co_return std::unexpected(make_error_code(std::errc::timed_out));
 }

@@ -58,7 +58,7 @@ template <typename T, typename Promise> struct task_awaiter
 
     auto await_ready() const noexcept -> bool
     {
-        return false;
+        return !h;
     }
 
     auto await_suspend(std::coroutine_handle<> caller) noexcept
@@ -70,6 +70,8 @@ template <typename T, typename Promise> struct task_awaiter
 
     auto await_resume() -> T
     {
+        if (!h)
+            throw std::logic_error("awaiting an empty task");
         return h.promise().result();
     }
 };
@@ -81,7 +83,7 @@ template <typename Promise> struct task_awaiter<void, Promise>
 
     auto await_ready() const noexcept -> bool
     {
-        return false;
+        return !h;
     }
 
     auto await_suspend(std::coroutine_handle<> caller) noexcept
@@ -93,6 +95,8 @@ template <typename Promise> struct task_awaiter<void, Promise>
 
     void await_resume()
     {
+        if (!h)
+            throw std::logic_error("awaiting an empty task");
         h.promise().result();
     }
 };
@@ -288,43 +292,72 @@ auto starts_on(io_context& context, task<T> operation) -> task<T>
 
 namespace detail {
 
+    // sync_wait may be completed by an I/O or third-party worker.  Its
+    // runner must therefore destroy its coroutine frame on that resuming
+    // thread, not on the synchronous caller which can observe completion
+    // before coroutine_handle::resume() has unwound.
+    struct sync_wait_detached
+    {
+        struct promise_type
+        {
+            auto get_return_object() noexcept -> sync_wait_detached
+            {
+                return {};
+            }
+
+            auto initial_suspend() noexcept -> std::suspend_never
+            {
+                return {};
+            }
+
+            auto final_suspend() noexcept -> std::suspend_never
+            {
+                return {};
+            }
+
+            void return_void() noexcept {}
+
+            void unhandled_exception() noexcept
+            {
+                std::terminate();
+            }
+        };
+    };
+
     template <typename T> struct sync_wait_state
     {
-        std::mutex mutex;
-        std::condition_variable condition;
         std::optional<T> value;
         std::exception_ptr exception;
-        bool completed = false;
+        // `sync_wait` is a thread bridge, so a coroutine may finish on a
+        // different worker.  Release/acquire around this flag publishes the
+        // result without a platform mutex or condition variable.
+        std::atomic<bool> completed{false};
     };
 
     template <typename T>
-    auto sync_wait_runner(task<T> operation, sync_wait_state<T>& state) -> task<void>
+    auto sync_wait_runner(task<T> operation, std::shared_ptr<sync_wait_state<T>> state)
+        -> sync_wait_detached
     {
         try
         {
-            state.value.emplace(co_await operation);
+            state->value.emplace(co_await operation);
         }
         catch (...)
         {
-            state.exception = std::current_exception();
+            state->exception = std::current_exception();
         }
-        {
-            std::lock_guard lock{state.mutex};
-            state.completed = true;
-        }
-        state.condition.notify_one();
+        state->completed.store(true, std::memory_order_release);
+        state->completed.notify_one();
     }
 
     struct sync_wait_void_state
     {
-        std::mutex mutex;
-        std::condition_variable condition;
         std::exception_ptr exception;
-        bool completed = false;
+        std::atomic<bool> completed{false};
     };
 
-    inline auto sync_wait_void_runner(task<void> operation, sync_wait_void_state& state)
-        -> task<void>
+    inline auto sync_wait_void_runner(task<void> operation,
+        std::shared_ptr<sync_wait_void_state> state) -> sync_wait_detached
     {
         try
         {
@@ -332,13 +365,10 @@ namespace detail {
         }
         catch (...)
         {
-            state.exception = std::current_exception();
+            state->exception = std::current_exception();
         }
-        {
-            std::lock_guard lock{state.mutex};
-            state.completed = true;
-        }
-        state.condition.notify_one();
+        state->completed.store(true, std::memory_order_release);
+        state->completed.notify_one();
     }
 
 } // namespace detail
@@ -349,32 +379,24 @@ namespace detail {
 /// instead of reading task::promise_type::value_ after the initial resume.
 export template <typename T> auto sync_wait(task<T> operation) -> T
 {
-    detail::sync_wait_state<T> state;
-    auto runner = detail::sync_wait_runner(std::move(operation), state);
-    runner.handle().resume();
-    std::unique_lock lock{state.mutex};
-    state.condition.wait(lock, [&state]
-        {
-            return state.completed;
-        });
-    if (state.exception)
-        std::rethrow_exception(state.exception);
-    return std::move(*state.value);
+    auto state = std::make_shared<detail::sync_wait_state<T>>();
+    detail::sync_wait_runner(std::move(operation), state);
+    while (!state->completed.load(std::memory_order_acquire))
+        state->completed.wait(false, std::memory_order_relaxed);
+    if (state->exception)
+        std::rethrow_exception(state->exception);
+    return std::move(*state->value);
 }
 
 /// sync_wait<void> specialization
 export inline void sync_wait(task<void> operation)
 {
-    detail::sync_wait_void_state state;
-    auto runner = detail::sync_wait_void_runner(std::move(operation), state);
-    runner.handle().resume();
-    std::unique_lock lock{state.mutex};
-    state.condition.wait(lock, [&state]
-        {
-            return state.completed;
-        });
-    if (state.exception)
-        std::rethrow_exception(state.exception);
+    auto state = std::make_shared<detail::sync_wait_void_state>();
+    detail::sync_wait_void_runner(std::move(operation), state);
+    while (!state->completed.load(std::memory_order_acquire))
+        state->completed.wait(false, std::memory_order_relaxed);
+    if (state->exception)
+        std::rethrow_exception(state->exception);
 }
 
 // =============================================================================
@@ -388,6 +410,10 @@ namespace detail {
     {
         std::atomic<int> remaining;
         std::coroutine_handle<> caller{};
+        // Completion handoff: 0 = startup, 1 = parent safely suspended,
+        // 2 = last child completed during startup.  This avoids resuming the
+        // parent while await_suspend() still owns the awaiter storage.
+        std::atomic<unsigned char> completion_handoff{0};
 
         explicit when_all_state(int n) noexcept;
 
@@ -627,7 +653,7 @@ namespace detail {
             return false;
         }
 
-        void await_suspend(std::coroutine_handle<> caller) noexcept
+        auto await_suspend(std::coroutine_handle<> caller) noexcept -> bool
         {
             state_.caller = caller;
             // Set state and start all subtasks
@@ -641,6 +667,16 @@ namespace detail {
                     (t.start(), ...);
                 },
                 tasks_);
+
+            // Publish exactly once.  If the final child already completed it
+            // changed 0 -> 2, so returning false safely continues the caller
+            // after await_suspend() returns.  If we win 0 -> 1, a later final
+            // child owns the resume; do not touch awaiter state afterwards.
+            unsigned char expected = 0;
+            if (!state_.completion_handoff.compare_exchange_strong(expected, 1,
+                    std::memory_order_acq_rel, std::memory_order_acquire))
+                return false;
+            return true;
         }
 
         void await_resume() {}

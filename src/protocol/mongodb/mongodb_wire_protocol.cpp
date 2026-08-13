@@ -47,9 +47,12 @@ namespace {
 } // namespace
 
 auto encode_command_message(std::int32_t request_id,
-    const bson_document& command, std::size_t maximum)
+    const bson_document& command, std::size_t maximum, std::uint32_t flags)
     -> result<std::vector<std::byte>>
 {
+    if ((flags & ~op_message_exhaust_allowed) != 0)
+        return std::unexpected(make_error(error_code::protocol_error,
+            "unsupported MongoDB OP_MSG request flags"));
     auto encoded = encode_bson_document(command,
         bson_limits{.max_document_bytes = std::min(maximum, std::size_t{16 * 1024 * 1024})});
     if (!encoded)
@@ -64,7 +67,7 @@ auto encode_command_message(std::int32_t request_id,
     append_le(out, request_id);
     append_le(out, std::int32_t{});
     append_le(out, op_message);
-    append_le(out, std::uint32_t{});
+    append_le(out, flags);
     out.push_back(std::byte{}); // kind 0: single body
     out.insert(out.end(), encoded->begin(), encoded->end());
     return out;

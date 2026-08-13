@@ -3,11 +3,12 @@ module;
 module cnetmod.protocol.amqp091;
 import :topology_recovery;
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::amqp091 {
 void topology_recorder::remember(recorded_exchange v)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.exchanges, [&](const auto& x)
         {
             return x.options.name == v.options.name;
@@ -17,7 +18,7 @@ void topology_recorder::remember(recorded_exchange v)
 
 void topology_recorder::remember(recorded_queue v)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.queues, [&](const auto& x)
         {
             return (!v.server_name.empty() && x.server_name == v.server_name) ||
@@ -28,7 +29,7 @@ void topology_recorder::remember(recorded_queue v)
 
 void topology_recorder::remember(recorded_binding v)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.bindings, [&](const auto& x)
         {
             return x.options.queue == v.options.queue &&
@@ -40,7 +41,7 @@ void topology_recorder::remember(recorded_binding v)
 
 void topology_recorder::remember(recorded_consumer v)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.consumers, [&](const auto& x)
         {
             return x.options.consumer_tag == v.options.consumer_tag;
@@ -50,7 +51,7 @@ void topology_recorder::remember(recorded_consumer v)
 
 void topology_recorder::forget_exchange(std::string_view name)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.exchanges,
         [&](const auto& v)
         {
@@ -65,7 +66,7 @@ void topology_recorder::forget_exchange(std::string_view name)
 
 void topology_recorder::forget_queue(std::string_view name)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.queues, [&](const auto& v)
         {
             return v.options.name == name || v.server_name == name;
@@ -84,7 +85,7 @@ void topology_recorder::forget_queue(std::string_view name)
 
 void topology_recorder::forget_binding(const binding_options& o)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.bindings, [&](const auto& v)
         {
             return v.options.queue == o.queue && v.options.exchange == o.exchange &&
@@ -94,7 +95,7 @@ void topology_recorder::forget_binding(const binding_options& o)
 
 void topology_recorder::forget_consumer(std::string_view tag)
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     std::erase_if(topology_.consumers,
         [&](const auto& v)
         {
@@ -104,13 +105,13 @@ void topology_recorder::forget_consumer(std::string_view tag)
 
 void topology_recorder::clear()
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     topology_ = {};
 }
 
 auto topology_recorder::snapshot() const -> topology_snapshot
 {
-    std::scoped_lock l(mutex_);
+    concurrent_containers::shared_latch_guard lock{topology_latch_};
     return topology_;
 }
 

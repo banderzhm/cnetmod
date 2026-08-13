@@ -136,16 +136,15 @@ auto connection_pool::async_get_connection(cnetmod::deadline value)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
     co_return co_await with_deadline(ctx_, value,
-        [this](cancel_token& token) { return async_get_connection(token); });
+        [this](cancel_token& token)
+        {
+            return async_get_connection(token);
+        });
 }
 
 auto connection_pool::async_get_connection(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    if (waiters_count_.load(std::memory_order_acquire) == 0)
-        if (auto* node = try_get_idle_lockfree())
-            co_return pooled_connection(this, node);
-
     co_await mtx_.lock();
     async_lock_guard guard(mtx_, std::adopt_lock);
     if (waiters_head_)
@@ -190,26 +189,33 @@ auto connection_pool::async_get_connection(cancel_token& token)
             token.coroutine_ = handle;
             token.cancel_fn_ = [](cancel_token& item) noexcept
             {
+                if (!item.pending_.exchange(false, std::memory_order_acq_rel))
+                    return;
                 auto* owner = static_cast<connection_pool*>(item.ctx_);
                 auto* queued = static_cast<pool_waiter*>(item.io_handle_);
                 if (owner->mtx_.try_lock())
                 {
                     owner->remove_waiter(queued);
                     owner->mtx_.unlock();
+                    owner->ctx_.post(item.coroutine_);
+                    return;
                 }
-                owner->ctx_.post(item.coroutine_);
+
+                auto handle = item.coroutine_;
+                spawn(owner->ctx_, [owner, queued, handle]() -> task<void>
+                    {
+                        co_await owner->mtx_.lock();
+                        owner->remove_waiter(queued);
+                        owner->mtx_.unlock();
+                        owner->ctx_.post(handle);
+                    }());
             };
             token.pending_.store(true, std::memory_order_release);
             guard.release();
             pool.mtx_.unlock();
             if (token.is_cancelled())
             {
-                if (pool.mtx_.try_lock())
-                {
-                    pool.remove_waiter(&waiter);
-                    pool.mtx_.unlock();
-                }
-                pool.ctx_.post(handle);
+                token.cancel_fn_(token);
             }
         }
 
@@ -220,24 +226,28 @@ auto connection_pool::async_get_connection(cancel_token& token)
     };
 
     co_await waiter_awaitable{*this, waiter, guard, token};
+    // A successfully assigned connection owns the completion race with a
+    // concurrent cancellation.  Returning it through RAII preserves the
+    // lease instead of losing an in-use slot on the timeout path.
+    if (assigned)
+        co_return pooled_connection(this, assigned);
+
     if (token.is_cancelled())
     {
         co_await mtx_.lock();
         remove_waiter(&waiter);
         mtx_.unlock();
-        co_return std::unexpected(make_error_code(std::errc::timed_out));
+        co_return std::unexpected(make_error_code(
+            token.reason() == cancellation_reason::deadline_exceeded
+                ? std::errc::timed_out
+                : std::errc::operation_canceled));
     }
-    if (assigned)
-        co_return pooled_connection(this, assigned);
     co_return std::unexpected(make_error_code(std::errc::timed_out));
 }
 
 auto connection_pool::try_get_connection()
     -> std::expected<pooled_connection, std::error_code>
 {
-    if (waiters_count_.load(std::memory_order_acquire) == 0)
-        if (auto* node = try_get_idle_lockfree())
-            return pooled_connection(this, node);
     if (!mtx_.try_lock())
         return std::unexpected(
             make_error_code(std::errc::resource_unavailable_try_again));
@@ -502,10 +512,14 @@ void connection_pool::notify_waiters_with_idle_locked()
         dec_if_positive(waiters_count_);
         if (num_pending_requests_ > 0)
             --num_pending_requests_;
-        if (waiter->token)
+        // Cancellation and return may arrive concurrently.  The pending flag
+        // is the completion claim: when cancellation got there first, restore
+        // the lease and let its cleanup coroutine resume the waiter.
+        if (waiter->token && !waiter->token->pending_.exchange(false, std::memory_order_acq_rel))
         {
-            waiter->token->pending_.store(false, std::memory_order_release);
-            waiter->token->cancel_fn_ = nullptr;
+            node->state.store(conn_state::idle, std::memory_order_release);
+            set_idle_bit(node->index);
+            continue;
         }
         *waiter->result_node = node;
         if (waiter->handle)
@@ -517,7 +531,7 @@ auto connection_pool::remove_waiter(pool_waiter* target) -> bool
 {
     pool_waiter* previous = nullptr;
     for (auto* waiter = waiters_head_; waiter;
-         previous = waiter, waiter = waiter->next)
+        previous = waiter, waiter = waiter->next)
         if (waiter == target)
         {
             if (previous)
@@ -533,11 +547,6 @@ auto connection_pool::remove_waiter(pool_waiter* target) -> bool
             return true;
         }
     return false;
-}
-
-auto connection_pool::try_get_idle_lockfree() -> conn_node*
-{
-    return try_get_idle_locked();
 }
 
 void connection_pool::return_connection(conn_node& node)

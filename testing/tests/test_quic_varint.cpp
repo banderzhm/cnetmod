@@ -1,10 +1,7 @@
-#pragma once
+#include "test_framework.hpp"
 
-#include <quic/varint.hpp>
-#include <testing/test_framework.hpp>
-
-#include <array>
-#include <random>
+import std;
+import cnetmod.protocol.quic;
 
 TEST(quic_varint_encode_zero)
 {
@@ -26,17 +23,15 @@ TEST(quic_varint_encode_1byte_range)
     for (auto val : test_values)
     {
         auto encode_result = cnetmod::quic::encode_varint(val);
-        ASSERT_TRUE(encode_result.has_value()) << "Failed to encode value: " << val;
+        ASSERT_TRUE(encode_result.has_value());
 
-        ASSERT_EQ(encode_result->second, 1) << "Value " << val << " should be 1 byte";
+        ASSERT_EQ(encode_result->second, 1);
 
         // Verify round-trip decode
         std::array<std::byte, 8> buffer{};
         std::span<std::byte> span{buffer.data(), encode_result->second};
         for (std::size_t i = 0; i < encode_result->second; ++i)
-        {
-            buffer[i] = encode_result->value_or(std::array<std::byte, 8>{})[i];
-        }
+            buffer[i] = encode_result->first[i];
 
         auto decode_result = cnetmod::quic::decode_varint(span);
         ASSERT_TRUE(decode_result.has_value());
@@ -52,19 +47,17 @@ TEST(quic_varint_encode_2byte_range)
     for (auto val : test_values)
     {
         auto encode_result = cnetmod::quic::encode_varint(val);
-        ASSERT_TRUE(encode_result.has_value()) << "Failed to encode value: " << val;
+        ASSERT_TRUE(encode_result.has_value());
 
-        ASSERT_EQ(encode_result->second, 2) << "Value " << val << " should be 2 bytes";
+        ASSERT_EQ(encode_result->second, 2);
 
         // Verify first byte has correct prefix (0x40 | high_bits)
-        ASSERT_EQ((std::to_integer<std::uint8_t>(encode_result->value_or({})[0]) & 0xC0), 0x40);
+        ASSERT_EQ((std::to_integer<std::uint8_t>(encode_result->first[0]) & 0xC0), 0x40);
 
         // Round-trip test
         std::array<std::byte, 8> buffer{};
         for (std::size_t i = 0; i < encode_result->second; ++i)
-        {
-            buffer[i] = encode_result->value_or({})[i];
-        }
+            buffer[i] = encode_result->first[i];
 
         auto decode_result = cnetmod::quic::decode_varint(std::span{buffer.data(), encode_result->second});
         ASSERT_TRUE(decode_result.has_value());
@@ -85,19 +78,17 @@ TEST(quic_varint_encode_4byte_range)
     for (auto val : test_values)
     {
         auto encode_result = cnetmod::quic::encode_varint(val);
-        ASSERT_TRUE(encode_result.has_value()) << "Failed to encode value: " << val;
+        ASSERT_TRUE(encode_result.has_value());
 
-        ASSERT_EQ(encode_result->second, 4) << "Value " << val << " should be 4 bytes";
+        ASSERT_EQ(encode_result->second, 4);
 
         // Verify prefix
-        ASSERT_EQ((std::to_integer<std::uint8_t>(encode_result->value_or({})[0]) & 0xC0), 0x80);
+        ASSERT_EQ((std::to_integer<std::uint8_t>(encode_result->first[0]) & 0xC0), 0x80);
 
         // Round-trip test
         std::array<std::byte, 8> buffer{};
         for (std::size_t i = 0; i < encode_result->second; ++i)
-        {
-            buffer[i] = encode_result->value_or({})[i];
-        }
+            buffer[i] = encode_result->first[i];
 
         auto decode_result = cnetmod::quic::decode_varint(std::span{buffer.data(), encode_result->second});
         ASSERT_TRUE(decode_result.has_value());
@@ -107,22 +98,22 @@ TEST(quic_varint_encode_4byte_range)
 
 TEST(quic_varint_encode_max_valid)
 {
-    // Test maximum valid varint value (2^62 - 1 = 4398046511103)
-    const std::uint64_t max_val = 4398046511103ULL;
+    // Test maximum valid varint value (2^62 - 1).
+    const std::uint64_t max_val = (std::uint64_t{1} << 62) - 1;
 
     auto encode_result = cnetmod::quic::encode_varint(max_val);
     ASSERT_TRUE(encode_result.has_value());
 
-    ASSERT_EQ(encode_result->second, 8) << "Max value should use all 8 bytes";
+    ASSERT_EQ(encode_result->second, 8);
 
     // Verify prefix is 0xC0
-    ASSERT_EQ((std::to_integer<std::uint8_t>(encode_result->value_or({})[0]) & 0xC0), 0xC0);
+    ASSERT_EQ((std::to_integer<std::uint8_t>(encode_result->first[0]) & 0xC0), 0xC0);
 
     // Round-trip test
     std::array<std::byte, 8> buffer{};
     for (std::size_t i = 0; i < encode_result->second; ++i)
     {
-        buffer[i] = encode_result->value_or({})[i];
+        buffer[i] = encode_result->first[i];
     }
 
     auto decode_result = cnetmod::quic::decode_varint(std::span{buffer.data(), 8});
@@ -133,7 +124,7 @@ TEST(quic_varint_encode_max_valid)
 TEST(quic_varint_encode_exceeds_62bit)
 {
     // Values >= 2^62 should fail
-    const std::uint64_t exceeds_min = 4398046511104ULL; // 2^62
+    const std::uint64_t exceeds_min = std::uint64_t{1} << 62;
     const std::uint64_t u64_max = UINT64_MAX;
 
     // Test minimum exceeding value
@@ -150,17 +141,17 @@ TEST(quic_varint_decode_partial_input)
     // Test decoding truncated varints
 
     // 1-byte varint with only partial data
-    std::array<std::byte, 2> partial_2byte{{static_cast<std::byte>(0x40), 0x00}};
+    std::array<std::byte, 2> partial_2byte{{static_cast<std::byte>(0x40), static_cast<std::byte>(0x00)}};
     auto result1 = cnetmod::quic::decode_varint(std::span{partial_2byte.data(), 1});
     ASSERT_FALSE(result1.has_value());
 
     // 4-byte varint with only 2 bytes
-    std::array<std::byte, 4> partial_4byte{{static_cast<std::byte>(0x80), 0xFF, 0xFF, 0x00}};
+    std::array<std::byte, 4> partial_4byte{{static_cast<std::byte>(0x80), static_cast<std::byte>(0xFF),
+        static_cast<std::byte>(0xFF), static_cast<std::byte>(0x00)}};
     auto result2 = cnetmod::quic::decode_varint(std::span{partial_4byte.data(), 2});
     ASSERT_FALSE(result2.has_value());
 
     // Empty input
-    std::array<std::byte, 1> empty{};
     auto result3 = cnetmod::quic::decode_varint(std::span<std::byte>{});
     ASSERT_FALSE(result3.has_value());
 }
@@ -175,7 +166,8 @@ TEST(quic_varint_roundtrip_random)
     std::uniform_int_distribution<std::uint64_t> dist_1byte(0, 63);
     std::uniform_int_distribution<std::uint64_t> dist_2byte(64, 16383);
     std::uniform_int_distribution<std::uint64_t> dist_4byte(16384, 1073741823ULL);
-    std::uniform_int_distribution<std::uint64_t> dist_8byte(1073741824ULL, 4398046511103ULL);
+    std::uniform_int_distribution<std::uint64_t> dist_8byte(
+        1073741824ULL, (std::uint64_t{1} << 62) - 1);
 
     std::uniform_int_distribution<int> dist_type(0, 3);
 
@@ -213,7 +205,7 @@ TEST(quic_varint_roundtrip_random)
         std::array<std::byte, 8> buffer{};
         for (std::size_t j = 0; j < encode_result->second; ++j)
         {
-            buffer[j] = encode_result->value_or({})[j];
+            buffer[j] = encode_result->first[j];
         }
 
         auto decode_result = cnetmod::quic::decode_varint(std::span{buffer.data(), encode_result->second});
@@ -242,28 +234,28 @@ TEST(quic_varint_all_boundary_values)
     };
 
     test_case cases[] = {
-        {0, 1},             // 1-byte encoding
-        {63, 1},            // max 1-byte
-        {64, 2},            // min 2-byte
-        {16383, 2},         // max 2-byte
-        {16384, 4},         // min 4-byte
-        {1073741823, 4},    // max 4-byte (2^30 - 1)
-        {1073741824, 8},    // min 8-byte (2^30)
-        {4398046511103, 8}, // max value (2^62 - 1)
+        {0, 1},                            // 1-byte encoding
+        {63, 1},                           // max 1-byte
+        {64, 2},                           // min 2-byte
+        {16383, 2},                        // max 2-byte
+        {16384, 4},                        // min 4-byte
+        {1073741823, 4},                   // max 4-byte (2^30 - 1)
+        {1073741824, 8},                   // min 8-byte (2^30)
+        {(std::uint64_t{1} << 62) - 1, 8}, // max value (2^62 - 1)
     };
 
     for (const auto& tc : cases)
     {
         auto result = cnetmod::quic::encode_varint(tc.value);
-        ASSERT_TRUE(result.has_value()) << "Failed to encode value: " << tc.value;
-        ASSERT_EQ(result->second, tc.expected_size) << "Wrong size for value: " << tc.value;
+        ASSERT_TRUE(result.has_value());
+        ASSERT_EQ(result->second, tc.expected_size);
 
         // Round-trip decode
         auto& arr = result->first;
         std::span<const std::byte> encoded_span{arr.data(), result->second};
         auto decode_result = cnetmod::quic::decode_varint(encoded_span);
-        ASSERT_TRUE(decode_result.has_value()) << "Failed to decode value: " << tc.value;
-        ASSERT_EQ(decode_result->first, tc.value) << "Round-trip mismatch for value: " << tc.value;
+        ASSERT_TRUE(decode_result.has_value());
+        ASSERT_EQ(decode_result->first, tc.value);
         ASSERT_EQ(decode_result->second, tc.expected_size);
     }
 }
@@ -296,7 +288,7 @@ TEST(quic_varint_decode_truncated_8byte_prefix)
 TEST(quic_varint_encode_overflow_error)
 {
     // 2^62 should fail with value_too_large
-    auto result = cnetmod::quic::encode_varint(4398046511104ULL); // 2^62
+    auto result = cnetmod::quic::encode_varint(std::uint64_t{1} << 62);
     ASSERT_FALSE(result.has_value());
 
     // Verify error code
@@ -338,7 +330,7 @@ TEST(quic_varint_size_function)
     ASSERT_EQ(cnetmod::quic::varint_size(16384), 4);
     ASSERT_EQ(cnetmod::quic::varint_size(1073741823), 4);
     ASSERT_EQ(cnetmod::quic::varint_size(1073741824), 8);
-    ASSERT_EQ(cnetmod::quic::varint_size(4398046511103ULL), 8);
+    ASSERT_EQ(cnetmod::quic::varint_size((std::uint64_t{1} << 62) - 1), 8);
 }
 
 RUN_TESTS();

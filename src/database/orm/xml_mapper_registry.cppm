@@ -51,6 +51,12 @@ public:
     /// Get the statement type (select/insert/update/delete)
     auto statement_type(std::string_view id) const -> std::string_view;
 
+    /// MyBatis-compatible optional statement metadata. resultMap and
+    /// resultType are mutually exclusive for a <select> and validated on load.
+    auto statement_result_type(std::string_view id) const -> std::string_view;
+    auto statement_parameter_type(std::string_view id) const -> std::string_view;
+    auto statement_result_map(std::string_view id) const -> std::string_view;
+
     /// Look up a MyBatis-style <resultMap>. Both "MapId" (when unique in the
     /// requested namespace) and "namespace.MapId" forms are accepted.
     auto find_result_map(std::string_view id) const -> const result_map_def*;

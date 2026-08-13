@@ -79,6 +79,39 @@ TEST(qpack_dynamic_indexed_header_block_ric_base_and_ack)
     ASSERT_TRUE(encoder.process_decoder_instructions(decoder_instructions).has_value());
 }
 
+TEST(qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement)
+{
+    qpack_encoder encoder{64U * 1024U};
+    qpack_decoder decoder{64U * 1024U};
+    encoder.set_max_blocked_streams(100U);
+    decoder.set_max_blocked_streams(100U);
+
+    const auto first = fields({
+        {":method", "GET"}, {":scheme", "https"},
+        {":authority", "127.0.0.1"}, {":path", "/get"}});
+    const auto first_block = encoder.encode(first, 0U);
+    ASSERT_TRUE(first_block.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    ASSERT_TRUE(decoder.decode(*first_block, 0U).has_value());
+    ASSERT_TRUE(encoder.process_decoder_instructions(
+        decoder.take_decoder_instructions()).has_value());
+
+    const auto second = fields({
+        {":method", "POST"}, {":scheme", "https"},
+        {":authority", "127.0.0.1"}, {":path", "/post"},
+        {"content-type", "text/plain"}, {"content-length", "9"}});
+    const auto second_block = encoder.encode(second, 4U);
+    ASSERT_TRUE(second_block.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    const auto decoded = decoder.decode(*second_block, 4U);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->size(), second.size());
+    ASSERT_TRUE(encoder.process_decoder_instructions(
+        decoder.take_decoder_instructions()).has_value());
+}
+
 TEST(qpack_decoder_applies_local_maximum_table_capacity)
 {
     qpack_encoder encoder{1024};

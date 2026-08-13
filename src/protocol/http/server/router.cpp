@@ -211,6 +211,30 @@ void request_context::set_trace_id(std::string value)
     trace_id_ = std::move(value);
 }
 
+auto request_context::trace_span_id() const noexcept -> std::string_view
+{
+    return trace_span_id_;
+}
+
+auto request_context::trace_flags() const noexcept -> std::uint8_t
+{
+    return trace_flags_;
+}
+
+auto request_context::trace_state() const noexcept -> std::string_view
+{
+    return trace_state_;
+}
+
+void request_context::set_trace_context(std::string trace_id, std::string span_id,
+    std::uint8_t flags, std::string state)
+{
+    trace_id_ = std::move(trace_id);
+    trace_span_id_ = std::move(span_id);
+    trace_flags_ = flags;
+    trace_state_ = std::move(state);
+}
+
 auto request_context::client_address() const -> std::string
 {
     auto peer = sock_.remote_endpoint();

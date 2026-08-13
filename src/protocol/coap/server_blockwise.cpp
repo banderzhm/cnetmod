@@ -32,7 +32,7 @@ auto udp_server::apply_block1(const endpoint& peer, inbound_request& req) -> blo
         .path = normalize_path(req.path),
     };
 
-    std::scoped_lock lock(block1_mutex_);
+    concurrent_containers::exclusive_latch_guard lock{block1_latch_};
     const auto now = std::chrono::steady_clock::now();
     for (auto it = block1_.begin(); it != block1_.end();)
     {

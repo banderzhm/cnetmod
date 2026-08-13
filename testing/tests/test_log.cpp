@@ -1,23 +1,26 @@
 /// cnetmod unit tests — logger text/json format, file output, level filtering
 
 #include "test_framework.hpp"
+#include <filesystem>
 #include <fstream>
 #include <string>
-#include <filesystem>
 
+import std;
 import cnetmod.core.log;
 
 // =============================================================================
 // Helpers
 // =============================================================================
 
-static std::string read_file_contents(const std::string& path) {
+static std::string read_file_contents(const std::string& path)
+{
     std::ifstream f(path);
     return std::string(std::istreambuf_iterator<char>(f),
-                       std::istreambuf_iterator<char>());
+        std::istreambuf_iterator<char>());
 }
 
-static std::string temp_log_path(const char* name) {
+static std::string temp_log_path(const char* name)
+{
     auto dir = std::filesystem::temp_directory_path();
     return (dir / name).string();
 }
@@ -26,7 +29,8 @@ static std::string temp_log_path(const char* name) {
 // Tests
 // =============================================================================
 
-TEST(log_text_format_file_output) {
+TEST(log_text_format_file_output)
+{
     auto path = temp_log_path("cnetmod_test_text.log");
     std::filesystem::remove(path);
 
@@ -43,7 +47,8 @@ TEST(log_text_format_file_output) {
     std::filesystem::remove(path);
 }
 
-TEST(log_json_format_file_output) {
+TEST(log_json_format_file_output)
+{
     auto path = temp_log_path("cnetmod_test_json.log");
     std::filesystem::remove(path);
 
@@ -61,7 +66,8 @@ TEST(log_json_format_file_output) {
     std::filesystem::remove(path);
 }
 
-TEST(log_level_filtering) {
+TEST(log_level_filtering)
+{
     auto path = temp_log_path("cnetmod_test_filter.log");
     std::filesystem::remove(path);
 
@@ -81,7 +87,8 @@ TEST(log_level_filtering) {
     std::filesystem::remove(path);
 }
 
-TEST(log_set_level_dynamic) {
+TEST(log_set_level_dynamic)
+{
     auto path = temp_log_path("cnetmod_test_setlevel.log");
     std::filesystem::remove(path);
 
@@ -101,7 +108,8 @@ TEST(log_set_level_dynamic) {
     std::filesystem::remove(path);
 }
 
-TEST(log_set_format_dynamic) {
+TEST(log_set_format_dynamic)
+{
     auto path = temp_log_path("cnetmod_test_setfmt.log");
     std::filesystem::remove(path);
 
@@ -121,7 +129,8 @@ TEST(log_set_format_dynamic) {
     std::filesystem::remove(path);
 }
 
-TEST(log_format_string_args) {
+TEST(log_format_string_args)
+{
     auto path = temp_log_path("cnetmod_test_fmtargs.log");
     std::filesystem::remove(path);
 
@@ -136,7 +145,8 @@ TEST(log_format_string_args) {
     std::filesystem::remove(path);
 }
 
-TEST(log_json_escaping) {
+TEST(log_json_escaping)
+{
     auto path = temp_log_path("cnetmod_test_escape.log");
     std::filesystem::remove(path);
 
@@ -153,20 +163,60 @@ TEST(log_json_escaping) {
     std::filesystem::remove(path);
 }
 
-TEST(log_shutdown_then_write) {
+TEST(log_shutdown_then_write)
+{
     // After shutdown, logging should not crash (just silently do nothing)
     logger::init("test", logger::level::info);
     logger::shutdown();
-    logger::info("after shutdown");  // Should not crash
+    logger::info("after shutdown"); // Should not crash
     ASSERT_TRUE(true);
 }
 
-TEST(log_multiple_init) {
+TEST(log_multiple_init)
+{
     // Re-initializing should work without issues
     logger::init("first", logger::level::debug);
     logger::init("second", logger::level::warn);
     // Should not crash, second init overwrites first
     ASSERT_TRUE(true);
+}
+
+TEST(log_mpmc_flush_preserves_all_enqueued_events)
+{
+    auto path = temp_log_path("cnetmod_test_mpmc.log");
+    std::filesystem::remove(path);
+
+    constexpr std::size_t producer_count = 8;
+    constexpr std::size_t events_per_producer = 256;
+    logger::init_with_file("test", path, logger::level::info,
+        logger::output_format::text, false);
+    logger::set_async_queue_limit(65536);
+
+    std::vector<std::jthread> producers;
+    producers.reserve(producer_count);
+    for (std::size_t producer = 0; producer < producer_count; ++producer)
+    {
+        producers.emplace_back([producer]
+            {
+                for (std::size_t event = 0; event < events_per_producer; ++event)
+                    logger::info("mpmc-log-{}-{}", producer, event);
+            });
+    }
+    producers.clear(); // jthread destruction joins every producer.
+
+    logger::flush();
+    logger::shutdown();
+
+    const auto contents = read_file_contents(path);
+    std::size_t count{};
+    std::size_t offset{};
+    while ((offset = contents.find("mpmc-log-", offset)) != std::string::npos)
+    {
+        ++count;
+        offset += std::string_view{"mpmc-log-"}.size();
+    }
+    ASSERT_EQ(count, producer_count * events_per_producer);
+    std::filesystem::remove(path);
 }
 
 RUN_TESTS()

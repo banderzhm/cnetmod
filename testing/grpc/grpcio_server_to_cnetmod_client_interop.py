@@ -28,7 +28,7 @@ def main() -> int:
 
     if not has_module("grpc") or not has_module("grpc_tools"):
         print("[  SKIPPED ] grpcio reverse interop requires: pip install grpcio grpcio-tools")
-        return 0
+        return 77
 
     import grpc
     from grpc_tools import protoc

@@ -11,6 +11,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.mutex;
 import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 
 namespace cnetmod::modbus {
 
@@ -93,6 +94,9 @@ public:
     auto async_run() -> task<void>;
     auto async_get_connection(cancel_token& token)
         -> task<std::expected<pooled_connection, std::error_code>>;
+    /// Acquires a connection using the remaining request budget.
+    auto async_get_connection(cnetmod::deadline value)
+        -> task<std::expected<pooled_connection, std::error_code>>;
     auto async_get_connection()
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto try_get_connection()
@@ -118,7 +122,6 @@ private:
     void spawn_connection();
     static void dec_if_positive(std::atomic<std::size_t>& counter);
     auto try_get_idle_locked() -> conn_node*;
-    auto try_get_idle_lockfree() -> conn_node*;
     void notify_waiters_with_idle_locked();
     auto remove_waiter(pool_waiter* target) -> bool;
     void return_connection(conn_node& node);

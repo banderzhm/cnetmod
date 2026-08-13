@@ -201,6 +201,36 @@ TEST(quic_unknown_frame_type_handling)
     ASSERT_FALSE(result.has_value());
 }
 
+TEST(quic_priority_service_budget_bounds_background_starvation)
+{
+    cnetmod::quic::priority_service_budget budget;
+    std::array<bool, 8> ready{};
+    ready[0] = true;
+    ready[7] = true;
+
+    // A busy urgency-0 class still owns its configured first-packet burst,
+    // but a ready urgency-7 stream must run immediately after that burst
+    // rather than wait until foreground traffic happens to drain.
+    for (std::size_t index{}; index < 16U; ++index)
+    {
+        const auto selected = budget.take_next(ready);
+        ASSERT_TRUE(selected.has_value());
+        ASSERT_EQ(*selected, 0U);
+    }
+    const auto background = budget.take_next(ready);
+    ASSERT_TRUE(background.has_value());
+    ASSERT_EQ(*background, 7U);
+
+    // Exhausting every currently ready class starts a new epoch; it does not
+    // make a live stream permanently unschedulable.
+    ready[7] = false;
+    for (std::size_t index{}; index < 16U; ++index)
+        ASSERT_TRUE(budget.take_next(ready).has_value());
+    const auto next_epoch = budget.take_next(ready);
+    ASSERT_TRUE(next_epoch.has_value());
+    ASSERT_EQ(*next_epoch, 0U);
+}
+
 TEST(quic_empty_stream_frame)
 {
     // Test empty stream frame (no data)
@@ -549,6 +579,118 @@ TEST(quic_retire_connection_id_frame_roundtrip)
 
     auto& decoded = std::get<cnetmod::quic::retire_connection_id_frame>(result->first);
     ASSERT_EQ(decoded.sequence_number, 5ULL);
+}
+
+TEST(quic_datagram_frame_roundtrip)
+{
+    const std::array bytes{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}};
+    cnetmod::quic::datagram_frame frame{bytes, true};
+
+    auto encoded = cnetmod::quic::encode_frame(frame);
+    auto result = cnetmod::quic::decode_frame(encoded);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_TRUE(std::holds_alternative<cnetmod::quic::datagram_frame>(result->first));
+    const auto& decoded = std::get<cnetmod::quic::datagram_frame>(result->first);
+    ASSERT_TRUE(decoded.has_length);
+    ASSERT_EQ(decoded.data.size(), bytes.size());
+    ASSERT_EQ(std::to_integer<std::uint8_t>(decoded.data[2]), 0x03U);
+}
+
+TEST(quic_datagram_frame_without_length_consumes_packet_tail)
+{
+    const std::array bytes{std::byte{0x2a}, std::byte{0x2b}};
+    cnetmod::quic::datagram_frame frame{bytes, false};
+
+    auto encoded = cnetmod::quic::encode_frame(frame);
+    auto result = cnetmod::quic::decode_frame(encoded);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->second, encoded.size());
+    const auto& decoded = std::get<cnetmod::quic::datagram_frame>(result->first);
+    ASSERT_FALSE(decoded.has_length);
+    ASSERT_EQ(decoded.data.size(), bytes.size());
+}
+
+TEST(multipath_path_ack_frame_roundtrip)
+{
+    cnetmod::quic::path_ack_frame frame{};
+    frame.path_id = 3U;
+    frame.acknowledgment.largest_acked = 42U;
+    frame.acknowledgment.ack_delay = 7U;
+    frame.acknowledgment.ack_range_count = 1U;
+    frame.acknowledgment.first_ack_range = 3U;
+    frame.acknowledgment.ack_ranges.push_back({2U, 5U});
+    frame.acknowledgment.has_ecn = true;
+    frame.acknowledgment.ect_0_count = 11U;
+    frame.acknowledgment.ect_1_count = 12U;
+    frame.acknowledgment.ecn_ce_count = 13U;
+
+    const auto encoded = cnetmod::quic::encode_frame(frame);
+    const auto decoded = cnetmod::quic::decode_frame(encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::holds_alternative<cnetmod::quic::path_ack_frame>(decoded->first));
+    const auto& result = std::get<cnetmod::quic::path_ack_frame>(decoded->first);
+    ASSERT_EQ(result.path_id, 3U);
+    ASSERT_EQ(result.acknowledgment.largest_acked, 42ULL);
+    ASSERT_TRUE(result.acknowledgment.has_ecn);
+    ASSERT_EQ(result.acknowledgment.ecn_ce_count, 13ULL);
+}
+
+TEST(multipath_path_management_frames_roundtrip)
+{
+    const cnetmod::quic::path_status_frame status{.path_id = 4U,
+        .sequence_number = 9U,
+        .backup = true};
+    const auto status_result = cnetmod::quic::decode_frame(
+        cnetmod::quic::encode_frame(status));
+    ASSERT_TRUE(status_result.has_value());
+    const auto& decoded_status =
+        std::get<cnetmod::quic::path_status_frame>(status_result->first);
+    ASSERT_EQ(decoded_status.path_id, 4U);
+    ASSERT_EQ(decoded_status.sequence_number, 9ULL);
+    ASSERT_TRUE(decoded_status.backup);
+
+    const cnetmod::quic::max_path_id_frame maximum{.maximum_path_id = 0xffffffffU};
+    const auto maximum_result = cnetmod::quic::decode_frame(
+        cnetmod::quic::encode_frame(maximum));
+    ASSERT_TRUE(maximum_result.has_value());
+    ASSERT_EQ(std::get<cnetmod::quic::max_path_id_frame>(maximum_result->first)
+                  .maximum_path_id,
+        0xffffffffU);
+}
+
+TEST(multipath_path_connection_id_frames_roundtrip)
+{
+    const std::array cid_bytes{std::byte{0x01}, std::byte{0x02}, std::byte{0x03},
+        std::byte{0x04}};
+    cnetmod::quic::path_new_connection_id_frame frame{};
+    frame.path_id = 2U;
+    frame.connection_id.sequence_number = 6U;
+    frame.connection_id.retire_prior_to = 1U;
+    frame.connection_id.cid = cnetmod::quic::connection_id{cid_bytes};
+    frame.connection_id.stateless_reset_token[0] = std::byte{0xaa};
+
+    const auto decoded = cnetmod::quic::decode_frame(cnetmod::quic::encode_frame(frame));
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::holds_alternative<cnetmod::quic::path_new_connection_id_frame>(
+        decoded->first));
+    const auto& result =
+        std::get<cnetmod::quic::path_new_connection_id_frame>(decoded->first);
+    ASSERT_EQ(result.path_id, 2U);
+    ASSERT_EQ(result.connection_id.sequence_number, 6ULL);
+    ASSERT_EQ(result.connection_id.cid.size(), 4U);
+    ASSERT_EQ(std::to_integer<unsigned>(result.connection_id.stateless_reset_token[0]), 0xaaU);
+}
+
+TEST(multipath_frames_reject_path_ids_above_the_nonce_limit)
+{
+    // MAX_PATH_ID's experimental type is a four-byte QUIC varint, followed by
+    // an eight-byte value encoding 2^32. Path IDs are constrained by the
+    // 32-bit nonce prefix and therefore this frame is malformed.
+    const std::vector<std::byte> encoded{
+        std::byte{0x95}, std::byte{0x22}, std::byte{0x8c}, std::byte{0x0c},
+        std::byte{0xc0}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}};
+    ASSERT_FALSE(cnetmod::quic::decode_frame(encoded).has_value());
 }
 
 RUN_TESTS();

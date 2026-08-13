@@ -3,6 +3,13 @@ module;
 #ifdef CNETMOD_HAS_ZLIB
     #include <zlib.h>
 #endif
+#ifdef CNETMOD_HAS_ZSTD
+    #include <zstd.h>
+#endif
+#ifdef CNETMOD_HAS_BROTLI
+    #include <brotli/decode.h>
+    #include <brotli/encode.h>
+#endif
 module cnetmod.protocol.grpc.codec;
 import std;
 import cnetmod.core.error;
@@ -22,7 +29,7 @@ namespace {
         out.insert(out.end(), payload.begin(), payload.end());
     }
 
-    auto compress(std::span<const std::byte> payload)
+    auto compress_gzip(std::span<const std::byte> payload)
         -> std::expected<byte_buffer, status>
     {
 #ifdef CNETMOD_HAS_ZLIB
@@ -61,7 +68,7 @@ namespace {
 #endif
     }
 
-    auto decompress(std::span<const std::byte> payload, std::size_t limit)
+    auto decompress_gzip(std::span<const std::byte> payload, std::size_t limit)
         -> std::expected<byte_buffer, status>
     {
 #ifdef CNETMOD_HAS_ZLIB
@@ -107,6 +114,115 @@ namespace {
         return std::unexpected(make_status(status_code::unimplemented,
             "gzip decompression requires zlib"));
 #endif
+    }
+
+    auto compress_zstd(std::span<const std::byte> payload)
+        -> std::expected<byte_buffer, status>
+    {
+#ifdef CNETMOD_HAS_ZSTD
+        byte_buffer out(ZSTD_compressBound(payload.size()));
+        const auto size = ZSTD_compress(out.data(), out.size(), payload.data(), payload.size(), 3);
+        if (ZSTD_isError(size) != 0U)
+            return std::unexpected(make_status(status_code::internal,
+                "zstd compression failed"));
+        out.resize(size);
+        return out;
+#else
+        (void)payload;
+        return std::unexpected(make_status(status_code::unimplemented,
+            "zstd compression requires zstd"));
+#endif
+    }
+
+    auto decompress_zstd(std::span<const std::byte> payload, std::size_t limit)
+        -> std::expected<byte_buffer, status>
+    {
+#ifdef CNETMOD_HAS_ZSTD
+        const auto declared = ZSTD_getFrameContentSize(payload.data(), payload.size());
+        if (declared != ZSTD_CONTENTSIZE_UNKNOWN && declared != ZSTD_CONTENTSIZE_ERROR &&
+            declared > limit)
+            return std::unexpected(make_status(status_code::resource_exhausted,
+                "grpc zstd message exceeds receive limit"));
+        byte_buffer out(limit);
+        const auto size = ZSTD_decompress(out.data(), out.size(), payload.data(), payload.size());
+        if (ZSTD_isError(size) != 0U)
+            return std::unexpected(make_status(status_code::internal,
+                "zstd decompression failed or message exceeds receive limit"));
+        out.resize(size);
+        return out;
+#else
+        (void)payload;
+        (void)limit;
+        return std::unexpected(make_status(status_code::unimplemented,
+            "zstd decompression requires zstd"));
+#endif
+    }
+
+    auto compress_brotli(std::span<const std::byte> payload)
+        -> std::expected<byte_buffer, status>
+    {
+#ifdef CNETMOD_HAS_BROTLI
+        const auto bound = BrotliEncoderMaxCompressedSize(payload.size());
+        if (bound == 0U)
+            return std::unexpected(make_status(status_code::internal,
+                "brotli compression bound failed"));
+        byte_buffer out(bound);
+        std::size_t encoded_size = out.size();
+        if (BrotliEncoderCompress(5, BROTLI_DEFAULT_WINDOW, BROTLI_MODE_GENERIC,
+                payload.size(), reinterpret_cast<const std::uint8_t*>(payload.data()),
+                &encoded_size, reinterpret_cast<std::uint8_t*>(out.data())) == BROTLI_FALSE)
+            return std::unexpected(make_status(status_code::internal,
+                "brotli compression failed"));
+        out.resize(encoded_size);
+        return out;
+#else
+        (void)payload;
+        return std::unexpected(make_status(status_code::unimplemented,
+            "brotli compression requires brotli"));
+#endif
+    }
+
+    auto decompress_brotli(std::span<const std::byte> payload, std::size_t limit)
+        -> std::expected<byte_buffer, status>
+    {
+#ifdef CNETMOD_HAS_BROTLI
+        byte_buffer out(limit);
+        std::size_t decoded_size = out.size();
+        const auto result = BrotliDecoderDecompress(payload.size(),
+            reinterpret_cast<const std::uint8_t*>(payload.data()), &decoded_size,
+            reinterpret_cast<std::uint8_t*>(out.data()));
+        if (result != BROTLI_DECODER_RESULT_SUCCESS)
+            return std::unexpected(make_status(result == BROTLI_DECODER_RESULT_ERROR
+                    ? status_code::invalid_argument
+                    : status_code::resource_exhausted,
+                "invalid brotli grpc message or message exceeds receive limit"));
+        out.resize(decoded_size);
+        return out;
+#else
+        (void)payload;
+        (void)limit;
+        return std::unexpected(make_status(status_code::unimplemented,
+            "brotli decompression requires brotli"));
+#endif
+    }
+
+    auto compress_payload(std::span<const std::byte> payload,
+        compression_algorithm algorithm) -> std::expected<byte_buffer, status>
+    {
+        return algorithm == compression_algorithm::gzip  ? compress_gzip(payload)
+            : algorithm == compression_algorithm::zstd   ? compress_zstd(payload)
+            : algorithm == compression_algorithm::brotli ? compress_brotli(payload)
+                                                         : std::expected<byte_buffer, status>{byte_buffer{payload.begin(), payload.end()}};
+    }
+
+    auto decompress_payload(std::span<const std::byte> payload,
+        std::size_t limit, compression_algorithm algorithm)
+        -> std::expected<byte_buffer, status>
+    {
+        return algorithm == compression_algorithm::gzip  ? decompress_gzip(payload, limit)
+            : algorithm == compression_algorithm::zstd   ? decompress_zstd(payload, limit)
+            : algorithm == compression_algorithm::brotli ? decompress_brotli(payload, limit)
+                                                         : std::expected<byte_buffer, status>{byte_buffer{payload.begin(), payload.end()}};
     }
 
     auto frame_length(std::span<const std::byte> data) -> std::uint32_t
@@ -163,7 +279,7 @@ auto encode_frames(std::span<const byte_buffer> messages,
             append_frame(out, message, false);
         else
         {
-            auto payload = compress(message);
+            auto payload = compress_payload(message, algorithm);
             if (!payload)
                 return std::unexpected(payload.error());
             append_frame(out, *payload, true);
@@ -194,14 +310,30 @@ auto decode_frames(std::span<const std::byte> data)
     return out;
 }
 
+stream_decoder::stream_decoder(std::size_t max_message_bytes) noexcept
+    : max_message_bytes_(max_message_bytes)
+{
+}
+
 auto stream_decoder::feed(std::span<const std::byte> bytes)
     -> std::expected<std::vector<message_frame>, std::error_code>
 {
+    if (bytes.size() > max_message_bytes_ ||
+        buffer_.size() > max_message_bytes_ - bytes.size())
+    {
+        buffer_.clear();
+        return std::unexpected(make_error_code(std::errc::message_size));
+    }
     buffer_.insert(buffer_.end(), bytes.begin(), bytes.end());
     std::vector<message_frame> ready;
     while (buffer_.size() >= 5)
     {
         const auto n = frame_length(buffer_);
+        if (n > max_message_bytes_)
+        {
+            buffer_.clear();
+            return std::unexpected(make_error_code(std::errc::message_size));
+        }
         if (buffer_.size() < n + 5)
             break;
         auto one = decode_frames({buffer_.data(), static_cast<std::size_t>(n + 5)});
@@ -241,11 +373,12 @@ auto frames_to_messages(std::span<const message_frame> frames,
             return std::unexpected(
                 make_status(status_code::unimplemented,
                     "compressed grpc messages are not enabled"));
-        if (options.compression != compression_algorithm::gzip)
+        if (options.compression == compression_algorithm::identity)
             return std::unexpected(
                 make_status(status_code::unimplemented,
                     "unsupported grpc compression algorithm"));
-        auto payload = decompress(frame.payload, options.max_message_bytes);
+        auto payload = decompress_payload(frame.payload, options.max_message_bytes,
+            options.compression);
         if (!payload)
             return std::unexpected(payload.error());
         out.push_back(std::move(*payload));

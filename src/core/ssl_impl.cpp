@@ -165,13 +165,18 @@ namespace {
             if (!opened || opened->plaintext.size() > max_out_len)
                 return ssl_ticket_aead_ignore_ticket;
 
-            // A ticket may still resume a normal 1-RTT handshake repeatedly. It
-            // becomes single-use only when BoringSSL has actually entered the
-            // early-data path, so ordinary session resumption is not consumed.
-            if (SSL_in_early_data(ssl) == 1 &&
-                (!state->callbacks.consume_early_data || opened->identity.empty() ||
-                    !state->callbacks.consume_early_data(opened->identity,
-                        opened->early_data_expires_at)))
+            // BoringSSL invokes ticket AEAD open while selecting the session,
+            // before SSL_in_early_data() exposes the final offer/acceptance
+            // state.  Do not mistake that transient false value for a 1-RTT
+            // resume: accepting the ticket first and trying to consume it
+            // later leaves a replay window.  Consume every successful
+            // application-owned resumption ticket instead.  This is the
+            // conservative, auditable policy: a normal resumption also uses
+            // one ticket, while the server can safely accept at most one
+            // 0-RTT attempt for that identity.
+            if (!state->callbacks.consume_early_data || opened->identity.empty() ||
+                !state->callbacks.consume_early_data(opened->identity,
+                    opened->early_data_expires_at))
             {
                 return ssl_ticket_aead_ignore_ticket;
             }
@@ -653,8 +658,47 @@ auto ssl_stream::async_handshake(cancel_token& token)
 auto ssl_stream::async_read(mutable_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    // The no-token API must remain on the no-token IOCP path. Creating a
+    // throwaway cancel_token here forces every TLS record through cancellation
+    // registration and several atomic stores even though the caller cannot
+    // cancel it. Windows always uses memory BIOs, so this loop has no direct
+    // socket-BIO readiness branch.
+    for (;;)
+    {
+        const int ret = SSL_read(ssl_, buffer.data, static_cast<int>(buffer.size));
+        if (ret > 0)
+            co_return static_cast<std::size_t>(ret);
+
+        switch (const int error = SSL_get_error(ssl_, ret))
+        {
+        case SSL_ERROR_WANT_READ:
+        {
+            auto flushed = co_await flush_wbio();
+            if (!flushed)
+                co_return std::unexpected(flushed.error());
+            auto filled = co_await fill_rbio();
+            if (!filled)
+                co_return std::unexpected(filled.error());
+            break;
+        }
+        case SSL_ERROR_WANT_WRITE:
+        {
+            auto flushed = co_await flush_wbio();
+            if (!flushed)
+                co_return std::unexpected(flushed.error());
+            break;
+        }
+        case SSL_ERROR_ZERO_RETURN:
+            co_return static_cast<std::size_t>(0);
+        default:
+            co_return std::unexpected(make_ssl_error(error));
+        }
+    }
+#else
     cancel_token token;
     co_return co_await async_read(buffer, token);
+#endif
 }
 
 auto ssl_stream::async_read(mutable_buffer buffer, cancel_token& token)
@@ -722,8 +766,45 @@ auto ssl_stream::async_read(mutable_buffer buffer, cancel_token& token)
 auto ssl_stream::async_write(const_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    for (;;)
+    {
+        const int ret = SSL_write(ssl_, buffer.data, static_cast<int>(buffer.size));
+        if (ret > 0)
+        {
+            auto flushed = co_await flush_wbio();
+            if (!flushed)
+                co_return std::unexpected(flushed.error());
+            co_return static_cast<std::size_t>(ret);
+        }
+
+        switch (const int error = SSL_get_error(ssl_, ret))
+        {
+        case SSL_ERROR_WANT_WRITE:
+        {
+            auto flushed = co_await flush_wbio();
+            if (!flushed)
+                co_return std::unexpected(flushed.error());
+            break;
+        }
+        case SSL_ERROR_WANT_READ:
+        {
+            auto flushed = co_await flush_wbio();
+            if (!flushed)
+                co_return std::unexpected(flushed.error());
+            auto filled = co_await fill_rbio();
+            if (!filled)
+                co_return std::unexpected(filled.error());
+            break;
+        }
+        default:
+            co_return std::unexpected(make_ssl_error(error));
+        }
+    }
+#else
     cancel_token token;
     co_return co_await async_write(buffer, token);
+#endif
 }
 
 auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
@@ -797,8 +878,24 @@ auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
 auto ssl_stream::async_write_all(const_buffer buffer)
     -> task<std::expected<void, std::error_code>>
 {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    const auto* data = static_cast<const std::byte*>(buffer.data);
+    std::size_t written = 0;
+    while (written < buffer.size)
+    {
+        auto result = co_await async_write(
+            const_buffer{data + written, buffer.size - written});
+        if (!result)
+            co_return std::unexpected(result.error());
+        if (*result == 0)
+            co_return std::unexpected(make_error_code(errc::broken_pipe));
+        written += *result;
+    }
+    co_return {};
+#else
     cancel_token token;
     co_return co_await async_write_all(buffer, token);
+#endif
 }
 
 auto ssl_stream::async_write_all(const_buffer buffer, cancel_token& token)
@@ -940,8 +1037,25 @@ auto ssl_stream::native() const noexcept -> SSL*
 auto ssl_stream::flush_wbio()
     -> task<std::expected<void, std::error_code>>
 {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    for (;;)
+    {
+        char* encrypted = nullptr;
+        const auto pending = BIO_get_mem_data(wbio_, &encrypted);
+        if (pending <= 0)
+            break;
+        auto written = co_await cnetmod::async_write_all(
+            io_ctx_, sock_, const_buffer{encrypted, static_cast<std::size_t>(pending)});
+        if (!written)
+            co_return std::unexpected(written.error());
+        if (BIO_reset(wbio_) != 1)
+            co_return std::unexpected(make_ssl_error(SSL_ERROR_SSL));
+    }
+    co_return {};
+#else
     cancel_token token;
     co_return co_await flush_wbio(token);
+#endif
 }
 
 auto ssl_stream::flush_wbio(cancel_token& token)
@@ -978,8 +1092,25 @@ auto ssl_stream::flush_wbio(cancel_token& token)
 auto ssl_stream::fill_rbio()
     -> task<std::expected<void, std::error_code>>
 {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    // Only the completed range reaches BIO_write. Avoid both cancellation
+    // registration and needless initialization for this record scratch area.
+    std::array<std::byte, 8192> buffer;
+    auto read = co_await cnetmod::async_read(
+        io_ctx_, sock_, mutable_buffer{buffer.data(), buffer.size()});
+    if (!read)
+        co_return std::unexpected(read.error());
+    if (*read == 0)
+    {
+        co_return std::unexpected(
+            std::make_error_code(std::errc::connection_reset));
+    }
+    BIO_write(rbio_, buffer.data(), static_cast<int>(*read));
+    co_return {};
+#else
     cancel_token token;
     co_return co_await fill_rbio(token);
+#endif
 }
 
 auto ssl_stream::fill_rbio(cancel_token& token)
@@ -993,7 +1124,10 @@ auto ssl_stream::fill_rbio(cancel_token& token)
         co_return std::unexpected(make_error_code(std::errc::not_supported));
     #endif
     }
-    std::array<std::byte, 8192> buffer{};
+    // async_read initializes exactly the returned byte range before it is
+    // passed to BIO_write below. Clearing the complete scratch buffer first
+    // would be pure write traffic for the usual small-record TLS path.
+    std::array<std::byte, 8192> buffer;
     auto read = co_await cnetmod::async_read(
         io_ctx_, sock_, mutable_buffer{buffer.data(), buffer.size()}, token);
     if (!read)

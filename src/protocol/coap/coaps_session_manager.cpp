@@ -52,7 +52,7 @@ auto coaps_session_manager::dispatch(const endpoint& peer,
     std::shared_ptr<session_state> state;
     bool created = false;
     {
-        std::scoped_lock lock(mutex_);
+        concurrent_containers::exclusive_latch_guard lock{latch_};
         if (stopping_)
         {
             return false;
@@ -93,7 +93,7 @@ auto coaps_session_manager::dispatch(const endpoint& peer,
 
 void coaps_session_manager::stop() noexcept
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     stopping_ = true;
     for (auto& [_, state] : sessions_)
     {
@@ -104,7 +104,7 @@ void coaps_session_manager::stop() noexcept
 
 auto coaps_session_manager::session_count() const -> std::size_t
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     return sessions_.size();
 }
 
@@ -132,7 +132,7 @@ auto coaps_session_manager::run_session(endpoint peer,
 void coaps_session_manager::remove_session(std::string key,
     const std::shared_ptr<session_state>& state)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     auto it = sessions_.find(key);
     if (it != sessions_.end() && it->second == state)
     {

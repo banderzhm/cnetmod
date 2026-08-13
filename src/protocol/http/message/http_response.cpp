@@ -35,13 +35,30 @@ auto response::set_version(http_version version) noexcept -> response&
 auto response::set_header(std::string_view key, std::string_view value)
     -> response&
 {
+    if (key == "Date")
+        has_cached_date_header_ = false;
     headers_[std::string(key)] = std::string(value);
+    return *this;
+}
+
+auto response::set_header_owned(std::string_view key, std::string value)
+    -> response&
+{
+    if (key == "Date")
+        has_cached_date_header_ = false;
+    headers_[std::string(key)] = std::move(value);
     return *this;
 }
 
 auto response::append_header(std::string_view key, std::string_view value)
     -> response&
 {
+    if (key == "Date" && has_cached_date_header_)
+    {
+        headers_["Date"] = std::string{cached_date_header_.data(),
+            cached_date_header_.size()};
+        has_cached_date_header_ = false;
+    }
     auto it = headers_.find(key);
     if (it != headers_.end())
     {
@@ -80,6 +97,8 @@ auto response::append_trailer(std::string_view key, std::string_view value)
 
 auto response::remove_header(std::string_view key) -> response&
 {
+    if (key == "Date")
+        has_cached_date_header_ = false;
     headers_.erase(key);
     return *this;
 }
@@ -112,6 +131,7 @@ void response::reset(int status_code, http_version version) noexcept
     headers_.clear();
     trailers_.clear();
     body_.clear();
+    has_cached_date_header_ = false;
 }
 
 auto response::set_cookie(std::string_view name, std::string_view value,
@@ -168,6 +188,8 @@ auto response::take_body() noexcept -> std::string
 
 auto response::get_header(std::string_view key) const -> std::string_view
 {
+    if (key == "Date" && has_cached_date_header_)
+        return {cached_date_header_.data(), cached_date_header_.size()};
     auto it = headers_.find(key);
     return it != headers_.end() ? std::string_view(it->second)
                                 : std::string_view{};
@@ -180,10 +202,24 @@ auto response::serialize() const -> std::string
     return out;
 }
 
+void response::set_cached_date_header(std::array<char, 29U> value) noexcept
+{
+    cached_date_header_ = value;
+    has_cached_date_header_ = true;
+}
+
+auto response::cached_date_header() const noexcept -> std::string_view
+{
+    return has_cached_date_header_
+        ? std::string_view{cached_date_header_.data(), cached_date_header_.size()}
+        : std::string_view{};
+}
+
 void response::serialize_to(std::string& output) const
 {
     output.clear();
     const auto reserve_size = 64U + body_.size() +
+        (has_cached_date_header_ ? cached_date_header_.size() + 8U : 0U) +
         std::accumulate(headers_.begin(), headers_.end(), std::size_t{},
             [](std::size_t total, const auto& header)
             {
@@ -196,6 +232,12 @@ void response::serialize_to(std::string& output) const
     output += ' ';
     output += status_msg_.empty() ? status_reason(status_code_) : status_msg_;
     output += "\r\n";
+    if (has_cached_date_header_)
+    {
+        output += "Date: ";
+        output.append(cached_date_header_.data(), cached_date_header_.size());
+        output += "\r\n";
+    }
     for (const auto& [key, value] : headers_)
     {
         output += key;

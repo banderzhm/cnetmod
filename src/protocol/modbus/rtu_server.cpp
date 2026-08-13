@@ -223,8 +223,9 @@ private:
                 // Wait for frame delay before sending
                 co_await async_sleep(ctx_, config_.frame_delay);
 
-                auto send_result = co_await async_write_serial(response_frame);
-                // Ignore send errors, continue serving
+                // A response write failure terminates only this transaction;
+                // keep the serial service alive for the next request.
+                (void)co_await async_write_serial(response_frame);
             }
 
             buffer.resize(256);

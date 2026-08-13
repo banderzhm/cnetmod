@@ -4,6 +4,7 @@ export module cnetmod.orm.query_cache;
 import std;
 import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::orm {
 
@@ -61,7 +62,7 @@ public:
 private:
     cache_config config_;
     std::unordered_map<cache_key, cache_entry> cache_;
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     void evict_one();
 };
 
@@ -81,7 +82,7 @@ public:
 private:
     cache_config config_;
     std::unordered_map<cache_key, cache_entry> cache_;
-    mutable std::shared_mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::jthread eviction_thread_;
     std::atomic<bool> stop_eviction_{false};
     void evict_one();

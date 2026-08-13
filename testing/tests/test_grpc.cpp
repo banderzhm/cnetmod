@@ -2,10 +2,12 @@
 
 import std;
 import cnetmod.protocol.grpc;
+import cnetmod.protocol.http.middleware.tracing;
 
 using namespace cnetmod::grpc;
 
-TEST(grpc_frame_roundtrip) {
+TEST(grpc_frame_roundtrip)
+{
     std::array<std::byte, 3> payload{std::byte{1}, std::byte{2}, std::byte{3}};
     auto encoded = encode_frame(payload);
     ASSERT_TRUE(encoded.has_value());
@@ -18,7 +20,8 @@ TEST(grpc_frame_roundtrip) {
     ASSERT_EQ(decoded->front().payload.size(), std::size_t{3});
 }
 
-TEST(grpc_stream_decoder_handles_partial_frames) {
+TEST(grpc_stream_decoder_handles_partial_frames)
+{
     std::array<std::byte, 2> payload{std::byte{0xaa}, std::byte{0xbb}};
     auto encoded = encode_frame(payload);
     ASSERT_TRUE(encoded.has_value());
@@ -34,7 +37,20 @@ TEST(grpc_stream_decoder_handles_partial_frames) {
     ASSERT_EQ(second->front().payload.size(), std::size_t{2});
 }
 
-TEST(grpc_message_stream_decoder_emits_complete_messages_only) {
+TEST(grpc_stream_decoder_rejects_oversized_incomplete_frame)
+{
+    stream_decoder decoder(8);
+    std::array<std::byte, 5> oversized_header{
+        std::byte{0}, std::byte{0}, std::byte{0}, std::byte{0}, std::byte{9}};
+
+    auto decoded = decoder.feed(oversized_header);
+    ASSERT_FALSE(decoded.has_value());
+    ASSERT_EQ(decoded.error(), std::make_error_code(std::errc::message_size));
+    ASSERT_EQ(decoder.buffered_bytes(), std::size_t{0});
+}
+
+TEST(grpc_message_stream_decoder_emits_complete_messages_only)
+{
     std::array<std::byte, 2> payload{std::byte{0x11}, std::byte{0x22}};
     message_stream_encoder encoder;
     auto encoded = encoder.encode(payload);
@@ -52,11 +68,13 @@ TEST(grpc_message_stream_decoder_emits_complete_messages_only) {
     ASSERT_TRUE(std::ranges::equal(second->front(), payload));
 }
 
-TEST(grpc_service_path) {
+TEST(grpc_service_path)
+{
     ASSERT_EQ(service_path("demo.Echo", "Say"), std::string("/demo.Echo/Say"));
 }
 
-TEST(grpc_status_response_uses_trailers) {
+TEST(grpc_status_response_uses_trailers)
+{
     auto resp = make_status_response(status{
         .code = status_code::unavailable,
         .message = "backend down",
@@ -69,10 +87,11 @@ TEST(grpc_status_response_uses_trailers) {
     ASSERT_EQ(resp.trailers().at("grpc-message"), std::string("backend down"));
     ASSERT_EQ(resp.trailers().at("retry-info"), std::string("later"));
     ASSERT_EQ(static_cast<int>(status_from_response(resp).code),
-              static_cast<int>(status_code::unavailable));
+        static_cast<int>(status_code::unavailable));
 }
 
-TEST(grpc_health_codec_roundtrip) {
+TEST(grpc_health_codec_roundtrip)
+{
     auto req = health::encode_request("demo.Echo");
     auto decoded_req = health::decode_request(req);
     ASSERT_TRUE(decoded_req.has_value());
@@ -82,10 +101,11 @@ TEST(grpc_health_codec_roundtrip) {
     auto decoded_resp = health::decode_response(resp);
     ASSERT_TRUE(decoded_resp.has_value());
     ASSERT_EQ(static_cast<int>(*decoded_resp),
-              static_cast<int>(health::serving_status::serving));
+        static_cast<int>(health::serving_status::serving));
 }
 
-TEST(grpc_compressed_frames_are_rejected_without_opt_in) {
+TEST(grpc_compressed_frames_are_rejected_without_opt_in)
+{
     std::array<std::byte, 3> payload{std::byte{1}, std::byte{2}, std::byte{3}};
     auto frame = encode_frame(payload, true);
     ASSERT_TRUE(frame.has_value());
@@ -93,19 +113,21 @@ TEST(grpc_compressed_frames_are_rejected_without_opt_in) {
     auto decoded = decode_frames(*frame);
     ASSERT_TRUE(decoded.has_value());
     auto messages = frames_to_messages(*decoded, codec_options{
-        .compression = compression_algorithm::gzip,
-        .accept_compressed = false,
-        .max_message_bytes = 1024,
-    });
+                                                     .compression = compression_algorithm::gzip,
+                                                     .accept_compressed = false,
+                                                     .max_message_bytes = 1024,
+                                                 });
     ASSERT_FALSE(messages.has_value());
     ASSERT_EQ(static_cast<int>(messages.error().code),
-              static_cast<int>(status_code::unimplemented));
+        static_cast<int>(status_code::unimplemented));
 }
 
 #ifdef CNETMOD_HAS_ZLIB
-TEST(grpc_gzip_frame_roundtrip) {
+TEST(grpc_gzip_frame_roundtrip)
+{
     byte_buffer payload;
-    for (int i = 0; i < 256; ++i) {
+    for (int i = 0; i < 256; ++i)
+    {
         payload.push_back(static_cast<std::byte>('a' + (i % 3)));
     }
     std::vector<byte_buffer> messages{payload};
@@ -119,10 +141,10 @@ TEST(grpc_gzip_frame_roundtrip) {
     ASSERT_TRUE(frames->front().compressed);
 
     auto decoded = frames_to_messages(*frames, codec_options{
-        .compression = compression_algorithm::gzip,
-        .accept_compressed = true,
-        .max_message_bytes = 4096,
-    });
+                                                   .compression = compression_algorithm::gzip,
+                                                   .accept_compressed = true,
+                                                   .max_message_bytes = 4096,
+                                               });
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(decoded->size(), std::size_t{1});
     ASSERT_EQ(decoded->front().size(), payload.size());
@@ -130,7 +152,50 @@ TEST(grpc_gzip_frame_roundtrip) {
 }
 #endif
 
-TEST(grpc_metadata_size_and_compression_helpers) {
+#ifdef CNETMOD_HAS_BROTLI
+TEST(grpc_brotli_frame_roundtrip)
+{
+    byte_buffer payload;
+    for (int i = 0; i < 256; ++i)
+        payload.push_back(static_cast<std::byte>('a' + (i % 3)));
+    std::vector<byte_buffer> messages{payload};
+    auto encoded = encode_frames(messages, compression_algorithm::brotli);
+    ASSERT_TRUE(encoded.has_value());
+    auto frames = decode_frames(*encoded);
+    ASSERT_TRUE(frames.has_value());
+    auto decoded = frames_to_messages(*frames, codec_options{
+                                                   .compression = compression_algorithm::brotli,
+                                                   .accept_compressed = true,
+                                                   .max_message_bytes = 4096,
+                                               });
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::ranges::equal(decoded->front(), payload));
+}
+#endif
+
+#ifdef CNETMOD_HAS_ZSTD
+TEST(grpc_zstd_frame_roundtrip)
+{
+    byte_buffer payload;
+    for (int i = 0; i < 256; ++i)
+        payload.push_back(static_cast<std::byte>('a' + (i % 3)));
+    std::vector<byte_buffer> messages{payload};
+    auto encoded = encode_frames(messages, compression_algorithm::zstd);
+    ASSERT_TRUE(encoded.has_value());
+    auto frames = decode_frames(*encoded);
+    ASSERT_TRUE(frames.has_value());
+    auto decoded = frames_to_messages(*frames, codec_options{
+                                                   .compression = compression_algorithm::zstd,
+                                                   .accept_compressed = true,
+                                                   .max_message_bytes = 4096,
+                                               });
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::ranges::equal(decoded->front(), payload));
+}
+#endif
+
+TEST(grpc_metadata_size_and_compression_helpers)
+{
     metadata md;
     md.emplace("authorization", "Bearer token");
     md.emplace("x-trace-id", "abc");
@@ -139,10 +204,30 @@ TEST(grpc_metadata_size_and_compression_helpers) {
     ASSERT_TRUE(accepts_compression("identity, gzip", compression_algorithm::gzip));
     ASSERT_FALSE(accepts_compression("identity", compression_algorithm::gzip));
     ASSERT_EQ(static_cast<int>(compression_from_header("gzip").value()),
-              static_cast<int>(compression_algorithm::gzip));
+        static_cast<int>(compression_algorithm::gzip));
 }
 
-TEST(grpc_reflection_lists_services) {
+TEST(grpc_trace_context_is_explicit_and_single_valued)
+{
+    const auto parent = cnetmod::http::tracing::parse_traceparent(
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+        "vendor=value");
+    ASSERT_TRUE(parent.has_value());
+    metadata md{{"traceparent", "stale"}, {"tracestate", "stale"}};
+    const auto child = inject_trace_context(md, *parent);
+    ASSERT_EQ(child.trace_id, parent->trace_id);
+    ASSERT_NE(child.span_id, parent->span_id);
+    ASSERT_EQ(md.count("traceparent"), std::size_t{1});
+    ASSERT_EQ(md.count("tracestate"), std::size_t{1});
+    const auto extracted = extract_trace_context(md);
+    ASSERT_TRUE(extracted.has_value());
+    ASSERT_EQ(extracted->trace_id, child.trace_id);
+    ASSERT_EQ(extracted->span_id, child.span_id);
+    ASSERT_EQ(extracted->tracestate, "vendor=value");
+}
+
+TEST(grpc_reflection_lists_services)
+{
     std::vector<std::string> services{
         "cnetmod.testing.grpc.EchoService",
         "grpc.health.v1.Health",
@@ -151,7 +236,7 @@ TEST(grpc_reflection_lists_services) {
     auto decoded_req = reflection::decode_request(req);
     ASSERT_TRUE(decoded_req.has_value());
     ASSERT_EQ(static_cast<int>(decoded_req->kind),
-              static_cast<int>(reflection::request_kind::list_services));
+        static_cast<int>(reflection::request_kind::list_services));
 
     auto resp = reflection::encode_list_services_response(
         req, std::span<const std::string>{services.data(), services.size()});
@@ -162,7 +247,8 @@ TEST(grpc_reflection_lists_services) {
     ASSERT_TRUE(std::ranges::find(*decoded_resp, "grpc.health.v1.Health") != decoded_resp->end());
 }
 
-TEST(grpc_router_options_are_configurable) {
+TEST(grpc_router_options_are_configurable)
+{
     service_router router(server_options{
         .max_receive_message_bytes = 1024,
         .max_send_message_bytes = 2048,

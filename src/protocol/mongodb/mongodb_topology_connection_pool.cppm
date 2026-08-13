@@ -3,6 +3,7 @@ export module cnetmod.protocol.mongodb:topology_connection_pool;
 import std;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :error;
 import :bson_document;
 import :connection_pool;
@@ -54,7 +55,9 @@ private:
     io_context& context_;
     topology_connection_pool_options options_;
     topology_monitor topology_;
-    std::mutex mutex_;
+    // Pool creation, statistics and close share ownership of the per-server
+    // map. A returned pool remains owned by this map for its lifetime.
+    concurrent_containers::atomic_rw_latch pools_latch_;
     std::map<server_address, std::unique_ptr<connection_pool>> pools_;
 };
 

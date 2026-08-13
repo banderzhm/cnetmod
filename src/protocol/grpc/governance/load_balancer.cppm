@@ -7,6 +7,7 @@ export module cnetmod.protocol.grpc.governance.load_balancer;
 import std;
 import cnetmod.protocol.grpc.governance.discovery;
 import cnetmod.protocol.grpc.governance.endpoint;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::governance {
 
@@ -20,7 +21,7 @@ public:
 
 private:
     std::unordered_map<std::string, std::int64_t> current_weights_;
-    std::mutex mutex_;
+    concurrent_containers::atomic_rw_latch latch_;
 };
 
 } // namespace cnetmod::grpc::governance

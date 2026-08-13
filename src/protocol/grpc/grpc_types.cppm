@@ -6,6 +6,7 @@ export module cnetmod.protocol.grpc.types;
 
 import std;
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.middleware.tracing;
 
 namespace cnetmod::grpc {
 
@@ -37,7 +38,9 @@ export inline constexpr std::size_t default_max_metadata_bytes = 8u * 1024u;
 export enum class compression_algorithm
 {
     identity,
-    gzip
+    gzip,
+    zstd,
+    brotli
 };
 
 export struct status
@@ -124,6 +127,9 @@ export auto compression_from_header(std::string_view text)
     -> std::optional<compression_algorithm>;
 export auto accepts_compression(std::string_view header,
     compression_algorithm algorithm) -> bool;
+/// Whether this build has the codec dependency required by an algorithm.
+/// Callers should only advertise supported encodings in grpc-accept-encoding.
+export auto compression_supported(compression_algorithm algorithm) noexcept -> bool;
 export auto parse_service_path(std::string_view path)
     -> std::optional<std::pair<std::string, std::string>>;
 export auto metadata_from_headers(const http::header_map& headers) -> metadata;
@@ -144,5 +150,13 @@ export void add_binary_metadata(metadata& md, std::string key,
     std::span<const std::byte> value);
 export auto get_binary_metadata(const metadata& md, std::string_view key)
     -> std::vector<byte_buffer>;
+
+/// Create and inject a W3C child context into gRPC metadata. The caller owns
+/// the context value, avoiding thread-local state that would be unsafe across
+/// coroutine resumption on another worker.
+export auto inject_trace_context(metadata& md,
+    const http::tracing::trace_context& parent) -> http::tracing::trace_context;
+export auto extract_trace_context(const metadata& md)
+    -> std::optional<http::tracing::trace_context>;
 
 } // namespace cnetmod::grpc

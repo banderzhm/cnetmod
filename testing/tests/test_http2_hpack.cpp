@@ -8,19 +8,43 @@ import cnetmod.protocol.http.v2.huffman;
 
 using namespace cnetmod::http::v2;
 
-TEST(hpack_huffman_rfc_example) {
+TEST(hpack_huffman_rfc_example)
+{
     // RFC 7541 Appendix C.4.1: "www.example.com" Huffman coding.
     constexpr std::array encoded{
-        std::byte{0xf1}, std::byte{0xe3}, std::byte{0xc2}, std::byte{0xe5},
-        std::byte{0xf2}, std::byte{0x3a}, std::byte{0x6b}, std::byte{0xa0},
-        std::byte{0xab}, std::byte{0x90}, std::byte{0xf4}, std::byte{0xff},
+        std::byte{0xf1},
+        std::byte{0xe3},
+        std::byte{0xc2},
+        std::byte{0xe5},
+        std::byte{0xf2},
+        std::byte{0x3a},
+        std::byte{0x6b},
+        std::byte{0xa0},
+        std::byte{0xab},
+        std::byte{0x90},
+        std::byte{0xf4},
+        std::byte{0xff},
     };
     auto decoded = huffman_decode(encoded);
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(*decoded, std::string("www.example.com"));
 }
 
-TEST(hpack_dynamic_table_and_huffman_roundtrip) {
+TEST(hpack_huffman_all_byte_symbols_roundtrip)
+{
+    std::string input;
+    input.reserve(256U);
+    for (unsigned value{}; value <= 0xffU; ++value)
+        input.push_back(static_cast<char>(value));
+
+    const auto encoded = huffman_encode(input);
+    const auto decoded = huffman_decode(encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(*decoded, input);
+}
+
+TEST(hpack_dynamic_table_and_huffman_roundtrip)
+{
     header_compression encoder;
     header_compression decoder;
     const std::array fields{
@@ -35,7 +59,8 @@ TEST(hpack_dynamic_table_and_huffman_roundtrip) {
     auto first_decoded = decoder.decode(*first);
     ASSERT_TRUE(first_decoded.has_value());
     ASSERT_EQ(first_decoded->size(), fields.size());
-    for (std::size_t i = 0; i < fields.size(); ++i) {
+    for (std::size_t i = 0; i < fields.size(); ++i)
+    {
         ASSERT_EQ((*first_decoded)[i].name, fields[i].name);
         ASSERT_EQ((*first_decoded)[i].value, fields[i].value);
     }
@@ -47,7 +72,8 @@ TEST(hpack_dynamic_table_and_huffman_roundtrip) {
     ASSERT_EQ(second_decoded->size(), fields.size());
 }
 
-TEST(hpack_rejects_invalid_huffman_padding) {
+TEST(hpack_rejects_invalid_huffman_padding)
+{
     constexpr std::array malformed{std::byte{0xff}};
     ASSERT_FALSE(huffman_decode(malformed).has_value());
 }

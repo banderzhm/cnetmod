@@ -190,7 +190,22 @@ auto decoded = orm::from_json<Article>(nlohmann::json::parse(payload, nullptr, f
 </select>
 ```
 
-嵌套 select 当前为显式的 eager N+1 执行；面向类型 DTO 的自动绑定与 XML 自动延迟代理尚未实现。
+嵌套 select 当前为显式的 eager N+1 执行。根对象的标量字段可通过
+`query_object_graph_as<T>()` 直接投影到 `CNETMOD_MODEL` DTO；关联和集合由
+`xml_object_graph_binder<T>` 显式绑定到真实的 C++ 成员，避免 XML 字符串猜测成员布局。
+例如为 `User` 声明一次绑定：
+
+```cpp
+namespace cnetmod::orm {
+template <> struct xml_object_graph_binder<User> {
+    static void bind(User& user, const mapped_object& source) {
+        user.team = mapped_association_as<Team>(source, "team");
+        user.roles = mapped_collection_as<Role>(source, "roles");
+    }
+};
+} // namespace cnetmod::orm
+```
+
 `lazy_relation<T>` 可用于 C++ 业务层显式协程按需加载，访问必须 `co_await get()`，不会在普通属性访问中阻塞。
 因此这里不是 MyBatis / MyBatis-Plus 的完整 XML 运行时兼容。
 
@@ -373,9 +388,10 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 | `<choose>` / `<when>` / `<otherwise>` | 多分支（首个匹配的 `when` 生效） | `when` 带 `test` |
 | `<bind>` | 绑定表达式到新变量 | `name`、`value` |
 
-语句标签读取 `id`；`<select>` 还支持 `resultMap`，供对象图查询使用。尚未实现
-`resultType` / `parameterType`。
-`<foreach>` 目前不支持 `index` 属性。XML 中 `>`、`<`、`&` 需写成
+语句标签读取 `id`；`<select>` 支持 `resultMap` 或 `resultType`（两者互斥，加载时
+校验）；所有语句都可声明 `parameterType`，并可通过
+`statement_result_type()` / `statement_parameter_type()` 查询元数据。
+`<foreach>` 支持可选的零基 `index` 属性，迭代期间作为参数上下文变量绑定。XML 中 `>`、`<`、`&` 需写成
 `&gt;`、`&lt;`、`&amp;`。
 
 ### namespace 与语句 ID
@@ -397,7 +413,12 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 
 - 支持点路径访问集合元素属性：`#{user.name}`、`${cond.field}`。
 - 参数值来自 `param_context`（map、模型对象或集合，见「注册与加载」）。
-- `#{}` / `${}` 均不支持 `jdbcType=` 等附加修饰符。
+- `#{property,jdbcType=...,javaType=...,typeHandler=...,mode=...,numericScale=...}`
+  会绑定 `property`，并保留修饰元数据。MySQL XML session 默认使用
+  `COM_STMT_PREPARE` / `COM_STMT_EXECUTE`，值以二进制参数编码发送而非插入 SQL
+  文本；`set_native_prepared_statements(false)` 仅用于不支持 MySQL prepared
+  protocol 的旧代理兼容。
+- `${}` 只做直接替换，不能用来传递 JDBC 修饰符。
 
 ### test 表达式
 

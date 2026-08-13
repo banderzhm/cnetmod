@@ -13,6 +13,7 @@ export import cnetmod.coro.awaitable;
 export import cnetmod.coro.bridge;
 export import cnetmod.coro.channel;
 export import cnetmod.coro.mutex;
+export import cnetmod.coro.striped_mutex;
 export import cnetmod.coro.shared_mutex;
 export import cnetmod.coro.semaphore;
 export import cnetmod.coro.wait_group;

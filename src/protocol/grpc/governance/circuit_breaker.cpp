@@ -23,7 +23,7 @@ circuit_breaker::circuit_breaker(circuit_breaker_config config) noexcept
 
 auto circuit_breaker::try_acquire() noexcept -> bool
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     transition_if_expired(std::chrono::steady_clock::now());
     if (state_ == circuit_breaker_state::open)
         return false;
@@ -38,7 +38,7 @@ auto circuit_breaker::try_acquire() noexcept -> bool
 
 void circuit_breaker::record_success() noexcept
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     if (state_ == circuit_breaker_state::half_open)
     {
         if (half_open_in_flight_ > 0)
@@ -58,7 +58,7 @@ void circuit_breaker::record_success() noexcept
 
 void circuit_breaker::record_failure() noexcept
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     const auto now = std::chrono::steady_clock::now();
     if (state_ == circuit_breaker_state::half_open)
     {
@@ -74,7 +74,7 @@ void circuit_breaker::record_failure() noexcept
 
 void circuit_breaker::reset() noexcept
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     state_ = circuit_breaker_state::closed;
     consecutive_failures_ = 0;
     half_open_successes_ = 0;
@@ -84,7 +84,7 @@ void circuit_breaker::reset() noexcept
 
 auto circuit_breaker::state() const noexcept -> circuit_breaker_state
 {
-    std::lock_guard lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     const_cast<circuit_breaker*>(this)->transition_if_expired(
         std::chrono::steady_clock::now());
     return state_;

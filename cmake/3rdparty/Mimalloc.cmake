@@ -31,11 +31,40 @@
 #   From source: https://github.com/microsoft/mimalloc
 #
 function(cnetmod_use_mimalloc)
-    # Try to find mimalloc package
-    find_package(mimalloc QUIET)
+    # Prefer the active package toolchain. Some IDE integrations install a
+    # manifest into <build>/vcpkg_installed but do not append that prefix to
+    # CMAKE_PREFIX_PATH, so plain find_package() incorrectly falls back to
+    # the system allocator even though mimalloc is present.
+    find_package(mimalloc CONFIG QUIET)
+    if(NOT mimalloc_FOUND)
+        file(GLOB _cnetmod_mimalloc_vcpkg_configs
+            "${CMAKE_BINARY_DIR}/vcpkg_installed/*/share/mimalloc/mimalloc-config.cmake")
+        list(LENGTH _cnetmod_mimalloc_vcpkg_configs _cnetmod_mimalloc_config_count)
+        if(_cnetmod_mimalloc_config_count GREATER 0)
+            list(GET _cnetmod_mimalloc_vcpkg_configs 0 _cnetmod_mimalloc_config)
+            include("${_cnetmod_mimalloc_config}")
+            if(TARGET mimalloc)
+                set(mimalloc_FOUND TRUE)
+                get_filename_component(mimalloc_DIR "${_cnetmod_mimalloc_config}" DIRECTORY)
+            endif()
+        endif()
+    endif()
     
     if(mimalloc_FOUND)
         message(STATUS "Found mimalloc: ${mimalloc_DIR}")
+
+        # vcpkg's imported mimalloc target provides Debug and Release
+        # locations only. Without an explicit mapping, Visual Studio selects
+        # mimalloc-debug.dll for RelWithDebInfo; that DLL uses the Debug CRT
+        # while cnetmod uses /MD, so mimalloc-redirect initializes too late
+        # and allocation interception is disabled. RelWithDebInfo is an
+        # optimized /MD configuration and must use the Release DLL.
+        if(WIN32 AND TARGET mimalloc)
+            set_property(TARGET mimalloc APPEND PROPERTY
+                MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
+            set_property(TARGET mimalloc APPEND PROPERTY
+                MAP_IMPORTED_CONFIG_MINSIZEREL Release)
+        endif()
         
         # Create an interface library to propagate mimalloc to all targets
         if(NOT TARGET cnetmod::mimalloc)
@@ -101,11 +130,48 @@ endfunction()
 function(cnetmod_link_mimalloc target)
     if(CNETMOD_USING_MIMALLOC)
         if(TARGET mimalloc)
-            target_link_libraries(${target} PRIVATE mimalloc)
+            # cnetmod_core is static. Its allocator dependency must reach
+            # final executables; PRIVATE linkage would otherwise leave the
+            # import library out of a consumer's link step.
+            target_link_libraries(${target} PUBLIC mimalloc)
         elseif(TARGET cnetmod::mimalloc)
-            target_link_libraries(${target} PRIVATE cnetmod::mimalloc)
+            target_link_libraries(${target} PUBLIC cnetmod::mimalloc)
         endif()
+
     endif()
+endfunction()
+
+# Dynamic mimalloc on Windows uses a redirect DLL beside the executable.  CMake
+# propagates the import library through a static cnetmod_core target, but does
+# not copy imported runtime DLLs for Visual Studio projects automatically.
+# Attach this to executable targets so command-line runs work as well as IDE
+# launches; copying both files is required for CRT allocation redirection.
+function(cnetmod_deploy_mimalloc_runtime target)
+    if(NOT (WIN32 AND CNETMOD_USING_MIMALLOC AND TARGET mimalloc))
+        return()
+    endif()
+
+    get_target_property(_cnetmod_mimalloc_type mimalloc TYPE)
+    if(NOT _cnetmod_mimalloc_type STREQUAL "SHARED_LIBRARY")
+        return()
+    endif()
+
+    # mimalloc's Windows redirect DLL activates only when the main executable
+    # imports a mimalloc API. Keep that requirement on the executable which
+    # also receives the DLLs; a static cnetmod_core must not make unrelated
+    # tests and applications unloadable.
+    if(MSVC)
+        target_link_options(${target} PRIVATE "LINKER:/INCLUDE:mi_version")
+    endif()
+
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:mimalloc>"
+            "$<TARGET_FILE_DIR:${target}>"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect.dll"
+            "$<TARGET_FILE_DIR:${target}>"
+        VERBATIM)
 endfunction()
 
 # Function: cnetmod_print_allocator_info

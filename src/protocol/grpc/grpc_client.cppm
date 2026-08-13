@@ -9,6 +9,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.protocol.grpc.types;
 
 namespace cnetmod::grpc {
@@ -35,6 +36,8 @@ export struct client_options
     std::size_t max_send_message_bytes = default_max_message_bytes;
     std::size_t max_metadata_bytes = default_max_metadata_bytes;
     bool accept_gzip = true;
+    bool accept_zstd = true;
+    bool accept_brotli = true;
     compression_algorithm default_compression = compression_algorithm::identity;
     std::vector<client_request_interceptor> request_interceptors;
     std::vector<client_response_interceptor> response_interceptors;
@@ -50,6 +53,13 @@ public:
     [[nodiscard]] auto unary(unary_request req)
         -> task<std::expected<unary_response, status>>;
     [[nodiscard]] auto unary(unary_request req, cnetmod::cancel_token& token)
+        -> task<std::expected<unary_response, status>>;
+    /// Injects a child W3C span derived from an HTTP handler context.
+    [[nodiscard]] auto unary(unary_request req,
+        const http::request_context& parent)
+        -> task<std::expected<unary_response, status>>;
+    [[nodiscard]] auto unary(unary_request req,
+        const http::tracing::trace_context& parent)
         -> task<std::expected<unary_response, status>>;
 
     [[nodiscard]] auto client_streaming(streaming_request req)

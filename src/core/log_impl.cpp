@@ -1,5 +1,7 @@
 module;
 
+#include <cstdio>
+
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -9,6 +11,12 @@ module;
 
 module cnetmod.core.log;
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
+import cnetmod.utils.concurrent_containers.queue;
+
+namespace logger {
+namespace concurrent_containers = cnetmod::concurrent_containers;
+}
 
 namespace logger::detail {
 
@@ -25,20 +33,24 @@ struct log_event
 
 struct logger_state
 {
-    std::mutex mutex;
-    std::condition_variable wake;
-    std::condition_variable drained;
-    std::deque<log_event> queue;
+    // Configuration and sink lifetime need short synchronous transactions;
+    // the hot producer/consumer path itself is CAS-based MPMC.
+    concurrent_containers::atomic_rw_latch config_latch;
+    concurrent_containers::atomic_rw_latch lifecycle_latch;
+    concurrent_containers::bounded_mpmc_queue<log_event> queue{65536};
     std::jthread worker;
     std::ofstream file;
     std::string name{"cnetmod"};
-    std::size_t queue_limit{65536};
-    std::size_t active_writes{};
-    std::uint64_t dropped{};
+    std::atomic<std::size_t> queue_limit{65536};
+    std::atomic<std::size_t> queued{};
+    std::atomic<std::size_t> active_writes{};
+    std::atomic<std::uint64_t> dropped{};
+    std::atomic<std::uint64_t> work_epoch{};
+    std::atomic<std::uint64_t> drain_epoch{};
     level threshold{level::info};
     output_format format{output_format::text};
     bool console{true};
-    bool stopping{};
+    std::atomic_bool stopping{};
     bool ansi{};
 };
 
@@ -174,7 +186,10 @@ void sink(logger_state& s, const log_event& event)
                   event.message);
     }
     if (s.console)
-        std::println(std::cerr, "{}", line);
+    {
+        std::fwrite(line.data(), 1U, line.size(), stderr);
+        std::fputc('\n', stderr);
+    }
     if (s.file.is_open())
         s.file << line << '\n';
 }
@@ -184,45 +199,47 @@ void worker_loop(std::stop_token token)
     auto& s = state();
     std::stop_callback wake_on_stop{token, [&s]
         {
-            s.wake.notify_all();
+            s.work_epoch.fetch_add(1U, std::memory_order_release);
+            s.work_epoch.notify_all();
         }};
     for (;;)
     {
-        log_event event;
+        while (auto event = s.queue.try_dequeue())
         {
-            std::unique_lock lock(s.mutex);
-            s.wake.wait(lock, [&]
-                {
-                    return token.stop_requested() || s.stopping || !s.queue.empty();
-                });
-            if (s.queue.empty())
+            s.queued.fetch_sub(1U, std::memory_order_release);
+            s.active_writes.fetch_add(1U, std::memory_order_acq_rel);
             {
-                if (token.stop_requested() || s.stopping)
-                    break;
-                continue;
+                concurrent_containers::exclusive_latch_guard lock{
+                    s.config_latch};
+                sink(s, *event);
             }
-            event = std::move(s.queue.front());
-            s.queue.pop_front();
-            ++s.active_writes;
+            s.active_writes.fetch_sub(1U, std::memory_order_release);
         }
+        if (s.queued.load(std::memory_order_acquire) == 0U &&
+            s.active_writes.load(std::memory_order_acquire) == 0U)
         {
-            std::lock_guard lock(s.mutex);
-            sink(s, event);
-            --s.active_writes;
-            if (s.queue.empty() && s.active_writes == 0)
-                s.drained.notify_all();
+            s.drain_epoch.fetch_add(1U, std::memory_order_release);
+            s.drain_epoch.notify_all();
         }
+        if ((token.stop_requested() || s.stopping.load(std::memory_order_acquire)) &&
+            s.queued.load(std::memory_order_acquire) == 0U)
+            break;
+
+        const auto observed = s.work_epoch.load(std::memory_order_acquire);
+        if (s.queued.load(std::memory_order_acquire) == 0U)
+            s.work_epoch.wait(observed, std::memory_order_relaxed);
     }
-    std::lock_guard lock(s.mutex);
-    s.drained.notify_all();
+    s.drain_epoch.fetch_add(1U, std::memory_order_release);
+    s.drain_epoch.notify_all();
 }
 
 void ensure_worker()
 {
     auto& s = state();
+    concurrent_containers::exclusive_latch_guard lock{s.lifecycle_latch};
     if (s.worker.joinable())
         return;
-    s.stopping = false;
+    s.stopping.store(false, std::memory_order_release);
     s.worker = std::jthread([](std::stop_token token)
         {
             worker_loop(token);
@@ -232,59 +249,89 @@ void ensure_worker()
 void stop_worker()
 {
     auto& s = state();
-    std::jthread worker;
-    {
-        std::lock_guard lock(s.mutex);
-        if (!s.worker.joinable())
-            return;
-        s.stopping = true;
-        s.wake.notify_all();
-        worker = std::move(s.worker);
-    }
-    worker.request_stop();
-    worker.join();
+    concurrent_containers::exclusive_latch_guard lock{s.lifecycle_latch};
+    if (!s.worker.joinable())
+        return;
+    s.stopping.store(true, std::memory_order_release);
+    s.work_epoch.fetch_add(1U, std::memory_order_release);
+    s.work_epoch.notify_all();
+    s.worker.request_stop();
+    s.worker.join();
 }
 
 void write_log(level value, std::string_view message,
     const std::source_location& location)
 {
     auto& s = state();
-    std::lock_guard lock(s.mutex);
-    if (value < s.threshold || s.threshold == level::off)
-        return;
-    ensure_worker();
-    if (s.queue.size() >= s.queue_limit)
+    output_format event_format;
     {
-        ++s.dropped;
+        concurrent_containers::shared_latch_guard lock{s.config_latch};
+        if (value < s.threshold || s.threshold == level::off)
+            return;
+        event_format = s.format;
+    }
+    ensure_worker();
+    const auto queued = s.queued.fetch_add(1U, std::memory_order_acq_rel);
+    const auto configured_limit =
+        s.queue_limit.load(std::memory_order_acquire);
+    const auto limit = configured_limit < s.queue.capacity()
+        ? configured_limit
+        : s.queue.capacity();
+    if (queued >= limit)
+    {
+        s.queued.fetch_sub(1U, std::memory_order_release);
+        s.dropped.fetch_add(1U, std::memory_order_relaxed);
         return;
     }
-    s.queue.push_back(
-        {value, s.format, true, timestamp(), thread_id(),
+    if (!s.queue.try_enqueue({value, event_format, true, timestamp(), thread_id(),
             std::format("{}:{}", filename(location.file_name()), location.line()),
-            std::string(message)});
-    s.wake.notify_one();
+            std::string(message)}))
+    {
+        s.queued.fetch_sub(1U, std::memory_order_release);
+        s.dropped.fetch_add(1U, std::memory_order_relaxed);
+        return;
+    }
+    s.work_epoch.fetch_add(1U, std::memory_order_release);
+    s.work_epoch.notify_one();
 }
 
 void write_log_no_src(level value, std::string_view message)
 {
     auto& s = state();
-    std::lock_guard lock(s.mutex);
-    if (value < s.threshold || s.threshold == level::off)
-        return;
-    ensure_worker();
-    if (s.queue.size() >= s.queue_limit)
+    output_format event_format;
     {
-        ++s.dropped;
+        concurrent_containers::shared_latch_guard lock{s.config_latch};
+        if (value < s.threshold || s.threshold == level::off)
+            return;
+        event_format = s.format;
+    }
+    ensure_worker();
+    const auto queued = s.queued.fetch_add(1U, std::memory_order_acq_rel);
+    const auto configured_limit =
+        s.queue_limit.load(std::memory_order_acquire);
+    const auto limit = configured_limit < s.queue.capacity()
+        ? configured_limit
+        : s.queue.capacity();
+    if (queued >= limit)
+    {
+        s.queued.fetch_sub(1U, std::memory_order_release);
+        s.dropped.fetch_add(1U, std::memory_order_relaxed);
         return;
     }
-    s.queue.push_back({value,
-        s.format,
-        false,
-        timestamp(),
-        thread_id(),
-        {},
-        std::string(message)});
-    s.wake.notify_one();
+    if (!s.queue.try_enqueue({value,
+            event_format,
+            false,
+            timestamp(),
+            thread_id(),
+            {},
+            std::string(message)}))
+    {
+        s.queued.fetch_sub(1U, std::memory_order_release);
+        s.dropped.fetch_add(1U, std::memory_order_relaxed);
+        return;
+    }
+    s.work_epoch.fetch_add(1U, std::memory_order_release);
+    s.work_epoch.notify_one();
 }
 
 } // namespace logger::detail
@@ -293,7 +340,7 @@ namespace logger {
 void init(const std::string& name, level value, output_format format)
 {
     auto& s = detail::state();
-    std::lock_guard lock(s.mutex);
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
     s.name = name;
     s.threshold = value;
     s.format = format;
@@ -309,35 +356,37 @@ void init_with_file(const std::string& name, const std::string& path,
 {
     init(name, value, format);
     auto& s = detail::state();
-    std::lock_guard lock(s.mutex);
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
     s.console = echo_console;
     s.file.open(path, std::ios::app);
 }
 
 void set_level(level value)
 {
-    std::lock_guard lock(detail::state().mutex);
-    detail::state().threshold = value;
+    auto& s = detail::state();
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
+    s.threshold = value;
 }
 
 void set_format(output_format value)
 {
     auto& s = detail::state();
-    std::lock_guard lock(s.mutex);
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
     s.format = value;
     s.ansi = value == output_format::text && detail::can_enable_ansi();
 }
 
 void set_console_enabled(bool enabled)
 {
-    std::lock_guard lock(detail::state().mutex);
-    detail::state().console = enabled;
+    auto& s = detail::state();
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
+    s.console = enabled;
 }
 
 auto set_file_output(const std::string& path, bool append) -> bool
 {
     auto& s = detail::state();
-    std::lock_guard lock(s.mutex);
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
     if (s.file.is_open())
         s.file.close();
     s.file.open(path, append ? std::ios::app : std::ios::trunc);
@@ -347,7 +396,7 @@ auto set_file_output(const std::string& path, bool append) -> bool
 void disable_file_output()
 {
     auto& s = detail::state();
-    std::lock_guard lock(s.mutex);
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
     if (s.file.is_open())
     {
         s.file.flush();
@@ -357,29 +406,33 @@ void disable_file_output()
 
 void set_async_queue_limit(std::size_t limit)
 {
-    std::lock_guard lock(detail::state().mutex);
-    detail::state().queue_limit = std::max<std::size_t>(limit, 1024);
+    auto& s = detail::state();
+    const auto bounded = std::clamp(std::max<std::size_t>(limit, 1024U),
+        std::size_t{1024U}, s.queue.capacity());
+    s.queue_limit.store(bounded, std::memory_order_release);
 }
 
 auto dropped_messages() -> std::uint64_t
 {
-    std::lock_guard lock(detail::state().mutex);
-    return detail::state().dropped;
+    return detail::state().dropped.load(std::memory_order_acquire);
 }
 
 void flush()
 {
     auto& s = detail::state();
-    std::unique_lock lock(s.mutex);
-    if (s.worker.joinable())
+    for (;;)
     {
-        s.wake.notify_all();
-        s.drained.wait(lock,
-            [&]
-            {
-                return s.queue.empty() && s.active_writes == 0;
-            });
+        if (s.queued.load(std::memory_order_acquire) == 0U &&
+            s.active_writes.load(std::memory_order_acquire) == 0U)
+            break;
+        const auto observed = s.drain_epoch.load(std::memory_order_acquire);
+        s.work_epoch.fetch_add(1U, std::memory_order_release);
+        s.work_epoch.notify_one();
+        if (s.queued.load(std::memory_order_acquire) != 0U ||
+            s.active_writes.load(std::memory_order_acquire) != 0U)
+            s.drain_epoch.wait(observed, std::memory_order_relaxed);
     }
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
     if (s.file.is_open())
         s.file.flush();
 }

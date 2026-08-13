@@ -3,11 +3,42 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlsplit
 
 import pytest
 
 from database_driver_process import DatabaseDriver
+
+
+def _load_external_environment() -> None:
+    """Load developer-only database endpoints without exposing credentials.
+
+    Messaging interoperability already supports ``.env.external.local``. Keep
+    database tests equally usable from CTest, while deliberately using only
+    the standard library so an absent optional dotenv package cannot turn an
+    otherwise skippable suite into an import failure.
+    """
+
+    path = Path(__file__).resolve().parent / ".env.external.local"
+    if not path.is_file():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line.removeprefix("export ").lstrip()
+        key, separator, value = line.partition("=")
+        if not separator or not key.isidentifier():
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        os.environ.setdefault(key, value)
+
+
+_load_external_environment()
 
 
 class _Secret(str):

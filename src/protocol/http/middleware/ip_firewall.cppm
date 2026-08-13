@@ -52,11 +52,9 @@ export module cnetmod.protocol.http.middleware.ip_firewall;
 
 import std;
 import cnetmod.coro.task;
+import cnetmod.core.log;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.cache_store; // Only need abstract interface, avoid heavy dependencies like redis
-
-// Note: Don't import cnetmod.core.log to avoid MSVC C1605 (object file exceeds
-// 4GB) Use std::println(std::cerr, ...) for direct output
 
 namespace cnetmod {
 

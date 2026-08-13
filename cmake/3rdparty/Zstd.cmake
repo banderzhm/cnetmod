@@ -1,0 +1,37 @@
+include_guard(GLOBAL)
+
+macro(cnetmod_configure_zstd)
+    set(CNETMOD_ZSTD_ROOT "" CACHE PATH "Optional zstd installation prefix")
+    set(CNETMOD_HAS_ZSTD OFF)
+    if(CNETMOD_ENABLE_GRPC OR CNETMOD_ENABLE_KAFKA)
+        find_package(zstd CONFIG QUIET)
+        foreach(_cnetmod_zstd_target zstd::libzstd_static zstd::libzstd_shared zstd::zstd)
+            if(TARGET ${_cnetmod_zstd_target})
+                set(CNETMOD_ZSTD_TARGET ${_cnetmod_zstd_target})
+                break()
+            endif()
+        endforeach()
+        if(NOT CNETMOD_ZSTD_TARGET)
+            find_path(CNETMOD_ZSTD_INCLUDE_DIR zstd.h HINTS "${CNETMOD_ZSTD_ROOT}"
+                PATH_SUFFIXES include)
+            find_library(CNETMOD_ZSTD_LIBRARY NAMES zstd libzstd HINTS "${CNETMOD_ZSTD_ROOT}"
+                PATH_SUFFIXES lib lib64)
+            if(CNETMOD_ZSTD_INCLUDE_DIR AND CNETMOD_ZSTD_LIBRARY)
+                add_library(cnetmod_zstd UNKNOWN IMPORTED)
+                set_target_properties(cnetmod_zstd PROPERTIES
+                    IMPORTED_LOCATION "${CNETMOD_ZSTD_LIBRARY}"
+                    INTERFACE_INCLUDE_DIRECTORIES "${CNETMOD_ZSTD_INCLUDE_DIR}")
+                set(CNETMOD_ZSTD_TARGET cnetmod_zstd)
+            endif()
+        endif()
+        if(CNETMOD_ZSTD_TARGET)
+            set(CNETMOD_HAS_ZSTD ON)
+        endif()
+    endif()
+endmacro()
+
+function(cnetmod_link_zstd TARGET_NAME)
+    if(CNETMOD_HAS_ZSTD)
+        target_link_libraries(${TARGET_NAME} PUBLIC ${CNETMOD_ZSTD_TARGET})
+    endif()
+endfunction()

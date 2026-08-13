@@ -4,6 +4,7 @@ import std;
 import cnetmod.coro.timer;
 import cnetmod.coro.spawn;
 import cnetmod.coro.cancel;
+import cnetmod.coro.mutex;
 import cnetmod.executor.async_op;
 import :error;
 import :connection;
@@ -37,11 +38,18 @@ class connection_pool_state
 public:
     io_context* context = nullptr;
     connection_pool_options options;
-    mutable std::mutex mutex;
+    // This protects only pool metadata. It is never held across connection or
+    // database I/O, and waiters suspend instead of consuming an OS thread.
+    async_mutex state_mutex;
     std::vector<std::shared_ptr<connection_pool_slot>> slots;
     std::deque<std::shared_ptr<pool_waiter>> waiters;
     std::size_t connecting = 0;
     bool closed = false;
+    std::atomic_bool close_requested = false;
+    std::atomic<std::size_t> size_snapshot{};
+    std::atomic<std::size_t> idle_snapshot{};
+    std::atomic<std::size_t> checked_out_snapshot{};
+    std::atomic<std::size_t> waiter_snapshot{};
 };
 
 namespace {
@@ -60,25 +68,70 @@ namespace {
             state.waiters.erase(found);
     }
 
+    void refresh_snapshots_locked(connection_pool_state& state) noexcept
+    {
+        state.size_snapshot.store(state.slots.size(), std::memory_order_release);
+        state.idle_snapshot.store(std::ranges::count_if(state.slots,
+                                      [](const auto& slot)
+                                      {
+                                          return !slot->checked_out && !slot->stale;
+                                      }),
+            std::memory_order_release);
+        state.checked_out_snapshot.store(std::ranges::count_if(state.slots,
+                                             [](const auto& slot)
+                                             {
+                                                 return slot->checked_out;
+                                             }),
+            std::memory_order_release);
+        state.waiter_snapshot.store(state.waiters.size(), std::memory_order_release);
+    }
+
+    auto finish_waiter_locked(connection_pool_state& state,
+        const std::shared_ptr<pool_waiter>& waiter, std::optional<error> failure,
+        bool retry = false,
+        std::shared_ptr<connection_pool_slot> assigned = {}) -> std::coroutine_handle<>
+    {
+        if (waiter->completed)
+            return {};
+        remove_waiter_locked(state, waiter);
+        waiter->failure = std::move(failure);
+        waiter->retry = retry;
+        waiter->assigned = std::move(assigned);
+        waiter->completed = true;
+        refresh_snapshots_locked(state);
+        return waiter->handle;
+    }
+
+    auto finish_waiter_async(std::shared_ptr<connection_pool_state> state,
+        std::shared_ptr<pool_waiter> waiter, std::optional<error> failure,
+        bool retry = false,
+        std::shared_ptr<connection_pool_slot> assigned = {}) -> task<void>
+    {
+        co_await state->state_mutex.lock();
+        async_lock_guard lock{state->state_mutex, std::adopt_lock};
+        auto handle = finish_waiter_locked(*state, waiter, std::move(failure), retry,
+            std::move(assigned));
+        lock.release();
+        state->state_mutex.unlock();
+        waiter->timeout_token.cancel();
+        post_resume(state, handle);
+    }
+
     void finish_waiter(const std::shared_ptr<connection_pool_state>& state,
         const std::shared_ptr<pool_waiter>& waiter, std::optional<error> failure,
         bool retry = false,
         std::shared_ptr<connection_pool_slot> assigned = {})
     {
-        std::coroutine_handle<> handle;
+        if (state->state_mutex.try_lock())
         {
-            std::scoped_lock lock(state->mutex);
-            if (waiter->completed)
-                return;
-            remove_waiter_locked(*state, waiter);
-            waiter->failure = std::move(failure);
-            waiter->retry = retry;
-            waiter->assigned = std::move(assigned);
-            waiter->completed = true;
-            handle = waiter->handle;
+            auto handle = finish_waiter_locked(*state, waiter, std::move(failure), retry,
+                std::move(assigned));
+            state->state_mutex.unlock();
+            waiter->timeout_token.cancel();
+            post_resume(state, handle);
+            return;
         }
-        waiter->timeout_token.cancel();
-        post_resume(state, handle);
+        spawn(*state->context, finish_waiter_async(state, waiter, std::move(failure), retry, std::move(assigned)));
     }
 
     void wake_front_for_retry_locked(connection_pool_state& state,
@@ -114,68 +167,159 @@ namespace {
     {
         std::shared_ptr<connection_pool_state> state;
         std::shared_ptr<pool_waiter> waiter;
+        async_lock_guard& lock;
 
         auto await_ready() const noexcept -> bool
         {
-            std::scoped_lock lock(state->mutex);
-            return waiter->completed;
+            return false;
         }
 
-        auto await_suspend(std::coroutine_handle<> handle) noexcept -> bool
+        void await_suspend(std::coroutine_handle<> handle) noexcept
         {
-            std::scoped_lock lock(state->mutex);
-            if (waiter->completed)
-                return false;
             waiter->handle = handle;
-            return true;
+            lock.release();
+            state->state_mutex.unlock();
         }
 
         void await_resume() const noexcept {}
     };
 
-    void return_slot(const std::shared_ptr<connection_pool_state>& state,
-        const std::shared_ptr<connection_pool_slot>& slot, bool discard) noexcept
+    using waiter_resume = std::pair<std::shared_ptr<pool_waiter>, std::coroutine_handle<>>;
+
+    struct slot_return_outcome
     {
+        std::vector<waiter_resume> waiters;
+        bool close_connection = false;
+    };
+
+    auto return_slot_locked(connection_pool_state& state,
+        const std::shared_ptr<connection_pool_slot>& slot, bool discard) noexcept
+        -> slot_return_outcome
+    {
+        slot_return_outcome outcome;
         std::shared_ptr<pool_waiter> assigned_waiter;
         std::coroutine_handle<> assigned_handle;
-        std::vector<std::pair<std::shared_ptr<pool_waiter>, std::coroutine_handle<>>> retry_waiters;
+        slot->checked_out = false;
+        slot->last_used = std::chrono::steady_clock::now();
+        slot->stale = slot->stale || discard || !slot->client->is_open() || state.closed;
+        if (slot->stale)
         {
-            std::scoped_lock lock(state->mutex);
-            slot->checked_out = false;
-            slot->last_used = std::chrono::steady_clock::now();
-            slot->stale = slot->stale || discard || !slot->client->is_open() || state->closed;
-            if (slot->stale)
+            outcome.close_connection = true;
+            std::erase(state.slots, slot);
+            if (!state.closed)
+                wake_front_for_retry_locked(state, outcome.waiters);
+        }
+        else
+        {
+            while (!state.waiters.empty())
             {
-                slot->client->close();
-                std::erase(state->slots, slot);
-                if (!state->closed)
-                    wake_front_for_retry_locked(*state, retry_waiters);
-            }
-            else
-            {
-                while (!state->waiters.empty())
-                {
-                    auto waiter = state->waiters.front();
-                    state->waiters.pop_front();
-                    if (waiter->completed)
-                        continue;
-                    slot->checked_out = true;
-                    waiter->assigned = slot;
-                    waiter->completed = true;
-                    assigned_waiter = waiter;
-                    assigned_handle = waiter->handle;
-                    break;
-                }
+                auto waiter = state.waiters.front();
+                state.waiters.pop_front();
+                if (waiter->completed)
+                    continue;
+                slot->checked_out = true;
+                waiter->assigned = slot;
+                waiter->completed = true;
+                assigned_waiter = waiter;
+                assigned_handle = waiter->handle;
+                break;
             }
         }
+        refresh_snapshots_locked(state);
         if (assigned_waiter)
-            assigned_waiter->timeout_token.cancel();
-        post_resume(state, assigned_handle);
-        for (auto& [waiter, handle] : retry_waiters)
+            outcome.waiters.emplace_back(std::move(assigned_waiter), assigned_handle);
+        return outcome;
+    }
+
+    void resume_waiters(const std::shared_ptr<connection_pool_state>& state,
+        std::vector<waiter_resume> resumed)
+    {
+        for (auto& [waiter, handle] : resumed)
         {
             waiter->timeout_token.cancel();
             post_resume(state, handle);
         }
+    }
+
+    void complete_slot_return(const std::shared_ptr<connection_pool_state>& state,
+        const std::shared_ptr<connection_pool_slot>& slot, slot_return_outcome outcome)
+    {
+        if (outcome.close_connection)
+            slot->client->close();
+        resume_waiters(state, std::move(outcome.waiters));
+    }
+
+    auto return_slot_async(std::shared_ptr<connection_pool_state> state,
+        std::shared_ptr<connection_pool_slot> slot, bool discard) -> task<void>
+    {
+        co_await state->state_mutex.lock();
+        async_lock_guard lock{state->state_mutex, std::adopt_lock};
+        auto outcome = return_slot_locked(*state, slot, discard);
+        lock.release();
+        state->state_mutex.unlock();
+        complete_slot_return(state, slot, std::move(outcome));
+    }
+
+    void return_slot(const std::shared_ptr<connection_pool_state>& state,
+        const std::shared_ptr<connection_pool_slot>& slot, bool discard) noexcept
+    {
+        if (state->state_mutex.try_lock())
+        {
+            auto outcome = return_slot_locked(*state, slot, discard);
+            state->state_mutex.unlock();
+            complete_slot_return(state, slot, std::move(outcome));
+            return;
+        }
+        spawn(*state->context, return_slot_async(state, slot, discard));
+    }
+
+    struct close_outcome
+    {
+        std::vector<std::shared_ptr<connection_pool_slot>> slots;
+        std::vector<waiter_resume> waiters;
+    };
+
+    auto close_locked(connection_pool_state& state) -> close_outcome
+    {
+        close_outcome outcome;
+        if (state.closed)
+            return outcome;
+        state.closed = true;
+        outcome.slots = state.slots;
+        for (auto& slot : state.slots)
+            slot->stale = true;
+        for (auto& waiter : state.waiters)
+            if (!waiter->completed)
+            {
+                waiter->failure = make_error(error_code::connection_closed,
+                    "MongoDB connection pool was closed");
+                waiter->completed = true;
+                outcome.waiters.emplace_back(waiter, waiter->handle);
+            }
+        state.waiters.clear();
+        refresh_snapshots_locked(state);
+        return outcome;
+    }
+
+    void complete_close(const std::shared_ptr<connection_pool_state>& state,
+        close_outcome outcome)
+    {
+        for (auto& slot : outcome.slots)
+            slot->client->close();
+        resume_waiters(state, std::move(outcome.waiters));
+    }
+
+    // This cannot be a connection_pool member coroutine. close() is also
+    // called from ~connection_pool(), and deferred work must retain the
+    // shared pool state rather than a potentially dangling this-pointer.
+    auto close_pool_async(std::shared_ptr<connection_pool_state> state) -> task<void>
+    {
+        co_await state->state_mutex.lock();
+        async_lock_guard lock{state->state_mutex, std::adopt_lock};
+        auto outcome = close_locked(*state);
+        lock.release();
+        state->state_mutex.unlock();
+        complete_close(state, std::move(outcome));
     }
 } // namespace
 
@@ -252,34 +396,39 @@ connection_pool::~connection_pool()
 auto connection_pool::create_connection()
     -> task<result<std::shared_ptr<connection_pool_slot>>>
 {
-    {
-        std::scoped_lock lock(state_->mutex);
-        if (state_->closed)
-            co_return std::unexpected(make_error(error_code::connection_closed,
-                "MongoDB connection pool is closed"));
-        if (state_->slots.size() + state_->connecting >= state_->options.maximum_size ||
-            state_->connecting >= state_->options.maximum_connecting)
-            co_return std::unexpected(make_error(error_code::pool_exhausted,
-                "MongoDB connection pool creation limit reached"));
-        ++state_->connecting;
-    }
+    co_await state_->state_mutex.lock();
+    async_lock_guard admission_lock{state_->state_mutex, std::adopt_lock};
+    if (state_->closed || state_->close_requested.load(std::memory_order_acquire))
+        co_return std::unexpected(make_error(error_code::connection_closed,
+            "MongoDB connection pool is closed"));
+    if (state_->slots.size() + state_->connecting >= state_->options.maximum_size ||
+        state_->connecting >= state_->options.maximum_connecting)
+        co_return std::unexpected(make_error(error_code::pool_exhausted,
+            "MongoDB connection pool creation limit reached"));
+    ++state_->connecting;
+    refresh_snapshots_locked(*state_);
+    admission_lock.release();
+    state_->state_mutex.unlock();
     auto candidate = std::make_shared<connection_pool_slot>();
     candidate->client = std::make_unique<connection>(*state_->context);
     auto connected = co_await candidate->client->connect(state_->options.connection);
     std::vector<std::pair<std::shared_ptr<pool_waiter>, std::coroutine_handle<>>> resumed;
     bool closed_after_connect = false;
+    co_await state_->state_mutex.lock();
+    async_lock_guard completion_lock{state_->state_mutex, std::adopt_lock};
+    --state_->connecting;
+    closed_after_connect = state_->closed ||
+        state_->close_requested.load(std::memory_order_acquire);
+    if (!connected || closed_after_connect)
+        wake_front_for_retry_locked(*state_, resumed);
+    else
     {
-        std::scoped_lock lock(state_->mutex);
-        --state_->connecting;
-        closed_after_connect = state_->closed;
-        if (!connected || closed_after_connect)
-            wake_front_for_retry_locked(*state_, resumed);
-        else
-        {
-            candidate->checked_out = true;
-            state_->slots.push_back(candidate);
-        }
+        candidate->checked_out = true;
+        state_->slots.push_back(candidate);
     }
+    refresh_snapshots_locked(*state_);
+    completion_lock.release();
+    state_->state_mutex.unlock();
     for (auto& [waiter, handle] : resumed)
     {
         waiter->timeout_token.cancel();
@@ -300,15 +449,19 @@ auto connection_pool::warm_up() -> task<result<void>>
 {
     while (true)
     {
-        {
-            std::scoped_lock lock(state_->mutex);
-            std::erase_if(state_->slots, [](const auto& value)
-                {
-                    return !value->checked_out && (value->stale || !value->client->is_open());
-                });
-            if (state_->slots.size() + state_->connecting >= state_->options.minimum_size)
-                break;
-        }
+        co_await state_->state_mutex.lock();
+        async_lock_guard lock{state_->state_mutex, std::adopt_lock};
+        std::erase_if(state_->slots, [](const auto& value)
+            {
+                return !value->checked_out && (value->stale || !value->client->is_open());
+            });
+        const bool ready = state_->closed ||
+            state_->slots.size() + state_->connecting >= state_->options.minimum_size;
+        refresh_snapshots_locked(*state_);
+        lock.release();
+        state_->state_mutex.unlock();
+        if (ready)
+            break;
         auto created = co_await create_connection();
         if (!created)
             co_return std::unexpected(created.error());
@@ -332,50 +485,53 @@ auto connection_pool::acquire(std::stop_token cancellation)
                 error_code::operation_cancelled, "MongoDB connection pool checkout was cancelled"));
         bool may_create = false;
         std::shared_ptr<pool_waiter> waiter;
-        {
-            std::scoped_lock lock(state_->mutex);
-            if (state_->closed)
-                co_return std::unexpected(make_error(error_code::connection_closed,
-                    "MongoDB connection pool is closed"));
-            const auto now = std::chrono::steady_clock::now();
-            std::erase_if(state_->slots, [&](const auto& value)
-                {
-                    const bool expired = state_->options.maximum_idle_time.count() > 0 &&
-                        now - value->last_used > state_->options.maximum_idle_time;
-                    if (!value->checked_out && (value->stale || expired || !value->client->is_open()))
-                    {
-                        value->client->close();
-                        return true;
-                    }
-                    return false;
-                });
-            if (!state_->waiters.empty())
+        co_await state_->state_mutex.lock();
+        async_lock_guard lock{state_->state_mutex, std::adopt_lock};
+        if (state_->closed || state_->close_requested.load(std::memory_order_acquire))
+            co_return std::unexpected(make_error(error_code::connection_closed,
+                "MongoDB connection pool is closed"));
+        const auto now = std::chrono::steady_clock::now();
+        std::erase_if(state_->slots, [&](const auto& value)
             {
+                const bool expired = state_->options.maximum_idle_time.count() > 0 &&
+                    now - value->last_used > state_->options.maximum_idle_time;
+                if (!value->checked_out && (value->stale || expired || !value->client->is_open()))
+                {
+                    value->client->close();
+                    return true;
+                }
+                return false;
+            });
+        if (!state_->waiters.empty())
+        {
+            waiter = std::make_shared<pool_waiter>();
+            state_->waiters.push_back(waiter);
+        }
+        else
+        {
+            for (auto& slot : state_->slots)
+                if (!slot->checked_out && !slot->stale)
+                {
+                    slot->checked_out = true;
+                    refresh_snapshots_locked(*state_);
+                    co_return pooled_connection(state_, slot);
+                }
+            may_create = state_->slots.size() + state_->connecting < state_->options.maximum_size &&
+                state_->connecting < state_->options.maximum_connecting;
+            if (!may_create)
+            {
+                if (state_->options.wait_queue_timeout <= std::chrono::milliseconds::zero())
+                    co_return std::unexpected(make_error(error_code::pool_exhausted,
+                        "MongoDB connection pool wait queue timed out"));
                 waiter = std::make_shared<pool_waiter>();
                 state_->waiters.push_back(waiter);
             }
-            else
-            {
-                for (auto& slot : state_->slots)
-                    if (!slot->checked_out && !slot->stale)
-                    {
-                        slot->checked_out = true;
-                        co_return pooled_connection(state_, slot);
-                    }
-                may_create = state_->slots.size() + state_->connecting < state_->options.maximum_size &&
-                    state_->connecting < state_->options.maximum_connecting;
-                if (!may_create)
-                {
-                    if (state_->options.wait_queue_timeout <= std::chrono::milliseconds::zero())
-                        co_return std::unexpected(make_error(error_code::pool_exhausted,
-                            "MongoDB connection pool wait queue timed out"));
-                    waiter = std::make_shared<pool_waiter>();
-                    state_->waiters.push_back(waiter);
-                }
-            }
         }
+        refresh_snapshots_locked(*state_);
         if (may_create)
         {
+            lock.release();
+            state_->state_mutex.unlock();
             auto created = co_await create_connection();
             if (created)
                 co_return pooled_connection(state_, *created);
@@ -388,7 +544,7 @@ auto connection_pool::acquire(std::stop_token cancellation)
             {
                 finish_waiter(state, waiter, make_error(error_code::operation_cancelled, "MongoDB connection pool checkout was cancelled"));
             });
-        co_await waiter_awaitable{state_, waiter};
+        co_await waiter_awaitable{state_, waiter, lock};
         waiter->timeout_token.cancel();
         if (waiter->failure)
             co_return std::unexpected(*waiter->failure);
@@ -403,15 +559,17 @@ auto connection_pool::acquire(std::stop_token cancellation)
 auto connection_pool::health_check() -> task<void>
 {
     std::vector<std::shared_ptr<connection_pool_slot>> candidates;
-    {
-        std::scoped_lock lock(state_->mutex);
-        for (auto& slot : state_->slots)
-            if (!slot->checked_out && !slot->stale)
-            {
-                slot->checked_out = true;
-                candidates.push_back(slot);
-            }
-    }
+    co_await state_->state_mutex.lock();
+    async_lock_guard lock{state_->state_mutex, std::adopt_lock};
+    for (auto& slot : state_->slots)
+        if (!slot->checked_out && !slot->stale)
+        {
+            slot->checked_out = true;
+            candidates.push_back(slot);
+        }
+    refresh_snapshots_locked(*state_);
+    lock.release();
+    state_->state_mutex.unlock();
     for (auto& slot : candidates)
     {
         auto healthy = co_await slot->client->ping();
@@ -434,64 +592,37 @@ auto connection_pool::run_maintenance(std::stop_token stop) -> task<void>
 
 void connection_pool::close() noexcept
 {
-    std::vector<std::pair<std::shared_ptr<pool_waiter>, std::coroutine_handle<>>> waiters;
+    if (state_->close_requested.exchange(true, std::memory_order_acq_rel))
+        return;
+    if (state_->state_mutex.try_lock())
     {
-        std::scoped_lock lock(state_->mutex);
-        if (state_->closed)
-            return;
-        state_->closed = true;
-        for (auto& slot : state_->slots)
-        {
-            slot->stale = true;
-            slot->client->close();
-        }
-        for (auto& waiter : state_->waiters)
-            if (!waiter->completed)
-            {
-                waiter->failure = make_error(error_code::connection_closed,
-                    "MongoDB connection pool was closed");
-                waiter->completed = true;
-                waiters.emplace_back(waiter, waiter->handle);
-            }
-        state_->waiters.clear();
+        auto outcome = close_locked(*state_);
+        state_->state_mutex.unlock();
+        complete_close(state_, std::move(outcome));
+        return;
     }
-    for (auto& [waiter, handle] : waiters)
-    {
-        waiter->timeout_token.cancel();
-        post_resume(state_, handle);
-    }
+    auto state = state_;
+    spawn(*state->context, close_pool_async(std::move(state)));
 }
 
 auto connection_pool::size() const noexcept -> std::size_t
 {
-    std::scoped_lock lock(state_->mutex);
-    return state_->slots.size();
+    return state_->size_snapshot.load(std::memory_order_acquire);
 }
 
 auto connection_pool::idle_count() const noexcept -> std::size_t
 {
-    std::scoped_lock lock(state_->mutex);
-    return std::ranges::count_if(state_->slots,
-        [](const auto& slot)
-        {
-            return !slot->checked_out && !slot->stale;
-        });
+    return state_->idle_snapshot.load(std::memory_order_acquire);
 }
 
 auto connection_pool::checked_out_count() const noexcept -> std::size_t
 {
-    std::scoped_lock lock(state_->mutex);
-    return std::ranges::count_if(state_->slots,
-        [](const auto& slot)
-        {
-            return slot->checked_out;
-        });
+    return state_->checked_out_snapshot.load(std::memory_order_acquire);
 }
 
 auto connection_pool::waiter_count() const noexcept -> std::size_t
 {
-    std::scoped_lock lock(state_->mutex);
-    return state_->waiters.size();
+    return state_->waiter_snapshot.load(std::memory_order_acquire);
 }
 
 auto connection_pool::context() noexcept -> io_context&

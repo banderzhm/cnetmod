@@ -76,7 +76,7 @@ auto call_statistics_registry::for_method(std::string service,
     std::string method)
     -> std::shared_ptr<call_statistics>
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     auto& statistics = statistics_[std::move(service)][std::move(method)];
     if (!statistics)
         statistics = std::make_shared<call_statistics>();
@@ -89,7 +89,7 @@ auto call_statistics_registry::snapshot(std::string_view service,
 {
     std::shared_ptr<call_statistics> statistics;
     {
-        std::scoped_lock lock(mutex_);
+        concurrent_containers::shared_latch_guard lock{latch_};
         const auto service_it = statistics_.find(service);
         if (service_it == statistics_.end())
             return std::nullopt;

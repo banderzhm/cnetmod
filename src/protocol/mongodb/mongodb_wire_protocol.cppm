@@ -12,6 +12,9 @@ inline constexpr std::uint8_t compressor_noop = 0;
 inline constexpr std::uint8_t compressor_zlib = 2;
 inline constexpr std::uint32_t op_message_checksum_present = 1u;
 inline constexpr std::uint32_t op_message_more_to_come = 2u;
+/// Client-to-server capability bit. It permits a server to return an exhaust
+/// cursor as consecutive OP_MSG replies marked `moreToCome`.
+inline constexpr std::uint32_t op_message_exhaust_allowed = 1u << 16U;
 
 struct message_header
 {
@@ -29,7 +32,8 @@ struct decoded_message
 };
 
 auto encode_command_message(std::int32_t request_id,
-    const bson_document& command, std::size_t max_message_bytes)
+    const bson_document& command, std::size_t max_message_bytes,
+    std::uint32_t flags = 0)
     -> result<std::vector<std::byte>>;
 auto decode_command_message(std::span<const std::byte> bytes,
     std::size_t max_message_bytes, bson_limits limits = {})

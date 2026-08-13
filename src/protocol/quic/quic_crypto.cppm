@@ -13,9 +13,15 @@ export module cnetmod.protocol.quic:crypto;
 import std;
 import cnetmod.core.ssl;
 import cnetmod.core.buffer;
+import cnetmod.utils.concurrent_containers.atomic_hash_map;
 import :types;
 
 namespace cnetmod::quic {
+
+/// Opaque, reference-counted BoringSSL AEAD precomputation for one immutable
+/// QUIC traffic key. Its definition remains in the crypto implementation so
+/// callers do not depend on BoringSSL headers.
+export struct quic_aead_context;
 
 // =============================================================================
 // Encryption Level (RFC 9001)
@@ -55,6 +61,11 @@ export enum class handshake_result
 // Transport Parameters Structure (RFC 9000 §7.4)
 // =============================================================================
 
+/// Experimental draft-ietf-quic-multipath-12 transport parameter identifier.
+/// Its presence only records peer capability; it does not enable multipath.
+export inline constexpr std::uint64_t multipath_initial_max_path_id_parameter =
+    0x0f739bbc1b666d0cULL;
+
 export struct transport_params
 {
     std::uint64_t initial_max_data{1048576};
@@ -64,9 +75,13 @@ export struct transport_params
     std::uint64_t initial_max_streams_bidi{100};
     std::uint64_t initial_max_streams_uni{100};
     std::uint64_t max_udp_payload_size{65527};
+    /// RFC 9221 §3. Advertised as transport parameter 0x20 when non-zero.
+    std::uint64_t max_datagram_frame_size{0};
     std::uint64_t ack_delay_exponent{3};
     std::chrono::milliseconds max_ack_delay{25};
     std::uint64_t active_connection_id_limit{2};
+    /// Absent means the endpoint did not opt into draft-12 multipath.
+    std::optional<std::uint32_t> initial_max_path_id;
     std::chrono::milliseconds idle_timeout{30000};
     bool disable_active_migration{false};
     std::optional<connection_id> original_destination_connection_id;
@@ -103,6 +118,9 @@ struct hash<cnetmod::quic::transport_params>
         h ^= std::hash<std::uint64_t>{}(params.ack_delay_exponent) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<std::int64_t>{}(params.max_ack_delay.count()) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<std::uint64_t>{}(params.active_connection_id_limit) + 0x9e3779b9 + (h << 6) + (h >> 2);
+        if (params.initial_max_path_id)
+            h ^= std::hash<std::uint32_t>{}(*params.initial_max_path_id) +
+                0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<std::int64_t>{}(std::chrono::duration_cast<std::chrono::microseconds>(params.idle_timeout).count()) + 0x9e3779b9 + (h << 6) + (h >> 2);
         h ^= std::hash<bool>{}(params.disable_active_migration) + 0x9e3779b9 + (h << 6) + (h >> 2);
 
@@ -141,6 +159,10 @@ export struct quic_level_keys
     const void* aead{nullptr};          ///< const EVP_AEAD*
     const void* digest{nullptr};        ///< const EVP_MD*
     std::size_t tag_len{16};            ///< AEAD tag length
+    // Installed lazily because test fixtures may construct key material
+    // directly. Normal QUIC traffic reuses it for every packet protected by
+    // this immutable key generation.
+    mutable std::shared_ptr<quic_aead_context> aead_context;
 
     /// True once a secret has been installed and keys derived
     [[nodiscard]] auto valid() const noexcept -> bool
@@ -206,16 +228,13 @@ private:
     struct entry
     {
         std::chrono::steady_clock::time_point expires_at;
-        std::uint64_t generation{};
     };
 
     [[nodiscard]] static auto key(std::span<const std::byte> ticket_id)
         -> std::string;
 
     std::size_t capacity_;
-    mutable std::mutex mutex_;
-    std::unordered_map<std::string, entry> entries_;
-    std::uint64_t next_generation_{};
+    concurrent_containers::atomic_hash_map<std::string, entry> entries_;
 };
 
 /// Install the QUIC server ticket bridge on an application-owned TLS context.
@@ -266,11 +285,19 @@ export [[nodiscard]] auto make_retry_integrity_tag(quic_version version,
 /// primitive for TLS-installed Handshake and 1-RTT keys.
 export [[nodiscard]] auto seal_payload(const quic_level_keys& keys,
     std::span<const std::byte> payload, std::span<const std::byte> header,
-    std::uint64_t packet_number)
+    std::uint64_t packet_number, std::uint32_t path_id = 0)
     -> std::expected<std::vector<std::byte>, std::error_code>;
+/// Seal `payload` and append the ciphertext/tag directly to `packet`. The
+/// existing packet bytes are authenticated as the QUIC header. This avoids a
+/// per-packet ciphertext allocation and copy in the packet builder.
+export [[nodiscard]] auto append_sealed_payload(const quic_level_keys& keys,
+    std::span<const std::byte> payload, std::vector<std::byte>& packet,
+    std::uint64_t packet_number, std::uint32_t path_id = 0)
+    -> std::expected<void, std::error_code>;
 export [[nodiscard]] auto open_payload(const quic_level_keys& keys,
     std::span<const std::byte> protected_payload,
-    std::span<const std::byte> header, std::uint64_t packet_number)
+    std::span<const std::byte> header, std::uint64_t packet_number,
+    std::uint32_t path_id = 0)
     -> std::expected<std::vector<std::byte>, std::error_code>;
 
 /// Apply/remove RFC 9001 §5.4 header protection in place. `packet_number_offset`
@@ -388,6 +415,9 @@ public:
 
     /// True if any encryption level has unsent handshake data
     [[nodiscard]] auto has_pending_handshake_data() const noexcept -> bool;
+    /// True if the selected encryption level has unsent TLS handshake data.
+    /// Application-level data carries post-handshake NewSessionTicket.
+    [[nodiscard]] auto has_pending_handshake_data(encryption_level level) const noexcept -> bool;
 
     /// True if BoringSSL requested a flight flush since the last query
     [[nodiscard]] auto handshake_flush_pending() noexcept -> bool;
@@ -593,11 +623,22 @@ private:
     static auto cb_send_alert(
         SSL* ssl, enum ssl_encryption_level_t level, std::uint8_t alert) -> int;
 
+    /// BoringSSL delivers TLS 1.3 NewSessionTicket messages through the
+    /// session-cache callback. QUIC owns the callback state per SSL object so
+    /// tickets can be exported after the post-handshake CRYPTO flight.
+    static auto cb_new_session(SSL* ssl, SSL_SESSION* session) -> int;
+
     // =========================================================================
     // State
     // =========================================================================
 
     SSL* ssl_ = nullptr;
+
+    /// Latest ticket delivered by BoringSSL's client session callback. The
+    /// callback gives us a borrowed session; this member owns one reference.
+    /// SSL_SESSION is opaque in the public BoringSSL headers, so it is freed
+    /// explicitly in the implementation rather than through unique_ptr.
+    SSL_SESSION* latest_resumption_session_ = nullptr;
 
     /// Per-level installed key material
     std::array<quic_level_keys, encryption_level_count> read_keys_{};

@@ -45,8 +45,18 @@ using microseconds = std::chrono::microseconds;
 // installed its HTTP/3 control streams.  This is deliberately a setup-only
 // ramp: every configured connection still completes its warmup, and timed
 // measurement does not start until all of them are ready.
+#ifdef _WIN32
+// IOCP must keep receive operations posted while each UDP socket completes
+// its Initial/Handshake flight.  Four new clients every 2ms can consume that
+// posting budget before earlier connections install HTTP/3 control streams,
+// leaving a subset of a 256-connection benchmark parked indefinitely.  This
+// is setup only; all configured connections still warm up before timing.
+constexpr std::size_t connection_start_batch = 1U;
+constexpr auto connection_start_interval = std::chrono::milliseconds{12};
+#else
 constexpr std::size_t connection_start_batch = 4U;
 constexpr auto connection_start_interval = std::chrono::milliseconds{2};
+#endif
 
 struct benchmark_config
 {
@@ -59,6 +69,12 @@ struct benchmark_config
     std::size_t requests{1000};
     std::size_t warmup{100};
     std::size_t runs{5};
+    // A completed client close has sent CONNECTION_CLOSE, but the peer keeps
+    // its draining state for several PTOs.  Starting the next run immediately
+    // can benchmark that teardown backlog instead of a fresh connection set,
+    // especially on IOCP where a large UDP receive ring is shared.  This wait
+    // is deliberately outside the measured interval.
+    std::chrono::milliseconds inter_run_settle{2000};
     std::chrono::milliseconds timeout{5000};
     std::string output{"h3-benchmark-results.json"};
 };
@@ -322,9 +338,7 @@ auto run_connection(cnetmod::io_context& context, const benchmark_config& config
     for (std::size_t connection{}; connection < config.connections; ++connection)
     {
         const auto worker = connection % worker_count;
-        cnetmod::spawn(*contexts[worker], run_connection(*contexts[worker], config,
-            ready_connections, connections[connection], *remaining[worker],
-            connection_start_slots));
+        cnetmod::spawn(*contexts[worker], run_connection(*contexts[worker], config, ready_connections, connections[connection], *remaining[worker], connection_start_slots));
     }
     std::vector<std::jthread> threads;
     threads.reserve(worker_count);
@@ -479,6 +493,9 @@ auto write_results(const benchmark_config& config, const std::vector<run_result>
             config.warmup = std::stoull(std::string{value(index)});
         else if (argument == "--runs")
             config.runs = std::stoull(std::string{value(index)});
+        else if (argument == "--inter-run-settle")
+            config.inter_run_settle = std::chrono::milliseconds{
+                std::stoll(std::string{value(index)})};
         else if (argument == "--timeout")
             config.timeout = std::chrono::milliseconds{std::stoll(std::string{value(index)})};
         else if (argument == "--output")
@@ -489,7 +506,8 @@ auto write_results(const benchmark_config& config, const std::vector<run_result>
             std::println("                    [--connections N] [--client-workers N]");
             std::println("                    [--concurrency N]");
             std::println("                    [--requests N] [--warmup N]");
-            std::println("                    [--runs N] [--timeout MS] [--output FILE]");
+            std::println("                    [--runs N] [--inter-run-settle MS]");
+            std::println("                    [--timeout MS] [--output FILE]");
             std::exit(0);
         }
         else
@@ -503,7 +521,8 @@ auto write_results(const benchmark_config& config, const std::vector<run_result>
     }
     if (config.host.empty() || config.path.empty() || config.port == 0U ||
         config.connections == 0U || config.concurrency == 0U ||
-        config.requests == 0U || config.runs == 0U)
+        config.requests == 0U || config.runs == 0U ||
+        config.inter_run_settle < std::chrono::milliseconds::zero())
         throw std::invalid_argument{
             "host, path, port, connections, concurrency, requests and runs must be non-zero"};
     return config;
@@ -531,6 +550,9 @@ auto main(int argc, char** argv) -> int
                 run.p95.count(), run.p99.count(), run.response_mib_per_second());
             passed = passed && run.failed == 0U && run.successful == run.requested;
             runs.push_back(std::move(run));
+            if (index + 1U < config.runs &&
+                config.inter_run_settle > std::chrono::milliseconds::zero())
+                std::this_thread::sleep_for(config.inter_run_settle);
         }
         if (!write_results(config, runs))
         {

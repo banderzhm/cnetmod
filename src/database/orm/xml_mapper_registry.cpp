@@ -85,6 +85,30 @@ auto mapper_registry::statement_type(std::string_view id) const
     return {};
 }
 
+auto mapper_registry::statement_result_type(std::string_view id) const
+    -> std::string_view
+{
+    if (auto* stmt = find_statement(id))
+        return stmt->attr("resultType");
+    return {};
+}
+
+auto mapper_registry::statement_parameter_type(std::string_view id) const
+    -> std::string_view
+{
+    if (auto* stmt = find_statement(id))
+        return stmt->attr("parameterType");
+    return {};
+}
+
+auto mapper_registry::statement_result_map(std::string_view id) const
+    -> std::string_view
+{
+    if (auto* stmt = find_statement(id))
+        return stmt->attr("resultMap");
+    return {};
+}
+
 auto mapper_registry::find_result_map(std::string_view id) const
     -> const result_map_def*
 {
@@ -164,6 +188,12 @@ auto mapper_registry::load_mapper_node(std::unique_ptr<xml_node> root)
         else if (tag == "select" || tag == "insert" || tag == "update" ||
             tag == "delete")
         {
+            if (tag == "select" && child.element->has_attr("resultMap") &&
+                child.element->has_attr("resultType"))
+            {
+                return std::unexpected(std::format(
+                    "<select id='{}'> cannot declare both resultMap and resultType", id));
+            }
             def.statements[id_string] = std::move(*child.element);
             id_index_[id_string] = {def.namespace_id, id_string};
             id_index_[def.namespace_id + "." + id_string] = {def.namespace_id,

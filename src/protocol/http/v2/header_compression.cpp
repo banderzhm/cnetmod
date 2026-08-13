@@ -76,6 +76,56 @@ namespace {
         {"www-authenticate", ""},
     };
 
+    auto common_static_index(std::string_view name, std::string_view value,
+        bool exact) noexcept -> std::uint32_t
+    {
+        if (name == ":method")
+        {
+            if (!exact || value == "GET")
+                return 2;
+            return value == "POST" ? 3 : 0;
+        }
+        if (name == ":path")
+        {
+            if (!exact || value == "/")
+                return 4;
+            return value == "/index.html" ? 5 : 0;
+        }
+        if (name == ":scheme")
+        {
+            if (!exact || value == "http")
+                return 6;
+            return value == "https" ? 7 : 0;
+        }
+        if (name == ":status")
+        {
+            if (!exact || value == "200")
+                return 8;
+            if (value == "204")
+                return 9;
+            if (value == "206")
+                return 10;
+            if (value == "304")
+                return 11;
+            if (value == "400")
+                return 12;
+            if (value == "404")
+                return 13;
+            return value == "500" ? 14 : 0;
+        }
+        if (name == ":authority")
+            return exact && !value.empty() ? 0 : 1;
+        if (name == "content-length")
+            return exact && !value.empty() ? 0 : 28;
+        if (name == "content-type")
+            return exact && !value.empty() ? 0 : 31;
+        if (name == "host")
+            return exact && !value.empty() ? 0 : 38;
+        if (name == "user-agent")
+            return exact && !value.empty() ? 0 : 58;
+        return 0;
+    }
+
     void encode_integer(std::vector<std::byte>& out, std::uint32_t value,
         unsigned prefix, std::uint8_t head = 0)
     {
@@ -196,6 +246,8 @@ auto header_compression::at(std::uint32_t index) const -> std::optional<entry>
 auto header_compression::find(std::string_view name, std::string_view value,
     bool exact) const -> std::uint32_t
 {
+    if (const auto common = common_static_index(name, value, exact))
+        return common;
     for (std::uint32_t i = 1; i < std::size(static_table); ++i)
         if (static_table[i].name == name &&
             (!exact || static_table[i].value == value))
@@ -222,6 +274,7 @@ auto header_compression::decode(std::span<const std::byte> block)
     -> std::expected<std::vector<header_field>, std::error_code>
 {
     std::vector<header_field> result;
+    result.reserve(std::min<std::size_t>(block.size(), 16U));
     std::size_t offset = 0;
     bool can_resize = true;
     while (offset < block.size())
@@ -283,6 +336,7 @@ auto header_compression::encode(std::span<const header_field> fields)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
     std::vector<std::byte> result;
+    result.reserve(fields.size() * 16U);
     for (const auto& field : fields)
     {
         if (field.name.empty())

@@ -124,6 +124,19 @@ TEST(congestion_controller_on_packet_acked)
     ASSERT_TRUE(cc.can_send(5000));
 }
 
+TEST(congestion_controller_discarded_packets_only_release_flight_accounting)
+{
+    auto config = make_cc_config();
+    cnetmod::quic::new_reno_congestion_controller cc(config);
+    const auto initial_window = cc.congestion_window();
+
+    cc.on_packet_sent(4096U);
+    cc.on_packets_discarded(4096U);
+
+    ASSERT_EQ(cc.bytes_in_flight(), 0U);
+    ASSERT_EQ(cc.congestion_window(), initial_window);
+}
+
 // =============================================================================
 // Tests: Congestion event handling
 // =============================================================================
@@ -211,6 +224,56 @@ TEST(cubic_reduces_window_and_preserves_minimum)
 
     ASSERT_TRUE(cc.congestion_window() < before_loss);
     ASSERT_TRUE(cc.congestion_window() >= 2944ULL);
+}
+
+TEST(congestion_controller_selects_configured_cubic_without_heap_polymorphism)
+{
+    auto config = make_cc_config();
+    config.congestion_algorithm = cnetmod::quic::quic_congestion_algorithm::cubic;
+    auto cc = cnetmod::quic::create_congestion_controller(config);
+
+    ASSERT_TRUE(cc.algorithm() == cnetmod::quic::quic_congestion_algorithm::cubic);
+    cc.on_packet_sent(12000);
+    cc.on_packet_acked(12000);
+    const auto before_loss = cc.congestion_window();
+    cc.on_congestion_event(2000);
+    ASSERT_TRUE(cc.congestion_window() < before_loss);
+}
+
+TEST(congestion_controller_keeps_newreno_as_the_default)
+{
+    auto cc = cnetmod::quic::create_congestion_controller(make_cc_config());
+
+    ASSERT_TRUE(cc.algorithm() == cnetmod::quic::quic_congestion_algorithm::new_reno);
+}
+
+TEST(bbr_selects_model_based_controller_and_tracks_acknowledgements)
+{
+    auto config = make_cc_config();
+    config.congestion_algorithm = cnetmod::quic::quic_congestion_algorithm::bbr;
+    auto cc = cnetmod::quic::create_congestion_controller(config);
+
+    ASSERT_TRUE(cc.algorithm() == cnetmod::quic::quic_congestion_algorithm::bbr);
+    const auto initial_window = cc.congestion_window();
+    cc.on_packet_sent(12000U);
+    cc.on_packet_acked(12000U);
+    ASSERT_TRUE(cc.bytes_in_flight() == 0U);
+    ASSERT_TRUE(cc.congestion_window() >= initial_window);
+    ASSERT_TRUE(*cc.pacing_rate() > 0.0);
+}
+
+TEST(bbr_loss_keeps_a_safe_send_window)
+{
+    auto config = make_cc_config();
+    config.congestion_algorithm = cnetmod::quic::quic_congestion_algorithm::bbr;
+    auto cc = cnetmod::quic::create_congestion_controller(config);
+    cc.on_packet_sent(12000U);
+    cc.on_packet_acked(12000U);
+    const auto before_loss = cc.congestion_window();
+    cc.on_congestion_event(1000U);
+
+    ASSERT_TRUE(cc.congestion_window() < before_loss);
+    ASSERT_TRUE(cc.congestion_window() >= 2944U);
 }
 
 TEST(congestion_pacing_tracks_rtt)

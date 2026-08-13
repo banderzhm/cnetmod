@@ -9,10 +9,29 @@ import cnetmod.orm.xml_mapper_parser;
 
 namespace cnetmod::orm {
 
+/// Metadata preserved for every MyBatis-style #{...} placeholder.  The SQL
+/// formatter currently consumes `params`; this companion data keeps the XML
+/// declaration available to protocol clients which use native prepared
+/// statements, without ever treating a modifier as part of the property name.
+export struct dynamic_parameter_mapping
+{
+    std::string property;
+    std::string jdbc_type;
+    std::string java_type;
+    std::string type_handler;
+    std::string mode;
+    std::optional<std::uint32_t> numeric_scale;
+};
+
 export struct built_dynamic_sql
 {
+    /// `sql` remains the existing `{}` representation consumed by format_sql.
     std::string sql;
     std::vector<param_value> params;
+    std::vector<dynamic_parameter_mapping> parameter_mappings;
+    /// Same statement with MySQL native `?` markers. It is generated from the
+    /// parser output, never by interpolating parameter values.
+    std::string prepared_sql;
 };
 
 export using fragment_map = std::unordered_map<std::string, const xml_node*>;
@@ -29,6 +48,7 @@ private:
     format_options opts_;
     std::string sql_buf_;
     std::vector<param_value> params_;
+    std::vector<dynamic_parameter_mapping> parameter_mappings_;
     mutable std::unordered_map<std::string, std::unique_ptr<ast_node>>
         expr_cache_;
 
@@ -42,6 +62,8 @@ private:
     void process_node(const xml_node& node, param_context& ctx,
         const fragment_map& fragments);
     void process_text(std::string_view text, const param_context& ctx);
+    static auto parse_parameter_mapping(std::string_view expression)
+        -> dynamic_parameter_mapping;
     void append_normalized(std::string_view text, bool& last_was_space);
     void process_if(const xml_node& node, param_context& ctx,
         const fragment_map& fragments);

@@ -5,6 +5,7 @@ module;
 export module cnetmod.protocol.grpc.governance.circuit_breaker;
 
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::governance {
 
@@ -43,7 +44,7 @@ private:
     void open(std::chrono::steady_clock::time_point now) noexcept;
 
     circuit_breaker_config config_;
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     circuit_breaker_state state_ = circuit_breaker_state::closed;
     std::uint32_t consecutive_failures_ = 0;
     std::uint32_t half_open_successes_ = 0;

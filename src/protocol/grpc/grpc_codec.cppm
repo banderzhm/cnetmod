@@ -28,12 +28,18 @@ export auto decode_frames(std::span<const std::byte> data)
 export class stream_decoder
 {
 public:
+    /// Limit incomplete frame buffering as well as completed message size.
+    /// A peer can otherwise advertise a huge frame and keep a streaming RPC
+    /// alive forever while incrementally exhausting process memory.
+    explicit stream_decoder(
+        std::size_t max_message_bytes = default_max_message_bytes) noexcept;
     [[nodiscard]] auto feed(std::span<const std::byte> bytes)
         -> std::expected<std::vector<message_frame>, std::error_code>;
     [[nodiscard]] auto buffered_bytes() const noexcept -> std::size_t;
 
 private:
     byte_buffer buffer_;
+    std::size_t max_message_bytes_;
 };
 
 export auto frames_to_messages(std::span<const message_frame> frames,

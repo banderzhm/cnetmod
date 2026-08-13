@@ -7,6 +7,7 @@ module;
         #define WIN32_LEAN_AND_MEAN
     #endif
     #include <WinSock2.h>
+    #include <Windows.h>
 #else
     #include <cerrno>
 #endif
@@ -139,6 +140,16 @@ auto from_native_error([[maybe_unused]] int native_error) noexcept -> errc
         return errc::network_unreachable;
     case WSAEHOSTUNREACH:
         return errc::host_unreachable;
+    // IOCP returns Win32 ERROR_* values for asynchronous UDP ICMP failures,
+    // not their WSA* aliases. Preserve their network meaning instead of
+    // collapsing them into unknown_error (which makes QUIC tear down an
+    // otherwise healthy multipath connection).
+    case ERROR_HOST_UNREACHABLE:
+        return errc::host_unreachable;
+    case ERROR_PROTOCOL_UNREACHABLE:
+        return errc::network_unreachable;
+    case ERROR_PORT_UNREACHABLE:
+        return errc::connection_refused;
     case WSAHOST_NOT_FOUND:
         return errc::host_not_found;
     case WSAEACCES:

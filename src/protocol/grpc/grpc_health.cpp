@@ -8,13 +8,13 @@ import cnetmod.protocol.grpc.proto;
 namespace cnetmod::grpc::health {
 void registry::set(std::string service, serving_status status)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     statuses_[std::move(service)] = status;
 }
 
 auto registry::get(std::string_view service) const -> serving_status
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     if (auto it = statuses_.find(std::string(service)); it != statuses_.end())
         return it->second;
     return service.empty() ? default_status_ : serving_status::service_unknown;
@@ -22,7 +22,7 @@ auto registry::get(std::string_view service) const -> serving_status
 
 void registry::set_default(serving_status status)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     default_status_ = status;
 }
 

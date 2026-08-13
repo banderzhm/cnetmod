@@ -78,6 +78,23 @@ namespace {
         return *value;
     }
 
+    [[nodiscard]] auto trim_ows(std::string_view value) noexcept -> std::string_view
+    {
+        while (!value.empty() && (value.front() == ' ' || value.front() == '\t'))
+            value.remove_prefix(1U);
+        while (!value.empty() && (value.back() == ' ' || value.back() == '\t'))
+            value.remove_suffix(1U);
+        return value;
+    }
+
+    [[nodiscard]] auto valid_priority_text(std::string_view value) noexcept -> bool
+    {
+        return std::ranges::all_of(value, [](unsigned char character)
+            {
+                return character >= 0x20U && character <= 0x7eU;
+            });
+    }
+
 } // namespace
 
 auto decode_http3_frame(byte_view input)
@@ -153,6 +170,18 @@ auto decode_http3_frame(byte_view input)
             return std::unexpected(push_id.error());
         return std::pair{http3_frame_variant{max_push_id_frame{*push_id}}, consumed};
     }
+    case http3_frame_type::priority_update:
+    {
+        std::size_t id_size{};
+        auto id = decode_varint(payload, id_size);
+        if (!id || !valid_priority_text(std::string_view{reinterpret_cast<const char*>(payload.data() + id_size), payload.size() - id_size}))
+            return std::unexpected(id ? std::make_error_code(std::errc::invalid_argument)
+                                      : id.error());
+        return std::pair{http3_frame_variant{priority_update_frame{*id,
+                             std::string{reinterpret_cast<const char*>(payload.data() + id_size),
+                                 payload.size() - id_size}}},
+            consumed};
+    }
     default:
         return std::pair{http3_frame_variant{unknown_frame{*type, payload}}, consumed};
     }
@@ -204,6 +233,16 @@ auto encode_http3_frame(const cancel_push_frame& frame) -> byte_buffer
     return encode_frame(static_cast<std::uint64_t>(http3_frame_type::cancel_push), varint_payload(frame.push_id));
 }
 
+auto encode_http3_frame(const priority_update_frame& frame) -> byte_buffer
+{
+    if (!valid_priority_text(frame.priority_field_value))
+        return {};
+    auto payload = varint_payload(frame.prioritized_element_id);
+    payload.append(byte_view{reinterpret_cast<const std::byte*>(frame.priority_field_value.data()),
+        frame.priority_field_value.size()});
+    return encode_frame(static_cast<std::uint64_t>(http3_frame_type::priority_update), payload);
+}
+
 auto encode_http3_frame(const http3_frame_variant& frame) -> byte_buffer
 {
     return std::visit([](const auto& value) -> byte_buffer
@@ -214,6 +253,71 @@ auto encode_http3_frame(const http3_frame_variant& frame) -> byte_buffer
                 return encode_http3_frame(value);
         },
         frame);
+}
+
+auto parse_http_priority(std::string_view value)
+    -> std::expected<http_priority, std::error_code>
+{
+    http_priority result;
+    bool seen_urgency{};
+    bool seen_incremental{};
+    while (!value.empty())
+    {
+        const auto separator = value.find(',');
+        const auto member = trim_ows(value.substr(0U, separator));
+        value = separator == std::string_view::npos ? std::string_view{}
+                                                    : value.substr(separator + 1U);
+        if (member.empty())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        if (member.starts_with("u="))
+        {
+            if (seen_urgency || member.size() != 3U || member[2] < '0' || member[2] > '7')
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            result.urgency = static_cast<std::uint8_t>(member[2] - '0');
+            seen_urgency = true;
+        }
+        else if (member == "i" || member == "i=?1" || member == "i=?0")
+        {
+            if (seen_incremental)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            result.incremental = member != "i=?0";
+            seen_incremental = true;
+        }
+        else if (!valid_priority_text(member))
+        {
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        }
+    }
+    return result;
+}
+
+auto format_http_priority(http_priority priority) -> std::string
+{
+    const auto urgency = std::min<std::uint8_t>(priority.urgency, 7U);
+    auto result = std::string{"u="};
+    result.push_back(static_cast<char>('0' + urgency));
+    if (priority.incremental)
+        result += ", i";
+    return result;
+}
+
+auto encode_http_datagram(const http_datagram& datagram) -> byte_buffer
+{
+    byte_buffer result;
+    result.reserve(8U + datagram.payload.size());
+    encode_varint(datagram.context_id, result);
+    result.append(datagram.payload);
+    return result;
+}
+
+auto decode_http_datagram(byte_view bytes)
+    -> std::expected<http_datagram, std::error_code>
+{
+    std::size_t used{};
+    auto context_id = decode_varint(bytes, used);
+    if (!context_id)
+        return std::unexpected(context_id.error());
+    return http_datagram{*context_id, bytes.subspan(used)};
 }
 
 auto is_stream_frame(const http3_frame_variant& frame) noexcept -> bool

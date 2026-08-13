@@ -16,10 +16,29 @@ python3 testing/http3/h3_acceptance.py \
   --results h3-interop-results.json
 ```
 
-The two required directions are cnetmod server → curl HTTP/3 and aioquic
-server → cnetmod client.  The JSON record identifies each peer as passed,
-failed, or skipped.  A release needs both cases passed; a skipped case is not
-release evidence.  nghttp3 distributions do not expose one portable CLI, so
+On Windows with the Visual Studio 2026 build, run the same gate from
+PowerShell (the executable paths are configuration-specific):
+
+```powershell
+python testing/http3/h3_acceptance.py `
+  --server .\cmake-build-quic-windows\bin\Release\h3_interop_server.exe `
+  --client .\cmake-build-quic-windows\bin\Release\h3_interop_client.exe `
+  --port 45433 `
+  --results .\cmake-build-quic-windows\h3-interop-release.json
+```
+
+The same command can be run with `bin\Debug` and a different UDP port. The
+verified Windows Debug and Release runs each passed the aioquic server to
+cnetmod client request and the aioquic WebTransport to cnetmod server probe.
+The generated JSON records each pass/skip status and should be kept with CI
+artifacts rather than committed as a source fixture.
+
+The required HTTP/3 directions are cnetmod server → curl HTTP/3 and aioquic
+server → cnetmod client. When aioquic is installed, the same gate also runs
+aioquic WebTransport → cnetmod server, covering Extended CONNECT, child
+streams, HTTP Datagrams, and Close Capsules. The JSON record identifies each
+peer as passed, failed, or skipped. A release needs the applicable cases
+passed; a skipped case is not release evidence. nghttp3 distributions do not expose one portable CLI, so
 CI must pin its invocation and pass it explicitly; `{url}`, `{port}`, `{cert}`
 `{key}`, and `{root}` are expanded by the harness. The client command must
 write the response body to stdout so the gate can validate the expected
@@ -42,6 +61,42 @@ python3 testing/http3/h3_acceptance.py ... \
   --nghttp3-server-command \
     'osslserver -q --htdocs {root} 127.0.0.1 {port} {key} {cert}'
 ```
+
+### Rust `wtransport` WebTransport peer
+
+The repository includes an independent Rust [`wtransport`](https://crates.io/crates/wtransport)
+client at `testing/bench/crosslang/rust/src/bin/webtransport_probe.rs`.  It
+validates Extended CONNECT, bidirectional and unidirectional child streams,
+and an HTTP Datagram echo against the cnetmod fixture. Add it to the same
+acceptance run with an explicit command template:
+
+```sh
+cargo build --manifest-path testing/bench/crosslang/rust/Cargo.toml --bin webtransport_probe
+python3 testing/http3/h3_acceptance.py ... \
+  --wtransport-probe testing/bench/crosslang/rust/target/debug/webtransport_probe
+```
+
+To include the same probe in CTest, configure with
+`-DCNETMOD_WTRANSPORT_PROBE=/absolute/path/to/webtransport_probe`.
+
+When the probe is supplied, the gate runs three independent connections by
+default (`--wtransport-repeats 3`). This catches ordering-sensitive regressions
+that can pass a single WebTransport connection; use a larger value for a
+release soak test. Each repetition uses a fresh fixture process and UDP port,
+so a cancelled session cannot contaminate the next result.
+
+If Rust/Cargo is not available, this case is recorded as `skipped`, not
+`passed`.
+
+### Connection migration regression
+
+The CTest target `http3_connection_migration` runs the cnetmod client and
+server through a loopback UDP proxy. After the first successful request, the
+proxy changes the source UDP port used toward the server. The second request
+must complete on the same QUIC connection, proving `PATH_CHALLENGE` /
+`PATH_RESPONSE`, CID routing, and post-validation endpoint switching. The
+fixture is built and run in both Visual Studio Debug and Release configurations
+on Windows CI; it is not a reconnect test.
 
 ## Weak network
 

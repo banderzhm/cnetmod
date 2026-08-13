@@ -24,6 +24,11 @@ export struct iocp_overlapped : OVERLAPPED
     io_context* resume_context{};
     std::error_code error{};
     DWORD bytes_transferred = 0;
+    /// Optional completion-port adapter for batched facilities such as RIO.
+    /// It drains its own completion queue and resumes the owning coroutines;
+    /// ordinary overlapped I/O keeps the zero-overhead coroutine path below.
+    void (*completion_callback)(iocp_overlapped&) noexcept = nullptr;
+    void* completion_context{};
 
     iocp_overlapped() noexcept;
     void reset() noexcept;

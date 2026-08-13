@@ -95,6 +95,11 @@ jobs:
         echo "SDKROOT=${SDKROOT}" >> $GITHUB_OUTPUT
         echo "macOS SDK path: ${SDKROOT}"
 
+    - name: Set up Python interoperability runtime
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
     - name: Configure CMake
       run: |
         LLVM_PREFIX="${{ steps.llvm-paths.outputs.LLVM_PREFIX }}"
@@ -122,6 +127,15 @@ jobs:
 
     - name: Build
       run: cmake --build ${{ github.workspace }}/build --parallel $(sysctl -n hw.ncpu)
+
+    - name: Install required HTTP/3 and WebTransport interoperability peer
+      run: python -m pip install --disable-pip-version-check --requirement testing/http3/requirements.txt
+
+    - name: Run QUIC and HTTP/3 release gates
+      run: |
+        ctest --test-dir "${{ github.workspace }}/build" \
+          --output-on-failure --timeout 180 \
+          -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
     - name: Verify build artifacts
       run: |

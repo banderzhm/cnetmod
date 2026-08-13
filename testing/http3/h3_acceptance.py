@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Executable HTTP/3 interoperability gate.
 
-This program intentionally treats an unavailable peer implementation as a
-*skip* (exit 77), never as a passed interoperability result.  A completed
-case must make an HTTP/3 request and validate its response.
+Every required release-gate case must use the aioquic peer installed by CI.
+An unavailable required peer is a failing gate, not a passing or skipped
+result. Optional curl, nghttp3 and Rust wtransport checks retain their skip
+behaviour because the workflow does not provision those external tools.
 """
 
 from __future__ import annotations
@@ -95,15 +96,17 @@ def cnetmod_client(binary: Path, port: int) -> None:
     reply = run([str(binary), "127.0.0.1", str(port), "/health"], 20)
     if reply.returncode:
         raise AssertionError(reply.stderr.strip() or reply.stdout.strip())
-    if "Status: 200" not in reply.stdout:
-        raise AssertionError(f"unexpected client result: {reply.stdout!r}")
+    output = reply.stdout + reply.stderr
+    if "Status: 200" not in output:
+        raise AssertionError(f"unexpected client result: {output!r}")
 
 
-def case(name: str, action: Callable[[], None]) -> Result:
+def case(name: str, action: Callable[[], None],
+         success_detail: str = "request and response validated") -> Result:
     began = time.monotonic()
     try:
         action()
-        return Result(name, "passed", "request and response validated", int((time.monotonic() - began) * 1000))
+        return Result(name, "passed", success_detail, int((time.monotonic() - began) * 1000))
     except (FileNotFoundError, SkipCase) as exc:
         return Result(name, "skipped", str(exc), int((time.monotonic() - began) * 1000))
     except Exception as exc:  # keep each peer case independent
@@ -115,6 +118,16 @@ def main() -> int:
     parser.add_argument("--server", type=Path, required=True, help="cnetmod h3_interop_server executable")
     parser.add_argument("--client", type=Path, required=True, help="cnetmod h3_interop_client executable")
     parser.add_argument("--aioquic-peer", type=Path, default=Path(__file__).with_name("h3_aioquic_peer.py"))
+    parser.add_argument("--aioquic-webtransport-probe", type=Path,
+                        default=Path(__file__).with_name("h3_webtransport_aioquic_probe.py"))
+    parser.add_argument("--wtransport-probe-command",
+                        help="Rust wtransport probe command template; use {url}")
+    parser.add_argument("--wtransport-probe", type=Path,
+                        help="built Rust wtransport probe executable")
+    parser.add_argument("--wtransport-repeats", type=int, default=3,
+                        help="number of independent wtransport probes (default: 3)")
+    parser.add_argument("--server-workers", type=int, default=1,
+                        help="number of cnetmod HTTP/3 server workers (default: 1)")
     parser.add_argument("--port", type=int, default=4433)
     parser.add_argument("--results", type=Path, default=Path("h3-interop-results.json"))
     parser.add_argument("--nghttp3-client-command", help="external HTTP/3 client command template; use {url}")
@@ -122,6 +135,10 @@ def main() -> int:
     args = parser.parse_args()
 
     cases: list[Result] = []
+    required_cases: set[str] = {
+        "aioquic-server_to_cnetmod-client",
+        "aioquic-webtransport_to_cnetmod-server",
+    }
 
     def cnetmod_server_to_curl() -> None:
         if not args.server.is_file():
@@ -129,7 +146,9 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="cnetmod-h3-") as temp:
             directory = Path(temp)
             make_certificate(directory)
-            process = subprocess.Popen([str(args.server), "--port", str(args.port)], cwd=directory, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process = subprocess.Popen([str(args.server), "--port", str(args.port),
+                "--workers", str(args.server_workers)], cwd=directory, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 wait_for_process(process)
                 # The cnetmod fixture listener intentionally binds an IPv4
@@ -181,6 +200,104 @@ def main() -> int:
                 except subprocess.TimeoutExpired:
                     process.kill()
 
+    def aioquic_webtransport_to_cnetmod() -> None:
+        try:
+            import aioquic  # noqa: F401
+        except ImportError as exc:
+            raise SkipCase(f"aioquic unavailable: {exc}") from exc
+        if not args.server.is_file():
+            raise FileNotFoundError(args.server)
+        if not args.aioquic_webtransport_probe.is_file():
+            raise FileNotFoundError(args.aioquic_webtransport_probe)
+        with tempfile.TemporaryDirectory(prefix="cnetmod-h3-webtransport-") as temp:
+            directory = Path(temp)
+            cert, key = make_certificate(directory)
+            port = reserve_udp_port()
+            process = subprocess.Popen(
+                [str(args.server), "--port", str(port), "--cert", str(cert), "--key", str(key),
+                 "--workers", str(args.server_workers), "--webtransport"],
+                cwd=directory, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            )
+            try:
+                wait_for_process(process)
+                try:
+                    completed = run([sys.executable, str(args.aioquic_webtransport_probe),
+                                     "127.0.0.1", str(port)], 20)
+                except subprocess.TimeoutExpired as exc:
+                    process.terminate()
+                    _, stderr = process.communicate(timeout=5)
+                    raise AssertionError(
+                        f"aioquic WebTransport probe timed out after {exc.timeout}s\n"
+                        f"cnetmod server stderr:\n{stderr}"
+                    ) from exc
+                if completed.returncode == SKIP:
+                    raise SkipCase(completed.stdout.strip() or completed.stderr.strip())
+                if completed.returncode:
+                    process.terminate()
+                    _, stderr = process.communicate(timeout=5)
+                    raise AssertionError(
+                        f"{completed.stderr.strip() or completed.stdout.strip()}\n"
+                        f"cnetmod server stderr:\n{stderr}"
+                    )
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                try:
+                    process.wait(5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+
+    def wtransport_webtransport_to_cnetmod() -> None:
+        if not args.wtransport_probe and not args.wtransport_probe_command:
+            raise SkipCase("--wtransport-probe or --wtransport-probe-command was not supplied")
+        if args.wtransport_repeats < 1:
+            raise ValueError("--wtransport-repeats must be at least 1")
+        if args.wtransport_probe and not args.wtransport_probe.is_file():
+            raise FileNotFoundError(args.wtransport_probe)
+        if not args.server.is_file():
+            raise FileNotFoundError(args.server)
+        with tempfile.TemporaryDirectory(prefix="cnetmod-h3-webtransport-") as temp:
+            directory = Path(temp)
+            cert, key = make_certificate(directory)
+            for attempt in range(1, args.wtransport_repeats + 1):
+                # Use a fresh fixture process for every probe.  A failed or
+                # cancelled WebTransport session must not leave connection-
+                # local state that can affect the next independent run.
+                port = reserve_udp_port()
+                process = subprocess.Popen(
+                    [str(args.server), "--port", str(port), "--cert", str(cert), "--key", str(key),
+                     "--workers", str(args.server_workers), "--webtransport"],
+                    cwd=directory, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                )
+                try:
+                    wait_for_process(process)
+                    url = f"https://127.0.0.1:{port}/webtransport"
+                    command = ([str(args.wtransport_probe), url] if args.wtransport_probe else
+                               shlex.split(args.wtransport_probe_command.format(url=url)))
+                    completed = run(command, 30)
+                    if completed.returncode == SKIP:
+                        raise SkipCase(completed.stdout.strip() or completed.stderr.strip())
+                    if completed.returncode:
+                        process.terminate()
+                        _, stderr = process.communicate(timeout=5)
+                        raise AssertionError(
+                            f"wtransport probe {attempt}/{args.wtransport_repeats} failed: "
+                            f"{completed.stderr.strip() or completed.stdout.strip()}\n"
+                            f"cnetmod server stderr:\n{stderr}"
+                        )
+                    if "WebTransport wtransport -> cnetmod:" not in completed.stdout:
+                        raise AssertionError(
+                            f"wtransport probe {attempt}/{args.wtransport_repeats} returned "
+                            f"unexpected output: {completed.stdout!r}"
+                        )
+                finally:
+                    if process.poll() is None:
+                        process.terminate()
+                    try:
+                        process.wait(5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+
     def cnetmod_server_to_nghttp3() -> None:
         if not args.nghttp3_client_command:
             raise SkipCase("--nghttp3-client-command was not supplied")
@@ -189,7 +306,9 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="cnetmod-h3-") as temp:
             directory = Path(temp)
             make_certificate(directory)
-            process = subprocess.Popen([str(args.server), "--port", str(args.port)], cwd=directory, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            process = subprocess.Popen([str(args.server), "--port", str(args.port),
+                "--workers", str(args.server_workers)], cwd=directory, text=True,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 wait_for_process(process)
                 command = shlex.split(args.nghttp3_client_command.format(url=f"https://127.0.0.1:{args.port}/health"))
@@ -235,6 +354,10 @@ def main() -> int:
                     process.kill()
 
     cases.append(case("aioquic-server_to_cnetmod-client", aioquic_server_to_cnetmod))
+    cases.append(case("aioquic-webtransport_to_cnetmod-server", aioquic_webtransport_to_cnetmod))
+    cases.append(case(
+        "wtransport-webtransport_to_cnetmod-server", wtransport_webtransport_to_cnetmod,
+        f"{args.wtransport_repeats} independent connections validated"))
     cases.append(case("cnetmod-server_to_curl-http3", cnetmod_server_to_curl))
     cases.append(case("cnetmod-server_to_nghttp3-client", cnetmod_server_to_nghttp3))
     cases.append(case("nghttp3-server_to_cnetmod-client", nghttp3_server_to_cnetmod))
@@ -243,7 +366,13 @@ def main() -> int:
         print(f"[{item.status.upper()}] {item.name}: {item.detail}")
     if any(item.status == "failed" for item in cases):
         return 1
-    return 0 if any(item.status == "passed" for item in cases) else SKIP
+    skipped_required = [item.name for item in cases
+                        if item.name in required_cases and item.status == "skipped"]
+    if skipped_required:
+        print("[FAILED] required interoperability peer unavailable: " + ", ".join(skipped_required),
+              file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

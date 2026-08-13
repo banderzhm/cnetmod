@@ -8,6 +8,7 @@ import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
 import cnetmod.executor.async_op;
+import cnetmod.utils.concurrent_containers.copy_on_write_value;
 
 namespace cnetmod::kafka {
 namespace {
@@ -386,7 +387,7 @@ namespace {
                     error_code::malformed_response,
                     "truncated AddPartitionsToTxn response"));
             for (std::int32_t topic_index = 0; topic_index < *topic_count;
-                 ++topic_index)
+                ++topic_index)
             {
                 auto topic = decoder.string();
                 auto partition_count = decoder.int32();
@@ -395,7 +396,7 @@ namespace {
                         error_code::malformed_response,
                         "truncated AddPartitionsToTxn topic response"));
                 for (std::int32_t partition_index = 0;
-                     partition_index < *partition_count; ++partition_index)
+                    partition_index < *partition_count; ++partition_index)
                 {
                     auto partition = decoder.int32();
                     auto code = decoder.int16();
@@ -462,7 +463,7 @@ namespace {
                     error_code::malformed_response,
                     "truncated TxnOffsetCommit response"));
             for (std::int32_t topic_index = 0; topic_index < *topic_count;
-                 ++topic_index)
+                ++topic_index)
             {
                 auto topic = commit_decoder.string();
                 auto partition_count = commit_decoder.int32();
@@ -471,7 +472,7 @@ namespace {
                         error_code::malformed_response,
                         "truncated TxnOffsetCommit topic response"));
                 for (std::int32_t partition_index = 0;
-                     partition_index < *partition_count; ++partition_index)
+                    partition_index < *partition_count; ++partition_index)
                 {
                     auto partition = commit_decoder.int32();
                     auto commit_code = commit_decoder.int16();
@@ -1311,8 +1312,7 @@ namespace {
         [[nodiscard]] auto assignment() const
             -> std::vector<topic_partition> override
         {
-            std::scoped_lock lock(assignment_snapshot_mutex_);
-            return assignment_snapshot_;
+            return assignment_snapshot_.snapshot();
         }
 
         auto poll(std::size_t limit, cancel_token* token)
@@ -1700,7 +1700,7 @@ namespace {
                 if (existing != positions_.end())
                     next[partition] = existing->second;
                 else if (auto saved = committed->find(partition);
-                         saved != committed->end())
+                    saved != committed->end())
                     next[partition] = saved->second;
                 else
                     next[partition] = reset->at(partition);
@@ -1789,15 +1789,13 @@ namespace {
         void replace_assignment(std::vector<topic_partition> assignment)
         {
             assigned_ = std::move(assignment);
-            std::scoped_lock lock(assignment_snapshot_mutex_);
-            assignment_snapshot_ = assigned_;
+            assignment_snapshot_.store(assigned_);
         }
 
         void clear_assignment()
         {
             assigned_.clear();
-            std::scoped_lock lock(assignment_snapshot_mutex_);
-            assignment_snapshot_.clear();
+            assignment_snapshot_.store({});
         }
 
         std::shared_ptr<metadata_cache> metadata_;
@@ -1811,8 +1809,8 @@ namespace {
         std::function<broker_connection*(std::int32_t)> broker_lookup_;
         std::vector<std::string> topics_;
         std::vector<topic_partition> assigned_;
-        mutable std::mutex assignment_snapshot_mutex_;
-        std::vector<topic_partition> assignment_snapshot_;
+        concurrent_containers::copy_on_write_value<std::vector<topic_partition>>
+            assignment_snapshot_;
         std::map<topic_partition, std::int64_t> positions_;
         std::map<std::int32_t, fetch_session_state> fetch_sessions_;
         compression_registry codecs_;

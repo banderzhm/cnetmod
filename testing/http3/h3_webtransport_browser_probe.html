@@ -1,0 +1,71 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>cnetmod WebTransport browser probe</title>
+<pre id="status">Preparing WebTransport probe…</pre>
+<script type="module">
+const status = document.querySelector('#status');
+const parameters = new URLSearchParams(location.search);
+
+function bytes(text) {
+  return new TextEncoder().encode(text);
+}
+
+function text(value) {
+  return new TextDecoder().decode(value);
+}
+
+function certificateHash(hex) {
+  if (!/^[0-9a-f]{64}$/i.test(hex))
+    throw new Error('certificate SHA-256 must be 32 bytes of hexadecimal');
+  const value = new Uint8Array(32);
+  for (let index = 0; index < value.length; ++index)
+    value[index] = Number.parseInt(hex.slice(index * 2, index * 2 + 2), 16);
+  return value;
+}
+
+async function probe() {
+  const url = parameters.get('url');
+  const hash = parameters.get('hash');
+  if (!url || !hash)
+    throw new Error('supply ?url=https://127.0.0.1:PORT/webtransport&hash=SHA256');
+  if (!('WebTransport' in globalThis))
+    throw new Error('this browser does not expose the WebTransport API');
+
+  const transport = new WebTransport(url, {
+    serverCertificateHashes: [{algorithm: 'sha-256', value: certificateHash(hash)}],
+  });
+  await transport.ready;
+
+  const bidi = await transport.createBidirectionalStream();
+  const bidiWriter = bidi.writable.getWriter();
+  await bidiWriter.write(bytes('strm'));
+  bidiWriter.releaseLock();
+
+  const uni = await transport.createUnidirectionalStream();
+  const uniWriter = uni.getWriter();
+  await uniWriter.write(bytes('uni'));
+  await uniWriter.close();
+
+  const datagramWriter = transport.datagrams.writable.getWriter();
+  await datagramWriter.write(bytes('ping'));
+  datagramWriter.releaseLock();
+
+  const bidiReader = bidi.readable.getReader();
+  const childEcho = await bidiReader.read();
+  if (childEcho.done || text(childEcho.value) !== 'strm')
+    throw new Error(`child-stream echo mismatch: ${text(childEcho.value ?? new Uint8Array())}`);
+  bidiReader.releaseLock();
+
+  const datagramReader = transport.datagrams.readable.getReader();
+  const datagramEcho = await datagramReader.read();
+  if (datagramEcho.done || text(datagramEcho.value) !== 'ping')
+    throw new Error(`Datagram echo mismatch: ${text(datagramEcho.value ?? new Uint8Array())}`);
+  datagramReader.releaseLock();
+
+  status.textContent = 'PASS: WebTransport CONNECT, child streams, and Datagram echo';
+}
+
+probe().catch((error) => {
+  status.textContent = `FAIL: ${error?.stack ?? error}`;
+});
+</script>

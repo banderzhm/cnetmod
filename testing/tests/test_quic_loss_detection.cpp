@@ -277,6 +277,29 @@ TEST(loss_detector_pn_space_isolation)
     ASSERT_TRUE(lost_app.empty());
 }
 
+TEST(loss_detector_discarded_packet_space_clears_pto_and_bytes)
+{
+    auto config = make_test_config();
+    cnetmod::quic::loss_detector detector(config);
+    const auto now = std::chrono::steady_clock::now();
+
+    detector.on_packet_sent(7U, 512U, now, true,
+        cnetmod::quic::pn_space::initial);
+    ASSERT_EQ(detector.in_flight_packet_count(cnetmod::quic::pn_space::initial),
+        1U);
+    ASSERT_EQ(detector.bytes_in_flight(cnetmod::quic::pn_space::initial), 512U);
+    ASSERT_TRUE(detector.next_pto_deadline().has_value());
+
+    // Once Handshake keys authenticate, Initial packets are no longer valid
+    // on the wire. Their PTO state must disappear with the key material.
+    ASSERT_EQ(detector.discard_packet_number_space(cnetmod::quic::pn_space::initial),
+        512U);
+    ASSERT_EQ(detector.in_flight_packet_count(cnetmod::quic::pn_space::initial),
+        0U);
+    ASSERT_EQ(detector.bytes_in_flight(cnetmod::quic::pn_space::initial), 0U);
+    ASSERT_FALSE(detector.next_pto_deadline().has_value());
+}
+
 // =============================================================================
 // Tests: RTT sample structure
 // =============================================================================

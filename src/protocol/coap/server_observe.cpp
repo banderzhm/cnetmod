@@ -107,7 +107,7 @@ void udp_server::add_observer(const endpoint& peer, const std::vector<std::byte>
         .path = std::move(normalized),
         .updated_at = std::chrono::steady_clock::now(),
     };
-    std::scoped_lock lock(observers_mutex_);
+    concurrent_containers::exclusive_latch_guard lock{observers_latch_};
     observers_[std::move(key)] = std::move(sub);
 }
 
@@ -118,7 +118,7 @@ void udp_server::remove_observer(const endpoint& peer, const std::vector<std::by
         .token = token,
         .path = normalize_path(std::move(path)),
     };
-    std::scoped_lock lock(observers_mutex_);
+    concurrent_containers::exclusive_latch_guard lock{observers_latch_};
     observers_.erase(key);
 }
 
@@ -126,7 +126,7 @@ auto udp_server::collect_observers(std::string path) -> std::vector<observe_subs
 {
     std::vector<observe_subscription> result;
     const auto now = std::chrono::steady_clock::now();
-    std::scoped_lock lock(observers_mutex_);
+    concurrent_containers::exclusive_latch_guard lock{observers_latch_};
     for (auto it = observers_.begin(); it != observers_.end();)
     {
         if (now - it->second.updated_at > cfg_.observe_max_age * 3)
@@ -152,7 +152,7 @@ void udp_server::track_observe_delivery(std::uint16_t message_id,
         .path = sub.path,
         .sent_at = std::chrono::steady_clock::now(),
     };
-    std::scoped_lock lock(observers_mutex_);
+    concurrent_containers::exclusive_latch_guard lock{observers_latch_};
     pending_observe_[observe_delivery_key(sub.peer, message_id)] = std::move(delivery);
 }
 
@@ -165,7 +165,7 @@ auto udp_server::handle_observe_control(const endpoint& peer, const message& msg
 
     std::optional<observe_delivery> delivery;
     {
-        std::scoped_lock lock(observers_mutex_);
+        concurrent_containers::exclusive_latch_guard lock{observers_latch_};
         auto it = pending_observe_.find(observe_delivery_key(peer, msg.message_id));
         if (it == pending_observe_.end())
         {

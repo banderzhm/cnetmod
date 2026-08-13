@@ -5,6 +5,7 @@ module;
 export module cnetmod.protocol.grpc.governance.admission;
 
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::governance {
 
@@ -61,7 +62,7 @@ public:
     [[nodiscard]] auto limit() const noexcept -> rate_limit;
 
 private:
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     rate_limit limit_;
     double tokens_ = 0.0;
     std::chrono::steady_clock::time_point last_refill_;
@@ -85,7 +86,7 @@ private:
     using method_limits =
         std::map<std::string, std::shared_ptr<token_bucket>, std::less<>>;
 
-    mutable std::mutex mutex_;
+    mutable concurrent_containers::atomic_rw_latch latch_;
     std::map<std::string, method_limits, std::less<>> limits_;
 };
 

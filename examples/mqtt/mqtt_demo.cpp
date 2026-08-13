@@ -32,30 +32,39 @@ namespace mqtt = cnetmod::mqtt;
 
 constexpr std::uint16_t MQTT_PORT = 11883;
 
+template <class value_type>
+void report_mqtt_result(const std::expected<value_type, std::string>& result,
+    std::string_view operation)
+{
+    if (!result)
+        logger::warn("  [MQTT] {} failed: {}", operation, result.error());
+}
+
 // =============================================================================
 // 1. Broker start
 // =============================================================================
 
 auto run_broker(cn::io_context& ctx, mqtt::broker& brk,
-                std::atomic<bool>& broker_ready) -> cn::task<void>
+    std::atomic<bool>& broker_ready) -> cn::task<void>
 {
     brk.set_options({
-        .port                = MQTT_PORT,
-        .host                = "127.0.0.1",
-        .max_keep_alive      = 300,
+        .port = MQTT_PORT,
+        .host = "127.0.0.1",
+        .max_keep_alive = 300,
         .topic_alias_maximum = 10,
-        .receive_maximum     = 100,
+        .receive_maximum = 100,
     });
 
     // Configuresecurity: + ACL
     auto& sec = brk.security();
     sec.add_user("alice", "pass123", {"admin"});
-    sec.add_user("bob",   "pass456", {"viewer"});
-    sec.allow_all("#", {"admin"});              // Implementation note: admin.
+    sec.add_user("bob", "pass456", {"viewer"});
+    sec.allow_all("#", {"admin"});               // Implementation note: admin.
     sec.allow_subscribe("sensor/#", {"viewer"}); // Viewer sensor/
 
     auto r = brk.listen("127.0.0.1", MQTT_PORT);
-    if (!r) {
+    if (!r)
+    {
         logger::error("  [Broker] listen failed: {}", r.error().message());
         co_return;
     }
@@ -70,8 +79,8 @@ auto run_broker(cn::io_context& ctx, mqtt::broker& brk,
 // =============================================================================
 
 auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
-                    std::atomic<int>& msg_count,
-                    std::atomic<bool>& sub_ready) -> cn::task<void>
+    std::atomic<int>& msg_count,
+    std::atomic<bool>& sub_ready) -> cn::task<void>
 {
     while (!broker_ready.load())
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{5});
@@ -79,29 +88,32 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     mqtt::client sub(ctx);
 
     // Register
-    sub.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Subscriber] topic={} payload={} qos={} retain={}",
-            msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value), msg.retain);
-        msg_count.fetch_add(1);
-    });
+    sub.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Subscriber] topic={} payload={} qos={} retain={}",
+                msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value), msg.retain);
+            msg_count.fetch_add(1);
+        });
 
-    sub.on_disconnect([](std::string reason) {
-        logger::info("  [Subscriber] disconnected: {}", reason);
-    });
+    sub.on_disconnect([](std::string reason)
+        {
+            logger::info("  [Subscriber] disconnected: {}", reason);
+        });
 
     // Implementation note.
     mqtt::connect_options opts;
-    opts.host           = "127.0.0.1";
-    opts.port           = MQTT_PORT;
-    opts.client_id      = "subscriber-1";
-    opts.clean_session  = true;
+    opts.host = "127.0.0.1";
+    opts.port = MQTT_PORT;
+    opts.client_id = "subscriber-1";
+    opts.clean_session = true;
     opts.keep_alive_sec = 30;
-    opts.version        = mqtt::protocol_version::v5;
-    opts.username       = "alice";
-    opts.password       = "pass123";
+    opts.version = mqtt::protocol_version::v5;
+    opts.username = "alice";
+    opts.password = "pass123";
 
     auto cr = co_await sub.connect(opts);
-    if (!cr) {
+    if (!cr)
+    {
         logger::error("  [Subscriber] connect failed: {}", cr.error());
         co_return;
     }
@@ -110,11 +122,12 @@ auto run_subscriber(cn::io_context& ctx, std::atomic<bool>& broker_ready,
     // Implementation note: topic.
     std::vector<mqtt::subscribe_entry> entries = {
         {"sensor/temperature", mqtt::qos::exactly_once},
-        {"sensor/humidity",    mqtt::qos::at_least_once},
-        {"device/+/status",   mqtt::qos::at_most_once},
+        {"sensor/humidity", mqtt::qos::at_least_once},
+        {"device/+/status", mqtt::qos::at_most_once},
     };
     auto sr = co_await sub.subscribe(entries);
-    if (!sr) {
+    if (!sr)
+    {
         logger::error("  [Subscriber] subscribe failed: {}", sr.error());
         co_return;
     }
@@ -142,24 +155,27 @@ auto run_publisher(cn::io_context& ctx, std::atomic<bool>& sub_ready)
     mqtt::client pub(ctx);
 
     mqtt::connect_options opts;
-    opts.host           = "127.0.0.1";
-    opts.port           = MQTT_PORT;
-    opts.client_id      = "publisher-1";
-    opts.clean_session  = true;
+    opts.host = "127.0.0.1";
+    opts.port = MQTT_PORT;
+    opts.client_id = "publisher-1";
+    opts.clean_session = true;
     opts.keep_alive_sec = 30;
-    opts.version        = mqtt::protocol_version::v5;
-    opts.username       = "alice";
-    opts.password       = "pass123";
+    opts.version = mqtt::protocol_version::v5;
+    opts.username = "alice";
+    opts.password = "pass123";
 
     auto cr = co_await pub.connect(opts);
-    if (!cr) {
+    if (!cr)
+    {
         logger::error("  [Publisher] connect failed: {}", cr.error());
         co_return;
     }
     logger::info("  [Publisher] Connected");
 
     // QoS 0
-    co_await pub.publish("sensor/temperature", "22.5°C", mqtt::qos::at_most_once);
+    report_mqtt_result(co_await pub.publish("sensor/temperature", "22.5°C",
+                           mqtt::qos::at_most_once),
+        "QoS 0 temperature publish");
     logger::info("  [Publisher] sent sensor/temperature (QoS 0)");
 
     // QoS 1
@@ -169,21 +185,26 @@ auto run_publisher(cn::io_context& ctx, std::atomic<bool>& sub_ready)
 
     // QoS 2
     auto r2 = co_await pub.publish("sensor/temperature", "23.1°C",
-                                   mqtt::qos::exactly_once);
+        mqtt::qos::exactly_once);
     if (r2)
         logger::info("  [Publisher] sent sensor/temperature (QoS 2) — complete");
 
     // Retained
-    co_await pub.publish("device/thermostat/status", "online",
-                         mqtt::qos::at_least_once, true);
+    report_mqtt_result(co_await pub.publish("device/thermostat/status", "online",
+                           mqtt::qos::at_least_once, true),
+        "retained status publish");
     logger::info("  [Publisher] sent device/thermostat/status (retained)");
 
     // Implementation note.
-    co_await pub.publish("sensor/temperature", "23.5°C", mqtt::qos::at_most_once);
-    co_await pub.publish("sensor/humidity",    "62%",    mqtt::qos::at_most_once);
+    report_mqtt_result(co_await pub.publish("sensor/temperature", "23.5°C",
+                           mqtt::qos::at_most_once),
+        "QoS 0 temperature update");
+    report_mqtt_result(co_await pub.publish("sensor/humidity", "62%",
+                           mqtt::qos::at_most_once),
+        "QoS 0 humidity update");
 
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{200});
-    co_await pub.disconnect();
+    report_mqtt_result(co_await pub.disconnect(), "publisher disconnect");
     logger::info("  [Publisher] Disconnected");
 }
 
@@ -192,41 +213,48 @@ auto run_publisher(cn::io_context& ctx, std::atomic<bool>& sub_ready)
 // =============================================================================
 
 auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
-                   std::atomic<int>& msg_count) -> cn::task<void>
+    std::atomic<int>& msg_count) -> cn::task<void>
 {
     while (!broker_ready.load())
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{5});
 
     // Subscriber will topic
     mqtt::client will_sub(ctx);
-    will_sub.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [WillSub] got will: topic={} payload={}",
-            msg.topic, msg.payload.str());
-        msg_count.fetch_add(1);
-    });
+    will_sub.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [WillSub] got will: topic={} payload={}",
+                msg.topic, msg.payload.str());
+            msg_count.fetch_add(1);
+        });
 
     mqtt::connect_options sub_opts;
-    sub_opts.host = "127.0.0.1"; sub_opts.port = MQTT_PORT;
+    sub_opts.host = "127.0.0.1";
+    sub_opts.port = MQTT_PORT;
     sub_opts.client_id = "will-subscriber";
-    sub_opts.username = "alice"; sub_opts.password = "pass123";
+    sub_opts.username = "alice";
+    sub_opts.password = "pass123";
     sub_opts.version = mqtt::protocol_version::v5;
-    co_await will_sub.connect(sub_opts);
-    co_await will_sub.subscribe("device/sensor-1/will", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await will_sub.connect(sub_opts), "will subscriber connect");
+    report_mqtt_result(co_await will_sub.subscribe("device/sensor-1/will",
+                           mqtt::qos::at_least_once),
+        "will subscriber subscribe");
 
     // Will Client
     mqtt::client will_client(ctx);
     mqtt::connect_options wc_opts;
-    wc_opts.host = "127.0.0.1"; wc_opts.port = MQTT_PORT;
+    wc_opts.host = "127.0.0.1";
+    wc_opts.port = MQTT_PORT;
     wc_opts.client_id = "sensor-1";
-    wc_opts.username = "alice"; wc_opts.password = "pass123";
+    wc_opts.username = "alice";
+    wc_opts.password = "pass123";
     wc_opts.version = mqtt::protocol_version::v5;
     wc_opts.will_msg = mqtt::will{
-        .topic   = "device/sensor-1/will",
+        .topic = "device/sensor-1/will",
         .message = "sensor-1 offline unexpectedly",
         .qos_value = mqtt::qos::at_least_once,
     };
 
-    co_await will_client.connect(wc_opts);
+    report_mqtt_result(co_await will_client.connect(wc_opts), "will client connect");
     logger::info("  [WillClient] Connected with will message");
 
     // Simulate( close DISCONNECT -> broker will)
@@ -235,47 +263,57 @@ auto run_will_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready,
 
     // Wait for will
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{500});
-    co_await will_sub.disconnect();
+    report_mqtt_result(co_await will_sub.disconnect(), "will subscriber disconnect");
 }
 
 // =============================================================================
 // 5. Client Demonstrates
 // =============================================================================
 
-void run_sync_demo(std::atomic<bool>& broker_ready) {
+void run_sync_demo(std::atomic<bool>& broker_ready)
+{
     // CPU: wait for
-    while (!broker_ready.load()) {
+    while (!broker_ready.load())
+    {
         std::this_thread::sleep_for(std::chrono::milliseconds{1});
     }
 
     mqtt::sync_client sc;
 
     mqtt::connect_options opts;
-    opts.host = "127.0.0.1"; opts.port = MQTT_PORT;
+    opts.host = "127.0.0.1";
+    opts.port = MQTT_PORT;
     opts.client_id = "sync-client-1";
-    opts.username = "alice"; opts.password = "pass123";
+    opts.username = "alice";
+    opts.password = "pass123";
 
     auto cr = sc.connect_sync(opts);
-    if (!cr) {
+    if (!cr)
+    {
         logger::error("  [Sync] connect failed: {}", cr.error());
         return;
     }
     logger::info("  [Sync] Connected");
 
-    sc.on_message([](const mqtt::publish_message& msg) {
-        logger::info("  [Sync] recv: topic={} payload={}", msg.topic, msg.payload.str());
-    });
+    sc.on_message([](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Sync] recv: topic={} payload={}", msg.topic, msg.payload.str());
+        });
 
-    sc.subscribe_sync("test/sync", mqtt::qos::at_least_once);
-    sc.publish_sync("test/sync", "hello from sync_client", mqtt::qos::at_least_once);
+    report_mqtt_result(sc.subscribe_sync("test/sync", mqtt::qos::at_least_once),
+        "sync subscribe");
+    report_mqtt_result(sc.publish_sync("test/sync", "hello from sync_client",
+                           mqtt::qos::at_least_once),
+        "sync publish");
 
     // Implementation note: poll.
-    for (int i = 0; i < 50; ++i) {
+    for (int i = 0; i < 50; ++i)
+    {
         sc.poll();
         std::this_thread::sleep_for(std::chrono::milliseconds{10});
     }
 
-    sc.disconnect_sync();
+    report_mqtt_result(sc.disconnect_sync(), "sync disconnect");
     logger::info("  [Sync] Disconnected");
 }
 
@@ -293,40 +331,46 @@ auto run_reconnect_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
 
     // Configure
     rc.set_reconnect({
-        .enabled              = true,
-        .max_retries          = 3,
-        .initial_delay        = std::chrono::seconds(1),
-        .max_delay            = std::chrono::seconds(5),
-        .backoff_multiplier   = 2.0,
+        .enabled = true,
+        .max_retries = 3,
+        .initial_delay = std::chrono::seconds(1),
+        .max_delay = std::chrono::seconds(5),
+        .backoff_multiplier = 2.0,
         .restore_subscriptions = true,
     });
 
-    rc.on_message([](const mqtt::publish_message& msg) {
-        logger::info("  [Reconnect] recv: {}", msg.payload.str());
-    });
-    rc.on_disconnect([](std::string reason) {
-        logger::info("  [Reconnect] disconnected: {} (auto-reconnect will retry)",
-            reason);
-    });
+    rc.on_message([](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Reconnect] recv: {}", msg.payload.str());
+        });
+    rc.on_disconnect([](std::string reason)
+        {
+            logger::info("  [Reconnect] disconnected: {} (auto-reconnect will retry)",
+                reason);
+        });
 
     mqtt::connect_options opts;
-    opts.host = "127.0.0.1"; opts.port = MQTT_PORT;
+    opts.host = "127.0.0.1";
+    opts.port = MQTT_PORT;
     opts.client_id = "reconnect-client";
     opts.clean_session = false;
-    opts.username = "alice"; opts.password = "pass123";
+    opts.username = "alice";
+    opts.password = "pass123";
     opts.version = mqtt::protocol_version::v5;
 
     auto cr = co_await rc.connect(opts);
-    if (!cr) {
+    if (!cr)
+    {
         logger::error("  [Reconnect] connect failed: {}", cr.error());
         co_return;
     }
     logger::info("  [Reconnect] Connected (auto-reconnect enabled)");
 
-    co_await rc.subscribe("reconnect/test", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await rc.subscribe("reconnect/test", mqtt::qos::at_least_once),
+        "reconnect subscriber subscribe");
     logger::info("  [Reconnect] Subscribed to reconnect/test");
 
-    co_await rc.disconnect();
+    report_mqtt_result(co_await rc.disconnect(), "reconnect client disconnect");
     logger::info("  [Reconnect] Demo done");
 }
 
@@ -344,10 +388,11 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     {
         mqtt::client c(ctx);
         mqtt::connect_options opts;
-        opts.host = "127.0.0.1"
-                    ; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1";
+        opts.port = MQTT_PORT;
         opts.client_id = "bad-auth";
-        opts.username = "alice"; opts.password = "wrong_password";
+        opts.username = "alice";
+        opts.password = "wrong_password";
         opts.version = mqtt::protocol_version::v5;
 
         auto cr = co_await c.connect(opts);
@@ -361,14 +406,16 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     {
         mqtt::client bob(ctx);
         mqtt::connect_options opts;
-        opts.host = "127.0.0.1"
-                    ; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1";
+        opts.port = MQTT_PORT;
         opts.client_id = "bob-acl-test";
-        opts.username = "bob"; opts.password = "pass456";
+        opts.username = "bob";
+        opts.password = "pass456";
         opts.version = mqtt::protocol_version::v5;
 
         auto cr = co_await bob.connect(opts);
-        if (!cr) {
+        if (!cr)
+        {
             logger::error("  [Security] bob connect failed: {}", cr.error());
             co_return;
         }
@@ -387,7 +434,7 @@ auto run_security_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
         else
             logger::info("  [Security] bob publish device/cmd — rejected: {}", pr.error());
 
-        co_await bob.disconnect();
+        report_mqtt_result(co_await bob.disconnect(), "authorization client disconnect");
         logger::info("  [Security] bob disconnected");
     }
 }
@@ -405,35 +452,41 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     std::atomic<int> recv_count{0};
 
     mqtt::client c(ctx);
-    c.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Unsub] recv: topic={} payload={}", msg.topic, msg.payload.str());
-        recv_count.fetch_add(1);
-    });
+    c.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Unsub] recv: topic={} payload={}", msg.topic, msg.payload.str());
+            recv_count.fetch_add(1);
+        });
 
     mqtt::connect_options opts;
-    opts.host = "127.0.0.1"
-                ; opts.port = MQTT_PORT;
+    opts.host = "127.0.0.1";
+    opts.port = MQTT_PORT;
     opts.client_id = "unsub-client";
-    opts.username = "alice"; opts.password = "pass123";
+    opts.username = "alice";
+    opts.password = "pass123";
     opts.version = mqtt::protocol_version::v5;
-    co_await c.connect(opts);
+    report_mqtt_result(co_await c.connect(opts), "unsubscribe client connect");
 
     // Implementation note.
-    co_await c.subscribe("unsub/test", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await c.subscribe("unsub/test", mqtt::qos::at_least_once),
+        "unsubscribe client subscribe");
     logger::info("  [Unsub] Subscribed to unsub/test");
 
     // Implementation note: client.
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
-    pub_opts.host = "127.0.0.1"
-                    ; pub_opts.port = MQTT_PORT;
+    pub_opts.host = "127.0.0.1";
+    pub_opts.port = MQTT_PORT;
     pub_opts.client_id = "unsub-publisher";
-    pub_opts.username = "alice"; pub_opts.password = "pass123";
+    pub_opts.username = "alice";
+    pub_opts.password = "pass123";
     pub_opts.version = mqtt::protocol_version::v5;
-    co_await pub.connect(pub_opts);
+    report_mqtt_result(co_await pub.connect(pub_opts), "unsubscribe publisher connect");
 
     // Implementation note: 1 .
-    co_await pub.publish("unsub/test", "msg-before-unsub", mqtt::qos::at_most_once);
+    report_mqtt_result(co_await pub.publish("unsub/test", "msg-before-unsub",
+                           mqtt::qos::at_most_once),
+        "pre-unsubscribe publish");
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{100});
     logger::info("  [Unsub] recv_count after 1st publish: {}", recv_count.load());
 
@@ -443,13 +496,15 @@ auto run_unsubscribe_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
         logger::info("  [Unsub] Unsubscribed from unsub/test");
 
     // Implementation note: 2 .
-    co_await pub.publish("unsub/test", "msg-after-unsub", mqtt::qos::at_most_once);
+    report_mqtt_result(co_await pub.publish("unsub/test", "msg-after-unsub",
+                           mqtt::qos::at_most_once),
+        "post-unsubscribe publish");
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{100});
     logger::info("  [Unsub] recv_count after 2nd publish: {} (should still be 1)",
         recv_count.load());
 
-    co_await pub.disconnect();
-    co_await c.disconnect();
+    report_mqtt_result(co_await pub.disconnect(), "unsubscribe publisher disconnect");
+    report_mqtt_result(co_await c.disconnect(), "unsubscribe client disconnect");
 }
 
 // =============================================================================
@@ -465,52 +520,60 @@ auto run_retained_retrieval_demo(cn::io_context& ctx, std::atomic<bool>& broker_
     // Retained
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
-    pub_opts.host = "127.0.0.1"
-                    ; pub_opts.port = MQTT_PORT;
+    pub_opts.host = "127.0.0.1";
+    pub_opts.port = MQTT_PORT;
     pub_opts.client_id = "retained-pub";
-    pub_opts.username = "alice"; pub_opts.password = "pass123";
+    pub_opts.username = "alice";
+    pub_opts.password = "pass123";
     pub_opts.version = mqtt::protocol_version::v5;
-    co_await pub.connect(pub_opts);
+    report_mqtt_result(co_await pub.connect(pub_opts), "retained publisher connect");
 
-    co_await pub.publish("status/server", "running", mqtt::qos::at_least_once, true);
+    report_mqtt_result(co_await pub.publish("status/server", "running",
+                           mqtt::qos::at_least_once, true),
+        "retained state publish");
     logger::info("  [Retained] Published retained: status/server=running");
-    co_await pub.disconnect();
+    report_mqtt_result(co_await pub.disconnect(), "retained publisher disconnect");
 
     // > retained
     std::atomic<int> retained_count{0};
     mqtt::client sub(ctx);
-    sub.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Retained] new sub recv: topic={} payload={} retain={}",
-            msg.topic, msg.payload.str(), msg.retain);
-        retained_count.fetch_add(1);
-    });
+    sub.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Retained] new sub recv: topic={} payload={} retain={}",
+                msg.topic, msg.payload.str(), msg.retain);
+            retained_count.fetch_add(1);
+        });
 
     mqtt::connect_options sub_opts;
-    sub_opts.host = "127.0.0.1"
-                    ; sub_opts.port = MQTT_PORT;
+    sub_opts.host = "127.0.0.1";
+    sub_opts.port = MQTT_PORT;
     sub_opts.client_id = "retained-sub";
-    sub_opts.username = "alice"; sub_opts.password = "pass123";
+    sub_opts.username = "alice";
+    sub_opts.password = "pass123";
     sub_opts.version = mqtt::protocol_version::v5;
-    co_await sub.connect(sub_opts);
+    report_mqtt_result(co_await sub.connect(sub_opts), "retained subscriber connect");
 
-    co_await sub.subscribe("status/#", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await sub.subscribe("status/#", mqtt::qos::at_least_once),
+        "retained subscriber subscribe");
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{200});
     logger::info("  [Retained] retained_count={} (should be >=1)", retained_count.load());
 
     // Delete retained ( payload)
     mqtt::client del(ctx);
     mqtt::connect_options del_opts;
-    del_opts.host = "127.0.0.1"
-                    ; del_opts.port = MQTT_PORT;
+    del_opts.host = "127.0.0.1";
+    del_opts.port = MQTT_PORT;
     del_opts.client_id = "retained-del";
-    del_opts.username = "alice"; del_opts.password = "pass123";
+    del_opts.username = "alice";
+    del_opts.password = "pass123";
     del_opts.version = mqtt::protocol_version::v5;
-    co_await del.connect(del_opts);
-    co_await del.publish("status/server", "", mqtt::qos::at_most_once, true);
+    report_mqtt_result(co_await del.connect(del_opts), "retained delete client connect");
+    report_mqtt_result(co_await del.publish("status/server", "", mqtt::qos::at_most_once, true),
+        "retained delete publish");
     logger::info("  [Retained] Deleted retained on status/server");
-    co_await del.disconnect();
+    report_mqtt_result(co_await del.disconnect(), "retained delete client disconnect");
 
-    co_await sub.disconnect();
+    report_mqtt_result(co_await sub.disconnect(), "retained subscriber disconnect");
 }
 
 // =============================================================================
@@ -529,21 +592,27 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
     {
         mqtt::client c(ctx);
         mqtt::connect_options opts;
-        opts.host = "127.0.0.1"
-                    ; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1";
+        opts.port = MQTT_PORT;
         opts.client_id = "session-resume";
         opts.clean_session = false;
-        opts.username = "alice"; opts.password = "pass123";
+        opts.username = "alice";
+        opts.password = "pass123";
         opts.version = mqtt::protocol_version::v5;
 
         auto cr = co_await c.connect(opts);
-        if (!cr) { logger::error("  [Session] connect failed: {}", cr.error()); co_return; }
+        if (!cr)
+        {
+            logger::error("  [Session] connect failed: {}", cr.error());
+            co_return;
+        }
         logger::info("  [Session] 1st connect: session_present={}", c.session_present());
 
-        co_await c.subscribe("session/test", mqtt::qos::at_least_once);
+        report_mqtt_result(co_await c.subscribe("session/test", mqtt::qos::at_least_once),
+            "session subscriber subscribe");
         logger::info("  [Session] Subscribed to session/test");
 
-        co_await c.disconnect();
+        report_mqtt_result(co_await c.disconnect(), "session subscriber disconnect");
         logger::info("  [Session] 1st disconnect (session persisted on broker)");
     }
 
@@ -551,45 +620,56 @@ auto run_session_resume_demo(cn::io_context& ctx, std::atomic<bool>& broker_read
     {
         mqtt::client pub(ctx);
         mqtt::connect_options opts;
-        opts.host = "127.0.0.1"
-                    ; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1";
+        opts.port = MQTT_PORT;
         opts.client_id = "session-pub";
-        opts.username = "alice"; opts.password = "pass123";
+        opts.username = "alice";
+        opts.password = "pass123";
         opts.version = mqtt::protocol_version::v5;
-        co_await pub.connect(opts);
+        report_mqtt_result(co_await pub.connect(opts), "offline publisher connect");
 
-        co_await pub.publish("session/test", "offline-msg-1", mqtt::qos::at_least_once);
-        co_await pub.publish("session/test", "offline-msg-2", mqtt::qos::at_least_once);
+        report_mqtt_result(
+            co_await pub.publish("session/test", "offline-msg-1", mqtt::qos::at_least_once),
+            "offline publish #1");
+        report_mqtt_result(
+            co_await pub.publish("session/test", "offline-msg-2", mqtt::qos::at_least_once),
+            "offline publish #2");
         logger::info("  [Session] Published 2 msgs while client offline");
 
-        co_await pub.disconnect();
+        report_mqtt_result(co_await pub.disconnect(), "offline publisher disconnect");
     }
 
     // Clean_session=false -> restoresession ->
     {
         mqtt::client c(ctx);
-        c.on_message([&](const mqtt::publish_message& msg) {
-            logger::info("  [Session] recv offline: topic={} payload={}",
-                msg.topic, msg.payload.str());
-            recv_count.fetch_add(1);
-        });
+        c.on_message([&](const mqtt::publish_message& msg)
+            {
+                logger::info("  [Session] recv offline: topic={} payload={}",
+                    msg.topic, msg.payload.str());
+                recv_count.fetch_add(1);
+            });
 
         mqtt::connect_options opts;
-        opts.host = "127.0.0.1"
-                    ; opts.port = MQTT_PORT;
+        opts.host = "127.0.0.1";
+        opts.port = MQTT_PORT;
         opts.client_id = "session-resume";
         opts.clean_session = false;
-        opts.username = "alice"; opts.password = "pass123";
+        opts.username = "alice";
+        opts.password = "pass123";
         opts.version = mqtt::protocol_version::v5;
 
         auto cr = co_await c.connect(opts);
-        if (!cr) { logger::error("  [Session] reconnect failed: {}", cr.error()); co_return; }
+        if (!cr)
+        {
+            logger::error("  [Session] reconnect failed: {}", cr.error());
+            co_return;
+        }
         logger::info("  [Session] 2nd connect: session_present={}", c.session_present());
 
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{300});
         logger::info("  [Session] recv_count={} (should be 2)", recv_count.load());
 
-        co_await c.disconnect();
+        report_mqtt_result(co_await c.disconnect(), "restored-session disconnect");
     }
 }
 
@@ -609,41 +689,49 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     // Shared subscription
     mqtt::client s1(ctx), s2(ctx);
 
-    s1.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Shared-S1] recv: {}", msg.payload.str());
-        sub1_count.fetch_add(1);
-    });
-    s2.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [Shared-S2] recv: {}", msg.payload.str());
-        sub2_count.fetch_add(1);
-    });
+    s1.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Shared-S1] recv: {}", msg.payload.str());
+            sub1_count.fetch_add(1);
+        });
+    s2.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [Shared-S2] recv: {}", msg.payload.str());
+            sub2_count.fetch_add(1);
+        });
 
-    auto make_opts = [](const char* cid) {
+    auto make_opts = [](const char* cid)
+    {
         mqtt::connect_options o;
-        o.host = "127.0.0.1"
-                 ; o.port = MQTT_PORT;
+        o.host = "127.0.0.1";
+        o.port = MQTT_PORT;
         o.client_id = cid;
-        o.username = "alice"; o.password = "pass123";
+        o.username = "alice";
+        o.password = "pass123";
         o.version = mqtt::protocol_version::v5;
         return o;
     };
 
-    co_await s1.connect(make_opts("shared-s1"));
-    co_await s2.connect(make_opts("shared-s2"));
+    report_mqtt_result(co_await s1.connect(make_opts("shared-s1")), "shared subscriber #1 connect");
+    report_mqtt_result(co_await s2.connect(make_opts("shared-s2")), "shared subscriber #2 connect");
 
     // Shared: $share/workers/job/+
-    co_await s1.subscribe("$share/workers/job/+", mqtt::qos::at_least_once);
-    co_await s2.subscribe("$share/workers/job/+", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await s1.subscribe("$share/workers/job/+", mqtt::qos::at_least_once),
+        "shared subscriber #1 subscribe");
+    report_mqtt_result(co_await s2.subscribe("$share/workers/job/+", mqtt::qos::at_least_once),
+        "shared subscriber #2 subscribe");
     logger::info("  [Shared] Both subscribers joined $share/workers/job/+");
 
     // Implementation note.
     mqtt::client pub(ctx);
-    co_await pub.connect(make_opts("shared-pub"));
+    report_mqtt_result(co_await pub.connect(make_opts("shared-pub")), "shared publisher connect");
 
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 4; ++i)
+    {
         auto topic = "job/task" + std::to_string(i);
         auto payload = "work-" + std::to_string(i);
-        co_await pub.publish(topic, payload, mqtt::qos::at_least_once);
+        report_mqtt_result(co_await pub.publish(topic, payload, mqtt::qos::at_least_once),
+            "shared publish");
     }
     logger::info("  [Shared] Published 4 messages to job/task*");
 
@@ -651,9 +739,9 @@ auto run_shared_sub_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     logger::info("  [Shared] S1 recv={}, S2 recv={} (round-robin)",
         sub1_count.load(), sub2_count.load());
 
-    co_await pub.disconnect();
-    co_await s1.disconnect();
-    co_await s2.disconnect();
+    report_mqtt_result(co_await pub.disconnect(), "shared publisher disconnect");
+    report_mqtt_result(co_await s1.disconnect(), "shared subscriber #1 disconnect");
+    report_mqtt_result(co_await s2.disconnect(), "shared subscriber #2 disconnect");
 }
 
 // =============================================================================
@@ -669,45 +757,54 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     std::atomic<int> recv_count{0};
 
     mqtt::client sub(ctx);
-    sub.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [v5Props] recv: topic={} payload={}", msg.topic, msg.payload.str());
-        // User properties
-        for (auto& p : msg.props) {
-            if (p.id == mqtt::property_id::user_property) {
-                if (auto* kv = std::get_if<std::pair<std::string, std::string>>(&p.value))
-                    logger::info("  [v5Props]   user_property: {}={}", kv->first, kv->second);
+    sub.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [v5Props] recv: topic={} payload={}", msg.topic, msg.payload.str());
+            // User properties
+            for (auto& p : msg.props)
+            {
+                if (p.id == mqtt::property_id::user_property)
+                {
+                    if (auto* kv = std::get_if<std::pair<std::string, std::string>>(&p.value))
+                        logger::info("  [v5Props]   user_property: {}={}", kv->first, kv->second);
+                }
+                if (p.id == mqtt::property_id::content_type)
+                {
+                    if (auto* s = std::get_if<std::string>(&p.value))
+                        logger::info("  [v5Props]   content_type: {}", *s);
+                }
+                if (p.id == mqtt::property_id::response_topic)
+                {
+                    if (auto* s = std::get_if<std::string>(&p.value))
+                        logger::info("  [v5Props]   response_topic: {}", *s);
+                }
+                if (p.id == mqtt::property_id::correlation_data)
+                {
+                    if (auto* s = std::get_if<std::string>(&p.value))
+                        logger::info("  [v5Props]   correlation_data: {}", *s);
+                }
             }
-            if (p.id == mqtt::property_id::content_type) {
-                if (auto* s = std::get_if<std::string>(&p.value))
-                    logger::info("  [v5Props]   content_type: {}", *s);
-            }
-            if (p.id == mqtt::property_id::response_topic) {
-                if (auto* s = std::get_if<std::string>(&p.value))
-                    logger::info("  [v5Props]   response_topic: {}", *s);
-            }
-            if (p.id == mqtt::property_id::correlation_data) {
-                if (auto* s = std::get_if<std::string>(&p.value))
-                    logger::info("  [v5Props]   correlation_data: {}", *s);
-            }
-        }
-        recv_count.fetch_add(1);
-    });
+            recv_count.fetch_add(1);
+        });
 
-    auto make_opts = [](const char* cid) {
+    auto make_opts = [](const char* cid)
+    {
         mqtt::connect_options o;
-        o.host = "127.0.0.1"
-                 ; o.port = MQTT_PORT;
+        o.host = "127.0.0.1";
+        o.port = MQTT_PORT;
         o.client_id = cid;
-        o.username = "alice"; o.password = "pass123";
+        o.username = "alice";
+        o.password = "pass123";
         o.version = mqtt::protocol_version::v5;
         return o;
     };
 
-    co_await sub.connect(make_opts("v5props-sub"));
-    co_await sub.subscribe("v5test/#", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await sub.connect(make_opts("v5props-sub")), "v5 subscriber connect");
+    report_mqtt_result(co_await sub.subscribe("v5test/#", mqtt::qos::at_least_once),
+        "v5 subscriber subscribe");
 
     mqtt::client pub(ctx);
-    co_await pub.connect(make_opts("v5props-pub"));
+    report_mqtt_result(co_await pub.connect(make_opts("v5props-pub")), "v5 publisher connect");
 
     // User Property + Content-Type + Response Topic + Correlation Data
     mqtt::properties pub_props;
@@ -720,23 +817,25 @@ auto run_v5_props_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     pub_props.push_back(mqtt::mqtt_property::string_prop(
         mqtt::property_id::correlation_data, "req-001"));
 
-    co_await pub.publish("v5test/request", R"({"cmd":"status"})",
-        mqtt::qos::at_least_once, false, pub_props);
+    report_mqtt_result(co_await pub.publish("v5test/request", R"({"cmd":"status"})",
+                           mqtt::qos::at_least_once, false, pub_props),
+        "v5 request publish");
     logger::info("  [v5Props] Published with user_property + content_type + response_topic");
 
     // Message Expiry Interval
     mqtt::properties expiry_props;
     expiry_props.push_back(mqtt::mqtt_property::u32_prop(
         mqtt::property_id::message_expiry_interval, 60));
-    co_await pub.publish("v5test/expiry", "expires in 60s",
-        mqtt::qos::at_most_once, false, expiry_props);
+    report_mqtt_result(co_await pub.publish("v5test/expiry", "expires in 60s",
+                           mqtt::qos::at_most_once, false, expiry_props),
+        "v5 expiry publish");
     logger::info("  [v5Props] Published with message_expiry_interval=60");
 
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{200});
     logger::info("  [v5Props] recv_count={}", recv_count.load());
 
-    co_await pub.disconnect();
-    co_await sub.disconnect();
+    report_mqtt_result(co_await pub.disconnect(), "v5 publisher disconnect");
+    report_mqtt_result(co_await sub.disconnect(), "v5 subscriber disconnect");
 }
 
 // =============================================================================
@@ -752,60 +851,77 @@ auto run_v311_demo(cn::io_context& ctx, std::atomic<bool>& broker_ready)
     std::atomic<int> recv_count{0};
 
     mqtt::client sub(ctx);
-    sub.on_message([&](const mqtt::publish_message& msg) {
-        logger::info("  [v3.1.1] recv: topic={} payload={} qos={}",
-            msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value));
-        recv_count.fetch_add(1);
-    });
+    sub.on_message([&](const mqtt::publish_message& msg)
+        {
+            logger::info("  [v3.1.1] recv: topic={} payload={} qos={}",
+                msg.topic, msg.payload.str(), mqtt::to_string(msg.qos_value));
+            recv_count.fetch_add(1);
+        });
 
     // Implementation note: v3.1.1.
     mqtt::connect_options sub_opts;
-    sub_opts.host = "127.0.0.1"; sub_opts.port = MQTT_PORT;
+    sub_opts.host = "127.0.0.1";
+    sub_opts.port = MQTT_PORT;
     sub_opts.client_id = "v311-sub";
-    sub_opts.username = "alice"; sub_opts.password = "pass123";
+    sub_opts.username = "alice";
+    sub_opts.password = "pass123";
     sub_opts.version = mqtt::protocol_version::v3_1_1;
 
     auto cr = co_await sub.connect(sub_opts);
-    if (!cr) { logger::error("  [v3.1.1] sub connect failed: {}", cr.error()); co_return; }
+    if (!cr)
+    {
+        logger::error("  [v3.1.1] sub connect failed: {}", cr.error());
+        co_return;
+    }
     logger::info("  [v3.1.1] Subscriber connected (v3.1.1)");
 
-    co_await sub.subscribe("compat/#", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await sub.subscribe("compat/#", mqtt::qos::at_least_once),
+        "v3.1.1 subscriber subscribe");
 
     // v3.1.1 publisher
     mqtt::client pub(ctx);
     mqtt::connect_options pub_opts;
-    pub_opts.host = "127.0.0.1"; pub_opts.port = MQTT_PORT;
+    pub_opts.host = "127.0.0.1";
+    pub_opts.port = MQTT_PORT;
     pub_opts.client_id = "v311-pub";
-    pub_opts.username = "alice"; pub_opts.password = "pass123";
+    pub_opts.username = "alice";
+    pub_opts.password = "pass123";
     pub_opts.version = mqtt::protocol_version::v3_1_1;
 
-    co_await pub.connect(pub_opts);
+    report_mqtt_result(co_await pub.connect(pub_opts), "v3.1.1 publisher connect");
     logger::info("  [v3.1.1] Publisher connected (v3.1.1)");
 
     // QoS 0
-    co_await pub.publish("compat/q0", "hello-v311-q0", mqtt::qos::at_most_once);
+    report_mqtt_result(co_await pub.publish("compat/q0", "hello-v311-q0",
+                           mqtt::qos::at_most_once),
+        "v3.1.1 QoS 0 publish");
     // QoS 1
-    co_await pub.publish("compat/q1", "hello-v311-q1", mqtt::qos::at_least_once);
+    report_mqtt_result(co_await pub.publish("compat/q1", "hello-v311-q1",
+                           mqtt::qos::at_least_once),
+        "v3.1.1 QoS 1 publish");
     // QoS 2
-    co_await pub.publish("compat/q2", "hello-v311-q2", mqtt::qos::exactly_once);
+    report_mqtt_result(co_await pub.publish("compat/q2", "hello-v311-q2",
+                           mqtt::qos::exactly_once),
+        "v3.1.1 QoS 2 publish");
 
     co_await cn::async_sleep(ctx, std::chrono::milliseconds{200});
     logger::info("  [v3.1.1] recv_count={} (should be 3)", recv_count.load());
 
-    co_await pub.disconnect();
-    co_await sub.disconnect();
+    report_mqtt_result(co_await pub.disconnect(), "v3.1.1 publisher disconnect");
+    report_mqtt_result(co_await sub.disconnect(), "v3.1.1 subscriber disconnect");
 }
 
 // =============================================================================
 // Main coroutine - Demonstrates
 // =============================================================================
 
-auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void> {
+auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void>
+{
     mqtt::broker brk(ctx);
     std::atomic<bool> broker_ready{false};
     std::atomic<bool> sub_ready{false};
-    std::atomic<int>  msg_count{0};
-    std::atomic<int>  will_count{0};
+    std::atomic<int> msg_count{0};
+    std::atomic<int> will_count{0};
 
     // Start Broker
     cn::spawn(ctx, run_broker(ctx, brk, broker_ready));
@@ -827,9 +943,10 @@ auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void> {
     logger::info("--- Demo 3: Sync Client ---");
     {
         exec::static_thread_pool pool(1);
-        co_await cn::blocking_invoke(pool, ctx, [&] {
-            run_sync_demo(broker_ready);
-        });
+        co_await cn::blocking_invoke(pool, ctx, [&]
+            {
+                run_sync_demo(broker_ready);
+            });
     }
 
     // === Demo 4: Auto-Reconnect ===
@@ -876,7 +993,8 @@ auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void> {
 // main
 // =============================================================================
 
-auto main() -> int {
+auto main() -> int
+{
     logger::info("=== cnetmod: MQTT Broker + Client Demo ===");
 
     cn::net_init net;

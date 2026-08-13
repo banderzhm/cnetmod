@@ -5,6 +5,7 @@ import :error;
 import :server_description;
 import :topology_monitor;
 import :connection;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::mongodb {
 namespace {
@@ -29,7 +30,7 @@ topology_monitor::topology_monitor(std::optional<std::string> required)
 
 void topology_monitor::update(server_description description)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     if (required_replica_set_ && !description.replica_set_name.empty() &&
         description.replica_set_name != *required_replica_set_)
     {
@@ -70,7 +71,7 @@ void topology_monitor::update(server_description description)
 
 void topology_monitor::mark_unknown(const server_address& address, error reason)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{topology_latch_};
     auto& server = servers_[address];
     server.address = address;
     server.kind = server_kind::unknown;
@@ -81,13 +82,13 @@ void topology_monitor::mark_unknown(const server_address& address, error reason)
 
 auto topology_monitor::kind() const noexcept -> topology_kind
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{topology_latch_};
     return kind_;
 }
 
 auto topology_monitor::snapshot() const -> std::vector<server_description>
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{topology_latch_};
     std::vector<server_description> result;
     result.reserve(servers_.size());
     for (const auto& [_, server] : servers_)

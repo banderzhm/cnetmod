@@ -14,6 +14,11 @@ import cnetmod.protocol.tcp;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
+import cnetmod.coro.spawn;
+import cnetmod.coro.channel;
+import cnetmod.coro.wait_group;
+import cnetmod.coro.semaphore;
+import cnetmod.coro.mutex;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.settings;
@@ -26,9 +31,10 @@ import :cookie;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
-#ifdef CNETMOD_ENABLE_QUIC
-import cnetmod.protocol.http.v3.client;
 #endif
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+import cnetmod.protocol.http.v3.session;
 #endif
 
 namespace cnetmod::http {
@@ -76,7 +82,26 @@ export struct client_options
     // requests; `http3_only` never falls back.
     std::uint64_t h3_qpack_max_table_capacity = 64 * 1024;
     std::uint64_t h3_qpack_blocked_streams = 100;
+    std::uint32_t h3_max_concurrent_streams = 100;
     bool http3_fallback_to_tcp = false;
+    bool enable_alt_svc_http3 = true;
+    /// Optional small cache shared by client instances/processes. Empty keeps
+    /// the existing in-memory-only behavior.
+    std::string alt_svc_cache_file;
+    /// Optional cross-process TLS 1.3 ticket cache for HTTP/3. The file is
+    /// treated as sensitive state; callers should place it in a private
+    /// directory with restrictive permissions. Empty disables persistence.
+    std::string http3_resumption_ticket_file;
+    /// Explicitly permit replay-safe HTTP/3 requests to use a persisted TLS
+    /// ticket before the handshake completes. Disabled by default.
+    bool enable_http3_early_data = false;
+    /// RFC 9114 server push is off unless this limit is present. The callback
+    /// is invoked on the owning io_context after the pushed response reaches
+    /// FIN; it never runs inline on the UDP receive path.
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    std::optional<std::uint64_t> http3_max_push_id;
+    v3::server_push_handler on_http3_push;
+#endif
 
     // Cookie options
     bool enable_cookies = true; // Implementation note: cookies.
@@ -95,6 +120,7 @@ public:
 #ifdef CNETMOD_HAS_SSL
         init_ssl_context();
 #endif
+        load_alt_svc_cache();
     }
 
     ~client()
@@ -127,7 +153,7 @@ public:
         std::string_view body = {})
         -> task<std::expected<response, std::error_code>>;
 
-    /// Submit same-origin requests as concurrent HTTP/2 streams on one
+    /// Submit same-origin requests as concurrent HTTP/2 or HTTP/3 streams on one
     /// connection. HTTP/1.1 falls back to ordered requests. Redirect handling
     /// is intentionally not applied to a batch, because a redirect can change
     /// the origin and therefore cannot remain on the shared HTTP/2 connection.
@@ -172,6 +198,10 @@ public:
     /// Close connection
     void close() noexcept;
 
+    /// Gracefully close the active HTTP/3 QUIC connection before releasing it.
+    /// HTTP/1.1/2 close synchronously as before.
+    [[nodiscard]] auto close_async() -> task<void>;
+
     /// Get client options
     [[nodiscard]] auto options() const noexcept -> const client_options&
     {
@@ -182,8 +212,19 @@ public:
     auto& set_options(client_options opts) noexcept
     {
         options_ = std::move(opts);
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+        raced_use_http3_.reset();
+#endif
+        h3_alt_svc_.clear();
+        load_alt_svc_cache();
         return *this;
     }
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
+    /// Whether a valid persisted/in-memory Alt-Svc entry exists for an origin.
+    [[nodiscard]] auto has_http3_alt_svc(std::string_view host,
+        std::uint16_t port) const -> bool;
+#endif
 
     /// Get cookie jar
     [[nodiscard]] auto cookies() -> cookie_jar&
@@ -270,19 +311,56 @@ private:
     std::optional<connection_state> state_;
     cookie_jar cookies_; // Implementation note: Cookie.
 
+    struct alt_svc_entry
+    {
+        std::chrono::steady_clock::time_point expires_at;
+        std::uint16_t peer_port{};
+    };
+
+    std::unordered_map<std::string, alt_svc_entry> h3_alt_svc_;
+    // Result of the one-time safe first-request H3/TCP race.  Keeping the
+    // protocol decision avoids racing every subsequent request while the
+    // winning candidate connection is intentionally closed after handoff.
+    std::optional<bool> raced_use_http3_;
+
 #ifdef CNETMOD_HAS_SSL
     std::optional<ssl_context> ssl_ctx_;
-#ifdef CNETMOD_ENABLE_QUIC
+    #ifdef CNETMOD_ENABLE_QUIC
     std::optional<ssl_context> h3_ssl_ctx_;
-    std::unique_ptr<v3::http3_client> h3_client_;
-#endif
+    // Keep the HTTP/3 implementation out of this public module partition's
+    // BMI.  The concrete v3 client is recovered only in http_client.cpp,
+    // where its lifetime is still owned by this shared control block.
+    std::shared_ptr<void> h3_client_;
+    // HTTP/3 requests may share one connection, but creation/replacement of
+    // the pooled client must be serialized.  Without this guard two batch
+    // items can both observe a missing/non-reusable connection and replace
+    // the same client while the other coroutine is still using it.
+    async_mutex h3_lifecycle_mutex_;
+    #endif
 
     void init_ssl_context();
 #endif
 
+    void load_alt_svc_cache();
+    void persist_alt_svc_cache() const;
+
 #if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_ENABLE_QUIC)
-    [[nodiscard]] auto send_http3(const request& req, cnetmod::cancel_token& token)
+    [[nodiscard]] auto send_http3_tcp_race(const request& req,
+        cnetmod::cancel_token& token)
         -> task<std::expected<response, std::error_code>>;
+    [[nodiscard]] auto send_http3(const request& req, cnetmod::cancel_token& token,
+        std::uint16_t peer_port = 0)
+        -> task<std::expected<response, std::error_code>>;
+    [[nodiscard]] auto send_http3_batch(std::span<const request> requests)
+        -> task<std::vector<std::expected<response, std::error_code>>>;
+    [[nodiscard]] auto send_http3_batch_item(std::span<const request> requests,
+        std::vector<std::expected<response, std::error_code>>& results,
+        async_wait_group& completed, async_semaphore& permits, std::size_t index)
+        -> task<void>;
+    [[nodiscard]] auto http3_alt_svc_port(std::string_view host, std::uint16_t port) const
+        -> std::optional<std::uint16_t>;
+    void remember_http3_alt_svc(std::string_view host, std::uint16_t port,
+        std::string_view value);
 #endif
 
     /// Connect to host:port with protocol negotiation (async)

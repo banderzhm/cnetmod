@@ -17,6 +17,11 @@ auto request_body_stream::receive() -> task<std::optional<request_body_chunk>>
     co_return co_await chunks_.receive();
 }
 
+auto request_body_stream::send(request_body_chunk chunk) -> task<bool>
+{
+    co_return co_await chunks_.send(std::move(chunk));
+}
+
 auto request_body_stream::try_receive() -> std::optional<request_body_chunk>
 {
     return chunks_.try_receive();

@@ -6,6 +6,7 @@ import :connection_options;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+import cnetmod.coro.mutex;
 
 export namespace cnetmod::postgresql {
 
@@ -78,12 +79,23 @@ private:
 
     io_context& context_;
     connection_pool_options options_;
-    mutable std::mutex mutex_;
+    // The pool state is a coroutine-only critical section.  A lease never
+    // holds this lock while the caller performs database I/O: it protects only
+    // slot assignment, FIFO waiter ownership, and shutdown transitions.
+    async_mutex state_mutex_;
     std::deque<slot> slots_;
     std::deque<waiter*> waiters_;
     bool closing_{};
+    std::atomic<std::size_t> size_snapshot_{};
+    std::atomic<std::size_t> idle_snapshot_{};
+    std::atomic<std::size_t> checked_out_snapshot_{};
+    std::atomic<std::size_t> waiter_snapshot_{};
+    void refresh_snapshots_locked() noexcept;
     void release(std::size_t, bool) noexcept;
+    void release_locked(std::size_t, bool) noexcept;
+    auto release_async(std::size_t, bool) -> task<void>;
     void remove_waiter(waiter*) noexcept;
+    auto cancel_waiter_async(waiter*, std::coroutine_handle<>) -> task<void>;
     auto reconnect_discarded_slot(std::size_t) -> task<void>;
 };
 

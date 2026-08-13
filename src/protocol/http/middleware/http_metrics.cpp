@@ -179,7 +179,7 @@ namespace {
 void registry::counter_add(std::string_view name, double delta,
     labels metric_labels, std::string_view help)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     auto& family = families_[std::string(name)];
     family.type = metric_type::counter;
     family.name = name;
@@ -193,7 +193,7 @@ void registry::counter_add(std::string_view name, double delta,
 void registry::gauge_set(std::string_view name, double value,
     labels metric_labels, std::string_view help)
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     auto& family = families_[std::string(name)];
     family.type = metric_type::gauge;
     family.name = name;
@@ -209,7 +209,7 @@ void registry::histogram_observe(std::string_view name, double value,
     labels metric_labels, std::string_view help)
 {
     std::ranges::sort(buckets);
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::exclusive_latch_guard lock{latch_};
     auto& family = families_[std::string(name)];
     family.type = metric_type::histogram;
     family.name = name;
@@ -231,7 +231,7 @@ void registry::histogram_observe(std::string_view name, double value,
 
 auto registry::render_openmetrics() const -> std::string
 {
-    std::scoped_lock lock(mutex_);
+    concurrent_containers::shared_latch_guard lock{latch_};
     std::string out;
     for (const auto& [_, family] : families_)
     {

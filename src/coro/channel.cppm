@@ -65,22 +65,32 @@ class channel
     class spinlock
     {
         std::atomic_flag flag_{};
+        // Most channel operations are uncontended. Avoid entering libc++'s
+        // global atomic-notify table on every unlock; a waiter announces
+        // itself before sleeping, and an unlock only notifies when one exists.
+        std::atomic<std::uint32_t> waiters_{};
 
     public:
         void lock() noexcept
         {
             if (!flag_.test_and_set(std::memory_order_acquire))
                 return;
+            waiters_.fetch_add(1U, std::memory_order_relaxed);
             do
             {
                 flag_.wait(true, std::memory_order_relaxed);
             } while (flag_.test_and_set(std::memory_order_acquire));
+            waiters_.fetch_sub(1U, std::memory_order_relaxed);
         }
 
         void unlock() noexcept
         {
             flag_.clear(std::memory_order_release);
-            flag_.notify_one();
+            // If an unlock wins the tiny race before a contender increments
+            // waiters_, that contender observes the cleared flag and retries
+            // instead of sleeping, so no wakeup can be lost.
+            if (waiters_.load(std::memory_order_relaxed) != 0U)
+                flag_.notify_one();
         }
     };
 

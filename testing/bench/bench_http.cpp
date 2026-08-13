@@ -36,6 +36,7 @@ namespace {
 
 struct bench_case
 {
+    std::string_view id;
     const char* name;
     bool tls;
     http::http_version_preference version;
@@ -43,10 +44,10 @@ struct bench_case
 };
 
 constexpr bench_case cases[] = {
-    {"HTTP/1.1 cleartext", false, http::http_version_preference::http1_only, 18080},
-    {"HTTP/2 h2c", false, http::http_version_preference::http2_only, 18180},
-    {"HTTPS/1.1", true, http::http_version_preference::http1_only, 18280},
-    {"HTTPS/2", true, http::http_version_preference::http2_only, 18380},
+    {"http1", "HTTP/1.1 cleartext", false, http::http_version_preference::http1_only, 18080},
+    {"h2c", "HTTP/2 h2c", false, http::http_version_preference::http2_only, 18180},
+    {"https1", "HTTPS/1.1", true, http::http_version_preference::http1_only, 18280},
+    {"https2", "HTTPS/2", true, http::http_version_preference::http2_only, 18380},
 };
 
 enum class bench_mode
@@ -133,6 +134,16 @@ auto benchmark_affinity_enabled() -> bool
         return true;
     const auto text = std::string_view{value};
     return text != "0" && text != "false" && text != "off";
+}
+
+auto benchmark_case_selected(std::string_view id) -> bool
+{
+    const auto* value = std::getenv("CNETMOD_BENCH_HTTP_CASE");
+    if (value == nullptr || *value == '\0')
+        return true;
+
+    const auto requested = std::string_view{value};
+    return requested == "all" || requested == id;
 }
 
 auto make_router() -> http::router
@@ -464,6 +475,8 @@ void run_matrix(std::size_t requests_per_client, std::size_t client_count, bench
 {
     for (auto cfg : cases)
     {
+        if (!benchmark_case_selected(cfg.id))
+            continue;
         if (mode == bench_mode::single_loop || mode == bench_mode::both)
         {
             run_http_bench_single(cfg, requests_per_client, client_count);

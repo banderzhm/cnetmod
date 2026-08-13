@@ -2,6 +2,7 @@ module;
 #include <cnetmod/config.hpp>
 export module cnetmod.protocol.amqp091:topology_recovery;
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :reconnect_policy;
 import :channel_options;
 import :field_table_codec;
@@ -57,7 +58,10 @@ public:
     [[nodiscard]] auto snapshot() const -> topology_snapshot;
 
 private:
-    mutable std::mutex mutex_;
+    // A recovery snapshot must be internally consistent across exchanges,
+    // queues, bindings and consumers.  The atomic latch protects that single
+    // topology transaction while allowing concurrent snapshot readers.
+    mutable concurrent_containers::atomic_rw_latch topology_latch_;
     topology_snapshot topology_;
 };
 

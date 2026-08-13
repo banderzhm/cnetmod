@@ -9,6 +9,11 @@ option(CNETMOD_USE_BORINGSSL_SUBMODULE "Use BoringSSL as submodule (preferred ov
 option(BORINGSSL_BUILD_SHARED "Build shared libraries instead of static" OFF)
 option(BORINGSSL_ENABLE_ASM "Enable assembly optimizations" ON)
 option(BORINGSSL_FIPS "Build with FIPS mode" OFF)
+# Windows NASM is intentionally opt-in.  A tool merely being discoverable is
+# not enough to select this path: deployments which do not validate their NASM
+# toolchain must retain BoringSSL's portable C++ implementation.
+option(CNETMOD_ALLOW_WINDOWS_BORINGSSL_NASM
+    "Allow BoringSSL NASM assembly on Windows (requires validated toolchain)" OFF)
 
 macro(cnetmod_configure_boringssl_submodule)
     if(CNETMOD_ENABLE_SSL AND CNETMOD_USE_BORINGSSL_SUBMODULE)
@@ -30,10 +35,14 @@ macro(cnetmod_configure_boringssl_submodule)
             # A standard Visual Studio Build Tools installation does not ship it,
             # so make the portable C++ implementation the automatic fallback.
             set(_cnetmod_boringssl_disable_asm OFF)
+            if(WIN32 AND NOT CNETMOD_ALLOW_WINDOWS_BORINGSSL_NASM)
+                set(_cnetmod_boringssl_disable_asm ON)
+                message(STATUS "BoringSSL: Windows NASM path disabled; using portable C++ implementation")
+            endif()
             if(NOT BORINGSSL_ENABLE_ASM)
                 set(_cnetmod_boringssl_disable_asm ON)
             endif()
-            if(WIN32 AND BORINGSSL_ENABLE_ASM)
+            if(WIN32 AND BORINGSSL_ENABLE_ASM AND CNETMOD_ALLOW_WINDOWS_BORINGSSL_NASM)
                 find_program(_cnetmod_boringssl_nasm NAMES nasm nasm.exe)
                 if(NOT _cnetmod_boringssl_nasm)
                     set(_cnetmod_boringssl_disable_asm ON)

@@ -33,6 +33,24 @@ import :crypto;
 
 namespace cnetmod::quic {
 
+struct quic_aead_context
+{
+    quic_aead_context()
+    {
+        EVP_AEAD_CTX_zero(&context);
+    }
+
+    ~quic_aead_context()
+    {
+        EVP_AEAD_CTX_cleanup(&context);
+    }
+
+    quic_aead_context(const quic_aead_context&) = delete;
+    auto operator=(const quic_aead_context&) -> quic_aead_context& = delete;
+
+    EVP_AEAD_CTX context;
+};
+
 // =============================================================================
 // Helper: Convert between encryption levels (RFC 9001)
 // =============================================================================
@@ -400,6 +418,11 @@ auto quic_tls_session::install_secret(
     }
 
     auto& keys = for_reading ? read_keys_[idx] : write_keys_[idx];
+    // A TLS callback may replace an existing level while retrying a
+    // handshake. The cached AEAD precomputation belongs to the old immutable
+    // key and must never survive that replacement.
+    std::atomic_store_explicit(&keys.aead_context,
+        std::shared_ptr<quic_aead_context>{}, std::memory_order_release);
     keys.cipher_id = cipher_id;
     keys.aead = traits->aead;
     keys.digest = traits->digest;
@@ -532,6 +555,7 @@ auto quic_tls_session::cb_add_handshake_data(
         buffer.end(),
         reinterpret_cast<const std::byte*>(data),
         reinterpret_cast<const std::byte*>(data) + len);
+
     return 1;
 }
 
@@ -564,6 +588,23 @@ auto quic_tls_session::cb_send_alert(
     return 1;
 }
 
+auto quic_tls_session::cb_new_session(SSL* ssl, SSL_SESSION* session) -> int
+{
+    auto* self = static_cast<quic_tls_session*>(SSL_get_app_data(ssl));
+    if (self == nullptr || session == nullptr || SSL_SESSION_up_ref(session) != 1)
+        return 0;
+
+    // BoringSSL retains ownership of the callback argument unless the
+    // callback returns one. Keep our own reference and let the library manage
+    // its reference normally. This callback is used for both the initial
+    // handshake ticket and any later ticket renewal.
+    if (self->latest_resumption_session_ != nullptr)
+        SSL_SESSION_free(self->latest_resumption_session_);
+    self->latest_resumption_session_ = session;
+
+    return 0;
+}
+
 // =============================================================================
 // Construction / factories
 // =============================================================================
@@ -576,6 +617,11 @@ quic_tls_session::quic_tls_session(SSL* ssl)
 
 quic_tls_session::~quic_tls_session()
 {
+    if (latest_resumption_session_ != nullptr)
+    {
+        SSL_SESSION_free(latest_resumption_session_);
+        latest_resumption_session_ = nullptr;
+    }
     if (ssl_ != nullptr)
     {
         SSL_free(ssl_);
@@ -603,6 +649,11 @@ void quic_tls_session::register_quic_callbacks()
 auto quic_tls_session::client(ssl_context& ctx, transport_params params)
     -> std::expected<std::unique_ptr<quic_tls_session>, std::error_code>
 {
+    // BoringSSL's default SSL_CTX cache mode is server-only. QUIC clients
+    // receive TLS 1.3 NewSessionTicket messages after the handshake, so opt
+    // into the client cache callback before creating the SSL object.
+    SSL_CTX_set_session_cache_mode(ctx.native(), SSL_SESS_CACHE_CLIENT);
+    SSL_CTX_sess_set_new_cb(ctx.native(), &quic_tls_session::cb_new_session);
     SSL* ssl = SSL_new(ctx.native());
     if (ssl == nullptr)
     {
@@ -814,7 +865,7 @@ auto quic_tls_session::set_resumption_ticket(const session_ticket& ticket)
 }
 
 early_data_replay_cache::early_data_replay_cache(std::size_t capacity)
-    : capacity_(capacity)
+    : capacity_(capacity), entries_(capacity)
 {
 }
 
@@ -831,45 +882,39 @@ auto early_data_replay_cache::consume(std::span<const std::byte> ticket_id,
     if (ticket_id.empty() || capacity_ == 0 || expires_at <= now)
         return false;
 
-    std::scoped_lock lock(mutex_);
-    for (auto it = entries_.begin(); it != entries_.end();)
+    purge_expired(now);
+    const auto ticket_key = key(ticket_id);
+    if (const auto existing = entries_.find(ticket_key))
     {
-        if (it->second.expires_at <= now)
-            it = entries_.erase(it);
-        else
-            ++it;
+        if (existing->expires_at > now)
+            return false;
+        // An expired entry must be retired before this ticket can be consumed
+        // again. If another thread wins either CAS, try_emplace below still
+        // preserves the single-use invariant.
+        (void)entries_.erase(ticket_key);
     }
 
-    const auto ticket_key = key(ticket_id);
-    if (entries_.contains(ticket_key))
-        return false;
-
-    // Evict the entry which expires first. This preserves the single-use
-    // invariant for all entries that remain in the bounded cache.
     if (entries_.size() >= capacity_)
     {
-        const auto victim = std::min_element(entries_.begin(), entries_.end(),
-            [](const auto& left, const auto& right)
+        // Preserve bounded-cache behaviour without a global lock. The scan
+        // selects immutable snapshots; only the final slot CAS retires the
+        // selected oldest entry.
+        (void)entries_.erase_min_by([](const auto&, const entry& left,
+                                        const auto&, const entry& right)
             {
-                return left.second.expires_at < right.second.expires_at;
+                return left.expires_at < right.expires_at;
             });
-        entries_.erase(victim);
     }
-    entries_.emplace(ticket_key, entry{expires_at, ++next_generation_});
-    return true;
+    return entries_.try_emplace_bounded(ticket_key, entry{expires_at}, capacity_);
 }
 
 void early_data_replay_cache::purge_expired(
     std::chrono::steady_clock::time_point now)
 {
-    std::scoped_lock lock(mutex_);
-    for (auto it = entries_.begin(); it != entries_.end();)
-    {
-        if (it->second.expires_at <= now)
-            it = entries_.erase(it);
-        else
-            ++it;
-    }
+    (void)entries_.erase_if([now](const auto&, const entry& item)
+        {
+            return item.expires_at <= now;
+        });
 }
 
 auto configure_server_early_data_tickets(ssl_context& context,
@@ -908,14 +953,24 @@ auto configure_server_early_data_tickets(ssl_context& context,
 
 auto early_data_replay_cache::size() const -> std::size_t
 {
-    std::scoped_lock lock(mutex_);
     return entries_.size();
 }
 
 auto quic_tls_session::take_resumption_ticket()
     -> std::expected<session_ticket, std::error_code>
 {
-    SSL_SESSION* session = SSL_get1_session(ssl_);
+    SSL_SESSION* session = latest_resumption_session_;
+    if (session != nullptr)
+    {
+        if (SSL_SESSION_up_ref(session) != 1)
+            return std::unexpected(make_ssl_error());
+    }
+    else
+    {
+        // Keep the established-session fallback for TLS providers that do not
+        // expose post-handshake tickets through a callback.
+        session = SSL_get1_session(ssl_);
+    }
     if (session == nullptr)
     {
         return std::unexpected(make_ssl_error());
@@ -1012,7 +1067,8 @@ auto quic_tls_session::early_data_reason() const noexcept -> int
 auto quic_tls_session::reset_after_early_data_rejection()
     -> std::expected<void, std::error_code>
 {
-    if (!early_data_rejected_)
+    if (!early_data_rejected_ &&
+        SSL_get_early_data_reason(ssl_) == ssl_early_data_unknown)
     {
         return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     }
@@ -1101,6 +1157,12 @@ auto quic_tls_session::has_pending_handshake_data() const noexcept -> bool
         }
     }
     return false;
+}
+
+auto quic_tls_session::has_pending_handshake_data(encryption_level level) const noexcept -> bool
+{
+    const auto idx = level_index(level);
+    return idx < handshake_send_.size() && !handshake_send_[idx].empty();
 }
 
 auto quic_tls_session::handshake_flush_pending() noexcept -> bool
@@ -1474,7 +1536,8 @@ namespace detail {
 
     /// Build the per-packet nonce: iv XOR packet number (RFC 9001 §5.3)
     [[nodiscard]] inline auto build_nonce(
-        std::span<const std::uint8_t> iv, std::uint64_t packet_number)
+        std::span<const std::uint8_t> iv, std::uint64_t packet_number,
+        std::uint32_t path_id)
         -> std::array<std::uint8_t, 12>
     {
         std::array<std::uint8_t, 12> nonce{};
@@ -1483,6 +1546,10 @@ namespace detail {
             std::copy(iv.begin(), iv.end(), nonce.begin());
         }
 
+        for (int i = 0; i < 4; ++i)
+        {
+            nonce[3 - i] ^= static_cast<std::uint8_t>((path_id >> (8 * i)) & 0xff);
+        }
         for (int i = 0; i < 8; ++i)
         {
             nonce[11 - i] ^= static_cast<std::uint8_t>(
@@ -1493,9 +1560,39 @@ namespace detail {
 
 } // namespace detail
 
+namespace {
+
+    auto aead_context_for(const quic_level_keys& keys)
+        -> std::expected<std::shared_ptr<quic_aead_context>, std::error_code>
+    {
+        auto cached = std::atomic_load_explicit(&keys.aead_context,
+            std::memory_order_acquire);
+        if (cached)
+            return cached;
+
+        auto created = std::make_shared<quic_aead_context>();
+        if (EVP_AEAD_CTX_init(&created->context,
+                static_cast<const EVP_AEAD*>(keys.aead), keys.aead_key.data(),
+                keys.aead_key.size(), keys.tag_len, nullptr) != 1)
+        {
+            return std::unexpected(make_ssl_error());
+        }
+
+        std::shared_ptr<quic_aead_context> expected;
+        if (!std::atomic_compare_exchange_strong_explicit(&keys.aead_context,
+                &expected, created, std::memory_order_release,
+                std::memory_order_acquire))
+        {
+            return expected;
+        }
+        return created;
+    }
+
+} // namespace
+
 auto seal_payload(const quic_level_keys& keys,
     std::span<const std::byte> payload, std::span<const std::byte> header,
-    std::uint64_t packet_number)
+    std::uint64_t packet_number, std::uint32_t path_id)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
     if (!keys.valid() || keys.aead == nullptr || keys.aead_key.empty() ||
@@ -1503,29 +1600,71 @@ auto seal_payload(const quic_level_keys& keys,
     {
         return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     }
-    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number);
-    EVP_AEAD_CTX context;
-    if (EVP_AEAD_CTX_init(&context, static_cast<const EVP_AEAD*>(keys.aead),
-            keys.aead_key.data(), keys.aead_key.size(), keys.tag_len, nullptr) != 1)
-    {
-        return std::unexpected(make_ssl_error());
-    }
+    if (packet_number > ((std::uint64_t{1} << 62) - 1))
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, path_id);
+    auto context = aead_context_for(keys);
+    if (!context)
+        return std::unexpected(context.error());
     std::vector<std::byte> output(payload.size() + keys.tag_len);
     std::size_t output_length{};
-    const auto ok = EVP_AEAD_CTX_seal(&context,
+    const auto ok = EVP_AEAD_CTX_seal(&(*context)->context,
         reinterpret_cast<std::uint8_t*>(output.data()), &output_length, output.size(),
         nonce.data(), nonce.size(), reinterpret_cast<const std::uint8_t*>(payload.data()),
         payload.size(), reinterpret_cast<const std::uint8_t*>(header.data()), header.size());
-    EVP_AEAD_CTX_cleanup(&context);
     if (ok != 1)
         return std::unexpected(make_ssl_error());
     output.resize(output_length);
     return output;
 }
 
+auto append_sealed_payload(const quic_level_keys& keys,
+    std::span<const std::byte> payload, std::vector<std::byte>& packet,
+    std::uint64_t packet_number, std::uint32_t path_id)
+    -> std::expected<void, std::error_code>
+{
+    if (!keys.valid() || keys.aead == nullptr || keys.aead_key.empty() ||
+        keys.aead_iv.size() != 12)
+    {
+        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+    }
+    if (packet_number > ((std::uint64_t{1} << 62) - 1))
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
+    // `packet` is reserved by all QUIC packet builders, but reconstruct the
+    // associated-data span after resize so the operation remains correct if a
+    // caller did not reserve enough capacity and vector storage moves.
+    const auto header_size = packet.size();
+    const auto output_capacity = payload.size() + keys.tag_len;
+    packet.resize(header_size + output_capacity);
+
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, path_id);
+    auto context = aead_context_for(keys);
+    if (!context)
+    {
+        packet.resize(header_size);
+        return std::unexpected(context.error());
+    }
+
+    std::size_t output_length{};
+    const auto ok = EVP_AEAD_CTX_seal(&(*context)->context,
+        reinterpret_cast<std::uint8_t*>(packet.data() + header_size), &output_length,
+        output_capacity, nonce.data(), nonce.size(),
+        reinterpret_cast<const std::uint8_t*>(payload.data()), payload.size(),
+        reinterpret_cast<const std::uint8_t*>(packet.data()), header_size);
+    if (ok != 1)
+    {
+        packet.resize(header_size);
+        return std::unexpected(make_ssl_error());
+    }
+    packet.resize(header_size + output_length);
+    return {};
+}
+
 auto open_payload(const quic_level_keys& keys,
     std::span<const std::byte> protected_payload,
-    std::span<const std::byte> header, std::uint64_t packet_number)
+    std::span<const std::byte> header, std::uint64_t packet_number,
+    std::uint32_t path_id)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
     if (!keys.valid() || keys.aead == nullptr || keys.aead_key.empty() ||
@@ -1533,21 +1672,19 @@ auto open_payload(const quic_level_keys& keys,
     {
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     }
-    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number);
-    EVP_AEAD_CTX context;
-    if (EVP_AEAD_CTX_init(&context, static_cast<const EVP_AEAD*>(keys.aead),
-            keys.aead_key.data(), keys.aead_key.size(), keys.tag_len, nullptr) != 1)
-    {
-        return std::unexpected(make_ssl_error());
-    }
+    if (packet_number > ((std::uint64_t{1} << 62) - 1))
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, path_id);
+    auto context = aead_context_for(keys);
+    if (!context)
+        return std::unexpected(context.error());
     std::vector<std::byte> output(protected_payload.size() - keys.tag_len);
     std::size_t output_length{};
-    const auto ok = EVP_AEAD_CTX_open(&context,
+    const auto ok = EVP_AEAD_CTX_open(&(*context)->context,
         reinterpret_cast<std::uint8_t*>(output.data()), &output_length, output.size(),
         nonce.data(), nonce.size(),
         reinterpret_cast<const std::uint8_t*>(protected_payload.data()), protected_payload.size(),
         reinterpret_cast<const std::uint8_t*>(header.data()), header.size());
-    EVP_AEAD_CTX_cleanup(&context);
     if (ok != 1)
         return std::unexpected(make_ssl_error());
     output.resize(output_length);
@@ -1569,7 +1706,7 @@ auto quic_tls_session::encrypt_packet(
     }
 
     const auto* aead = static_cast<const EVP_AEAD*>(keys.aead);
-    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number);
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, 0);
 
     EVP_AEAD_CTX ctx;
     if (EVP_AEAD_CTX_init(
@@ -1638,7 +1775,7 @@ auto quic_tls_session::decrypt_packet(
     }
 
     const auto* aead = static_cast<const EVP_AEAD*>(keys.aead);
-    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number);
+    const auto nonce = detail::build_nonce(keys.aead_iv, packet_number, 0);
 
     EVP_AEAD_CTX ctx;
     if (EVP_AEAD_CTX_init(
@@ -1779,6 +1916,11 @@ auto quic_tls_session::encode_transport_params()
     append_varint(0x0a, sent_params_.ack_delay_exponent);
     append_varint(0x0b, static_cast<std::uint64_t>(sent_params_.max_ack_delay.count()));
     append_varint(0x0e, sent_params_.active_connection_id_limit);
+    if (sent_params_.initial_max_path_id)
+        append_varint(multipath_initial_max_path_id_parameter,
+            *sent_params_.initial_max_path_id);
+    if (sent_params_.max_datagram_frame_size != 0U)
+        append_varint(0x20, sent_params_.max_datagram_frame_size);
 
     const auto append_cid = [&result](std::uint64_t type, const connection_id& cid)
     {
@@ -1910,6 +2052,20 @@ auto quic_tls_session::decode_transport_params(
                 return std::unexpected(value.error());
             break;
 
+        case multipath_initial_max_path_id_parameter:
+        {
+            auto value = read_varint();
+            if (!value || *value > std::numeric_limits<std::uint32_t>::max())
+                return std::unexpected(make_error_code(quic_errc::transport_parameter_error));
+            received_params_.initial_max_path_id = static_cast<std::uint32_t>(*value);
+            break;
+        }
+
+        case 0x20: // max_datagram_frame_size (RFC 9221)
+            if (auto value = assign_varint(received_params_.max_datagram_frame_size); !value)
+                return std::unexpected(value.error());
+            break;
+
         case 0x0c: // Disable Active Migration
             if (!param_value.empty())
                 return std::unexpected(make_error_code(quic_errc::transport_parameter_error));
@@ -1920,7 +2076,13 @@ auto quic_tls_session::decode_transport_params(
         case 0x0f: // initial_source_connection_id
         case 0x10: // retry_source_connection_id
         {
-            if (param_value.empty() || param_value.size() > max_cid_length)
+            // RFC 9000 permits a zero-length connection ID.  Chromium uses
+            // one for the client's Initial source CID, and mirrors that value
+            // in the mandatory initial_source_connection_id transport
+            // parameter.  Only the server-only Retry/ODCID parameters require
+            // a non-empty value in this implementation.
+            if (param_value.size() > max_cid_length ||
+                (param_value.empty() && param_type != 0x0f))
                 return std::unexpected(make_error_code(quic_errc::transport_parameter_error));
             const auto cid = connection_id{param_value};
             if (param_type == 0x00)

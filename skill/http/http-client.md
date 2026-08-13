@@ -43,7 +43,9 @@ struct client_options {
     // HTTP/3 / QUIC
     std::uint64_t h3_qpack_max_table_capacity = 64 * 1024;
     std::uint64_t h3_qpack_blocked_streams = 100;
+    std::uint32_t h3_max_concurrent_streams = 100;
     bool http3_fallback_to_tcp = false;
+    bool enable_alt_svc_http3 = true;
 
     // Cookie
     bool enable_cookies = true;
@@ -61,7 +63,9 @@ struct client_options {
 | `version_pref` | `http2_preferred` | HTTP 版本偏好 |
 | `h3_qpack_max_table_capacity` | 64 KiB | HTTP/3 QPACK 动态表容量 |
 | `h3_qpack_blocked_streams` | 100 | HTTP/3 QPACK 允许阻塞的 stream 数 |
+| `h3_max_concurrent_streams` | 100 | `send_batch` 在一条 HTTP/3 连接上同时运行的请求上限 |
 | `http3_fallback_to_tcp` | `false` | 仅为安全方法显式允许 HTTP/3 到 TCP 回退 |
+| `enable_alt_svc_http3` | `true` | 在 HTTPS 的 HTTP/1.1/2 响应收到 `Alt-Svc: h3=...` 后，为同一 origin 升级到 HTTP/3；遵守 `ma`，`ma=0` 会清除记录 |
 
 **`http_version_preference` 枚举**:
 | 值 | 说明 |
@@ -90,6 +94,10 @@ auto result = co_await http_client.get("https://api.example.com/v1/profile");
 ```
 
 `http3_only` 只接受绝对 `https://` URL，绝不降级。`http3_preferred` 同样默认不降级，避免请求已到达服务端时被静默重放。业务明确允许 GET、HEAD、OPTIONS 回退时，才设置 `http3_fallback_to_tcp = true`；POST、PUT、PATCH 等非幂等请求不会自动重放。
+
+当 `version_pref = http2_preferred` 时，客户端会从成功的 HTTPS TCP 响应学习 `Alt-Svc: h3=...`，并在同一 origin 的后续请求中改用 HTTP/3。支持 `h3=":端口"`、缓存寿命 `ma` 与 `ma=0` 失效；不接受跨主机的替代端点，因此 TLS 证书和请求 authority 始终保持同源。
+
+`http3_preferred` 的首次 GET/HEAD/OPTIONS 会在 HTTP/3 与 TCP 并发竞速；首个成功路径获胜后会取消 loser。POST/PUT/PATCH 不参加竞速，避免重复提交。
 
 ---
 
@@ -210,6 +218,28 @@ auto fetch_data(client& c) -> task<void> {
 **签名**: `auto& set_body(std::string_view body)` / `auto& set_body(std::string body)`
 **说明**: 自动设置 `Content-Length` 头。
 
+#### `request::set_body_stream`
+**签名**:
+```cpp
+using request_body_reader =
+    std::function<task<std::optional<request_body_chunk>>(cancel_token&)>;
+
+request_body_source(request_body_reader reader,
+    std::optional<std::uint64_t> content_length = std::nullopt);
+auto& request::set_body_stream(request_body_source source);
+```
+
+**说明**: 生产者在每次上一个分块写入完成后才会被再次调用；返回 `std::nullopt` 表示 EOF。提供长度时自动设置 `Content-Length`，否则 HTTP/1.1 使用 chunked，HTTP/2/3 使用连续 DATA 帧。取消 token 会传给生产者，并在底层 I/O 上终止当前请求。
+
+流式 body 是一次性 producer，不应把同一个请求重复用于重定向或自动重放；需要重试时应重新创建 producer。
+
+#### HTTP/3 大响应的流式消费
+
+统一 `http::client::send()` 保持完整 `response.body` 兼容语义。需要边收边处理
+时，使用 `cnetmod::http::v3::http3_client::send_request_streaming()`；它在
+HEADERS 到达后调用 handler，并通过有界 `request_body_stream` 提供 DATA。详见
+`skill/http/http3-quic.md` 的“HTTP/3 客户端响应体流式消费”章节。
+
 #### `client::send`
 **签名**:
 ```cpp
@@ -316,10 +346,10 @@ auto cookie_demo(client& c) -> task<void> {
 
 ---
 
-### `send_batch` — HTTP/2 并发
+### `send_batch` — HTTP/2 / HTTP/3 并发
 
 **签名**: `[[nodiscard]] auto send_batch(std::span<const request> requests) -> task<std::vector<std::expected<response, std::error_code>>>`
-**说明**: 对同一来源的请求使用 HTTP/2 多路复用在同一连接上并发发送。HTTP/1.1 回退为顺序发送。
+**说明**: 对同一 origin 的请求使用 HTTP/2 或 HTTP/3 多路复用，在同一连接上并发发送。HTTP/1.1 回退为顺序发送。HTTP/3 批处理只接受同源绝对 `https://` URL，不会错误建立 TCP 连接；并发 stream 数由 `h3_max_concurrent_streams` 限制，防止单个批次压垮连接。
 
 **示例**:
 ```cpp
@@ -524,3 +554,21 @@ auto h2_batch_with_pool(client_pool& pool) -> task<void> {
 - `examples/http/cookie_demo.cpp` — Cookie 自动管理示例
 - `examples/http/cookie_and_chunked_demo.cpp` — Cookie 简化 API 与 chunked 传输
 
+# HTTP/3 ticket persistence
+
+`client_options::http3_resumption_ticket_file` optionally persists one TLS 1.3
+session ticket per HTTPS origin. The file is replaced atomically and should be
+kept in a directory readable only by the application account because it
+contains sensitive TLS session material. Leave it empty to keep the existing
+in-memory-only behavior.
+
+Ticket loading/export is wired into the unified `http::client`; HTTP requests
+are still sent after the HTTP/3 handshake and control streams are ready. This
+is deliberate: the option does not claim full HTTP-layer 0-RTT request
+support, and replay-safe request policy remains explicit.
+
+Set `client_options::enable_http3_early_data = true` only together with a
+trusted ticket cache. The client then queues replay-safe GET/HEAD/OPTIONS
+streams during the handshake; if the server rejects 0-RTT, those streams are
+reset and the request is retried once at 1-RTT. Non-idempotent methods are
+never replayed.

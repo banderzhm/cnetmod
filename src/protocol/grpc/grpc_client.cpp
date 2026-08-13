@@ -9,6 +9,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.codec;
 
@@ -56,7 +57,7 @@ namespace {
         return frames_to_messages(
             *frames, codec_options{
                          .compression = encoding,
-                         .accept_compressed = opts.accept_gzip && encoding == compression_algorithm::gzip,
+                         .accept_compressed = (opts.accept_gzip && encoding == compression_algorithm::gzip) || (opts.accept_zstd && encoding == compression_algorithm::zstd && compression_supported(compression_algorithm::zstd)) || (opts.accept_brotli && encoding == compression_algorithm::brotli && compression_supported(compression_algorithm::brotli)),
                          .max_message_bytes = opts.max_receive_message_bytes,
                      });
     }
@@ -216,8 +217,14 @@ auto client::send_streaming(streaming_request req, cancel_token& token)
     http::request http_req(http::http_method::POST, base_url_ + call.path);
     http_req.set_header("Content-Type", "application/grpc");
     http_req.set_header("TE", "trailers");
-    http_req.set_header("grpc-accept-encoding",
-        opts_.accept_gzip ? "identity,gzip" : "identity");
+    std::string accepted_encodings = "identity";
+    if (opts_.accept_gzip && compression_supported(compression_algorithm::gzip))
+        accepted_encodings += ",gzip";
+    if (opts_.accept_zstd && compression_supported(compression_algorithm::zstd))
+        accepted_encodings += ",zstd";
+    if (opts_.accept_brotli && compression_supported(compression_algorithm::brotli))
+        accepted_encodings += ",br";
+    http_req.set_header("grpc-accept-encoding", std::move(accepted_encodings));
     if (req.compression != compression_algorithm::identity)
     {
         http_req.set_header("grpc-encoding",
@@ -234,8 +241,8 @@ auto client::send_streaming(streaming_request req, cancel_token& token)
     auto resp = co_await http_.send(http_req, token);
     if (!resp)
         co_return std::unexpected(token.is_cancelled()
-            ? cancelled_status(token, "grpc call cancelled")
-            : make_unavailable(resp.error().message()));
+                ? cancelled_status(token, "grpc call cancelled")
+                : make_unavailable(resp.error().message()));
 
     streaming_response out;
     out.headers = metadata_from_headers(resp->headers());
@@ -310,8 +317,8 @@ auto client::unary(unary_request req, cancel_token& token)
         auto resp = co_await http_.send(http_req, token);
         if (!resp)
             co_return std::unexpected(token.is_cancelled()
-                ? cancelled_status(token, "grpc call cancelled")
-                : make_unavailable(resp.error().message()));
+                    ? cancelled_status(token, "grpc call cancelled")
+                    : make_unavailable(resp.error().message()));
 
         unary_response out{
             .st = status_from_response(*resp),
@@ -352,6 +359,22 @@ auto client::unary(unary_request req, cancel_token& token)
     if (!r->messages.empty())
         out.payload = std::move(r->messages.front());
     co_return out;
+}
+
+auto client::unary(unary_request req, const http::request_context& parent)
+    -> task<std::expected<unary_response, status>>
+{
+    if (const auto context = http::tracing::context_from(parent))
+        (void)inject_trace_context(req.headers, *context);
+    co_return co_await unary(std::move(req));
+}
+
+auto client::unary(unary_request req,
+    const http::tracing::trace_context& parent)
+    -> task<std::expected<unary_response, status>>
+{
+    (void)inject_trace_context(req.headers, parent);
+    co_return co_await unary(std::move(req));
 }
 
 auto client::client_streaming(streaming_request req)

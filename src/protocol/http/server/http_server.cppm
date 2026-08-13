@@ -75,12 +75,24 @@ export struct response_header_options
 class date_cache
 {
 public:
-    [[nodiscard]] auto get() -> std::string;
+    /// Snapshot the RFC 9110 IMF-fixdate into caller-owned stack storage.
+    /// Keeping the fixed-width representation out of std::string avoids a
+    /// heap allocation for every normal server response.
+    [[nodiscard]] auto get() -> std::array<char, 29U>;
 
 private:
+    static constexpr std::size_t date_size = 29U;
+    static constexpr std::size_t word_count = 4U;
+
+    /// The date is a read-mostly value shared by every server worker.  A
+    /// reader must not perform a contended read-modify-write merely to copy
+    /// it: that would bounce one cache line between all workers on every
+    /// response.  Writers publish four atomic words under this sequence;
+    /// refreshes happen at most once per second.
     std::atomic<std::time_t> cached_time_{0};
-    mutable std::mutex mtx_;
-    std::string cached_str_;
+    std::atomic<std::uint32_t> sequence_{};
+    std::atomic_flag refreshing_{};
+    alignas(64) std::array<std::atomic<std::uint64_t>, word_count> words_{};
 };
 
 // =============================================================================
