@@ -379,6 +379,9 @@ if(CNETMOD_BUILD_C_API)
     set_target_properties(cnetmod_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
     add_library(cnetmod_c STATIC
         "${CMAKE_CURRENT_SOURCE_DIR}/bindings/c_api/cnetmod_c_api.cpp")
+    # The CPython extension embeds this archive in a shared object on ELF
+    # platforms, so its objects must be position independent as well.
+    set_target_properties(cnetmod_c PROPERTIES POSITION_INDEPENDENT_CODE ON)
     target_link_libraries(cnetmod_c PRIVATE cnetmod_core)
     target_compile_features(cnetmod_c PRIVATE cxx_std_23)
     target_compile_definitions(cnetmod_c PUBLIC CNETMOD_C_API_STATIC)
