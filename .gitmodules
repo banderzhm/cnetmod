@@ -4,6 +4,7 @@
 [submodule "3rdparty/jwt-cpp"]
 	path = 3rdparty/jwt-cpp
 	url = https://github.com/banderzhm/jwt-cpp.git
+	branch = auto_ssl
 [submodule "3rdparty/spdlog"]
 	path = 3rdparty/spdlog
 	url = https://github.com/gabime/spdlog.git

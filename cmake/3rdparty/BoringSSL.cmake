@@ -3,7 +3,8 @@ include_guard(GLOBAL)
 # ==============================================================================
 # BoringSSL Submodule Support
 # ==============================================================================
-option(CNETMOD_USE_BORINGSSL_SUBMODULE "Use BoringSSL as submodule (preferred over system)" ON)
+set(CNETMOD_USE_BORINGSSL_SUBMODULE ON CACHE BOOL
+    "Use the bundled BoringSSL submodule (required by cnetmod)" FORCE)
 
 # BoringSSL build options
 option(BORINGSSL_BUILD_SHARED "Build shared libraries instead of static" OFF)
@@ -154,8 +155,7 @@ macro(cnetmod_configure_boringssl_submodule)
                 endif()
             endif()
         else()
-            message(WARNING "BoringSSL submodule not initialized. Run:\n  git submodule init\n  git submodule update")
-            set(CNETMOD_USE_BORINGSSL_SUBMODULE FALSE)
+            message(FATAL_ERROR "cnetmod requires the initialized BoringSSL submodule at ${CNETMOD_BORINGSSL_DIR}")
         endif()
     endif()
 endmacro()
