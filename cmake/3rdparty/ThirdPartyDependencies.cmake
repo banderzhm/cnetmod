@@ -18,6 +18,16 @@ macro(cnetmod_configure_third_party_dependencies)
     # shared provider switch first; otherwise an undefined CNETMOD_ENABLE_SSL
     # makes the bundled submodule silently skip its initial configuration.
     option(CNETMOD_ENABLE_SSL "Enable SSL/TLS and cryptographic authentication" ON)
+    set(CNETMOD_JWT_SSL_LIBRARY "BoringSSL" CACHE STRING
+        "TLS provider used by jwt-cpp (BoringSSL or OpenSSL)")
+    set_property(CACHE CNETMOD_JWT_SSL_LIBRARY PROPERTY STRINGS BoringSSL OpenSSL)
+    if(CNETMOD_JWT_SSL_LIBRARY STREQUAL "OpenSSL")
+        # jwt-cpp and cnetmod must use the same OpenSSL-compatible ABI. Do not
+        # configure bundled BoringSSL when the application explicitly selects
+        # the system OpenSSL provider.
+        set(CNETMOD_USE_BORINGSSL_SUBMODULE OFF CACHE BOOL
+            "Use BoringSSL as submodule (forced off for jwt-cpp OpenSSL mode)" FORCE)
+    endif()
     cnetmod_configure_stdexec()
     cnetmod_configure_nlohmann_json()
     cnetmod_configure_jwt_cpp()
