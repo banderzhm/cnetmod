@@ -14,6 +14,7 @@ import :wire_serialization;
 import :format_sql;
 import :diagnostics;
 import :pipeline;
+import cnetmod.database.sql_parameters;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
@@ -50,6 +51,11 @@ public:
 
     /// execute with_params — Client-side SQL formatting then execute (COM_QUERY)
     auto execute(with_params_t wp) -> task<result_set>;
+
+    /// Common ORM parameter contract. Formatting remains at this protocol
+    /// boundary so the current connection character set and escaping mode are
+    /// used before sending a COM_QUERY request.
+    auto execute(cnetmod::database::parameterized_query parameters) -> task<result_set>;
 
     /// Get current connection's format options
     auto current_format_opts() const noexcept -> const format_options&;

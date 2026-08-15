@@ -229,6 +229,26 @@ auto client::execute(with_params_t wp) -> task<result_set>
     co_return co_await query(*sql_r);
 }
 
+auto client::execute(cnetmod::database::parameterized_query parameters)
+    -> task<result_set>
+{
+    result_set error;
+    if (!connected_)
+    {
+        error.error_msg = "not connected";
+        co_return error;
+    }
+
+    auto sql = format_sql(format_opts_, parameters.query, parameters.args);
+    if (!sql)
+    {
+        error.error_msg = "format_sql error";
+        error.diag.assign_client(error.error_msg);
+        co_return error;
+    }
+    co_return co_await query(*sql);
+}
+
 auto client::current_format_opts() const noexcept -> const format_options&
 {
     return format_opts_;

@@ -675,14 +675,71 @@ auto work(mysql::client& cli) -> task<void>
 ```cpp
 template <asynchronous_database_client Client>
 class database_session {
-    explicit database_session(Client& client);
+    explicit database_session(Client& client,
+        sql_dialect dialect = sql_dialect::mysql);
     auto query(std::string_view sql) -> task<query_result>;
     auto execute(std::string_view sql) -> task<query_result>;
     auto execute(parameterized_query) -> task<query_result>;
+
+    template <Model T> auto find_all() -> task<model_result<T>>;
+    template <Model T> auto find_by_id(param_value) -> task<model_result<T>>;
+    template <Model T> auto find_one_by(std::string_view, param_value)
+        -> task<model_result<T>>;
+    template <Model T> auto insert(T&) -> task<model_result<T>>;
+    template <Model T> auto update(const T&) -> task<model_result<T>>;
+    template <Model T> auto remove(const T&) -> task<model_result<T>>;
+    template <Model T> auto remove_by(std::string_view, param_value)
+        -> task<model_result<T>>;
+    template <Model T> auto remove_by_id(param_value) -> task<model_result<T>>;
+    template <Model T> auto find(const query_wrapper<T>&) -> task<model_result<T>>;
+    template <Model T> auto remove(const query_wrapper<T>&) -> task<model_result<T>>;
+    template <Model T> auto update(const update_wrapper<T>&) -> task<model_result<T>>;
+    template <Model T> auto execute(const query_wrapper<T>&) -> task<model_result<T>>;
+    template <Model T> auto execute(const update_wrapper<T>&) -> task<model_result<T>>;
     auto transaction(Func&&) -> task<query_result>;
     auto transaction(Func&&, isolation_level) -> task<query_result>;
 };
 ```
+
+`database_session` is the protocol-independent repository surface. It accepts
+either a MySQL or PostgreSQL client and preserves the native wire client below
+it. `model_result<T>` contains `data`, `affected_rows`, `last_insert_id`,
+`error_msg`, and `sql_state`; use `ok()` and `first()` to distinguish an empty
+query from a failed operation.
+
+```cpp
+import cnetmod.orm;
+import cnetmod.protocol.mysql;
+
+task<void> load_user(mysql::client& client) {
+    orm::database_session db{client, orm::sql_dialect::mysql};
+
+    auto user = co_await db.find_by_id<User>(orm::param_value::from_int(42));
+    if (!user.ok())
+        co_return;
+
+    auto active = co_await db.find(
+        orm::query_wrapper<User>{}.eq("status", 1).order_by_desc("id"));
+}
+```
+
+For PostgreSQL construct the same session with `sql_dialect::postgresql`.
+The session then emits quoted identifiers, `$1…$N` placeholders, uses the
+client's parameter binding, and adds `RETURNING *` for model inserts, updates,
+and deletes. MySQL keeps its native formatting path and fills an auto-increment
+primary key from `last_insert_id`. This makes the model mapping and CRUD API
+portable without removing `mysql_session` or `postgresql_session` for
+protocol-specific operations.
+
+`query_wrapper<T>` and `update_wrapper<T>` never perform I/O: they only retain
+structured conditions and values, then build dialect-aware parameterized SQL.
+`database_session` is the sole execution/mapping boundary. The convenience
+methods (`find_by_id`, `remove_by_id`, and model `insert`/`update`/`remove`)
+delegate to the same wrapper path where applicable; use `find(wrapper)`,
+`update(wrapper)`, and `remove(wrapper)` for conditional work. Direct dispatch
+is also available: `execute(query_wrapper)` defaults to SELECT, while
+`execute(query_wrapper.as_delete())` performs DELETE; `execute(update_wrapper)`
+performs UPDATE.
 
 ## CMake 启用
 

@@ -82,6 +82,15 @@ export enum class aggregate_func
     count_distinct,
 };
 
+/// Operation selected when a query_wrapper is submitted directly to a
+/// database_session. Query wrappers default to a read, so a broad DELETE is
+/// never selected accidentally.
+export enum class query_execution_kind
+{
+    select,
+    delete_,
+};
+
 // =============================================================================
 // Condition node
 // =============================================================================
@@ -152,6 +161,26 @@ class query_wrapper
 {
 public:
     query_wrapper() = default;
+
+    /// Mark this wrapper for direct DELETE execution through
+    /// database_session::execute. The predicates remain unchanged.
+    auto as_delete() noexcept -> query_wrapper&
+    {
+        execution_kind_ = query_execution_kind::delete_;
+        return *this;
+    }
+
+    /// Mark this wrapper for direct SELECT execution. This is the default.
+    auto as_select() noexcept -> query_wrapper&
+    {
+        execution_kind_ = query_execution_kind::select;
+        return *this;
+    }
+
+    [[nodiscard]] auto execution_kind() const noexcept -> query_execution_kind
+    {
+        return execution_kind_;
+    }
 
     // =========================================================================
     // Comparison methods  (string column name + auto value)
@@ -341,7 +370,7 @@ public:
 
     /// @brief Select specific columns (variadic string form, appends)
     template <typename... Cols>
-    requires (std::convertible_to<Cols, std::string_view> && ...)
+    requires(std::convertible_to<Cols, std::string_view> && ...)
     auto select(Cols... cols) -> query_wrapper&
     {
         (select_columns_.emplace_back(std::string_view(cols)), ...);
@@ -363,7 +392,7 @@ public:
 
     /// @brief Structured HAVING with aggregate function and parameterised value
     auto having(aggregate_func func, std::string_view column,
-                std::string_view op, const auto& value) -> query_wrapper&
+        std::string_view op, const auto& value) -> query_wrapper&
     {
         aggregate_having h;
         h.func = func;
@@ -381,7 +410,7 @@ public:
 
     /// @brief Add a JOIN clause (raw ON condition, user handles identifier quoting)
     auto join(std::string_view table, std::string_view condition,
-              join_type type = join_type::inner) -> query_wrapper&;
+        join_type type = join_type::inner) -> query_wrapper&;
 
     /// @brief Convenience: INNER JOIN
     auto inner_join(std::string_view table, std::string_view condition) -> query_wrapper&;
@@ -401,27 +430,27 @@ public:
 
     /// @brief Add an aggregate column to the SELECT list
     auto select_aggregate(aggregate_func func, std::string_view column,
-                          std::string_view alias = "") -> query_wrapper&;
+        std::string_view alias = "") -> query_wrapper&;
 
     /// @brief SELECT COUNT(column) AS alias
     auto select_count(std::string_view column = "*",
-                      std::string_view alias = "count") -> query_wrapper&;
+        std::string_view alias = "count") -> query_wrapper&;
 
     /// @brief SELECT SUM(column) AS alias
     auto select_sum(std::string_view column,
-                    std::string_view alias = "") -> query_wrapper&;
+        std::string_view alias = "") -> query_wrapper&;
 
     /// @brief SELECT AVG(column) AS alias
     auto select_avg(std::string_view column,
-                    std::string_view alias = "") -> query_wrapper&;
+        std::string_view alias = "") -> query_wrapper&;
 
     /// @brief SELECT MIN(column) AS alias
     auto select_min(std::string_view column,
-                    std::string_view alias = "") -> query_wrapper&;
+        std::string_view alias = "") -> query_wrapper&;
 
     /// @brief SELECT MAX(column) AS alias
     auto select_max(std::string_view column,
-                    std::string_view alias = "") -> query_wrapper&;
+        std::string_view alias = "") -> query_wrapper&;
 
     // =========================================================================
     // Build SQL — dialect-aware overloads
@@ -492,76 +521,112 @@ public:
     // =========================================================================
 
     template <typename U>
-    auto eq(U T::*member_ptr, const auto& value) -> query_wrapper&
-    { return eq(resolve_column_name<T>(member_ptr), value); }
+    auto eq(U T::* member_ptr, const auto& value) -> query_wrapper&
+    {
+        return eq(resolve_column_name<T>(member_ptr), value);
+    }
 
     template <typename U>
-    auto ne(U T::*member_ptr, const auto& value) -> query_wrapper&
-    { return ne(resolve_column_name<T>(member_ptr), value); }
+    auto ne(U T::* member_ptr, const auto& value) -> query_wrapper&
+    {
+        return ne(resolve_column_name<T>(member_ptr), value);
+    }
 
     template <typename U>
-    auto gt(U T::*member_ptr, const auto& value) -> query_wrapper&
-    { return gt(resolve_column_name<T>(member_ptr), value); }
+    auto gt(U T::* member_ptr, const auto& value) -> query_wrapper&
+    {
+        return gt(resolve_column_name<T>(member_ptr), value);
+    }
 
     template <typename U>
-    auto ge(U T::*member_ptr, const auto& value) -> query_wrapper&
-    { return ge(resolve_column_name<T>(member_ptr), value); }
+    auto ge(U T::* member_ptr, const auto& value) -> query_wrapper&
+    {
+        return ge(resolve_column_name<T>(member_ptr), value);
+    }
 
     template <typename U>
-    auto lt(U T::*member_ptr, const auto& value) -> query_wrapper&
-    { return lt(resolve_column_name<T>(member_ptr), value); }
+    auto lt(U T::* member_ptr, const auto& value) -> query_wrapper&
+    {
+        return lt(resolve_column_name<T>(member_ptr), value);
+    }
 
     template <typename U>
-    auto le(U T::*member_ptr, const auto& value) -> query_wrapper&
-    { return le(resolve_column_name<T>(member_ptr), value); }
+    auto le(U T::* member_ptr, const auto& value) -> query_wrapper&
+    {
+        return le(resolve_column_name<T>(member_ptr), value);
+    }
 
     template <typename U>
-    auto like(U T::*member_ptr, std::string_view pattern) -> query_wrapper&
-    { return like(resolve_column_name<T>(member_ptr), pattern); }
+    auto like(U T::* member_ptr, std::string_view pattern) -> query_wrapper&
+    {
+        return like(resolve_column_name<T>(member_ptr), pattern);
+    }
 
     template <typename U>
-    auto not_like(U T::*member_ptr, std::string_view pattern) -> query_wrapper&
-    { return not_like(resolve_column_name<T>(member_ptr), pattern); }
+    auto not_like(U T::* member_ptr, std::string_view pattern) -> query_wrapper&
+    {
+        return not_like(resolve_column_name<T>(member_ptr), pattern);
+    }
 
     template <typename U>
-    auto is_null(U T::*member_ptr) -> query_wrapper&
-    { return is_null(resolve_column_name<T>(member_ptr)); }
+    auto is_null(U T::* member_ptr) -> query_wrapper&
+    {
+        return is_null(resolve_column_name<T>(member_ptr));
+    }
 
     template <typename U>
-    auto is_not_null(U T::*member_ptr) -> query_wrapper&
-    { return is_not_null(resolve_column_name<T>(member_ptr)); }
+    auto is_not_null(U T::* member_ptr) -> query_wrapper&
+    {
+        return is_not_null(resolve_column_name<T>(member_ptr));
+    }
 
     template <typename U, typename ValueType>
-    auto in(U T::*member_ptr, const std::vector<ValueType>& values) -> query_wrapper&
-    { return in(resolve_column_name<T>(member_ptr), values); }
+    auto in(U T::* member_ptr, const std::vector<ValueType>& values) -> query_wrapper&
+    {
+        return in(resolve_column_name<T>(member_ptr), values);
+    }
 
     template <typename U, typename ValueType>
-    auto not_in(U T::*member_ptr, const std::vector<ValueType>& values) -> query_wrapper&
-    { return not_in(resolve_column_name<T>(member_ptr), values); }
+    auto not_in(U T::* member_ptr, const std::vector<ValueType>& values) -> query_wrapper&
+    {
+        return not_in(resolve_column_name<T>(member_ptr), values);
+    }
 
     template <typename U>
-    auto between(U T::*member_ptr, const auto& start, const auto& end) -> query_wrapper&
-    { return between(resolve_column_name<T>(member_ptr), start, end); }
+    auto between(U T::* member_ptr, const auto& start, const auto& end) -> query_wrapper&
+    {
+        return between(resolve_column_name<T>(member_ptr), start, end);
+    }
 
     template <typename U>
-    auto not_between(U T::*member_ptr, const auto& start, const auto& end) -> query_wrapper&
-    { return not_between(resolve_column_name<T>(member_ptr), start, end); }
+    auto not_between(U T::* member_ptr, const auto& start, const auto& end) -> query_wrapper&
+    {
+        return not_between(resolve_column_name<T>(member_ptr), start, end);
+    }
 
     template <typename U>
-    auto is_true(U T::*member_ptr) -> query_wrapper&
-    { return is_true(resolve_column_name<T>(member_ptr)); }
+    auto is_true(U T::* member_ptr) -> query_wrapper&
+    {
+        return is_true(resolve_column_name<T>(member_ptr));
+    }
 
     template <typename U>
-    auto is_false(U T::*member_ptr) -> query_wrapper&
-    { return is_false(resolve_column_name<T>(member_ptr)); }
+    auto is_false(U T::* member_ptr) -> query_wrapper&
+    {
+        return is_false(resolve_column_name<T>(member_ptr));
+    }
 
     template <typename U>
-    auto order_by_asc(U T::*member_ptr) -> query_wrapper&
-    { return order_by_asc(resolve_column_name<T>(member_ptr)); }
+    auto order_by_asc(U T::* member_ptr) -> query_wrapper&
+    {
+        return order_by_asc(resolve_column_name<T>(member_ptr));
+    }
 
     template <typename U>
-    auto order_by_desc(U T::*member_ptr) -> query_wrapper&
-    { return order_by_desc(resolve_column_name<T>(member_ptr)); }
+    auto order_by_desc(U T::* member_ptr) -> query_wrapper&
+    {
+        return order_by_desc(resolve_column_name<T>(member_ptr));
+    }
 
     /// @brief Select columns via member pointers (type-safe partial select)
     template <typename... Members>
@@ -572,30 +637,43 @@ public:
     }
 
     template <typename U>
-    auto group_by(U T::*member_ptr) -> query_wrapper&
-    { return group_by(resolve_column_name<T>(member_ptr)); }
+    auto group_by(U T::* member_ptr) -> query_wrapper&
+    {
+        return group_by(resolve_column_name<T>(member_ptr));
+    }
 
     template <typename U>
-    auto select_count(U T::*member_ptr, std::string_view alias = "count") -> query_wrapper&
-    { return select_count(resolve_column_name<T>(member_ptr), alias); }
+    auto select_count(U T::* member_ptr, std::string_view alias = "count") -> query_wrapper&
+    {
+        return select_count(resolve_column_name<T>(member_ptr), alias);
+    }
 
     template <typename U>
-    auto select_sum(U T::*member_ptr, std::string_view alias = "") -> query_wrapper&
-    { return select_sum(resolve_column_name<T>(member_ptr), alias); }
+    auto select_sum(U T::* member_ptr, std::string_view alias = "") -> query_wrapper&
+    {
+        return select_sum(resolve_column_name<T>(member_ptr), alias);
+    }
 
     template <typename U>
-    auto select_avg(U T::*member_ptr, std::string_view alias = "") -> query_wrapper&
-    { return select_avg(resolve_column_name<T>(member_ptr), alias); }
+    auto select_avg(U T::* member_ptr, std::string_view alias = "") -> query_wrapper&
+    {
+        return select_avg(resolve_column_name<T>(member_ptr), alias);
+    }
 
     template <typename U>
-    auto select_min(U T::*member_ptr, std::string_view alias = "") -> query_wrapper&
-    { return select_min(resolve_column_name<T>(member_ptr), alias); }
+    auto select_min(U T::* member_ptr, std::string_view alias = "") -> query_wrapper&
+    {
+        return select_min(resolve_column_name<T>(member_ptr), alias);
+    }
 
     template <typename U>
-    auto select_max(U T::*member_ptr, std::string_view alias = "") -> query_wrapper&
-    { return select_max(resolve_column_name<T>(member_ptr), alias); }
+    auto select_max(U T::* member_ptr, std::string_view alias = "") -> query_wrapper&
+    {
+        return select_max(resolve_column_name<T>(member_ptr), alias);
+    }
 
 private:
+    query_execution_kind execution_kind_ = query_execution_kind::select;
     std::vector<condition> conditions_;
     std::vector<order_by> order_by_;
     std::vector<std::string> select_columns_;
@@ -642,7 +720,7 @@ public:
 
     /// @brief Set a field value by member pointer (type-safe)
     template <typename U>
-    auto set(U T::*member_ptr, const auto& value) -> update_wrapper&
+    auto set(U T::* member_ptr, const auto& value) -> update_wrapper&
     {
         return set(resolve_column_name<T>(member_ptr), value);
     }
@@ -650,84 +728,150 @@ public:
     // -- WHERE conditions (delegate to internal query_wrapper) --
 
     auto eq(std::string_view column, const auto& value) -> update_wrapper&
-    { where_.eq(column, value); return *this; }
+    {
+        where_.eq(column, value);
+        return *this;
+    }
 
     auto ne(std::string_view column, const auto& value) -> update_wrapper&
-    { where_.ne(column, value); return *this; }
+    {
+        where_.ne(column, value);
+        return *this;
+    }
 
     auto gt(std::string_view column, const auto& value) -> update_wrapper&
-    { where_.gt(column, value); return *this; }
+    {
+        where_.gt(column, value);
+        return *this;
+    }
 
     auto ge(std::string_view column, const auto& value) -> update_wrapper&
-    { where_.ge(column, value); return *this; }
+    {
+        where_.ge(column, value);
+        return *this;
+    }
 
     auto lt(std::string_view column, const auto& value) -> update_wrapper&
-    { where_.lt(column, value); return *this; }
+    {
+        where_.lt(column, value);
+        return *this;
+    }
 
     auto le(std::string_view column, const auto& value) -> update_wrapper&
-    { where_.le(column, value); return *this; }
+    {
+        where_.le(column, value);
+        return *this;
+    }
 
     template <typename ValueType>
     auto in(std::string_view column, const std::vector<ValueType>& values) -> update_wrapper&
-    { where_.in(column, values); return *this; }
+    {
+        where_.in(column, values);
+        return *this;
+    }
 
     auto like(std::string_view column, std::string_view pattern) -> update_wrapper&
-    { where_.like(column, pattern); return *this; }
+    {
+        where_.like(column, pattern);
+        return *this;
+    }
 
     auto is_null(std::string_view column) -> update_wrapper&
-    { where_.is_null(column); return *this; }
+    {
+        where_.is_null(column);
+        return *this;
+    }
 
     auto is_not_null(std::string_view column) -> update_wrapper&
-    { where_.is_not_null(column); return *this; }
+    {
+        where_.is_not_null(column);
+        return *this;
+    }
 
     auto between(std::string_view column, const auto& start, const auto& end) -> update_wrapper&
-    { where_.between(column, start, end); return *this; }
+    {
+        where_.between(column, start, end);
+        return *this;
+    }
 
     // -- Member pointer WHERE overloads --
 
     template <typename U>
-    auto eq(U T::*member_ptr, const auto& value) -> update_wrapper&
-    { where_.eq(resolve_column_name<T>(member_ptr), value); return *this; }
+    auto eq(U T::* member_ptr, const auto& value) -> update_wrapper&
+    {
+        where_.eq(resolve_column_name<T>(member_ptr), value);
+        return *this;
+    }
 
     template <typename U>
-    auto ne(U T::*member_ptr, const auto& value) -> update_wrapper&
-    { where_.ne(resolve_column_name<T>(member_ptr), value); return *this; }
+    auto ne(U T::* member_ptr, const auto& value) -> update_wrapper&
+    {
+        where_.ne(resolve_column_name<T>(member_ptr), value);
+        return *this;
+    }
 
     template <typename U>
-    auto gt(U T::*member_ptr, const auto& value) -> update_wrapper&
-    { where_.gt(resolve_column_name<T>(member_ptr), value); return *this; }
+    auto gt(U T::* member_ptr, const auto& value) -> update_wrapper&
+    {
+        where_.gt(resolve_column_name<T>(member_ptr), value);
+        return *this;
+    }
 
     template <typename U>
-    auto ge(U T::*member_ptr, const auto& value) -> update_wrapper&
-    { where_.ge(resolve_column_name<T>(member_ptr), value); return *this; }
+    auto ge(U T::* member_ptr, const auto& value) -> update_wrapper&
+    {
+        where_.ge(resolve_column_name<T>(member_ptr), value);
+        return *this;
+    }
 
     template <typename U>
-    auto lt(U T::*member_ptr, const auto& value) -> update_wrapper&
-    { where_.lt(resolve_column_name<T>(member_ptr), value); return *this; }
+    auto lt(U T::* member_ptr, const auto& value) -> update_wrapper&
+    {
+        where_.lt(resolve_column_name<T>(member_ptr), value);
+        return *this;
+    }
 
     template <typename U>
-    auto le(U T::*member_ptr, const auto& value) -> update_wrapper&
-    { where_.le(resolve_column_name<T>(member_ptr), value); return *this; }
+    auto le(U T::* member_ptr, const auto& value) -> update_wrapper&
+    {
+        where_.le(resolve_column_name<T>(member_ptr), value);
+        return *this;
+    }
 
     template <typename U, typename ValueType>
-    auto in(U T::*member_ptr, const std::vector<ValueType>& values) -> update_wrapper&
-    { where_.in(resolve_column_name<T>(member_ptr), values); return *this; }
+    auto in(U T::* member_ptr, const std::vector<ValueType>& values) -> update_wrapper&
+    {
+        where_.in(resolve_column_name<T>(member_ptr), values);
+        return *this;
+    }
 
     template <typename U>
-    auto like(U T::*member_ptr, std::string_view pattern) -> update_wrapper&
-    { where_.like(resolve_column_name<T>(member_ptr), pattern); return *this; }
+    auto like(U T::* member_ptr, std::string_view pattern) -> update_wrapper&
+    {
+        where_.like(resolve_column_name<T>(member_ptr), pattern);
+        return *this;
+    }
 
     template <typename U>
-    auto is_null(U T::*member_ptr) -> update_wrapper&
-    { where_.is_null(resolve_column_name<T>(member_ptr)); return *this; }
+    auto is_null(U T::* member_ptr) -> update_wrapper&
+    {
+        where_.is_null(resolve_column_name<T>(member_ptr));
+        return *this;
+    }
 
     template <typename U>
-    auto is_not_null(U T::*member_ptr) -> update_wrapper&
-    { where_.is_not_null(resolve_column_name<T>(member_ptr)); return *this; }
+    auto is_not_null(U T::* member_ptr) -> update_wrapper&
+    {
+        where_.is_not_null(resolve_column_name<T>(member_ptr));
+        return *this;
+    }
 
     template <typename U>
-    auto between(U T::*member_ptr, const auto& start, const auto& end) -> update_wrapper&
-    { where_.between(resolve_column_name<T>(member_ptr), start, end); return *this; }
+    auto between(U T::* member_ptr, const auto& start, const auto& end) -> update_wrapper&
+    {
+        where_.between(resolve_column_name<T>(member_ptr), start, end);
+        return *this;
+    }
 
     // -- Build SQL --
 

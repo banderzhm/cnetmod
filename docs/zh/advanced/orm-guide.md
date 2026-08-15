@@ -1,6 +1,6 @@
 # ORM 指南
 
-cnetmod 的 MySQL 对象关系映射（ORM）系统综合指南。
+cnetmod 的 MySQL 与 PostgreSQL 对象关系映射（ORM）系统综合指南。
 
 ## 概述
 
@@ -71,6 +71,39 @@ task<void> crud_example(mysql::client& client) {
     co_await db.remove(user);
 }
 ```
+
+### 协议无关 CRUD
+
+需要让仓储层同时适配 MySQL 和 PostgreSQL 时，使用
+`orm::database_session`，而不是将接口绑定到某个协议专属 session。方言负责
+标识符引用、占位符和 `RETURNING`，底层 client 仍独立负责网络操作。
+
+```cpp
+import cnetmod.orm;
+import cnetmod.protocol.postgresql;
+
+task<void> repository_example(postgresql::client& client) {
+    orm::database_session db{client, orm::sql_dialect::postgresql};
+
+    auto found = co_await db.find_by_id<User>(orm::param_value::from_int(42));
+    if (!found.ok() || !found.first())
+        co_return;
+
+    User user = *found.first();
+    user.name = "Alice Smith";
+    auto updated = co_await db.update(user);
+}
+```
+
+所有类型化操作均返回 `orm::model_result<T>`，其中保留 `data`、
+`affected_rows`、`last_insert_id`、`error_msg` 和 `sql_state`；因此空结果与
+执行失败可以明确区分。该 session 统一提供 `find_all`、`find_by_id`、
+`find_one_by`、`insert`、`update`、`remove`、`remove_by`，以及带参数的
+`remove_by_id`、`query_wrapper` / `update_wrapper` 执行入口。Wrapper 只构造
+SQL 与参数，`database_session` 是唯一的 I/O 和结果映射边界；条件操作使用
+`find(wrapper)`、`update(wrapper)`、`remove(wrapper)`。也可直接调用
+`execute(wrapper)`：`query_wrapper` 默认 SELECT，显式 `.as_delete()` 后执行
+DELETE；`update_wrapper` 始终执行 UPDATE。
 
 ## 模型定义
 

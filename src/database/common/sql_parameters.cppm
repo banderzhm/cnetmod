@@ -122,6 +122,14 @@ struct sql_format_options
 using param_value = query_parameter;
 using format_options = sql_format_options;
 
+/// Preserve a parameter that has already been typed by an ORM metadata or
+/// repository layer. This lets query_wrapper compose convenience CRUD APIs
+/// without reinterpreting the database value.
+inline auto to_query_parameter(query_parameter value) -> query_parameter
+{
+    return value;
+}
+
 inline auto to_query_parameter(std::int64_t value) -> query_parameter
 {
     return query_parameter::from_int(value);

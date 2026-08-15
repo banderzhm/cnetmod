@@ -154,4 +154,10 @@ auto mysql_adapt_result(const cnetmod::mysql::result_set& source) -> query_resul
     return result;
 }
 
+auto database_result_adapter<cnetmod::mysql::result_set>::adapt(
+    cnetmod::mysql::result_set&& source) -> query_result
+{
+    return mysql_adapt_result(source);
+}
+
 } // namespace cnetmod::orm

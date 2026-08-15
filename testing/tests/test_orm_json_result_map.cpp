@@ -10,8 +10,11 @@ import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.middleware.tracing;
+import cnetmod.protocol.mysql;
 
 namespace orm = cnetmod::orm;
+
+static_assert(orm::asynchronous_database_client<cnetmod::mysql::client>);
 
 struct orm_json_user
 {
@@ -24,6 +27,27 @@ CNETMOD_MODEL(orm_json_user, "users",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(name, "name", varchar),
     CNETMOD_FIELD(status, "status", int_))
+
+struct orm_crud_user
+{
+    std::int64_t id{};
+    std::string name;
+    std::int32_t status{};
+};
+
+CNETMOD_MODEL(orm_crud_user, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
+    CNETMOD_FIELD(name, "name", varchar),
+    CNETMOD_FIELD(status, "status", int_))
+
+[[maybe_unused]] auto mysql_database_session_compile_probe(
+    cnetmod::mysql::client& client) -> cnetmod::task<void>
+{
+    orm::database_session session{client, orm::sql_dialect::mysql};
+    auto result = co_await session.find_by_id<orm_crud_user>(
+        orm::param_value::from_int(7));
+    static_cast<void>(result);
+}
 
 struct orm_json_team
 {
@@ -74,6 +98,95 @@ struct traced_database_client
     auto execute(orm::parameterized_query) -> cnetmod::task<orm::query_result>
     {
         co_return orm::query_result{};
+    }
+
+    auto current_format_opts() const -> const orm::sql_format_options&
+    {
+        return format_options;
+    }
+};
+
+auto orm_crud_user_rows(std::int64_t id = 7, std::string name = "Ada",
+    std::int64_t status = 1) -> orm::query_result
+{
+    orm::query_result result;
+    result.columns = {{.name = "id"}, {.name = "name"}, {.name = "status"}};
+    result.rows = {{orm::field_value::from_int64(id),
+        orm::field_value::from_string(std::move(name)),
+        orm::field_value::from_int64(status)}};
+    result.affected_rows = 1;
+    return result;
+}
+
+struct mysql_style_orm_client
+{
+    orm::sql_format_options format_options{};
+    std::string last_sql;
+
+    auto query(std::string_view sql) -> cnetmod::task<orm::query_result>
+    {
+        last_sql = sql;
+        co_return orm_crud_user_rows();
+    }
+
+    auto execute(std::string_view sql) -> cnetmod::task<orm::query_result>
+    {
+        last_sql = sql;
+        if (sql.starts_with("SELECT"))
+            co_return orm_crud_user_rows();
+        orm::query_result result;
+        result.affected_rows = 1;
+        result.last_insert_id = 73;
+        co_return result;
+    }
+
+    auto execute(orm::parameterized_query statement) -> cnetmod::task<orm::query_result>
+    {
+        auto formatted = orm::format_sql(format_options, statement.query, statement.args);
+        if (!formatted)
+        {
+            orm::query_result error;
+            error.error_msg = "failed to format parameterized SQL";
+            co_return error;
+        }
+        co_return co_await execute(*formatted);
+    }
+
+    auto current_format_opts() const -> const orm::sql_format_options&
+    {
+        return format_options;
+    }
+};
+
+struct postgresql_style_orm_client
+{
+    orm::sql_format_options format_options{};
+    std::string last_sql;
+    std::vector<orm::param_value> last_parameters;
+
+    auto query(std::string_view sql) -> cnetmod::task<orm::query_result>
+    {
+        last_sql = sql;
+        co_return orm_crud_user_rows();
+    }
+
+    auto execute(std::string_view sql) -> cnetmod::task<orm::query_result>
+    {
+        last_sql = sql;
+        orm::query_result result;
+        result.affected_rows = 1;
+        co_return result;
+    }
+
+    auto execute(orm::parameterized_query statement) -> cnetmod::task<orm::query_result>
+    {
+        last_sql = statement.query;
+        last_parameters = std::move(statement.args);
+        if (last_sql.starts_with("SELECT") || last_sql.contains("RETURNING"))
+            co_return orm_crud_user_rows(17, "Grace", 2);
+        orm::query_result result;
+        result.affected_rows = 1;
+        co_return result;
     }
 
     auto current_format_opts() const -> const orm::sql_format_options&
@@ -351,6 +464,83 @@ TEST(orm_database_session_reports_explicit_sql_client_span)
     ASSERT_EQ(reported->name, "SQL QUERY");
     ASSERT_EQ(reported->attributes.at(0).first, "db.system");
     ASSERT_EQ(reported->attributes.at(0).second, "sql");
+}
+
+TEST(orm_database_session_unifies_mysql_crud_and_model_mapping)
+{
+    mysql_style_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql};
+
+    const auto found = cnetmod::sync_wait(
+        session.find_by_id<orm_crud_user>(orm::param_value::from_int(7)));
+    ASSERT_TRUE(found.ok());
+    ASSERT_EQ(found.first()->name, "Ada");
+    ASSERT_TRUE(client.last_sql.contains("`users`"));
+    ASSERT_TRUE(client.last_sql.contains("`id` = 7"));
+
+    orm_crud_user created{.name = "Lin", .status = 3};
+    const auto inserted = cnetmod::sync_wait(session.insert(created));
+    ASSERT_TRUE(inserted.ok());
+    ASSERT_EQ(created.id, 73);
+    ASSERT_EQ(inserted.first()->id, 73);
+    ASSERT_TRUE(client.last_sql.starts_with("INSERT INTO `users`"));
+    ASSERT_TRUE(client.last_sql.contains("'Lin'"));
+
+    const auto updated = cnetmod::sync_wait(session.update(created));
+    ASSERT_TRUE(updated.ok());
+    ASSERT_TRUE(client.last_sql.starts_with("UPDATE `users` SET"));
+    ASSERT_TRUE(client.last_sql.contains("WHERE `id` = 73"));
+
+    const auto removed = cnetmod::sync_wait(session.remove(created));
+    ASSERT_TRUE(removed.ok());
+    ASSERT_TRUE(client.last_sql.starts_with("DELETE FROM `users`"));
+
+    const auto removed_by_id = cnetmod::sync_wait(
+        session.remove_by_id<orm_crud_user>(orm::param_value::from_int(73)));
+    ASSERT_TRUE(removed_by_id.ok());
+    ASSERT_TRUE(client.last_sql.contains("WHERE `id` = 73"));
+
+    orm::query_wrapper<orm_crud_user> select_wrapper;
+    select_wrapper.eq("status", 1);
+    const auto selected = cnetmod::sync_wait(session.execute(select_wrapper));
+    ASSERT_TRUE(selected.ok());
+    ASSERT_EQ(selected.first()->name, "Ada");
+    ASSERT_TRUE(client.last_sql.starts_with("SELECT"));
+
+    orm::query_wrapper<orm_crud_user> delete_wrapper;
+    delete_wrapper.eq("id", 73).as_delete();
+    const auto deleted = cnetmod::sync_wait(session.execute(delete_wrapper));
+    ASSERT_TRUE(deleted.ok());
+    ASSERT_TRUE(client.last_sql.starts_with("DELETE FROM `users`"));
+
+    orm::update_wrapper<orm_crud_user> update_wrapper;
+    update_wrapper.set("name", "Ada Lovelace").eq("id", 73);
+    const auto conditionally_updated = cnetmod::sync_wait(session.execute(update_wrapper));
+    ASSERT_TRUE(conditionally_updated.ok());
+    ASSERT_TRUE(client.last_sql.starts_with("UPDATE `users` SET"));
+}
+
+TEST(orm_database_session_uses_postgresql_binding_and_returning_mapping)
+{
+    postgresql_style_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::postgresql};
+
+    const auto found = cnetmod::sync_wait(
+        session.find_by_id<orm_crud_user>(orm::param_value::from_int(17)));
+    ASSERT_TRUE(found.ok());
+    ASSERT_EQ(found.first()->id, 17);
+    ASSERT_TRUE(client.last_sql.contains("\"users\""));
+    ASSERT_TRUE(client.last_sql.contains("\"id\" = $1"));
+    ASSERT_EQ(client.last_parameters.size(), 1U);
+    ASSERT_EQ(client.last_parameters.front().int_val, 17);
+
+    orm_crud_user created{.name = "Grace", .status = 2};
+    const auto inserted = cnetmod::sync_wait(session.insert(created));
+    ASSERT_TRUE(inserted.ok());
+    ASSERT_TRUE(client.last_sql.contains("RETURNING *"));
+    ASSERT_EQ(created.id, 17);
+    ASSERT_EQ(created.name, "Grace");
+    ASSERT_EQ(client.last_parameters.size(), 2U);
 }
 
 RUN_TESTS()

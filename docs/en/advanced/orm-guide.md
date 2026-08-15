@@ -1,6 +1,6 @@
 # ORM Guide
 
-Comprehensive guide to cnetmod's Object-Relational Mapping (ORM) system for MySQL.
+Comprehensive guide to cnetmod's Object-Relational Mapping (ORM) system for MySQL and PostgreSQL.
 
 ## Overview
 
@@ -71,6 +71,41 @@ task<void> crud_example(mysql::client& client) {
     co_await db.remove(user);
 }
 ```
+
+### Protocol-Independent CRUD
+
+When a repository must work with either database protocol, use
+`orm::database_session` instead of binding its API to a protocol-specific
+session. The database dialect controls quoting, placeholders, and `RETURNING`;
+the underlying client still owns the network operation.
+
+```cpp
+import cnetmod.orm;
+import cnetmod.protocol.postgresql;
+
+task<void> repository_example(postgresql::client& client) {
+    orm::database_session db{client, orm::sql_dialect::postgresql};
+
+    auto found = co_await db.find_by_id<User>(orm::param_value::from_int(42));
+    if (!found.ok() || !found.first())
+        co_return;
+
+    User user = *found.first();
+    user.name = "Alice Smith";
+    auto updated = co_await db.update(user);
+}
+```
+
+All typed operations return `orm::model_result<T>`. It retains `data`,
+`affected_rows`, `last_insert_id`, `error_msg`, and `sql_state`; therefore an
+empty successful query is distinct from an error. The same session supports
+`find_all`, `find_by_id`, `find_one_by`, `insert`, `update`, `remove`,
+`remove_by`, `remove_by_id`, and parameterized `query_wrapper`/`update_wrapper`
+execution. Wrappers only construct SQL and values; `database_session` is the
+sole I/O and result-mapping boundary. Use `find(wrapper)`, `update(wrapper)`,
+and `remove(wrapper)` for conditional operations. `execute(wrapper)` is also
+available: a `query_wrapper` defaults to SELECT and `.as_delete()` explicitly
+selects DELETE; an `update_wrapper` always selects UPDATE.
 
 ## Model Definition
 
