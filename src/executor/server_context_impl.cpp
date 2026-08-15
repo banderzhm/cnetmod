@@ -32,24 +32,43 @@ namespace cnetmod {
 
 namespace {
 
+    enum class pool_resume_status
+    {
+        pending,
+        value,
+        error,
+        stopped,
+    };
+
+    struct pool_resume_state
+    {
+        std::coroutine_handle<> coroutine;
+        std::exception_ptr error;
+        pool_resume_status status{pool_resume_status::pending};
+    };
+
     struct pool_resume_receiver
     {
         using receiver_concept = stdexec::receiver_t;
-        std::coroutine_handle<> coroutine;
+        pool_resume_state* state;
 
         void set_value() noexcept
         {
-            coroutine.resume();
+            state->status = pool_resume_status::value;
+            state->coroutine.resume();
         }
 
-        void set_error(std::exception_ptr) noexcept
+        void set_error(std::exception_ptr error) noexcept
         {
-            coroutine.resume();
+            state->error = std::move(error);
+            state->status = pool_resume_status::error;
+            state->coroutine.resume();
         }
 
         void set_stopped() noexcept
         {
-            coroutine.resume();
+            state->status = pool_resume_status::stopped;
+            state->coroutine.resume();
         }
 
         struct env
@@ -70,12 +89,14 @@ namespace {
 
     struct resume_operation
     {
+        pool_resume_state state;
         native_resume_operation operation;
 
         explicit resume_operation(native_scheduler scheduler,
             std::coroutine_handle<> coroutine)
-            : operation(stdexec::connect(
-                  scheduler.schedule(), pool_resume_receiver{coroutine})) {}
+            : state{.coroutine = coroutine},
+              operation(stdexec::connect(
+                  scheduler.schedule(), pool_resume_receiver{&state})) {}
     };
 
 } // namespace
@@ -86,6 +107,7 @@ struct thread_pool::impl
         : native(thread_count == 0 ? 1U : thread_count) {}
 
     native_pool native;
+    std::atomic<bool> stop_requested{false};
 };
 
 thread_pool::thread_pool(unsigned thread_count)
@@ -95,11 +117,17 @@ thread_pool::~thread_pool() = default;
 
 void thread_pool::request_stop() noexcept
 {
+    impl_->stop_requested.store(true, std::memory_order_release);
     impl_->native.request_stop();
 }
 
 auto thread_pool::prepare_resume(std::coroutine_handle<> coroutine) -> void*
 {
+    if (impl_->stop_requested.load(std::memory_order_acquire))
+    {
+        throw std::system_error(
+            make_error_code(errc::operation_aborted), "thread pool stopped");
+    }
     return new resume_operation{impl_->native.get_scheduler(), coroutine};
 }
 
@@ -108,9 +136,24 @@ void thread_pool::start_resume(void* operation) noexcept
     static_cast<resume_operation*>(operation)->operation.start();
 }
 
-void thread_pool::release_resume(void* operation) noexcept
+void thread_pool::finish_resume(void* operation)
 {
-    delete static_cast<resume_operation*>(operation);
+    auto owned = std::unique_ptr<resume_operation>(
+        static_cast<resume_operation*>(operation));
+    switch (owned->state.status)
+    {
+    case pool_resume_status::value:
+        return;
+    case pool_resume_status::error:
+        if (owned->state.error)
+            std::rethrow_exception(owned->state.error);
+        throw std::runtime_error("thread pool scheduling failed");
+    case pool_resume_status::stopped:
+        throw std::system_error(
+            make_error_code(errc::operation_aborted), "thread pool stopped");
+    case pool_resume_status::pending:
+        throw std::logic_error("thread pool operation resumed before completion");
+    }
 }
 
 pool_post_awaitable::pool_post_awaitable(thread_pool& value) noexcept
@@ -121,16 +164,17 @@ auto pool_post_awaitable::await_ready() const noexcept -> bool
     return false;
 }
 
-void pool_post_awaitable::await_suspend(std::coroutine_handle<> coroutine) noexcept
+void pool_post_awaitable::await_suspend(std::coroutine_handle<> coroutine)
 {
     operation_ = pool.prepare_resume(coroutine);
     pool.start_resume(operation_);
 }
 
-void pool_post_awaitable::await_resume() noexcept
+void pool_post_awaitable::await_resume()
 {
-    pool.release_resume(operation_);
+    auto* operation = operation_;
     operation_ = nullptr;
+    pool.finish_resume(operation);
 }
 
 auto set_current_thread_affinity(unsigned processor) noexcept

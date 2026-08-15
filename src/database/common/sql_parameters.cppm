@@ -100,18 +100,28 @@ struct query_parameter
 
 struct parameterized_query
 {
-    std::string_view query;
+    std::string query;
     std::vector<query_parameter> args;
 };
 
 inline auto with_params(std::string_view sql, std::initializer_list<query_parameter> args) -> parameterized_query
 {
-    return {sql, args};
+    return {std::string(sql), args};
 }
 
 inline auto with_params(std::string_view sql, std::vector<query_parameter> args) -> parameterized_query
 {
-    return {sql, std::move(args)};
+    return {std::string(sql), std::move(args)};
+}
+
+inline auto with_params(std::string&& sql, std::initializer_list<query_parameter> args) -> parameterized_query
+{
+    return {std::move(sql), args};
+}
+
+inline auto with_params(std::string&& sql, std::vector<query_parameter> args) -> parameterized_query
+{
+    return {std::move(sql), std::move(args)};
 }
 
 struct sql_format_options

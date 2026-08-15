@@ -479,7 +479,7 @@ class server_context {
 |------|------|------|
 | Thread 0（main） | `accept_io()` | 专用 accept 循环，不参与请求处理 |
 | Thread 1..N | `next_worker_io()` | 每个 worker 独立 `io_context`，round-robin 分配连接 |
-| Thread Pool | `pool()` | stdexec `static_thread_pool`，用于 CPU 密集型任务卸载 |
+| Thread Pool | `pool()` | cnetmod `thread_pool`，用于 CPU 密集型任务卸载 |
 
 **IOCP 特性**：accept 后的新 socket 尚未关联 IOCP，首次 `async_read/write` 时自动绑定到 worker 的 IOCP。
 
@@ -507,7 +507,7 @@ namespace http = cnetmod::http;
 auto main() -> int {
     cn::net_init net;
 
-    // 创建多核上下文：4 worker 线程 + 4 stdexec 线程池
+    // 创建多核上下文：4 worker 线程 + 4 个 CPU 线程
     constexpr unsigned WORKERS = 4;
     cn::server_context sctx(WORKERS, WORKERS);
 
@@ -528,7 +528,7 @@ auto main() -> int {
         co_return;
     });
 
-    // CPU 密集型路由：卸载到 stdexec 线程池
+    // CPU 密集型路由：卸载到 cnetmod 线程池
     router.get("/compute/:n", [&sctx](http::request_context& ctx) -> cn::task<void> {
         int n = 30;
         auto n_str = ctx.param("n");
@@ -537,7 +537,7 @@ auto main() -> int {
 
         auto io_tid = std::this_thread::get_id();
 
-        // 切换到 stdexec 线程池执行 CPU 密集计算
+        // 切换到 cnetmod 线程池执行 CPU 密集计算
         co_await cn::pool_post_awaitable{sctx.pool()};
         auto pool_tid = std::this_thread::get_id();
 

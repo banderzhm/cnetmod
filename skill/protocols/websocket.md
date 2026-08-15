@@ -409,6 +409,6 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 
 ## 参考示例
 
-- `examples/websocket/ws_demo.cpp` — 底层 connection + exec::async_scope 并发
+- `examples/websocket/ws_demo.cpp` — 底层 connection + cnetmod task/spawn 并发
 - `examples/websocket/hight_ws.cpp` — 高层 server 路由注册 + client
 - `examples/websocket/multicore_ws.cpp` — server_context 多核分发

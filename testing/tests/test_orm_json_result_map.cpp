@@ -554,12 +554,79 @@ TEST(query_wrapper_accepts_optional_condition_values)
 
     const auto [sql, parameters] = query.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(sql.contains("\"status\" = $1"));
-    ASSERT_TRUE(sql.contains("\"name\" = $2"));
-    ASSERT_TRUE(sql.contains("\"id\" = $3"));
-    ASSERT_EQ(parameters.size(), 3U);
+    ASSERT_TRUE(sql.contains("\"name\" IS NULL"));
+    ASSERT_TRUE(sql.contains("\"id\" IS NULL"));
+    ASSERT_EQ(parameters.size(), 1U);
     ASSERT_TRUE(parameters[0].kind == orm::param_value::kind_t::int64_kind);
-    ASSERT_TRUE(parameters[1].kind == orm::param_value::kind_t::null_kind);
-    ASSERT_TRUE(parameters[2].kind == orm::param_value::kind_t::null_kind);
+}
+
+TEST(query_wrapper_preserves_sql_null_and_collection_semantics)
+{
+    std::optional<std::int64_t> absent;
+
+    orm::query_wrapper<orm_crud_user> null_query;
+    null_query.ne("id", absent);
+    const auto [null_sql, null_parameters] =
+        null_query.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(null_sql.contains("\"id\" IS NOT NULL"));
+    ASSERT_TRUE(null_parameters.empty());
+
+    orm::query_wrapper<orm_crud_user> empty_in;
+    empty_in.in("id", std::vector<std::int64_t>{});
+    const auto [empty_in_sql, empty_in_parameters] =
+        empty_in.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(empty_in_sql.contains("1 = 0"));
+    ASSERT_TRUE(empty_in_parameters.empty());
+
+    orm::query_wrapper<orm_crud_user> empty_not_in;
+    empty_not_in.not_in("id", std::vector<std::int64_t>{});
+    const auto [empty_not_in_sql, empty_not_in_parameters] =
+        empty_not_in.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(empty_not_in_sql.contains("1 = 1"));
+    ASSERT_TRUE(empty_not_in_parameters.empty());
+
+    const std::vector<std::optional<std::int64_t>> mixed_values{
+        std::int64_t{7}, std::nullopt, std::int64_t{9}};
+    orm::query_wrapper<orm_crud_user> mixed_in;
+    mixed_in.in("id", mixed_values);
+    const auto [mixed_in_sql, mixed_in_parameters] =
+        mixed_in.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(mixed_in_sql.contains("\"id\" IN ($1, $2)"));
+    ASSERT_TRUE(mixed_in_sql.contains("OR \"id\" IS NULL"));
+    ASSERT_EQ(mixed_in_parameters.size(), 2U);
+
+    orm::query_wrapper<orm_crud_user> mixed_not_in;
+    mixed_not_in.not_in("id", mixed_values);
+    const auto [mixed_not_in_sql, mixed_not_in_parameters] =
+        mixed_not_in.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(mixed_not_in_sql.contains("\"id\" NOT IN ($1, $2)"));
+    ASSERT_TRUE(mixed_not_in_sql.contains("AND \"id\" IS NOT NULL"));
+    ASSERT_EQ(mixed_not_in_parameters.size(), 2U);
+
+    orm::query_wrapper<orm_crud_user> invalid_between;
+    ASSERT_THROWS(invalid_between.between("id", absent, std::int64_t{10}));
+}
+
+TEST(update_wrapper_preserves_set_order_and_optional_conditions)
+{
+    std::optional<std::int64_t> absent_id;
+    orm::update_wrapper<orm_crud_user> update;
+    update.set("name", "first")
+        .set("status", 2)
+        .set("name", "replacement")
+        .eq("id", absent_id)
+        .ne("status", std::nullopt);
+
+    const auto [sql, parameters] = update.build_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(sql.contains(
+        "SET \"name\" = $1, \"status\" = $2"));
+    ASSERT_TRUE(sql.contains("\"id\" IS NULL"));
+    ASSERT_TRUE(sql.contains("\"status\" IS NOT NULL"));
+    ASSERT_EQ(parameters.size(), 2U);
+    ASSERT_TRUE(parameters[0].kind == orm::param_value::kind_t::string_kind);
+    ASSERT_EQ(parameters[0].str_val, std::string("replacement"));
+    ASSERT_TRUE(parameters[1].kind == orm::param_value::kind_t::int64_kind);
+    ASSERT_EQ(parameters[1].int_val, 2);
 }
 
 RUN_TESTS()

@@ -90,6 +90,36 @@ jobs:
     - name: Build
       run: cmake --build ${{ github.workspace }}/build --parallel 2
 
+    - name: Configure minimal PostgreSQL feature probe
+      if: matrix.build_type == 'Release'
+      run: |
+        cmake -B ${{ github.workspace }}/build-postgresql-minimal \
+          -G "Ninja" \
+          -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
+          -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1 \
+          -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
+          -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF \
+          -DCNETMOD_ENABLE_HTTP=ON \
+          -DCNETMOD_ENABLE_MYSQL=ON \
+          -DCNETMOD_ENABLE_POSTGRESQL=ON \
+          -DCNETMOD_ENABLE_ORM=ON \
+          -DCNETMOD_ENABLE_SSL=OFF \
+          -DCNETMOD_ENABLE_REDIS=OFF \
+          -DCNETMOD_BUILD_EXAMPLES=OFF \
+          -S ${{ github.workspace }}
+
+    - name: Build and test minimal PostgreSQL feature probe
+      if: matrix.build_type == 'Release'
+      run: |
+        cmake --build ${{ github.workspace }}/build-postgresql-minimal \
+          --target postgresql_interoperability_driver test_task test_orm_json_result_map \
+          --parallel 2
+        ctest --test-dir ${{ github.workspace }}/build-postgresql-minimal \
+          --output-on-failure \
+          -R '^(test_task|test_orm_json_result_map)$'
+
     - name: Install required HTTP/3 and WebTransport interoperability peer
       run: python -m pip install --disable-pip-version-check --requirement testing/http3/requirements.txt
 

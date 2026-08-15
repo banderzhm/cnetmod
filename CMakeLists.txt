@@ -466,13 +466,8 @@ endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
-# Install stdexec headers (transitive dependency for cnetmod.executor.pool).
-# Consumers that import the pool module need <exec/static_thread_pool.hpp>.
-if(EXISTS "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}/exec/static_thread_pool.hpp")
-    install(DIRECTORY "${CNETMOD_STDEXEC_EFFECTIVE_INCLUDE_DIR}/"
-        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-        FILES_MATCHING PATTERN "*.hpp" PATTERN "*.h")
-endif()
+# stdexec remains a private build-time implementation dependency.  It is not
+# installed because no public cnetmod module interface exposes its types.
 
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodConfig.cmake.in"

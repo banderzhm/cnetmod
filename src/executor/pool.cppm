@@ -33,7 +33,7 @@ private:
 
     auto prepare_resume(std::coroutine_handle<> coroutine) -> void*;
     void start_resume(void* operation) noexcept;
-    void release_resume(void* operation) noexcept;
+    void finish_resume(void* operation);
 
     friend struct pool_post_awaitable;
 };
@@ -58,8 +58,8 @@ export struct pool_post_awaitable
 
     explicit pool_post_awaitable(thread_pool& value) noexcept;
     auto await_ready() const noexcept -> bool;
-    void await_suspend(std::coroutine_handle<> coroutine) noexcept;
-    void await_resume() noexcept;
+    void await_suspend(std::coroutine_handle<> coroutine);
+    void await_resume();
 
 private:
     void* operation_ = nullptr;
@@ -86,10 +86,34 @@ namespace detail {
         -> task<std::invoke_result_t<F>>
     {
         using R = std::invoke_result_t<F>;
-        co_await pool_post_awaitable{pool};
-        R result = fn();
+        std::exception_ptr scheduling_error;
+        try
+        {
+            co_await pool_post_awaitable{pool};
+        }
+        catch (...)
+        {
+            scheduling_error = std::current_exception();
+        }
+        if (scheduling_error)
+        {
+            co_await post_awaitable{io};
+            std::rethrow_exception(scheduling_error);
+        }
+        std::optional<R> result;
+        std::exception_ptr error;
+        try
+        {
+            result.emplace(fn());
+        }
+        catch (...)
+        {
+            error = std::current_exception();
+        }
         co_await post_awaitable{io};
-        co_return std::move(result);
+        if (error)
+            std::rethrow_exception(error);
+        co_return std::move(*result);
     }
 
     template <typename F>
@@ -97,9 +121,32 @@ namespace detail {
     auto offload_impl(thread_pool& pool, io_context& io, F fn)
         -> task<void>
     {
-        co_await pool_post_awaitable{pool};
-        fn();
+        std::exception_ptr scheduling_error;
+        try
+        {
+            co_await pool_post_awaitable{pool};
+        }
+        catch (...)
+        {
+            scheduling_error = std::current_exception();
+        }
+        if (scheduling_error)
+        {
+            co_await post_awaitable{io};
+            std::rethrow_exception(scheduling_error);
+        }
+        std::exception_ptr error;
+        try
+        {
+            fn();
+        }
+        catch (...)
+        {
+            error = std::current_exception();
+        }
         co_await post_awaitable{io};
+        if (error)
+            std::rethrow_exception(error);
     }
 
 } // namespace detail

@@ -1,6 +1,6 @@
 # JWT 签发与验证
 
-> 协程原生 JWT 模块，基于 jwt-cpp，CPU 密集操作卸载到 stdexec 线程池。
+> 协程原生 JWT 模块，基于 jwt-cpp，CPU 密集操作卸载到 cnetmod 线程池。
 > 模块: `import cnetmod.security.jwt;`
 
 ## 核心原则
@@ -69,7 +69,7 @@ auto sign_jwt(thread_pool& pool, io_context& io,
 
 | 参数 | 说明 |
 |------|------|
-| `pool` | stdexec 线程池，用于卸载 CPU 密集操作 |
+| `pool` | cnetmod 线程池，用于卸载 CPU 密集操作 |
 | `io` | io_context，完成后返回 IO 线程 |
 | `opts` | 签发参数（issuer、subject、lifetime 等） |
 | `secret` | HS256 密钥（或未来 RS256 的 PEM 私钥） |
@@ -106,7 +106,7 @@ auto verify_jwt(thread_pool& pool, io_context& io,
 
 | 参数 | 说明 |
 |------|------|
-| `pool` | stdexec 线程池 |
+| `pool` | cnetmod 线程池 |
 | `io` | io_context |
 | `token` | 编码的 JWT 字符串（`header.payload.signature`） |
 | `secret` | HS256 验证密钥 |

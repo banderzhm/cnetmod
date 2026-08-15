@@ -63,7 +63,7 @@ Coroutine-based concurrency primitives:
 - Async channels (lock-free)
 - Async mutex
 - Blocking operation bridge
-- stdexec integration
+- Native task composition and blocking-operation offload
 
 [View Concurrency Examples →](concurrency/README.md)
 

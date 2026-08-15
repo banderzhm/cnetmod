@@ -289,96 +289,101 @@ export void report_address_connect_failure(const ip_address& addr,
 }
 
 // =============================================================================
-// detail::resolve_awaitable — CPU pool async DNS
+// detail::resolve_on_pool — structured CPU pool async DNS
 // =============================================================================
 
 namespace detail {
 
-    struct resolve_awaitable
+    struct addrinfo_deleter
     {
-        io_context& ctx_;
-        std::string host_;
-        std::string service_;
-        std::expected<std::vector<std::string>, std::string> result_;
-        std::coroutine_handle<> caller_{};
-
-        auto await_ready() const noexcept -> bool
+        void operator()(::addrinfo* value) const noexcept
         {
-            return false;
+            if (value)
+                ::freeaddrinfo(value);
         }
+    };
 
-        void await_suspend(std::coroutine_handle<> h) noexcept
-        {
-            caller_ = h;
-            spawn(ctx_, run_on_pool(this));
-        }
+    auto resolve_on_pool(io_context& ctx, std::string host,
+        std::string service)
+        -> task<std::expected<std::vector<std::string>, std::string>>
+    {
+        co_await pool_post_awaitable{blocking_pool()};
 
-        auto await_resume() -> std::expected<std::vector<std::string>, std::string>
-        {
-            return std::move(result_);
-        }
-
-    private:
-        static auto run_on_pool(resolve_awaitable* self) -> task<void>
-        {
-            co_await pool_post_awaitable{blocking_pool()};
-            self->run();
-        }
-
-        void do_resolve() noexcept
+        std::expected<std::vector<std::string>, std::string> result =
+            std::unexpected(std::string("not resolved"));
+        try
         {
             ::addrinfo hints{};
             hints.ai_family = AF_UNSPEC;
             hints.ai_socktype = SOCK_STREAM;
 
             ::addrinfo* res = nullptr;
-            const char* svc = service_.empty() ? nullptr : service_.c_str();
-            int rc = ::getaddrinfo(host_.c_str(), svc, &hints, &res);
+            const char* svc = service.empty() ? nullptr : service.c_str();
+            const int rc = ::getaddrinfo(host.c_str(), svc, &hints, &res);
+            std::unique_ptr<::addrinfo, addrinfo_deleter> addresses{res};
 
             if (rc != 0)
             {
 #ifdef CNETMOD_PLATFORM_WINDOWS
-                result_ = std::unexpected(
+                result = std::unexpected(
                     std::format("getaddrinfo failed (error {})", rc));
 #else
-                result_ = std::unexpected(
+                result = std::unexpected(
                     std::format("getaddrinfo: {}", ::gai_strerror(rc)));
 #endif
-                return;
             }
-            if (!res)
+            else if (!addresses)
             {
-                result_ = std::unexpected(std::string("no results from getaddrinfo"));
-                return;
+                result = std::unexpected(
+                    std::string("no results from getaddrinfo"));
             }
-
-            std::vector<std::string> addrs;
-            char buf[INET6_ADDRSTRLEN]{};
-            for (auto* p = res; p; p = p->ai_next)
-            {
-                const void* addr_ptr = nullptr;
-                if (p->ai_family == AF_INET)
-                    addr_ptr = &reinterpret_cast<::sockaddr_in*>(p->ai_addr)->sin_addr;
-                else if (p->ai_family == AF_INET6)
-                    addr_ptr = &reinterpret_cast<::sockaddr_in6*>(p->ai_addr)->sin6_addr;
-
-                if (addr_ptr && ::inet_ntop(p->ai_family, addr_ptr, buf, sizeof(buf)))
-                    addrs.emplace_back(buf);
-            }
-            ::freeaddrinfo(res);
-
-            if (addrs.empty())
-                result_ = std::unexpected(std::string("no addresses resolved"));
             else
-                result_ = std::move(addrs);
+            {
+                std::vector<std::string> addrs;
+                char buf[INET6_ADDRSTRLEN]{};
+                for (auto* current = addresses.get(); current;
+                    current = current->ai_next)
+                {
+                    const void* address = nullptr;
+                    if (current->ai_family == AF_INET)
+                    {
+                        address = &reinterpret_cast<::sockaddr_in*>(
+                            current->ai_addr)
+                                       ->sin_addr;
+                    }
+                    else if (current->ai_family == AF_INET6)
+                    {
+                        address = &reinterpret_cast<::sockaddr_in6*>(
+                            current->ai_addr)
+                                       ->sin6_addr;
+                    }
+
+                    if (address && ::inet_ntop(current->ai_family, address, buf, sizeof(buf)))
+                    {
+                        addrs.emplace_back(buf);
+                    }
+                }
+
+                if (addrs.empty())
+                {
+                    result = std::unexpected(
+                        std::string("no addresses resolved"));
+                }
+                else
+                {
+                    result = std::move(addrs);
+                }
+            }
+        }
+        catch (const std::exception& error)
+        {
+            result = std::unexpected(
+                std::format("getaddrinfo processing failed: {}", error.what()));
         }
 
-        void run() noexcept
-        {
-            do_resolve();
-            ctx_.post(caller_);
-        }
-    };
+        co_await post_awaitable{ctx};
+        co_return result;
+    }
 
 } // namespace detail
 
@@ -395,13 +400,8 @@ export auto async_resolve(io_context& ctx, std::string_view host,
     std::string_view service = {})
     -> task<std::expected<std::vector<std::string>, std::string>>
 {
-    detail::resolve_awaitable aw{
-        .ctx_ = ctx,
-        .host_ = std::string(host),
-        .service_ = std::string(service),
-        .result_ = std::unexpected(std::string("not resolved")),
-        .caller_ = {}};
-    co_return co_await aw;
+    co_return co_await detail::resolve_on_pool(
+        ctx, std::string(host), std::string(service));
 }
 
 export auto async_resolve_addresses(io_context& ctx,

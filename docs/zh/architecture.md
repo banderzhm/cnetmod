@@ -32,7 +32,7 @@ cnetmod 使用分层架构，关注点清晰分离：
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   执行器层                                │
-│        server_context │ scheduler │ stdexec bridge      │
+│      server_context │ scheduler │ CPU 线程池桥接        │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -61,7 +61,7 @@ cnetmod.io            (I/O 事件循环: io_context + 平台后端)
     ↓
 cnetmod.coro          (协程原语: task, spawn, sync)
     ↓
-cnetmod.executor      (调度: server_context, stdexec bridge)
+cnetmod.executor      (调度: server_context、协程调度与 CPU 线程池桥接)
     ↓
 cnetmod.protocol.*    (协议: tcp, udp, http, websocket, mqtt, coap, mysql, redis, raft)
     ↓

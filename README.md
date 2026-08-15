@@ -34,14 +34,14 @@ The [`skill/`](skill/) directory contains the project-specific instructions for 
 ### Core Runtime
 - **Coroutine engine**: `task<T>`, `spawn()` fire-and-forget, symmetric transfer for tail-call optimization
 - **I/O context**: Platform-native event loop (IOCP / io_uring / epoll / kqueue) with thread-safe `post()`
-- **Multi-core**: `server_context` with dedicated accept thread + N worker `io_context` threads + stdexec thread pool
-- **stdexec integration**: `schedule()` sender, `async_scope`, `blocking_invoke()` for offloading blocking calls
+- **Multi-core**: `server_context` with a dedicated accept thread, N worker `io_context` threads, and a cnetmod-owned CPU pool
+- **Coroutine scheduling**: `io_scheduler`, `task_group`, and `blocking_invoke()` keep scheduling and structured concurrency in cnetmod APIs
 
 ### Networking
 - **TCP**: Async accept / connect / read / write with RAII socket wrappers
 - **UDP**: Async sendto / recvfrom
 - **TLS/SSL**: OpenSSL-backed `ssl_context` / `ssl_stream` with async handshake, SNI, client certificate support
-- **Async DNS**: `async_resolve()` — non-blocking DNS via stdexec thread pool + `getaddrinfo`
+- **Async DNS**: `async_resolve()` — structured offload of `getaddrinfo` to the internal CPU pool, resumed on the caller's `io_context`
 - **Serial port**: Cross-platform async serial I/O
 
 ### Protocols
@@ -382,7 +382,7 @@ cmake -B build \
 cnetmod.core          — socket, buffer, address, error, log, dns, ssl, serial_port
 cnetmod.coro          — task, spawn, channel, mutex, semaphore, timer, cancel
 cnetmod.io            — io_context + platform backends (iocp, io_uring, epoll, kqueue)
-cnetmod.executor      — async_op, server_context, scheduler, stdexec bridge
+cnetmod.executor      — async_op, server_context, coroutine scheduler, CPU-pool bridge
 cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP async I/O
 cnetmod.protocol.http — HTTP/1.1 + HTTP/2 server, router, middleware pipeline, ALPN negotiation
@@ -420,7 +420,7 @@ cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, regis
 
 **Why io_uring/IOCP/kqueue?** Platform-native async I/O delivers best performance. io_uring avoids syscall overhead. IOCP is battle-tested for Windows servers. kqueue is the only option for macOS.
 
-**Why stdexec?** De facto standard for sender/receiver. Enables composition with other async libraries. Structured concurrency via `async_scope`. Used for blocking operation offloading (`blocking_invoke`).
+**Why a private executor backend?** cnetmod exposes only its own coroutine APIs (`task`, `io_scheduler`, `task_group`, and `blocking_invoke`). The current CPU-pool implementation may use stdexec internally in ordinary `.cpp` files, but no sender/receiver or third-party executor type crosses a public module boundary.
 
 ## Project Status
 

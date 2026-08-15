@@ -5,7 +5,9 @@
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
+import cnetmod.coro.bridge;
 import cnetmod.io.io_context;
+import cnetmod.executor.pool;
 import cnetmod.executor.scheduler;
 
 using namespace cnetmod;
@@ -91,6 +93,30 @@ static auto schedules_on(io_scheduler scheduler,
     co_await scheduler.schedule();
     execution_thread = std::this_thread::get_id();
     co_return 11;
+}
+
+static auto catches_blocking_exception_on_io_context(thread_pool& pool,
+    io_context& context, std::thread::id& pool_thread,
+    std::thread::id& catch_thread, bool& caught) -> task<void>
+{
+    try
+    {
+        (void)co_await blocking_invoke(pool, context, [&]() -> int
+            {
+                pool_thread = std::this_thread::get_id();
+                throw std::runtime_error("blocking failure");
+            });
+    }
+    catch (const std::runtime_error&)
+    {
+        catch_thread = std::this_thread::get_id();
+        caught = true;
+    }
+}
+
+static auto switches_to_pool(thread_pool& pool) -> task<void>
+{
+    co_await pool_post_awaitable{pool};
 }
 
 // =============================================================================
@@ -194,6 +220,37 @@ TEST(io_scheduler_schedule_resumes_on_target_io_context)
     runner.join();
     ASSERT_EQ(result, 11);
     ASSERT_EQ(execution_thread, context_thread);
+}
+
+TEST(blocking_invoke_rethrows_on_requested_io_context)
+{
+    auto context = make_io_context();
+    thread_pool pool{1};
+    std::thread::id context_thread;
+    std::thread runner{[&]
+        {
+            context_thread = std::this_thread::get_id();
+            context->run();
+        }};
+
+    std::thread::id pool_thread;
+    std::thread::id catch_thread;
+    bool caught = false;
+    sync_wait(catches_blocking_exception_on_io_context(
+        pool, *context, pool_thread, catch_thread, caught));
+
+    context->stop();
+    runner.join();
+    ASSERT_TRUE(caught);
+    ASSERT_EQ(catch_thread, context_thread);
+    ASSERT_TRUE(pool_thread != context_thread);
+}
+
+TEST(pool_post_reports_stopped_completion)
+{
+    thread_pool pool{1};
+    pool.request_stop();
+    ASSERT_THROWS(sync_wait(switches_to_pool(pool)));
 }
 
 TEST(spawn_releases_unstarted_coroutine_when_context_is_destroyed)

@@ -16,8 +16,6 @@
 /// Complete
 
 #include <cnetmod/config.hpp>
-#include <exec/static_thread_pool.hpp>
-
 import std;
 import cnetmod.core;
 import cnetmod.coro;
@@ -942,7 +940,7 @@ auto run_mqtt_demo(cn::io_context& ctx) -> cn::task<void>
     // === Demo 3: Sync Client ===
     logger::info("--- Demo 3: Sync Client ---");
     {
-        exec::static_thread_pool pool(1);
+        cn::thread_pool pool(1);
         co_await cn::blocking_invoke(pool, ctx, [&]
             {
                 run_sync_demo(broker_ready);

@@ -597,7 +597,7 @@ class server_context {
     auto next_worker_io() noexcept -> io_context&;   // round-robin 选择 worker
     auto worker_count() const noexcept -> unsigned;
     auto worker_ios() -> std::vector<io_context*>;    // 所有 worker io_context
-    auto pool() noexcept -> thread_pool&;             // stdexec 线程池
+    auto pool() noexcept -> thread_pool&;             // cnetmod CPU 线程池
     void spawn_next(task<void> t);                    // 在下一个 worker 上启动协程
     void run();                                       // 阻塞运行
     void stop();                                      // 停止所有线程
@@ -710,7 +710,7 @@ auto main() -> int
 
 ## 参考示例
 
-- `examples/redis/redis_client.cpp` — 基本命令 + request 构建器 + Pipeline + stdexec 桥接
+- `examples/redis/redis_client.cpp` — 基本命令 + request 构建器 + Pipeline + 阻塞调用桥接
 - `examples/redis/redis_pool.cpp` — 连接池：单/多线程获取连接
 - `examples/redis/redis_sharded_pool.cpp` — 分片连接池 + server_context 多核场景
 - `examples/http/multicore_http.cpp` — `server_context` 多核架构参考

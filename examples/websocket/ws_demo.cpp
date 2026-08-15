@@ -1,11 +1,11 @@
 /// cnetmod example — WebSocket Server + Client
 /// Demonstrates ws::connection with structured coroutine concurrency
 /// Server accept Client
-/// Async_scope.spawn() task, scope.on_empty() wait forcomplete
+/// Uses cnetmod tasks and spawn() for structured server/client flow.
 
 #include <cnetmod/config.hpp>
-#include <new>
 #include <cstdio>
+#include <new>
 
 import std;
 import cnetmod.core;
@@ -25,32 +25,37 @@ constexpr std::uint16_t PORT = 18081;
 // =============================================================================
 
 auto ws_session(cn::io_context& ctx, cn::socket client_sock,
-                std::atomic<int>& done) -> cn::task<void> {
+    std::atomic<int>& done) -> cn::task<void>
+{
     ws::connection conn(ctx);
 
     // WebSocket
     auto r = co_await conn.async_accept(std::move(client_sock));
-    if (!r) {
+    if (!r)
+    {
         std::println(stderr, "  [WS Server] handshake failed: {}",
-                     r.error().message());
+            r.error().message());
         co_return;
     }
     std::println("  [WS Server] Client connected (WebSocket handshake OK)");
 
     // Echo : echo back(10)
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 3; ++i)
+    {
         cn::cancel_token recv_token;
         conn.set_cancel_token(&recv_token);
         auto msg = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
             conn.async_recv(), recv_token);
         conn.clear_cancel_token();
-        if (!msg) {
+        if (!msg)
+        {
             std::println(stderr, "  [WS Server] recv error/timeout: {}",
-                         msg.error().message());
+                msg.error().message());
             break;
         }
 
-        if (msg->op == ws::opcode::close) {
+        if (msg->op == ws::opcode::close)
+        {
             std::println("  [WS Server] Client sent close");
             break;
         }
@@ -63,7 +68,8 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
         // Echo back echo
         auto echo = std::format("[echo] {}", text);
         auto sr = co_await conn.async_send_text(echo);
-        if (!sr) break;
+        if (!sr)
+            break;
     }
 
     (void)co_await conn.async_close();
@@ -76,7 +82,7 @@ auto ws_session(cn::io_context& ctx, cn::socket client_sock,
 // =============================================================================
 
 auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
-               std::atomic<int>& done, std::atomic<bool>& server_ready)
+    std::atomic<int>& done, std::atomic<bool>& server_ready)
     -> cn::task<void>
 {
     server_ready.store(true);
@@ -85,7 +91,8 @@ auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
     cn::cancel_token accept_token;
     auto r = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
         cn::async_accept(ctx, acc.native_socket(), accept_token), accept_token);
-    if (!r) {
+    if (!r)
+    {
         std::println(stderr, "  [WS Server] accept error/timeout");
         done.fetch_add(1);
         co_return;
@@ -101,10 +108,11 @@ auto ws_server(cn::io_context& ctx, cn::tcp::acceptor& acc,
 // =============================================================================
 
 auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
-               std::atomic<int>& done) -> cn::task<void>
+    std::atomic<int>& done) -> cn::task<void>
 {
     // Wait forServer
-    while (!server_ready.load()) {
+    while (!server_ready.load())
+    {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{1});
     }
 
@@ -116,18 +124,21 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
     auto cr = co_await cn::with_timeout(ctx, std::chrono::seconds{5},
         conn.async_connect(url), conn_token);
     conn.clear_cancel_token();
-    if (!cr) {
+    if (!cr)
+    {
         std::println(stderr, "  [WS Client] connect failed/timeout: {}",
-                     cr.error().message());
+            cr.error().message());
         co_return;
     }
     std::println("  [WS Client] Connected to {}", url);
 
     // Implementation note: 3 .
-    for (int i = 1; i <= 3; ++i) {
+    for (int i = 1; i <= 3; ++i)
+    {
         auto text = std::format("Hello #{} from cnetmod", i);
         auto sr = co_await conn.async_send_text(text);
-        if (!sr) break;
+        if (!sr)
+            break;
         std::println("  [WS Client] sent: {}", text);
 
         cn::cancel_token recv_token;
@@ -135,9 +146,11 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
         auto msg = co_await cn::with_timeout(ctx, std::chrono::seconds{10},
             conn.async_recv(), recv_token);
         conn.clear_cancel_token();
-        if (!msg) break;
+        if (!msg)
+            break;
 
-        if (msg->op == ws::opcode::close) break;
+        if (msg->op == ws::opcode::close)
+            break;
 
         std::string_view reply(
             reinterpret_cast<const char*>(msg->payload.data()),
@@ -151,26 +164,29 @@ auto ws_client(cn::io_context& ctx, std::atomic<bool>& server_ready,
 }
 
 // =============================================================================
-// Main coroutine: async_scope task
+// Main server/client coroutine
 // =============================================================================
 
-auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
+auto run_ws_demo(cn::io_context& ctx) -> cn::task<void>
+{
     cn::tcp::acceptor acc(ctx);
     auto ep = cn::endpoint{cn::ipv4_address::loopback(), PORT};
-    if (auto r = acc.open(ep, {.reuse_address = true}); !r) {
+    if (auto r = acc.open(ep, {.reuse_address = true}); !r)
+    {
         std::println(stderr, "  Acceptor open failed: {}", r.error().message());
         ctx.stop();
         co_return;
     }
 
     std::atomic<bool> server_ready{false};
-    std::atomic<int>  done{0}; // session + client = 2
+    std::atomic<int> done{0}; // session + client = 2
 
     cn::spawn(ctx, ws_server(ctx, acc, done, server_ready));
     cn::spawn(ctx, ws_client(ctx, server_ready, done));
 
     // Wait for session + client complete (server accept )
-    while (done.load() < 2) {
+    while (done.load() < 2)
+    {
         co_await cn::async_sleep(ctx, std::chrono::milliseconds{50});
     }
 
@@ -183,7 +199,8 @@ auto run_ws_demo(cn::io_context& ctx) -> cn::task<void> {
 // main
 // =============================================================================
 
-int main() {
+int main()
+{
     std::println("=== cnetmod: WebSocket Server + Client Demo ===");
 
     cn::net_init net;

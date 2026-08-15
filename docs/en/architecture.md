@@ -32,7 +32,7 @@ cnetmod uses a layered architecture with clear separation of concerns:
                             ↓
 ┌─────────────────────────────────────────────────────────┐
 │                   Executor Layer                         │
-│        server_context │ scheduler │ stdexec bridge      │
+│      server_context │ scheduler │ CPU-pool bridge       │
 └─────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────┐
@@ -61,7 +61,7 @@ cnetmod.io            (I/O event loop: io_context + platform backends)
     ↓
 cnetmod.coro          (coroutine primitives: task, spawn, sync)
     ↓
-cnetmod.executor      (scheduling: server_context, stdexec bridge)
+cnetmod.executor      (scheduling: server_context, coroutine and CPU-pool bridge)
     ↓
 cnetmod.protocol.*    (protocols: tcp, udp, http, websocket, mqtt, coap, mysql, redis, raft)
     ↓

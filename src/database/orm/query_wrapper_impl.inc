@@ -6,72 +6,83 @@ namespace cnetmod::orm {
 
 export namespace query_wrapper_detail {
 
-inline auto join_type_str(join_type type) -> std::string_view
-{
-    switch (type)
+    inline auto join_type_str(join_type type) -> std::string_view
     {
-    case join_type::inner:      return "INNER JOIN";
-    case join_type::left:       return "LEFT JOIN";
-    case join_type::right:      return "RIGHT JOIN";
-    case join_type::full_outer: return "FULL OUTER JOIN";
-    case join_type::cross:      return "CROSS JOIN";
+        switch (type)
+        {
+        case join_type::inner:
+            return "INNER JOIN";
+        case join_type::left:
+            return "LEFT JOIN";
+        case join_type::right:
+            return "RIGHT JOIN";
+        case join_type::full_outer:
+            return "FULL OUTER JOIN";
+        case join_type::cross:
+            return "CROSS JOIN";
+        }
+        return "JOIN";
     }
-    return "JOIN";
-}
 
-auto aggregate_func_str(aggregate_func func) -> std::string_view
-{
-    switch (func)
+    auto aggregate_func_str(aggregate_func func) -> std::string_view
     {
-    case aggregate_func::count:          return "COUNT";
-    case aggregate_func::sum:            return "SUM";
-    case aggregate_func::avg:            return "AVG";
-    case aggregate_func::min:            return "MIN";
-    case aggregate_func::max:            return "MAX";
-    case aggregate_func::count_distinct: return "COUNT";
+        switch (func)
+        {
+        case aggregate_func::count:
+            return "COUNT";
+        case aggregate_func::sum:
+            return "SUM";
+        case aggregate_func::avg:
+            return "AVG";
+        case aggregate_func::min:
+            return "MIN";
+        case aggregate_func::max:
+            return "MAX";
+        case aggregate_func::count_distinct:
+            return "COUNT";
+        }
+        return "COUNT";
     }
-    return "COUNT";
-}
 
-/// Build an aggregate SQL fragment, e.g.  COUNT(*)  or  COUNT(DISTINCT col)
-inline auto build_aggregate_fragment(const aggregate_column& agg,
-                                     const dialect_config& cfg) -> std::string
-{
-    auto func_name = aggregate_func_str(agg.func);
-    std::string sql;
-    if (agg.func == aggregate_func::count_distinct)
+    /// Build an aggregate SQL fragment, e.g.  COUNT(*)  or  COUNT(DISTINCT col)
+    inline auto build_aggregate_fragment(const aggregate_column& agg,
+        const dialect_config& cfg) -> std::string
     {
-        sql = std::format("COUNT(DISTINCT {})",
-                          agg.column == "*" ? "*" : quote_identifier(agg.column, cfg));
+        auto func_name = aggregate_func_str(agg.func);
+        std::string sql;
+        if (agg.func == aggregate_func::count_distinct)
+        {
+            sql = std::format("COUNT(DISTINCT {})",
+                agg.column == "*" ? "*" : quote_identifier(agg.column, cfg));
+        }
+        else
+        {
+            sql = std::format("{}({})",
+                func_name,
+                agg.column == "*" ? "*" : quote_identifier(agg.column, cfg));
+        }
+        if (!agg.alias.empty())
+        {
+            sql += std::format(" AS {}", quote_identifier(agg.alias, cfg));
+        }
+        return sql;
     }
-    else
-    {
-        sql = std::format("{}({})",
-                          func_name,
-                          agg.column == "*" ? "*" : quote_identifier(agg.column, cfg));
-    }
-    if (!agg.alias.empty())
-    {
-        sql += std::format(" AS {}", quote_identifier(agg.alias, cfg));
-    }
-    return sql;
-}
 
-/// Build a HAVING aggregate fragment (without alias)
-inline auto build_having_aggregate_fragment(aggregate_func func,
-                                            const std::string& column,
-                                            const dialect_config& cfg) -> std::string
-{
-    auto func_name = aggregate_func_str(func);
-    if (func == aggregate_func::count_distinct)
+    /// Build a HAVING aggregate fragment (without alias)
+    inline auto build_having_aggregate_fragment(aggregate_func func,
+        const std::string& column,
+        const dialect_config& cfg) -> std::string
     {
-        return std::format("COUNT(DISTINCT {})",
-                           column == "*" ? "*" : quote_identifier(column, cfg));
+        auto func_name = aggregate_func_str(func);
+        if (func == aggregate_func::count_distinct)
+        {
+            return std::format("COUNT(DISTINCT {})",
+                column == "*" ? "*" : quote_identifier(column, cfg));
+        }
+        return std::format("{}({})",
+            func_name,
+            column == "*" ? "*" : quote_identifier(column, cfg));
     }
-    return std::format("{}({})",
-                       func_name,
-                       column == "*" ? "*" : quote_identifier(column, cfg));
-}
 
 } // namespace query_wrapper_detail
 
@@ -268,7 +279,7 @@ auto query_wrapper<T>::having(std::string_view condition) -> query_wrapper&
 
 template <Model T>
 auto query_wrapper<T>::join(std::string_view table, std::string_view condition,
-                            join_type type) -> query_wrapper&
+    join_type type) -> query_wrapper&
 {
     joins_.push_back({type, std::string(table), std::string(condition)});
     return *this;
@@ -306,7 +317,7 @@ auto query_wrapper<T>::full_outer_join(std::string_view table, std::string_view 
 
 template <Model T>
 auto query_wrapper<T>::select_aggregate(aggregate_func func, std::string_view column,
-                                        std::string_view alias) -> query_wrapper&
+    std::string_view alias) -> query_wrapper&
 {
     aggregate_columns_.push_back({func, std::string(column), std::string(alias)});
     return *this;
@@ -403,7 +414,8 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
         {
             for (auto& col : select_columns_)
             {
-                if (!first) sql += ", ";
+                if (!first)
+                    sql += ", ";
                 sql += quote_identifier(col, cfg);
                 first = false;
             }
@@ -412,7 +424,8 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
         {
             for (auto& agg : aggregate_columns_)
             {
-                if (!first) sql += ", ";
+                if (!first)
+                    sql += ", ";
                 sql += query_wrapper_detail::build_aggregate_fragment(agg, cfg);
                 first = false;
             }
@@ -426,9 +439,9 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
     for (auto& j : joins_)
     {
         sql += std::format(" {} {} ON {}",
-                           query_wrapper_detail::join_type_str(j.type),
-                           quote_identifier(j.table, cfg),
-                           j.condition);
+            query_wrapper_detail::join_type_str(j.type),
+            quote_identifier(j.table, cfg),
+            j.condition);
     }
 
     // --- WHERE ---
@@ -446,7 +459,8 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
         sql += " GROUP BY ";
         for (std::size_t i = 0; i < group_by_.size(); ++i)
         {
-            if (i > 0) sql += ", ";
+            if (i > 0)
+                sql += ", ";
             sql += quote_identifier(group_by_[i], cfg);
         }
     }
@@ -466,8 +480,8 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
             if (i > 0 || has_raw_having)
             {
                 sql += having_conditions_[i].connector == logic_op::and_op
-                           ? " AND "
-                           : " OR ";
+                    ? " AND "
+                    : " OR ";
             }
             auto& h = having_conditions_[i];
             sql += query_wrapper_detail::build_having_aggregate_fragment(h.func, h.column, cfg);
@@ -483,7 +497,8 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
         sql += " ORDER BY ";
         for (std::size_t i = 0; i < order_by_.size(); ++i)
         {
-            if (i > 0) sql += ", ";
+            if (i > 0)
+                sql += ", ";
             sql += quote_identifier(order_by_[i].column, cfg);
             sql += order_by_[i].direction == order_dir::asc ? " ASC" : " DESC";
         }
@@ -527,9 +542,9 @@ auto query_wrapper<T>::build_count_sql(const dialect_config& cfg) const
     for (auto& j : joins_)
     {
         sql += std::format(" {} {} ON {}",
-                           query_wrapper_detail::join_type_str(j.type),
-                           quote_identifier(j.table, cfg),
-                           j.condition);
+            query_wrapper_detail::join_type_str(j.type),
+            quote_identifier(j.table, cfg),
+            j.condition);
     }
 
     std::vector<param_value> params;
@@ -665,8 +680,75 @@ auto query_wrapper<T>::build_where_sql(const dialect_config& cfg, int initial_pa
 
 template <Model T>
 void query_wrapper<T>::add_condition(std::string_view column, compare_op op,
-                                     std::vector<param_value> values)
+    std::vector<param_value> values)
 {
+    if (op == compare_op::in || op == compare_op::not_in)
+    {
+        std::vector<param_value> non_null_values;
+        non_null_values.reserve(values.size());
+        bool has_null = false;
+        for (auto& value : values)
+        {
+            if (value.kind == param_value::kind_t::null_kind)
+                has_null = true;
+            else
+                non_null_values.push_back(std::move(value));
+        }
+
+        if (non_null_values.empty() && !has_null)
+        {
+            add_condition(op == compare_op::in ? "1 = 0" : "1 = 1",
+                compare_op::raw, std::vector<param_value>{});
+            return;
+        }
+
+        if (non_null_values.empty())
+        {
+            add_condition(column,
+                op == compare_op::in ? compare_op::is_null
+                                     : compare_op::is_not_null,
+                std::vector<param_value>{});
+            return;
+        }
+
+        if (has_null)
+        {
+            condition group;
+            group.is_group = true;
+            group.connector = current_logic_;
+
+            condition membership;
+            membership.column = column;
+            membership.op = op;
+            membership.values = std::move(non_null_values);
+            membership.connector = logic_op::and_op;
+            group.children.push_back(std::move(membership));
+
+            condition null_check;
+            null_check.column = column;
+            null_check.op = op == compare_op::in ? compare_op::is_null
+                                                 : compare_op::is_not_null;
+            null_check.connector = op == compare_op::in ? logic_op::or_op
+                                                        : logic_op::and_op;
+            group.children.push_back(std::move(null_check));
+
+            conditions_.push_back(std::move(group));
+            current_logic_ = logic_op::and_op;
+            return;
+        }
+
+        values = std::move(non_null_values);
+    }
+
+    if ((op == compare_op::between || op == compare_op::not_between) &&
+        std::ranges::any_of(values, [](const param_value& value)
+            {
+                return value.kind == param_value::kind_t::null_kind;
+            }))
+    {
+        throw std::invalid_argument("NULL cannot be used with BETWEEN");
+    }
+
     condition cond;
     cond.column = column;
     cond.op = op;
@@ -678,8 +760,22 @@ void query_wrapper<T>::add_condition(std::string_view column, compare_op op,
 
 template <Model T>
 void query_wrapper<T>::add_condition(std::string_view column, compare_op op,
-                                     param_value value)
+    param_value value)
 {
+    if (value.kind == param_value::kind_t::null_kind)
+    {
+        if (op == compare_op::eq || op == compare_op::ne)
+        {
+            add_condition(column,
+                op == compare_op::eq ? compare_op::is_null
+                                     : compare_op::is_not_null,
+                std::vector<param_value>{});
+            return;
+        }
+        throw std::invalid_argument(
+            "NULL is only valid with equality or explicit NULL predicates");
+    }
+
     std::vector<param_value> values;
     values.push_back(std::move(value));
     add_condition(column, op, std::move(values));
@@ -772,7 +868,8 @@ auto query_wrapper<T>::build_where_clause(
             sql += " IN (";
             for (std::size_t j = 0; j < cond.values.size(); ++j)
             {
-                if (j > 0) sql += ", ";
+                if (j > 0)
+                    sql += ", ";
                 ++param_index;
                 sql += make_placeholder(param_index, cfg);
                 params.push_back(cond.values[j]);
@@ -783,7 +880,8 @@ auto query_wrapper<T>::build_where_clause(
             sql += " NOT IN (";
             for (std::size_t j = 0; j < cond.values.size(); ++j)
             {
-                if (j > 0) sql += ", ";
+                if (j > 0)
+                    sql += ", ";
                 ++param_index;
                 sql += make_placeholder(param_index, cfg);
                 params.push_back(cond.values[j]);

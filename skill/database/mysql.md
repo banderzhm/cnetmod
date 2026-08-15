@@ -426,7 +426,7 @@ auto run(cn::io_context& ctx) -> cn::task<void>
 
 - **1 个 accept 线程** — 专职接受新连接（`accept_io()`）
 - **N 个 worker 线程** — round-robin 处理业务请求（`next_worker_io()`）
-- **M 个 stdexec 线程池** — 卸载 CPU 密集操作（`pool()`）
+- **M 个 CPU 工作线程** — 通过 cnetmod 线程池卸载 CPU 密集操作（`pool()`）
 
 ```cpp
 class server_context {
@@ -438,7 +438,7 @@ class server_context {
     auto next_worker_io() noexcept -> io_context&;   // round-robin 选择 worker
     auto worker_count() const noexcept -> unsigned;
     auto worker_ios() -> std::vector<io_context*>;    // 所有 worker io_context
-    auto pool() noexcept -> thread_pool&;             // stdexec 线程池
+    auto pool() noexcept -> thread_pool&;             // cnetmod CPU 线程池
     void spawn_next(task<void> t);                    // 在下一个 worker 上启动协程
     void run();                                       // 阻塞运行
     void stop();                                      // 停止所有线程

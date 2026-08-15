@@ -90,7 +90,7 @@ protocol (协议实现)
 
 `async_op` → `scheduler` → `pool`
 
-基于 stdexec (P2300) 的异步执行器。
+公开层是 cnetmod 自有的协程调度与线程池接口；P2300 实现仅保留在普通 `.cpp` 的内部后端。
 
 ### protocol 层（18 个协议模块）
 

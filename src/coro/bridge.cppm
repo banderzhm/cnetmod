@@ -67,10 +67,34 @@ namespace detail {
         -> task<std::invoke_result_t<F>>
     {
         using R = std::invoke_result_t<F>;
-        co_await pool_post_awaitable{pool};
-        R result = fn();
+        std::exception_ptr scheduling_error;
+        try
+        {
+            co_await pool_post_awaitable{pool};
+        }
+        catch (...)
+        {
+            scheduling_error = std::current_exception();
+        }
+        if (scheduling_error)
+        {
+            co_await post_awaitable{io};
+            std::rethrow_exception(scheduling_error);
+        }
+        std::optional<R> result;
+        std::exception_ptr error;
+        try
+        {
+            result.emplace(fn());
+        }
+        catch (...)
+        {
+            error = std::current_exception();
+        }
         co_await post_awaitable{io};
-        co_return std::move(result);
+        if (error)
+            std::rethrow_exception(error);
+        co_return std::move(*result);
     }
 
     template <typename F>
@@ -78,9 +102,32 @@ namespace detail {
     auto blocking_invoke_impl(thread_pool& pool, io_context& io, F fn)
         -> task<void>
     {
-        co_await pool_post_awaitable{pool};
-        fn();
+        std::exception_ptr scheduling_error;
+        try
+        {
+            co_await pool_post_awaitable{pool};
+        }
+        catch (...)
+        {
+            scheduling_error = std::current_exception();
+        }
+        if (scheduling_error)
+        {
+            co_await post_awaitable{io};
+            std::rethrow_exception(scheduling_error);
+        }
+        std::exception_ptr error;
+        try
+        {
+            fn();
+        }
+        catch (...)
+        {
+            error = std::current_exception();
+        }
         co_await post_awaitable{io};
+        if (error)
+            std::rethrow_exception(error);
     }
 
 } // namespace detail

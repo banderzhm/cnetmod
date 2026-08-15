@@ -233,7 +233,7 @@ auto main() -> int
     std::println("=== cnetmod: Blocking Bridge Demo ===");
     std::println("Main thread: {}", std::this_thread::get_id());
 
-    // Server_context wrap io_context + stdexec thread pool
+    // server_context owns io_context workers and a cnetmod CPU pool.
     server_context ctx(1 /*workers*/, 4 /*pool_threads*/);
 
     spawn(ctx.accept_io(), run_all(ctx));

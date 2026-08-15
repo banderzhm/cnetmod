@@ -487,26 +487,19 @@ auto response = co_await port.async_read();
 ./build/examples/serial_port
 ```
 
-### stdexec 桥接 (`stdexec_bridge.cpp`)
+### 原生 Task 组合 (`stdexec_bridge.cpp`)
 
-**演示内容**：与 stdexec 集成
+**演示内容**：只使用 cnetmod 协程 API 组合任务，不暴露执行器后端
 
 ```cpp
-// 在 stdexec 线程池上调度工作
-auto result = co_await blocking_invoke(ctx, [] {
-    return expensive_computation();
-});
-
-// 使用 sender/receiver
-auto sender = schedule(ctx) | then([] { return 42; });
-auto value = co_await as_awaitable(sender);
+auto value = sync_wait(compute(2, 5));
+auto chained = sync_wait(compute(value, 3));
 ```
 
 **关键概念**：
-- `blocking_invoke()` 用于 CPU 密集型工作
-- Sender/receiver 组合
-- `async_scope` 用于结构化并发
-- 线程池集成
+- 原生 `task<T>` 组合
+- 在同步程序边界使用 `sync_wait()`
+- 公共接口不依赖 sender/receiver
 
 **运行**：
 ```bash

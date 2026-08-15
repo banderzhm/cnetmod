@@ -488,26 +488,19 @@ auto response = co_await port.async_read();
 ./build/examples/serial_port
 ```
 
-### stdexec Bridge (`stdexec_bridge.cpp`)
+### Native Task Composition (`stdexec_bridge.cpp`)
 
-**What it demonstrates**: Integration with stdexec
+**What it demonstrates**: Composing cnetmod tasks without exposing an executor backend
 
 ```cpp
-// Schedule work on stdexec thread pool
-auto result = co_await blocking_invoke(ctx, [] {
-    return expensive_computation();
-});
-
-// Use sender/receiver
-auto sender = schedule(ctx) | then([] { return 42; });
-auto value = co_await as_awaitable(sender);
+auto value = sync_wait(compute(2, 5));
+auto chained = sync_wait(compute(value, 3));
 ```
 
 **Key concepts**:
-- `blocking_invoke()` for CPU-bound work
-- Sender/receiver composition
-- `async_scope` for structured concurrency
-- Thread pool integration
+- Native `task<T>` composition
+- `sync_wait()` at a synchronous program boundary
+- No public sender/receiver dependency
 
 **Run**:
 ```bash
