@@ -2,7 +2,13 @@ include_guard(GLOBAL)
 include(${CMAKE_CURRENT_LIST_DIR}/DependencyHelpers.cmake)
 
 macro(cnetmod_configure_jwt_cpp)
+    set(CNETMOD_JWT_SSL_LIBRARY "BoringSSL" CACHE STRING
+        "TLS provider used by cnetmod (fixed to BoringSSL)" FORCE)
+    set_property(CACHE CNETMOD_JWT_SSL_LIBRARY PROPERTY STRINGS BoringSSL)
     set(CNETMOD_JWT_CPP_INCLUDE_DIR "" CACHE PATH "jwt-cpp include directory")
+    if(CNETMOD_ENABLE_SSL AND NOT BoringSSL_FOUND)
+        message(FATAL_ERROR "cnetmod requires BoringSSL; the BoringSSL provider was not configured")
+    endif()
     if(CNETMOD_ENABLE_HTTP)
         if(CNETMOD_USE_SYSTEM_DEPS)
             find_package(jwt-cpp CONFIG QUIET)
