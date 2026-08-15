@@ -3,6 +3,7 @@ module;
 #include <cnetmod/config.hpp>
 
 #include <exec/static_thread_pool.hpp>
+#include <stdexec/execution.hpp>
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
     #ifndef NOMINMAX
@@ -28,6 +29,109 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 
 namespace cnetmod {
+
+namespace {
+
+    struct pool_resume_receiver
+    {
+        using receiver_concept = stdexec::receiver_t;
+        std::coroutine_handle<> coroutine;
+
+        void set_value() noexcept
+        {
+            coroutine.resume();
+        }
+
+        void set_error(std::exception_ptr) noexcept
+        {
+            coroutine.resume();
+        }
+
+        void set_stopped() noexcept
+        {
+            coroutine.resume();
+        }
+
+        struct env
+        {
+        };
+
+        auto get_env() const noexcept -> env
+        {
+            return {};
+        }
+    };
+
+    using native_pool = exec::static_thread_pool;
+    using native_scheduler = native_pool::scheduler;
+    using native_resume_operation = decltype(stdexec::connect(
+        std::declval<native_scheduler>().schedule(),
+        std::declval<pool_resume_receiver>()));
+
+    struct resume_operation
+    {
+        native_resume_operation operation;
+
+        explicit resume_operation(native_scheduler scheduler,
+            std::coroutine_handle<> coroutine)
+            : operation(stdexec::connect(
+                  scheduler.schedule(), pool_resume_receiver{coroutine})) {}
+    };
+
+} // namespace
+
+struct thread_pool::impl
+{
+    explicit impl(unsigned thread_count)
+        : native(thread_count == 0 ? 1U : thread_count) {}
+
+    native_pool native;
+};
+
+thread_pool::thread_pool(unsigned thread_count)
+    : impl_(std::make_unique<impl>(thread_count)) {}
+
+thread_pool::~thread_pool() = default;
+
+void thread_pool::request_stop() noexcept
+{
+    impl_->native.request_stop();
+}
+
+auto thread_pool::prepare_resume(std::coroutine_handle<> coroutine) -> void*
+{
+    return new resume_operation{impl_->native.get_scheduler(), coroutine};
+}
+
+void thread_pool::start_resume(void* operation) noexcept
+{
+    static_cast<resume_operation*>(operation)->operation.start();
+}
+
+void thread_pool::release_resume(void* operation) noexcept
+{
+    delete static_cast<resume_operation*>(operation);
+}
+
+pool_post_awaitable::pool_post_awaitable(thread_pool& value) noexcept
+    : pool(value) {}
+
+auto pool_post_awaitable::await_ready() const noexcept -> bool
+{
+    return false;
+}
+
+void pool_post_awaitable::await_suspend(std::coroutine_handle<> coroutine) noexcept
+{
+    operation_ = pool.prepare_resume(coroutine);
+    pool.start_resume(operation_);
+}
+
+void pool_post_awaitable::await_resume() noexcept
+{
+    pool.release_resume(operation_);
+    operation_ = nullptr;
+}
 
 auto set_current_thread_affinity(unsigned processor) noexcept
     -> std::expected<void, std::error_code>

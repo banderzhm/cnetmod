@@ -1,8 +1,3 @@
-module;
-
-#include <cnetmod/config.hpp>
-#include <exec/static_thread_pool.hpp>
-
 export module cnetmod.executor.pool;
 
 import std;
@@ -14,21 +9,41 @@ import cnetmod.coro.spawn;
 namespace cnetmod {
 
 // =============================================================================
-// thread_pool — cnetmod 统一线程池类型
+// thread_pool — cnetmod-owned thread pool facade
+// =============================================================================
+
+/// The implementation is intentionally hidden in a .cpp file. This keeps
+/// third-party executor implementation types out of the exported module BMI.
+export class thread_pool
+{
+public:
+    explicit thread_pool(unsigned thread_count = std::thread::hardware_concurrency());
+    ~thread_pool();
+
+    thread_pool(const thread_pool&) = delete;
+    auto operator=(const thread_pool&) -> thread_pool& = delete;
+    thread_pool(thread_pool&&) = delete;
+    auto operator=(thread_pool&&) -> thread_pool& = delete;
+
+    void request_stop() noexcept;
+
+private:
+    struct impl;
+    std::unique_ptr<impl> impl_;
+
+    auto prepare_resume(std::coroutine_handle<> coroutine) -> void*;
+    void start_resume(void* operation) noexcept;
+    void release_resume(void* operation) noexcept;
+
+    friend struct pool_post_awaitable;
+};
+
+// =============================================================================
+// pool_post_awaitable — Switch Current Coroutine to cnetmod Thread Pool
 // =============================================================================
 //
-// 对外导出唯一线程池类型别名。下游代码只依赖 cnetmod::thread_pool，
-// 不直接引用 exec::static_thread_pool。后续 stdexec 升级只需改此处。
-
-export using thread_pool = exec::static_thread_pool;
-
-// =============================================================================
-// pool_post_awaitable — Switch Current Coroutine to stdexec Thread Pool
-// =============================================================================
-//
-// Uses stdexec public API: schedule() + connect() + start()
-// Coroutine resumes on thread pool thread after suspension, offloading
-// CPU-intensive work
+// Coroutine resumes on a pool thread after suspension, offloading CPU-heavy
+// work while keeping implementation details out of the module interface.
 //
 // Usage:
 //   co_await pool_post_awaitable{pool};
@@ -37,69 +52,17 @@ export using thread_pool = exec::static_thread_pool;
 //   co_await post_awaitable{io_ctx};
 //   // Now running on io_context thread
 
-namespace detail {
-
-    /// Minimal stdexec receiver: resume coroutine
-    struct coro_resume_receiver
-    {
-        using receiver_concept = stdexec::receiver_t;
-        std::coroutine_handle<> coro;
-
-        void set_value() noexcept
-        {
-            coro.resume();
-        }
-
-        void set_stopped() noexcept
-        {
-            coro.resume();
-        }
-
-        struct env
-        {
-        };
-
-        auto get_env() const noexcept -> env
-        {
-            return {};
-        }
-    };
-
-} // namespace detail
-
 export struct pool_post_awaitable
 {
     thread_pool& pool;
 
-    using scheduler_t = thread_pool::scheduler;
-    using sender_t = decltype(std::declval<scheduler_t>().schedule());
-    using op_t = decltype(stdexec::connect(
-        std::declval<sender_t>(), std::declval<detail::coro_resume_receiver>()));
+    explicit pool_post_awaitable(thread_pool& value) noexcept;
+    auto await_ready() const noexcept -> bool;
+    void await_suspend(std::coroutine_handle<> coroutine) noexcept;
+    void await_resume() noexcept;
 
-    // op_state stored on coroutine frame (awaitable embedded in frame, alive
-    // during suspension)
-    alignas(op_t) std::byte storage_[sizeof(op_t)];
-
-    explicit pool_post_awaitable(thread_pool& p) noexcept
-        : pool(p), storage_{} {}
-
-    auto await_ready() const noexcept -> bool
-    {
-        return false;
-    }
-
-    void await_suspend(std::coroutine_handle<> h) noexcept
-    {
-        auto sched = pool.get_scheduler();
-        auto* op = new (storage_) op_t(
-            stdexec::connect(sched.schedule(), detail::coro_resume_receiver{h}));
-        op->start();
-    }
-
-    void await_resume() noexcept
-    {
-        std::launder(reinterpret_cast<op_t*>(storage_))->~op_t();
-    }
+private:
+    void* operation_ = nullptr;
 };
 
 // =============================================================================
@@ -145,13 +108,12 @@ namespace detail {
 // server_context — Multi-Core Server Context
 // =============================================================================
 //
-// Manages accept-dedicated io_context + N worker io_contexts + stdexec thread
-// pool
+// Manages accept-dedicated io_context + N worker io_contexts + CPU thread pool.
 //
 // Architecture:
 //   Thread 0 (main):  accept_io  — Runs accept loop
 //   Thread 1..N:      worker_io  — One io_context per thread, handles
-//   connection I/O exec::static_thread_pool:      Optional CPU-intensive work
+//   connection I/O CPU pool:                      Optional CPU-intensive work
 //   offload
 //
 // IOCP Feature: New socket after accept is not associated with IOCP, first
@@ -172,7 +134,7 @@ export class server_context
 {
 public:
     /// @param workers Number of worker threads (default = CPU cores)
-    /// @param pool_threads stdexec thread pool size (default = CPU cores)
+    /// @param pool_threads CPU thread pool size (default = CPU cores)
     explicit server_context(
         unsigned workers = std::thread::hardware_concurrency(),
         unsigned pool_threads = std::thread::hardware_concurrency(),
@@ -198,7 +160,7 @@ public:
     /// Return all worker io_context pointers
     [[nodiscard]] auto worker_ios() -> std::vector<io_context*>;
 
-    /// cnetmod thread pool (type alias shields downstream from stdexec)
+    /// cnetmod-owned thread pool
     [[nodiscard]] auto pool() noexcept -> thread_pool&;
 
     /// Offload a blocking callable to the thread pool, then switch back to

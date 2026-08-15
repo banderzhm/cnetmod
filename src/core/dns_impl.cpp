@@ -1,5 +1,5 @@
 /// cnetmod.core.dns — Async DNS resolution
-/// Uses stdexec::static_thread_pool to execute blocking getaddrinfo
+/// Uses cnetmod's CPU pool to execute blocking getaddrinfo
 /// Resumes coroutine via io_context::post after completion
 
 module;
@@ -15,11 +15,6 @@ module;
     #include <sys/socket.h>
     #include <sys/types.h>
 #endif
-
-#include <exec/async_scope.hpp>
-#include <exec/static_thread_pool.hpp>
-#include <new>
-#include <stdexec/execution.hpp>
 
 export module cnetmod.core.dns;
 
@@ -39,7 +34,7 @@ import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 namespace cnetmod {
 
 // =============================================================================
-// Global thread pool (stdexec) — For offloading blocking operations
+// Global CPU pool for offloading blocking operations
 // =============================================================================
 
 namespace detail {
@@ -48,12 +43,6 @@ namespace detail {
     {
         static thread_pool pool;
         return pool;
-    }
-
-    inline auto& blocking_scope()
-    {
-        static exec::async_scope scope;
-        return scope;
     }
 
     struct dns_cache_entry
@@ -300,7 +289,7 @@ export void report_address_connect_failure(const ip_address& addr,
 }
 
 // =============================================================================
-// detail::resolve_awaitable — stdexec thread pool async DNS
+// detail::resolve_awaitable — CPU pool async DNS
 // =============================================================================
 
 namespace detail {
@@ -321,14 +310,7 @@ namespace detail {
         void await_suspend(std::coroutine_handle<> h) noexcept
         {
             caller_ = h;
-            // Schedule blocking getaddrinfo on stdexec thread pool, post back to io_context when done
-            auto work = stdexec::then(
-                stdexec::schedule(blocking_pool().get_scheduler()),
-                [this]() noexcept
-                {
-                    run();
-                });
-            blocking_scope().spawn(std::move(work));
+            spawn(ctx_, run_on_pool(this));
         }
 
         auto await_resume() -> std::expected<std::vector<std::string>, std::string>
@@ -337,6 +319,12 @@ namespace detail {
         }
 
     private:
+        static auto run_on_pool(resolve_awaitable* self) -> task<void>
+        {
+            co_await pool_post_awaitable{blocking_pool()};
+            self->run();
+        }
+
         void do_resolve() noexcept
         {
             ::addrinfo hints{};

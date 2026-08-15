@@ -6,6 +6,7 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.io.io_context;
+import cnetmod.executor.scheduler;
 
 using namespace cnetmod;
 
@@ -82,6 +83,14 @@ static auto records_execution_thread(std::thread::id& execution_thread) -> task<
 {
     execution_thread = std::this_thread::get_id();
     co_return 9;
+}
+
+static auto schedules_on(io_scheduler scheduler,
+    std::thread::id& execution_thread) -> task<int>
+{
+    co_await scheduler.schedule();
+    execution_thread = std::this_thread::get_id();
+    co_return 11;
 }
 
 // =============================================================================
@@ -164,6 +173,26 @@ TEST(starts_on_starts_task_on_target_io_context)
     context->stop();
     runner.join();
     ASSERT_EQ(result, 9);
+    ASSERT_EQ(execution_thread, context_thread);
+}
+
+TEST(io_scheduler_schedule_resumes_on_target_io_context)
+{
+    auto context = make_io_context();
+    std::thread::id context_thread;
+    std::thread runner{[&]
+        {
+            context_thread = std::this_thread::get_id();
+            context->run();
+        }};
+
+    std::thread::id execution_thread;
+    const auto result = sync_wait(
+        schedules_on(io_scheduler{*context}, execution_thread));
+
+    context->stop();
+    runner.join();
+    ASSERT_EQ(result, 11);
     ASSERT_EQ(execution_thread, context_thread);
 }
 

@@ -1,5 +1,5 @@
 /// cnetmod example — Async Redis Client (RESP3)
-/// Demonstrates redis::client HELLO 3 / AUTH / basic / pipeline / request builder / stdexec bridge
+/// Demonstrates redis::client HELLO 3 / AUTH / basic / pipeline / request builder / native tasks
 /// Redis run 127.0.0.1:6379
 
 #include <cnetmod/config.hpp>
@@ -13,31 +13,49 @@ import cnetmod.protocol.redis;
 
 namespace cn = cnetmod;
 using redis_client = cn::redis::client;
+using cn::redis::all_values;
+using cn::redis::error_message;
+using cn::redis::first_value;
+using cn::redis::has_error;
+using cn::redis::is_ok;
 using cn::redis::request;
 using cn::redis::resp3_node;
 using cn::redis::resp3_type;
-using cn::redis::first_value;
-using cn::redis::all_values;
-using cn::redis::is_ok;
-using cn::redis::has_error;
-using cn::redis::error_message;
 
 /// Response
-void print_nodes(std::string_view label, const std::vector<resp3_node>& nodes) {
+void print_nodes(std::string_view label, const std::vector<resp3_node>& nodes)
+{
     std::print("  {:<20} -> ", label);
-    if (nodes.empty()) { std::println("(empty)"); return; }
+    if (nodes.empty())
+    {
+        std::println("(empty)");
+        return;
+    }
     auto& first = nodes.front();
-    if (first.is_null()) { std::println("(nil)"); return; }
-    if (first.is_error()) { std::println("(error) {}", first.value); return; }
-    if (first.is_aggregate()) {
+    if (first.is_null())
+    {
+        std::println("(nil)");
+        return;
+    }
+    if (first.is_error())
+    {
+        std::println("(error) {}", first.value);
+        return;
+    }
+    if (first.is_aggregate())
+    {
         std::print("[{}] ", cn::redis::type_name(first.data_type));
         auto vals = all_values(nodes);
-        for (std::size_t i = 0; i < vals.size(); ++i) {
-            if (i) std::print(", ");
+        for (std::size_t i = 0; i < vals.size(); ++i)
+        {
+            if (i)
+                std::print(", ");
             std::print("\"{}\"", vals[i]);
         }
         std::println();
-    } else {
+    }
+    else
+    {
         std::println("{}", first.value);
     }
 }
@@ -46,7 +64,8 @@ void print_nodes(std::string_view label, const std::vector<resp3_node>& nodes) {
 // Demo 1: basic ( cmd initializer_list)
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto demo_basic(redis_client& r) -> cn::task<void> {
+auto demo_basic(redis_client& r) -> cn::task<void>
+{
     std::println("\n── Basic Commands ──");
 
     auto pong = co_await r.cmd({"PING"});
@@ -81,7 +100,8 @@ auto demo_basic(redis_client& r) -> cn::task<void> {
 // Demo 2: request builder + exec
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto demo_request_builder(redis_client& r) -> cn::task<void> {
+auto demo_request_builder(redis_client& r) -> cn::task<void>
+{
     std::println("\n── Request Builder ──");
 
     // Via request
@@ -108,21 +128,23 @@ auto demo_request_builder(redis_client& r) -> cn::task<void> {
 // Demo 3: Pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto demo_pipeline(redis_client& r) -> cn::task<void> {
+auto demo_pipeline(redis_client& r) -> cn::task<void>
+{
     std::println("\n── Pipeline ──");
 
     auto t0 = std::chrono::steady_clock::now();
 
     auto replies = co_await r.pipe({
-        {"SET",  "p:a", "alpha"},
-        {"SET",  "p:b", "beta"},
-        {"SET",  "p:c", "gamma"},
+        {"SET", "p:a", "alpha"},
+        {"SET", "p:b", "beta"},
+        {"SET", "p:c", "gamma"},
         {"MGET", "p:a", "p:b", "p:c"},
-        {"DEL",  "p:a", "p:b", "p:c"},
+        {"DEL", "p:a", "p:b", "p:c"},
     });
 
     auto us = std::chrono::duration_cast<std::chrono::microseconds>(
-                  std::chrono::steady_clock::now() - t0).count();
+        std::chrono::steady_clock::now() - t0)
+                  .count();
 
     auto vals = all_values(*replies);
     for (std::size_t i = 0; i < vals.size(); ++i)
@@ -131,20 +153,21 @@ auto demo_pipeline(redis_client& r) -> cn::task<void> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Demo 4: stdexec sender bridge
+// Demo 4: native task composition
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto demo_sender(cn::io_context& ctx, redis_client& r) -> cn::task<void> {
-    std::println("\n── stdexec Sender ──");
+auto demo_native_task(redis_client& r) -> cn::task<void>
+{
+    std::println("\n── Native Task ──");
 
-    [[maybe_unused]] auto sched = cn::io_scheduler(ctx);
-    std::println("  io_scheduler ready (schedule() -> sender)");
+    auto square = [](int x) -> cn::task<int>
+    {
+        co_return x* x;
+    };
+    auto val = co_await square(7);
+    std::println("  co_await square(7) = {}", val);
 
-    auto square = [](int x) -> cn::task<int> { co_return x * x; };
-    auto val = cn::sync_wait_sender(cn::as_sender(square(7)));
-    std::println("  sync_wait_sender(square(7)) = {}", val);
-
-    (void)co_await r.cmd({"SET", "s:demo", "via_sender"});
+    (void)co_await r.cmd({"SET", "s:demo", "via_task"});
     auto sv = co_await r.cmd({"GET", "s:demo"});
     std::println("  GET s:demo = {}", first_value(*sv));
 
@@ -155,19 +178,21 @@ auto demo_sender(cn::io_context& ctx, redis_client& r) -> cn::task<void> {
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
-auto run(cn::io_context& ctx) -> cn::task<void> {
+auto run(cn::io_context& ctx) -> cn::task<void>
+{
     redis_client r(ctx);
 
     // Redis(HELLO 3 + AUTH + SELECT)
     auto result = co_await r.connect({
-        .host     = "127.0.0.1",
-        .port     = 6379,
-        .password = "ydc888888",  // Real, AUTH
+        .host = "127.0.0.1",
+        .port = 6379,
+        .password = "ydc888888", // Real, AUTH
         .username = {},
-        .db       = 9,
+        .db = 9,
     });
 
-    if (!result) {
+    if (!result)
+    {
         std::println("Redis 连接失败: {}", result.error());
         ctx.stop();
         co_return;
@@ -177,14 +202,15 @@ auto run(cn::io_context& ctx) -> cn::task<void> {
     co_await demo_basic(r);
     co_await demo_request_builder(r);
     co_await demo_pipeline(r);
-    co_await demo_sender(ctx, r);
+    co_await demo_native_task(r);
 
     r.close();
     std::println("\nDone.");
     ctx.stop();
 }
 
-auto main() -> int {
+auto main() -> int
+{
     std::println("=== cnetmod: Async Redis Client (RESP3) ===");
 
     cn::net_init net;

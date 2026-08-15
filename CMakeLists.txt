@@ -225,6 +225,14 @@ cnetmod_filter_disabled_component_sources(
         REGULAR_CPP_SOURCES
 )
 
+# JWT signing depends on the TLS/crypto provider. Keep SSL-free protocol-only
+# probes free of both the implementation unit and its module interface.
+if(NOT CNETMOD_ENABLE_SSL)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.(cppm|ixx)$")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
+    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
+endif()
+
 # HTTP/3 modules live under src/protocol/http/v3/ and depend on QUIC primitives
 # (e.g. http3_frame imports :semantics and ::varint).  CMake's file(STRINGS)
 # scanner detects "export module" regardless of preprocessor conditions, so when

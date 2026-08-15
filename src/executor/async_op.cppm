@@ -23,7 +23,7 @@ namespace cnetmod {
 // Async Network I/O Operations (Coroutine Version)
 // =============================================================================
 // Returns task<T>, call with co_await
-// These are low-level coroutine interfaces, can be converted to stdexec sender via as_sender()
+// These are low-level coroutine interfaces used directly with co_await.
 
 /// Async accept
 /// Usage: auto conn = co_await async_accept(ctx, listener);

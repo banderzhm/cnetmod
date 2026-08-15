@@ -130,6 +130,11 @@ inline auto to_query_parameter(query_parameter value) -> query_parameter
     return value;
 }
 
+inline auto to_query_parameter(std::nullopt_t) -> query_parameter
+{
+    return query_parameter::null();
+}
+
 inline auto to_query_parameter(std::int64_t value) -> query_parameter
 {
     return query_parameter::from_int(value);
@@ -193,6 +198,18 @@ inline auto to_query_parameter(const calendar_datetime& value) -> query_paramete
 inline auto to_query_parameter(const clock_time& value) -> query_parameter
 {
     return query_parameter::from_time(value);
+}
+
+/// Define the nullable adapter after all concrete conversions. This preserves
+/// correct two-phase lookup for optional<int>, optional<string>, and similar
+/// values whose element types have no associated namespace for ADL.
+template <class T>
+requires requires(const T& value) {
+    { to_query_parameter(value) } -> std::same_as<query_parameter>;
+}
+inline auto to_query_parameter(const std::optional<T>& value) -> query_parameter
+{
+    return value ? to_query_parameter(*value) : query_parameter::null();
 }
 
 } // namespace cnetmod::database

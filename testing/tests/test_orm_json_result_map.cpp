@@ -543,4 +543,23 @@ TEST(orm_database_session_uses_postgresql_binding_and_returning_mapping)
     ASSERT_EQ(client.last_parameters.size(), 2U);
 }
 
+TEST(query_wrapper_accepts_optional_condition_values)
+{
+    std::optional<std::int64_t> active_status{1};
+    std::optional<std::string> absent_name;
+    orm::query_wrapper<orm_crud_user> query;
+    query.eq(&orm_crud_user::status, active_status)
+        .eq(&orm_crud_user::name, absent_name)
+        .eq("id", std::nullopt);
+
+    const auto [sql, parameters] = query.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(sql.contains("\"status\" = $1"));
+    ASSERT_TRUE(sql.contains("\"name\" = $2"));
+    ASSERT_TRUE(sql.contains("\"id\" = $3"));
+    ASSERT_EQ(parameters.size(), 3U);
+    ASSERT_TRUE(parameters[0].kind == orm::param_value::kind_t::int64_kind);
+    ASSERT_TRUE(parameters[1].kind == orm::param_value::kind_t::null_kind);
+    ASSERT_TRUE(parameters[2].kind == orm::param_value::kind_t::null_kind);
+}
+
 RUN_TESTS()

@@ -5,12 +5,11 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.io.io_context;
-import cnetmod.executor.scheduler;
 
 // import cnetmod.core.log;
 
 // =============================================================================
-// Demo: coroutine chain + spawn + stdexec bridge (smoke test)
+// Demo: coroutine chain + spawn (smoke test)
 // =============================================================================
 
 auto echo(std::string msg) -> cnetmod::task<std::string>
@@ -44,9 +43,9 @@ auto main() -> int
     std::println("\n=== Coroutine Chain ===");
     cnetmod::sync_wait(demo_chain());
 
-    // 2. stdexec sender bridge
-    std::println("\n=== stdexec Sender ===");
-    auto val = cnetmod::sync_wait_sender(cnetmod::as_sender(compute(6, 7)));
+    // 2. native task execution
+    std::println("\n=== Native Task ===");
+    auto val = cnetmod::sync_wait(compute(6, 7));
     std::println("  compute(6,7) = {}", val);
 
     // 3. io_context + spawn

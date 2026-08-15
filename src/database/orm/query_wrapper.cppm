@@ -10,6 +10,11 @@ import cnetmod.orm.member_pointer_reflection;
 
 namespace cnetmod::orm {
 
+template <class Value>
+concept query_parameter_compatible = requires(const Value& value) {
+    { to_query_parameter(value) } -> std::same_as<param_value>;
+};
+
 // =============================================================================
 // Comparison operators
 // =============================================================================
@@ -187,42 +192,48 @@ public:
     // =========================================================================
 
     /// @brief WHERE column = value
-    auto eq(std::string_view column, const auto& value) -> query_wrapper&
+    template <query_parameter_compatible Value>
+    auto eq(std::string_view column, const Value& value) -> query_wrapper&
     {
         add_condition(column, compare_op::eq, to_query_parameter(value));
         return *this;
     }
 
     /// @brief WHERE column != value
-    auto ne(std::string_view column, const auto& value) -> query_wrapper&
+    template <query_parameter_compatible Value>
+    auto ne(std::string_view column, const Value& value) -> query_wrapper&
     {
         add_condition(column, compare_op::ne, to_query_parameter(value));
         return *this;
     }
 
     /// @brief WHERE column > value
-    auto gt(std::string_view column, const auto& value) -> query_wrapper&
+    template <query_parameter_compatible Value>
+    auto gt(std::string_view column, const Value& value) -> query_wrapper&
     {
         add_condition(column, compare_op::gt, to_query_parameter(value));
         return *this;
     }
 
     /// @brief WHERE column >= value
-    auto ge(std::string_view column, const auto& value) -> query_wrapper&
+    template <query_parameter_compatible Value>
+    auto ge(std::string_view column, const Value& value) -> query_wrapper&
     {
         add_condition(column, compare_op::ge, to_query_parameter(value));
         return *this;
     }
 
     /// @brief WHERE column < value
-    auto lt(std::string_view column, const auto& value) -> query_wrapper&
+    template <query_parameter_compatible Value>
+    auto lt(std::string_view column, const Value& value) -> query_wrapper&
     {
         add_condition(column, compare_op::lt, to_query_parameter(value));
         return *this;
     }
 
     /// @brief WHERE column <= value
-    auto le(std::string_view column, const auto& value) -> query_wrapper&
+    template <query_parameter_compatible Value>
+    auto le(std::string_view column, const Value& value) -> query_wrapper&
     {
         add_condition(column, compare_op::le, to_query_parameter(value));
         return *this;
@@ -241,7 +252,7 @@ public:
     auto is_not_null(std::string_view column) -> query_wrapper&;
 
     /// @brief WHERE column IN (values...)
-    template <typename ValueType>
+    template <query_parameter_compatible ValueType>
     auto in(std::string_view column, const std::vector<ValueType>& values) -> query_wrapper&
     {
         std::vector<param_value> params;
@@ -252,7 +263,7 @@ public:
     }
 
     /// @brief WHERE column NOT IN (values...)
-    template <typename ValueType>
+    template <query_parameter_compatible ValueType>
     auto not_in(std::string_view column, const std::vector<ValueType>& values) -> query_wrapper&
     {
         std::vector<param_value> params;
@@ -263,7 +274,8 @@ public:
     }
 
     /// @brief WHERE column BETWEEN start AND end
-    auto between(std::string_view column, const auto& start, const auto& end) -> query_wrapper&
+    template <query_parameter_compatible Start, query_parameter_compatible End>
+    auto between(std::string_view column, const Start& start, const End& end) -> query_wrapper&
     {
         std::vector<param_value> params;
         params.push_back(to_query_parameter(start));
@@ -273,7 +285,8 @@ public:
     }
 
     /// @brief WHERE column NOT BETWEEN start AND end
-    auto not_between(std::string_view column, const auto& start, const auto& end) -> query_wrapper&
+    template <query_parameter_compatible Start, query_parameter_compatible End>
+    auto not_between(std::string_view column, const Start& start, const End& end) -> query_wrapper&
     {
         std::vector<param_value> params;
         params.push_back(to_query_parameter(start));
@@ -520,38 +533,38 @@ public:
     // Member pointer overloads — type-safe column reference via U T::*
     // =========================================================================
 
-    template <typename U>
-    auto eq(U T::* member_ptr, const auto& value) -> query_wrapper&
+    template <typename U, query_parameter_compatible Value>
+    auto eq(U T::* member_ptr, const Value& value) -> query_wrapper&
     {
         return eq(resolve_column_name<T>(member_ptr), value);
     }
 
-    template <typename U>
-    auto ne(U T::* member_ptr, const auto& value) -> query_wrapper&
+    template <typename U, query_parameter_compatible Value>
+    auto ne(U T::* member_ptr, const Value& value) -> query_wrapper&
     {
         return ne(resolve_column_name<T>(member_ptr), value);
     }
 
-    template <typename U>
-    auto gt(U T::* member_ptr, const auto& value) -> query_wrapper&
+    template <typename U, query_parameter_compatible Value>
+    auto gt(U T::* member_ptr, const Value& value) -> query_wrapper&
     {
         return gt(resolve_column_name<T>(member_ptr), value);
     }
 
-    template <typename U>
-    auto ge(U T::* member_ptr, const auto& value) -> query_wrapper&
+    template <typename U, query_parameter_compatible Value>
+    auto ge(U T::* member_ptr, const Value& value) -> query_wrapper&
     {
         return ge(resolve_column_name<T>(member_ptr), value);
     }
 
-    template <typename U>
-    auto lt(U T::* member_ptr, const auto& value) -> query_wrapper&
+    template <typename U, query_parameter_compatible Value>
+    auto lt(U T::* member_ptr, const Value& value) -> query_wrapper&
     {
         return lt(resolve_column_name<T>(member_ptr), value);
     }
 
-    template <typename U>
-    auto le(U T::* member_ptr, const auto& value) -> query_wrapper&
+    template <typename U, query_parameter_compatible Value>
+    auto le(U T::* member_ptr, const Value& value) -> query_wrapper&
     {
         return le(resolve_column_name<T>(member_ptr), value);
     }
@@ -580,26 +593,29 @@ public:
         return is_not_null(resolve_column_name<T>(member_ptr));
     }
 
-    template <typename U, typename ValueType>
+    template <typename U, query_parameter_compatible ValueType>
     auto in(U T::* member_ptr, const std::vector<ValueType>& values) -> query_wrapper&
     {
         return in(resolve_column_name<T>(member_ptr), values);
     }
 
-    template <typename U, typename ValueType>
+    template <typename U, query_parameter_compatible ValueType>
     auto not_in(U T::* member_ptr, const std::vector<ValueType>& values) -> query_wrapper&
     {
         return not_in(resolve_column_name<T>(member_ptr), values);
     }
 
-    template <typename U>
-    auto between(U T::* member_ptr, const auto& start, const auto& end) -> query_wrapper&
+    template <typename U, query_parameter_compatible Start,
+        query_parameter_compatible End>
+    auto between(U T::* member_ptr, const Start& start, const End& end) -> query_wrapper&
     {
         return between(resolve_column_name<T>(member_ptr), start, end);
     }
 
-    template <typename U>
-    auto not_between(U T::* member_ptr, const auto& start, const auto& end) -> query_wrapper&
+    template <typename U, query_parameter_compatible Start,
+        query_parameter_compatible End>
+    auto not_between(U T::* member_ptr, const Start& start,
+        const End& end) -> query_wrapper&
     {
         return not_between(resolve_column_name<T>(member_ptr), start, end);
     }

@@ -56,7 +56,6 @@ struct redis_cache_options
 {
     std::string key_prefix;
 };
-#endif
 
 class redis_cache : public cache_store
 {
@@ -74,6 +73,7 @@ private:
     redis::client& client_;
     redis_cache_options opts_;
 };
+#endif
 
 class cache_group_registry
 {

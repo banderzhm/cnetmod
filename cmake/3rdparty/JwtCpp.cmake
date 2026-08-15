@@ -9,7 +9,9 @@ macro(cnetmod_configure_jwt_cpp)
     if(CNETMOD_ENABLE_SSL AND NOT BoringSSL_FOUND)
         message(FATAL_ERROR "cnetmod requires BoringSSL; the BoringSSL provider was not configured")
     endif()
-    if(CNETMOD_ENABLE_HTTP)
+    # The standalone cnetmod.security.jwt module is available independently of
+    # HTTP, but it requires the configured TLS/crypto provider.
+    if(CNETMOD_ENABLE_SSL)
         if(CNETMOD_USE_SYSTEM_DEPS)
             find_package(jwt-cpp CONFIG QUIET)
             cnetmod_dependency_target_include(_jwt_from_target jwt-cpp::jwt-cpp jwt-cpp/jwt.h)

@@ -3,7 +3,7 @@
  * @brief Coroutine-native JWT sign/verify module — backed by jwt-cpp
  *
  * Provides non-blocking JWT operations by offloading CPU-intensive
- * cryptographic work to the stdexec thread pool via blocking_invoke.
+ * cryptographic work to the cnetmod CPU pool via blocking_invoke.
  *
  * Usage:
  *   import cnetmod.security.jwt;
@@ -73,13 +73,13 @@ struct jwt_sign_options
 // =============================================================================
 
 /// Build and sign a JWT token string.
-/// @param pool   stdexec thread pool for offloading
+/// @param pool   cnetmod thread pool for offloading
 /// @param io     io_context to return to after completion
 /// @param opts   Signing parameters (issuer, subject, lifetime, etc.)
 /// @param secret HS256 secret key (or PEM private key for future RS256)
 /// @return Signed JWT string on success, error message on failure
 auto sign_jwt(thread_pool& pool, io_context& io,
-              const jwt_sign_options& opts, std::string_view secret)
+    const jwt_sign_options& opts, std::string_view secret)
     -> task<std::expected<std::string, std::string>>;
 
 // =============================================================================
@@ -87,13 +87,13 @@ auto sign_jwt(thread_pool& pool, io_context& io,
 // =============================================================================
 
 /// Verify a JWT signature and extract claims.
-/// @param pool   stdexec thread pool for offloading
+/// @param pool   cnetmod thread pool for offloading
 /// @param io     io_context to return to after completion
 /// @param token  Encoded JWT string (header.payload.signature)
 /// @param secret HS256 secret key used for verification
 /// @return Parsed jwt_claims on success, error message on failure
 auto verify_jwt(thread_pool& pool, io_context& io,
-                std::string_view token, std::string_view secret)
+    std::string_view token, std::string_view secret)
     -> task<std::expected<jwt_claims, std::string>>;
 
 // =============================================================================
