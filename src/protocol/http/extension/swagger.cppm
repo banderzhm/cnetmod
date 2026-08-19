@@ -24,11 +24,11 @@ struct openapi_operation
     std::string summary;
     std::string description;
     std::string operation_id;
+    std::vector<std::string> security_json;
     std::vector<std::string> parameters_json;
     std::string request_body_json;
     std::map<std::string, openapi_response> responses{
         {"200", openapi_response{}}};
-    std::vector<std::string> security_json;
     bool deprecated = false;
 };
 

@@ -2,6 +2,7 @@ export module cnetmod.protocol.mysql:orm_mysql_result_adapter;
 
 import std;
 import :types;
+import :connection_client;
 import cnetmod.orm.database_session;
 export import cnetmod.orm.result_mapper;
 import cnetmod.orm.sql_query_data;
@@ -22,6 +23,14 @@ auto mysql_adapt_parameter(const cnetmod::mysql::param_value& source)
 /// Converts the protocol-owned MySQL result representation into the stable,
 /// database-independent ORM result contract.
 auto mysql_adapt_result(const cnetmod::mysql::result_set& source) -> query_result;
+
+struct mysql_database_result_adapter
+{
+    static auto adapt(cnetmod::mysql::result_set&& source) -> query_result;
+};
+
+using mysql_database_session = database_session<cnetmod::mysql::client,
+    mysql_database_result_adapter>;
 
 /// Lets protocol-independent repositories consume mysql::result_set without
 /// exposing MySQL's wire value types in the ORM session API.

@@ -195,6 +195,33 @@ struct postgresql_style_orm_client
     }
 };
 
+struct transaction_orm_client
+{
+    std::vector<std::string> statements;
+    std::map<std::string, std::string> failures;
+
+    auto query(std::string_view sql) -> cnetmod::task<orm::query_result>
+    {
+        co_return co_await execute(sql);
+    }
+
+    auto execute(std::string_view sql) -> cnetmod::task<orm::query_result>
+    {
+        statements.emplace_back(sql);
+        orm::query_result result;
+        if (const auto failure = failures.find(std::string{sql});
+            failure != failures.end())
+            result.error_msg = failure->second;
+        co_return result;
+    }
+
+    auto execute(orm::parameterized_query statement)
+        -> cnetmod::task<orm::query_result>
+    {
+        co_return co_await execute(statement.query);
+    }
+};
+
 namespace cnetmod::orm {
 
 template <> struct xml_object_graph_binder<::orm_json_user_graph>
@@ -543,6 +570,96 @@ TEST(orm_database_session_uses_postgresql_binding_and_returning_mapping)
     ASSERT_EQ(client.last_parameters.size(), 2U);
 }
 
+TEST(orm_database_session_expected_transaction_commits_typed_value)
+{
+    transaction_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql};
+
+    const auto result = cnetmod::sync_wait(session.transaction<int>(
+        []() -> cnetmod::task<std::expected<int, std::string>>
+        {
+            co_return 42;
+        }));
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(*result, 42);
+    ASSERT_EQ(client.statements.size(), 2U);
+    ASSERT_EQ(client.statements[0], "START TRANSACTION");
+    ASSERT_EQ(client.statements[1], "COMMIT");
+}
+
+TEST(orm_database_session_expected_transaction_rolls_back_void_failure)
+{
+    transaction_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql};
+
+    const auto result = cnetmod::sync_wait(session.transaction<void>(
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::unexpected("validation failed");
+        }));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_EQ(result.error(), "validation failed");
+    ASSERT_EQ(client.statements.size(), 2U);
+    ASSERT_EQ(client.statements[0], "START TRANSACTION");
+    ASSERT_EQ(client.statements[1], "ROLLBACK");
+}
+
+TEST(orm_database_session_expected_transaction_rolls_back_commit_failure)
+{
+    transaction_orm_client client;
+    client.failures.emplace("COMMIT", "connection lost");
+    orm::database_session session{client, orm::sql_dialect::mysql};
+
+    const auto result = cnetmod::sync_wait(session.transaction<int>(
+        []() -> cnetmod::task<std::expected<int, std::string>>
+        {
+            co_return 7;
+        }));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_TRUE(result.error().contains(
+        "transaction commit failed: connection lost"));
+    ASSERT_EQ(client.statements.size(), 3U);
+    ASSERT_EQ(client.statements[2], "ROLLBACK");
+}
+
+TEST(orm_database_session_expected_transaction_reports_rollback_failure)
+{
+    transaction_orm_client client;
+    client.failures.emplace("ROLLBACK", "server closed transaction");
+    orm::database_session session{client, orm::sql_dialect::mysql};
+
+    const auto result = cnetmod::sync_wait(session.transaction<void>(
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::unexpected("write rejected");
+        }));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_TRUE(result.error().contains("write rejected"));
+    ASSERT_TRUE(result.error().contains(
+        "transaction rollback failed: server closed transaction"));
+}
+
+TEST(orm_database_session_expected_transaction_supports_isolation_level)
+{
+    transaction_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::postgresql};
+
+    const auto result = cnetmod::sync_wait(session.transaction<void>(
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        }, orm::isolation_level::serializable));
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(client.statements.size(), 2U);
+    ASSERT_EQ(client.statements[0], "BEGIN ISOLATION LEVEL SERIALIZABLE");
+    ASSERT_EQ(client.statements[1], "COMMIT");
+}
+
 TEST(query_wrapper_accepts_optional_condition_values)
 {
     std::optional<std::int64_t> active_status{1};
@@ -605,6 +722,34 @@ TEST(query_wrapper_preserves_sql_null_and_collection_semantics)
 
     orm::query_wrapper<orm_crud_user> invalid_between;
     ASSERT_THROWS(invalid_between.between("id", absent, std::int64_t{10}));
+}
+
+TEST(query_wrapper_builds_parameterless_conditions_without_overload_ambiguity)
+{
+    orm::query_wrapper<orm_crud_user> query;
+    query.is_null("name")
+        .is_not_null("id")
+        .is_true("status")
+        .is_false("id")
+        .raw("1 = 1");
+
+    const auto [sql, parameters] =
+        query.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(sql.contains("\"name\" IS NULL"));
+    ASSERT_TRUE(sql.contains("\"id\" IS NOT NULL"));
+    ASSERT_TRUE(sql.contains("\"status\" = TRUE"));
+    ASSERT_TRUE(sql.contains("\"id\" = FALSE"));
+    ASSERT_TRUE(sql.contains("1 = 1"));
+    ASSERT_TRUE(parameters.empty());
+}
+
+TEST(parameterized_query_accepts_string_literals_without_overload_ambiguity)
+{
+    auto query = cnetmod::database::with_params(
+        "SELECT $1", {orm::param_value::from_int(7)});
+    ASSERT_EQ(query.query, std::string("SELECT $1"));
+    ASSERT_EQ(query.args.size(), 1U);
+    ASSERT_EQ(query.args.front().int_val, 7);
 }
 
 TEST(update_wrapper_preserves_set_order_and_optional_conditions)

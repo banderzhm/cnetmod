@@ -114,16 +114,6 @@ inline auto with_params(std::string_view sql, std::vector<query_parameter> args)
     return {std::string(sql), std::move(args)};
 }
 
-inline auto with_params(std::string&& sql, std::initializer_list<query_parameter> args) -> parameterized_query
-{
-    return {std::move(sql), args};
-}
-
-inline auto with_params(std::string&& sql, std::vector<query_parameter> args) -> parameterized_query
-{
-    return {std::move(sql), std::move(args)};
-}
-
 struct sql_format_options
 {
     bool backslash_escapes = false;

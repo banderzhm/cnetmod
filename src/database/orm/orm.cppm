@@ -4,6 +4,8 @@ export import cnetmod.orm.sql_query_data;
 export import cnetmod.orm.sql_parameters;
 export import cnetmod.orm.sql_statement_formatting;
 export import cnetmod.orm.database_session;
+export import cnetmod.orm.session_gateway;
+export import cnetmod.orm.schema_migration_runner;
 export import cnetmod.orm.id_generation;
 export import cnetmod.orm.model_metadata;
 export import cnetmod.orm.member_pointer_reflection;

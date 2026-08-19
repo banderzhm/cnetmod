@@ -26,6 +26,16 @@ template <class Result> struct database_result_adapter
     }
 };
 
+struct default_database_result_adapter
+{
+    template <class Result>
+    static auto adapt(Result&& result) -> query_result
+    {
+        return database_result_adapter<std::remove_cvref_t<Result>>::adapt(
+            std::forward<Result>(result));
+    }
+};
+
 template <class Client>
 concept asynchronous_database_client = requires(Client& client,
     std::string_view sql,
@@ -73,7 +83,8 @@ template <class T> struct model_result
 /// Raw SQL, typed CRUD and row-to-model mapping share this one session.  The
 /// selected dialect owns only identifier quoting, placeholder spelling and
 /// RETURNING support; protocol clients continue to own the wire operation.
-template <asynchronous_database_client Client>
+template <asynchronous_database_client Client,
+    class ResultAdapter = default_database_result_adapter>
 class database_session
 {
 public:
@@ -109,6 +120,35 @@ public:
     [[nodiscard]] auto dialect() const noexcept -> sql_dialect
     {
         return dialect_;
+    }
+
+    // Long-lived units of work need an explicit lifecycle because their
+    // repositories may suspend between individual commands. Keep the dialect
+    // specific statements inside the ORM boundary rather than duplicating
+    // them in every primary-store adapter.
+    auto begin_transaction(std::optional<isolation_level> isolation = std::nullopt)
+        -> task<std::expected<void, std::string>>
+    {
+        auto started = co_await begin_expected_transaction(isolation);
+        if (started.is_err())
+            co_return std::unexpected(std::move(started.error_msg));
+        co_return std::expected<void, std::string>{};
+    }
+
+    auto commit_transaction() -> task<std::expected<void, std::string>>
+    {
+        auto committed = co_await execute("COMMIT");
+        if (committed.is_err())
+            co_return std::unexpected(transaction_phase_error("commit", committed));
+        co_return std::expected<void, std::string>{};
+    }
+
+    auto rollback_transaction() -> task<std::expected<void, std::string>>
+    {
+        auto rolled_back = co_await execute("ROLLBACK");
+        if (rolled_back.is_err())
+            co_return std::unexpected(transaction_phase_error("rollback", rolled_back));
+        co_return std::expected<void, std::string>{};
     }
 
     // ---------------------------------------------------------------------
@@ -265,6 +305,25 @@ public:
         co_return map<T>(co_await execute_bound(std::move(sql), std::move(parameters)));
     }
 
+    template <Model T>
+    auto count(const query_wrapper<T>& query)
+        -> task<std::expected<std::size_t, std::string>>
+    {
+        auto [sql, parameters] = query.build_count_sql(dialect_);
+        auto result = co_await execute_bound(std::move(sql), std::move(parameters));
+        if (result.is_err())
+            co_return std::unexpected(std::move(result.error_msg));
+        if (result.rows.empty() || result.rows.front().empty())
+            co_return std::size_t{};
+
+        const auto& value = result.rows.front().front();
+        if (value.is_uint64())
+            co_return static_cast<std::size_t>(value.get_uint64());
+        if (value.is_int64())
+            co_return static_cast<std::size_t>(value.get_int64());
+        co_return std::unexpected("count query returned a non-integral value");
+    }
+
     template <Model T> auto remove(const query_wrapper<T>& query) -> task<model_result<T>>
     {
         auto [sql, parameters] = query.build_delete_sql(dialect_);
@@ -341,13 +400,64 @@ public:
         co_return result;
     }
 
+    /// Run an operation in a transaction without using exceptions as the
+    /// expected failure path. The operation's value is returned after a
+    /// successful commit; any failure attempts a rollback first.
+    template <typename T, typename Function>
+    requires std::invocable<Function&> && requires(Function& function) {
+        { function() } -> std::same_as<task<std::expected<T, std::string>>>;
+    }
+    [[nodiscard]] auto transaction(Function function)
+        -> task<std::expected<T, std::string>>
+    {
+        co_return co_await expected_transaction<T>(
+            std::move(function), std::nullopt);
+    }
+
+    /// Expected-returning transaction with an explicit isolation level.
+    template <typename T, typename Function>
+    requires std::invocable<Function&> && requires(Function& function) {
+        { function() } -> std::same_as<task<std::expected<T, std::string>>>;
+    }
+    [[nodiscard]] auto transaction(Function function, isolation_level isolation)
+        -> task<std::expected<T, std::string>>
+    {
+        co_return co_await expected_transaction<T>(
+            std::move(function), isolation);
+    }
+
     template <typename Function>
     requires std::invocable<Function> && requires(Function function) {
         { function() } -> std::same_as<task<void>>;
     }
     auto transaction(Function&& function) -> task<query_result>
     {
-        co_return adapt(co_await client_->transaction(std::forward<Function>(function)));
+        auto started = co_await execute(
+            dialect_ == sql_dialect::postgresql ? "BEGIN" : "START TRANSACTION");
+        if (started.is_err())
+            co_return started;
+
+        std::string transaction_error;
+        try
+        {
+            co_await function();
+        }
+        catch (const std::exception& error)
+        {
+            transaction_error = error.what();
+        }
+        catch (...)
+        {
+            transaction_error = "transaction failed";
+        }
+
+        if (transaction_error.empty())
+            co_return co_await execute("COMMIT");
+
+        (void)co_await execute("ROLLBACK");
+        query_result result;
+        result.error_msg = std::move(transaction_error);
+        co_return result;
     }
 
     template <typename Function>
@@ -357,14 +467,184 @@ public:
     auto transaction(Function&& function, isolation_level isolation)
         -> task<query_result>
     {
-        co_return adapt(co_await client_->transaction(std::forward<Function>(function), isolation));
+        const auto isolation_name = isolation_level_name(isolation);
+        query_result started;
+        if (dialect_ == sql_dialect::postgresql)
+        {
+            const auto begin = std::format(
+                "BEGIN ISOLATION LEVEL {}", isolation_name);
+            started = co_await execute(begin);
+        }
+        else
+        {
+            const auto configure = std::format(
+                "SET TRANSACTION ISOLATION LEVEL {}", isolation_name);
+            auto configured = co_await execute(configure);
+            if (configured.is_err())
+                co_return configured;
+            started = co_await execute("START TRANSACTION");
+        }
+        if (started.is_err())
+            co_return started;
+
+        std::string transaction_error;
+        try
+        {
+            co_await function();
+        }
+        catch (const std::exception& error)
+        {
+            transaction_error = error.what();
+        }
+        catch (...)
+        {
+            transaction_error = "transaction failed";
+        }
+
+        if (transaction_error.empty())
+            co_return co_await execute("COMMIT");
+
+        (void)co_await execute("ROLLBACK");
+        query_result result;
+        result.error_msg = std::move(transaction_error);
+        co_return result;
     }
 
 private:
+    template <typename T, typename Function>
+    auto expected_transaction(Function function,
+        std::optional<isolation_level> isolation)
+        -> task<std::expected<T, std::string>>
+    {
+        auto started = co_await begin_expected_transaction(isolation);
+        if (started.is_err())
+            co_return std::unexpected(std::move(started.error_msg));
+
+        std::optional<std::expected<T, std::string>> operation;
+        std::string exception_error;
+        try
+        {
+            operation.emplace(co_await std::invoke(function));
+        }
+        catch (const std::exception& error)
+        {
+            exception_error = std::format(
+                "transaction operation threw: {}", error.what());
+        }
+        catch (...)
+        {
+            exception_error = "transaction operation threw an unknown exception";
+        }
+
+        if (!exception_error.empty())
+            co_return std::unexpected(co_await rollback_after_failure(
+                std::move(exception_error)));
+
+        if (!operation)
+            co_return std::unexpected(co_await rollback_after_failure(
+                "transaction operation completed without a result"));
+
+        if (!*operation)
+        {
+            auto operation_error = operation->error().empty()
+                ? std::string{"transaction operation failed"}
+                : std::move(operation->error());
+            co_return std::unexpected(co_await rollback_after_failure(
+                std::move(operation_error)));
+        }
+
+        auto committed = co_await execute("COMMIT");
+        if (committed.is_err())
+        {
+            auto commit_error = transaction_phase_error("commit", committed);
+            co_return std::unexpected(co_await rollback_after_failure(
+                std::move(commit_error)));
+        }
+
+        if constexpr (std::is_void_v<T>)
+            co_return std::expected<void, std::string>{};
+        else
+            co_return std::move(**operation);
+    }
+
+    auto begin_expected_transaction(std::optional<isolation_level> isolation)
+        -> task<query_result>
+    {
+        if (!isolation)
+        {
+            auto started = co_await execute(
+                dialect_ == sql_dialect::postgresql ? "BEGIN" : "START TRANSACTION");
+            if (started.is_err())
+                started.error_msg = transaction_phase_error("begin", started);
+            co_return started;
+        }
+
+        const auto isolation_name = isolation_level_name(*isolation);
+        if (dialect_ == sql_dialect::postgresql)
+        {
+            auto started = co_await execute(std::format(
+                "BEGIN ISOLATION LEVEL {}", isolation_name));
+            if (started.is_err())
+                started.error_msg = transaction_phase_error("begin", started);
+            co_return started;
+        }
+
+        auto configured = co_await execute(std::format(
+            "SET TRANSACTION ISOLATION LEVEL {}", isolation_name));
+        if (configured.is_err())
+        {
+            configured.error_msg = transaction_phase_error(
+                "configure transaction isolation", configured);
+            co_return configured;
+        }
+
+        auto started = co_await execute("START TRANSACTION");
+        if (started.is_err())
+            started.error_msg = transaction_phase_error("begin", started);
+        co_return started;
+    }
+
+    auto rollback_after_failure(std::string primary_error)
+        -> task<std::string>
+    {
+        auto rolled_back = co_await execute("ROLLBACK");
+        if (rolled_back.is_err())
+        {
+            primary_error += "; ";
+            primary_error += transaction_phase_error("rollback", rolled_back);
+        }
+        co_return primary_error;
+    }
+
+    static auto transaction_phase_error(std::string_view phase,
+        const query_result& result) -> std::string
+    {
+        if (result.error_msg.empty())
+            return std::format("transaction {} failed", phase);
+        return std::format("transaction {} failed: {}", phase,
+            result.error_msg);
+    }
+
+    static auto isolation_level_name(isolation_level isolation)
+        -> std::string_view
+    {
+        switch (isolation)
+        {
+        case isolation_level::read_uncommitted:
+            return "READ UNCOMMITTED";
+        case isolation_level::repeatable_read:
+            return "REPEATABLE READ";
+        case isolation_level::serializable:
+            return "SERIALIZABLE";
+        case isolation_level::read_committed:
+        default:
+            return "READ COMMITTED";
+        }
+    }
+
     template <class Result> static auto adapt(Result&& result) -> query_result
     {
-        return database_result_adapter<std::remove_cvref_t<Result>>::adapt(
-            std::forward<Result>(result));
+        return ResultAdapter::adapt(std::forward<Result>(result));
     }
 
     auto execute_bound(std::string sql, std::vector<param_value> parameters)

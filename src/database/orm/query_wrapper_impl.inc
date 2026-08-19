@@ -111,28 +111,28 @@ auto query_wrapper<T>::not_like(std::string_view column, std::string_view patter
 template <Model T>
 auto query_wrapper<T>::is_null(std::string_view column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_null, {});
+    add_condition(column, compare_op::is_null, std::vector<param_value>{});
     return *this;
 }
 
 template <Model T>
 auto query_wrapper<T>::is_not_null(std::string_view column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_not_null, {});
+    add_condition(column, compare_op::is_not_null, std::vector<param_value>{});
     return *this;
 }
 
 template <Model T>
 auto query_wrapper<T>::is_true(std::string_view column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_true, {});
+    add_condition(column, compare_op::is_true, std::vector<param_value>{});
     return *this;
 }
 
 template <Model T>
 auto query_wrapper<T>::is_false(std::string_view column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_false, {});
+    add_condition(column, compare_op::is_false, std::vector<param_value>{});
     return *this;
 }
 
@@ -141,7 +141,7 @@ auto query_wrapper<T>::is_false(std::string_view column) -> query_wrapper&
 template <Model T>
 auto query_wrapper<T>::raw(std::string_view raw_sql) -> query_wrapper&
 {
-    add_condition(raw_sql, compare_op::raw, {});
+    add_condition(raw_sql, compare_op::raw, std::vector<param_value>{});
     return *this;
 }
 
