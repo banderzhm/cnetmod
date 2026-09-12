@@ -8,6 +8,8 @@ set(TEST_SOURCES
     test_flat_map.cpp
     test_concurrent_containers.cpp
     test_application_result.cpp
+    test_application.cpp
+    test_application_integrations.cpp
     test_deadline.cpp
     test_task_group.cpp
     test_task.cpp
@@ -45,6 +47,7 @@ set(TEST_SOURCES
     test_tfb_compliance.cpp
     test_socks5.cpp
     test_mail.cpp
+    test_openai.cpp
     test_redis.cpp
     test_mongodb_wire.cpp
     test_orm_json_result_map.cpp
@@ -72,6 +75,8 @@ endif()
 if(NOT CNETMOD_ENABLE_HTTP)
     list(FILTER TEST_SOURCES EXCLUDE REGEX
         "^(test_http|test_tfb|test_metrics)")
+    list(REMOVE_ITEM TEST_SOURCES test_application.cpp
+        test_application_integrations.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_DNS)
     list(REMOVE_ITEM TEST_SOURCES test_dns.cpp)
@@ -90,6 +95,9 @@ if(NOT CNETMOD_ENABLE_SOCKS5)
 endif()
 if(NOT CNETMOD_ENABLE_MAIL)
     list(REMOVE_ITEM TEST_SOURCES test_mail.cpp)
+endif()
+if(NOT CNETMOD_ENABLE_OPENAI)
+    list(REMOVE_ITEM TEST_SOURCES test_openai.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_REDIS)
     list(REMOVE_ITEM TEST_SOURCES test_redis.cpp)
@@ -232,7 +240,6 @@ if(Python3_Interpreter_FOUND AND TARGET test_grpc_proto)
         PROPERTIES SKIP_RETURN_CODE 77
     )
 endif()
-
 if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MQTT)
     add_executable(mqtt_interop_broker
         "${CMAKE_CURRENT_SOURCE_DIR}/../mqtt/mqtt_interop_broker.cpp"

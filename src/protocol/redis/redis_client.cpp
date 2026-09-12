@@ -194,7 +194,7 @@ auto client::cmd(std::initializer_list<std::string_view> args,
 {
     const auto operation = args.size() == 0U ? std::string{"UNKNOWN"} : std::string{*args.begin()};
     auto span = http::tracing::start_client_span(parent, "REDIS " + operation,
-        {{"db.system", "redis"}, {"db.operation", operation}});
+        {{"db.system.name", "redis"}, {"db.operation.name", operation}});
     auto response = co_await cmd(args);
     if (on_end)
     {
@@ -217,7 +217,7 @@ auto client::cmd(std::span<const std::string> args,
 {
     const auto operation = args.empty() ? std::string{"UNKNOWN"} : args.front();
     auto span = http::tracing::start_client_span(parent, "REDIS " + operation,
-        {{"db.system", "redis"}, {"db.operation", operation}});
+        {{"db.system.name", "redis"}, {"db.operation.name", operation}});
     auto response = co_await cmd(args);
     if (on_end)
     {

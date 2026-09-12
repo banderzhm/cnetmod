@@ -14,6 +14,7 @@ export import cnetmod.core.address;
 export import cnetmod.core.socket;
 export import cnetmod.core.net_init;
 export import cnetmod.core.file;
+export import cnetmod.core.process;
 export import cnetmod.core.serial_port;
 export import cnetmod.core.log;
 export import cnetmod.core.dns;

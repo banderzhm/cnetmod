@@ -36,6 +36,14 @@ struct default_database_result_adapter
     }
 };
 
+/// Controls potentially sensitive SQL telemetry. Query text is excluded by
+/// default because it can contain credentials or personal data.
+struct sql_observation_options
+{
+    bool capture_query_text = false;
+    std::size_t max_query_bytes = 2048;
+};
+
 template <class Client>
 concept asynchronous_database_client = requires(Client& client,
     std::string_view sql,
@@ -359,11 +367,16 @@ public:
     /// this boundary: it derives a child context and hands the completed
     /// client span to the same exporter used by the enclosing HTTP request.
     auto query(std::string_view sql, const http::tracing::trace_context& parent,
-        http::tracing::span_exporter on_end) -> task<query_result>
+        http::tracing::span_exporter on_end,
+        sql_observation_options options = {}) -> task<query_result>
     {
+        std::vector<std::pair<std::string, std::string>> attributes{
+            {"db.system.name", "sql"}, {"db.operation.name", "query"}};
+        if (options.capture_query_text && options.max_query_bytes > 0)
+            attributes.emplace_back("db.query.text",
+                std::string{sql.substr(0, options.max_query_bytes)});
         auto span = http::tracing::start_client_span(parent, "SQL QUERY",
-            {{"db.system", "sql"}, {"db.operation", "query"},
-                {"db.statement", std::string(sql)}});
+            std::move(attributes));
         auto result = adapt(co_await client_->query(sql));
         if (on_end)
         {
@@ -380,11 +393,16 @@ public:
     }
 
     auto execute(std::string_view sql, const http::tracing::trace_context& parent,
-        http::tracing::span_exporter on_end) -> task<query_result>
+        http::tracing::span_exporter on_end,
+        sql_observation_options options = {}) -> task<query_result>
     {
+        std::vector<std::pair<std::string, std::string>> attributes{
+            {"db.system.name", "sql"}, {"db.operation.name", "execute"}};
+        if (options.capture_query_text && options.max_query_bytes > 0)
+            attributes.emplace_back("db.query.text",
+                std::string{sql.substr(0, options.max_query_bytes)});
         auto span = http::tracing::start_client_span(parent, "SQL EXECUTE",
-            {{"db.system", "sql"}, {"db.operation", "execute"},
-                {"db.statement", std::string(sql)}});
+            std::move(attributes));
         auto result = adapt(co_await client_->execute(sql));
         if (on_end)
         {

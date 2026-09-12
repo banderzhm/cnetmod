@@ -60,30 +60,97 @@ namespace {
                 .count());
     }
 
-    auto encode_batch(std::string_view service,
+    auto span_kind_name(http::tracing::span_kind kind) -> std::string_view
+    {
+        using enum http::tracing::span_kind;
+        switch (kind)
+        {
+        case unspecified:
+            return "SPAN_KIND_UNSPECIFIED";
+        case server:
+            return "SPAN_KIND_SERVER";
+        case client:
+            return "SPAN_KIND_CLIENT";
+        case producer:
+            return "SPAN_KIND_PRODUCER";
+        case consumer:
+            return "SPAN_KIND_CONSUMER";
+        case internal:
+            return "SPAN_KIND_INTERNAL";
+        }
+        return "SPAN_KIND_UNSPECIFIED";
+    }
+
+    auto append_string_attribute(std::string& result, bool& first,
+        std::string_view key, std::string_view value) -> void
+    {
+        if (!first)
+            result.push_back(',');
+        first = false;
+        result += "{\"key\":";
+        append_json_string(result, key);
+        result += ",\"value\":{\"stringValue\":";
+        append_json_string(result, value);
+        result += "}}";
+    }
+
+    auto encode_batch(const otlp_http_options& options,
         const std::vector<http::tracing::completed_span>& spans) -> std::string
     {
-        const auto ended = std::chrono::system_clock::now();
-        std::string result{"{\"resourceSpans\":[{\"resource\":{\"attributes\":[{\"key\":\"service.name\",\"value\":{\"stringValue\":"};
-        append_json_string(result, service);
-        result += "}}]},\"scopeSpans\":[{\"scope\":{\"name\":\"cnetmod\"},\"spans\":[";
+        std::string result{"{\"resourceSpans\":[{\"resource\":{\"attributes\":["};
+        bool first_resource = true;
+        append_string_attribute(result, first_resource, "service.name",
+            options.service_name);
+        if (!options.service_version.empty())
+            append_string_attribute(result, first_resource, "service.version",
+                options.service_version);
+        if (!options.service_namespace.empty())
+            append_string_attribute(result, first_resource, "service.namespace",
+                options.service_namespace);
+        if (!options.service_instance_id.empty())
+            append_string_attribute(result, first_resource, "service.instance.id",
+                options.service_instance_id);
+        if (!options.deployment_environment.empty())
+            append_string_attribute(result, first_resource,
+                "deployment.environment.name", options.deployment_environment);
+        for (const auto& [key, value] : options.resource_attributes)
+            append_string_attribute(result, first_resource, key, value);
+        result += "]},\"scopeSpans\":[{\"scope\":{\"name\":\"cnetmod\",\"version\":\"1\"},\"spans\":[";
         for (std::size_t index{}; index < spans.size(); ++index)
         {
             if (index != 0U)
                 result.push_back(',');
             const auto& span = spans[index];
-            const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(
-                span.elapsed);
-            const auto started = ended - elapsed;
+            const auto fallback_end = std::chrono::system_clock::now();
+            const auto ended = span.ended_at.time_since_epoch().count() == 0
+                ? fallback_end
+                : span.ended_at;
+            const auto started = span.started_at.time_since_epoch().count() == 0
+                ? ended - std::chrono::duration_cast<std::chrono::system_clock::duration>(span.elapsed)
+                : span.started_at;
             result += "{\"traceId\":";
             append_json_string(result, span.context.trace_id);
             result += ",\"spanId\":";
             append_json_string(result, span.context.span_id);
+            if (!span.parent_span_id.empty())
+            {
+                result += ",\"parentSpanId\":";
+                append_json_string(result, span.parent_span_id);
+            }
+            if (!span.context.tracestate.empty())
+            {
+                result += ",\"traceState\":";
+                append_json_string(result, span.context.tracestate);
+            }
             result += ",\"name\":";
             const auto name = span.name.empty() ? span.method + " " + span.path : span.name;
             append_json_string(result, name);
             result += ",\"kind\":\"";
-            result += span.name.empty() ? "SPAN_KIND_SERVER" : "SPAN_KIND_CLIENT";
+            const auto kind = span.kind == http::tracing::span_kind::unspecified
+                ? (span.name.empty() ? http::tracing::span_kind::server
+                                     : http::tracing::span_kind::client)
+                : span.kind;
+            result += span_kind_name(kind);
             result += "\",\"startTimeUnixNano\":";
             append_json_string(result, unix_nanoseconds(started));
             result += ",\"endTimeUnixNano\":";
@@ -92,14 +159,7 @@ namespace {
             bool first_attribute = true;
             const auto append_attribute = [&](std::string_view key, std::string_view value)
             {
-                if (!first_attribute)
-                    result.push_back(',');
-                first_attribute = false;
-                result += "{\"key\":";
-                append_json_string(result, key);
-                result += ",\"value\":{\"stringValue\":";
-                append_json_string(result, value);
-                result += "}}";
+                append_string_attribute(result, first_attribute, key, value);
             };
             if (!span.method.empty())
             {
@@ -116,8 +176,7 @@ namespace {
             result += "]";
             if (span.failed)
                 result += ",\"status\":{\"code\":\"STATUS_CODE_ERROR\"}";
-            if (span.has_remote_parent)
-                result += ",\"flags\":1";
+            result += ",\"flags\":" + std::to_string(span.context.flags);
             result.push_back('}');
         }
         result += "]}]}]}";
@@ -142,6 +201,34 @@ public:
     std::atomic<std::uint64_t> dropped{};
     std::atomic<std::uint64_t> exported{};
     std::atomic<std::uint64_t> failed_batches{};
+    std::atomic<std::uint64_t> retries{};
+
+    static auto retryable_status(int status) noexcept -> bool
+    {
+        return status == 429 || status == 502 || status == 503 || status == 504;
+    }
+
+    auto retry_delay(std::size_t attempt,
+        const std::optional<http::response>& response) const -> std::chrono::milliseconds
+    {
+        if (response)
+        {
+            const auto value = response->get_header("Retry-After");
+            unsigned long long seconds{};
+            const auto parsed = std::from_chars(value.data(), value.data() + value.size(),
+                seconds);
+            if (!value.empty() && parsed.ec == std::errc{} &&
+                parsed.ptr == value.data() + value.size())
+                return std::min(options.max_retry_delay,
+                    std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::seconds{seconds}));
+        }
+        const auto shift = std::min<std::size_t>(attempt, 16U);
+        const auto multiplier = static_cast<std::int64_t>(
+            std::uint64_t{1} << shift);
+        const auto raw = options.initial_retry_delay * multiplier;
+        return std::min(options.max_retry_delay, raw);
+    }
 
     static void discard_post(void* value) noexcept
     {
@@ -182,9 +269,40 @@ public:
 
             http::request request{http::http_method::POST, options.endpoint};
             request.set_header("Content-Type", "application/json");
-            request.set_body(encode_batch(options.service_name, batch));
-            const auto result = co_await client.send(request);
-            if (result && result->status_code() >= 200 && result->status_code() < 300)
+            for (const auto& [key, value] : options.headers)
+                if (!std::ranges::equal(key, std::string_view{"content-type"},
+                        [](char left, char right)
+                        {
+                            return std::tolower(static_cast<unsigned char>(left)) ==
+                                std::tolower(static_cast<unsigned char>(right));
+                        }))
+                    request.set_header(key, value);
+            request.set_body(encode_batch(options, batch));
+
+            bool delivered = false;
+            for (std::size_t attempt{}; attempt < options.max_attempts; ++attempt)
+            {
+                auto result = co_await client.send(request);
+                if (result && result->status_code() >= 200 &&
+                    result->status_code() < 300)
+                {
+                    delivered = true;
+                    break;
+                }
+                const auto can_retry = attempt + 1U < options.max_attempts &&
+                    (!result || retryable_status(result->status_code()));
+                if (!can_retry)
+                    break;
+                retries.fetch_add(1U, std::memory_order_relaxed);
+                std::optional<http::response> response;
+                if (result)
+                    response = std::move(*result);
+                const auto waited = co_await async_timer_wait(ctx,
+                    retry_delay(attempt, response));
+                if (!waited)
+                    break;
+            }
+            if (delivered)
                 exported.fetch_add(batch.size(), std::memory_order_relaxed);
             else
                 failed_batches.fetch_add(1U, std::memory_order_relaxed);
@@ -204,6 +322,11 @@ otlp_http_exporter::otlp_http_exporter(io_context& context, otlp_http_options op
         options.endpoint = "http://127.0.0.1:4318/v1/traces";
     options.queue_capacity = std::max<std::size_t>(2U, options.queue_capacity);
     options.max_batch_size = std::max<std::size_t>(1U, options.max_batch_size);
+    options.max_attempts = std::max<std::size_t>(1U, options.max_attempts);
+    options.initial_retry_delay = std::max(std::chrono::milliseconds::zero(),
+        options.initial_retry_delay);
+    options.max_retry_delay = std::max(options.initial_retry_delay,
+        options.max_retry_delay);
     state_ = std::make_shared<otlp_http_exporter_state>(context, std::move(options));
 }
 
@@ -263,6 +386,7 @@ auto otlp_http_exporter::statistics() const noexcept -> otlp_exporter_statistics
         .dropped = state->dropped.load(std::memory_order_relaxed),
         .exported = state->exported.load(std::memory_order_relaxed),
         .failed_batches = state->failed_batches.load(std::memory_order_relaxed),
+        .retries = state->retries.load(std::memory_order_relaxed),
     };
 }
 

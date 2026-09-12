@@ -22,7 +22,15 @@ import cnetmod.protocol.http;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
-import :types;
+import :foundation;
+import :tool_contracts;
+import :messages;
+import :chat;
+import :responses;
+import :embeddings;
+import :audio;
+import :images;
+import :moderation;
 import nlohmann.json;
 
 namespace cnetmod::openai {
@@ -56,6 +64,10 @@ public:
     /// Non-streaming Chat Completions — Send request, wait for complete response
     auto chat(chat_request req)
         -> task<std::expected<chat_response, std::string>>;
+
+    /// Unified Responses API for modern text, multimodal and tool workflows.
+    auto responses(response_request req)
+        -> task<std::expected<response_result, std::string>>;
 
     // ── Streaming chat (SSE) ───────────────────────────────────────
 
@@ -154,14 +166,14 @@ private:
 
     /// Read HTTP response header (for streaming - only read until header ends)
     auto read_response_header()
-        -> task<std::expected<std::pair<int, std::string>, std::string>>;
+        -> task<std::expected<std::tuple<int, std::string, bool>, std::string>>;
 
     /// Read remaining body (for error responses)
     auto read_remaining_body() -> task<std::string>;
 
     /// Read binary response (for TTS)
     auto read_binary_response() -> task<
-                                    std::expected<std::pair<int, std::vector<std::byte>>, std::string>>;
+        std::expected<std::pair<int, std::vector<std::byte>>, std::string>>;
 
     // ── Multipart form building helpers ──
 

@@ -24,8 +24,10 @@
 | 我想… | 看这个文件 |
 |-------|-----------|
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
+| 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
 | 了解代码风格、clang-format、命名规范 | [code-style.md](infra/code-style.md) |
+| 接入 OpenTelemetry、链路追踪和指标 | [observability.md](infra/observability.md) |
 | 新增一个模块或协议 | [new-module-guide.md](infra/new-module-guide.md) |
 
 ### 核心网络
@@ -37,6 +39,7 @@
 | SSL/TLS/DTLS 加密通信 | [ssl-tls.md](core/ssl-tls.md) |
 | 异步 IO 操作（read/write/accept/connect） | [network-io.md](core/network-io.md) |
 | 异步文件读写、send_file | [file-io.md](core/file-io.md) |
+| 启动子进程并通过标准输入输出通信 | [process.md](core/process.md) |
 | 日志初始化、级别、文件输出 | [logging.md](core/logging.md) |
 | 错误码、工具函数 | [utils-error.md](core/utils-error.md) |
 
@@ -45,7 +48,7 @@
 | 我想… | 看这个文件 |
 |-------|-----------|
 | task/spawn/channel/mutex/semaphore/wait_group | [coroutine.md](coro/coroutine.md) |
-| 定时器、超时、重试、断路器 | [timer-retry.md](coro/timer-retry.md) |
+| 定时器、超时、重试、断路器、速率限制 | [timer-retry.md](coro/timer-retry.md) |
 | 执行器、线程池、阻塞 API/awaitable 桥接 | [executor-bridge.md](coro/executor-bridge.md) |
 
 ### HTTP

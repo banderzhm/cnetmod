@@ -89,7 +89,9 @@ namespace {
 
     void report_span(const tracing_options& options, const trace_context& context,
         std::string_view method, std::string_view path, int status,
-        std::chrono::steady_clock::duration elapsed, bool has_remote_parent) noexcept
+        std::chrono::steady_clock::duration elapsed, bool has_remote_parent,
+        std::string_view parent_span_id,
+        std::chrono::system_clock::time_point started_at) noexcept
     {
         if (!options.on_end)
             return;
@@ -102,6 +104,10 @@ namespace {
                 .status_code = status,
                 .elapsed = elapsed,
                 .has_remote_parent = has_remote_parent,
+                .parent_span_id = std::string(parent_span_id),
+                .started_at = started_at,
+                .ended_at = std::chrono::system_clock::now(),
+                .kind = span_kind::server,
             });
         }
         catch (...)
@@ -124,6 +130,7 @@ namespace {
             request.resp().set_header("traceparent", format_traceparent(context));
 
         const auto started = std::chrono::steady_clock::now();
+        const auto started_at = std::chrono::system_clock::now();
         try
         {
             co_await next();
@@ -132,12 +139,14 @@ namespace {
         {
             report_span(options, context, request.method(), request.path(),
                 request.resp().status_code(), std::chrono::steady_clock::now() - started,
-                parent.has_value());
+                parent.has_value(), parent ? parent->span_id : std::string_view{},
+                started_at);
             throw;
         }
         report_span(options, context, request.method(), request.path(),
             request.resp().status_code(), std::chrono::steady_clock::now() - started,
-            parent.has_value());
+            parent.has_value(), parent ? parent->span_id : std::string_view{},
+            started_at);
     }
 
 } // namespace
@@ -242,17 +251,25 @@ auto start_client_span(const trace_context& parent, std::string name,
         .name = std::move(name),
         .started = std::chrono::steady_clock::now(),
         .attributes = std::move(attributes),
+        .parent_span_id = parent.span_id,
+        .started_at = std::chrono::system_clock::now(),
+        .kind = span_kind::client,
     };
 }
 
 auto finish_client_span(active_span span, bool failed) -> completed_span
 {
+    const auto ended_at = std::chrono::system_clock::now();
     return {
         .context = std::move(span.context),
         .name = std::move(span.name),
         .elapsed = std::chrono::steady_clock::now() - span.started,
         .failed = failed,
         .attributes = std::move(span.attributes),
+        .parent_span_id = std::move(span.parent_span_id),
+        .started_at = span.started_at,
+        .ended_at = ended_at,
+        .kind = span.kind,
     };
 }
 

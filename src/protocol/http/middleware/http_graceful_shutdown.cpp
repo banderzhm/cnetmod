@@ -16,29 +16,79 @@ import cnetmod.protocol.http;
 
 namespace cnetmod {
 
+namespace {
+
+    bool handler_installed = false;
+#ifndef CNETMOD_PLATFORM_WINDOWS
+    struct sigaction previous_interrupt{};
+    struct sigaction previous_terminate{};
+#endif
+
+} // namespace
+
 shutdown_handler* shutdown_handler::instance_ = nullptr;
+
+shutdown_handler::~shutdown_handler()
+{
+    uninstall();
+}
 
 void shutdown_handler::install() noexcept
 {
+    if (instance_ == this && handler_installed)
+        return;
+    if (instance_)
+        instance_->uninstall();
     instance_ = this;
 #ifdef CNETMOD_PLATFORM_WINDOWS
-    SetConsoleCtrlHandler(win_handler, TRUE);
+    handler_installed = SetConsoleCtrlHandler(win_handler, TRUE) != FALSE;
 #else
-    struct sigaction sa
-    {
-    };
+    struct sigaction sa{};
 
     sa.sa_handler = unix_handler;
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = 0;
-    sigaction(SIGINT, &sa, nullptr);
-    sigaction(SIGTERM, &sa, nullptr);
+    const auto interrupt_installed =
+        sigaction(SIGINT, &sa, &previous_interrupt) == 0;
+    const auto terminate_installed =
+        sigaction(SIGTERM, &sa, &previous_terminate) == 0;
+    handler_installed = interrupt_installed && terminate_installed;
+    if (!handler_installed)
+    {
+        if (interrupt_installed)
+            sigaction(SIGINT, &previous_interrupt, nullptr);
+        if (terminate_installed)
+            sigaction(SIGTERM, &previous_terminate, nullptr);
+        instance_ = nullptr;
+    }
 #endif
+}
+
+void shutdown_handler::uninstall() noexcept
+{
+    if (instance_ != this)
+        return;
+    if (handler_installed)
+    {
+#ifdef CNETMOD_PLATFORM_WINDOWS
+        SetConsoleCtrlHandler(win_handler, FALSE);
+#else
+        sigaction(SIGINT, &previous_interrupt, nullptr);
+        sigaction(SIGTERM, &previous_terminate, nullptr);
+#endif
+    }
+    handler_installed = false;
+    instance_ = nullptr;
 }
 
 auto shutdown_handler::is_signaled() const noexcept -> bool
 {
     return signaled_.load(std::memory_order_acquire);
+}
+
+void shutdown_handler::request_stop() noexcept
+{
+    signal();
 }
 
 auto shutdown_handler::in_flight() const noexcept -> std::int64_t

@@ -17,9 +17,20 @@ export struct otlp_http_options
     /// Full collector endpoint, normally http://collector:4318/v1/traces.
     std::string endpoint;
     std::string service_name{"cnetmod"};
+    std::string service_version;
+    std::string service_namespace;
+    std::string service_instance_id;
+    std::string deployment_environment;
+    std::map<std::string, std::string, std::less<>> resource_attributes;
+    /// Collector authentication and tenant headers. Content-Type is managed
+    /// by the exporter and cannot be overridden through this map.
+    std::map<std::string, std::string, std::less<>> headers;
     std::size_t queue_capacity{4096};
     std::size_t max_batch_size{256};
     std::chrono::milliseconds request_timeout{5000};
+    std::size_t max_attempts{3};
+    std::chrono::milliseconds initial_retry_delay{100};
+    std::chrono::milliseconds max_retry_delay{5000};
 };
 
 export struct otlp_exporter_statistics
@@ -28,6 +39,7 @@ export struct otlp_exporter_statistics
     std::uint64_t dropped{};
     std::uint64_t exported{};
     std::uint64_t failed_batches{};
+    std::uint64_t retries{};
 };
 
 class otlp_http_exporter_state;

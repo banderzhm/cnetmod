@@ -53,13 +53,24 @@ export class shutdown_handler
 {
 public:
     shutdown_handler() noexcept = default;
+    ~shutdown_handler();
+
+    shutdown_handler(const shutdown_handler&) = delete;
+    auto operator=(const shutdown_handler&) -> shutdown_handler& = delete;
 
     /// Register signal handler (SIGINT/SIGTERM / Windows Ctrl+C)
     /// Sets signaled_ and notifies waiters after receiving signal
     void install() noexcept;
 
+    /// Restore the process handlers that were active before install().
+    void uninstall() noexcept;
+
     /// Whether shutdown signal has been received
     [[nodiscard]] auto is_signaled() const noexcept -> bool;
+
+    /// Request the same graceful path used by SIGINT/SIGTERM. Thread-safe and
+    /// suitable for administrative endpoints and embedding hosts.
+    void request_stop() noexcept;
 
     /// Current number of in-flight requests
     [[nodiscard]] auto in_flight() const noexcept -> std::int64_t;

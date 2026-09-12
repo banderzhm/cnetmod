@@ -5,6 +5,7 @@ module;
 export module cnetmod.protocol.grpc.governance.admission;
 
 import std;
+import cnetmod.coro.rate_limiter;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::grpc::governance {
@@ -47,26 +48,8 @@ private:
     std::atomic<std::size_t> in_flight_{0};
 };
 
-export struct rate_limit
-{
-    double tokens_per_second = 0.0;
-    double burst = 0.0;
-};
-
-export class token_bucket
-{
-public:
-    explicit token_bucket(rate_limit limit) noexcept;
-
-    [[nodiscard]] auto try_consume(double tokens = 1.0) noexcept -> bool;
-    [[nodiscard]] auto limit() const noexcept -> rate_limit;
-
-private:
-    mutable concurrent_containers::atomic_rw_latch latch_;
-    rate_limit limit_;
-    double tokens_ = 0.0;
-    std::chrono::steady_clock::time_point last_refill_;
-};
+export using rate_limit = cnetmod::rate_limit;
+export using token_bucket = cnetmod::token_bucket;
 
 /// Stores independent token buckets for exact service/method pairs.
 export class rate_limit_registry

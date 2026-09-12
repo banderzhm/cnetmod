@@ -66,6 +66,10 @@ TEST(tracing_explicit_client_span_preserves_parent_identity)
     ASSERT_EQ(completed.context.trace_id, parent.trace_id);
     ASSERT_NE(completed.context.span_id, parent.span_id);
     ASSERT_EQ(completed.name, "REDIS GET");
+    ASSERT_EQ(completed.parent_span_id, parent.span_id);
+    ASSERT_TRUE(completed.kind == tracing::span_kind::client);
+    ASSERT_TRUE(completed.started_at.time_since_epoch().count() > 0);
+    ASSERT_TRUE(completed.ended_at >= completed.started_at);
     ASSERT_TRUE(completed.failed);
     ASSERT_EQ(completed.attributes.size(), std::size_t{2});
     ASSERT_TRUE(completed.elapsed >= std::chrono::steady_clock::duration::zero());
@@ -104,6 +108,10 @@ TEST(http_tracing_middleware_creates_server_span_and_reports_it)
         tracing::format_traceparent(*server_context));
     ASSERT_TRUE(reported.has_value());
     ASSERT_TRUE(reported->has_remote_parent);
+    ASSERT_EQ(reported->parent_span_id, "00f067aa0ba902b7");
+    ASSERT_TRUE(reported->kind == tracing::span_kind::server);
+    ASSERT_TRUE(reported->started_at.time_since_epoch().count() > 0);
+    ASSERT_TRUE(reported->ended_at >= reported->started_at);
     ASSERT_EQ(reported->status_code, cnetmod::http::status::accepted);
 }
 

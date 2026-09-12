@@ -19,6 +19,18 @@ export struct trace_context
     std::string tracestate;
 };
 
+/// OpenTelemetry span role. Keeping this protocol-neutral enum in cnetmod's
+/// tracing API prevents a public dependency on a particular telemetry SDK.
+export enum class span_kind
+{
+    unspecified,
+    internal,
+    server,
+    client,
+    producer,
+    consumer
+};
+
 /// Parse a W3C traceparent header. Invalid input is intentionally ignored by
 /// the server middleware, which then begins a new root trace.
 export [[nodiscard]] auto parse_traceparent(std::string_view value,
@@ -54,6 +66,12 @@ export struct completed_span
     bool has_remote_parent{};
     bool failed{};
     std::vector<std::pair<std::string, std::string>> attributes;
+    /// Direct parent identity is separate from the current span context and
+    /// is required to reconstruct a distributed trace tree in a collector.
+    std::string parent_span_id;
+    std::chrono::system_clock::time_point started_at{};
+    std::chrono::system_clock::time_point ended_at{};
+    span_kind kind{span_kind::unspecified};
 };
 
 export using span_exporter = std::function<void(const completed_span&)>;
@@ -67,6 +85,9 @@ export struct active_span
     std::string name;
     std::chrono::steady_clock::time_point started;
     std::vector<std::pair<std::string, std::string>> attributes;
+    std::string parent_span_id;
+    std::chrono::system_clock::time_point started_at{};
+    span_kind kind{span_kind::client};
 };
 
 /// Start and finish a child client span. Database and Redis protocols have no

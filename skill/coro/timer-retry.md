@@ -1,9 +1,9 @@
-# 定时器、重试与断路器
+# 定时器、重试、断路器与速率限制
 
-> 提供异步定时器、自动重试和断路器模式，增强网络应用的可靠性。
+> 提供异步定时器、自动重试、断路器和 Token Bucket 速率限制，增强网络应用的可靠性。
 
 **import**: `import cnetmod.coro;`
-**源码**: `src/coro/timer.cppm`, `src/coro/retry.cppm`, `src/coro/circuit_breaker.cppm`
+**源码**: `src/coro/timer.cppm`, `src/coro/retry.cppm`, `src/coro/circuit_breaker.cppm`, `src/coro/rate_limiter.cppm`
 
 ## 场景导航
 
@@ -15,6 +15,7 @@
 | 失败后自动重试（指数退避） | `retry()` |
 | 失败后重试（抛异常风格） | `retry_throwing()` |
 | 防止级联故障（熔断） | `circuit_breaker` |
+| 限制请求速率与突发流量 | `token_bucket` |
 
 ---
 
@@ -303,6 +304,22 @@ auto result = co_await cb.execute_ec([]() {
 
 if (result.error() == make_error_code(circuit_breaker_errc::circuit_open)) {
     // 执行降级逻辑
+}
+```
+
+### Token Bucket 速率限制
+
+`token_bucket` 是同步、非阻塞的准入控制器，内部使用项目的 atomic latch，可安全用于多个协程发起请求前的快速判断。
+
+```cpp
+cnetmod::token_bucket requests({
+    .tokens_per_second = 20.0,
+    .burst = 40.0,
+});
+
+if (!requests.try_consume()) {
+    cnetmod::logger::warn{"request rate limit exceeded"};
+    co_return;
 }
 ```
 

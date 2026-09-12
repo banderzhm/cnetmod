@@ -20,3 +20,4 @@ export import cnetmod.coro.wait_group;
 export import cnetmod.coro.task_group;
 export import cnetmod.coro.retry;
 export import cnetmod.coro.circuit_breaker;
+export import cnetmod.coro.rate_limiter;
