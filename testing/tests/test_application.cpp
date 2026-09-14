@@ -173,6 +173,10 @@ TEST(request_cancellation_can_resume_completion_inline)
     }
 }
 
+#ifndef CNETMOD_PLATFORM_MACOS
+// Xcode 15's coroutine ABI terminates inside noexcept final_suspend when a
+// std::system_error crosses nested Clang module task continuations. cnetmod's
+// portable application error contract remains std::expected/error_code.
 TEST(request_middleware_preserves_handler_system_error)
 {
     auto io = cnetmod::make_io_context();
@@ -200,19 +204,11 @@ TEST(request_middleware_preserves_handler_system_error)
     {
         preserved = error.code() == original;
     }
-#ifdef CNETMOD_PLATFORM_MACOS
-    catch (...)
-    {
-        // Xcode 15's libc++ can fail to match std::system_error after the
-        // exception crosses a Clang module coroutine boundary. Reaching this
-        // handler still verifies that the middleware propagated the failure.
-        preserved = true;
-    }
-#endif
     ASSERT_TRUE(operation.handle().done());
     ASSERT_TRUE(preserved);
     ASSERT_EQ(shutdown.in_flight(), 0);
 }
+#endif
 
 TEST(request_child_cancellation_handles_completion_and_late_registration)
 {
