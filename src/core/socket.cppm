@@ -126,11 +126,14 @@ public:
         socket_type type,
         bool registered_io = false) -> std::expected<socket, std::error_code>;
 
-    /// Construct from native handle (takes ownership)
-    [[nodiscard]] static auto from_native(native_handle_t handle) noexcept -> socket
-    {
-        return socket{handle};
-    }
+    /**
+     * @brief Takes ownership of a native socket handle.
+     *
+     * On platforms that support per-socket SIGPIPE suppression, the adopted
+     * handle is configured so a disconnected peer is reported as an error
+     * instead of terminating the process.
+     */
+    [[nodiscard]] static auto from_native(native_handle_t handle) noexcept -> socket;
 
     /// Bind address
     [[nodiscard]] auto bind(const endpoint& ep) -> std::expected<void, std::error_code>;

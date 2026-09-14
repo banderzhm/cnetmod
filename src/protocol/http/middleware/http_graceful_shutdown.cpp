@@ -165,19 +165,9 @@ auto shutdown_handler::track_middleware() -> http::middleware_fn
         }
 
         request_registration registration{*this, ctx};
-        std::exception_ptr failure;
-        try
-        {
-            co_await next();
-        }
-        catch (...)
-        {
-            failure = std::current_exception();
-        }
+        co_await next();
         if (ctx.cancellation_token().is_cancelled())
             co_await post_awaitable{ctx.io_ctx()};
-        if (failure)
-            std::rethrow_exception(failure);
     };
 }
 

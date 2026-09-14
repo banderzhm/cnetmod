@@ -69,6 +69,15 @@ namespace {
 #endif
     }
 
+    void suppress_sigpipe([[maybe_unused]] native_handle_t handle) noexcept
+    {
+#ifdef CNETMOD_PLATFORM_MACOS
+        const int enabled = 1;
+        (void)::setsockopt(handle, SOL_SOCKET, SO_NOSIGPIPE,
+            &enabled, static_cast<socklen_t>(sizeof(enabled)));
+#endif
+    }
+
     /// Fill sockaddr_storage, return length
     auto fill_sockaddr(const endpoint& ep, ::sockaddr_storage& storage) noexcept -> int
     {
@@ -100,6 +109,12 @@ namespace {
 socket::~socket()
 {
     close();
+}
+
+auto socket::from_native(native_handle_t handle) noexcept -> socket
+{
+    suppress_sigpipe(handle);
+    return socket{handle};
 }
 
 socket::socket(socket&& other) noexcept
@@ -220,6 +235,7 @@ auto socket::create(address_family family, socket_type type, bool registered_io)
 #endif
 
     socket result{fd, family};
+    suppress_sigpipe(fd);
 #ifdef CNETMOD_PLATFORM_WINDOWS
     result.registered_io_requested_ = registered_io && type == socket_type::datagram;
     result.registered_io_enabled_ = registered_socket;
