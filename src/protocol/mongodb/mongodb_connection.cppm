@@ -35,6 +35,11 @@ public:
     auto operator=(connection&&) -> connection& = delete;
 
     auto connect(connection_options options = {}) -> task<result<void>>;
+    /**
+     * Connects with cancellation across transport setup and protocol commands.
+     * Invoke on the owner loop with an exclusive token that outlives completion.
+     */
+    auto connect(connection_options options, cancel_token& cancellation) -> task<result<void>>;
     auto command(std::string_view database, bson_document command_document)
         -> task<result<bson_document>>;
     auto command(bson_document command_document)
@@ -42,6 +47,12 @@ public:
     auto command_stream(std::string_view database, bson_document command_document,
         command_stream_handler on_message) -> task<result<void>>;
     auto ping() -> task<result<void>>;
+    /**
+     * Pings with caller cancellation and joins its owner-thread notification.
+     * The token must be exclusive to this operation and outlive completion.
+     * Invoke on the connection's event loop; cancellation may come from any thread.
+     */
+    auto ping(cancel_token& cancellation) -> task<result<void>>;
     void cancel_active_command() noexcept;
     void close() noexcept;
 
@@ -52,6 +63,8 @@ public:
     [[nodiscard]] auto hello_response() const noexcept -> const bson_document&;
 
 private:
+    template <bool Cancellable>
+    auto connect_impl(connection_options options, cancel_token* transport) -> task<result<void>>;
     auto execute_command(std::string_view database,
         bson_document command_document) -> task<result<bson_document>>;
     auto execute_command_with_timer(std::string database,
@@ -81,10 +94,12 @@ private:
     bson_document hello_response_;
     std::int32_t next_request_id_ = 1;
     bool connected_ = false;
+    bool connecting_ = false;
     bool authenticated_ = false;
     bool command_in_progress_ = false;
     std::atomic<bool> active_command_{false};
     std::atomic<bool> command_cancel_requested_{false};
+    cancel_token command_io_cancel_;
     std::optional<std::uint8_t> selected_compressor_;
 #ifdef CNETMOD_HAS_SSL
     std::unique_ptr<ssl_context> tls_context_;

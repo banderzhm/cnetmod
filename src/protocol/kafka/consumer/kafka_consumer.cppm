@@ -75,6 +75,16 @@ public:
         -> task<result<void>>;
     auto seek(topic_partition, std::int64_t, cancel_token* = nullptr)
         -> task<result<void>>;
+    /**
+     * @brief Rejects new operations and awaits backend cleanup.
+     *
+     * The closing state begins when this task executes, including when cleanup
+     * fails. Cleanup may be retried; subscribe, assign, poll, commit and seek
+     * remain disabled. Already running operations must be settled by the caller.
+     * Concurrent close tasks serialize cleanup; successful cleanup is not repeated.
+     * Pending close tasks must be awaited, not destroyed while waiting for cleanup.
+     * Access must remain serialized on the owning executor.
+     */
     auto close(cancel_token* = nullptr) -> task<result<void>>;
 
 private:

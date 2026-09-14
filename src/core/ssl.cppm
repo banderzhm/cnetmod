@@ -266,6 +266,12 @@ public:
 
     /// Async TLS shutdown
     auto async_shutdown() -> task<std::expected<void, std::error_code>>;
+    /**
+     * @brief Shuts down TLS with cancellation applied to every transport wait.
+     * The token and stream must remain alive until completion. Cancellation
+     * leaves socket lifetime management to the caller.
+     */
+    auto async_shutdown(cancel_token& token) -> task<std::expected<void, std::error_code>>;
 
     /// Get ALPN-negotiated protocol after handshake
     [[nodiscard]] auto get_alpn_selected() const noexcept -> std::string_view;
@@ -283,6 +289,8 @@ private:
 
     /// Write encrypted data from wbio_ to socket
     auto flush_wbio() -> task<std::expected<void, std::error_code>>;
+    template <typename Cancellation>
+    auto shutdown_impl(Cancellation cancellation) -> task<std::expected<void, std::error_code>>;
     auto flush_wbio(cancel_token& token) -> task<std::expected<void, std::error_code>>;
 
     /// Read data from socket and write to rbio_

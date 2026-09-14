@@ -56,6 +56,24 @@ jobs:
         with:
           python-version: '3.12'
 
+      - name: Verify observability dependency boundary
+        shell: pwsh
+        run: |
+          python -m unittest discover -s tools -p test_observability_dependencies.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/check_observability_dependencies.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify integration test execution gates
+        shell: pwsh
+        run: |
+          python -m unittest discover -s testing/database -p test_required_runner.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s testing/database -p test_mysql_live_configuration.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s testing/messaging -p test_runner_gate.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Configure CMake
         shell: pwsh
         run: |
@@ -69,6 +87,49 @@ jobs:
 
       - name: Build
         run: cmake --build ${{ github.workspace }}/build --target cnetmod_build_all --config ${{ matrix.build_type }} -- /m:1
+
+      - name: Verify protocol-free module graph
+        if: matrix.build_type == 'Release'
+        shell: pwsh
+        run: |
+          cmake -B "${{ github.workspace }}/build-core-only" `
+            -G "Visual Studio 18 2026" -A x64 `
+            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF `
+            -DCNETMOD_BUILD_TESTS=OFF -DCNETMOD_BUILD_EXAMPLES=OFF `
+            -S "${{ github.workspace }}"
+          cmake --build "${{ github.workspace }}/build-core-only" `
+            --target cnetmod_core --config Release -- /m:1
+
+      - name: Verify ORM instrumentation without HTTP or OTEL transport
+        if: matrix.build_type == 'Release'
+        shell: pwsh
+        run: |
+          cmake -B "${{ github.workspace }}/build-mysql-no-http" `
+            -G "Visual Studio 18 2026" -A x64 `
+            -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF `
+            -DCNETMOD_ENABLE_MYSQL=ON -DCNETMOD_ENABLE_ORM=ON `
+            -DCNETMOD_ENABLE_SSL=OFF -DCNETMOD_ENABLE_LEVELDB=OFF `
+            -DCNETMOD_ENABLE_LZ4=OFF `
+            -DCNETMOD_BUILD_TESTS=ON -DCNETMOD_BUILD_EXAMPLES=OFF `
+            -S "${{ github.workspace }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "${{ github.workspace }}/build-mysql-no-http" `
+            --target test_orm_json_result_map test_instrumentation test_mysql_pool --config Release -- /m:1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir "${{ github.workspace }}/build-mysql-no-http" `
+            -C Release -R '^(test_orm_json_result_map|test_instrumentation|test_mysql_pool)$' --output-on-failure --no-tests=error
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+          # Reuse the cache to prove that the pool has no ORM dependency.
+          cmake -B "${{ github.workspace }}/build-mysql-no-http" -DCNETMOD_ENABLE_ORM=OFF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          cmake --build "${{ github.workspace }}/build-mysql-no-http" `
+            --target test_mysql_pool --config Release -- /m:1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ctest --test-dir "${{ github.workspace }}/build-mysql-no-http" `
+            -C Release -R '^test_mysql_pool$' --output-on-failure --no-tests=error
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       # These are release gates, not best-effort smoke checks.  In particular
       # the Python cases exercise the public HTTP client against a real local
@@ -89,6 +150,16 @@ jobs:
           ctest --test-dir "${{ github.workspace }}/build" -C "${{ matrix.build_type }}" `
             --output-on-failure --timeout 180 `
             -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|h3_interop_multi_worker_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
+
+      - name: Run application lifecycle and OTEL gates
+        shell: pwsh
+        run: |
+          $gates = @('test_application', 'test_application_integrations', 'test_otlp_exporter', 'test_instrumentation', 'test_metric_aggregation', 'test_http_observability', 'test_http_disabled_overhead', 'test_mysql_pool', 'test_ssl_shutdown')
+          foreach ($gate in $gates) {
+            ctest --test-dir "${{ github.workspace }}/build" -C "${{ matrix.build_type }}" `
+              --output-on-failure --timeout 60 --no-tests=error -R "^${gate}$"
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
       - name: Run smoke tests
         shell: pwsh

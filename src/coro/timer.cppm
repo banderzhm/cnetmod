@@ -23,6 +23,7 @@ public:
     using duration = clock::duration;
 
     constexpr deadline() noexcept = default;
+
     explicit constexpr deadline(time_point value) noexcept : value_(value) {}
 
     [[nodiscard]] static auto after(duration value) noexcept -> deadline
@@ -148,7 +149,7 @@ namespace detail {
     };
 
     auto deadline_timer_task(io_context& ctx, deadline value,
-        cancel_token& timer_token, cancel_token& op_token) -> task<int>;
+        cancel_token& timer_token, cancel_token& op_token) -> task<std::error_code>;
 
     /// Operation side: cancel timer after completion
     template <typename T>
@@ -156,9 +157,17 @@ namespace detail {
         cancel_token& timer_token)
         -> task<std::expected<T, std::error_code>>
     {
-        auto result = co_await std::move(op);
-        timer_token.cancel();
-        co_return std::move(result);
+        try
+        {
+            auto result = co_await std::move(op);
+            timer_token.cancel();
+            co_return std::move(result);
+        }
+        catch (...)
+        {
+            timer_token.cancel();
+            throw;
+        }
     }
 
 } // namespace detail
@@ -168,17 +177,22 @@ auto with_deadline(io_context& ctx, deadline value,
     task<std::expected<T, std::error_code>> op, cancel_token& op_token)
     -> task<std::expected<T, std::error_code>>;
 
-/// Factory form for token-aware operations. It creates a fresh token for the
-/// one downstream operation, avoiding accidental token sharing across fan-out.
+/**
+ * @brief Owns a token-aware factory and gives its operation an independent token.
+ *
+ * The factory is stored by value in the coroutine frame so temporary captures
+ * remain alive across suspension. Move non-copyable factories into this call;
+ * use std::ref only when the caller guarantees the referenced factory lifetime.
+ */
 export template <class Factory>
-requires std::invocable<Factory, cancel_token&>
-      && requires {
-          typename detail::deadline_operation<std::remove_cvref_t<
-              std::invoke_result_t<Factory, cancel_token&>>>::value_type;
-      }
-auto with_deadline(io_context& ctx, deadline value, Factory&& factory)
+requires std::invocable<Factory, cancel_token&> && requires {
+    typename detail::deadline_operation<std::remove_cvref_t<
+        std::invoke_result_t<Factory, cancel_token&>>>::value_type;
+}
+auto with_deadline(io_context& ctx, deadline value, Factory factory)
     -> task<std::expected<typename detail::deadline_operation<std::remove_cvref_t<
-        std::invoke_result_t<Factory, cancel_token&>>>::value_type, std::error_code>>
+                              std::invoke_result_t<Factory, cancel_token&>>>::value_type,
+        std::error_code>>
 {
     using value_type = typename detail::deadline_operation<std::remove_cvref_t<
         std::invoke_result_t<Factory, cancel_token&>>>::value_type;
@@ -228,8 +242,9 @@ auto with_deadline(io_context& ctx, deadline value,
     cancel_token timer_token;
     auto op_task = detail::timeout_op_wrapper<T>(std::move(op), timer_token);
     auto timer_task = detail::deadline_timer_task(ctx, value, timer_token, op_token);
-    auto [result, ignored] = co_await when_all(std::move(op_task), std::move(timer_task));
-    (void)ignored;
+    auto [result, timer_error] = co_await when_all(std::move(op_task), std::move(timer_task));
+    if (timer_error && !result)
+        co_return std::unexpected(timer_error);
     if (op_token.reason() == cancellation_reason::deadline_exceeded)
         co_return std::unexpected(std::make_error_code(std::errc::timed_out));
     co_return std::move(result);

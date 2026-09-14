@@ -219,4 +219,54 @@ TEST(log_mpmc_flush_preserves_all_enqueued_events)
     std::filesystem::remove(path);
 }
 
+TEST(log_observer_receives_completed_records_and_can_be_removed)
+{
+    std::vector<std::string> messages;
+    const auto identifier = logger::add_observer([&messages](const logger::log_record& record)
+        {
+            messages.emplace_back(record.message);
+            ASSERT_TRUE(record.severity == logger::level::info);
+            ASSERT_FALSE(record.thread_id.empty());
+            ASSERT_TRUE(record.observed_at.time_since_epoch() > std::chrono::seconds::zero());
+        });
+    ASSERT_NE(identifier, 0U);
+
+    logger::init("test", logger::level::info);
+    logger::set_console_enabled(false);
+    logger::info("observer-visible");
+    logger::flush();
+    ASSERT_EQ(messages.size(), 1U);
+    ASSERT_EQ(messages.front(), "observer-visible");
+
+    logger::remove_observer(identifier);
+    logger::info("observer-hidden");
+    logger::flush();
+    ASSERT_EQ(messages.size(), 1U);
+    logger::shutdown();
+}
+
+TEST(log_correlation_is_explicit_and_visible_to_observers)
+{
+    std::string trace_id;
+    std::string span_id;
+    const auto identifier = logger::add_observer([&](const logger::log_record& record)
+        {
+            trace_id = record.trace_id;
+            span_id = record.span_id;
+        });
+    ASSERT_NE(identifier, 0U);
+
+    logger::init("test", logger::level::info);
+    logger::set_console_enabled(false);
+    logger::log(logger::level::info,
+        {.trace_id = "0123456789abcdef0123456789abcdef", .span_id = "0123456789abcdef"},
+        "correlated");
+    logger::flush();
+
+    ASSERT_EQ(trace_id, "0123456789abcdef0123456789abcdef");
+    ASSERT_EQ(span_id, "0123456789abcdef");
+    logger::remove_observer(identifier);
+    logger::shutdown();
+}
+
 RUN_TESTS()

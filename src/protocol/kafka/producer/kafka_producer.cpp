@@ -5,33 +5,86 @@ import cnetmod.coro.semaphore;
 
 namespace cnetmod::kafka {
 namespace {
+    using pending_outcome = std::variant<std::monostate, result<record_metadata>, std::exception_ptr>;
+    static_assert(sizeof(pending_outcome) <= sizeof(std::optional<result<record_metadata>>));
+
+    struct pending_record_awaiter;
+
     struct pending_record_send
     {
         record value;
         std::chrono::steady_clock::time_point deadline;
-        std::optional<result<record_metadata>> outcome;
-        std::coroutine_handle<> waiter{};
+        pending_outcome outcome;
+        pending_record_awaiter* waiters = nullptr;
+
+        /**
+         * @brief Reports whether either mutually exclusive terminal outcome is available.
+         */
+        auto ready() const noexcept -> bool
+        {
+            return outcome.index() != 0;
+        }
+
+        /**
+         * @brief Transfers the original result or rethrows the stored backend exception.
+         */
+        auto take_result() -> result<record_metadata>
+        {
+            if (auto* exception = std::get_if<std::exception_ptr>(&outcome))
+                std::rethrow_exception(*exception);
+            return std::move(std::get<result<record_metadata>>(outcome));
+        }
     };
 
     struct pending_record_awaiter
     {
         std::shared_ptr<pending_record_send> state;
+        bool consume = true;
+        pending_record_awaiter* next = nullptr;
+        std::coroutine_handle<> waiter{};
+
+        ~pending_record_awaiter()
+        {
+            auto** link = &state->waiters;
+            while (*link && *link != this)
+                link = &(*link)->next;
+            if (*link)
+                *link = next;
+        }
 
         auto await_ready() const noexcept -> bool
         {
-            return state->outcome.has_value();
+            return state->ready();
         }
 
         void await_suspend(std::coroutine_handle<> handle) noexcept
         {
-            state->waiter = handle;
+            waiter = handle;
+            next = state->waiters;
+            state->waiters = this;
         }
 
         auto await_resume() -> result<record_metadata>
         {
-            return std::move(*state->outcome);
+            if (consume)
+                return state->take_result();
+            if (auto* exception = std::get_if<std::exception_ptr>(&state->outcome))
+                std::rethrow_exception(*exception);
+            return std::get<result<record_metadata>>(state->outcome);
         }
     };
+
+    /**
+     * @brief Resumes frame-owned waiters without allocating notification storage.
+     */
+    void resume_pending(std::shared_ptr<pending_record_send> state)
+    {
+        while (auto* node = state->waiters)
+        {
+            state->waiters = node->next;
+            node->waiter.resume();
+        }
+    }
 
     auto estimated_record_bytes(const record& value) -> std::size_t
     {
@@ -49,11 +102,7 @@ namespace {
         result<record_metadata> outcome)
     {
         state->outcome = std::move(outcome);
-        if (state->waiter)
-        {
-            auto waiter = std::exchange(state->waiter, {});
-            waiter.resume();
-        }
+        resume_pending(state);
     }
 } // namespace
 
@@ -193,13 +242,13 @@ public:
                 }
             }
             auto flushed = co_await flush_partition(destination, token);
-            if (!flushed && !pending->outcome)
+            if (!flushed && !pending->ready())
                 complete_send(pending, std::unexpected(flushed.error()));
-            if (!pending->outcome)
+            if (!pending->ready())
                 co_return std::unexpected(
                     make_error(error_code::transport,
                         "producer batch completed without a result"));
-            co_return std::move(*pending->outcome);
+            co_return pending->take_result();
         }
         co_return co_await pending_record_awaiter{pending};
     }
@@ -217,7 +266,7 @@ public:
                 batch.pending.empty() ? batch.inflight_tail : batch.pending.back();
             if (!target)
                 co_return result<void>{};
-            auto outcome = co_await pending_record_awaiter{target};
+            auto outcome = co_await pending_record_awaiter{target, false};
             if (!outcome)
                 co_return std::unexpected(outcome.error());
             co_return result<void>{};
@@ -229,118 +278,151 @@ public:
         batch.pending.clear();
         batch.inflight_tail = pending.back();
         std::size_t begin = 0;
-        while (begin < pending.size())
+        try
         {
-            std::size_t end = begin;
-            std::size_t bytes = 0;
-            while (end < pending.size())
+            while (begin < pending.size())
             {
-                auto next = estimated_record_bytes(pending[end]->value);
-                if (end > begin && bytes + next > options.batch_bytes)
-                    break;
-                bytes += next;
-                ++end;
-            }
-            std::vector<record> records;
-            records.reserve(end - begin);
-            auto deadline = pending[begin]->deadline;
-            for (std::size_t i = begin; i < end; ++i)
-            {
-                records.push_back(pending[i]->value);
-                deadline = std::min(deadline, pending[i]->deadline);
-            }
-            if (std::chrono::steady_clock::now() >= deadline)
-            {
-                auto failure = make_error(error_code::request_timed_out,
-                    "producer delivery timeout expired");
-                for (std::size_t i = begin; i < end; ++i)
-                    complete_send(pending[i], std::unexpected(failure));
-                begin = end;
-                continue;
-            }
-            co_await in_flight_window.acquire();
-            in_flight_permit permit(in_flight_window);
-            auto batch_identity_generation = identity_generation;
-            record_batch_options batch_options{
-                .compression_type = options.compression_type,
-                .transactional_id = options.transactional_id,
-                .producer_id = producer_id,
-                .producer_epoch = producer_epoch,
-                .base_sequence = sequence[destination],
-                .transactional = options.transactional_id.has_value()};
-            if (options.transactional_id &&
-                !transaction_partitions.contains(destination))
-            {
-                std::array<topic_partition, 1> added{destination};
-                auto registered = co_await backend->add_transaction_partitions(
-                    *options.transactional_id, producer_id, producer_epoch, added,
-                    token);
-                if (!registered)
+                std::size_t end = begin;
+                std::size_t bytes = 0;
+                while (end < pending.size())
                 {
-                    transaction_status = producer_transaction_state::fatal;
+                    auto next = estimated_record_bytes(pending[end]->value);
+                    if (end > begin && bytes + next > options.batch_bytes)
+                        break;
+                    bytes += next;
+                    ++end;
+                }
+                std::vector<record> records;
+                records.reserve(end - begin);
+                auto deadline = pending[begin]->deadline;
+                for (std::size_t i = begin; i < end; ++i)
+                {
+                    records.push_back(pending[i]->value);
+                    deadline = std::min(deadline, pending[i]->deadline);
+                }
+                if (std::chrono::steady_clock::now() >= deadline)
+                {
+                    auto failure = make_error(error_code::request_timed_out,
+                        "producer delivery timeout expired");
                     for (std::size_t i = begin; i < end; ++i)
-                        complete_send(pending[i], std::unexpected(registered.error()));
+                        complete_send(pending[i], std::unexpected(failure));
                     begin = end;
                     continue;
                 }
-                transaction_partitions.insert(destination);
-            }
-            auto sent = co_await backend->send_batch(
-                destination, records, batch_options, options.acks, deadline, token);
-            if (!sent &&
-                (sent.error().code == error_code::invalid_producer_epoch ||
-                    sent.error().code == error_code::out_of_order_sequence_number) &&
-                options.idempotent && !options.transactional_id)
-            {
-                co_await identity_recovery_mutex.lock();
-                async_lock_guard recovery_guard(identity_recovery_mutex,
-                    std::adopt_lock);
-                if (batch_identity_generation == identity_generation)
+                co_await in_flight_window.acquire();
+                in_flight_permit permit(in_flight_window);
+                auto batch_identity_generation = identity_generation;
+                record_batch_options batch_options{
+                    .compression_type = options.compression_type,
+                    .transactional_id = options.transactional_id,
+                    .producer_id = producer_id,
+                    .producer_epoch = producer_epoch,
+                    .base_sequence = sequence[destination],
+                    .transactional = options.transactional_id.has_value()};
+                if (options.transactional_id &&
+                    !transaction_partitions.contains(destination))
                 {
-                    initialized = false;
-                    sequence.clear();
-                    auto recovered = co_await initialize(token);
-                    if (!recovered)
-                        sent = std::unexpected(recovered.error());
-                    else
-                        ++identity_generation;
+                    std::array<topic_partition, 1> added{destination};
+                    auto registered = co_await backend->add_transaction_partitions(
+                        *options.transactional_id, producer_id, producer_epoch, added,
+                        token);
+                    if (!registered)
+                    {
+                        transaction_status = producer_transaction_state::fatal;
+                        for (std::size_t i = begin; i < end; ++i)
+                            complete_send(pending[i], std::unexpected(registered.error()));
+                        begin = end;
+                        continue;
+                    }
+                    transaction_partitions.insert(destination);
                 }
-                if (initialized)
+                auto sent = co_await backend->send_batch(
+                    destination, records, batch_options, options.acks, deadline, token);
+                if (!sent &&
+                    (sent.error().code == error_code::invalid_producer_epoch ||
+                        sent.error().code == error_code::out_of_order_sequence_number) &&
+                    options.idempotent && !options.transactional_id)
                 {
-                    batch_identity_generation = identity_generation;
-                    batch_options.producer_id = producer_id;
-                    batch_options.producer_epoch = producer_epoch;
-                    batch_options.base_sequence = sequence[destination];
-                    sent =
-                        co_await backend->send_batch(destination, records, batch_options,
-                            options.acks, deadline, token);
+                    co_await identity_recovery_mutex.lock();
+                    async_lock_guard recovery_guard(identity_recovery_mutex,
+                        std::adopt_lock);
+                    if (batch_identity_generation == identity_generation)
+                    {
+                        initialized = false;
+                        sequence.clear();
+                        auto recovered = co_await initialize(token);
+                        if (!recovered)
+                            sent = std::unexpected(recovered.error());
+                        else
+                            ++identity_generation;
+                    }
+                    if (initialized)
+                    {
+                        batch_identity_generation = identity_generation;
+                        batch_options.producer_id = producer_id;
+                        batch_options.producer_epoch = producer_epoch;
+                        batch_options.base_sequence = sequence[destination];
+                        sent =
+                            co_await backend->send_batch(destination, records, batch_options,
+                                options.acks, deadline, token);
+                    }
                 }
+                if (!sent)
+                {
+                    if (options.transactional_id)
+                        transaction_status = producer_transaction_state::fatal;
+                    for (std::size_t i = begin; i < end; ++i)
+                        complete_send(pending[i], std::unexpected(sent.error()));
+                }
+                else if (sent->size() != end - begin)
+                {
+                    auto failure =
+                        make_error(error_code::malformed_response,
+                            "Produce result count does not match the batch");
+                    for (std::size_t i = begin; i < end; ++i)
+                        complete_send(pending[i], std::unexpected(failure));
+                }
+                else
+                {
+                    for (std::size_t i = begin; i < end; ++i)
+                        complete_send(pending[i], std::move((*sent)[i - begin]));
+                    if (options.idempotent &&
+                        batch_identity_generation == identity_generation)
+                        sequence[destination] = batch_options.base_sequence +
+                            static_cast<std::int32_t>(end - begin);
+                }
+                begin = end;
             }
-            if (!sent)
+        }
+        catch (...)
+        {
+            const auto exception = std::current_exception();
+            auto queued = std::move(batch.pending);
+            batch.pending.clear();
+            batch.inflight_tail.reset();
+            batch.flushing = false;
+            if (options.idempotent || options.transactional_id)
             {
+                closed = true;
                 if (options.transactional_id)
                     transaction_status = producer_transaction_state::fatal;
-                for (std::size_t i = begin; i < end; ++i)
-                    complete_send(pending[i], std::unexpected(sent.error()));
             }
-            else if (sent->size() != end - begin)
+            const auto settle = [&](auto& records) noexcept
             {
-                auto failure =
-                    make_error(error_code::malformed_response,
-                        "Produce result count does not match the batch");
-                for (std::size_t i = begin; i < end; ++i)
-                    complete_send(pending[i], std::unexpected(failure));
-            }
-            else
+                for (auto& item : records)
+                    if (!item->ready())
+                        item->outcome = exception;
+            };
+            settle(pending);
+            settle(queued);
+            const auto resume = [](auto& records)
             {
-                for (std::size_t i = begin; i < end; ++i)
-                    complete_send(pending[i], std::move((*sent)[i - begin]));
-                if (options.idempotent &&
-                    batch_identity_generation == identity_generation)
-                    sequence[destination] = batch_options.base_sequence +
-                        static_cast<std::int32_t>(end - begin);
-            }
-            begin = end;
+                for (auto& item : records)
+                    resume_pending(item);
+            };
+            resume(pending);
+            resume(queued);
+            throw;
         }
         batch.inflight_tail.reset();
         batch.flushing = false;
@@ -366,6 +448,8 @@ public:
 
     auto begin_transaction(cancel_token* token) -> task<result<void>>
     {
+        if (closed)
+            co_return std::unexpected(make_error(error_code::configuration, "producer is closed"));
         if (!options.transactional_id)
             co_return std::unexpected(make_error(
                 error_code::configuration, "producer is not transactional"));
@@ -381,6 +465,8 @@ public:
             transaction_status = producer_transaction_state::fatal;
             co_return std::unexpected(ready.error());
         }
+        if (closed)
+            co_return std::unexpected(make_error(error_code::configuration, "producer is closed"));
         transaction_partitions.clear();
         transaction_status = producer_transaction_state::in_transaction;
         co_return result<void>{};
@@ -391,6 +477,8 @@ public:
         const std::map<topic_partition, offset_and_metadata>& offsets,
         cancel_token* token) -> task<result<void>>
     {
+        if (closed)
+            co_return std::unexpected(make_error(error_code::configuration, "producer is closed"));
         if (!options.transactional_id ||
             transaction_status != producer_transaction_state::in_transaction)
             co_return std::unexpected(
@@ -406,6 +494,8 @@ public:
     auto finish_transaction(bool commit, cancel_token* token)
         -> task<result<void>>
     {
+        if (closed)
+            co_return std::unexpected(make_error(error_code::configuration, "producer is closed"));
         if (!options.transactional_id ||
             transaction_status != producer_transaction_state::in_transaction)
             co_return std::unexpected(
@@ -418,6 +508,8 @@ public:
             transaction_status = producer_transaction_state::fatal;
             co_return std::unexpected(flushed.error());
         }
+        if (closed)
+            co_return std::unexpected(make_error(error_code::configuration, "producer is closed"));
         auto finished = co_await backend->finish_transaction(
             *options.transactional_id, producer_id, producer_epoch, commit, token);
         transaction_status = finished ? producer_transaction_state::ready
@@ -432,15 +524,26 @@ public:
     void close() noexcept
     {
         closed = true;
-        auto failure =
-            make_error(error_code::configuration,
-                "producer closed before the pending record was sent");
         for (auto& entry : batches)
         {
             auto& batch = entry.second;
-            for (auto& pending : batch.pending)
-                complete_send(pending, std::unexpected(failure));
+            auto pending_records = std::move(batch.pending);
             batch.pending.clear();
+            for (auto& pending : pending_records)
+            {
+                if (pending->ready())
+                    continue;
+                error failure{.code = error_code::configuration};
+                try
+                {
+                    failure.message = "producer closed before the pending record was sent";
+                }
+                catch (...)
+                {
+                    // Closing retains the error code even when diagnostic storage is unavailable.
+                }
+                complete_send(pending, std::unexpected(std::move(failure)));
+            }
         }
     }
 

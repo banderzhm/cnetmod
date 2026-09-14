@@ -1,9 +1,14 @@
 module cnetmod.protocol.redis;
 
 import std;
+import cnetmod.instrumentation.operation_scope;
+import cnetmod.instrumentation.error;
+import cnetmod.instrumentation.operation_result;
+import cnetmod.instrumentation.tracing;
 import cnetmod.core.buffer;
 import cnetmod.core.dns;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 #ifdef CNETMOD_HAS_SSL
@@ -18,6 +23,23 @@ client::client(io_context& ctx) noexcept
 auto client::connect(connect_options opts)
     -> task<std::expected<void, std::string>>
 {
+    close();
+
+    /**
+     * @brief Rolls back every unsuccessful transport or protocol handshake.
+     */
+    struct connection_guard
+    {
+        client& owner;
+        bool committed = false;
+
+        ~connection_guard()
+        {
+            if (!committed)
+                owner.close();
+        }
+    } guard{*this};
+
     opts_ = opts;
     auto connected =
         co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port);
@@ -27,46 +49,9 @@ auto client::connect(connect_options opts)
 #ifdef CNETMOD_HAS_SSL
     if (opts.tls)
     {
-        auto context = ssl_context::client();
-        if (!context)
-        {
-            sock_.close();
-            co_return std::unexpected("ssl context: " + context.error().message());
-        }
-        ssl_ctx_ = std::make_unique<ssl_context>(std::move(*context));
-        ssl_ctx_->set_verify_peer(opts.tls_verify);
-        if (!opts.tls_ca_file.empty())
-        {
-            auto r = ssl_ctx_->load_ca_file(opts.tls_ca_file);
-            if (!r)
-            {
-                sock_.close();
-                co_return std::unexpected("ssl ca: " + r.error().message());
-            }
-        }
-        else if (opts.tls_verify)
-            (void)ssl_ctx_->set_default_ca();
-        if (!opts.tls_cert_file.empty())
-        {
-            auto r = ssl_ctx_->load_cert_file(opts.tls_cert_file);
-            if (!r)
-            {
-                sock_.close();
-                co_return std::unexpected("ssl cert: " + r.error().message());
-            }
-        }
-        if (!opts.tls_key_file.empty())
-        {
-            auto r = ssl_ctx_->load_key_file(opts.tls_key_file);
-            if (!r)
-            {
-                sock_.close();
-                co_return std::unexpected("ssl key: " + r.error().message());
-            }
-        }
-        ssl_ = std::make_unique<ssl_stream>(*ssl_ctx_, ctx_, sock_);
-        ssl_->set_connect_state();
-        ssl_->set_hostname(opts.tls_sni.empty() ? opts.host : opts.tls_sni);
+        auto configured = configure_tls(opts, false);
+        if (!configured)
+            co_return std::unexpected(std::string{configured.error().stage} + configured.error().code.message());
         auto handshake = co_await ssl_->async_handshake();
         if (!handshake)
         {
@@ -122,6 +107,7 @@ auto client::connect(connect_options opts)
         if (!response->empty() && response->front().is_error())
             co_return std::unexpected("SELECT error: " + response->front().value);
     }
+    guard.committed = true;
     co_return std::expected<void, std::string>{};
 }
 
@@ -137,6 +123,9 @@ void client::close() noexcept
     ssl_ctx_.reset();
 #endif
     sock_.close();
+    rbuf_.clear();
+    rpos_ = 0;
+    resp3_mode_ = false;
 }
 
 auto client::exec(const request& request)
@@ -188,50 +177,163 @@ auto client::cmd(std::span<const std::string> args)
     co_return co_await parse_one_response();
 }
 
-auto client::cmd(std::initializer_list<std::string_view> args,
-    const http::tracing::trace_context& parent, http::tracing::span_exporter on_end)
-    -> task<std::expected<std::vector<resp3_node>, std::string>>
-{
-    const auto operation = args.size() == 0U ? std::string{"UNKNOWN"} : std::string{*args.begin()};
-    auto span = http::tracing::start_client_span(parent, "REDIS " + operation,
-        {{"db.system.name", "redis"}, {"db.operation.name", operation}});
-    auto response = co_await cmd(args);
-    if (on_end)
+namespace {
+
+    auto observe_batch(task<std::expected<std::vector<resp3_node>, std::string>> pending,
+        std::size_t count, instrumentation::trace_context parent,
+        instrumentation::span_exporter sink)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>
     {
+        auto operation = instrumentation::operation_scope::start(sink, [&]
+            {
+                return instrumentation::start_client_span(parent, "REDIS PIPELINE");
+            });
+        operation.annotate([&]
+            {
+                return std::vector<std::pair<std::string, std::string>>{
+                    {"db.system.name", "redis"}, {"db.operation.name", "PIPELINE"},
+                    {"db.operation.batch.size", std::to_string(count)}};
+            });
         try
         {
-            on_end(http::tracing::finish_client_span(std::move(span), !response));
+            auto response = co_await std::move(pending);
+            const bool failed = !response || has_error(*response);
+            operation.complete({failed ? instrumentation::operation_status::error
+                                       : instrumentation::operation_status::success,
+                {}});
+            co_return response;
+        }
+        catch (const std::system_error& error)
+        {
+            operation.complete(instrumentation::classify_error(error.code()));
+            throw;
         }
         catch (...)
         {
-            // Instrumentation must never turn a completed Redis operation
-            // into an application failure.
+            operation.complete({instrumentation::operation_status::error, {}});
+            throw;
         }
     }
-    co_return response;
+
+    template <typename Arguments>
+    auto observe_command(client& connection, Arguments args,
+        instrumentation::trace_context parent, instrumentation::span_exporter sink)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>
+    {
+        auto operation = instrumentation::operation_scope::start(sink, [&]
+            {
+                const auto command = args.size() == 0U ? std::string{"UNKNOWN"}
+                                                       : std::string{*args.begin()};
+                return instrumentation::start_client_span(parent, "REDIS " + command);
+            });
+        operation.annotate([&]
+            {
+                const auto command = args.size() == 0U ? std::string{"UNKNOWN"}
+                                                       : std::string{*args.begin()};
+                return std::vector<std::pair<std::string, std::string>>{
+                    {"db.system.name", "redis"}, {"db.operation.name", command}};
+            });
+        try
+        {
+            auto response = co_await connection.cmd(args);
+            const bool failed = !response || has_error(*response);
+            operation.complete({failed ? instrumentation::operation_status::error
+                                       : instrumentation::operation_status::success,
+                {}});
+            co_return response;
+        }
+        catch (const std::system_error& error)
+        {
+            operation.complete(instrumentation::classify_error(error.code()));
+            throw;
+        }
+        catch (...)
+        {
+            operation.complete({instrumentation::operation_status::error, {}});
+            throw;
+        }
+    }
+
+} // namespace
+
+auto client::exec(const request& req, const instrumentation::trace_context& parent,
+    const instrumentation::span_exporter& on_end)
+    -> task<std::expected<std::vector<resp3_node>, std::string>>
+{
+    if (!on_end)
+        return exec(req);
+    try
+    {
+        return observe_batch(exec(req), req.size(), parent, on_end);
+    }
+    catch (...)
+    {
+        return exec(req);
+    }
+}
+
+auto client::pipe(std::span<const std::vector<std::string>> commands,
+    const instrumentation::trace_context& parent, const instrumentation::span_exporter& on_end)
+    -> task<std::expected<std::vector<resp3_node>, std::string>>
+{
+    if (!on_end)
+        return pipe(commands);
+    try
+    {
+        return observe_batch(pipe(commands), commands.size(), parent, on_end);
+    }
+    catch (...)
+    {
+        return pipe(commands);
+    }
+}
+
+auto client::pipe(std::initializer_list<std::initializer_list<std::string_view>> commands,
+    const instrumentation::trace_context& parent, const instrumentation::span_exporter& on_end)
+    -> task<std::expected<std::vector<resp3_node>, std::string>>
+{
+    if (!on_end)
+        return pipe(commands);
+    try
+    {
+        return observe_batch(pipe(commands), commands.size(), parent, on_end);
+    }
+    catch (...)
+    {
+        return pipe(commands);
+    }
+}
+
+auto client::cmd(std::initializer_list<std::string_view> args,
+    const instrumentation::trace_context& parent, const instrumentation::span_exporter& on_end)
+    -> task<std::expected<std::vector<resp3_node>, std::string>>
+{
+    if (!on_end)
+        return cmd(args);
+    try
+    {
+        return observe_command(*this, args, parent, on_end);
+    }
+    catch (...)
+    {
+        return cmd(args);
+    }
 }
 
 auto client::cmd(std::span<const std::string> args,
-    const http::tracing::trace_context& parent, http::tracing::span_exporter on_end)
+    const instrumentation::trace_context& parent, const instrumentation::span_exporter& on_end)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
-    const auto operation = args.empty() ? std::string{"UNKNOWN"} : args.front();
-    auto span = http::tracing::start_client_span(parent, "REDIS " + operation,
-        {{"db.system.name", "redis"}, {"db.operation.name", operation}});
-    auto response = co_await cmd(args);
-    if (on_end)
+    if (!on_end)
+        return cmd(args);
+    try
     {
-        try
-        {
-            on_end(http::tracing::finish_client_span(std::move(span), !response));
-        }
-        catch (...)
-        {
-            // Instrumentation must never turn a completed Redis operation
-            // into an application failure.
-        }
+        return observe_command(*this, args, parent, on_end);
     }
-    co_return response;
+    catch (...)
+    {
+        return cmd(args);
+    }
 }
 
 auto client::cmd_follow_redirect(std::vector<std::string> args,
@@ -381,6 +483,73 @@ auto client::receive_push()
 auto client::is_resp3() const noexcept -> bool
 {
     return resp3_mode_;
+}
+
+auto client::ping(cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(std::make_error_code(
+            cancellation.reason() == cancellation_reason::deadline_exceeded
+                ? std::errc::timed_out
+                : std::errc::operation_canceled));
+    if (!is_open())
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+
+    // Pending input belongs to another exchange; never consume it as this PONG.
+    if (rpos_ != rbuf_.size())
+        co_return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+
+    /**
+     * @brief Invalidates the stream unless the entire exchange was verified.
+     */
+    struct exchange_guard
+    {
+        client& connection;
+        bool complete = false;
+
+        ~exchange_guard()
+        {
+            if (!complete)
+                connection.close();
+        }
+    } guard{*this};
+
+    constexpr std::string_view command = "*1\r\n$4\r\nPING\r\n";
+    const_buffer outgoing{command.data(), command.size()};
+    std::expected<void, std::error_code> written;
+#ifdef CNETMOD_HAS_SSL
+    if (ssl_)
+        written = co_await ssl_->async_write_all(outgoing, cancellation);
+    else
+#endif
+        written = co_await async_write_all(ctx_, sock_, outgoing, cancellation);
+    if (!written)
+        co_return std::unexpected(written.error());
+
+    constexpr std::string_view expected = "+PONG\r\n";
+    std::array<char, expected.size()> response{};
+    std::size_t offset = 0;
+    while (offset < response.size())
+    {
+        mutable_buffer incoming{response.data() + offset, response.size() - offset};
+        std::expected<std::size_t, std::error_code> received;
+#ifdef CNETMOD_HAS_SSL
+        if (ssl_)
+            received = co_await ssl_->async_read(incoming, cancellation);
+        else
+#endif
+            received = co_await async_read(ctx_, sock_, incoming, cancellation);
+        if (!received)
+            co_return std::unexpected(received.error());
+        if (*received == 0U)
+            co_return std::unexpected(std::make_error_code(std::errc::connection_reset));
+        offset += *received;
+        if (std::string_view{response.data(), offset} != expected.substr(0, offset))
+            co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+    }
+    guard.complete = true;
+    co_return {};
 }
 
 auto client::do_write(const_buffer buffer)

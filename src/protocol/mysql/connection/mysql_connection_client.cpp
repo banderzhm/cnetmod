@@ -9,6 +9,7 @@ import std;
 import cnetmod.core.buffer;
 import cnetmod.core.dns;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 #ifdef CNETMOD_HAS_SSL
@@ -21,6 +22,38 @@ namespace cnetmod::mysql {
 client::client(io_context& ctx) noexcept
     : ctx_(ctx) {}
 
+auto client::connect(connect_options opts, cancel_token& token) -> task<result_set>
+{
+    struct token_scope
+    {
+        cancel_token*& slot;
+        cancel_token* previous;
+
+        ~token_scope()
+        {
+            slot = previous;
+        }
+    } restore{operation_token_, std::exchange(operation_token_, &token)};
+
+    co_return co_await connect(std::move(opts));
+}
+
+auto client::ping(cancel_token& token) -> task<result_set>
+{
+    struct token_scope
+    {
+        cancel_token*& slot;
+        cancel_token* previous;
+
+        ~token_scope()
+        {
+            slot = previous;
+        }
+    } restore{operation_token_, std::exchange(operation_token_, &token)};
+
+    co_return co_await ping();
+}
+
 auto client::connect(connect_options opts) -> task<result_set>
 {
     result_set err_rs;
@@ -28,10 +61,12 @@ auto client::connect(connect_options opts) -> task<result_set>
     last_opts_ = opts;
 
     // TCP connection
-    auto connect_r =
-        co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port);
+    auto connect_r = operation_token_
+        ? co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port, {}, *operation_token_)
+        : co_await async_connect_happy_eyeballs(ctx_, opts.host, opts.port);
     if (!connect_r)
     {
+        last_io_ec_ = connect_r.error();
         err_rs.error_msg = "connect: " + connect_r.error().message();
         err_rs.diag.assign_client(err_rs.error_msg);
         co_return err_rs;
@@ -130,9 +165,12 @@ auto client::connect(connect_options opts) -> task<result_set>
         ssl_->set_connect_state();
         ssl_->set_hostname(opts.host);
 
-        auto hs = co_await ssl_->async_handshake();
+        auto hs = operation_token_
+            ? co_await ssl_->async_handshake(*operation_token_)
+            : co_await ssl_->async_handshake();
         if (!hs)
         {
+            last_io_ec_ = hs.error();
             sock_.close();
             err_rs.error_msg = "ssl handshake: " + hs.error().message();
             co_return err_rs;
@@ -540,6 +578,22 @@ auto client::ping() -> task<result_set>
     co_return result_set{};
 }
 
+auto client::reset_connection(cancel_token& token) -> task<result_set>
+{
+    struct token_scope
+    {
+        cancel_token*& slot;
+        cancel_token* previous;
+
+        ~token_scope()
+        {
+            slot = previous;
+        }
+    } restore{operation_token_, std::exchange(operation_token_, &token)};
+
+    co_return co_await reset_connection();
+}
+
 auto client::reset_connection() -> task<result_set>
 {
     result_set err_rs;
@@ -567,14 +621,41 @@ auto client::reset_connection() -> task<result_set>
         co_return err_rs;
     }
 
+    /**
+     * Reject incomplete acknowledgements before the pool can reuse this session.
+     * The connection has negotiated protocol 4.1, including status and warnings.
+     */
+    auto malformed = [this]() -> result_set
+    {
+        mark_disconnected(std::make_error_code(std::errc::protocol_error));
+        result_set result;
+        result.error_msg = "invalid reset response";
+        return result;
+    };
     if (resp[0] == ERR_HEADER)
     {
+        if (resp.size() < 9 || resp[3] != '#' ||
+            (resp[1] == 0 && resp[2] == 0))
+            co_return malformed();
         auto ep = detail::parse_err_packet(resp.data(), resp.size());
         err_rs.error_code = ep.error_code;
         err_rs.error_msg = ep.message;
+        err_rs.sql_state = ep.sql_state;
         co_return err_rs;
     }
 
+    if (resp[0] != OK_HEADER)
+        co_return malformed();
+    std::size_t position = 1;
+    for (unsigned field = 0; field < 2; ++field)
+    {
+        const auto value = detail::read_lenenc(resp.data() + position, resp.size() - position);
+        if (value.bytes_consumed == 0)
+            co_return malformed();
+        position += value.bytes_consumed;
+    }
+    if (resp.size() - position < 4)
+        co_return malformed();
     co_return result_set{};
 }
 
@@ -597,6 +678,11 @@ auto client::quit() -> task<void>
 auto client::is_open() const noexcept -> bool
 {
     return connected_ && sock_.is_open();
+}
+
+void client::close() noexcept
+{
+    mark_disconnected(last_io_ec_);
 }
 
 auto client::reconnect() -> task<result_set>
@@ -636,7 +722,9 @@ auto client::do_write(const_buffer buf)
 #ifdef CNETMOD_HAS_SSL
     if (ssl_)
     {
-        auto r = co_await ssl_->async_write_all(buf);
+        auto r = operation_token_
+            ? co_await ssl_->async_write_all(buf, *operation_token_)
+            : co_await ssl_->async_write_all(buf);
         if (!r)
         {
             mark_disconnected(r.error());
@@ -645,7 +733,9 @@ auto client::do_write(const_buffer buf)
         co_return buf.size;
     }
 #endif
-    auto r = co_await async_write_all(ctx_, sock_, buf);
+    auto r = operation_token_
+        ? co_await async_write_all(ctx_, sock_, buf, *operation_token_)
+        : co_await async_write_all(ctx_, sock_, buf);
     if (!r)
     {
         mark_disconnected(r.error());
@@ -660,13 +750,17 @@ auto client::do_read(mutable_buffer buf)
 #ifdef CNETMOD_HAS_SSL
     if (ssl_)
     {
-        auto r = co_await ssl_->async_read(buf);
+        auto r = operation_token_
+            ? co_await ssl_->async_read(buf, *operation_token_)
+            : co_await ssl_->async_read(buf);
         if (!r)
             mark_disconnected(r.error());
         co_return r;
     }
 #endif
-    auto r = co_await async_read(ctx_, sock_, buf);
+    auto r = operation_token_
+        ? co_await async_read(ctx_, sock_, buf, *operation_token_)
+        : co_await async_read(ctx_, sock_, buf);
     if (!r)
         mark_disconnected(r.error());
     co_return r;

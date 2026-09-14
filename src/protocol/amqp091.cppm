@@ -6,6 +6,7 @@ export import :connection_options;
 export import :message;
 export import :channel_options;
 export import :message_delivery;
+export import :delivery_acknowledgement;
 export import :field_table_codec;
 export import :wire_frame_codec;
 export import :publisher_confirm;

@@ -7,6 +7,7 @@ import :reconnect_policy;
 import :channel_options;
 import :field_table_codec;
 import :message_delivery;
+import :delivery_acknowledgement;
 
 export namespace cnetmod::amqp091 {
 struct recorded_exchange
@@ -33,6 +34,7 @@ struct recorded_consumer
     consume_options options;
     field_table arguments;
     delivery_handler handler;
+    acknowledged_delivery_handler acknowledged_handler;
 };
 
 struct topology_snapshot

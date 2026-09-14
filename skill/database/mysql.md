@@ -1,5 +1,12 @@
 # MySQL 协议模块
 
+## 停止后的传输释放
+
+`client::close() noexcept` 不发送 COM_QUIT，也不等待网络，保留最近 I/O 错误并清空连接状态。
+只能在所属执行线程、所有客户端操作均已结束后调用；正常协议退出仍使用 `quit()`。
+连接池维护入口等待全部连接任务结束后关闭未借出的客户端；维护已结束后的重复
+`cancel()` 也清理未借出连接。外部 lease 仍须在池销毁前归还。
+
 > 高性能异步 MySQL 客户端，支持文本/二进制协议、连接池、管道、事务与 ORM 集成。
 
 **import**: `import cnetmod.protocol.mysql;`
@@ -89,6 +96,11 @@ auto with_params(std::string_view query, std::initializer_list<param_value> args
 ### `client::connect`
 
 **签名**: `auto connect(connect_options opts = {}) -> task<result_set>`
+
+需要可取消的连接或心跳时，使用 `connect(connect_options, cancel_token&)`
+与 `ping(cancel_token&)`。令牌必须存活到操作结束；不要并发操作同一个
+client。取消会传递到连接和认证读写，`last_error()` 保留传输错误。
+已经开始的系统 DNS 查询仍可能需要等解析返回，不能将它当成硬实时取消。
 
 ```cpp
 struct connect_options {
@@ -343,6 +355,44 @@ class pooled_connection {
 
 **`sharded_connection_pool`** — 多核分片连接池（每个 worker io_context 绑定独立分片）：
 
+默认析构归还的打开连接先进入 resetting，由已有连接维护任务执行
+`COM_RESET_CONNECTION`，成功后才进入空闲位图并交给等待者。reset 使用
+`ping_timeout` 作为维护操作超时，支持停机取消；失败则进入 dead 等待重连。
+`client::reset_connection(cancel_token&)` 提供对应的取消感知协议调用。
+显式 `return_without_reset()` 保持不重置语义，可保留会话状态并立即再次借出。
+默认归还增加的是之前遗漏的协议清理往返，不是 OTEL 开关带来的成本。
+114 专用测试库已验证普通归还清除会话变量、不重置归还保留变量。本地协议对端
+在收到 reset 后不回复，已验证 30ms 维护超时关闭旧会话，以及设置 10 秒超时
+时主动停机仍能取消 reset 并等待维护任务退出。测试同时断言 reset 期间无空闲连接。
+超时分支还完成新 TCP 连接的认证，验证等待者重新获得连接并成功 PING，池大小
+保持 1，退出后无残留等待者。reset 响应只接受结构完整的 OK 或 ERR；未知响应头、
+截断的长度编码或状态字段、畸形错误包会关闭连接并报告 protocol_error。
+reset 回归使用独立 `test_mysql_pool` 目标，只要求启用 MYSQL，不依赖 HTTP 或 ORM；
+Windows 已验证 HTTP=OFF、ORM=OFF 配置。TLS 及锁竞争归还的分配失败仍需单独验证，
+不能据此认定连接池已完整验收。
+
+锁竞争归还不再创建辅助协程：默认归还进入 resetting，不重置归还进入 returning，
+由已有、可等待退出的连接维护任务获得元数据锁后通知 FIFO 等待者。非竞争的
+不重置归还仍直接进入 idle。分配探针已覆盖扩容持锁期间的重入不重置归还：
+不消耗嵌套分配失败探针，等待者最终取得连接，另一等待者取消后计数归零。
+该定向测试复用 `test_http_disabled_overhead` 的测试专用分配器，不改变生产分配器；
+同一探针也覆盖 optional 租约直接析构：析构不消耗失败探针，对端随后收到
+COM_RESET_CONNECTION，返回成功后等待者获得连接。登录和 reset 读取处理 TCP
+分片，避免将一次 read 当作完整报文。它不是跨线程竞争或 CPU 性能等价的完整证明。
+
+`async_run()` 是完整生命周期任务：启动各分片，并在停止后等待已投递的分片
+退出，最后传播错误。不能把 `co_await pool.async_run()` 放在业务请求之前
+当作启动屏障。用 `when_all` 或应用监管器并发运行生命周期和业务任务。
+`request_stop()` 可跨线程请求所有分片停止；`cancel()` 也只发出停止请求。
+必须等待运行中的 `async_run()` 结束，再停事件循环；销毁池前仍须归还所有
+借出的连接。异步归还与借出连接的完整生命周期安全尚未验收。
+
+`connection_pool::checked_out_count()` 在所属执行线程扫描节点状态，报告尚未归还的
+租约数；不在借还快速路径增加计数器。Application 的 `mysql_service::stop()` 请求池
+停止后等待租约归还，并遵守阶段取消令牌和截止时间。到期仍有租约则失败，保留服务登记，
+归还后可重试关闭，不能再把仅停止维护任务当作服务已释放。114 隔离库验证了持有租约时
+30ms 关闭超时、归还后再次关闭成功；这不是任意逃逸引用可安全析构的保证。
+
 ```cpp
 class sharded_connection_pool {
     // 单 io_context + 指定分片数
@@ -392,28 +442,32 @@ auto run(cn::io_context& ctx) -> cn::task<void>
     params.max_size = 64;
     params.ping_interval = std::chrono::minutes(30);
 
-    // 4 分片，适合 4 worker 线程
+    // 4 个分片共用此事件循环；多线程时传入各 worker 的 io_context。
     mysql::sharded_connection_pool pool(ctx, params, 4);
-    co_await pool.async_run();
+    auto workload = [&]() -> cn::task<void> {
+        struct stop_on_exit {
+            mysql::sharded_connection_pool& pool;
+            ~stop_on_exit() { pool.request_stop(); }
+        } stop{pool};
 
-    // 获取连接（自动选择分片）
-    auto conn_r = co_await pool.async_get_connection();
-    if (conn_r) {
-        auto rs = co_await (*conn_r)->query("SELECT COUNT(*) FROM orders");
-        if (rs.has_rows())
-            std::println("订单总数: {}", rs.rows[0][0].to_string());
-    } // pooled_connection 析构时自动归还
+        // 限定 lease 作用域，确保停止前归还。
+        if (auto connection = co_await pool.async_get_connection(); connection) {
+            auto result = co_await (*connection)->query("SELECT COUNT(*) FROM orders");
+            if (result.is_err())
+                co_return;
+        }
 
-    // 绑定到特定 io_context（用于多 worker 场景）
-    auto conn2_r = co_await pool.async_get_connection(ctx);
-    if (conn2_r) {
-        auto rs = co_await (*conn2_r)->execute(
-            mysql::with_params("UPDATE orders SET status = {} WHERE id = {}",
-                {mysql::param_value::from_string("shipped"),
-                 mysql::param_value::from_int(1024)}));
-    }
+        if (auto connection = co_await pool.async_get_connection(ctx); connection) {
+            auto result = co_await (*connection)->execute(
+                mysql::with_params("UPDATE orders SET status = {} WHERE id = {}",
+                    {mysql::param_value::from_string("shipped"),
+                     mysql::param_value::from_int(1024)}));
+            if (result.is_err())
+                co_return;
+        }
 
-    co_await pool.cancel();
+    };
+    co_await cn::when_all(pool.async_run(), workload());
     ctx.stop();
 }
 ```

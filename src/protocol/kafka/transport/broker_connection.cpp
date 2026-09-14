@@ -24,8 +24,9 @@ public:
         if (token && token->is_cancelled())
             co_return std::unexpected(
                 make_error(error_code::cancelled, "connection cancelled"));
-        auto connected =
-            co_await async_connect_happy_eyeballs(ctx, remote.host, remote.port);
+        auto connected = token
+            ? co_await async_connect_happy_eyeballs(ctx, remote.host, remote.port, {}, *token)
+            : co_await async_connect_happy_eyeballs(ctx, remote.host, remote.port);
         if (!connected)
             co_return std::unexpected(
                 make_error(connected.error() ==
@@ -83,7 +84,7 @@ public:
             ssl->set_connect_state();
             ssl->set_hostname(tls.server_name.empty() ? remote.host
                                                       : tls.server_name);
-            auto h = co_await ssl->async_handshake();
+            auto h = token ? co_await ssl->async_handshake(*token) : co_await ssl->async_handshake();
             if (!h)
             {
                 close();
@@ -219,7 +220,7 @@ public:
         auto id = next_correlation++;
         auto packet =
             protocol::encode_request({key, version, id, options.client_id}, body);
-        auto w = co_await write_all({packet.data(), packet.size()});
+        auto w = co_await write_all({packet.data(), packet.size()}, token);
         if (!w)
         {
             auto e = make_error(error_code::transport, w.error().message());
@@ -228,7 +229,7 @@ public:
             co_return std::unexpected(std::move(e));
         }
         std::array<std::byte, 4> prefix{};
-        auto r = co_await read_exact(prefix);
+        auto r = co_await read_exact(prefix, token);
         if (!r)
         {
             auto e = make_error(error_code::transport, r.error().message());
@@ -241,25 +242,30 @@ public:
         if (!n || *n < 4 ||
             static_cast<std::size_t>(*n) > options.max_response_bytes)
         {
+            auto e = make_error(error_code::malformed_response,
+                "invalid Kafka response length");
+            notify_disconnected(e);
             close();
-            co_return std::unexpected(make_error(error_code::malformed_response,
-                "invalid Kafka response length"));
+            co_return std::unexpected(std::move(e));
         }
         bytes response(static_cast<std::size_t>(*n));
-        auto rr = co_await read_exact(response);
+        auto rr = co_await read_exact(response, token);
         if (!rr)
         {
+            auto e = make_error(error_code::transport, rr.error().message());
+            notify_disconnected(e);
             close();
-            co_return std::unexpected(
-                make_error(error_code::transport, rr.error().message()));
+            co_return std::unexpected(std::move(e));
         }
         protocol::decoder d(response);
         auto h = protocol::decode_response_header(d);
         if (!h || h->correlation_id != id)
         {
+            auto e = make_error(error_code::malformed_response,
+                "Kafka correlation id mismatch");
+            notify_disconnected(e);
             close();
-            co_return std::unexpected(make_error(error_code::malformed_response,
-                "Kafka correlation id mismatch"));
+            co_return std::unexpected(std::move(e));
         }
         auto payload = d.slice(d.remaining());
         co_return bytes(payload->begin(), payload->end());
@@ -284,7 +290,7 @@ public:
         async_lock_guard request_guard(request_mutex, std::adopt_lock);
         auto packet = protocol::encode_request(
             {key, version, next_correlation++, options.client_id}, body);
-        auto written = co_await write_all({packet.data(), packet.size()});
+        auto written = co_await write_all({packet.data(), packet.size()}, token);
         if (!written)
         {
             auto failure =
@@ -305,32 +311,32 @@ public:
         return plain;
     }
 
-    auto write_all(const_buffer b) -> task<std::expected<void, std::error_code>>
+    auto write_all(const_buffer b, cancel_token* token) -> task<std::expected<void, std::error_code>>
     {
 #ifdef CNETMOD_HAS_SSL
         if (ssl)
-            co_return co_await ssl->async_write_all(b);
+            co_return token ? co_await ssl->async_write_all(b, *token) : co_await ssl->async_write_all(b);
 #endif
-        co_return co_await async_write_all(ctx, sock, b);
+        co_return token ? co_await async_write_all(ctx, sock, b, *token) : co_await async_write_all(ctx, sock, b);
     }
 
-    auto read_some(mutable_buffer b)
+    auto read_some(mutable_buffer b, cancel_token* token)
         -> task<std::expected<std::size_t, std::error_code>>
     {
 #ifdef CNETMOD_HAS_SSL
         if (ssl)
-            co_return co_await ssl->async_read(b);
+            co_return token ? co_await ssl->async_read(b, *token) : co_await ssl->async_read(b);
 #endif
-        co_return co_await async_read(ctx, sock, b);
+        co_return token ? co_await async_read(ctx, sock, b, *token) : co_await async_read(ctx, sock, b);
     }
 
-    auto read_exact(std::span<std::byte> b)
+    auto read_exact(std::span<std::byte> b, cancel_token* token)
         -> task<std::expected<void, std::error_code>>
     {
         std::size_t at = 0;
         while (at < b.size())
         {
-            auto r = co_await read_some({b.data() + at, b.size() - at});
+            auto r = co_await read_some({b.data() + at, b.size() - at}, token);
             if (!r)
                 co_return std::unexpected(r.error());
             if (*r == 0)
@@ -366,17 +372,35 @@ public:
             });
     }
 
-    template <class F> void visit(F f)
+    /**
+     * @brief Isolates each observer failure from transport results and cleanup.
+     * Defers compaction until the outermost dispatch preserves all active indices.
+     */
+    template <class F> void visit(F f) noexcept
     {
-        std::erase_if(observers, [&](auto& w)
+        if (observers.empty())
+            return;
+        ++observer_dispatch_depth;
+        const auto count = observers.size();
+        for (std::size_t index = 0; index < count; ++index)
+        {
+            auto observer = observers[index].lock();
+            if (!observer)
+                continue;
+            try
             {
-                if (auto x = w.lock())
+                f(*observer);
+            }
+            catch (...)
+            {
+                // One optional observer must not suppress later observers.
+            }
+        }
+        if (--observer_dispatch_depth == 0)
+            std::erase_if(observers, [](const auto& observer) noexcept
                 {
-                    f(*x);
-                    return false;
-                }
-                return true;
-            });
+                    return observer.expired();
+                });
     }
 
     io_context& ctx;
@@ -385,6 +409,7 @@ public:
     socket sock;
     std::int32_t next_correlation = 1;
     std::vector<std::weak_ptr<connection_observer>> observers;
+    std::size_t observer_dispatch_depth = 0;
     async_mutex connect_mutex;
     async_mutex request_mutex;
 #ifdef CNETMOD_HAS_SSL

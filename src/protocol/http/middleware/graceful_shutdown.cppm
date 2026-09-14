@@ -42,6 +42,7 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
 import cnetmod.core.log;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod {
 
@@ -71,6 +72,17 @@ public:
     /// Request the same graceful path used by SIGINT/SIGTERM. Thread-safe and
     /// suitable for administrative endpoints and embedding hosts.
     void request_stop() noexcept;
+
+    /**
+     * @brief Cancels tracked request tokens after the graceful drain period.
+     *
+     * Terminal for this handler: new requests are rejected. Repeated calls,
+     * including calls from a cancellation callback, do not repeat the broadcast.
+     * Returning from a repeated call does not join the initial broadcast.
+     * Operations must observe their request token;
+     * arbitrary non-cooperative work is not forcibly destroyed.
+     */
+    void cancel_requests() noexcept;
 
     /// Current number of in-flight requests
     [[nodiscard]] auto in_flight() const noexcept -> std::int64_t;
@@ -109,13 +121,15 @@ public:
         auto deadline = std::chrono::steady_clock::now() + timeout;
         while (in_flight_.load(std::memory_order_acquire) > 0)
         {
-            if (std::chrono::steady_clock::now() >= deadline)
+            const auto now = std::chrono::steady_clock::now();
+            if (now >= deadline)
             {
                 logger::warn("Drain timeout, {} requests still in-flight",
                     in_flight_.load(std::memory_order_relaxed));
                 co_return false;
             }
-            co_await sleep_fn(std::chrono::milliseconds{50});
+            co_await sleep_fn(std::min(deadline - now,
+                std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::milliseconds{50})));
         }
         logger::info("All in-flight requests drained");
         co_return true;
@@ -130,6 +144,10 @@ public:
     auto track_middleware() -> http::middleware_fn;
 
 private:
+    struct request_registration;
+    concurrent_containers::atomic_rw_latch requests_latch_;
+    request_registration* requests_{};
+    std::atomic<bool> requests_cancelled_{false};
     std::atomic<bool> signaled_{false};
     std::atomic<std::int64_t> in_flight_{0};
 

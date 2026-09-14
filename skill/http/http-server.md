@@ -48,6 +48,25 @@
 
 #### `server::stop`
 **签名**: `void stop()`
+**生命周期**: 在 accept 事件循环上调用，取消挂起的 accept。调用后必须继续运行
+事件循环，直到持有的 `run()` task 完成，才能销毁 server/事件循环。
+`stop()` 不等于连接排空；已经接受的连接仍须独立等待完成，不能调用后立即停止 I/O。
+连接超限时，接收循环发送 429 后半关闭发送方向，并读取丢弃对端剩余数据直到 EOF。
+发送和收尾共用 1 秒取消预算，`stop()` 可提前取消。等待 I/O 与定时器结束后才关闭
+socket、复用接收取消令牌。这避免立即关闭未读请求使 Windows 客户端丢失 429。
+收尾当前占用接收循环，超限对端不关闭时最多消耗上述预算；不改变正常获准连接的路径。
+
+获准连接使用 `spawn_guarded` 派发：未被中间件处理的连接异常会结束该连接，记录错误
+类别和数值，不记录异常文本，也不再经 detached promise 终止进程。包装协程创建前的
+分配失败仍可向接收循环传播。此隔离机制与 OTEL 开关无关，不替代连接任务的显式等待
+或 handler 的取消契约。
+
+#### `server::abort_connections`
+**签名**: `void abort_connections() noexcept`
+**说明**: 停止接收后，可中止现有及已投递连接的 socket 读写。此操作对该 server
+实例不可撤销，可重复调用；采用 socket shutdown，不销毁挂起的协程。
+必须继续运行 worker 事件循环直到连接完成。它不能取消 handler 内任意非 socket
+等待，也不能替代应用层取消协议。`active_connections()` 包含已投递但尚未执行的连接。
 
 #### `server::set_max_connections`
 **签名**: `void set_max_connections(std::size_t n)`

@@ -9,7 +9,10 @@ import cnetmod.orm.model_metadata;
 import cnetmod.orm.result_mapper;
 import cnetmod.orm.query_wrapper;
 import cnetmod.coro.task;
-import cnetmod.protocol.http.middleware.tracing;
+import cnetmod.instrumentation.tracing;
+import cnetmod.instrumentation.operation_scope;
+import cnetmod.instrumentation.operation_result;
+import cnetmod.instrumentation.error;
 
 export namespace cnetmod::orm {
 
@@ -363,59 +366,42 @@ public:
         co_return co_await this->update(update);
     }
 
-    /// Database protocols do not carry W3C headers, so tracing is explicit at
-    /// this boundary: it derives a child context and hands the completed
-    /// client span to the same exporter used by the enclosing HTTP request.
-    auto query(std::string_view sql, const http::tracing::trace_context& parent,
-        http::tracing::span_exporter on_end,
+    /**
+     * @brief Observes a query without coupling the database to HTTP or OTEL.
+     * An empty sink returns the original task without an observation frame.
+     */
+    auto query(std::string_view sql, const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end,
         sql_observation_options options = {}) -> task<query_result>
     {
-        std::vector<std::pair<std::string, std::string>> attributes{
-            {"db.system.name", "sql"}, {"db.operation.name", "query"}};
-        if (options.capture_query_text && options.max_query_bytes > 0)
-            attributes.emplace_back("db.query.text",
-                std::string{sql.substr(0, options.max_query_bytes)});
-        auto span = http::tracing::start_client_span(parent, "SQL QUERY",
-            std::move(attributes));
-        auto result = adapt(co_await client_->query(sql));
-        if (on_end)
-        {
-            try
-            {
-                on_end(http::tracing::finish_client_span(std::move(span), result.is_err()));
-            }
-            catch (...)
-            {
-                // Observability must not alter database semantics.
-            }
-        }
-        co_return result;
+        if (!on_end)
+            return query(sql);
+        return observe_sql(sql, parent, on_end, options, false);
     }
 
-    auto execute(std::string_view sql, const http::tracing::trace_context& parent,
-        http::tracing::span_exporter on_end,
+    /**
+     * @brief Observes execution while preserving results and exceptions.
+     */
+    auto execute(std::string_view sql, const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end,
         sql_observation_options options = {}) -> task<query_result>
     {
-        std::vector<std::pair<std::string, std::string>> attributes{
-            {"db.system.name", "sql"}, {"db.operation.name", "execute"}};
-        if (options.capture_query_text && options.max_query_bytes > 0)
-            attributes.emplace_back("db.query.text",
-                std::string{sql.substr(0, options.max_query_bytes)});
-        auto span = http::tracing::start_client_span(parent, "SQL EXECUTE",
-            std::move(attributes));
-        auto result = adapt(co_await client_->execute(sql));
-        if (on_end)
-        {
-            try
-            {
-                on_end(http::tracing::finish_client_span(std::move(span), result.is_err()));
-            }
-            catch (...)
-            {
-                // Observability must not alter database semantics.
-            }
-        }
-        co_return result;
+        if (!on_end)
+            return execute(sql);
+        return observe_sql(sql, parent, on_end, options, true);
+    }
+
+    /**
+     * @brief Observes bound execution without capturing parameter values.
+     * The statement retains ownership of its bindings across suspension.
+     */
+    auto execute(parameterized_query statement, const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end,
+        sql_observation_options options = {}) -> task<query_result>
+    {
+        if (!on_end)
+            return execute(std::move(statement));
+        return observe_sql(std::move(statement), parent, on_end, options, true);
     }
 
     /// Run an operation in a transaction without using exceptions as the
@@ -529,6 +515,128 @@ public:
     }
 
 private:
+    /**
+     * @brief Owns observation inputs without starting an unexecuted operation.
+     */
+    struct pending_observation
+    {
+        instrumentation::trace_context parent;
+        instrumentation::span_exporter sink;
+        sql_observation_options options;
+    };
+
+    /**
+     * @brief Captures sink ownership before returning the lazy database task.
+     */
+    template <typename Statement>
+    auto observe_sql(Statement sql, const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& sink, sql_observation_options options,
+        bool execution) -> task<query_result>
+    {
+        std::optional<pending_observation> observation;
+        try
+        {
+            observation.emplace(pending_observation{parent, sink, options});
+            auto pending = execute_observed(sql, observation, execution);
+            // Transfer inputs only after the observation frame exists. The
+            // first suspension below precedes all instrumentation and I/O.
+            pending.handle().resume();
+            return pending;
+        }
+        catch (...)
+        {
+            // Input-copy or frame-allocation failure leaves the SQL untouched.
+            if constexpr (std::same_as<Statement, parameterized_query>)
+                return execute(std::move(sql));
+            else
+                return execution ? execute(sql) : query(sql);
+        }
+    }
+
+    /**
+     * @brief Starts and completes observation within the executing coroutine.
+     * The caller primes ownership transfer before returning this task. Source
+     * references are never accessed after the explicit ownership suspension.
+     */
+    template <typename Statement>
+    auto execute_observed(Statement& source, std::optional<pending_observation>& pending,
+        bool execution) -> task<query_result>
+    {
+        static_assert(std::is_nothrow_move_constructible_v<Statement>);
+        static_assert(std::is_nothrow_move_constructible_v<pending_observation>);
+        auto sql = std::move(source);
+        auto observation = std::move(pending);
+        co_await std::suspend_always{};
+        instrumentation::operation_scope scope;
+        if (observation)
+        {
+            scope = instrumentation::operation_scope::start(observation->sink, [&]
+                {
+                    return instrumentation::start_client_span(observation->parent,
+                        execution ? "SQL EXECUTE" : "SQL QUERY");
+                });
+            scope.annotate([&]
+                {
+                    const auto& options = observation->options;
+                    std::vector<std::pair<std::string, std::string>> attributes{
+                        {"db.system.name", dialect_ == sql_dialect::postgresql ? "postgresql" : "mysql"},
+                        {"db.operation.name", execution ? "execute" : "query"}};
+                    if (options.capture_query_text && options.max_query_bytes > 0)
+                    {
+                        if constexpr (std::same_as<Statement, parameterized_query>)
+                            attributes.emplace_back("db.query.text", sql.query.substr(0, options.max_query_bytes));
+                        else
+                            attributes.emplace_back("db.query.text", sql.substr(0, options.max_query_bytes));
+                    }
+                    return attributes;
+                });
+            observation.reset();
+        }
+        try
+        {
+            query_result result;
+            if constexpr (std::same_as<Statement, parameterized_query>)
+                result = adapt(co_await client_->execute(std::move(sql)));
+            else
+                result = execution ? adapt(co_await client_->execute(sql))
+                                   : adapt(co_await client_->query(sql));
+            if (result.is_err())
+                scope.annotate([&]
+                    {
+                        std::vector<std::pair<std::string, std::string>> attributes;
+                        std::string code;
+                        if (dialect_ == sql_dialect::mysql && result.error_code != 0)
+                            code = std::to_string(result.error_code);
+                        else if (dialect_ == sql_dialect::postgresql && result.sql_state.size() == 5 &&
+                            std::ranges::all_of(result.sql_state, [](char character)
+                                {
+                                    return (character >= '0' && character <= '9') || (character >= 'A' && character <= 'Z');
+                                }))
+                            code = result.sql_state;
+                        if (!code.empty())
+                        {
+                            attributes.emplace_back("db.response.status_code", code);
+                            attributes.emplace_back("error.type", std::move(code));
+                        }
+                        return attributes;
+                    });
+            scope.complete({result.is_err() ? instrumentation::operation_status::error
+                                            : instrumentation::operation_status::success,
+                {}});
+            co_return result;
+        }
+        catch (const std::system_error& error)
+        {
+            scope.complete(instrumentation::classify_error(error.code()));
+            throw;
+        }
+        catch (...)
+        {
+            scope.complete({instrumentation::operation_status::error, {}});
+            throw;
+        }
+    }
+
     template <typename T, typename Function>
     auto expected_transaction(Function function,
         std::optional<isolation_level> isolation)

@@ -13,6 +13,9 @@ module cnetmod.protocol.http.middleware.graceful_shutdown;
 import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.http;
+import cnetmod.coro.cancel;
+import cnetmod.io.io_context;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod {
 
@@ -27,6 +30,59 @@ namespace {
 } // namespace
 
 shutdown_handler* shutdown_handler::instance_ = nullptr;
+
+/**
+ * @brief Pins a request token in the shutdown list until its handler unwinds.
+ *
+ * The node lives in the middleware coroutine frame and does not allocate.
+ */
+struct shutdown_handler::request_registration
+{
+    shutdown_handler& owner;
+    http::request_context& request;
+    request_registration* previous{};
+    request_registration* next{};
+
+    request_registration(shutdown_handler& handler, http::request_context& context) noexcept
+        : owner(handler), request(context)
+    {
+        {
+            concurrent_containers::exclusive_latch_guard lock{owner.requests_latch_};
+            next = owner.requests_;
+            if (next)
+                next->previous = this;
+            owner.requests_ = this;
+            owner.in_flight_.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (owner.requests_cancelled_.load(std::memory_order_acquire))
+            request.cancel_pending_operations();
+    }
+
+    ~request_registration()
+    {
+        concurrent_containers::exclusive_latch_guard lock{owner.requests_latch_};
+        if (previous)
+            previous->next = next;
+        else
+            owner.requests_ = next;
+        if (next)
+            next->previous = previous;
+        owner.in_flight_.fetch_sub(1, std::memory_order_release);
+    }
+
+    request_registration(const request_registration&) = delete;
+    auto operator=(const request_registration&) -> request_registration& = delete;
+};
+
+void shutdown_handler::cancel_requests() noexcept
+{
+    signal();
+    if (requests_cancelled_.exchange(true, std::memory_order_acq_rel))
+        return;
+    concurrent_containers::exclusive_latch_guard lock{requests_latch_};
+    for (auto* request = requests_; request; request = request->next)
+        request->request.cancel_pending_operations();
+}
 
 shutdown_handler::~shutdown_handler()
 {
@@ -93,7 +149,7 @@ void shutdown_handler::request_stop() noexcept
 
 auto shutdown_handler::in_flight() const noexcept -> std::int64_t
 {
-    return in_flight_.load(std::memory_order_relaxed);
+    return in_flight_.load(std::memory_order_acquire);
 }
 
 auto shutdown_handler::track_middleware() -> http::middleware_fn
@@ -108,17 +164,20 @@ auto shutdown_handler::track_middleware() -> http::middleware_fn
             co_return;
         }
 
-        in_flight_.fetch_add(1, std::memory_order_relaxed);
+        request_registration registration{*this, ctx};
+        std::exception_ptr failure;
         try
         {
             co_await next();
         }
         catch (...)
         {
-            in_flight_.fetch_sub(1, std::memory_order_relaxed);
-            throw;
+            failure = std::current_exception();
         }
-        in_flight_.fetch_sub(1, std::memory_order_relaxed);
+        if (ctx.cancellation_token().is_cancelled())
+            co_await post_awaitable{ctx.io_ctx()};
+        if (failure)
+            std::rethrow_exception(failure);
     };
 }
 

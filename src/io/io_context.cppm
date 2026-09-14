@@ -74,8 +74,13 @@ public:
     /// coroutine overhead)
     void post(void (*fn)(void*), void* arg, void (*cleanup)(void*) = nullptr);
 
-    /// Post a pre-constructed post_node (caller owns node lifetime, not deleted
-    /// after drain)
+    /**
+     * @brief Enqueues a caller-owned node without allocating queue storage.
+     *
+     * The node must have heap_owned set to false and remain alive until dispatch.
+     * Its callback or resumed coroutine may release the node during dispatch.
+     * A node must not be enqueued again while its previous entry is pending.
+     */
     void post_node_raw(post_node* node);
 
 protected:
@@ -107,6 +112,10 @@ private:
 export struct post_awaitable
 {
     io_context& ctx;
+    /**
+     * Queue storage stays in the suspended frame until its continuation runs.
+     */
+    post_node continuation{};
     auto await_ready() const noexcept -> bool;
     void await_suspend(std::coroutine_handle<> h) noexcept;
     void await_resume() noexcept;

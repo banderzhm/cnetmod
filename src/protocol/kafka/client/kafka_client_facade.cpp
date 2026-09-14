@@ -4,7 +4,7 @@ import cnetmod.protocol.kafka.protocol_value_codec;
 import cnetmod.protocol.kafka.record_batch;
 import cnetmod.protocol.kafka.group_coordinator;
 import cnetmod.protocol.kafka.offset_manager;
-import cnetmod.coro.spawn;
+import cnetmod.coro.task_group;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
 import cnetmod.executor.async_op;
@@ -1235,7 +1235,16 @@ namespace {
                   options_.group_instance_id),
               retry_(context, client_configuration_) {}
 
-        void start_background_maintenance(io_context& context)
+        ~facade_consumer_backend() override
+        {
+            if (maintenance_)
+                maintenance_->cancel();
+        }
+
+        /**
+         * @brief Starts cancellable maintenance with an explicit completion owner.
+         */
+        auto start_background_maintenance(io_context& context, std::shared_ptr<task_group> maintenance) -> bool
         {
             last_auto_commit_ = std::chrono::steady_clock::now();
             auto interval = options_.heartbeat_interval;
@@ -1243,7 +1252,11 @@ namespace {
                 interval = std::min(interval, options_.auto_commit_interval);
             if (interval < std::chrono::milliseconds{100})
                 interval = std::chrono::milliseconds{100};
-            spawn(context, background_maintenance(weak_from_this(), context, interval));
+            maintenance_ = std::move(maintenance);
+            return maintenance_->run([weak = weak_from_this(), &context, interval](cancel_token& token)
+                {
+                    return background_maintenance(weak, context, interval, token);
+                });
         }
 
         auto subscribe(std::span<const std::string> topics, cancel_token* token)
@@ -1252,6 +1265,8 @@ namespace {
             co_await membership_mutex_.lock();
             async_lock_guard membership_guard(
                 membership_mutex_, std::adopt_lock);
+            if (closed_)
+                co_return std::unexpected(make_error(error_code::configuration, "consumer is closed"));
             if (options_.group_id.empty())
                 co_return std::unexpected(make_error(
                     error_code::configuration, "group_id is required for subscribe"));
@@ -1276,6 +1291,8 @@ namespace {
             co_await membership_mutex_.lock();
             async_lock_guard membership_guard(
                 membership_mutex_, std::adopt_lock);
+            if (closed_)
+                co_return std::unexpected(make_error(error_code::configuration, "consumer is closed"));
             auto sessions_closed = co_await close_fetch_sessions(token);
             if (!sessions_closed)
                 co_return std::unexpected(sessions_closed.error());
@@ -1318,6 +1335,8 @@ namespace {
         auto poll(std::size_t limit, cancel_token* token)
             -> task<result<std::vector<consumed_record>>> override
         {
+            if (closed_)
+                co_return std::unexpected(make_error(error_code::configuration, "consumer is closed"));
             last_poll_ = std::chrono::steady_clock::now();
             poll_timeout_ = false;
             if (!explicit_assignment_)
@@ -1358,6 +1377,8 @@ namespace {
         auto seek(const topic_partition& tp, std::int64_t offset, cancel_token*)
             -> task<result<void>> override
         {
+            if (closed_)
+                co_return std::unexpected(make_error(error_code::configuration, "consumer is closed"));
             if (std::ranges::find(assigned_, tp) == assigned_.end())
                 co_return std::unexpected(make_error(
                     error_code::configuration, "cannot seek an unassigned partition"));
@@ -1367,6 +1388,32 @@ namespace {
 
         auto commit(const std::map<topic_partition, offset_and_metadata>& offsets,
             cancel_token* token) -> task<result<void>> override
+        {
+            if (closed_)
+                co_return std::unexpected(make_error(error_code::configuration, "consumer is closed"));
+            co_return co_await commit_for_cleanup(offsets, token);
+        }
+
+        void request_stop() noexcept
+        {
+            closed_ = true;
+            if (maintenance_)
+                maintenance_->cancel();
+        }
+
+        [[nodiscard]] auto cleanup_complete() const noexcept -> bool
+        {
+            return cleanup_complete_;
+        }
+
+        [[nodiscard]] auto maintenance_restart_allowed() const noexcept -> bool
+        {
+            return !closed_;
+        }
+
+    private:
+        auto commit_for_cleanup(const std::map<topic_partition, offset_and_metadata>& offsets,
+            cancel_token* token) -> task<result<void>>
         {
             if (options_.group_id.empty())
                 co_return std::unexpected(make_error(
@@ -1384,9 +1431,24 @@ namespace {
                 identity, plain, token);
         }
 
+    public:
+        /**
+         * @brief Joins maintenance before releasing membership and fetch sessions.
+         */
         auto close(cancel_token* token) -> task<result<void>> override
         {
-            closed_ = true;
+            auto lifetime = shared_from_this();
+            request_stop();
+            co_await close_mutex_.lock();
+            async_lock_guard close_guard{close_mutex_, std::adopt_lock};
+            if (cleanup_complete_)
+                co_return result<void>{};
+            std::expected<void, std::error_code> maintenance_result;
+            if (maintenance_)
+            {
+                maintenance_->cancel();
+                maintenance_result = co_await maintenance_->join();
+            }
             co_await membership_mutex_.lock();
             async_lock_guard membership_guard(
                 membership_mutex_, std::adopt_lock);
@@ -1396,7 +1458,7 @@ namespace {
                 std::map<topic_partition, offset_and_metadata> offsets;
                 for (auto& [partition, offset] : positions_)
                     offsets[partition] = {offset, {}, {}};
-                auto saved = co_await commit(offsets, token);
+                auto saved = co_await commit_for_cleanup(offsets, token);
                 if (!saved)
                     co_return std::unexpected(saved.error());
             }
@@ -1413,6 +1475,10 @@ namespace {
             positions_.clear();
             topics_.clear();
             fetch_sessions_.clear();
+            group_backend_->invalidate_coordinator();
+            cleanup_complete_ = true;
+            if (!maintenance_result)
+                co_return std::unexpected(make_error(error_code::transport, "consumer maintenance failed"));
             co_return result<void>{};
         }
 
@@ -1554,24 +1620,28 @@ namespace {
         static auto
         background_maintenance(std::weak_ptr<facade_consumer_backend> weak,
             io_context& context,
-            std::chrono::milliseconds interval) -> task<void>
+            std::chrono::milliseconds interval, cancel_token& token)
+            -> task<std::expected<void, std::error_code>>
         {
-            steady_timer timer(context);
-            while (true)
+            while (!token.is_cancelled())
             {
-                auto waited = co_await timer.async_wait(interval);
+                auto waited = co_await async_timer_wait(context, interval, token);
+                if (token.is_cancelled())
+                    co_return std::expected<void, std::error_code>{};
                 if (!waited)
-                    co_return;
+                    co_return std::unexpected(waited.error());
                 auto self = weak.lock();
                 if (!self || self->closed_)
-                    co_return;
+                    co_return std::expected<void, std::error_code>{};
                 co_await self->membership_mutex_.lock();
                 async_lock_guard membership_guard(
                     self->membership_mutex_, std::adopt_lock);
-                if (self->closed_)
-                    co_return;
+                if (self->closed_ || token.is_cancelled())
+                    co_return std::expected<void, std::error_code>{};
                 auto maintained =
-                    co_await self->maintain_membership_unlocked(nullptr);
+                    co_await self->maintain_membership_unlocked(&token);
+                if (token.is_cancelled())
+                    co_return std::expected<void, std::error_code>{};
                 if (!maintained && (self->poll_timeout_ || maintained.error().code != error_code::configuration))
                     continue;
                 if (self->options_.enable_auto_commit &&
@@ -1582,11 +1652,12 @@ namespace {
                     std::map<topic_partition, offset_and_metadata> offsets;
                     for (auto& [partition, offset] : self->positions_)
                         offsets[partition] = {offset, {}, {}};
-                    auto committed = co_await self->commit(offsets, nullptr);
+                    auto committed = co_await self->commit(offsets, &token);
                     if (committed)
                         self->last_auto_commit_ = std::chrono::steady_clock::now();
                 }
             }
+            co_return std::expected<void, std::error_code>{};
         }
 
         auto close_fetch_sessions(cancel_token* token) -> task<result<void>>
@@ -1816,6 +1887,9 @@ namespace {
         compression_registry codecs_;
         std::chrono::steady_clock::time_point last_heartbeat_{};
         std::chrono::steady_clock::time_point last_auto_commit_{};
+        std::shared_ptr<task_group> maintenance_;
+        async_mutex close_mutex_;
+        bool cleanup_complete_ = false;
         std::chrono::steady_clock::time_point last_poll_{};
         bool explicit_assignment_ = false;
         bool closed_ = false;
@@ -1826,11 +1900,37 @@ namespace {
 class kafka_client_runtime_state
 {
 public:
+    struct consumer_registration
+    {
+        std::weak_ptr<facade_consumer_backend> backend;
+        std::shared_ptr<task_group> maintenance;
+    };
+
+    /**
+     * @brief Retires successful inactive consumers without discarding task failures.
+     * Shutdown iteration keeps its inventory stable across suspension.
+     */
+    void retire_consumers() noexcept
+    {
+        if (closing)
+            return;
+        std::erase_if(consumers, [](const consumer_registration& registration)
+            {
+                const auto completion = registration.maintenance->completion_result();
+                if (!completion || *completion)
+                    return false;
+                const auto backend = registration.backend.lock();
+                return !backend || backend->cleanup_complete();
+            });
+    }
+
     kafka_client_runtime_state(io_context& c, client_options o)
         : ctx(c), options(std::move(o)), metadata(std::make_shared<metadata_cache>()) {}
 
     auto connect(cancel_token* token) -> task<result<void>>
     {
+        if (stopped || closing)
+            co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
         if (options.bootstrap_servers.empty())
             co_return std::unexpected(
                 make_error(error_code::configuration, "bootstrap_servers is empty"));
@@ -1847,6 +1947,8 @@ public:
                 opened = co_await conn->connect(*token);
             else
                 opened = co_await conn->connect();
+            if (stopped)
+                co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
             if (!opened)
             {
                 last = opened.error();
@@ -1855,6 +1957,8 @@ public:
             auto body = protocol::encode_api_versions();
             auto response = co_await request_with_cancel(
                 *conn, protocol::api_key::api_versions, 0, body, token);
+            if (stopped)
+                co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
             if (!response)
             {
                 last = response.error();
@@ -1882,6 +1986,8 @@ public:
     auto ensure_metadata(std::vector<std::string> topics, bool force,
         cancel_token* token) -> task<result<void>>
     {
+        if (stopped || closing)
+            co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
         auto now = std::chrono::steady_clock::now();
         if (!force &&
             last_metadata_refresh_ != std::chrono::steady_clock::time_point{} &&
@@ -1889,6 +1995,8 @@ public:
             co_return result<void>{};
         co_await metadata_refresh_mutex_.lock();
         async_lock_guard guard(metadata_refresh_mutex_, std::adopt_lock);
+        if (stopped || closing)
+            co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
         now = std::chrono::steady_clock::now();
         if (!force &&
             last_metadata_refresh_ != std::chrono::steady_clock::time_point{} &&
@@ -1918,6 +2026,8 @@ public:
         {
             auto response = co_await request_with_cancel(
                 *connection, protocol::api_key::metadata, version, body, token);
+            if (stopped)
+                co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
             if (!response)
             {
                 last = response.error();
@@ -1963,6 +2073,8 @@ public:
             {
                 auto response = co_await request_with_cancel(
                     *bootstrap, protocol::api_key::metadata, version, body, token);
+                if (stopped)
+                    co_return std::unexpected(make_error(error_code::configuration, "client runtime is stopped"));
                 if (response)
                 {
                     auto parsed = protocol::decode_metadata(*response, version);
@@ -1985,12 +2097,16 @@ public:
 
     auto lookup(std::int32_t id) -> broker_connection*
     {
+        if (stopped)
+            return nullptr;
         auto i = connections.find(id);
         return i == connections.end() ? nullptr : i->second.get();
     }
 
     auto resolve(const broker_endpoint& endpoint) -> broker_connection*
     {
+        if (stopped)
+            return nullptr;
         if (auto* existing = lookup(endpoint.node_id))
             return existing;
         auto connection =
@@ -2016,6 +2132,10 @@ public:
     }
 
     io_context& ctx;
+    bool stopped = false;
+    bool closing = false;
+    async_mutex shutdown_mutex;
+    std::vector<consumer_registration> consumers;
     client_options options;
     std::shared_ptr<metadata_cache> metadata;
     std::unique_ptr<broker_connection> bootstrap;
@@ -2087,14 +2207,24 @@ auto client_facade::operator=(client_facade&&) noexcept
 
 auto client_facade::connect(cancel_token* token) -> task<result<void>>
 {
-    co_return co_await impl_->connect(token);
+    if (impl_->lifetime->closing && !impl_->lifetime->stopped)
+        co_return std::unexpected(make_error(error_code::configuration, "client shutdown is incomplete"));
+    if (impl_->lifetime->stopped)
+    {
+        auto replacement = std::make_unique<impl>(impl_->ctx, impl_->options);
+        replacement->observers = impl_->observers;
+        impl_ = std::move(replacement);
+    }
+    auto runtime = impl_->lifetime;
+    co_return co_await runtime->connect(token);
 }
 
 auto client_facade::refresh_metadata(std::vector<std::string> topics,
     cancel_token* token)
     -> task<result<void>>
 {
-    co_return co_await impl_->refresh(std::move(topics), token);
+    auto runtime = impl_->lifetime;
+    co_return co_await runtime->refresh(std::move(topics), token);
 }
 
 auto client_facade::metadata() const -> std::shared_ptr<metadata_cache>
@@ -2112,7 +2242,7 @@ auto client_facade::make_producer(producer_options options,
     std::unique_ptr<partitioner> strategy)
     -> result<producer>
 {
-    if (impl_->connections.empty())
+    if (impl_->lifetime->closing || impl_->lifetime->stopped || impl_->connections.empty())
         return std::unexpected(
             make_error(error_code::configuration,
                 "refresh metadata before creating a producer"));
@@ -2127,7 +2257,7 @@ auto client_facade::make_producer(producer_options options,
     };
     auto seed = [runtime]()
     {
-        return runtime->bootstrap.get();
+        return runtime->stopped ? nullptr : runtime->bootstrap.get();
     };
     metadata_refresh_operation refresh =
         [runtime](std::vector<std::string> topics, bool force,
@@ -2151,7 +2281,7 @@ auto client_facade::make_producer(producer_options options,
 auto client_facade::make_consumer(consumer_options options)
     -> result<consumer>
 {
-    if (impl_->connections.empty())
+    if (impl_->lifetime->closing || impl_->lifetime->stopped || impl_->connections.empty())
         return std::unexpected(
             make_error(error_code::configuration,
                 "refresh metadata before creating a consumer"));
@@ -2162,6 +2292,8 @@ auto client_facade::make_consumer(consumer_options options)
     };
     auto make_coordinator_connection = [runtime](const broker_endpoint& endpoint)
     {
+        if (runtime->stopped)
+            return std::unique_ptr<broker_connection>{};
         auto connection = std::make_unique<broker_connection>(
             runtime->ctx, endpoint, runtime->options);
         for (auto& observer : runtime->observers)
@@ -2170,7 +2302,7 @@ auto client_facade::make_consumer(consumer_options options)
     };
     auto seed = [runtime]()
     {
-        return runtime->bootstrap.get();
+        return runtime->stopped ? nullptr : runtime->bootstrap.get();
     };
     metadata_refresh_operation group_refresh =
         [runtime](std::vector<std::string> topics, bool force,
@@ -2198,8 +2330,13 @@ auto client_facade::make_consumer(consumer_options options)
         runtime->ctx, runtime->metadata, std::move(group_backend),
         std::move(consumer_refresh), runtime->options, options);
     backend->set_broker_lookup(std::move(lookup));
-    backend->start_background_maintenance(runtime->ctx);
-    return consumer(std::move(backend), std::move(options));
+    auto value = consumer(backend, std::move(options));
+    auto maintenance = std::make_shared<task_group>(runtime->ctx);
+    runtime->retire_consumers();
+    runtime->consumers.push_back({backend, maintenance});
+    if (!backend->start_background_maintenance(runtime->ctx, std::move(maintenance)))
+        return std::unexpected(make_error(error_code::configuration, "could not start consumer maintenance"));
+    return value;
 }
 
 void client_facade::add_connection_observer(
@@ -2216,9 +2353,109 @@ void client_facade::add_connection_observer(
 void client_facade::close() noexcept
 {
     auto runtime = impl_->lifetime;
+    runtime->stopped = true;
+    runtime->closing = true;
+    for (auto& registration : runtime->consumers)
+    {
+        if (auto backend = registration.backend.lock())
+            backend->request_stop();
+        registration.maintenance->cancel();
+    }
     if (runtime->bootstrap)
         runtime->bootstrap->close();
     for (auto& [id, connection] : runtime->connections)
         connection->close();
+}
+
+auto client_facade::async_close(cancel_token* token) -> task<result<void>>
+{
+    auto runtime = impl_->lifetime;
+    runtime->closing = true;
+    co_await runtime->shutdown_mutex.lock();
+    async_lock_guard guard{runtime->shutdown_mutex, std::adopt_lock};
+    for (auto& registration : runtime->consumers)
+    {
+        if (auto backend = registration.backend.lock())
+            backend->request_stop();
+        registration.maintenance->cancel();
+    }
+    std::optional<error> failure;
+    bool cleanup_pending = false;
+    for (auto& registration : runtime->consumers)
+    {
+        auto joined = co_await registration.maintenance->join();
+        if (!joined && !failure)
+            failure = make_error(error_code::transport, "consumer maintenance failed");
+        if (auto backend = registration.backend.lock())
+        {
+            auto cleaned = co_await backend->close(token);
+            if (!cleaned && !failure)
+                failure = std::move(cleaned.error());
+            cleanup_pending = cleanup_pending || !backend->cleanup_complete();
+        }
+    }
+    if (failure && cleanup_pending)
+        co_return std::unexpected(std::move(*failure));
+    runtime->stopped = true;
+    if (runtime->bootstrap)
+        runtime->bootstrap->close();
+    for (auto& [id, connection] : runtime->connections)
+        connection->close();
+    runtime->consumers.clear();
+    if (failure)
+        co_return std::unexpected(std::move(*failure));
+    co_return result<void>{};
+}
+
+auto client_facade::requires_async_close() const noexcept -> bool
+{
+    impl_->lifetime->retire_consumers();
+    return !impl_->lifetime->consumers.empty();
+}
+
+auto client_facade::background_error() const noexcept -> std::error_code
+{
+    for (const auto& registration : impl_->lifetime->consumers)
+    {
+        const auto completion = registration.maintenance->completion_result();
+        if (completion && *completion)
+            return *completion;
+    }
+    return {};
+}
+
+auto client_facade::restart_failed_maintenance() -> std::expected<void, std::error_code>
+{
+    auto runtime = impl_->lifetime;
+    if (runtime->closing || runtime->stopped)
+        return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+    for (auto& registration : runtime->consumers)
+    {
+        const auto completion = registration.maintenance->completion_result();
+        if (!completion || !*completion)
+            continue;
+        auto backend = registration.backend.lock();
+        if (!backend || !backend->maintenance_restart_allowed())
+            return std::unexpected(*completion);
+        const auto previous = registration.maintenance;
+        try
+        {
+            auto replacement = std::make_shared<task_group>(runtime->ctx);
+            registration.maintenance = replacement;
+            if (!backend->start_background_maintenance(runtime->ctx, std::move(replacement)))
+                return std::unexpected(std::make_error_code(std::errc::io_error));
+        }
+        catch (const std::bad_alloc&)
+        {
+            registration.maintenance = previous;
+            return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+        }
+        catch (...)
+        {
+            registration.maintenance = previous;
+            return std::unexpected(std::make_error_code(std::errc::io_error));
+        }
+    }
+    return {};
 }
 } // namespace cnetmod::kafka

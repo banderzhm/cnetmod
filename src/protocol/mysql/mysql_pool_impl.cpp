@@ -18,9 +18,36 @@ import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
 import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
 import cnetmod.executor.async_op;
 
 namespace cnetmod::mysql {
+
+namespace {
+    /**
+     * @brief Holds exclusive maintenance ownership until all workers have joined.
+     */
+    class maintenance_run_guard
+    {
+    public:
+        explicit maintenance_run_guard(std::atomic<bool>& active) : active_(active)
+        {
+            if (active_.exchange(true, std::memory_order_acq_rel))
+                throw std::system_error(std::make_error_code(std::errc::operation_in_progress));
+        }
+
+        ~maintenance_run_guard()
+        {
+            active_.store(false, std::memory_order_release);
+        }
+
+        maintenance_run_guard(const maintenance_run_guard&) = delete;
+        auto operator=(const maintenance_run_guard&) -> maintenance_run_guard& = delete;
+
+    private:
+        std::atomic<bool>& active_;
+    };
+} // namespace
 
 pooled_connection::pooled_connection(pooled_connection&& o) noexcept
     : pool_(std::exchange(o.pool_, nullptr)),
@@ -84,11 +111,48 @@ connection_pool::connection_pool(io_context& ctx, pool_params params)
 
 auto connection_pool::async_run() -> task<void>
 {
+    maintenance_run_guard active_run{run_active_};
+
+    try
+    {
+        co_await run_maintenance();
+    }
+    catch (...)
+    {
+        if (!maintenance_failure_)
+            maintenance_failure_ = std::current_exception();
+    }
+    co_await cancel();
+    co_await connection_workers_.wait();
+    for (auto& node : conns_)
+        if (node.conn && node.state.load(std::memory_order_acquire) != conn_state::in_use)
+            node.conn->close();
+    if (maintenance_failure_)
+        std::rethrow_exception(maintenance_failure_);
+}
+
+auto connection_pool::run_maintenance() -> task<void>
+{
+    if (stop_requested_.load(std::memory_order_acquire))
+        co_return;
     running_ = true;
+
+    struct run_state_guard
+    {
+        bool& running;
+
+        ~run_state_guard()
+        {
+            running = false;
+        }
+    } reset_running{running_};
+
     // Spawn initial connection tasks
     for (std::size_t i = 0; i < params_.initial_size && i < params_.max_size;
         ++i)
     {
+        if (stop_requested_.load(std::memory_order_acquire))
+            break;
         spawn_connection();
     }
     // Warm-up barrier: wait until initial connections are ready (or timeout).
@@ -96,18 +160,42 @@ auto connection_pool::async_run() -> task<void>
     if (target > 0)
     {
         auto deadline = std::chrono::steady_clock::now() + params_.connect_timeout;
-        while (running_ && std::chrono::steady_clock::now() < deadline)
+        while (running_ && !stop_requested_.load(std::memory_order_acquire) &&
+            std::chrono::steady_clock::now() < deadline)
         {
             if (count_ready_connections() >= target)
                 break;
-            co_await async_sleep(ctx_, std::chrono::milliseconds(10));
+            auto waited = co_await async_timer_wait(ctx_, std::chrono::milliseconds(10), run_cancel_);
+            if (!waited)
+            {
+                if (!stop_requested_.load(std::memory_order_acquire))
+                {
+                    running_ = false;
+                    throw std::system_error(waited.error());
+                }
+                break;
+            }
         }
     }
     // Background: periodic scan for dead connections that have no task
-    while (running_)
+    while (running_ && !stop_requested_.load(std::memory_order_acquire))
     {
-        co_await async_sleep(ctx_, params_.ping_interval);
+        auto waited = co_await async_timer_wait(ctx_, params_.ping_interval, run_cancel_);
+        if (!waited)
+        {
+            running_ = false;
+            if (!stop_requested_.load(std::memory_order_acquire))
+                throw std::system_error(waited.error());
+            break;
+        }
     }
+    running_ = false;
+}
+
+void connection_pool::request_stop() noexcept
+{
+    stop_requested_.store(true, std::memory_order_seq_cst);
+    run_cancel_.cancel();
 }
 
 auto connection_pool::async_get_connection()
@@ -127,6 +215,9 @@ auto connection_pool::try_get_connection()
             make_error_code(std::errc::resource_unavailable_try_again));
     }
     async_lock_guard guard(mtx_, std::adopt_lock);
+
+    if (stop_requested_.load(std::memory_order_acquire))
+        return std::unexpected(make_error_code(std::errc::operation_canceled));
 
     if (waiters_head_)
     {
@@ -152,14 +243,36 @@ auto connection_pool::try_get_connection()
 
 auto connection_pool::cancel() -> task<void>
 {
+    request_stop();
     running_ = false;
     co_await mtx_.lock();
+    async_lock_guard guard(mtx_, std::adopt_lock);
+    while (waiters_head_)
+    {
+        auto* waiter = waiters_head_;
+        remove_waiter(waiter);
+        if (waiter->token &&
+            !waiter->token->pending_.exchange(false, std::memory_order_acq_rel))
+            continue;
+        ctx_.post_node_raw(&waiter->completion);
+    }
     for (auto& node : conns_)
     {
-        if (node.conn && node.conn->is_open())
+        node.ping_sleep_token.cancel();
+        node.network_token.cancel();
+        if (auto handle = node.task_waiting.exchange({}, std::memory_order_seq_cst))
+        {
+            node.task_completion.coroutine = handle;
+            ctx_.post_node_raw(&node.task_completion);
+        }
+        if (node.conn && node.conn->is_open() &&
+            node.state.load(std::memory_order_acquire) != conn_state::in_use)
+        {
             node.state.store(conn_state::dead, std::memory_order_release);
+            if (connection_workers_.count() == 0)
+                node.conn->close();
+        }
     }
-    mtx_.unlock();
 }
 
 auto connection_pool::size() const noexcept -> std::size_t
@@ -183,6 +296,14 @@ auto connection_pool::waiter_count() const noexcept -> std::size_t
     return waiters_count_.load(std::memory_order_acquire);
 }
 
+auto connection_pool::checked_out_count() const noexcept -> std::size_t
+{
+    std::size_t count = 0;
+    for (const auto& node : conns_)
+        count += node.state.load(std::memory_order_acquire) == conn_state::in_use;
+    return count;
+}
+
 auto connection_pool::make_connect_options() const -> connect_options
 {
     connect_options opts;
@@ -204,7 +325,8 @@ auto connection_pool::count_ready_connections() const noexcept -> std::size_t
     {
         auto st = node.state.load(std::memory_order_acquire);
         if (st == conn_state::idle || st == conn_state::in_use ||
-            st == conn_state::pinging || st == conn_state::resetting)
+            st == conn_state::pinging || st == conn_state::resetting ||
+            st == conn_state::returning)
         {
             ++ready;
         }
@@ -222,7 +344,7 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
     }
     auto retry_backoff = std::min(max_retry, std::chrono::milliseconds(100));
 
-    while (running_)
+    while (running_ && !stop_requested_.load(std::memory_order_acquire))
     {
         // Phase 1: Ensure connected
         auto state = node.state.load(std::memory_order_acquire);
@@ -230,24 +352,66 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
         {
             node.state.store(conn_state::connecting, std::memory_order_release);
             auto opts = make_connect_options();
-            auto rs = co_await node.conn->connect(opts);
+            auto rs = co_await node.conn->connect(opts, node.network_token);
 
             co_await mtx_.lock();
+            if (!running_ || stop_requested_.load(std::memory_order_acquire))
+            {
+                mtx_.unlock();
+                break;
+            }
             if (rs.is_err())
             {
                 node.state.store(conn_state::dead, std::memory_order_release);
                 mtx_.unlock();
-                co_await async_sleep(ctx_, retry_backoff);
+                node.ping_sleep_token.reset();
+                if (!running_ || stop_requested_.load(std::memory_order_acquire))
+                    break;
+                (void)co_await async_timer_wait(ctx_, retry_backoff, node.ping_sleep_token);
                 retry_backoff = std::min(max_retry, retry_backoff * 2);
                 continue;
             }
             retry_backoff = std::min(max_retry, std::chrono::milliseconds(100));
             node.state.store(conn_state::idle, std::memory_order_release);
-            node.last_used = std::chrono::steady_clock::now();
             set_idle_bit(node.index); // P6: Mark as idle in bitmap
             // Hand idle connections to queued waiters first.
             notify_waiters_with_idle_locked();
             mtx_.unlock();
+        }
+
+        /**
+         * A returned session remains unavailable until its reset succeeds.
+         * Reuse the owned connection worker so reset is joined during shutdown.
+         */
+        const auto returned_state = node.state.load(std::memory_order_acquire);
+        if (returned_state == conn_state::resetting || returned_state == conn_state::returning)
+        {
+            auto reset = [&]() -> task<std::expected<void, std::error_code>>
+            {
+                auto result = co_await node.conn->reset_connection(node.network_token);
+                if (result.is_err())
+                    co_return std::unexpected(node.conn->last_error()
+                            ? node.conn->last_error()
+                            : std::make_error_code(std::errc::io_error));
+                co_return std::expected<void, std::error_code>{};
+            };
+            std::expected<void, std::error_code> result;
+            if (returned_state == conn_state::resetting)
+                result = co_await with_timeout(ctx_, params_.ping_timeout,
+                    reset(), node.network_token);
+            if (!running_ || stop_requested_.load(std::memory_order_acquire))
+                break;
+            node.network_token.reset();
+            co_await mtx_.lock();
+            async_lock_guard guard(mtx_, std::adopt_lock);
+            node.state.store(result ? conn_state::idle : conn_state::dead,
+                std::memory_order_release);
+            if (result)
+            {
+                set_idle_bit(node.index);
+                notify_waiters_with_idle_locked();
+            }
+            continue;
         }
 
         // Phase 2: Idle — wait ping_interval then ping
@@ -257,6 +421,15 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
             // Make the idle wait cancellable so we can reconnect promptly
             // when a borrowed connection returns broken.
             node.ping_sleep_token.reset();
+            if (!running_ || stop_requested_.load(std::memory_order_acquire))
+                break;
+            /**
+             * A return may cancel the previous token just before reset clears it.
+             * Recheck the published state before arming a fresh idle timer so
+             * pending reset, reconnect, or waiter notification is not delayed.
+             */
+            if (node.state.load(std::memory_order_seq_cst) != conn_state::idle)
+                continue;
             auto wait_r = co_await cnetmod::async_timer_wait(
                 ctx_, params_.ping_interval, node.ping_sleep_token);
             node.ping_sleep_token.reset();
@@ -277,7 +450,7 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
             clear_idle_bit(node.index); // P6: Clear idle bit during ping
             mtx_.unlock();
 
-            auto rs = co_await node.conn->ping();
+            auto rs = co_await node.conn->ping(node.network_token);
 
             co_await mtx_.lock();
             if (rs.is_err())
@@ -287,7 +460,6 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
                 continue; // Will reconnect next iteration
             }
             node.state.store(conn_state::idle, std::memory_order_release);
-            node.last_used = std::chrono::steady_clock::now();
             set_idle_bit(node.index); // P6: Mark as idle again
             mtx_.unlock();
         }
@@ -299,21 +471,33 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
             struct return_awaitable
             {
                 conn_node& n;
+                const std::atomic<bool>& stopping;
 
                 auto await_ready() const noexcept -> bool
                 {
-                    return n.state.load(std::memory_order_acquire) != conn_state::in_use;
+                    return n.state.load(std::memory_order_acquire) != conn_state::in_use ||
+                        stopping.load(std::memory_order_acquire);
                 }
 
-                void await_suspend(std::coroutine_handle<> h) noexcept
+                auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
                 {
-                    n.task_waiting = h;
+                    /**
+                     * Publish before rechecking the condition. Either this awaiter
+                     * withdraws its handle and continues, or a producer owns the
+                     * single queued wakeup. Sequential ordering closes the gap
+                     * between observing in_use and registering the waiter.
+                     */
+                    n.task_waiting.store(h, std::memory_order_seq_cst);
+                    if (n.state.load(std::memory_order_seq_cst) != conn_state::in_use ||
+                        stopping.load(std::memory_order_seq_cst))
+                        return !n.task_waiting.exchange({}, std::memory_order_seq_cst);
+                    return true;
                 }
 
                 void await_resume() noexcept {}
             };
 
-            co_await return_awaitable{node};
+            co_await return_awaitable{node, stop_requested_};
         }
     }
 }
@@ -324,13 +508,58 @@ void connection_pool::spawn_connection()
     if (idx >= MAX_BITMAPS * BITMAP_BITS)
         return; // Max capacity reached
 
+    // Construct the client before publishing a slot. Allocation failure must
+    // not leave a node whose connection pointer cannot be dereferenced.
+    auto connection = std::make_unique<client>(ctx_);
     conns_.emplace_back();
     auto& node = conns_.back();
-    node.conn = std::make_unique<client>(ctx_);
+    node.conn = std::move(connection);
     node.state.store(conn_state::initial, std::memory_order_release);
-    node.last_used = std::chrono::steady_clock::now();
     node.index = idx;
-    spawn(ctx_, connection_task(node));
+    task<void> work;
+    try
+    {
+        work = connection_task(node);
+    }
+    catch (...)
+    {
+        conns_.pop_back();
+        throw;
+    }
+    try
+    {
+        start_worker(std::move(work));
+    }
+    catch (...)
+    {
+        conns_.pop_back();
+        throw;
+    }
+}
+
+void connection_pool::start_worker(task<void> work)
+{
+    struct completion_ticket
+    {
+        async_wait_group& workers;
+        bool registered = false;
+
+        ~completion_ticket()
+        {
+            if (registered)
+                workers.done();
+        }
+    };
+
+    auto ticket = std::make_shared<completion_ticket>(connection_workers_);
+    connection_workers_.add();
+    ticket->registered = true;
+    spawn_guarded(ctx_, std::move(work), [this, ticket](std::exception_ptr failure) noexcept
+        {
+            if (!maintenance_failure_)
+                maintenance_failure_ = std::move(failure);
+            request_stop();
+        });
 }
 
 void connection_pool::set_idle_bit(std::size_t idx)
@@ -431,7 +660,6 @@ auto connection_pool::try_get_idle_locked() -> conn_node*
                     std::memory_order_relaxed))
             {
                 clear_idle_bit(idx);
-                node.last_used = std::chrono::steady_clock::now();
                 return &node;
             }
         }
@@ -470,7 +698,7 @@ void connection_pool::notify_waiters_with_idle_locked()
         }
         *w->result_node = node;
         if (w->handle)
-            ctx_.post(w->handle);
+            ctx_.post_node_raw(&w->completion);
     }
 }
 
@@ -497,61 +725,55 @@ auto connection_pool::remove_waiter(pool_waiter* target) -> bool
     return false;
 }
 
+auto connection_pool::publish_returned_connection(conn_node& node, conn_state reusable_state) -> bool
+{
+    const bool open = node.conn && node.conn->is_open();
+    const conn_state target = open ? reusable_state : conn_state::dead;
+
+    conn_state expected = conn_state::in_use;
+    if (!node.state.compare_exchange_strong(expected, target,
+            std::memory_order_seq_cst,
+            std::memory_order_relaxed))
+    {
+        return false;
+    }
+
+    if (target == conn_state::idle)
+    {
+        set_idle_bit(node.index);
+    }
+    else
+    {
+        clear_idle_bit(node.index);
+        // Wake the per-connection task if it's waiting in idle sleep,
+        // so it can reconnect immediately.
+        node.ping_sleep_token.cancel();
+    }
+
+    if (auto h = node.task_waiting.exchange({}, std::memory_order_seq_cst))
+    {
+        node.task_completion.coroutine = h;
+        ctx_.post_node_raw(&node.task_completion);
+    }
+
+    return true;
+}
+
 void connection_pool::return_connection(conn_node& node, bool needs_reset)
 {
-    enum class ret_kind
-    {
-        failed,
-        idle,
-        dead
-    };
-
-    auto mark_returned = [this, &node, needs_reset]() -> ret_kind
-    {
-        const bool open = node.conn && node.conn->is_open();
-        const conn_state target = open ? conn_state::idle : conn_state::dead;
-
-        conn_state expected = conn_state::in_use;
-        if (!node.state.compare_exchange_strong(expected, target,
-                std::memory_order_release,
-                std::memory_order_relaxed))
-        {
-            return ret_kind::failed;
-        }
-
-        node.needs_reset.store(needs_reset, std::memory_order_relaxed);
-        node.last_used = std::chrono::steady_clock::now();
-
-        if (open)
-        {
-            set_idle_bit(node.index);
-        }
-        else
-        {
-            clear_idle_bit(node.index);
-            // Wake the per-connection task if it's waiting in idle sleep,
-            // so it can reconnect immediately.
-            node.ping_sleep_token.cancel();
-        }
-
-        if (auto h = std::exchange(node.task_waiting, {}))
-            ctx_.post(h);
-
-        return open ? ret_kind::idle : ret_kind::dead;
-    };
-
+    const auto target = needs_reset ? conn_state::resetting : conn_state::idle;
     // No queued waiters: avoid lock and return immediately.
     if (waiters_count_.load(std::memory_order_acquire) == 0)
     {
-        if (mark_returned() != ret_kind::failed)
+        if (publish_returned_connection(node, target))
             return;
     }
 
     // Waiters exist: notify under lock.
     if (mtx_.try_lock())
     {
-        auto r = mark_returned();
-        if (r == ret_kind::idle || waiters_head_)
+        (void)publish_returned_connection(node, target);
+        if (waiters_head_)
         {
             notify_waiters_with_idle_locked();
         }
@@ -559,41 +781,13 @@ void connection_pool::return_connection(conn_node& node, bool needs_reset)
         return;
     }
 
-    // Async fallback: enqueue lock acquisition without CPU spinning.
-    auto* node_ptr = &node;
-    spawn(ctx_, [this, node_ptr, needs_reset]() -> task<void>
-        {
-            co_await mtx_.lock();
-            const bool open = node_ptr->conn && node_ptr->conn->is_open();
-            const conn_state target = open ? conn_state::idle : conn_state::dead;
-
-            conn_state expected = conn_state::in_use;
-            if (node_ptr->state.compare_exchange_strong(expected, target,
-                    std::memory_order_release,
-                    std::memory_order_relaxed))
-            {
-                node_ptr->needs_reset.store(needs_reset, std::memory_order_relaxed);
-                node_ptr->last_used = std::chrono::steady_clock::now();
-
-                if (open)
-                {
-                    set_idle_bit(node_ptr->index);
-                }
-                else
-                {
-                    clear_idle_bit(node_ptr->index);
-                    node_ptr->ping_sleep_token.cancel();
-                }
-
-                if (auto h = std::exchange(node_ptr->task_waiting, {}))
-                    ctx_.post(h);
-            }
-            if (waiters_head_)
-            {
-                notify_waiters_with_idle_locked();
-            }
-            mtx_.unlock();
-        }());
+    /**
+     * Delegate contended publication to the existing joined connection worker.
+     * Returning a lease must not allocate a coroutine from its destructor.
+     * A no-reset lease remains unavailable until FIFO waiters are notified.
+     */
+    (void)publish_returned_connection(node,
+        needs_reset ? conn_state::resetting : conn_state::returning);
 }
 
 auto connection_pool::async_get_connection(cnetmod::deadline value)
@@ -616,6 +810,14 @@ auto connection_pool::async_get_connection(cancel_token& token)
     async_lock_guard guard(mtx_, std::adopt_lock);
 
     // Prioritize old waiters first if any idle connections exist.
+    if (stop_requested_.load(std::memory_order_acquire))
+        co_return std::unexpected(make_error_code(std::errc::operation_canceled));
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(
+            token.reason() == cancellation_reason::deadline_exceeded
+                ? std::errc::timed_out
+                : std::errc::operation_canceled));
+
     if (waiters_head_)
     {
         notify_waiters_with_idle_locked();
@@ -632,8 +834,16 @@ auto connection_pool::async_get_connection(cancel_token& token)
 
     // 2) P1: Record pending request + demand-driven scaling
     ++num_pending_requests_;
-    if (running_)
-        create_connections_if_needed();
+    try
+    {
+        if (running_)
+            create_connections_if_needed();
+    }
+    catch (...)
+    {
+        --num_pending_requests_;
+        throw;
+    }
 
     // 3) Wait in queue (cancellable via cancel_token)
     conn_node* assigned = nullptr;
@@ -656,6 +866,7 @@ auto connection_pool::async_get_connection(cancel_token& token)
         void await_suspend(std::coroutine_handle<> h) noexcept
         {
             w.handle = h;
+            w.completion.coroutine = h;
             if (!pool.waiters_head_)
             {
                 pool.waiters_head_ = pool.waiters_tail_ = &w;
@@ -674,27 +885,11 @@ auto connection_pool::async_get_connection(cancel_token& token)
                 if (!tok.pending_.exchange(false, std::memory_order_acq_rel))
                     return;
                 auto* p = static_cast<connection_pool*>(tok.ctx_);
-                auto* wt = static_cast<pool_waiter*>(tok.io_handle_);
-                if (p->mtx_.try_lock())
-                {
-                    p->remove_waiter(wt);
-                    p->mtx_.unlock();
-                    p->ctx_.post(tok.coroutine_);
-                    return;
-                }
-
-                // Cancellation may originate from another thread and cannot
-                // suspend on the pool mutex.  Keep the waiter alive by
-                // resuming it only after an owner-context coroutine removed
-                // it from the FIFO queue.
-                auto handle = tok.coroutine_;
-                spawn(p->ctx_, [p, wt, handle]() -> task<void>
-                    {
-                        co_await p->mtx_.lock();
-                        p->remove_waiter(wt);
-                        p->mtx_.unlock();
-                        p->ctx_.post(handle);
-                    }());
+                // The owning coroutine unlinks its waiter under the mutex
+                // before returning. Keep that cleanup in its existing frame:
+                // cancellation needs neither a pool lock nor a helper task.
+                auto* waiter = static_cast<pool_waiter*>(tok.io_handle_);
+                p->ctx_.post_node_raw(&waiter->completion);
             };
             token.pending_.store(true, std::memory_order_release);
             guard.release();
@@ -703,9 +898,8 @@ auto connection_pool::async_get_connection(cancel_token& token)
             if (token.is_cancelled())
             {
                 // Cancellation may have happened immediately before the
-                // waiter was armed. Route it through the same one-shot
-                // cleanup path; posting first would let the stack waiter die
-                // while it was still linked in the pool queue.
+                // waiter was armed. The resumed coroutine must unlink its
+                // stack waiter before its frame can finish.
                 token.cancel_fn_(token);
             }
         }
@@ -728,15 +922,20 @@ auto connection_pool::async_get_connection(cancel_token& token)
 
     if (token.is_cancelled())
     {
-        co_await mtx_.lock();
-        remove_waiter(&waiter);
-        mtx_.unlock();
+        {
+            co_await mtx_.lock();
+            async_lock_guard cleanup(mtx_, std::adopt_lock);
+            remove_waiter(&waiter);
+        }
         co_return std::unexpected(make_error_code(
             token.reason() == cancellation_reason::deadline_exceeded
                 ? std::errc::timed_out
                 : std::errc::operation_canceled));
     }
-    co_return std::unexpected(make_error_code(std::errc::timed_out));
+    co_return std::unexpected(make_error_code(
+        stop_requested_.load(std::memory_order_acquire)
+            ? std::errc::operation_canceled
+            : std::errc::timed_out));
 }
 
 void pooled_connection::return_to_pool(bool needs_reset)
@@ -788,11 +987,55 @@ sharded_connection_pool::sharded_connection_pool(
 
 auto sharded_connection_pool::async_run() -> task<void>
 {
-    for (std::size_t i = 0; i < shards_.size(); ++i)
+    maintenance_run_guard active_run{run_active_};
+    async_wait_group workers;
+    std::vector<std::exception_ptr> failures(shards_.size());
+    std::exception_ptr startup_failure;
+
+    struct completion_ticket
     {
-        spawn(*shard_ctxs_[i], shards_[i]->async_run());
+        async_wait_group& workers;
+        bool registered = false;
+
+        ~completion_ticket()
+        {
+            if (registered)
+                workers.done();
+        }
+    };
+
+    try
+    {
+        for (std::size_t index = 0; index < shards_.size(); ++index)
+        {
+            auto ticket = std::make_shared<completion_ticket>(workers);
+            workers.add();
+            ticket->registered = true;
+            spawn_guarded(*shard_ctxs_[index], shards_[index]->async_run(),
+                [this, index, &failures, ticket](std::exception_ptr failure) noexcept
+                {
+                    failures[index] = std::move(failure);
+                    request_stop();
+                });
+        }
     }
-    co_return;
+    catch (...)
+    {
+        startup_failure = std::current_exception();
+        request_stop();
+    }
+    co_await workers.wait();
+    if (startup_failure)
+        std::rethrow_exception(startup_failure);
+    for (const auto& failure : failures)
+        if (failure)
+            std::rethrow_exception(failure);
+}
+
+void sharded_connection_pool::request_stop() noexcept
+{
+    for (auto& shard : shards_)
+        shard->request_stop();
 }
 
 auto sharded_connection_pool::async_get_connection()
@@ -863,10 +1106,8 @@ auto sharded_connection_pool::async_get_connection(io_context& io,
 
 auto sharded_connection_pool::cancel() -> task<void>
 {
-    for (auto& shard : shards_)
-    {
-        co_await shard->cancel();
-    }
+    request_stop();
+    co_return;
 }
 
 auto sharded_connection_pool::size() const noexcept -> std::size_t

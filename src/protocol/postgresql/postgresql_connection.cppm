@@ -12,6 +12,7 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -23,14 +24,34 @@ class client
 public:
     using copy_data_source = std::function<task<std::optional<std::vector<std::uint8_t>>>()>;
     using copy_data_sink = std::function<task<void>(std::span<const std::uint8_t>)>;
-    explicit client(io_context&) noexcept;
+    explicit client(io_context&);
     ~client();
     client(const client&) = delete;
     auto operator=(const client&) -> client& = delete;
 
     auto connect(connection_options options = {}) -> task<result_set>;
+    /**
+     * @brief Connects and authenticates using one cancellation token.
+     * The token must outlive the operation, including connection retries.
+     */
+    auto connect(connection_options options, cancel_token& cancellation) -> task<result_set>;
+    /**
+     * @brief Reconnects with the saved options after acquiring operation ownership.
+     *
+     * An overlapping operation is rejected without closing its transport.
+     * Calls must remain on the client's owning executor.
+     */
     auto reconnect() -> task<result_set>;
     auto query(std::string_view sql) -> task<result_set>;
+    /**
+     * @brief Executes a query with cancellable transport reads and writes.
+     *
+     * Cancellation during I/O discards the session; reconnect before reuse.
+     * The token and SQL storage must outlive the awaited operation. Calls
+     * remain serialized on the owning executor. This is transport cancellation,
+     * not PostgreSQL's separate best-effort CancelRequest protocol.
+     */
+    auto query(std::string_view sql, cancel_token& cancellation) -> task<result_set>;
     auto execute(std::string_view sql) -> task<result_set>;
     auto execute(parameterized_query parameters) -> task<result_set>;
     auto prepare(std::string_view sql, std::string name = {})
@@ -55,6 +76,12 @@ public:
     /// connection. The server may finish the operation before it receives it.
     auto cancel_current_operation() -> task<result_set>;
     auto terminate() -> task<void>;
+    /**
+     * @brief Terminates the session with cancellable transport shutdown.
+     * Precancellation leaves an established session intact for a later retry.
+     * Once shutdown starts, transport failure disconnects and preserves its code.
+     */
+    auto terminate(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
 
     template <typename Function>
     requires std::invocable<Function> && requires(Function function) {
@@ -128,11 +155,18 @@ public:
 private:
     struct streaming_portal_state;
     enum class streaming_portal_action : std::uint8_t;
-    auto read_exact(std::uint8_t*, std::size_t) -> task<bool>;
-    auto read_message() -> task<std::expected<detail::backend_message, std::string>>;
-    auto write_all(std::span<const std::uint8_t>) -> task<bool>;
-    auto authenticate() -> task<result_set>;
-    auto collect_results() -> task<result_set>;
+    template <typename Cancellation = std::nullptr_t>
+    auto read_exact(std::uint8_t*, std::size_t, Cancellation cancellation = nullptr) -> task<bool>;
+    template <typename Cancellation = std::nullptr_t>
+    auto read_message(Cancellation cancellation = nullptr) -> task<std::expected<detail::backend_message, std::string>>;
+    template <typename Cancellation = std::nullptr_t>
+    auto write_all(std::span<const std::uint8_t>, Cancellation cancellation = nullptr) -> task<bool>;
+    template <typename Cancellation>
+    auto connect_impl(connection_options, Cancellation cancellation) -> task<result_set>;
+    template <typename Cancellation>
+    auto authenticate(Cancellation cancellation) -> task<result_set>;
+    template <typename Cancellation = std::nullptr_t>
+    auto collect_results(Cancellation cancellation = nullptr) -> task<result_set>;
     auto drain_until_ready() -> task<bool>;
     auto abort_streaming_portal(std::string_view portal) -> task<void>;
     auto deliver_batch(std::vector<row>& batch,

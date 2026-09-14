@@ -391,4 +391,62 @@ TEST(when_all_single_task)
     ASSERT_EQ(r, 42);
 }
 
+TEST(guarded_spawn_reports_task_failure_and_contains_observer_failure)
+{
+    auto io = make_io_context();
+    unsigned failures{};
+    bool original{};
+    auto failing = []() -> task<void>
+    {
+        throw std::runtime_error("background failure");
+        co_return;
+    };
+    spawn_guarded(*io, failing(), [&](std::exception_ptr error)
+        {
+            ++failures;
+            try
+            {
+                std::rethrow_exception(error);
+            }
+            catch (const std::runtime_error& exception)
+            {
+                original = std::string_view{exception.what()} == "background failure";
+            }
+            io->stop();
+            throw std::runtime_error("observer failure");
+        });
+    io->run();
+    ASSERT_EQ(failures, 1U);
+    ASSERT_TRUE(original);
+}
+
+TEST(raw_post_node_can_release_its_storage_during_dispatch)
+{
+    auto io = make_io_context();
+    auto node = std::make_unique<post_node>();
+    node->callback_arg = &node;
+    node->callback = [](void* value)
+    {
+        static_cast<std::unique_ptr<post_node>*>(value)->reset();
+    };
+    io->post_node_raw(node.get());
+    io->poll();
+    ASSERT_TRUE(node == nullptr);
+}
+
+TEST(raw_post_node_ownership_is_captured_before_callback)
+{
+    auto io = make_io_context();
+    post_node node;
+    node.callback_arg = &node;
+    node.callback = [](void* value)
+    {
+        static_cast<post_node*>(value)->heap_owned = true;
+    };
+    io->post_node_raw(&node);
+    io->poll();
+    ASSERT_TRUE(node.heap_owned);
+    node.heap_owned = false;
+}
+
 RUN_TESTS()

@@ -99,6 +99,12 @@ auto [a, b] = co_await when_all(fetch_a(), fetch_b());
 
 即发即弃：投递到 `io_context` 后立即返回。未捕获异常调用 `std::terminate()`。
 
+需要隔离异常时使用 `spawn_guarded(ctx, task, on_error)`，回调接收
+`std::exception_ptr`，回调自身异常也被捕获。固定基础设施回调可使用
+`spawn_guarded<on_error>(ctx, task)` 编译期绑定，不在协程帧中保存运行时回调。
+包装协程开始前的分配失败仍可能抛给调用者。两种 guarded 接口均不是 join 机制，
+不能代替关键任务的生命周期监管和取消。普通 `spawn()` 的终止语义保持不变。
+
 ---
 
 ### `channel<T>`

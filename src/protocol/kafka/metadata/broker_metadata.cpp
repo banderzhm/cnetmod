@@ -9,19 +9,39 @@ void metadata_cache::update(protocol::metadata_response m)
     {
         concurrent_containers::exclusive_latch_guard l{latch_};
         data_ = std::move(m);
-        std::erase_if(observers_, [&](auto& w)
+        std::erase_if(observers_, [](const auto& w) noexcept
             {
-                if (auto x = w.lock())
-                {
-                    live.push_back(x);
-                    return false;
-                }
-                return true;
+                return w.expired();
             });
-        snapshot = data_;
+        if (observers_.empty())
+            return;
+        try
+        {
+            live.reserve(observers_.size());
+            for (const auto& w : observers_)
+                if (auto observer = w.lock())
+                    live.push_back(std::move(observer));
+            if (live.empty())
+                return;
+            snapshot = data_;
+        }
+        catch (...)
+        {
+            // Notification preparation is optional; the cache update is committed.
+            return;
+        }
     }
     for (auto& o : live)
-        o->on_metadata_changed(snapshot);
+    {
+        try
+        {
+            o->on_metadata_changed(snapshot);
+        }
+        catch (...)
+        {
+            // Optional observers cannot invalidate committed metadata or suppress peers.
+        }
+    }
 }
 
 auto metadata_cache::broker(std::int32_t id) const

@@ -97,12 +97,14 @@ def _kafka_external_endpoint():
 def _require_docker_or_skip(protocol: str) -> None:
     try:
         client = docker_from_environment()
-        client.ping()
-        client.close()
-    except Exception as error:
-        pytest.skip(
+        try:
+            client.ping()
+        finally:
+            client.close()
+    except Exception:
+        _unavailable(
             f"{protocol}: neither an external endpoint nor a usable Docker engine "
-            f"is available ({error})"
+            "is available"
         )
 
 
@@ -110,7 +112,13 @@ def _driver(variable: str, protocol: str) -> MessagingDriver:
     try:
         return MessagingDriver.from_environment(variable, protocol)
     except FileNotFoundError as error:
-        pytest.skip(str(error))
+        _unavailable(str(error))
+
+
+def _unavailable(message: str) -> None:
+    if os.environ.get("CNETMOD_MESSAGING_REQUIRED") == "1":
+        pytest.fail(message, pytrace=False)
+    pytest.skip(message)
 
 
 @pytest.fixture(scope="session")
@@ -136,7 +144,7 @@ def rabbitmq_service(amqp091_driver: MessagingDriver):
         yield None, external
         return
     if mode == "external":
-        pytest.skip("AMQP 0-9-1 external endpoint is not configured")
+        _unavailable("AMQP 0-9-1 external endpoint is not configured")
     _require_docker_or_skip("AMQP 0-9-1")
     service = RabbitMqService()
     endpoint = service.start()
@@ -152,7 +160,7 @@ def artemis_service(amqp10_driver: MessagingDriver):
         yield None, external
         return
     if mode == "external":
-        pytest.skip("AMQP 1.0 external endpoint is not configured")
+        _unavailable("AMQP 1.0 external endpoint is not configured")
     _require_docker_or_skip("AMQP 1.0")
     service = ArtemisService()
     endpoint = service.start()
@@ -168,7 +176,7 @@ def kafka_service(kafka_driver: MessagingDriver):
         yield None, external
         return
     if mode == "external":
-        pytest.skip("Kafka external endpoint is not configured")
+        _unavailable("Kafka external endpoint is not configured")
     _require_docker_or_skip("Kafka")
     service = KafkaService()
     endpoint = service.start()

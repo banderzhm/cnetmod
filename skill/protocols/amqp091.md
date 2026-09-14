@@ -182,13 +182,18 @@ class publisher_confirm_observer {
     virtual void on_confirm_failure(const error&) = 0;
 };
 class publisher_confirm_tracker {
-    auto reserve_sequence() noexcept -> std::uint64_t;
+    auto reserve_sequence() -> std::uint64_t;
     void observe(std::weak_ptr<publisher_confirm_observer>);
     void settle(std::uint64_t tag, bool acknowledged, bool multiple);
-    void fail_all(error reason);
+    void fail_all(const error& reason) noexcept;
     auto pending() const noexcept -> std::size_t;
 };
 ```
+
+发布确认订阅在注册时创建只读快照；通知期间新注册的观察者从下一轮生效。
+`settle()` 会完成其他观察者通知后重新抛出首个回调异常；`fail_all()` 清理路径隔离
+回调异常且不创建临时通知集合。`reserve_sequence()` 可能抛出分配异常，插入成功后
+才递增序号，不再以 `noexcept` 将内存不足转换为进程终止。
 
 ### `reconnect_policy` — 重连策略
 
@@ -231,6 +236,47 @@ class automatic_recovery_strategy final : public recovery_strategy {
 
 ### `protocol_connection` — 协议连接
 
+传输层返回 `std::errc::not_enough_memory` 时，协议保留独立的
+`error_code::not_enough_memory`，不归类为可重试断连；诊断文本固定且不含请求数据。
+此枚举追加在现有值之后，不增加 `error` 的字段。直接协程分配仍可抛出 bad_alloc，
+调用方应同时处理异常和 result；会话故障测试覆盖这两种出口。
+
+同一连接遵循单执行器使用约定。`async_connect()` 仅在 disconnected/recovering 状态且
+没有活动读取所有者或写锁持有者时接受新握手；否则返回 `command_invalid`，不替换
+现有 socket/TLS。先取消并等待旧帧泵及活动操作收尾，再重连；不要以再次 connect
+作为强制中止当前会话的方式。
+
+独立 `async_recover()` 拒绝尚未关闭或读取任务尚未结束的会话；提前取消直接返回
+`cancelled`。重连退避使用取消感知定时器，取消后不继续等完退避时长，也不发起连接。
+恢复操作以作用域所有权覆盖退避与握手；期间外部 connect 和另一轮 recover 返回
+`command_invalid`，不会改写正在恢复的配置。内部恢复握手使用私有编译期分支，
+恢复期间公开 async_open_channel 同样返回 command_invalid，且不分配通道编号；
+内部恢复建通道使用独立编译期分支。非 open 会话建通道返回 connection_closed。
+通道上限检查在编号递增前执行，拒绝不会推动计数器回绕到活动编号。
+新连接先清理旧 RPC/确认/投递处理器及接收状态，再从通道 1 分配；旧通道仍由会话代数拒绝，
+不能因新连接重用编号而重新有效。拓扑记录独立保留供恢复重建。
+普通 connect 直接返回任务，不额外增加包装协程。约定仍是单执行器访问。
+`async_close()` 会向当前恢复令牌请求取消，并通过协程等待组等待恢复作用域退出；
+30 秒退避阶段的关闭取消已有回归。恢复内部启动的 reader 使用共享完成票据登记，
+close 同时等待该 reader 释放连接引用；调用方仍须保留并等待自己启动的恢复任务。
+reader 在主动取消前返回的协议失败被保留，close 返回原始协议错误；运行异常则重新抛出。
+新连接清除上一会话的完成记录，避免旧错误污染新会话。此约定不替代等待用户自行启动
+的 async_run 任务。握手成功到 reader 派发成功之间由作用域回滚守卫接管传输；
+派发前分配或同步 posting 失败会关闭传输并传播原始异常，而不返回恢复成功。
+握手完成后的 7 个分配位置已做失败注入；这不覆盖 reader 执行期间的全部异常，
+也不覆盖真实 TLS 和拓扑阶段的关闭竞争。
+拓扑恢复期间调用者取消会传递给内部 reader，RPC 因取消失败时返回 cancelled。
+首个拓扑 RPC 等待 reader 显式发布读取所有权，不依赖定时轮询启动。
+静默 Channel.Open 对端已有回归。恢复使用临时记录器，失败、异常或取消时以无分配的
+共享所有权回滚保留原始记录，全部恢复成功才保留新记录；这不是 broker 端事务回滚。
+Channel.Open、交换机、队列、绑定、消费者五个阶段取消后，再次恢复的完整请求顺序
+已有脚本 TCP 线帧回归，包括部分成功后的取消。服务端队列名逐会话变化时，绑定和消费者
+重映射，以及交换机名/类型、路由键、消费者标签保留已有断言；完整字段表及标志位、
+真实 broker 和恢复期间外部并发修改仍待验收。脚本对端在五个恢复阶段返回 Channel.Close
+406 时，原始 reply_code/文本/class/method 保留且后续完整恢复已有回归；这不是实际 RabbitMQ 验收。
+上述取消/拒绝矩阵的最终恢复还接收脚本 Basic.Deliver + 内容头 + 两段 body，验证原消费者
+回调仅触发一次，投递标签/编号、重投标志、交换机、路由、content type 和完整内容保留。
+
 **签名**:
 ```cpp
 class connection_observer {
@@ -242,6 +288,7 @@ class protocol_connection : public std::enable_shared_from_this<protocol_connect
     auto async_connect(connection_options) -> task<result<void>>;
     auto async_connect(connection_options, cancel_token&) -> task<result<void>>;
     auto async_run(cancel_token&) -> task<result<void>>;
+    auto async_run_session(cancel_token&, std::function<void()> on_ready) -> task<result<void>>;
     auto async_recover(cancel_token&) -> task<result<void>>;
     auto async_close(std::string reply_text = "client shutdown") -> task<result<void>>;
     auto state() const noexcept -> connection_state;
@@ -253,6 +300,27 @@ class protocol_connection : public std::enable_shared_from_this<protocol_connect
 ```
 
 ### `logical_channel` — 逻辑通道
+
+`async_consume_acknowledged(consume_options, acknowledged_delivery_handler, field_table = {})`
+为显式手动确认入口，拒绝 no_ack 配置及空回调。回调接收 `(const delivery&,
+delivery_acknowledgement)`，可保存确认对象并由受监管协程等待 `ack(multiple=false)`
+或 `nack(requeue=true, multiple=false)`。任务按值保存身份，不借用临时确认对象。
+拓扑重放重新绑定弱连接、会话代数和通道；确认写锁内复核代数。旧消费入口直接调用
+原 handler，不修改 delivery 布局。恢复记录新增上下文回调存储，订阅阶段开销仍待测量。
+该入口尚未完成单通道关闭失效、NACK 线帧及新分配故障验收，不视为生产闭环完成。
+后续脚本回归已覆盖恢复后的 NACK flags=0 和 flags=3，以及整个生命周期停机后
+保存对象的 ACK/NACK 被拒绝；不代表单通道关闭或真实 broker 重新入队行为已验证。
+
+`protocol_connection::async_run_session()` 在已连接会话上拥有 reader 和拓扑重放，
+通过 when_all 等待两者，不执行连接重试。重放成功后调用 on_ready，取消转发给 reader。
+调用方必须等待返回任务；它不是 detached 启动入口。Application 通过 supervisor 拥有该任务，
+start 等待重放完成，probe 检查会话 ready。生命周期交换机恢复及延迟确认已有脚本 TCP 回归，
+完整订阅、消息确认和真实 broker 的 Application 恢复验收仍未完成。
+
+发布方法帧和内容头在首次写入前编码并校验协商帧上限，成功后才分配确认序号。
+消息发送期间持有连接写锁；发送失败中断传输，拒绝后续发布，由帧泵等待活动写操作
+结束后释放传输资源并清理待确认记录。应用监管的停机路径会等待帧泵退出；
+单独调用 `async_close()` 不能替代等待用户自行启动的 `async_run()` 任务。
 
 **签名**:
 ```cpp

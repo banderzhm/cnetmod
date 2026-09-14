@@ -63,9 +63,11 @@ struct connection_options {
 **签名**:
 ```cpp
 class client {
-    explicit client(io_context&) noexcept;
+    explicit client(io_context&);
     auto connect(connection_options options = {}) -> task<result_set>;
+    auto connect(connection_options options, cancel_token& cancellation) -> task<result_set>;
     auto query(std::string_view sql) -> task<result_set>;
+    auto query(std::string_view sql, cancel_token& cancellation) -> task<result_set>;
     auto execute(parameterized_query parameters) -> task<result_set>;
     auto prepare(std::string_view sql, std::string name = {})
         -> task<std::expected<prepared_statement, std::string>>;
@@ -75,6 +77,7 @@ class client {
     auto query_batches(std::string_view sql, std::size_t batch_size,
         std::function<task<void>(std::span<const row>)> consume) -> task<result_set>;
     auto terminate() -> task<void>;
+    auto terminate(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
     auto is_open() const noexcept -> bool;
 };
 ```
@@ -198,13 +201,16 @@ struct connection_pool_options {
 class connection_pool {
     connection_pool(io_context&, connection_pool_options);
     auto warm_up() -> task<result_set>;
+    auto warm_up(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
     auto acquire() -> task<std::expected<pooled_connection, std::error_code>>;
     auto acquire(cancel_token& cancellation)
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto close() -> task<void>;
+    auto close(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
     auto size() const noexcept -> std::size_t;
     auto idle_count() const noexcept -> std::size_t;
     auto checked_out_count() const noexcept -> std::size_t;
+    auto background_error() const noexcept -> std::error_code;
 };
 
 class pooled_connection {
@@ -233,7 +239,60 @@ if (conn_r) {
 } // pooled_connection 析构时自动归还
 ```
 
+可取消 terminate 拒绝重叠操作；预取消保留会话，便于之后重试。开始关闭后，同一 token
+传到 PostgreSQL Terminate 写入以及启用 SSL 时的 async_shutdown。传输错误断开连接并
+保留 error_code。普通无参 terminate 未改变。当前回归验证明文协议终止报文与预取消，
+池的 close(cancellation) 与 Application stop 已接入这一入口。可取消关闭等待关闭锁、
+重连任务和租约时检查取消，超时后池仍持有槽位与通知；调用方必须保持池存活，归还租约并重试。
+Application 使用停止上下文的 deadline 映射 timed_out；从未启动且无资源的 stop 仍幂等成功。
+当前服务回归验证持有租约超过 30ms 截止时间后返回超时、连接保留、归还后再次停止成功。
+这不代表任意失控业务协程或传输阻塞均已完成有界退出验证。
+
 ### 认证机制
+
+`client::reconnect()` 使用保存的连接配置，并由 `connect()` 统一取得操作所有权后
+关闭旧连接。在所属 executor 上与尚未完成的操作重叠调用时，重连返回错误，
+不会提前断开原操作的传输连接。认证期间的传输失败在清理后仍保留于
+`last_error()`；这不表示所有认证错误都有网络错误码。
+
+`query(sql, cancellation)` 将 token 显式传给该次查询的网络读写，包括 TLS 接口。
+调用前已取消时不发送 SQL，保留会话；进行中的读写被取消时断开会话，必须重连后
+才能复用。重叠调用在网络操作之前被拒绝，token 与 SQL 存储必须活到任务完成。
+内部使用编译期传输选择：普通入口采用 `std::nullptr_t` 实例，可取消入口采用
+`cancel_token*` 实例；客户端没有共享 token 槽位，普通读写不检查运行时取消指针。
+这是传输取消，不是 `cancel_current_operation()` 的 PostgreSQL CancelRequest。
+`connect(options, cancellation)` 也采用编译期分流，将同一 token 传到 Happy Eyeballs、
+重试定时器、TLS 握手与认证读写。token 必须活到连接任务完成。
+当前本地回归验证明文查询和认证等待取消；真实 TLS、DNS 阻塞、中途写入取消及
+重试等待取消仍需独立验证，连接池/Application 尚未全面接入这些重载。
+
+Application 的 PostgreSQL 健康探测使用同一个 deadline 获取连接并执行 `SELECT 1`，
+不再仅凭池大小报告 up。失败连接被标记 discard；下次探测可重新建连。
+健康报告使用固定诊断文本和错误码，不转发服务器 SQL 错误详情。当前本地测试覆盖
+探测超时后丢弃连接、下一次探测重连成功。Application 启动使用可取消预热与同一个
+截止时间；预热临时持有连接租约直到达到 minimum_connections，随后归还池。
+可取消预热失败时，会在返回前关闭本次持有的连接（包括复用的空闲连接），不影响其他
+调用方已借出的连接。槽位保留为可重试状态，池不进入关闭状态；`size()` 仍统计槽位，
+不能用它推断活连接数。生命周期回归覆盖第二条连接认证超时、第一条连接自动关闭、
+原始启动错误保留，以及同一服务再次启动成功并最终停止。该回归使用明文 TCP 模拟对端，
+不是完整 PostgreSQL 服务器。后台重连监管仍需完善。
+
+丢弃槽位的后台重连由池延迟创建的 `task_group` 持有，每个任务使用独立取消 token。
+`close()` 先禁止新任务、取消并等待重连结束，再清理连接。正常租借路径不创建任务组。
+`background_error()` 在所属 executor 上无分配地读取重连派发错误，或已完成任务组的错误；
+派发错误优先返回。没有派发错误且任务仍运行或尚无任务组时返回空错误，不能将其
+当作连通性判断。Application 的 PostgreSQL probe 在发起查询前检查此结果并以固定
+诊断文本报告 down。当前接口不提供跨线程池操作保证。
+已启动服务再次 `start()` 时，若存在派发错误或已完成后台错误，会重新进入可取消预热，而不是
+直接成功返回。预热在任务组不存在或已经完成时处理已记录的派发错误或任务组错误，
+清除失败状态并将未借出、已丢弃槽位恢复为可重试；
+不会清除仍运行任务的状态。重新调度不代表健康已恢复，仍需查询探测和健康状态确认。
+回归分别注入任务组创建前和已排队重连开始时的分配失败，验证 probe 报告 down、
+再次 start 后原等待者获得替代连接、错误清除和最终 close。对端为明文认证模拟服务，
+另有认证期间对端断开的回归：普通 connect 错误也会使重连任务失败，优先保留
+客户端 `last_error()`，没有传输错误码时回退为 `io_error`，不再把连接失败报告为成功。
+不证明真实 SQL 健康确认、恢复预算或完整 host 生命周期。调用方仍必须在销毁池前
+等待 `close()`；已借出的连接和跨线程等待者仍需独立验证，不能理解为所有池后台路径均已闭环。
 
 模块内置 **SCRAM-SHA-256**（推荐）、**MD5**（兼容旧版）、**Trust** 认证，在 `connect()` 阶段自动处理。TLS 协商在认证前完成。
 
@@ -276,6 +335,16 @@ User user{.name = "Alice", .email = "alice@example.com"};
 auto rs = co_await db.insert(user); // RETURNING * 自动回填 id
 ```
 
+连接租约的普通归还保持同步快速路径；状态锁竞争时，归还通知存放在池的稳定槽位中，
+通过所属 io_context 投递，不再创建 `release_async` 脱离协程。通知处理前槽位仍保持
+已借出状态，因此 `close()` 不会提前移除它。锁仍被占用时通知留待下一次事件循环处理。
+每个槽位增加固定通知存储；这不是历史性能无损的测量证明。取消清理使用等待者帧内的
+通知，不创建脱离协程，取消回调只取得唤醒权并投递通知。close 会等待已登记等待者
+完成清理，不能因等待队列已清空而提前返回。调用方必须保持池存活并等待 close，
+不能提前停止事件循环。等待队列通过 cancel_token 的 register_callback、complete_callback、
+finish_callback 同步登记、完成与取消，不直接读写旧平台回调字段。当前回归覆盖登记完成后
+由另一线程发起取消、通知尚未执行时开始 close；同时登记/取消压力与持续锁竞争公平性仍需验证。
+
 ## 连接池（生产级用法）
 
 ### Pool API
@@ -301,6 +370,7 @@ class connection_pool {
     auto idle_count() const noexcept -> std::size_t;
     auto checked_out_count() const noexcept -> std::size_t;
     auto waiter_count() const noexcept -> std::size_t;
+    auto background_error() const noexcept -> std::error_code;
 };
 
 class pooled_connection {

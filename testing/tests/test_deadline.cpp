@@ -45,7 +45,8 @@ TEST(with_deadline_expired_budget_normalizes_to_timeout)
     auto context = make_io_context();
     cancel_token token;
     bool started = false;
-    auto operation = [&]() -> task<std::expected<int, std::error_code>> {
+    auto operation = [&]() -> task<std::expected<int, std::error_code>>
+    {
         started = true;
         co_return 42;
     };
@@ -63,7 +64,8 @@ TEST(with_timeout_uses_deadline_cancellation_cause)
 {
     auto context = make_io_context();
     cancel_token token;
-    auto operation = []() -> task<std::expected<int, std::error_code>> {
+    auto operation = []() -> task<std::expected<int, std::error_code>>
+    {
         co_return 42;
     };
 
@@ -80,7 +82,8 @@ TEST(with_deadline_factory_owns_a_fresh_cancel_token)
     auto context = make_io_context();
     cancel_token* observed = nullptr;
     auto result = sync_wait(with_deadline(*context, deadline::after(std::chrono::seconds{1}),
-        [&](cancel_token& token) -> task<std::expected<int, std::error_code>> {
+        [&](cancel_token& token) -> task<std::expected<int, std::error_code>>
+        {
             observed = &token;
             co_return 42;
         }));
@@ -89,19 +92,41 @@ TEST(with_deadline_factory_owns_a_fresh_cancel_token)
     ASSERT_EQ(*result, 42);
 }
 
+TEST(with_deadline_owns_temporary_factory_until_task_destruction)
+{
+    auto context = make_io_context();
+    auto retained = std::make_shared<int>(42);
+    std::weak_ptr<int> lifetime = retained;
+    {
+        auto operation = with_deadline(*context, deadline{},
+            [value = std::move(retained), unique = std::make_unique<int>(1)](cancel_token&)
+                -> task<std::expected<int, std::error_code>>
+            {
+                co_return *value + *unique;
+            });
+        ASSERT_FALSE(lifetime.expired());
+        auto result = sync_wait(std::move(operation));
+        ASSERT_TRUE(result.has_value());
+        ASSERT_EQ(*result, 43);
+    }
+    ASSERT_TRUE(lifetime.expired());
+}
+
 TEST(with_deadline_cancels_underlying_wait)
 {
     auto context = make_io_context();
     cancel_token token;
     std::optional<std::expected<int, std::error_code>> result;
 
-    auto operation = [&]() -> task<std::expected<int, std::error_code>> {
+    auto operation = [&]() -> task<std::expected<int, std::error_code>>
+    {
         auto waited = co_await async_timer_wait(*context, std::chrono::seconds{10}, token);
         if (!waited)
             co_return std::unexpected(waited.error());
         co_return 42;
     };
-    auto wrapper = [&]() -> task<void> {
+    auto wrapper = [&]() -> task<void>
+    {
         result = co_await with_deadline(*context,
             deadline::after(std::chrono::milliseconds{1}), operation(), token);
         context->stop();

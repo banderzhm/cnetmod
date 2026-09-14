@@ -52,7 +52,7 @@ inline int run_all() {
     for (auto& tc : registry()) {
         if (filter && *filter && tc.name.find(filter) == std::string::npos)
             continue;
-        std::cout << "[ RUN      ] " << tc.name << "\n";
+        std::cout << "[ RUN      ] " << tc.name << "\n" << std::flush;
         failure_count() = 0;
         total_count() = 0;
 
@@ -81,6 +81,10 @@ inline int run_all() {
     if (failed > 0)
         std::cout << "[  FAILED  ] " << failed << " test(s).\n";
 
+    if (passed + failed == 0) {
+        std::cerr << "No test cases matched the selected filter.\n";
+        return 1;
+    }
     return failed > 0 ? 1 : 0;
 }
 

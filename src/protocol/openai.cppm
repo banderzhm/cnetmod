@@ -14,7 +14,6 @@ export import :images;
 export import :moderation;
 export import :client;
 export import :model;
-export import :observability;
 export import :prompt;
 export import :runnable;
 export import :memory;

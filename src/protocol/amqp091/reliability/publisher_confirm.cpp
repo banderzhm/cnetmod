@@ -7,11 +7,14 @@ import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import :protocol_constants;
 
 namespace cnetmod::amqp091 {
-auto publisher_confirm_tracker::reserve_sequence() noexcept -> std::uint64_t
+auto publisher_confirm_tracker::reserve_sequence() -> std::uint64_t
 {
     concurrent_containers::exclusive_latch_guard lock{state_latch_};
-    auto tag = next_++;
+    if (next_ == 0)
+        throw std::overflow_error("publisher confirmation sequence exhausted");
+    const auto tag = next_;
     pending_.insert(tag);
+    ++next_;
     return tag;
 }
 
@@ -19,50 +22,62 @@ void publisher_confirm_tracker::observe(
     std::weak_ptr<publisher_confirm_observer> o)
 {
     concurrent_containers::exclusive_latch_guard lock{state_latch_};
-    observers_.push_back(std::move(o));
+    auto next = std::make_shared<observer_list>();
+    if (observers_)
+        for (const auto& observer : *observers_)
+            if (!observer.expired())
+                next->push_back(observer);
+    next->push_back(std::move(o));
+    observers_ = std::move(next);
 }
 
 void publisher_confirm_tracker::settle(std::uint64_t tag, bool ack,
     bool multiple)
 {
-    std::vector<std::shared_ptr<publisher_confirm_observer>> listeners;
+    std::shared_ptr<const observer_list> listeners;
     {
         concurrent_containers::exclusive_latch_guard lock{state_latch_};
         if (multiple)
             pending_.erase(pending_.begin(), pending_.upper_bound(tag));
         else
             pending_.erase(tag);
-        for (auto it = observers_.begin(); it != observers_.end();)
-            if (auto p = it->lock())
-            {
-                listeners.push_back(std::move(p));
-                ++it;
-            }
-            else
-                it = observers_.erase(it);
+        listeners = observers_;
     }
     publisher_confirmation event{tag, ack, multiple};
-    for (auto& x : listeners)
-        x->on_confirm(event);
+    std::exception_ptr first_failure;
+    if (listeners)
+        for (const auto& observer : *listeners)
+            if (auto listener = observer.lock())
+                try
+                {
+                    listener->on_confirm(event);
+                }
+                catch (...)
+                {
+                    if (!first_failure)
+                        first_failure = std::current_exception();
+                }
+    if (first_failure)
+        std::rethrow_exception(first_failure);
 }
 
-void publisher_confirm_tracker::fail_all(error reason)
+void publisher_confirm_tracker::fail_all(const error& reason) noexcept
 {
-    std::vector<std::shared_ptr<publisher_confirm_observer>> listeners;
+    std::shared_ptr<const observer_list> listeners;
     {
         concurrent_containers::exclusive_latch_guard lock{state_latch_};
         pending_.clear();
-        for (auto it = observers_.begin(); it != observers_.end();)
-            if (auto p = it->lock())
-            {
-                listeners.push_back(std::move(p));
-                ++it;
-            }
-            else
-                it = observers_.erase(it);
+        listeners = observers_;
     }
-    for (auto& x : listeners)
-        x->on_confirm_failure(reason);
+    if (listeners)
+        for (const auto& observer : *listeners)
+            if (auto listener = observer.lock())
+                try
+                {
+                    listener->on_confirm_failure(reason);
+                }
+                catch (...)
+                {}
 }
 
 auto publisher_confirm_tracker::pending() const noexcept -> std::size_t

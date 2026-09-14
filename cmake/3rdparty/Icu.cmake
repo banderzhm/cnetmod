@@ -30,11 +30,24 @@ macro(cnetmod_configure_icu)
             # Keep the ICU MSBuild invocation configuration-aware; MSBuild is
             # incremental, so an already-built matching configuration is a
             # no-op while a Debug build always materializes its debug imports.
+            set(_cnetmod_icu_configuration "$<IF:$<CONFIG:Debug>,Debug,Release>")
+            set(_cnetmod_icu_stage_tools)
+            # Tool executables have no Debug suffix in bin64. Switching
+            # configurations may leave a newer executable from the other
+            # configuration, bypassing ICU's incremental custom copy step.
+            # Restore matching tools without recompilation or redundant writes.
+            foreach(_cnetmod_icu_tool IN ITEMS genrb gencnval gencfu icupkg makeconv pkgdata)
+                list(APPEND _cnetmod_icu_stage_tools
+                    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+                        "${_cnetmod_icu_source}/tools/${_cnetmod_icu_tool}/x64/${_cnetmod_icu_configuration}/${_cnetmod_icu_tool}.exe"
+                        "${_cnetmod_icu_source}/../bin64/${_cnetmod_icu_tool}.exe")
+            endforeach()
             add_custom_target(cnetmod_icu
                 COMMAND "${CMAKE_COMMAND}" -E env "PATH=${_cnetmod_icu_python_dir}\;$ENV{PATH}"
                     "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
                     /target:common,i18n,genrb,gencnval,gencfu,icupkg,makeconv,pkgdata
-                    /property:Configuration=$<CONFIG> /property:Platform=x64
+                    /property:Configuration=${_cnetmod_icu_configuration} /property:Platform=x64
+                ${_cnetmod_icu_stage_tools}
                 # ICU's makedata project declares its own test projects as
                 # ProjectReferences.  They are irrelevant to the production
                 # data DLL and can concurrently link to the same output path
@@ -43,7 +56,7 @@ macro(cnetmod_configure_icu)
                 # references.
                 COMMAND "${CMAKE_COMMAND}" -E env "PATH=${_cnetmod_icu_python_dir}\;$ENV{PATH}"
                     "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/data/makedata.vcxproj"
-                    /property:Configuration=$<CONFIG> /property:Platform=x64
+                    /property:Configuration=${_cnetmod_icu_configuration} /property:Platform=x64
                     /property:BuildProjectReferences=false
                     /property:SolutionDir=${_cnetmod_icu_source}/allinone/
                     COMMENT "Building bundled ICU libraries and data for $<CONFIG>")

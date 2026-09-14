@@ -22,6 +22,7 @@ import cnetmod.core.address;
 import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -41,6 +42,12 @@ public:
     // ── Connection ────────────────────────────────────────────────
 
     auto connect(connect_options opts = {}) -> task<result_set>;
+    /**
+     * @brief Connects with cancellation propagated through transport and authentication.
+     * The token must outlive the operation. Concurrent operations on one client
+     * are unsupported, including operations using different cancellation tokens.
+     */
+    auto connect(connect_options opts, cancel_token& token) -> task<result_set>;
 
     // ── COM_QUERY ────────────────────────────────────────────
 
@@ -97,14 +104,29 @@ public:
     // ── COM_PING ─────────────────────────────────────────────
 
     auto ping() -> task<result_set>;
+    /**
+     * @brief Pings with cancellable packet reads and writes.
+     */
+    auto ping(cancel_token& token) -> task<result_set>;
 
     // ── COM_RESET_CONNECTION ─────────────────────────────────
 
     auto reset_connection() -> task<result_set>;
+    /**
+     * @brief Resets session state with cancellable packet reads and writes.
+     * The token must outlive the operation; concurrent client use is unsupported.
+     */
+    auto reset_connection(cancel_token& token) -> task<result_set>;
 
     // ── COM_QUIT ─────────────────────────────────────────────
 
     auto quit() -> task<void>;
+
+    /**
+     * Closes the transport without sending COM_QUIT or waiting for network I/O.
+     * Call on the owner thread only after all client operations have settled.
+     */
+    void close() noexcept;
 
     auto is_open() const noexcept -> bool;
 
@@ -266,6 +288,7 @@ private:
     // ── Members ────────────────────────────────────────────────
 
     io_context& ctx_;
+    cancel_token* operation_token_ = nullptr;
     socket sock_;
     bool connected_ = false;
     bool secure_channel_ = false;

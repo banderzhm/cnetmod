@@ -1,5 +1,29 @@
 # MongoDB 协议模块
 
+## 等待关闭动作
+
+`connection_pool::async_close() -> task<void>` 返回持有共享池状态的关闭任务，
+Application MongoDB 服务使用 `co_await` 等待它，不通过 `close()` 投递后立即报告成功。
+此入口等待关闭动作本身，不自动等待独立启动的维护与借用者；这些任务仍需
+由调用方监管。锁竞争产生的已登记归还动作由连接槽持有，`async_close()` 会等待
+这些投递执行完毕；它不等待调用方尚未释放的租约。I/O 上下文必须保持运行直到收尾完成。
+排队借用的超时任务由 `acquire()` 持有，借用返回前会取消并等待
+该任务结束；超时执行异常传播给借用者，不再从裸 `spawn()` 终止进程。
+借用必须在所属 I/O 线程执行，不可提前销毁仍在挂起的借用任务。
+`std::stop_source::request_stop()` 可以从其他线程发起；借用取消回调只通知定时器，
+队列移除与结果发布由所属 I/O 线程上的超时任务完成，不从取消线程操作池元数据。
+原有 `close()` 入口仍不是完整的关闭等待屏障。
+已请求关闭或已关闭的池调用 `warm_up()` 返回 `connection_closed`，即使最小连接数为零，
+也不会将关闭状态当作预热成功；重新启动服务不能复用已关闭的池。
+
+## 命令超时与 I/O 取消
+
+命令读写（普通 socket 与 SSL 分支）使用连接持有的取消 token。命令超时先取消
+挂起的 I/O，命令与看门狗收尾后再关闭连接；不能仅靠关闭 fd 唤醒 epoll 中的读取。
+`cancel_active_command()` 通知同一 token，不直接从调用线程销毁 socket 或 SSL 对象。
+该 token 仅在上一条命令 I/O 已结束后复用；仍禁止并发使用同一连接。
+Arch epoll/ASAN 已验证无响应 hello 的超时收尾；这不是 MongoDB TLS 运行验证。
+
 > 异步 MongoDB C++ 客户端，基于 Wire Protocol，支持 SCRAM-SHA-256 认证、TLS、连接池、事务、变更流与重试逻辑。
 
 **import**: `import cnetmod.protocol.mongodb;`

@@ -1,10 +1,26 @@
 #include "test_framework.hpp"
 
 import std;
+import cnetmod.core.socket;
+import cnetmod.coro.cancel;
+import cnetmod.coro.task;
+import cnetmod.io.io_context;
+import cnetmod.instrumentation.metric;
+import cnetmod.instrumentation.tracing;
 import cnetmod.protocol.grpc;
+import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.tracing;
+import cnetmod.observability.grpc;
+import cnetmod.observability.grpc_server;
 
 using namespace cnetmod::grpc;
+
+namespace {
+auto no_op_grpc_handler(cnetmod::http::request_context&) -> cnetmod::task<void>
+{
+    co_return;
+}
+} // namespace
 
 TEST(grpc_frame_roundtrip)
 {
@@ -259,6 +275,195 @@ TEST(grpc_router_options_are_configurable)
     ASSERT_EQ(router.options().max_send_message_bytes, std::size_t{2048});
     ASSERT_EQ(router.options().max_metadata_bytes, std::size_t{128});
     ASSERT_FALSE(router.options().accept_gzip);
+}
+
+TEST(disabled_grpc_server_observation_returns_the_original_handler)
+{
+    cnetmod::http::handler_fn raw{no_op_grpc_handler};
+    auto decorated = cnetmod::observability::grpc_server_handler(raw, {}, {});
+    const auto target = decorated.target<decltype(&no_op_grpc_handler)>();
+    ASSERT_TRUE(target != nullptr);
+    ASSERT_TRUE(*target == &no_op_grpc_handler);
+}
+
+TEST(grpc_server_observation_extracts_remote_context_and_records_rpc_status)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    cnetmod::http::response response;
+    cnetmod::http::header_map headers{
+        {"traceparent", "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"},
+        {"tracestate", "vendor=value"},
+    };
+    cnetmod::http::request_context context{*io, socket, "POST", "/demo.Echo/Say",
+        headers, {}, response, {}};
+    ASSERT_EQ(context.get_header("traceparent"),
+        "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+    std::vector<cnetmod::instrumentation::completed_span> spans;
+    std::vector<cnetmod::instrumentation::metric_measurement> measurements;
+    cnetmod::http::handler_fn raw = [](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+    {
+        request.resp() = cnetmod::grpc::make_status_response({
+            .code = cnetmod::grpc::status_code::unavailable,
+            .message = "backend unavailable",
+        });
+        co_return;
+    };
+    const auto observed = cnetmod::observability::grpc_server_handler(raw, [&](const cnetmod::instrumentation::completed_span& span)
+        {
+            spans.push_back(span);
+        },
+        [&](cnetmod::instrumentation::metric_measurement measurement)
+        {
+            measurements.push_back(std::move(measurement));
+        });
+
+    cnetmod::sync_wait(observed(context));
+
+    ASSERT_EQ(spans.size(), std::size_t{1});
+    ASSERT_EQ(spans.front().context.trace_id, "4bf92f3577b34da6a3ce929d0e0e4736");
+    ASSERT_EQ(spans.front().parent_span_id, "00f067aa0ba902b7");
+    ASSERT_TRUE(spans.front().kind == cnetmod::instrumentation::span_kind::server);
+    ASSERT_EQ(spans.front().name, "grpc.server demo.Echo/Say");
+    ASSERT_TRUE(spans.front().result.status == cnetmod::instrumentation::operation_status::error);
+    ASSERT_EQ(measurements.size(), std::size_t{1});
+    ASSERT_EQ(measurements.front().name, "rpc.server.duration");
+    const auto status = std::ranges::find_if(measurements.front().attributes,
+        [](const auto& attribute)
+        {
+            return attribute.first == "rpc.grpc.status_code";
+        });
+    ASSERT_TRUE(status != measurements.front().attributes.end());
+    ASSERT_EQ(status->second, "14");
+}
+
+TEST(grpc_server_observation_contains_exporter_failures)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    cnetmod::http::response response;
+    cnetmod::http::header_map headers;
+    cnetmod::http::request_context context{*io, socket, "POST", "/demo.Echo/Say",
+        headers, {}, response, {}};
+    cnetmod::http::handler_fn raw = [](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+    {
+        request.resp() = cnetmod::grpc::make_status_response({
+            .code = cnetmod::grpc::status_code::ok,
+        });
+        co_return;
+    };
+    const auto observed = cnetmod::observability::grpc_server_handler(raw, [](const cnetmod::instrumentation::completed_span&)
+        {
+            throw std::runtime_error("span export failed");
+        },
+        [](cnetmod::instrumentation::metric_measurement)
+        {
+            throw std::runtime_error("metric export failed");
+        });
+
+    cnetmod::sync_wait(observed(context));
+
+    ASSERT_EQ(context.resp().trailers().at("grpc-status"), "0");
+}
+
+TEST(grpc_client_observation_owns_metric_metadata_for_every_call_shape)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::grpc::client raw{*io, "invalid://grpc-observation"};
+    std::vector<cnetmod::instrumentation::completed_span> spans;
+    std::vector<cnetmod::instrumentation::metric_measurement> measurements;
+    cnetmod::observability::instrumented_grpc_client observed{raw,
+        [&](const cnetmod::instrumentation::completed_span& span)
+        {
+            spans.push_back(span);
+        },
+        [&](cnetmod::instrumentation::metric_measurement measurement)
+        {
+            measurements.push_back(std::move(measurement));
+        }};
+    const auto parent = cnetmod::instrumentation::new_root_context();
+    const std::string service{"example.observation.LongServiceName"};
+    const std::string method{"LongMethodNameThatOutlivesTheMovedRequest"};
+    const auto unary = [&]
+    {
+        return cnetmod::grpc::unary_request{.service = service, .method = method};
+    };
+    const auto streaming = [&]
+    {
+        return cnetmod::grpc::streaming_request{.service = service, .method = method};
+    };
+
+    ASSERT_FALSE(cnetmod::sync_wait(observed.unary(unary(), parent)).has_value());
+    ASSERT_FALSE(cnetmod::sync_wait(observed.client_streaming(streaming(), parent)).has_value());
+    ASSERT_FALSE(cnetmod::sync_wait(observed.server_streaming(unary(), parent)).has_value());
+    ASSERT_FALSE(cnetmod::sync_wait(observed.bidi_streaming(streaming(), parent)).has_value());
+
+    ASSERT_EQ(spans.size(), std::size_t{4});
+    ASSERT_EQ(measurements.size(), std::size_t{4});
+    for (const auto& span : spans)
+    {
+        ASSERT_EQ(span.context.trace_id, parent.trace_id);
+        ASSERT_EQ(span.parent_span_id, parent.span_id);
+        ASSERT_TRUE(span.kind == cnetmod::instrumentation::span_kind::client);
+    }
+    for (const auto& measurement : measurements)
+    {
+        ASSERT_EQ(measurement.name, "rpc.client.duration");
+        const auto service_attribute = std::ranges::find_if(measurement.attributes,
+            [](const auto& attribute)
+            {
+                return attribute.first == "rpc.service";
+            });
+        const auto method_attribute = std::ranges::find_if(measurement.attributes,
+            [](const auto& attribute)
+            {
+                return attribute.first == "rpc.method";
+            });
+        ASSERT_TRUE(service_attribute != measurement.attributes.end());
+        ASSERT_TRUE(method_attribute != measurement.attributes.end());
+        ASSERT_EQ(service_attribute->second, service);
+        ASSERT_EQ(method_attribute->second, method);
+    }
+}
+
+TEST(grpc_client_observation_preserves_cancelled_terminal_status)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::grpc::client raw{*io, "invalid://grpc-observation"};
+    std::vector<cnetmod::instrumentation::completed_span> spans;
+    std::vector<cnetmod::instrumentation::metric_measurement> measurements;
+    cnetmod::observability::instrumented_grpc_client observed{raw,
+        [&](const cnetmod::instrumentation::completed_span& span)
+        {
+            spans.push_back(span);
+        },
+        [&](cnetmod::instrumentation::metric_measurement measurement)
+        {
+            measurements.push_back(std::move(measurement));
+        }};
+    cnetmod::cancel_token cancellation;
+    cancellation.cancel();
+    const auto result = cnetmod::sync_wait(observed.unary({
+                                                              .service = "example.observation.Service",
+                                                              .method = "CancelledPath",
+                                                          },
+        cnetmod::instrumentation::new_root_context(), cancellation));
+
+    ASSERT_FALSE(result.has_value());
+    ASSERT_TRUE(result.error().code == cnetmod::grpc::status_code::cancelled);
+    ASSERT_EQ(spans.size(), std::size_t{1});
+    ASSERT_TRUE(spans.front().result.status ==
+        cnetmod::instrumentation::operation_status::cancelled);
+    ASSERT_EQ(measurements.size(), std::size_t{1});
+    const auto status = std::ranges::find_if(measurements.front().attributes,
+        [](const auto& attribute)
+        {
+            return attribute.first == "rpc.grpc.status_code";
+        });
+    ASSERT_TRUE(status != measurements.front().attributes.end());
+    ASSERT_EQ(status->second, "1");
 }
 
 RUN_TESTS()

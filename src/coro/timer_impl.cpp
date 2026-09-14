@@ -71,13 +71,38 @@ auto async_sleep_until(io_context& ctx,
 
 namespace detail {
 
+    /**
+     * @brief Distinguishes watchdog failure from an elapsed deadline.
+     */
     auto deadline_timer_task(io_context& ctx, deadline value,
-        cancel_token& timer_token, cancel_token& operation_token) -> task<int>
+        cancel_token& timer_token, cancel_token& operation_token) -> task<std::error_code>
     {
-        (void)co_await async_timer_wait(ctx, value.remaining(), timer_token);
-        if (!timer_token.is_cancelled())
+        std::error_code error;
+        try
+        {
+            const auto waited = co_await async_timer_wait(ctx, value.remaining(), timer_token);
+            if (!waited)
+                error = waited.error();
+        }
+        catch (const std::bad_alloc&)
+        {
+            error = std::make_error_code(std::errc::not_enough_memory);
+        }
+        catch (const std::system_error& failure)
+        {
+            error = failure.code();
+        }
+        catch (...)
+        {
+            error = std::make_error_code(std::errc::io_error);
+        }
+        if (timer_token.is_cancelled())
+            co_return std::error_code{};
+        if (error)
+            operation_token.cancel();
+        else
             operation_token.cancel_due_to_deadline();
-        co_return 0;
+        co_return error;
     }
 
 } // namespace detail

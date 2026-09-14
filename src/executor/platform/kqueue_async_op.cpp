@@ -114,14 +114,7 @@ namespace {
     // kqueue awaiter with cancellation support
     // =============================================================================
 
-    /// cancel_fn_: delete event from kqueue, then post coroutine resume
-    static void kqueue_cancel_fn(cancel_token& token) noexcept
-    {
-        auto* kq = static_cast<kqueue_context*>(token.ctx_);
-        (void)kq->delete_event(token.fd_, token.filter_);
-        if (token.coroutine_)
-            kq->post(token.coroutine_);
-    }
+    static void kqueue_cancel_fn(cancel_token& token) noexcept;
 
     /// kqueue awaiter with cancellation support
     struct kqueue_cancel_awaiter
@@ -131,6 +124,12 @@ namespace {
         int16_t filter;
         cancel_token& token;
         std::error_code sync_error{};
+
+        /**
+         * The suspended frame owns cancellation queue storage until dispatch.
+         * Cancellation must not allocate inside a noexcept callback.
+         */
+        post_node cancellation_post{};
 
         auto await_ready() const noexcept -> bool
         {
@@ -145,7 +144,7 @@ namespace {
                 return false;
             }
 
-            token.ctx_ = &ctx;
+            token.ctx_ = this;
             token.fd_ = fd;
             token.filter_ = filter;
             token.coroutine_ = h;
@@ -177,6 +176,22 @@ namespace {
             token.pending_.store(false, std::memory_order_relaxed);
         }
     };
+
+    /**
+     * @brief Removes readiness and queues cancellation without allocating.
+     */
+    static void kqueue_cancel_fn(cancel_token& token) noexcept
+    {
+        auto* awaiter = static_cast<kqueue_cancel_awaiter*>(token.ctx_);
+        if (!awaiter)
+            return;
+        (void)awaiter->ctx.delete_event(awaiter->fd, awaiter->filter);
+        if (token.coroutine_)
+        {
+            awaiter->cancellation_post.coroutine = token.coroutine_;
+            awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
+        }
+    }
 
     auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint
     {

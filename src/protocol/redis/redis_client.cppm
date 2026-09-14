@@ -12,8 +12,9 @@ import cnetmod.core.address;
 import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http.middleware.tracing;
+import cnetmod.instrumentation.tracing;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -48,23 +49,72 @@ public:
     explicit client(io_context& ctx) noexcept;
     auto connect(connect_options opts = {})
         -> task<std::expected<void, std::string>>;
+    /**
+     * @brief Establishes a cancellable session with typed, payload-free errors.
+     *
+     * TCP attempts, TLS handshake and Redis negotiation share the caller token.
+     * Blocking resolver work currently finishes before cancellation is observed.
+     * A failed attempt closes the uncommitted session. Requires exclusive ownership.
+     */
+    [[nodiscard]] auto connect(connect_options opts, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto is_open() const noexcept -> bool;
+    /**
+     * @brief Releases transport and resets buffered input and negotiated state.
+     *
+     * Requires exclusive ownership with no pending I/O. Reconnecting invokes
+     * this reset before establishing a new session; push handlers are retained.
+     */
     void close() noexcept;
+    /**
+     * @brief Probes an exclusively owned command connection with cancellable I/O.
+     *
+     * Requires no outstanding commands, subscriptions, or pending push messages.
+     * Only an exact PONG response succeeds. Interrupted or invalid exchanges
+     * close the connection so unread bytes cannot contaminate a later command.
+     * The caller supplies cancellation and, if needed, a deadline wrapper.
+     */
+    [[nodiscard]] auto ping(cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
+    /**
+     * @brief Exchanges a bounded request batch using cancellable transport I/O.
+     *
+     * Requires exclusive command ownership and no buffered unsolicited input.
+     * Server error replies remain response nodes; transport and parser errors
+     * retain their error codes. Incomplete exchanges invalidate the connection.
+     * The byte budget covers all received replies, not each pipeline element.
+     */
+    [[nodiscard]] auto exchange(const request& batch, cancel_token& cancellation,
+        std::size_t response_byte_limit = 65536)
+        -> task<std::expected<std::vector<resp3_node>, std::error_code>>;
     auto exec(const request& req)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    /**
+     * @brief Observes a request batch without capturing command arguments.
+     */
+    auto exec(const request& req, const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto cmd(std::initializer_list<std::string_view> args)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto cmd(std::span<const std::string> args)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
-    /// Run a command as a child of an HTTP/request trace. Redis itself has no
-    /// traceparent field, so completion is emitted locally through `on_end`.
+    /**
+     * @brief Observes a command using an explicit protocol-independent parent.
+     *
+     * An empty sink delegates directly to the original command task. Redis
+     * carries no trace headers; server error replies mark the local span failed.
+     * Argument storage must remain valid until the returned task completes.
+     * Parent and sink snapshots are owned by the observed task; snapshot failure
+     * delegates to the original command without replacing its result.
+     */
     auto cmd(std::initializer_list<std::string_view> args,
-        const http::tracing::trace_context& parent,
-        http::tracing::span_exporter on_end)
+        const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto cmd(std::span<const std::string> args,
-        const http::tracing::trace_context& parent,
-        http::tracing::span_exporter on_end)
+        const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto cmd_follow_redirect(std::vector<std::string> args,
         std::size_t max_redirects = 3)
@@ -72,6 +122,19 @@ public:
     auto pipe(std::initializer_list<std::initializer_list<std::string_view>> cmds)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto pipe(std::span<const std::vector<std::string>> cmds)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    /**
+     * @brief Observes a complete pipeline, including errors in individual replies.
+     *
+     * A disabled sink returns the original task without copying the batch.
+     */
+    auto pipe(std::span<const std::vector<std::string>> cmds,
+        const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end)
+        -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto pipe(std::initializer_list<std::initializer_list<std::string_view>> cmds,
+        const instrumentation::trace_context& parent,
+        const instrumentation::span_exporter& on_end)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
     auto subscribe(std::initializer_list<std::string_view> channels)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
@@ -96,6 +159,19 @@ public:
         -> std::expected<std::vector<cluster_slot_range>, std::string>;
 
 private:
+#ifdef CNETMOD_HAS_SSL
+    struct tls_configuration_failure
+    {
+        std::error_code code;
+        std::string_view stage;
+    };
+
+    /**
+     * @brief Configures TLS identity and trust without starting network I/O.
+     */
+    [[nodiscard]] auto configure_tls(const connect_options& options,
+        bool require_default_trust) -> std::expected<void, tls_configuration_failure>;
+#endif
     auto do_write(const_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
     auto do_read(mutable_buffer buf)

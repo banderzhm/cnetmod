@@ -4,6 +4,7 @@ import std;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.mutex;
+import cnetmod.coro.cancel;
 import :error;
 import :connection;
 import :connection_options;
@@ -56,19 +57,49 @@ public:
     auto operator=(const connection_pool&) -> connection_pool& = delete;
 
     auto warm_up() -> task<result<void>>;
+    /**
+     * Warms the pool while cancelling only connections created by this call.
+     * The exclusive token and pool must outlive the operation. Cancellation
+     * does not cancel other callers waiting for or creating connections.
+     */
+    auto warm_up(cancel_token& cancellation) -> task<result<void>>;
     auto acquire() -> task<result<pooled_connection>>;
     auto acquire(std::stop_token cancellation) -> task<result<pooled_connection>>;
     auto health_check() -> task<void>;
+    /**
+     * Checks idle connections with cancellable pings. If none are idle, uses
+     * the existing checkout queue and creation limits to obtain a candidate.
+     * Queue timeout is not reported as verified health. The pool and
+     * exclusive token must outlive the returned operation.
+     */
+    auto health_check(cancel_token& cancellation) -> task<result<void>>;
     auto run_maintenance(std::stop_token stop) -> task<void>;
     void close() noexcept;
+    /**
+     * Waits for pool closure and already-registered deferred lease returns.
+     * The returned task retains shared state, not the connection_pool object.
+     * This does not join independently started maintenance or borrower tasks.
+     */
+    [[nodiscard]] auto async_close() -> task<void>;
     [[nodiscard]] auto size() const noexcept -> std::size_t;
     [[nodiscard]] auto idle_count() const noexcept -> std::size_t;
     [[nodiscard]] auto checked_out_count() const noexcept -> std::size_t;
+    /**
+     * Returns the number of admitted connection attempts awaiting settlement.
+     * Pool closure rejects new attempts but does not complete existing ones.
+     */
+    [[nodiscard]] auto connecting_count() const noexcept -> std::size_t;
     [[nodiscard]] auto waiter_count() const noexcept -> std::size_t;
     [[nodiscard]] auto context() noexcept -> io_context&;
 
 private:
-    auto create_connection() -> task<result<std::shared_ptr<connection_pool_slot>>>;
+    auto create_connection(cancel_token* cancellation = nullptr, std::stop_token stop = {}) -> task<result<std::shared_ptr<connection_pool_slot>>>;
+    auto checkout_for_health(cancel_token& cancellation) -> task<result<pooled_connection>>;
+    template <bool Cancellable>
+    auto warm_connections(cancel_token* cancellation) -> task<result<void>>;
+    template <bool Cancellable>
+    auto check_connections(cancel_token* cancellation)
+        -> task<std::conditional_t<Cancellable, result<void>, void>>;
     std::shared_ptr<connection_pool_state> state_;
 };
 

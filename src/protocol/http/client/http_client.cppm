@@ -105,6 +105,14 @@ export struct client_options
 
     // Cookie options
     bool enable_cookies = true; // Implementation note: cookies.
+    /**
+     * @brief Optional HTTP/1.1 response-body budget enforced before accumulation.
+     *
+     * Zero preserves the existing policy. A nonzero budget also bounds chunk
+     * framing and closes failed response connections. HTTP/2 and HTTP/3 are not
+     * covered; bounded consumers must explicitly select http1_only.
+     */
+    std::size_t http1_response_body_limit = 0;
 };
 
 // =============================================================================
@@ -375,6 +383,14 @@ private:
     [[nodiscard]] auto send_http1(const request& req)
         -> task<std::expected<response, std::error_code>>;
     [[nodiscard]] auto send_http1(const request& req, cnetmod::cancel_token& token)
+        -> task<std::expected<response, std::error_code>>;
+
+    /**
+     * Specializes response decoding so unlimited clients do not execute
+     * bounded-response checks in their receive loops.
+     */
+    template <bool Bounded>
+    [[nodiscard]] auto send_http1_impl(const request& req, cnetmod::cancel_token& token)
         -> task<std::expected<response, std::error_code>>;
 
     [[nodiscard]] auto send_http2(const request& req)

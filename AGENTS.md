@@ -1528,9 +1528,20 @@ Socket 必须已通过 `async_connect`（客户端）或 `async_accept`（服务
 | `async_write` | `auto async_write(const_buffer buf) -> task<expected<size_t, error_code>>` | 异步写入（加密后发送） |
 | `async_write_all` | `auto async_write_all(const_buffer buf) -> task<expected<void, error_code>>` | 异步写完所有字节 |
 | `async_shutdown` | `auto async_shutdown() -> task<expected<void, error_code>>` | 异步 TLS 关闭 |
+| `async_shutdown` | `auto async_shutdown(cancel_token& token) -> task<expected<void, error_code>>` | 可取消关闭，token 与流必须存活到任务结束 |
 | `get_alpn_selected` | `auto get_alpn_selected() const noexcept -> string_view` | 获取 ALPN 协商结果 |
 | `kernel_tls_active` | `auto kernel_tls_active() const noexcept -> bool` | kTLS 是否激活 |
 | `native` | `auto native() const noexcept -> SSL*` | 获取原生 SSL 指针 |
+
+可取消关闭将 token 传到 BIO 读写和 Linux socket readiness 等待；调用前已取消则直接
+返回 operation_canceled，不调用 SSL_shutdown。它不负责关闭 socket，调用方仍拥有传输资源。
+普通入口与可取消入口通过编译期分流共享实现，普通入口不检查运行时 token。
+Windows 本地回归覆盖预取消，以及已握手连接等待对端 close_notify 时的 30ms 超时取消：
+对端只消费密文、不发送关闭确认；客户端返回 timed_out 后关闭 socket，对端观察到连接结束。
+该用例由独立 test_ssl_shutdown 目标执行，仅依赖 SSL 与 OpenSSL 证书生成工具，不依赖
+Redis 开关；它与 test_redis_tls 共用证书设施。Arch Clang 22 的 SSL-only 配置（HTTP、Redis、
+ORM 均关闭）也已运行通过。当前仓库强制使用内置 BoringSSL，其头文件未提供 SSL_OP_ENABLE_KTLS，
+因此该配置实际使用 memory BIO；不能将结果当作 direct socket BIO/kTLS 的运行证据。
 
 ### 错误处理
 **签名**:
@@ -2452,6 +2463,12 @@ auto [a, b] = co_await when_all(fetch_a(), fetch_b());
 **签名**: `export void spawn(io_context& ctx, task<void> task_to_run);`
 
 即发即弃：投递到 `io_context` 后立即返回。未捕获异常调用 `std::terminate()`。
+
+需要隔离异常时使用 `spawn_guarded(ctx, task, on_error)`，回调接收
+`std::exception_ptr`，回调自身异常也被捕获。固定基础设施回调可使用
+`spawn_guarded<on_error>(ctx, task)` 编译期绑定，不在协程帧中保存运行时回调。
+包装协程开始前的分配失败仍可能抛给调用者。两种 guarded 接口均不是 join 机制，
+不能代替关键任务的生命周期监管和取消。普通 `spawn()` 的终止语义保持不变。
 
 ---
 
@@ -4106,6 +4123,30 @@ for (auto* worker_io : sctx.worker_ios()) {
 
 # MongoDB 协议模块
 
+## 等待关闭动作
+
+`connection_pool::async_close() -> task<void>` 返回持有共享池状态的关闭任务，
+Application MongoDB 服务使用 `co_await` 等待它，不通过 `close()` 投递后立即报告成功。
+此入口等待关闭动作本身，不自动等待独立启动的维护与借用者；这些任务仍需
+由调用方监管。锁竞争产生的已登记归还动作由连接槽持有，`async_close()` 会等待
+这些投递执行完毕；它不等待调用方尚未释放的租约。I/O 上下文必须保持运行直到收尾完成。
+排队借用的超时任务由 `acquire()` 持有，借用返回前会取消并等待
+该任务结束；超时执行异常传播给借用者，不再从裸 `spawn()` 终止进程。
+借用必须在所属 I/O 线程执行，不可提前销毁仍在挂起的借用任务。
+`std::stop_source::request_stop()` 可以从其他线程发起；借用取消回调只通知定时器，
+队列移除与结果发布由所属 I/O 线程上的超时任务完成，不从取消线程操作池元数据。
+原有 `close()` 入口仍不是完整的关闭等待屏障。
+已请求关闭或已关闭的池调用 `warm_up()` 返回 `connection_closed`，即使最小连接数为零，
+也不会将关闭状态当作预热成功；重新启动服务不能复用已关闭的池。
+
+## 命令超时与 I/O 取消
+
+命令读写（普通 socket 与 SSL 分支）使用连接持有的取消 token。命令超时先取消
+挂起的 I/O，命令与看门狗收尾后再关闭连接；不能仅靠关闭 fd 唤醒 epoll 中的读取。
+`cancel_active_command()` 通知同一 token，不直接从调用线程销毁 socket 或 SSL 对象。
+该 token 仅在上一条命令 I/O 已结束后复用；仍禁止并发使用同一连接。
+Arch epoll/ASAN 已验证无响应 hello 的超时收尾；这不是 MongoDB TLS 运行验证。
+
 > 异步 MongoDB C++ 客户端，基于 Wire Protocol，支持 SCRAM-SHA-256 认证、TLS、连接池、事务、变更流与重试逻辑。
 
 **import**: `import cnetmod.protocol.mongodb;`
@@ -4795,6 +4836,13 @@ auto streamed = co_await conn.command_stream("analytics",
 
 # MySQL 协议模块
 
+## 停止后的传输释放
+
+`client::close() noexcept` 不发送 COM_QUIT，也不等待网络，保留最近 I/O 错误并清空连接状态。
+只能在所属执行线程、所有客户端操作均已结束后调用；正常协议退出仍使用 `quit()`。
+连接池维护入口等待全部连接任务结束后关闭未借出的客户端；维护已结束后的重复
+`cancel()` 也清理未借出连接。外部 lease 仍须在池销毁前归还。
+
 > 高性能异步 MySQL 客户端，支持文本/二进制协议、连接池、管道、事务与 ORM 集成。
 
 **import**: `import cnetmod.protocol.mysql;`
@@ -4884,6 +4932,11 @@ auto with_params(std::string_view query, std::initializer_list<param_value> args
 ### `client::connect`
 
 **签名**: `auto connect(connect_options opts = {}) -> task<result_set>`
+
+需要可取消的连接或心跳时，使用 `connect(connect_options, cancel_token&)`
+与 `ping(cancel_token&)`。令牌必须存活到操作结束；不要并发操作同一个
+client。取消会传递到连接和认证读写，`last_error()` 保留传输错误。
+已经开始的系统 DNS 查询仍可能需要等解析返回，不能将它当成硬实时取消。
 
 ```cpp
 struct connect_options {
@@ -5138,6 +5191,44 @@ class pooled_connection {
 
 **`sharded_connection_pool`** — 多核分片连接池（每个 worker io_context 绑定独立分片）：
 
+默认析构归还的打开连接先进入 resetting，由已有连接维护任务执行
+`COM_RESET_CONNECTION`，成功后才进入空闲位图并交给等待者。reset 使用
+`ping_timeout` 作为维护操作超时，支持停机取消；失败则进入 dead 等待重连。
+`client::reset_connection(cancel_token&)` 提供对应的取消感知协议调用。
+显式 `return_without_reset()` 保持不重置语义，可保留会话状态并立即再次借出。
+默认归还增加的是之前遗漏的协议清理往返，不是 OTEL 开关带来的成本。
+114 专用测试库已验证普通归还清除会话变量、不重置归还保留变量。本地协议对端
+在收到 reset 后不回复，已验证 30ms 维护超时关闭旧会话，以及设置 10 秒超时
+时主动停机仍能取消 reset 并等待维护任务退出。测试同时断言 reset 期间无空闲连接。
+超时分支还完成新 TCP 连接的认证，验证等待者重新获得连接并成功 PING，池大小
+保持 1，退出后无残留等待者。reset 响应只接受结构完整的 OK 或 ERR；未知响应头、
+截断的长度编码或状态字段、畸形错误包会关闭连接并报告 protocol_error。
+reset 回归使用独立 `test_mysql_pool` 目标，只要求启用 MYSQL，不依赖 HTTP 或 ORM；
+Windows 已验证 HTTP=OFF、ORM=OFF 配置。TLS 及锁竞争归还的分配失败仍需单独验证，
+不能据此认定连接池已完整验收。
+
+锁竞争归还不再创建辅助协程：默认归还进入 resetting，不重置归还进入 returning，
+由已有、可等待退出的连接维护任务获得元数据锁后通知 FIFO 等待者。非竞争的
+不重置归还仍直接进入 idle。分配探针已覆盖扩容持锁期间的重入不重置归还：
+不消耗嵌套分配失败探针，等待者最终取得连接，另一等待者取消后计数归零。
+该定向测试复用 `test_http_disabled_overhead` 的测试专用分配器，不改变生产分配器；
+同一探针也覆盖 optional 租约直接析构：析构不消耗失败探针，对端随后收到
+COM_RESET_CONNECTION，返回成功后等待者获得连接。登录和 reset 读取处理 TCP
+分片，避免将一次 read 当作完整报文。它不是跨线程竞争或 CPU 性能等价的完整证明。
+
+`async_run()` 是完整生命周期任务：启动各分片，并在停止后等待已投递的分片
+退出，最后传播错误。不能把 `co_await pool.async_run()` 放在业务请求之前
+当作启动屏障。用 `when_all` 或应用监管器并发运行生命周期和业务任务。
+`request_stop()` 可跨线程请求所有分片停止；`cancel()` 也只发出停止请求。
+必须等待运行中的 `async_run()` 结束，再停事件循环；销毁池前仍须归还所有
+借出的连接。异步归还与借出连接的完整生命周期安全尚未验收。
+
+`connection_pool::checked_out_count()` 在所属执行线程扫描节点状态，报告尚未归还的
+租约数；不在借还快速路径增加计数器。Application 的 `mysql_service::stop()` 请求池
+停止后等待租约归还，并遵守阶段取消令牌和截止时间。到期仍有租约则失败，保留服务登记，
+归还后可重试关闭，不能再把仅停止维护任务当作服务已释放。114 隔离库验证了持有租约时
+30ms 关闭超时、归还后再次关闭成功；这不是任意逃逸引用可安全析构的保证。
+
 ```cpp
 class sharded_connection_pool {
     // 单 io_context + 指定分片数
@@ -5187,28 +5278,32 @@ auto run(cn::io_context& ctx) -> cn::task<void>
     params.max_size = 64;
     params.ping_interval = std::chrono::minutes(30);
 
-    // 4 分片，适合 4 worker 线程
+    // 4 个分片共用此事件循环；多线程时传入各 worker 的 io_context。
     mysql::sharded_connection_pool pool(ctx, params, 4);
-    co_await pool.async_run();
+    auto workload = [&]() -> cn::task<void> {
+        struct stop_on_exit {
+            mysql::sharded_connection_pool& pool;
+            ~stop_on_exit() { pool.request_stop(); }
+        } stop{pool};
 
-    // 获取连接（自动选择分片）
-    auto conn_r = co_await pool.async_get_connection();
-    if (conn_r) {
-        auto rs = co_await (*conn_r)->query("SELECT COUNT(*) FROM orders");
-        if (rs.has_rows())
-            std::println("订单总数: {}", rs.rows[0][0].to_string());
-    } // pooled_connection 析构时自动归还
+        // 限定 lease 作用域，确保停止前归还。
+        if (auto connection = co_await pool.async_get_connection(); connection) {
+            auto result = co_await (*connection)->query("SELECT COUNT(*) FROM orders");
+            if (result.is_err())
+                co_return;
+        }
 
-    // 绑定到特定 io_context（用于多 worker 场景）
-    auto conn2_r = co_await pool.async_get_connection(ctx);
-    if (conn2_r) {
-        auto rs = co_await (*conn2_r)->execute(
-            mysql::with_params("UPDATE orders SET status = {} WHERE id = {}",
-                {mysql::param_value::from_string("shipped"),
-                 mysql::param_value::from_int(1024)}));
-    }
+        if (auto connection = co_await pool.async_get_connection(ctx); connection) {
+            auto result = co_await (*connection)->execute(
+                mysql::with_params("UPDATE orders SET status = {} WHERE id = {}",
+                    {mysql::param_value::from_string("shipped"),
+                     mysql::param_value::from_int(1024)}));
+            if (result.is_err())
+                co_return;
+        }
 
-    co_await pool.cancel();
+    };
+    co_await cn::when_all(pool.async_run(), workload());
     ctx.stop();
 }
 ```
@@ -5407,9 +5502,11 @@ struct connection_options {
 **签名**:
 ```cpp
 class client {
-    explicit client(io_context&) noexcept;
+    explicit client(io_context&);
     auto connect(connection_options options = {}) -> task<result_set>;
+    auto connect(connection_options options, cancel_token& cancellation) -> task<result_set>;
     auto query(std::string_view sql) -> task<result_set>;
+    auto query(std::string_view sql, cancel_token& cancellation) -> task<result_set>;
     auto execute(parameterized_query parameters) -> task<result_set>;
     auto prepare(std::string_view sql, std::string name = {})
         -> task<std::expected<prepared_statement, std::string>>;
@@ -5419,6 +5516,7 @@ class client {
     auto query_batches(std::string_view sql, std::size_t batch_size,
         std::function<task<void>(std::span<const row>)> consume) -> task<result_set>;
     auto terminate() -> task<void>;
+    auto terminate(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
     auto is_open() const noexcept -> bool;
 };
 ```
@@ -5542,13 +5640,16 @@ struct connection_pool_options {
 class connection_pool {
     connection_pool(io_context&, connection_pool_options);
     auto warm_up() -> task<result_set>;
+    auto warm_up(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
     auto acquire() -> task<std::expected<pooled_connection, std::error_code>>;
     auto acquire(cancel_token& cancellation)
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto close() -> task<void>;
+    auto close(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>;
     auto size() const noexcept -> std::size_t;
     auto idle_count() const noexcept -> std::size_t;
     auto checked_out_count() const noexcept -> std::size_t;
+    auto background_error() const noexcept -> std::error_code;
 };
 
 class pooled_connection {
@@ -5577,7 +5678,60 @@ if (conn_r) {
 } // pooled_connection 析构时自动归还
 ```
 
+可取消 terminate 拒绝重叠操作；预取消保留会话，便于之后重试。开始关闭后，同一 token
+传到 PostgreSQL Terminate 写入以及启用 SSL 时的 async_shutdown。传输错误断开连接并
+保留 error_code。普通无参 terminate 未改变。当前回归验证明文协议终止报文与预取消，
+池的 close(cancellation) 与 Application stop 已接入这一入口。可取消关闭等待关闭锁、
+重连任务和租约时检查取消，超时后池仍持有槽位与通知；调用方必须保持池存活，归还租约并重试。
+Application 使用停止上下文的 deadline 映射 timed_out；从未启动且无资源的 stop 仍幂等成功。
+当前服务回归验证持有租约超过 30ms 截止时间后返回超时、连接保留、归还后再次停止成功。
+这不代表任意失控业务协程或传输阻塞均已完成有界退出验证。
+
 ### 认证机制
+
+`client::reconnect()` 使用保存的连接配置，并由 `connect()` 统一取得操作所有权后
+关闭旧连接。在所属 executor 上与尚未完成的操作重叠调用时，重连返回错误，
+不会提前断开原操作的传输连接。认证期间的传输失败在清理后仍保留于
+`last_error()`；这不表示所有认证错误都有网络错误码。
+
+`query(sql, cancellation)` 将 token 显式传给该次查询的网络读写，包括 TLS 接口。
+调用前已取消时不发送 SQL，保留会话；进行中的读写被取消时断开会话，必须重连后
+才能复用。重叠调用在网络操作之前被拒绝，token 与 SQL 存储必须活到任务完成。
+内部使用编译期传输选择：普通入口采用 `std::nullptr_t` 实例，可取消入口采用
+`cancel_token*` 实例；客户端没有共享 token 槽位，普通读写不检查运行时取消指针。
+这是传输取消，不是 `cancel_current_operation()` 的 PostgreSQL CancelRequest。
+`connect(options, cancellation)` 也采用编译期分流，将同一 token 传到 Happy Eyeballs、
+重试定时器、TLS 握手与认证读写。token 必须活到连接任务完成。
+当前本地回归验证明文查询和认证等待取消；真实 TLS、DNS 阻塞、中途写入取消及
+重试等待取消仍需独立验证，连接池/Application 尚未全面接入这些重载。
+
+Application 的 PostgreSQL 健康探测使用同一个 deadline 获取连接并执行 `SELECT 1`，
+不再仅凭池大小报告 up。失败连接被标记 discard；下次探测可重新建连。
+健康报告使用固定诊断文本和错误码，不转发服务器 SQL 错误详情。当前本地测试覆盖
+探测超时后丢弃连接、下一次探测重连成功。Application 启动使用可取消预热与同一个
+截止时间；预热临时持有连接租约直到达到 minimum_connections，随后归还池。
+可取消预热失败时，会在返回前关闭本次持有的连接（包括复用的空闲连接），不影响其他
+调用方已借出的连接。槽位保留为可重试状态，池不进入关闭状态；`size()` 仍统计槽位，
+不能用它推断活连接数。生命周期回归覆盖第二条连接认证超时、第一条连接自动关闭、
+原始启动错误保留，以及同一服务再次启动成功并最终停止。该回归使用明文 TCP 模拟对端，
+不是完整 PostgreSQL 服务器。后台重连监管仍需完善。
+
+丢弃槽位的后台重连由池延迟创建的 `task_group` 持有，每个任务使用独立取消 token。
+`close()` 先禁止新任务、取消并等待重连结束，再清理连接。正常租借路径不创建任务组。
+`background_error()` 在所属 executor 上无分配地读取重连派发错误，或已完成任务组的错误；
+派发错误优先返回。没有派发错误且任务仍运行或尚无任务组时返回空错误，不能将其
+当作连通性判断。Application 的 PostgreSQL probe 在发起查询前检查此结果并以固定
+诊断文本报告 down。当前接口不提供跨线程池操作保证。
+已启动服务再次 `start()` 时，若存在派发错误或已完成后台错误，会重新进入可取消预热，而不是
+直接成功返回。预热在任务组不存在或已经完成时处理已记录的派发错误或任务组错误，
+清除失败状态并将未借出、已丢弃槽位恢复为可重试；
+不会清除仍运行任务的状态。重新调度不代表健康已恢复，仍需查询探测和健康状态确认。
+回归分别注入任务组创建前和已排队重连开始时的分配失败，验证 probe 报告 down、
+再次 start 后原等待者获得替代连接、错误清除和最终 close。对端为明文认证模拟服务，
+另有认证期间对端断开的回归：普通 connect 错误也会使重连任务失败，优先保留
+客户端 `last_error()`，没有传输错误码时回退为 `io_error`，不再把连接失败报告为成功。
+不证明真实 SQL 健康确认、恢复预算或完整 host 生命周期。调用方仍必须在销毁池前
+等待 `close()`；已借出的连接和跨线程等待者仍需独立验证，不能理解为所有池后台路径均已闭环。
 
 模块内置 **SCRAM-SHA-256**（推荐）、**MD5**（兼容旧版）、**Trust** 认证，在 `connect()` 阶段自动处理。TLS 协商在认证前完成。
 
@@ -5620,6 +5774,16 @@ User user{.name = "Alice", .email = "alice@example.com"};
 auto rs = co_await db.insert(user); // RETURNING * 自动回填 id
 ```
 
+连接租约的普通归还保持同步快速路径；状态锁竞争时，归还通知存放在池的稳定槽位中，
+通过所属 io_context 投递，不再创建 `release_async` 脱离协程。通知处理前槽位仍保持
+已借出状态，因此 `close()` 不会提前移除它。锁仍被占用时通知留待下一次事件循环处理。
+每个槽位增加固定通知存储；这不是历史性能无损的测量证明。取消清理使用等待者帧内的
+通知，不创建脱离协程，取消回调只取得唤醒权并投递通知。close 会等待已登记等待者
+完成清理，不能因等待队列已清空而提前返回。调用方必须保持池存活并等待 close，
+不能提前停止事件循环。等待队列通过 cancel_token 的 register_callback、complete_callback、
+finish_callback 同步登记、完成与取消，不直接读写旧平台回调字段。当前回归覆盖登记完成后
+由另一线程发起取消、通知尚未执行时开始 close；同时登记/取消压力与持续锁竞争公平性仍需验证。
+
 ## 连接池（生产级用法）
 
 ### Pool API
@@ -5645,6 +5809,7 @@ class connection_pool {
     auto idle_count() const noexcept -> std::size_t;
     auto checked_out_count() const noexcept -> std::size_t;
     auto waiter_count() const noexcept -> std::size_t;
+    auto background_error() const noexcept -> std::error_code;
 };
 
 class pooled_connection {
@@ -6112,6 +6277,20 @@ class connection_pool {
 
 ### `sharded_connection_pool` — 分片连接池
 
+连接池等待者的取消和池停止通知使用等待协程帧内的投递节点，不为通知本身分配堆内存。
+取消仅投递原等待者，原协程恢复后取得协程锁并移除登记，不启动 detached 清理协程。
+连接分配、调用者取消和池停止通过同一个 pending 标志竞争完成权，只有获胜者投递。
+调用者仍必须等待获取连接的任务结束后再销毁池和事件循环；此机制不支持强制销毁在途任务。
+
+归还连接遇到池锁竞争时，使用连接节点内的投递通知，不创建 detached 归还协程。
+待处理归还计入 `pending_maintenance()`，`cancel()` 等待已登记通知完成。
+这不替代外部借出连接的生命周期管理：所有 lease 仍须在池销毁前归还。
+
+`checked_out_count()` 在所属执行线程扫描节点，统计正常借出及停止后仍被持有的连接，
+不为每次借用增加计数器操作。停止后归还的连接会关闭而不重新进入空闲池。
+Application Redis 服务停止时按调用方 deadline 等待 lease；超时返回错误并保留服务状态，
+归还后可再次调用停止。该约定仍不允许销毁外部正在使用的池。
+
 适用于多核 `server_context` 场景，每个 worker `io_context` 绑定独立分片。
 
 ```cpp
@@ -6564,6 +6743,14 @@ auto main() -> int
 | 长连接启用 `ping_interval` 保活 | 不要在高并发场景为每个请求创建新 client |
 | 多核场景使用 `sharded_connection_pool` + `server_context` | 不要在多 worker 场景使用单 `connection_pool` |
 | 通过 `async_get_connection(io_context&)` 绑定 worker 分片 | 不要让请求跨 worker 分片获取连接 |
+
+## 本地真实服务测试
+
+`test_application_redis_live` 只连接显式指定端口的 `127.0.0.1`，执行 RESP3 建连、
+健康 PING、三次关闭自身借出的连接后重新建连，以及受监管停止，不创建键或修改服务配置。设置 `CNETMOD_REDIS_INTEGRATION=1`
+及 `CNETMOD_REDIS_TEST_PORT` 后通过 CTest 运行；未启用时返回 77，由 CTest 标记 skipped。
+端口缺失或非法直接失败。测试服务须自行启动、隔离和回收；该入口不验证服务端宕机恢复，
+也不意味着 Redis/Valkey 的真实服务验收已经通过。
 
 ## 参考示例
 
@@ -7797,6 +7984,25 @@ ignored and never changes the database or Redis operation outcome.
 
 #### `server::stop`
 **签名**: `void stop()`
+**生命周期**: 在 accept 事件循环上调用，取消挂起的 accept。调用后必须继续运行
+事件循环，直到持有的 `run()` task 完成，才能销毁 server/事件循环。
+`stop()` 不等于连接排空；已经接受的连接仍须独立等待完成，不能调用后立即停止 I/O。
+连接超限时，接收循环发送 429 后半关闭发送方向，并读取丢弃对端剩余数据直到 EOF。
+发送和收尾共用 1 秒取消预算，`stop()` 可提前取消。等待 I/O 与定时器结束后才关闭
+socket、复用接收取消令牌。这避免立即关闭未读请求使 Windows 客户端丢失 429。
+收尾当前占用接收循环，超限对端不关闭时最多消耗上述预算；不改变正常获准连接的路径。
+
+获准连接使用 `spawn_guarded` 派发：未被中间件处理的连接异常会结束该连接，记录错误
+类别和数值，不记录异常文本，也不再经 detached promise 终止进程。包装协程创建前的
+分配失败仍可向接收循环传播。此隔离机制与 OTEL 开关无关，不替代连接任务的显式等待
+或 handler 的取消契约。
+
+#### `server::abort_connections`
+**签名**: `void abort_connections() noexcept`
+**说明**: 停止接收后，可中止现有及已投递连接的 socket 读写。此操作对该 server
+实例不可撤销，可重复调用；采用 socket shutdown，不销毁挂起的协程。
+必须继续运行 worker 事件循环直到连接完成。它不能取消 handler 内任意非 socket
+等待，也不能替代应用层取消协议。`active_connections()` 包含已投递但尚未执行的连接。
 
 #### `server::set_max_connections`
 **签名**: `void set_max_connections(std::size_t n)`
@@ -8683,15 +8889,29 @@ Multipath 草案对端互操作仍需独立完成，不能宣称为通用浏览�
 <!-- BEGIN SOURCE: skill/infra/application.md -->
 # Source: `skill/infra/application.md`
 
-# Application 应用框架
+# Application 应用运行框架
 
-> 将网络初始化、HTTP、路由、中间件、服务注册、生命周期、管理端点和 OpenTelemetry 组合成开箱即用的应用入口。
+> 提供配置、显式自动装配、依赖生命周期、任务监管、健康检查、OTEL 和优雅停机的生产级组合根。
 
 **import**: `import cnetmod.application;`
 
 **源码**: `src/application/`
 
-## 快速启动
+## 核心原则
+
+1. 使用 `application_builder` 构建，使用 `application_host` 运行；不存在旧 `http_application` 兼容层。
+2. 外部组件只有在配置中 `enabled: true` 且调用 `enable_auto_configuration()` 时才会装配。
+3. 所有长生命周期组件实现 `managed_service`，关键后台协程交给 `task_supervisor`。
+4. `build()` 完成严格配置校验、服务注册冻结和依赖环检查；失败时不启动网络监听。
+5. required 组件启动失败会精确回滚；optional 组件进入降级恢复。运行期 required 恢复预算耗尽会请求应用停机。
+6. HTTP handler 只读取 `health_registry` 的缓存，不同步探测 Redis、数据库或消息代理。
+
+启动任务组使用整体启动截止时间，每个组件独立执行单组件截止时间。
+optional 组件的单组件超时只触发降级与恢复，不能由共享计时器升级为整层失败；
+整体启动预算耗尽或 required 组件失败仍触发回滚。真实 MySQL 适配器的本地
+拒绝连接用例验证 optional 降级时 live=200、ready=503，并可正常主动停机。
+
+## 最小入口
 
 ```cpp
 #include <cnetmod/config.hpp>
@@ -8699,126 +8919,399 @@ Multipath 草案对端互操作仍需独立完成，不能宣称为通用浏览�
 import std;
 import cnetmod.application;
 
+auto configure_routes(cnetmod::http::router& routes) -> void
+{
+    routes.get("/orders", [](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+    {
+        request.json(cnetmod::http::status::ok, R"({"orders":[]})");
+        co_return;
+    });
+}
+
 auto main() -> int
 {
-    auto result = cnetmod::application::run_application({
-        .name = "orders",
-        .http = {.port = 8080},
-        .observability = {.otlp = {
-            .endpoint = "http://127.0.0.1:4318/v1/traces",
-        }},
-    }, [](cnetmod::application::http_application& app)
-    {
-        app.routes().get("/hello", [](cnetmod::http::request_context& request)
-            -> cnetmod::task<void>
-        {
-            request.json(cnetmod::http::status::ok,
-                R"({"message":"hello"})");
-            co_return;
-        });
-    });
-    return result ? 0 : 1;
+    auto host = cnetmod::application::application_builder{"order-service"}
+        .configuration_file("application.json")
+        .enable_auto_configuration()
+        .routes(configure_routes)
+        .build();
+    if (!host)
+        return EXIT_FAILURE;
+    return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 ```
 
-默认启用以下能力：
+`application_host` 自己创建 `net_init`、`io_context`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。
 
-- `net_init` 与平台 `io_context` 生命周期管理。
-- 异常恢复、停机期间拒绝新请求、请求 ID、HTTP 指标和安全的精简访问日志。
-- `/actuator/health` 健康检查。
-- `/actuator/prometheus` OpenMetrics 指标。
-- 配置 OTLP endpoint 后自动启用 W3C Trace Context 与 OTLP Trace 导出。
-- SIGINT/SIGTERM 和代码调用 `stop()` 使用同一条优雅停机路径。
+host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 
-## 数据库与消息系统自动装配
+编排异常的清理入口停止监听后，立即取消被跟踪请求并中止业务和管理连接的 socket I/O，
+进入收尾并先等待被跟踪 handler 退出，再取消、等待监管任务，然后关闭服务；不等待再次
+走正常请求排空阶段，也不覆盖最早的原始错误。收尾本身失败的紧急回退仍请求监管任务停止。
+故障注入测试覆盖活跃 HTTP handler 等待期间的编排分配失败、请求取消和原始错误保留。
+该测试同时挂载受管理依赖及后台任务，检查 handler 异步完成取消收尾后才通知后台任务停止，
+依赖只启动、关闭一次。
+这不等于可强制终止未响应取消的业务协程，也不覆盖任意多层依赖和后台任务的全部竞争。
 
-应用层为已启用的可选协议提供显式安装函数。安装只发生在配置阶段；组件会注册为应用单例，在 HTTP 接收请求前连接或启动，并在停机阶段按安装顺序的反方向释放。
+业务及管理 HTTP 接收循环均注册为必需的受监管任务，监听异常不自动重启，而是进入统一停机路径。host 在接收事件循环上调用 `server::stop()`，清理阶段等待 supervisor；尚未开始执行就被取消的监听任务不会重新启动监听。监听及健康任务注册失败均进入回滚，不允许静默忽略。已接受的连接仍有独立生命周期，不能由接收循环已结束推断连接已排空。
 
-```cpp
-auto result = cnetmod::application::run_application(options,
-    [](cnetmod::application::http_application& app)
-    {
-        auto& redis = cnetmod::application::install_redis(app, {
-            .host = "redis.internal",
-            .max_size = 32,
-        });
-        auto& mysql = cnetmod::application::install_mysql(app, {
-            .host = "mysql.internal",
-            .username = "orders",
-            .database = "orders",
-        });
-        auto& kafka = cnetmod::application::install_kafka(app, {
-            .bootstrap_servers = {{.host = "kafka.internal"}},
-            .client_id = "orders",
-        });
+## 配置
 
-        app.services().emplace<order_service, default_order_service>(
-            redis.pool(), mysql.pool(), kafka.client());
-    });
-```
+优先级固定为：框架默认值 < JSON < 环境变量 < builder `configure()` 显式覆盖。
 
-| CMake 开关 | 安装函数 | 注册的应用服务 | 生命周期 |
-|------------|----------|------------------|----------|
-| `CNETMOD_ENABLE_REDIS` | `install_redis` | `redis_service` | 启动/取消连接池 |
-| `CNETMOD_ENABLE_MYSQL` | `install_mysql` | `mysql_service` | 启动/取消连接池 |
-| `CNETMOD_ENABLE_KAFKA` | `install_kafka` | `kafka_service` | 连接/关闭客户端门面 |
-| `CNETMOD_ENABLE_MQTT` | `install_mqtt` | `mqtt_service` | 连接/断开客户端，保留重连策略 |
-| `CNETMOD_ENABLE_AMQP091` | `install_amqp091` | `amqp091_service` | 连接、托管帧泵、取消并关闭 |
-| `CNETMOD_ENABLE_AMQP10` | `install_amqp10` | `amqp10_service` | 连接/取消并关闭 |
-
-没有启用对应 CMake 开关时，聚合模块不会导出该集成，因此不会引入无用的协议依赖。安装函数不会根据环境变量偷偷连接外部服务；是否启用始终由应用代码明确决定，连接参数可由应用自己的配置层注入。
-
-## 外部配置
-
-构造应用时自动读取以下环境变量并覆盖代码默认值：
-
-| 环境变量 | 作用 |
-|----------|------|
-| `CNETMOD_APPLICATION_NAME` | 应用名 |
-| `CNETMOD_HTTP_ADDRESS` | 监听地址 |
-| `CNETMOD_HTTP_PORT` | 监听端口 |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | OTLP/HTTP Trace 完整地址 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP 基础地址，自动追加 `/v1/traces` |
-| `OTEL_SERVICE_NAME` | OpenTelemetry service.name |
-| `OTEL_SERVICE_VERSION` | OpenTelemetry service.version |
-| `OTEL_RESOURCE_ATTRIBUTES` | 逗号分隔的资源属性 |
-| `OTEL_EXPORTER_OTLP_HEADERS` | 逗号分隔的鉴权或租户请求头 |
-
-## 类型安全服务注册
-
-```cpp
-app.services().emplace<user_repository, mysql_user_repository>(pool);
-auto& users = app.services().require<user_repository>();
-```
-
-服务注册表在启动钩子成功后冻结，避免运行期间改变依赖图。它只负责应用拥有的单例对象，不做隐式构造、反射或全局 Service Locator。
-
-## 生命周期
-
-```cpp
-app.lifecycle().on_start([&pool]()
-    -> cnetmod::task<std::expected<void, std::error_code>>
+```json
 {
-    co_return co_await pool.connect();
-});
-
-app.lifecycle().on_stop([&pool]()
-    -> cnetmod::task<std::expected<void, std::error_code>>
-{
-    co_return co_await pool.close();
-});
+  "application": {
+    "name": "order-service",
+    "install_signal_handlers": true
+  },
+  "logging": {
+    "level": "info",
+    "format": "json"
+  },
+  "http": {
+    "address": "0.0.0.0",
+    "port": 8080,
+    "request_timeout_ms": 30000
+  },
+  "management": {
+    "enabled": true,
+    "address": "127.0.0.1",
+    "port": 8081,
+    "same_port": false
+  },
+  "observability": {
+    "tracing": true,
+    "metrics": true,
+    "logs": true,
+    "sampling_ratio": 1.0,
+    "otlp": {
+      "traces_endpoint": "http://127.0.0.1:4318/v1/traces",
+      "metrics_endpoint": "http://127.0.0.1:4318/v1/metrics",
+      "logs_endpoint": "http://127.0.0.1:4318/v1/logs"
+    }
+  },
+  "services": {
+    "primary-cache": {
+      "type": "redis",
+      "instance": "primary",
+      "enabled": true,
+      "required": true,
+      "host": "redis.internal",
+      "password": "${REDIS_PASSWORD}",
+      "recovery": {
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 30000,
+        "budget_ms": 120000,
+        "multiplier": 2.0,
+        "jitter": 0.2
+      }
+    }
+  }
+}
 ```
 
-启动钩子按注册顺序执行；停止钩子反向执行。停止阶段即使某个钩子失败，也会继续执行剩余清理，然后排空 HTTP 请求和 OTLP 队列。
+服务条目的对象键只是配置绑定名；`type + instance` 才是服务身份，因此同一接口可配置多个具名实例。未知框架字段、未知集成属性、非法端口、非法超时、重复服务身份和缺失的必要凭据都会使 `build()` 失败。
 
-## 设计边界
+HTTP client 的 `connect_timeout_ms`、`request_timeout_ms` 和 OpenAI 的
+`timeout_seconds` 在创建对应服务前检查整数类型及正数范围，不接受布尔、小数、
+字符串、null、零、负数或超范围整数，避免 JSON 转换产生截断或回绕。
+缺省字段仍使用原有默认值。此校验不表示其他所有集成参数均已完成边界审计。
 
-- `configuration` 只处理配置和值对象。
-- `service_registry` 使用 Registry 模式管理应用单例，模板实现保留在 `.cppm` 中。
-- `application_lifecycle` 负责异步启动和反向释放。
-- `http_application` 是 Facade/Composition Root，不把协议细节泄漏到业务服务。
-- `application/integration` 中每个外部系统使用独立 Adapter，将不同协议的启动/停止语义统一到应用生命周期。
-- 业务模块继续依赖明确的构造函数参数；不要在业务代码中到处调用服务注册表。
+Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
+的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
+不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
+
+四类数据库连接池的 `minimum_size` / `maximum_size` 使用共享校验：前者可为零，
+后者必须为正整数，按缺省值补齐后仍必须满足 minimum ≤ maximum。转换前拒绝
+错误 JSON 类型、负数和超出可表示范围的数值，不静默截断或调整用户配置。
+该检查不承诺机器有足够内存或数据库连接配额，实际资源获取仍在生命周期内处理。
+
+采样率必须是 [0, 1] 的有限值，builder 提供的 NaN/无穷值同样拒绝。HTTP 请求超时
+未设置时保持原语义；显式设置则必须为正数。框架的正时长参数以及 HTTP client 超时
+不超过 steady_clock 可表示时长的一半，与恢复策略的保守上限一致；这不是对所有
+运行期截止时间运算的溢出安全证明。
+
+`${ENV_VAR}` 在解析阶段展开。`password`、`secret`、`token`、`api_key`、凭据和连接串会由 `redact_configuration()` 脱敏；框架不把请求正文、提示词、SQL 参数、凭据或消息载荷写入健康响应和遥测。
+
+支持的环境变量包括：
+
+- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_LOG_LEVEL`
+- `OTEL_EXPORTER_OTLP_ENDPOINT`、`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
+- `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
+- `OTEL_SERVICE_NAME`、`OTEL_SERVICE_VERSION`
+- `OTEL_RESOURCE_ATTRIBUTES`、`OTEL_EXPORTER_OTLP_HEADERS`
+
+## managed_service
+
+```cpp
+class order_worker final : public cnetmod::application::managed_service
+{
+public:
+    auto key() const -> cnetmod::application::service_key override;
+    auto dependencies() const
+        -> std::vector<cnetmod::application::service_key> override;
+    auto requirement() const noexcept
+        -> cnetmod::application::service_requirement override;
+    auto start(cnetmod::application::service_context& context)
+        -> cnetmod::task<std::expected<void, std::error_code>> override;
+    auto stop(cnetmod::application::service_context& context)
+        -> cnetmod::task<std::expected<void, std::error_code>> override;
+    auto probe(cnetmod::application::service_context& context)
+        -> cnetmod::task<cnetmod::application::health_report> override;
+};
+```
+
+`service_context` 提供 `io_context`、Telemetry Hub、Task Supervisor、取消令牌和本阶段截止时间。实现必须响应取消和截止时间，禁止在协程中同步阻塞。
+
+`managed_service::cleanup_required() const noexcept` 默认返回 false。若组件启动失败
+或抛异常后仍持有未完成清理的资源，必须覆盖该查询并返回 true；它不是运行状态查询。
+生命周期在操作收尾后、记录遥测前登记这些资源，回滚失败时连同依赖保留，允许后续
+`stop()` 重试。恢复尝试先清理 pending 状态，再启动，二者共用本次尝试截止时间。
+成功关闭后组件必须清除 pending 状态。MongoDB 适配器已将其 cleanup_pending 状态
+接入此契约；其他适配器仍须遵守失败启动自行清理或显式报告残留的约定。
+
+`shutdown_required() const noexcept` 单独报告停机资源归属，默认委托
+`cleanup_required()`。MySQL、Redis 在维护任务登记后即报告 shutdown_required，
+即使首次借用尚未成功也参与有序关闭；它们不因此报告 cleanup_required，恢复仍复用
+原连接池。前者决定是否必须 stop，后者决定重试 start 前是否必须先清理，两者不能混用。
+
+## 服务注册与依赖图
+
+```cpp
+registry.add_named<user_repository>("primary", repository);
+auto& users = registry.require<user_repository>("primary");
+```
+
+- Registry 模式提供接口绑定和具名实例。
+- `add_managed_named()` 以事务方式同时注册类型绑定和生命周期所有权。
+- 重复注册直接失败，不静默覆盖。
+- 构建后 registry 冻结并保持只读。
+- 启动前使用拓扑排序检查依赖缺失与循环；同一拓扑层并行启动，停止严格逆拓扑顺序。
+- `last_failure()` 保留失败组件、生命周期阶段和原始 `std::error_code`。
+- 组件原始 `start()` 返回成功时立即登记资源所有权，再进行截止时间结果转换；
+  即便该成功发生在取消后，调用方仍收到超时，但回滚不能漏掉该组件的 `stop()`。
+- 回滚不会覆盖发起回滚的启动失败；`last_rollback_failure()` 单独提供回滚组件的关闭失败及 `rollback` 阶段。
+- `last_rollback_error()` 还保留无法定位组件的回滚准备错误。回滚内部捕获清理异常并恢复原始启动错误；尚未关闭的资源保持登记，可由生命周期调用者后续重试 `stop()`。
+
+## 自动装配清单
+
+| 配置 `type` | 注册服务 | 说明 |
+|---|---|---|
+| `http_client` | `http_client_service` | 带 W3C Trace Context 的出站 HTTP 客户端 |
+| `openai` | `openai_service` | OpenAI 客户端和 GenAI telemetry listener |
+| `redis` | `redis_service` | Redis 连接池 |
+| `mysql` | `mysql_service` | MySQL 连接池 |
+| `postgresql` | `postgresql_service` | PostgreSQL 连接池 |
+| `mongodb` | `mongodb_service` | MongoDB 连接池与维护任务 |
+| `kafka` | `kafka_service` | Kafka 客户端 |
+| `mqtt` | `mqtt_service` | MQTT 客户端与重连 |
+| `amqp091` | `amqp091_service` | AMQP 0-9-1 客户端与受监管帧泵 |
+| `amqp10` | `amqp10_service` | AMQP 1.0 客户端 |
+| `grpc` | `grpc_client_service` | gRPC 客户端 |
+| `grpc_server` | `grpc_server_service` | 挂载到业务 HTTP/2 路由的 gRPC 服务路由器 |
+
+未启用相应 CMake 协议开关时，启用该服务会在构建阶段返回 `not_supported`，不会拖到运行期失败。
+
+AMQP 0-9-1 帧泵只监管单次连接会话，任务自身的重试预算为零，不单独触发 required
+恢复耗尽通知；错误保留在任务状态中。连接重建由服务生命周期的健康恢复任务发起，
+required/optional 要求及恢复预算仍来自 managed_service，而不是帧泵任务标志。
+重连成功后仍需健康缓存连续成功确认，不能直接恢复 readiness。已有 open 连接只有
+同时存在活动帧泵登记时才算幂等启动成功；否则必须补登记，失败进入回滚。
+启动通过受监管的 `async_run_session()` 等待读取任务接管和已记录拓扑重放完成，
+健康探测同时检查会话 ready、连接和帧泵；重放尚未完成时不能仅凭 socket=open 报告 up。
+启动等待将阶段取消传递给会话，但成功返回后不再借用启动上下文；帧泵仍由 supervisor 拥有。
+required/optional 生命周期脚本 TCP 回归扣住 Exchange.DeclareOk，验证恢复任务仍运行、
+probe 为 down，释放确认后还需两次健康成功才恢复 readiness。
+required/optional 的重放等待停机用例还验证：不发送交换机确认时，生命周期 stop 和
+supervisor join 完成，帧泵及恢复任务均 stopped，连接 disconnected，服务登记清空，
+且不触发恢复预算耗尽通知。此测试在单事件循环上发起停机，不覆盖跨线程取消竞争。
+另有 200ms 恢复总预算的静默重放回归：等待交换机确认耗尽预算后，恢复错误保留
+timed_out，帧泵失败、连接关闭、probe 为 down；required 升级一次，optional 不升级。
+总预算与单次启动截止时间取较早者。独立阶段超时另用 200ms 启动上限、1 秒恢复预算验证：
+首轮重放无确认，下一连接可观察到上轮 timed_out，再次重放参数与原声明逐字节一致；
+required/optional 均恢复成功且不升级，readiness 仍需两次健康确认。范围限脚本交换机声明，
+不代表队列、消费者和真实 broker 的超时恢复都已验收。
+随后生命周期脚本扩展到交换机→服务端命名队列→绑定→消费者：每次连接返回不同
+队列名，恢复请求检查新名称，原消费者回调接收一次带重投标志的消息并校验标签、
+投递编号及正文。普通恢复及单次超时后再次恢复均走该链路；手动 ACK、完整字段表、
+全部声明标志和真实 broker 仍未覆盖，不能称为完整消息可靠性验收。
+AMQP 传输报告内存不足时，适配器保留通用 not_enough_memory，启动等待与帧泵状态
+使用同一失败原因，不再统一返回 connection_aborted。握手、会话结果转换仅在失败
+分支执行；这不代表其他协议错误类别均已完成映射审计。
+这不是完整订阅链及真实 RabbitMQ 的 Application 恢复验收；启动派发失败和取消竞争仍需补齐。
+
+## 健康与管理端点
+
+MySQL、Redis、PostgreSQL 和 MongoDB 在启动入口拒绝已经取消或过期的
+`service_context`，不先注册维护任务或进行预热。取消和过期同时发生时优先返回
+`operation_canceled`。此入口检查不代替操作进行中的取消和截止时间处理。
+
+MongoDB 预热失败保留 `cnetmod.mongodb` 错误类别，不再统一映射为连接拒绝。
+类别值为协议 `error_code` 的整数值加一（协议枚举从零开始且没有成功项），
+超时和取消分别转换为通用 `timed_out` 与 `operation_canceled`。
+错误消息只含固定前缀及编号，不转发服务端诊断、连接凭据或命令内容。
+此转换位于 Application 启动失败路径，不改变数据库查询或关闭 OTEL 的路径。
+
+MongoDB 管理探测通过 `connection_pool::health_check(cancel_token&)` 执行实际 PING，
+并使用服务截止时间取消等待。失败连接归还前标记废弃；取消通知在连接所属事件循环
+执行，探测返回前等待通知收尾。无空闲连接时，在原有容量与并发建连上限内创建
+候选连接，hello 和 PING 成功后才报告健康；下次可复用该连接，零初始连接池不会
+仅因没有候选而一直失败。全忙时复用借用队列，受池排队超时与服务探测截止时间约束；
+取消移除本次等待，不取消业务方持有的连接。业务归还后才发送 PING。
+取消通知投递到所属事件循环并在探测返回前收尾；等待后需要新建连接时也传递停止信号。
+池锁等待仍未支持取消，任意排队竞争、持续分配失败及真实认证恢复尚未完整验证。
+池关闭将空闲连接从登记表移除，由关闭结果持有到锁外关闭；借出连接继续保留登记，
+直到归还，不能通过提前清空整个登记表隐藏仍在途的借用者。
+
+MongoDB 同步关闭复用连接槽、等待者的关闭链表，不创建临时容器或错误诊断对象。
+等待者先标记为关闭，恢复后才构造原有错误。锁竞争时使用池持有的通知节点与共享
+状态投递，不创建 detached 协程；`async_close()` 会等待这次已登记通知。
+异步等待任务本身仍可能分配失败，调用方应保留池并重试等待；不要把同步入口无分配
+理解为任意低内存状态下的全部异步清理都不会失败。事件循环必须运行到通知收尾。
+
+MongoDB 池关闭会向所有已登记的在途建连发送取消，不再依赖 hello 命令超时。
+登记节点由建连协程帧持有，完成后在池锁内移除并归还配额。`async_close()` 发出
+取消但本身不等待所有建连结束；`mongodb_service::stop()` 仍检查 `connecting_count()`，
+未收尾时保留清理状态，允许随后重试。启动使用同一服务截止时间与取消令牌执行
+`warm_up(cancel_token&)`，取消仅转发到该次预热创建的连接；等待其他调用方建连时，
+退出本次等待而不取消其他建连。Application 启动失败后的池关闭仍按资源所有权取消
+全池在途建连。无令牌重载直接进入无取消特化，不增加包装协程。
+本地无 hello 回复测试覆盖命令超时关闭、启动截止时间与跨线程取消，并检查可再次启动。
+池锁等待仍未支持取消，真实 TLS/认证取消也尚未完成验证，不能据此宣称所有启动路径已闭合。
+
+Kafka 服务启动把生命周期取消令牌传给客户端连接，并使用 `operation_deadline` 约束操作。
+已启动服务通过同一取消/截止时间契约发起元数据刷新作为健康探测，不再仅凭启动标志报告 up。
+提前取消、已过期启动，以及本地 TCP 对端收到 Kafka 请求后不响应时的超时/主动取消已覆盖回归。
+真实 broker 的完整协议交换、断线恢复及其他部分连接清理仍需验证。
+Kafka 取消和超时按生命周期语义返回通用错误；其他 Kafka 失败保留原始编号及
+`cnetmod.kafka` 类别。配置、传输、协议格式及授权错误可与对应的 `std::errc` 条件比较。
+错误消息仅包含固定前缀和编号，不转发 broker 的诊断文本。
+
+- `/actuator/live`：进程及事件循环是否存活。
+- `/actuator/ready`：应用已启动且所有已启用组件可用；optional 故障也会呈现降级 readiness。
+- `/actuator/health`：聚合状态、各组件状态、错误类别和最近探测时间。
+- `/actuator/prometheus`：OpenMetrics 文本指标。
+
+默认管理地址为 `127.0.0.1:8081`。健康探测按周期并行执行并缓存结果，默认 3 次失败进入 down、2 次成功恢复 up。
+
+运行期重连成功只进入等待健康确认状态，不计作一次成功探测；readiness 恢复仍需满足配置的连续成功探测次数。
+
+每次受监管恢复尝试在 `start()` 成功后先执行一次 `probe()`；探测非 up 仍作为本次恢复失败处理，继续消耗该次恢复任务的预算。这次恢复内部探测不替代健康注册表的连续成功确认。
+
+一次恢复的启动与内部探测共享 `service_start_timeout`，使用独立尝试令牌。超时只取消本次尝试，允许后续重试；应用停机取消则向当前尝试转发。上述取消仍要求服务协程协作退出。
+
+服务恢复在任务派发前建立绝对恢复截止时间，首次连接、内部探测、后续尝试和退避均消耗同一预算；单次尝试使用该截止时间与 `service_start_timeout` 中更早者。重连成功但尚未确认健康时保留截止时间，后续恢复任务继承它。`reconcile_health()` 仅在健康缓存确认 up 且恢复任务不再运行后清除此故障周期；健康循环也检查 starting/degraded 状态下的预算到期，因此确认阶段的到期通知可能延迟一个健康刷新周期。
+
+required 服务同一故障周期耗尽预算后不重复派发或通知停机；optional 服务保持降级，后续健康循环可在上一周期已经失败后开启新的恢复周期。预算到期仍等待被取消的协程安全退出，不强制销毁协程。
+
+健康快照携带缓存 `revision`，每次结果更新（包括探测准备失败）都会递增。`reconcile_health()` 在修改故障周期前检查版本，忽略已过期的快照，防止延迟投递的旧 up 清除新故障预算。`is_current()` 仅提供瞬时版本检查，不会在返回后锁住健康注册表。
+
+异步健康探测保存派发时的缓存版本，结果提交在注册表锁内比较版本并更新；期间出现更新则丢弃旧结果，不推进连续成功/失败计数。未完成探测的失败补记也使用同一版本条件。停机中的注册表不提交探测结果，stopping/stopped 组件不再被后续刷新探测。
+
+通用 `task_supervisor::supervise()` 可选接收 `recovery_deadline`。未提供时保留后台长任务首次失败后开始恢复计时的语义；提供时用于限制重试派发和退避，操作自身仍须将同一截止时间传入其取消感知 I/O。服务生命周期已完成这一传递。
+
+## 运行期更新
+
+`reload_configuration()` 只原位更新日志级别、OTEL 采样率、健康策略和恢复策略。监听地址、端口、中间件、线程、连接参数、凭据、OTLP 出口或队列参数变化会设置 `restart_required`，不会偷偷重建连接。
+
+底层 `reload_safe_configuration(active, candidate)` 返回
+`std::expected<configuration_reload_result, std::error_code>`。它先校验候选并在私有副本中
+准备变更清单，准备失败不修改 active；提交使用已静态验证的不抛异常移动赋值。
+分配失败映射为 `not_enough_memory`，非法候选返回校验错误。调用方必须检查 expected，
+不能把失败当作“没有字段变化”。这保证配置函数的提交边界，不等于 Host 向所有运行组件
+传播配置已具备跨组件事务性。
+
+同一配置绑定名若更换服务类型或实例名，旧服务的恢复策略保持不变；新身份及其策略
+需要重启生效。Host 在配置锁内准备服务键及候选副本，先完成恢复策略表的批量更新，
+再应用已校验的健康策略、采样率和日志级别，最后移动提交配置。底层配置函数不再
+修改全局日志状态。各组件仍使用独立读锁，这不是跨组件读快照的线性一致性保证。
+
+生命周期的 `update_recovery_policies(span<pair<service_key, recovery_policy>>)` 返回
+expected：先验证策略，再复制现有覆盖表并应用整批修改，成功后锁内交换。分配失败
+保留整张旧表，不再逐项提交；`recovery_policy_override(key)` 可读取指定覆盖项。
+Host 检查批量更新错误，失败时不提交配置副本。临时 JSON 文档使用局部 RAII 清理器：
+迭代删除叶节点后再释放空容器，不申请遍历栈、不递归，避免依赖库析构非空容器时
+申请内存导致 terminate。清理需要 O(节点数 × 深度) 的最坏时间，只用于配置路径。
+回归覆盖 Host 重载的 256 个分配位置，以及包含嵌套数组/对象的非法根节点的 128 个位置。
+这不是任意 JSON 解析内部状态、任意集成属性副本及持续内存耗尽的完整恢复证明。
+
+`load_configuration()` 在函数入口统一转换可传播异常：分配失败返回
+`not_enough_memory`，其他未分类异常返回 `io_error`。解析和字段转换不能把
+`bad_alloc` 吞成 `invalid_argument`。调用前的参数构造不在此边界内；故障注入
+需先准备 `optional<filesystem::path>`，再覆盖加载函数本身。
+
+## 停机顺序
+
+停机先撤销 readiness，然后停止接收、排空在途 HTTP、取消并等待受监管任务、逆拓扑关闭已成功启动的服务，最后 flush Trace/Metric/Log 队列。
+
+HTTP 请求排空返回超时时，host 保留 `timed_out`（不覆盖更早的错误），并立即中止业务和
+管理连接的 socket I/O；后续 handler 完成不会把此次停机改报成功。socket 中止不能取消
+任意 handler 等待，也不代表 handler 已释放服务引用。host 随后在已有整体停机截止时间内
+等待被跟踪的 handler 结束，再关闭后台任务和服务；服务清理重试也不会在 handler 仍在途时
+调用服务 `stop()`。预算耗尽仍有 handler 时保留服务登记。此保护不等于已解决残留协程和
+资源的最终安全析构，也不覆盖未经过请求跟踪中间件的自定义工作。
+
+排空超时还调用 `shutdown_handler::cancel_requests()`，取消被跟踪请求现有的
+`request_context::cancel_pending_operations()`，同时取消直接令牌和已登记的
+`request.with_deadline()` 子操作。登记节点位于协程帧中，退出时以 RAII 移除。
+每个子操作仍有独立令牌；工厂按值保存在包装协程中，支持临时及仅可移动工厂。
+取消是请求级终态，之后启动的子操作收到已取消令牌。请求必须活到所有子操作退出。
+直接调用 `cancellation_token().cancel()` 仅取消直接令牌，不向子操作广播；请求级取消
+应调用 `cancel_pending_operations()`。未传递令牌的等待不会自动停止。
+取消后的子操作与被跟踪 handler 在移除登记前投递回事件循环，异常退出也保留这一边界并
+重新传播原始异常，避免同步恢复的完成路径在取消调用栈中重入登记锁。未取消的完成路径
+不增加这次投递。请求取消先原子发布终态，重复请求级取消直接返回；取消后创建的子操作
+不进入登记链表，直接得到已取消令牌。锁内再次检查终态以处理并发登记竞争。
+`shutdown_handler::cancel_requests()` 也先发布停止接收和取消终态，再广播取消；重复调用
+（包括取消回调重入）直接返回，不代表首次广播已完成。新请求沿原有停机入口返回 503，
+不新增正常请求入口的状态读取。登记过程中补发取消在释放登记锁后执行。
+回归覆盖同步恢复后再次取消整个 shutdown handler、拒绝新请求、再次取消请求并启动
+嵌套子操作。任意自定义回调及跨线程生命周期仍需进一步验证；广播期间仍持有登记锁，
+不应将这一回归解释为允许任意同步重入事件循环或销毁请求。
+
+host 在现有清理截止时间内重试仍登记的服务，退避从 1ms 增至最多 20ms；已成功关闭的服务不重复关闭。最终若仍有服务登记或活动 HTTP 连接，状态为 `cleanup_failed` 而非 `stopped`，保留原始运行错误。该状态是失败诊断，不保证任意未协作资源可安全析构；这部分仍需调用者和组件的取消/关闭契约配合。
+
+最终连接收尾同时检查 telemetry 的取消投递是否完成，在既有预算内继续驱动完成通知；
+未完成的 telemetry 工作也会阻止状态变为 stopped。单纯投递失败仍不覆盖业务结果。
+该检查只发生在停机路径，不增加正常业务请求的检查或协程。
+
+`host.retry_cleanup(timeout)` 在 `run()` 返回 cleanup_failed 后，由拥有线程独占调用。
+调用方先解除可解除的占用（如归还连接租约），再传入正数预算；Host 重启同一个事件循环，
+只重试清理，不重新启动监听或服务。已停止时重复调用成功，已成功关闭的依赖不会重复关闭。
+返回值表示本次清理是否完成，不替换原始 run 结果；最初的业务失败仍应由调用方处理。
+每次显式重试使用新预算并预留其中 20% 给最终连接收尾。顶层协程尚未结束时拒绝重试，
+不能借此重入正在运行的生命周期；不协作操作、逃逸引用和并发析构仍须遵守所有权契约。
+
+`service_lifecycle::stop(deadline budget = {})` 接收绝对截止时间，每个组件使用独立取消令牌。到期请求取消后仍等待组件协程安全退出；组件必须响应取消，框架不会强行销毁悬挂协程。关闭失败的组件及其传递依赖保留所有权，无关组件继续关闭，后续调用可重试清理。已成功关闭的组件不再重复关闭。
+
+组件原始 `stop()` 返回成功时先移除资源登记，再转换截止时间结果。迟到完成仍向
+调用者返回超时，并保留错误诊断，但组件状态为 stopped，后续收尾不重复调用 stop。
+只有原始关闭失败的组件才继续保留登记；不能把超时报告等同于资源一定尚未释放。
+
+`service_lifecycle::start(std::chrono::milliseconds rollback_reserve = {})` 可为调用方的后续收尾保留回滚预算；默认零，不改变独立生命周期调用的预算。预留必须非负且不超过整体关闭超时，否则启动前返回 `invalid_argument`。Application 传入整体关闭预算的 20%；内部回滚使用较早截止时间，`rollback_deadline()` 仍返回原始整体回滚截止时间，供后续清理共享。预留不能强制终止不响应取消的服务。
+
+当前 HTTP 排空、服务关闭及 telemetry flush 的投递预算共享正常停机截止时间；flush 不会重新获得完整配置时长。HTTP 绑定失败的清理以及服务启动失败的内部回滚，也将已建立的清理截止时间传给 host 的 flush；`rollback_deadline()` 可读取最近一次回滚预算，每次新启动前重置。投递时间归零后仍保留至少 1ms 取消收尾机会。最终连接等待及中止后的等待也受同一整体截止时间约束，不会重新获得完整 drain/stop 时长；等待保留亚毫秒精度。任务等待、预算耗尽后的残留资源析构及异常清理路径仍需进一步验证；不得将配置的超时解释为已经验证的进程级硬退出上限。
+
+正常停机的请求排空、handler 收尾、服务关闭及其重试、telemetry 投递使用较早的清理截止时间，为最终连接收尾保留配置整体预算的 20%；各阶段不会重新计算出一段完整预算。最终连接等待又为 socket 中止后的完成回调预留进入该阶段时剩余预算的 20%，而不是等整体预算耗尽才中止连接。50ms 整体预算、200ms 阶段上限、依赖关闭等待 10 秒并响应取消的半截 HTTP 请求回归覆盖该路径。未协作的任务等待、启动回滚和异常路径仍可能耗尽预算，不能据此推断所有路径已具备硬退出上限。
+
+请求排空每次等待取 50ms 与剩余预算中的较小值，零预算不投递等待。`drain()` 的睡眠
+回调应接受 `std::chrono::steady_clock::duration`（推荐泛型 `auto duration`），避免截断
+亚毫秒剩余时间。预算限制的是投递等待时长，不保证操作系统调度不会产生额外延迟。
+
+## 设计模式与边界
+
+- `application_builder`：Builder；负责声明配置和组合。
+- `application_host`：Facade / Composition Root；独占运行时资源。
+- `service_registry`：Registry；只在构建阶段可变。
+- `managed_service`：Adapter；统一异构基础设施生命周期。
+- `service_lifecycle`：依赖图协调器与补偿事务。
+- `task_supervisor`：Supervisor；负责重启、预算和错误传播。
+- `health_registry`：状态机和缓存视图。
+- 自动装配 registry：显式启用的 Strategy 集合。
+
+业务模块应继续通过构造函数依赖明确接口，不要把 `service_registry` 当作全局 Service Locator。
 <!-- END SOURCE: skill/infra/application.md -->
 
 <!-- BEGIN SOURCE: skill/infra/architecture.md -->
@@ -9655,117 +10148,199 @@ ctest --test-dir build -R test_my_feature
 
 # Observability 与 OpenTelemetry
 
-> 使用统一 Telemetry Hub 为 HTTP、OpenAI、Redis、SQL 和自定义组件提供低侵入的分布式追踪与指标。
+> 通过一个 Telemetry Hub 低侵入地统一 Trace、Metric、Log、W3C 上下文传播和有界 OTLP/HTTP 导出。
 
 **import**: `import cnetmod.observability;`
 
-**源码**: `src/observability/telemetry.cppm`、`src/observability/otlp_http_exporter.cppm`、`src/observability/http_client.cppm`
+**源码**: `src/application/monitoring/telemetry.cppm`、`src/application/monitoring/otlp/otlp_http_exporter.cppm`、`src/application/monitoring/integration/http_client.cppm`
+
+监控源码统一归属 `src/application/monitoring/`：`core/` 放协议无关的上下文、
+操作结果和指标契约，`otlp/` 放编码与投递，`integration/` 放协议观测适配器。
+目录归属不改变模块依赖方向：协议只依赖中立契约，不导入 Application Host 或 OTLP。
+模块名保留 `cnetmod.instrumentation.*` / `cnetmod.observability.*`，避免目录整理
+同时改变调用方 API。HTTP 关闭时 CMake 仍编译 `monitoring/core/`。
 
 ## 核心原则
 
-1. 应用组合根只创建一个 `telemetry_hub`，协议模块不直接依赖第三方 OpenTelemetry SDK。
-2. 上下文必须作为值显式传递，禁止用线程局部变量保存协程链路上下文。
-3. 遥测失败不得改变业务请求的结果；生产路径使用有界非阻塞队列。
-4. 默认不记录提示词、模型输出、工具参数和 SQL 正文，敏感内容必须显式启用并限制长度。
-5. 退出前先 `co_await telemetry.flush()`，再停止 `io_context`。
+1. 应用组合根只创建一个 `telemetry_hub`；协议与业务代码不依赖具体 OTEL SDK。
+2. 协程上下文以值显式传递，禁止用 thread-local 保存活动 span。
+3. Trace、Metric、Log 共用非阻塞提交、有限队列、批量、退避重试、丢弃计数和有界 flush。
+4. 遥测失败不改变业务结果；队列满时只增加 dropped 计数。
+5. 默认不记录 HTTP 正文、提示词、模型输出、工具参数、SQL 参数、凭据和消息载荷。
 
 ## 初始化
 
 ```cpp
-import std;
-import cnetmod.core;
-import cnetmod.io;
-import cnetmod.observability;
-
 cnetmod::net_init net;
 auto io = cnetmod::make_io_context();
 cnetmod::observability::telemetry_hub telemetry{*io, {
     .endpoint = "http://127.0.0.1:4318/v1/traces",
+    .metrics_endpoint = "http://127.0.0.1:4318/v1/metrics",
+    .logs_endpoint = "http://127.0.0.1:4318/v1/logs",
     .service_name = "orders",
     .service_version = "1.4.0",
-    .service_namespace = "commerce",
-    .service_instance_id = "orders-01",
-    .deployment_environment = "production",
     .resource_attributes = {{"service.owner", "platform"}},
     .headers = {{"Authorization", "Bearer token"}},
+    // Optional: bridge completed framework logger events into OTLP logs.
+    .capture_framework_logs = true,
 }};
+telemetry.set_sampling_ratio(0.25);
 ```
 
-`telemetry_hub` 是组合根（Facade + Adapter）：内部持有指标注册表和 OTLP exporter，对外只暴露稳定的 cnetmod 接口。将来替换 collector 或接入官方 SDK 时不需要修改协议和业务代码。
+不设置 Trace endpoint 时导出器处于关闭状态，本地 OpenMetrics registry 仍可使用。只设置 Trace endpoint 时，Metric 和 Log endpoint 自动从同一 OTLP 基础地址派生。
 
-## HTTP 服务端
+## Trace
+
+OpenAI 的 `telemetry_listener` 由独立模块 `cnetmod.observability.openai`
+提供，使用时显式导入该模块。其公开命名空间仍为 `cnetmod::openai`。
+`cnetmod.protocol.openai` 不再导出观测适配器或依赖 OTLP；协议保留通用
+`run_listener` 事件接口，Application 在启用观测时装配适配器。
+这是模块依赖隔离，不代表整个库已经按 OTEL 开关裁剪，也不是零性能损耗证明。
+
+Application 的 OpenAI 监听器使用 `telemetry.measurements()`，将操作计数、活动数、
+耗时、token、重试、拒绝和配置成本送入统一指标出口，由 Hub 执行本地聚合及 OTLP
+投递。独立使用可构造 `telemetry_listener{telemetry.measurements(), telemetry.spans()}`。
+原有接收 `metrics::registry&` 的构造方式仍只向该 registry 写指标；传入 span
+exporter 不会使这些本地指标自动上报。不要同时把同一事件交给两种监听器，否则会重复计数。
+内置 wire 回归通过本地 HTTP 接收器验证 Application 模型事件的 token 与耗时指标，
+不代表已验证真实供应商请求或所有 GenAI 指标的端到端上报。
+
+HTTP 服务端：
 
 ```cpp
-router.use(cnetmod::http::tracing::tracing_middleware(
+server.use(cnetmod::http::tracing::tracing_middleware(
     telemetry.server_tracing()));
-router.get("/metrics",
+```
+
+HTTP 客户端：
+
+```cpp
+cnetmod::observability::instrumented_http_client client{
+    raw_client, telemetry.spans()};
+auto response = co_await client.send(request, parent_context);
+```
+
+Redis 和 SQL API 接受 `trace_context + span_exporter`，gRPC metadata 自动注入/提取 `traceparent` 与 `tracestate`。OpenAI Agent 使用 `telemetry_listener` 记录 GenAI span、token、重试、耗时和估算成本；详细提示词与输出默认关闭。
+
+### Kafka producer 装饰器
+
+`import cnetmod.observability.kafka_producer;` 提供拥有原始 producer 的
+`instrumented_kafka_producer`。`send(topic, record, parent, cancellation)` 的 parent
+按调用显式提供；空 sink 直接返回原始发送任务。事务、flush、身份查询和 close
+委托原始 producer，不改变事务提交边界。移动或析构前必须等待其任务结束。
+
+Application 自动装配把 telemetry sink 注入 `kafka_service`；使用
+`service.make_producer(options)` 获得带该 sink 的 producer，原始
+`service.client().make_producer()` 仍是不带观测的协议入口。服务须比 producer
+及其操作活得更久。当前工厂不自动监管 producer 的任务，也不自动进行停机 flush；
+消费者处理范围、事务观测和消息指标仍是独立工作，不应理解为已全部自动接入。
+
+## Metric
+
+Prometheus/OpenMetrics 使用进程内 registry：
+
+```cpp
+telemetry.metrics().counter_add("orders_created_total");
+router.get("/actuator/prometheus",
     cnetmod::metrics::openmetrics_handler(telemetry.metrics()));
 ```
 
-中间件读取并校验 `traceparent`/`tracestate`，创建 SERVER span，并保留入站 `parentSpanId`。
-
-## HTTP 客户端
+需要推送到 OTLP 时提交结构化测量：
 
 ```cpp
-import cnetmod.observability.http;
-
-cnetmod::http::client raw_client{*io};
-cnetmod::observability::instrumented_http_client client{
-    raw_client, telemetry.spans()};
-auto result = co_await client.send(request, parent_context);
+(void)telemetry.submit_metric({
+    .name = "queue.depth",
+    .value = 12.0,
+    .kind = cnetmod::observability::otel_metric_kind::gauge,
+    .unit = "{message}",
+    .attributes = {{"messaging.system", "kafka"}},
+});
 ```
 
-装饰器复制请求后注入 W3C 头，不改变原请求和底层客户端的所有权。
+Application 框架会自动为服务启动、停止、恢复和健康探测产生本地指标及 OTLP 测量。
 
-## OpenAI
+## Log
 
 ```cpp
-cnetmod::openai::telemetry_listener ai_telemetry{
-    telemetry.metrics(), telemetry.spans()};
-cnetmod::openai::run_config run{
-    .run_id = request_id,
-    .listeners = {&ai_telemetry},
-    .trace_parent = inbound_context,
-};
+(void)telemetry.submit_log({
+    .severity = "WARN",
+    .body = "dependency recovering",
+    .trace_id = trace.trace_id,
+    .span_id = trace.span_id,
+    .attributes = {{"service.name", "redis"}},
+});
 ```
 
-默认导出调用次数、并发量、耗时、token、重试、拒绝和估算成本；AI span 继承 HTTP trace，不捕获提示词和输出正文。
+HTTP access log 在 tracing middleware 启用时自动附加 `trace_id` 与 `span_id`。Application 生命周期日志同时作为 OTLP LogRecord 发送。不要把凭据或业务载荷放进 `body`/attributes。
 
-## Redis
+普通 Logger 默认不注册 OTLP 回调，因而不引入观察者复制、OTLP 队列操作或
+thread-local 查找。需要将框架日志导出时才设置 `capture_framework_logs: true`；回调运行在
+Logger 的 worker 上，提交失败或队列满不会影响日志落盘。业务代码已经持有调用链上下文时，
+使用显式值传递关联日志：
 
 ```cpp
-auto result = co_await redis.cmd({"GET", "key"}, parent_context,
-    telemetry.spans());
+import cnetmod.core.log;
+
+logger::log(logger::level::info,
+    {.trace_id = trace.trace_id, .span_id = trace.span_id},
+    "order persisted");
 ```
 
-## SQL / ORM
+Logger 把 ID 视为不透明字符串，不导入 OTEL，也不维护全局或 thread-local 的 active span；
+未关联的 `logger::info` / `warn` 等既有调用路径保持不变。
 
-```cpp
-auto result = co_await session.query("SELECT ...", parent_context,
-    telemetry.spans());
+## 上下文传播
 
-// 只有完成隐私审查后才显式记录截断后的 SQL：
-auto audited = co_await session.query("SELECT ...", parent_context,
-    telemetry.spans(), {.capture_query_text = true, .max_query_bytes = 512});
-```
+- HTTP 使用 W3C `traceparent`/`tracestate`。
+- gRPC 使用 metadata 中的相同字段。
+- Kafka、AMQP 等支持头部的消息协议应在 producer 注入，在 consumer 提取；不支持头部的 Redis/SQL 只生成本地 CLIENT span。
+- 传入可信边界前会校验 Trace Context，非法值不会继承。
+- 消息载体复用时，注入会替换已有追踪头；新上下文的 `tracestate` 为空时删除旧值，避免沿用上一条调用链的供应商状态。
+- 消息注入准备失败不会抛出异常或留下半更新的上下文。Kafka 和 MQTT 先准备追踪字段并预留容器空间，再以不抛异常的移动提交；AMQP 预备独立追踪节点，使用相同分配器及不抛异常的字符串比较转移节点。业务字段缓冲区和业务载荷不参与复制；开启传播时仍有追踪字段分配和容器操作成本，关闭路径不应调用注入适配器。
 
 ## 导出可靠性
 
-- 队列满时丢弃遥测，不阻塞业务线程，并累计 `dropped`。
-- 网络错误及 HTTP 429/502/503/504 按指数退避重试。
-- 支持 `Retry-After` 秒数。
-- 2xx（包括 OTLP partial success）不重试，避免重复数据。
-- resource、鉴权/租户请求头、真实起止时间、span kind、parent span 和 tracestate 均写入 OTLP。
+- 每类信号使用有界 MPMC 队列；提交不等待网络。
+- 单次 drain 按 `max_batch_size` 批量发送。
+- 网络错误及 HTTP 429/502/503/504 指数退避，支持 `Retry-After`。
+- 2xx 还必须通过 OTLP JSON acknowledgement 校验；不能只凭 HTTP 状态认为全部接收。
+- `partialSuccess` 的拒收数量按 spans、log records、metric data points 分别统计，部分接收禁止整批重试；零拒收警告不扣减成功数。Collector 的诊断文本不进入日志或遥测。
+- 导出器显式使用 HTTP/1.1、关闭重定向和 Cookie，网络接收阶段将响应体限制为 64 KiB，
+  并限制 chunk framing。超大或非法 framing 会关闭连接并计入无效响应，不重试。
+  原始 HTTP client 默认不启用这项额外限制；该选项不覆盖 HTTP/2、HTTP/3。
+- 响应 SAX 解析另有限制：64 KiB、16 层容器；无效响应计入 `invalid_responses` 和
+  `failed_batches`，不重试。64 KiB 是响应体上限，不是整个连接的总内存上限。
+- `statistics()` 提供总 accepted/dropped/exported/retry/failed batch，并分别统计三类信号的 accepted/dropped。
+- `exported` 表示 Collector 确认的 wire spans/log records/metric data points；累计指标快照可重复发送旧数据点，不能用 `accepted - exported` 推断丢失。拒收分别查看 `rejected_spans`、`rejected_metric_points`、`rejected_logs`；另有 `partial_batches`、`warning_batches`。
+- 资源属性和鉴权头由三个 signal 共享，但不会出现在健康响应或普通日志中。
 
 ## 有序关闭
 
 ```cpp
-auto flushed = co_await telemetry.flush(std::chrono::seconds{5});
-telemetry.close();
-io->stop();
+// Run on the telemetry hub's owning io_context.
+auto settled = co_await telemetry.shutdown(
+    std::chrono::seconds{5}, std::chrono::milliseconds{500});
+if (settled)
+    io->stop();
+else
+    logger::error{"Telemetry shutdown has not settled: {}", settled.error().message()};
 ```
 
-析构只停止接收新 span；需要尽量无损交付时必须在停止事件循环前显式 `flush()`。
+`flush()` 只等待已接收工作；超时不取消投递，也不关闭事件接收。`close()` 只停止接收，
+不是后台任务 join。停机使用 `shutdown(delivery_timeout, cancellation_timeout)`：
+先关闭接收并尝试排空，再取消未完成投递并等待收尾。成功表示任务已空闲、连接已关闭，
+不表示每条记录都成功送达；仍需检查失败、拒收、丢弃统计。
+
+`shutdown()` 返回错误时，不能仅因等待超时就停止或销毁事件循环。必须保持 hub 和
+io_context 存活，继续处理完成通知并等待收尾；示例中的错误分支故意不调用 `stop()`。
+它也不承诺强制终止不协作操作。Application Host 使用自己的整体停机预算安排收尾，
+不能把示例的两段独立预算直接解释成 Host 的进程硬退出上限。
+
+`try_settle_shutdown()` 供拥有事件循环的收尾协调器使用：在所属执行线程上取消投递，
+不分配内存、不等待；返回 false 时必须继续驱动事件循环，返回 true 表示投递已空闲且
+连接已关闭。调用是终态操作，不是普通空闲查询；不得用它检查仍在正常运行的 exporter。
+Host 在最终连接收尾阶段也检查此状态，使用已有剩余预算，不因一次 shutdown 等待失败
+就立即停止事件循环。这仍不保证预算耗尽后未协作资源的安全析构。
 <!-- END SOURCE: skill/infra/observability.md -->
 
 <!-- BEGIN SOURCE: skill/infra/windows-build.md -->
@@ -10047,13 +10622,18 @@ class publisher_confirm_observer {
     virtual void on_confirm_failure(const error&) = 0;
 };
 class publisher_confirm_tracker {
-    auto reserve_sequence() noexcept -> std::uint64_t;
+    auto reserve_sequence() -> std::uint64_t;
     void observe(std::weak_ptr<publisher_confirm_observer>);
     void settle(std::uint64_t tag, bool acknowledged, bool multiple);
-    void fail_all(error reason);
+    void fail_all(const error& reason) noexcept;
     auto pending() const noexcept -> std::size_t;
 };
 ```
+
+发布确认订阅在注册时创建只读快照；通知期间新注册的观察者从下一轮生效。
+`settle()` 会完成其他观察者通知后重新抛出首个回调异常；`fail_all()` 清理路径隔离
+回调异常且不创建临时通知集合。`reserve_sequence()` 可能抛出分配异常，插入成功后
+才递增序号，不再以 `noexcept` 将内存不足转换为进程终止。
 
 ### `reconnect_policy` — 重连策略
 
@@ -10096,6 +10676,47 @@ class automatic_recovery_strategy final : public recovery_strategy {
 
 ### `protocol_connection` — 协议连接
 
+传输层返回 `std::errc::not_enough_memory` 时，协议保留独立的
+`error_code::not_enough_memory`，不归类为可重试断连；诊断文本固定且不含请求数据。
+此枚举追加在现有值之后，不增加 `error` 的字段。直接协程分配仍可抛出 bad_alloc，
+调用方应同时处理异常和 result；会话故障测试覆盖这两种出口。
+
+同一连接遵循单执行器使用约定。`async_connect()` 仅在 disconnected/recovering 状态且
+没有活动读取所有者或写锁持有者时接受新握手；否则返回 `command_invalid`，不替换
+现有 socket/TLS。先取消并等待旧帧泵及活动操作收尾，再重连；不要以再次 connect
+作为强制中止当前会话的方式。
+
+独立 `async_recover()` 拒绝尚未关闭或读取任务尚未结束的会话；提前取消直接返回
+`cancelled`。重连退避使用取消感知定时器，取消后不继续等完退避时长，也不发起连接。
+恢复操作以作用域所有权覆盖退避与握手；期间外部 connect 和另一轮 recover 返回
+`command_invalid`，不会改写正在恢复的配置。内部恢复握手使用私有编译期分支，
+恢复期间公开 async_open_channel 同样返回 command_invalid，且不分配通道编号；
+内部恢复建通道使用独立编译期分支。非 open 会话建通道返回 connection_closed。
+通道上限检查在编号递增前执行，拒绝不会推动计数器回绕到活动编号。
+新连接先清理旧 RPC/确认/投递处理器及接收状态，再从通道 1 分配；旧通道仍由会话代数拒绝，
+不能因新连接重用编号而重新有效。拓扑记录独立保留供恢复重建。
+普通 connect 直接返回任务，不额外增加包装协程。约定仍是单执行器访问。
+`async_close()` 会向当前恢复令牌请求取消，并通过协程等待组等待恢复作用域退出；
+30 秒退避阶段的关闭取消已有回归。恢复内部启动的 reader 使用共享完成票据登记，
+close 同时等待该 reader 释放连接引用；调用方仍须保留并等待自己启动的恢复任务。
+reader 在主动取消前返回的协议失败被保留，close 返回原始协议错误；运行异常则重新抛出。
+新连接清除上一会话的完成记录，避免旧错误污染新会话。此约定不替代等待用户自行启动
+的 async_run 任务。握手成功到 reader 派发成功之间由作用域回滚守卫接管传输；
+派发前分配或同步 posting 失败会关闭传输并传播原始异常，而不返回恢复成功。
+握手完成后的 7 个分配位置已做失败注入；这不覆盖 reader 执行期间的全部异常，
+也不覆盖真实 TLS 和拓扑阶段的关闭竞争。
+拓扑恢复期间调用者取消会传递给内部 reader，RPC 因取消失败时返回 cancelled。
+首个拓扑 RPC 等待 reader 显式发布读取所有权，不依赖定时轮询启动。
+静默 Channel.Open 对端已有回归。恢复使用临时记录器，失败、异常或取消时以无分配的
+共享所有权回滚保留原始记录，全部恢复成功才保留新记录；这不是 broker 端事务回滚。
+Channel.Open、交换机、队列、绑定、消费者五个阶段取消后，再次恢复的完整请求顺序
+已有脚本 TCP 线帧回归，包括部分成功后的取消。服务端队列名逐会话变化时，绑定和消费者
+重映射，以及交换机名/类型、路由键、消费者标签保留已有断言；完整字段表及标志位、
+真实 broker 和恢复期间外部并发修改仍待验收。脚本对端在五个恢复阶段返回 Channel.Close
+406 时，原始 reply_code/文本/class/method 保留且后续完整恢复已有回归；这不是实际 RabbitMQ 验收。
+上述取消/拒绝矩阵的最终恢复还接收脚本 Basic.Deliver + 内容头 + 两段 body，验证原消费者
+回调仅触发一次，投递标签/编号、重投标志、交换机、路由、content type 和完整内容保留。
+
 **签名**:
 ```cpp
 class connection_observer {
@@ -10107,6 +10728,7 @@ class protocol_connection : public std::enable_shared_from_this<protocol_connect
     auto async_connect(connection_options) -> task<result<void>>;
     auto async_connect(connection_options, cancel_token&) -> task<result<void>>;
     auto async_run(cancel_token&) -> task<result<void>>;
+    auto async_run_session(cancel_token&, std::function<void()> on_ready) -> task<result<void>>;
     auto async_recover(cancel_token&) -> task<result<void>>;
     auto async_close(std::string reply_text = "client shutdown") -> task<result<void>>;
     auto state() const noexcept -> connection_state;
@@ -10118,6 +10740,27 @@ class protocol_connection : public std::enable_shared_from_this<protocol_connect
 ```
 
 ### `logical_channel` — 逻辑通道
+
+`async_consume_acknowledged(consume_options, acknowledged_delivery_handler, field_table = {})`
+为显式手动确认入口，拒绝 no_ack 配置及空回调。回调接收 `(const delivery&,
+delivery_acknowledgement)`，可保存确认对象并由受监管协程等待 `ack(multiple=false)`
+或 `nack(requeue=true, multiple=false)`。任务按值保存身份，不借用临时确认对象。
+拓扑重放重新绑定弱连接、会话代数和通道；确认写锁内复核代数。旧消费入口直接调用
+原 handler，不修改 delivery 布局。恢复记录新增上下文回调存储，订阅阶段开销仍待测量。
+该入口尚未完成单通道关闭失效、NACK 线帧及新分配故障验收，不视为生产闭环完成。
+后续脚本回归已覆盖恢复后的 NACK flags=0 和 flags=3，以及整个生命周期停机后
+保存对象的 ACK/NACK 被拒绝；不代表单通道关闭或真实 broker 重新入队行为已验证。
+
+`protocol_connection::async_run_session()` 在已连接会话上拥有 reader 和拓扑重放，
+通过 when_all 等待两者，不执行连接重试。重放成功后调用 on_ready，取消转发给 reader。
+调用方必须等待返回任务；它不是 detached 启动入口。Application 通过 supervisor 拥有该任务，
+start 等待重放完成，probe 检查会话 ready。生命周期交换机恢复及延迟确认已有脚本 TCP 回归，
+完整订阅、消息确认和真实 broker 的 Application 恢复验收仍未完成。
+
+发布方法帧和内容头在首次写入前编码并校验协商帧上限，成功后才分配确认序号。
+消息发送期间持有连接写锁；发送失败中断传输，拒绝后续发布，由帧泵等待活动写操作
+结束后释放传输资源并清理待确认记录。应用监管的停机路径会等待帧泵退出；
+单独调用 `async_close()` 不能替代等待用户自行启动的 `async_run()` 任务。
 
 **签名**:
 ```cpp
@@ -12040,6 +12683,16 @@ auto encode_offset_commit(const group_identity&,
 
 ### `broker_connection` — Broker 传输连接
 
+带取消令牌的连接和请求路径将令牌传入 Happy Eyeballs、握手及响应前缀/正文读写。
+Application 回归通过本地不响应 TCP 对端验证请求等待的超时和主动取消；这不代表真实
+TLS、认证、请求锁等待和所有重连竞争已完成验证。
+
+连接事件按观察者分别隔离异常，单个观察者抛出异常不会跳过后续观察者或中断传输清理。
+单线程回调中新增观察者不会使当前遍历失效：本轮通知范围在开始时固定，新增登记从后续
+事件开始接收通知。当前观察者在回调期间由强引用保活，不复制整份登记表。
+嵌套事件派发仅在最外层通知结束后清理失效登记，避免使外层索引越界；本地 TCP 回归
+覆盖连接回调中嵌套连接通知。该保障不代表支持回调中销毁连接对象或跨线程共享连接。
+
 **签名**:
 ```cpp
 class broker_connection {
@@ -12068,6 +12721,10 @@ auto make_scram_authenticator(sasl_mechanism, std::string, std::string,
 ```
 
 ### `metadata_cache` — 元数据缓存
+
+元数据更新与观察者通知分离：无有效观察者时不复制通知快照；通知准备分配失败不会撤销
+已提交的缓存更新，当前通知会跳过，后续更新可继续通知。单个观察者异常不会传播给调用方
+或跳过其他观察者；回调在缓存锁外执行。观察者不应作为必须成功的业务处理入口。
 
 **签名**:
 ```cpp
@@ -12175,6 +12832,13 @@ class group_coordinator {
 
 ### `consumer` — 消费组消费者
 
+消费者必须在所属 executor 上串行访问。`close()` 任务开始执行后，
+`subscribe/assign/poll/commit/seek` 返回 `configuration` 错误，不再调用后端；
+关闭前创建但尚未执行的任务也遵守此规则。清理失败可再次调用 `close()`，
+但不会重新开放业务操作。多个 `close()` 任务串行清理，首次成功后不再重复调用后端。
+调用方仍须等待已经运行的操作结束；等待清理的 `close()` 任务必须保留并等待完成，
+不能直接销毁挂起的任务。
+
 **签名**:
 ```cpp
 struct consumer_options {
@@ -12211,6 +12875,33 @@ auto consume(client_facade& client) -> task<void> {
 ```
 
 ### `client_facade` — 客户端门面
+
+`close()` 在关闭传输前封闭当前运行时，拒绝该运行时上的工厂创建和元数据重连。
+随后显式调用 `connect()` 会创建新的运行时；旧句柄不会自动绑定到新运行时。
+同步 `close()` 不会等待消费者维护任务或在途 I/O，不能替代消费者的异步清理。
+生命周期操作必须在所属 executor 上执行。
+
+`co_await client.async_close(token)` 禁止新建消费者/生产者，取消并等待已登记的
+消费者维护任务，再清理消费组、fetch session 与连接；失败时保留登记以便重试。
+仅维护任务失败但资源已全部清理时，首次关闭仍返回任务错误，同时释放登记和传输；
+后续关闭幂等成功。资源清理本身失败时才保留待清理登记。
+登记使用弱消费者引用和独立维护任务所有权，因此提前释放消费者也不会跳过任务等待。
+`requires_async_close()` 表示是否还有消费者登记需要清理；Application Kafka 服务据此
+选择空登记的同步关闭或带 deadline 的异步关闭。调用方仍须自行取消并等待已经运行的
+业务操作。创建消费者或查询 `requires_async_close()` 时会回收已成功完成且消费者
+已清理/释放的登记；仍在运行或失败的登记不会被丢弃，关闭迭代期间不回收。
+维护失败的自动恢复及取消等待中的锁尚需进一步验证。
+
+`background_error()` 无分配地读取首个已结束的消费者维护任务错误，不清除错误。
+Application 的 Kafka probe 在元数据请求前后检查此结果，失败时报告 `down`，
+而不是用元数据成功覆盖后台任务失败。`restart_failed_maintenance()` 只替换仍开放的
+消费者上已失败的维护任务；先登记替代任务的所有权，再派发，分配异常保留原失败登记。
+Application 对已启动服务的恢复调用会使用此入口，重试节奏与预算仍由生命周期监管器负责。
+本地协议对端已验证维护任务分配失败、健康 down、恢复分配失败保留原错误，
+以及生命周期监管器触发恢复后，连续两次成功探测才恢复 readiness，再完成停机。
+真实 Broker 中断与监管器多次退避/预算耗尽的联合验证仍未完成。
+维护循环内部尚在重试的协议错误不属于
+“任务已结束”错误。
 
 **签名**:
 ```cpp

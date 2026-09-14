@@ -219,8 +219,10 @@ void registry::histogram_observe(std::string_view name, double value,
     histogram.sample_labels = std::move(metric_labels);
     if (histogram.buckets.empty())
     {
+        // Complete the only throwing allocation before committing either array.
+        auto counts = std::vector<std::uint64_t>(buckets.size(), 0);
         histogram.buckets = std::move(buckets);
-        histogram.counts.assign(histogram.buckets.size(), 0);
+        histogram.counts = std::move(counts);
     }
     for (std::size_t i = 0; i < histogram.buckets.size(); ++i)
         if (value <= histogram.buckets[i])

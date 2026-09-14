@@ -10,6 +10,9 @@ namespace detail {
     void write_log(
         level lv, std::string_view message,
         const std::source_location& loc = std::source_location::current());
+    void write_log_with_correlation(level lv, log_correlation correlation,
+        std::string_view message,
+        const std::source_location& loc = std::source_location::current());
     void write_log_no_src(level lv, std::string_view message);
 
     template <typename... Args> struct fmt_loc
@@ -36,6 +39,27 @@ auto set_file_output(const std::string& filepath, bool append = true) -> bool;
 void disable_file_output();
 void set_async_queue_limit(std::size_t max_queue);
 auto dropped_messages() -> std::uint64_t;
+/**
+ * @brief Emits a log event with caller-provided distributed-trace identity.
+ *
+ * This is an explicit value flow: it never reads or mutates thread-local
+ * tracing state. Existing level-specific logger APIs remain the lowest-cost
+ * path when correlation is not required.
+ */
+void log(level severity, log_correlation correlation, std::string_view message,
+    const std::source_location& location = std::source_location::current());
+/**
+ * @brief Registers a non-blocking completed-event observer.
+ *
+ * The callback executes on the logger worker after normal sinks receive the
+ * event. A returned zero identifier means registration failed. Removing an
+ * observer prevents future dispatch; an already-running callback may finish.
+ */
+auto add_observer(observer callback) -> observer_id;
+/**
+ * @brief Stops future dispatch to one completed-event observer.
+ */
+void remove_observer(observer_id identifier) noexcept;
 void flush();
 void shutdown();
 

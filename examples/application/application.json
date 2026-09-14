@@ -1,0 +1,81 @@
+{
+  "application": {
+    "name": "cnetmod-service",
+    "install_signal_handlers": true
+  },
+  "logging": {
+    "manage_lifecycle": true,
+    "level": "info",
+    "format": "json"
+  },
+  "http": {
+    "address": "0.0.0.0",
+    "port": 8080,
+    "max_connections": 0,
+    "request_timeout_ms": 30000,
+    "request_ids": true,
+    "access_logging": true,
+    "recover_exceptions": true
+  },
+  "management": {
+    "enabled": true,
+    "address": "127.0.0.1",
+    "port": 8081,
+    "same_port": false,
+    "live_path": "/actuator/live",
+    "ready_path": "/actuator/ready",
+    "health_path": "/actuator/health",
+    "metrics_path": "/actuator/prometheus"
+  },
+  "observability": {
+    "tracing": true,
+    "metrics": true,
+    "logs": true,
+    "sampling_ratio": 1.0,
+    "otlp": {
+      "traces_endpoint": "http://127.0.0.1:4318/v1/traces",
+      "metrics_endpoint": "http://127.0.0.1:4318/v1/metrics",
+      "logs_endpoint": "http://127.0.0.1:4318/v1/logs",
+      "capture_framework_logs": false,
+      "service_name": "cnetmod-service",
+      "queue_capacity": 4096,
+      "max_batch_size": 256,
+      "request_timeout_ms": 5000,
+      "max_attempts": 3,
+      "initial_retry_delay_ms": 100,
+      "max_retry_delay_ms": 5000
+    }
+  },
+  "lifecycle": {
+    "service_start_timeout_ms": 30000,
+    "total_start_timeout_ms": 120000,
+    "service_stop_timeout_ms": 10000,
+    "total_stop_timeout_ms": 30000,
+    "http_drain_timeout_ms": 10000,
+    "telemetry_flush_timeout_ms": 5000
+  },
+  "health": {
+    "interval_ms": 10000,
+    "timeout_ms": 3000,
+    "failures_before_down": 3,
+    "successes_before_up": 2
+  },
+  "services": {
+    "primary-cache": {
+      "type": "redis",
+      "instance": "primary",
+      "enabled": false,
+      "required": true,
+      "host": "127.0.0.1",
+      "port": 6379,
+      "password": "",
+      "recovery": {
+        "initial_delay_ms": 500,
+        "maximum_delay_ms": 30000,
+        "budget_ms": 120000,
+        "multiplier": 2.0,
+        "jitter": 0.2
+      }
+    }
+  }
+}

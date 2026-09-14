@@ -80,9 +80,20 @@ Socket 必须已通过 `async_connect`（客户端）或 `async_accept`（服务
 | `async_write` | `auto async_write(const_buffer buf) -> task<expected<size_t, error_code>>` | 异步写入（加密后发送） |
 | `async_write_all` | `auto async_write_all(const_buffer buf) -> task<expected<void, error_code>>` | 异步写完所有字节 |
 | `async_shutdown` | `auto async_shutdown() -> task<expected<void, error_code>>` | 异步 TLS 关闭 |
+| `async_shutdown` | `auto async_shutdown(cancel_token& token) -> task<expected<void, error_code>>` | 可取消关闭，token 与流必须存活到任务结束 |
 | `get_alpn_selected` | `auto get_alpn_selected() const noexcept -> string_view` | 获取 ALPN 协商结果 |
 | `kernel_tls_active` | `auto kernel_tls_active() const noexcept -> bool` | kTLS 是否激活 |
 | `native` | `auto native() const noexcept -> SSL*` | 获取原生 SSL 指针 |
+
+可取消关闭将 token 传到 BIO 读写和 Linux socket readiness 等待；调用前已取消则直接
+返回 operation_canceled，不调用 SSL_shutdown。它不负责关闭 socket，调用方仍拥有传输资源。
+普通入口与可取消入口通过编译期分流共享实现，普通入口不检查运行时 token。
+Windows 本地回归覆盖预取消，以及已握手连接等待对端 close_notify 时的 30ms 超时取消：
+对端只消费密文、不发送关闭确认；客户端返回 timed_out 后关闭 socket，对端观察到连接结束。
+该用例由独立 test_ssl_shutdown 目标执行，仅依赖 SSL 与 OpenSSL 证书生成工具，不依赖
+Redis 开关；它与 test_redis_tls 共用证书设施。Arch Clang 22 的 SSL-only 配置（HTTP、Redis、
+ORM 均关闭）也已运行通过。当前仓库强制使用内置 BoringSSL，其头文件未提供 SSL_OP_ENABLE_KTLS，
+因此该配置实际使用 memory BIO；不能将结果当作 direct socket BIO/kTLS 的运行证据。
 
 ### 错误处理
 **签名**:

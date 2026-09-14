@@ -255,6 +255,20 @@ class connection_pool {
 
 ### `sharded_connection_pool` — 分片连接池
 
+连接池等待者的取消和池停止通知使用等待协程帧内的投递节点，不为通知本身分配堆内存。
+取消仅投递原等待者，原协程恢复后取得协程锁并移除登记，不启动 detached 清理协程。
+连接分配、调用者取消和池停止通过同一个 pending 标志竞争完成权，只有获胜者投递。
+调用者仍必须等待获取连接的任务结束后再销毁池和事件循环；此机制不支持强制销毁在途任务。
+
+归还连接遇到池锁竞争时，使用连接节点内的投递通知，不创建 detached 归还协程。
+待处理归还计入 `pending_maintenance()`，`cancel()` 等待已登记通知完成。
+这不替代外部借出连接的生命周期管理：所有 lease 仍须在池销毁前归还。
+
+`checked_out_count()` 在所属执行线程扫描节点，统计正常借出及停止后仍被持有的连接，
+不为每次借用增加计数器操作。停止后归还的连接会关闭而不重新进入空闲池。
+Application Redis 服务停止时按调用方 deadline 等待 lease；超时返回错误并保留服务状态，
+归还后可再次调用停止。该约定仍不允许销毁外部正在使用的池。
+
 适用于多核 `server_context` 场景，每个 worker `io_context` 绑定独立分片。
 
 ```cpp
@@ -707,6 +721,14 @@ auto main() -> int
 | 长连接启用 `ping_interval` 保活 | 不要在高并发场景为每个请求创建新 client |
 | 多核场景使用 `sharded_connection_pool` + `server_context` | 不要在多 worker 场景使用单 `connection_pool` |
 | 通过 `async_get_connection(io_context&)` 绑定 worker 分片 | 不要让请求跨 worker 分片获取连接 |
+
+## 本地真实服务测试
+
+`test_application_redis_live` 只连接显式指定端口的 `127.0.0.1`，执行 RESP3 建连、
+健康 PING、三次关闭自身借出的连接后重新建连，以及受监管停止，不创建键或修改服务配置。设置 `CNETMOD_REDIS_INTEGRATION=1`
+及 `CNETMOD_REDIS_TEST_PORT` 后通过 CTest 运行；未启用时返回 77，由 CTest 标记 skipped。
+端口缺失或非法直接失败。测试服务须自行启动、隔离和回收；该入口不验证服务端宕机恢复，
+也不意味着 Redis/Valkey 的真实服务验收已经通过。
 
 ## 参考示例
 

@@ -9,6 +9,7 @@ import :wire_frame_codec;
 import :field_table_codec;
 import :channel_options;
 import :message_delivery;
+import :delivery_acknowledgement;
 import :publisher_confirm;
 import :topology_recovery;
 import :protocol_connection;
@@ -108,11 +109,20 @@ namespace {
 struct logical_channel::impl
 {
     impl(std::shared_ptr<protocol_connection> c, std::uint16_t n)
-        : connection(std::move(c)), number(n), confirms(connection->confirm_tracker(n)) {}
+        : connection(std::move(c)), number(n), generation(connection->generation()), confirms(connection->confirm_tracker(n)) {}
 
     std::shared_ptr<protocol_connection> connection;
     std::uint16_t number;
-    bool open = true;
+    std::uint64_t generation;
+    /**
+     * @brief Distinguishes revoked operations from a confirmed close handshake.
+     */
+    enum class channel_state : std::uint8_t
+    {
+        open,
+        closing,
+        closed
+    } state = channel_state::open;
     bool confirm_mode = false;
     bool transaction = false;
     std::shared_ptr<publisher_confirm_tracker> confirms;
@@ -131,18 +141,23 @@ auto logical_channel::number() const noexcept -> std::uint16_t
 
 auto logical_channel::is_open() const noexcept -> bool
 {
-    return impl_->open;
+    return impl_->state == impl::channel_state::open && impl_->generation == impl_->connection->generation() &&
+        impl_->connection->state() == connection_state::open;
 }
 
 auto logical_channel::async_close(std::string text) -> task<result<void>>
 {
-    if (!impl_->open)
+    if (impl_->state == impl::channel_state::closed)
         co_return result<void>{};
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(200);
     out.short_string(text);
     out.integer<std::uint16_t>(0);
     out.integer<std::uint16_t>(0);
+    impl_->state = impl::channel_state::closing;
+    impl_->connection->retire_channel(impl_->number, error{.code = error_code::channel_closed});
     auto r =
         co_await impl_->connection->async_rpc({.channel = impl_->number,
                                                   .class_id = 20,
@@ -151,7 +166,7 @@ auto logical_channel::async_close(std::string text) -> task<result<void>>
             20, 41);
     if (!r)
         co_return std::unexpected(r.error());
-    impl_->open = false;
+    impl_->state = impl::channel_state::closed;
     co_return result<void>{};
 }
 
@@ -159,6 +174,8 @@ auto logical_channel::async_declare_exchange(exchange_declare_options o,
     field_table args)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(o.name);
@@ -191,6 +208,8 @@ auto logical_channel::async_delete_exchange(std::string name, bool unused,
     bool no_wait)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(name);
@@ -219,6 +238,8 @@ auto logical_channel::async_declare_queue(queue_declare_options o,
     field_table args)
     -> task<result<queue_declare_result>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(o.name);
@@ -257,6 +278,8 @@ auto logical_channel::async_delete_queue(std::string name, bool unused,
     bool empty, bool no_wait)
     -> task<result<std::uint32_t>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(name);
@@ -286,6 +309,8 @@ auto logical_channel::async_delete_queue(std::string name, bool unused,
 auto logical_channel::async_purge_queue(std::string name, bool no_wait)
     -> task<result<std::uint32_t>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(name);
@@ -313,6 +338,8 @@ auto logical_channel::async_purge_queue(std::string name, bool no_wait)
 auto logical_channel::async_bind_queue(binding_options o, field_table args)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(o.queue);
@@ -344,6 +371,8 @@ auto logical_channel::async_bind_queue(binding_options o, field_table args)
 auto logical_channel::async_unbind_queue(binding_options o, field_table args)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(o.queue);
@@ -365,6 +394,8 @@ auto logical_channel::async_unbind_queue(binding_options o, field_table args)
 
 auto logical_channel::async_set_qos(qos_options o) -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer(o.prefetch_size);
     out.integer(o.prefetch_count);
@@ -384,28 +415,48 @@ auto logical_channel::async_publish(publish_options o,
     message message)
     -> task<result<std::uint64_t>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
+    if (o.exchange.size() > 255 || o.routing_key.size() > 255)
+        co_return std::unexpected(error{.code = error_code::invalid_field});
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(o.exchange);
     out.short_string(o.routing_key);
     out.u8((o.mandatory ? 1 : 0) | (o.immediate ? 2 : 0));
-    auto tag = impl_->confirm_mode ? impl_->confirms->reserve_sequence() : 0;
-    if (auto r = co_await impl_->connection->async_send_message(
-            impl_->number,
-            {.channel = impl_->number,
-                .class_id = 60,
-                .method_id = 40,
-                .arguments = std::move(out.data)},
-            std::move(message));
-        !r)
-        co_return std::unexpected(r.error());
-    co_return tag;
+    co_return co_await impl_->connection->async_send_message(
+        impl_->number,
+        {.channel = impl_->number,
+            .class_id = 60,
+            .method_id = 40,
+            .arguments = std::move(out.data)},
+        std::move(message), impl_->confirm_mode ? impl_->confirms.get() : nullptr, impl_->generation);
 }
 
 auto logical_channel::async_consume(consume_options o, delivery_handler handler,
     field_table args)
     -> task<result<std::string>>
 {
+    return consume(std::move(o), std::move(handler), std::move(args));
+}
+
+auto logical_channel::async_consume_acknowledged(consume_options o, acknowledged_delivery_handler handler,
+    field_table args) -> task<result<std::string>>
+{
+    return consume(std::move(o), std::move(handler), std::move(args));
+}
+
+template <typename Handler>
+auto logical_channel::consume(consume_options o, Handler handler, field_table args)
+    -> task<result<std::string>>
+{
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
+    if constexpr (std::same_as<Handler, acknowledged_delivery_handler>)
+    {
+        if (o.no_ack || !handler)
+            co_return std::unexpected(error{.code = error_code::precondition_failed});
+    }
     writer out;
     out.integer<std::uint16_t>(0);
     out.short_string(o.queue);
@@ -416,23 +467,61 @@ auto logical_channel::async_consume(consume_options o, delivery_handler handler,
         co_return std::unexpected(r.error());
     method_frame m{impl_->number, 60, 20, std::move(out.data)};
     std::string tag = o.consumer_tag;
+    if (o.no_wait && tag.empty())
+        co_return std::unexpected(make_error(error_code::precondition_failed,
+            "consumer_tag required with no_wait"));
+
+    /**
+     * @brief Prepares callbacks after validation but before sending a subscription.
+     * Callable copies and wrapper allocation may throw without remote side effects.
+     */
+    auto recovery_handler = handler;
+    delivery_handler registered_handler;
+    if constexpr (std::same_as<Handler, acknowledged_delivery_handler>)
+    {
+        registered_handler = [handler = std::move(handler), connection = std::weak_ptr{impl_->connection},
+                                 generation = impl_->generation, channel = impl_->number](const delivery& value)
+        {
+            handler(value, delivery_acknowledgement{connection, generation, channel, value.delivery_tag});
+        };
+    }
+    else
+        registered_handler = std::move(handler);
+
+    /**
+     * @brief Rejects partially registered subscriptions without allocating cleanup work.
+     * Transport shutdown revokes the remote subscription; its I/O owner joins it.
+     */
+    struct registration_guard
+    {
+        impl& channel;
+        bool accepted = false;
+
+        ~registration_guard() noexcept
+        {
+            if (accepted)
+            {
+                channel.state = impl::channel_state::closing;
+                channel.connection->abort_subscription(channel.generation, channel.number);
+            }
+        }
+    } registration{*impl_};
+
     if (o.no_wait)
     {
-        if (tag.empty())
-            co_return std::unexpected(
-                make_error(error_code::precondition_failed,
-                    "consumer_tag required with no_wait"));
         auto f = encode_method(m);
         if (!f)
             co_return std::unexpected(f.error());
         if (auto r = co_await impl_->connection->async_send(std::move(*f)); !r)
             co_return std::unexpected(r.error());
+        registration.accepted = true;
     }
     else
     {
         auto reply = co_await impl_->connection->async_rpc(std::move(m), 60, 21);
         if (!reply)
             co_return std::unexpected(reply.error());
+        registration.accepted = true;
         reader in(reply->arguments);
         auto assigned = in.short_string();
         if (!assigned)
@@ -440,17 +529,26 @@ auto logical_channel::async_consume(consume_options o, delivery_handler handler,
         tag = std::move(*assigned);
     }
     o.consumer_tag = tag;
-    auto recovery_handler = handler;
-    impl_->connection->register_delivery_handler(impl_->number, tag,
-        std::move(handler));
-    impl_->connection->topology()->remember(recorded_consumer{
-        std::move(o), std::move(args), std::move(recovery_handler)});
-    co_return tag;
+    impl_->connection->register_delivery_handler(impl_->number, tag, std::move(registered_handler));
+    if constexpr (std::same_as<Handler, acknowledged_delivery_handler>)
+    {
+        impl_->connection->topology()->remember(recorded_consumer{
+            std::move(o), std::move(args), {}, std::move(recovery_handler)});
+    }
+    else
+    {
+        impl_->connection->topology()->remember(recorded_consumer{
+            std::move(o), std::move(args), std::move(recovery_handler), {}});
+    }
+    registration.accepted = false;
+    co_return std::move(tag);
 }
 
 auto logical_channel::async_cancel_consumer(std::string tag, bool no_wait)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.short_string(tag);
     out.u8(no_wait ? 1 : 0);
@@ -477,6 +575,8 @@ auto logical_channel::async_cancel_consumer(std::string tag, bool no_wait)
 auto logical_channel::async_ack(std::uint64_t tag, bool multiple)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer(tag);
     out.u8(multiple ? 1 : 0);
@@ -492,6 +592,8 @@ auto logical_channel::async_ack(std::uint64_t tag, bool multiple)
 auto logical_channel::async_nack(std::uint64_t tag, bool multiple, bool requeue)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer(tag);
     out.u8((multiple ? 1 : 0) | (requeue ? 2 : 0));
@@ -507,6 +609,8 @@ auto logical_channel::async_nack(std::uint64_t tag, bool multiple, bool requeue)
 auto logical_channel::async_reject(std::uint64_t tag, bool requeue)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.integer(tag);
     out.u8(requeue ? 1 : 0);
@@ -521,6 +625,8 @@ auto logical_channel::async_reject(std::uint64_t tag, bool requeue)
 
 auto logical_channel::async_recover(bool requeue) -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     writer out;
     out.u8(requeue ? 1 : 0);
     auto reply =
@@ -537,6 +643,8 @@ auto logical_channel::async_recover(bool requeue) -> task<result<void>>
 auto logical_channel::async_enable_confirms(bool no_wait)
     -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     if (impl_->transaction)
         co_return std::unexpected(make_error(
             error_code::precondition_failed,
@@ -570,6 +678,8 @@ void logical_channel::observe_confirms(
 
 auto logical_channel::async_select_transaction() -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     if (impl_->confirm_mode)
         co_return std::unexpected(make_error(
             error_code::precondition_failed,
@@ -584,6 +694,8 @@ auto logical_channel::async_select_transaction() -> task<result<void>>
 
 auto logical_channel::async_commit_transaction() -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     if (!impl_->transaction)
         co_return std::unexpected(make_error(error_code::precondition_failed,
             "transaction mode is not selected"));
@@ -596,6 +708,8 @@ auto logical_channel::async_commit_transaction() -> task<result<void>>
 
 auto logical_channel::async_rollback_transaction() -> task<result<void>>
 {
+    if (!is_open())
+        co_return std::unexpected(error{.code = error_code::channel_closed});
     if (!impl_->transaction)
         co_return std::unexpected(make_error(error_code::precondition_failed,
             "transaction mode is not selected"));

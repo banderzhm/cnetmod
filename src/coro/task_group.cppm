@@ -30,13 +30,18 @@ namespace detail {
     inline void cancel_task_group(const std::shared_ptr<task_group_state>& state,
         cancellation_reason reason)
     {
-        std::vector<std::shared_ptr<cancel_token>> tokens;
+        std::size_t count{};
         {
             concurrent_containers::exclusive_latch_guard lock{state->latch};
-            tokens = state->tokens;
+            count = state->tokens.size();
         }
-        for (const auto& token : tokens)
+        for (std::size_t index = 0; index < count; ++index)
         {
+            std::shared_ptr<cancel_token> token;
+            {
+                concurrent_containers::exclusive_latch_guard lock{state->latch};
+                token = state->tokens[index];
+            }
             if (reason == cancellation_reason::deadline_exceeded)
                 token->cancel_due_to_deadline();
             else
@@ -128,7 +133,27 @@ public:
             state_->tokens.push_back(token);
             state_->completed.add();
         }
-        spawn(*context_, detail::run_task_group_child(state_, std::move(token), std::move(operation)));
+        auto failed = [state = state_](std::exception_ptr) noexcept
+        {
+            try
+            {
+                detail::fail_task_group(state, std::make_error_code(std::errc::operation_canceled));
+            }
+            catch (...)
+            {
+                // Sibling cancellation must not strand this completion slot.
+            }
+            state->completed.done();
+        };
+        try
+        {
+            spawn_guarded(*context_, detail::run_task_group_child(state_, std::move(token), std::move(operation)), failed);
+        }
+        catch (...)
+        {
+            failed(std::current_exception());
+            return false;
+        }
         return true;
     }
 
@@ -144,6 +169,35 @@ public:
         detail::cancel_task_group(state_, cancellation_reason::deadline_exceeded);
     }
 
+    /**
+     * @brief Seals the group and waits without allocating a coroutine frame.
+     *
+     * Emergency cleanup must request cancellation first. This awaitable only
+     * joins existing children; it does not create a deadline watcher.
+     */
+    [[nodiscard]] auto settle() noexcept -> async_wait_group::wait_awaitable
+    {
+        {
+            concurrent_containers::exclusive_latch_guard lock{state_->latch};
+            state_->joining = true;
+        }
+        return state_->completed.wait();
+    }
+
+    /**
+     * @brief Returns the completion result without allocating or suspending.
+     * An empty optional means children are still running; a zero error code
+     * means successful completion. This snapshot does not seal registration.
+     * Owners must prevent new run() calls before using it to retire a group.
+     */
+    [[nodiscard]] auto completion_result() const noexcept -> std::optional<std::error_code>
+    {
+        concurrent_containers::exclusive_latch_guard lock{state_->latch};
+        if (state_->completed.count() != 0)
+            return std::nullopt;
+        return state_->first_error.value_or(std::error_code{});
+    }
+
     /// Waits for every started child, returning the first observed error.
     auto join() -> task<std::expected<void, std::error_code>>
     {
@@ -157,26 +211,59 @@ public:
         }
         else
         {
-            cancel_token timer_token;
-            auto wait_for_children = [state = state_, &timer_token]()
-                -> task<std::expected<void, std::error_code>>
+            std::error_code setup_error;
+            try
             {
-                co_await state->completed.wait();
-                timer_token.cancel();
-                co_return std::expected<void, std::error_code>{};
-            };
-            auto watch_deadline = [state = state_, context = context_, value = deadline_,
-                                      &timer_token]() -> task<int>
+                cancel_token timer_token;
+                auto wait_for_children = [state = state_, &timer_token]()
+                    -> task<std::expected<void, std::error_code>>
+                {
+                    co_await state->completed.wait();
+                    timer_token.cancel();
+                    co_return std::expected<void, std::error_code>{};
+                };
+                auto watch_deadline = [state = state_, context = context_, value = deadline_,
+                                          &timer_token]() -> task<int>
+                {
+                    try
+                    {
+                        const auto waited = co_await async_timer_wait(*context, value.remaining(), timer_token);
+                        if (!timer_token.is_cancelled())
+                        {
+                            if (waited)
+                                detail::timeout_task_group(state);
+                            else
+                                detail::fail_task_group(state, waited.error());
+                        }
+                    }
+                    catch (const std::bad_alloc&)
+                    {
+                        detail::fail_task_group(state, std::make_error_code(std::errc::not_enough_memory));
+                    }
+                    catch (...)
+                    {
+                        detail::fail_task_group(state, std::make_error_code(std::errc::io_error));
+                    }
+                    co_return 0;
+                };
+                auto [ignored, timer_result] = co_await when_all(wait_for_children(),
+                    watch_deadline());
+                (void)ignored;
+                (void)timer_result;
+            }
+            catch (const std::bad_alloc&)
             {
-                (void)co_await async_timer_wait(*context, value.remaining(), timer_token);
-                if (!timer_token.is_cancelled())
-                    detail::timeout_task_group(state);
-                co_return 0;
-            };
-            auto [ignored, timer_result] = co_await when_all(wait_for_children(),
-                watch_deadline());
-            (void)ignored;
-            (void)timer_result;
+                setup_error = std::make_error_code(std::errc::not_enough_memory);
+            }
+            catch (...)
+            {
+                setup_error = std::make_error_code(std::errc::io_error);
+            }
+            if (setup_error)
+            {
+                detail::fail_task_group(state_, setup_error);
+                co_await state_->completed.wait();
+            }
         }
 
         concurrent_containers::exclusive_latch_guard lock{state_->latch};

@@ -136,14 +136,21 @@ auto access_log(access_log_options opts, std::source_location loc)
             log_lv = std::max(opts.lv, logger::level::info);
         if (opts.format == access_log_format::brief)
         {
+            const auto correlation = ctx.trace_span_id().empty()
+                ? std::string{}
+                : std::format(" trace_id={} span_id={}", ctx.trace_id(),
+                      ctx.trace_span_id());
             logger::detail::write_log(log_lv,
-                std::format("{} {} {} {:.2f}ms", ctx.method(),
-                    ctx.path(), status, ms),
+                std::format("{} {} {} {:.2f}ms{}", ctx.method(),
+                    ctx.path(), status, ms, correlation),
                 loc);
             co_return;
         }
         auto message =
             std::format("{} {} {} {:.2f}ms", ctx.method(), ctx.path(), status, ms);
+        if (!ctx.trace_span_id().empty())
+            message.append(std::format(" trace_id={} span_id={}",
+                ctx.trace_id(), ctx.trace_span_id()));
         if (opts.dump == access_log_dump::always || status >= 400)
         {
             message.push_back('\n');

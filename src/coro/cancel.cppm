@@ -1,6 +1,7 @@
 export module cnetmod.coro.cancel;
 
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod {
 
@@ -53,13 +54,31 @@ public:
     /// Prerequisite: no pending operation currently
     void reset() noexcept;
 
+    /**
+     * @brief Publishes an operation whose cancellation notification only queues work.
+     * Returns false if cancellation was already requested. The callback must not
+     * reenter this token; completion and cancellation arbitrate the same registration.
+     */
+    [[nodiscard]] auto register_callback(void* operation, void (*notify)(void*) noexcept) noexcept -> bool;
+
+    /**
+     * @brief Claims normal completion; false means cancellation owns completion.
+     */
+    [[nodiscard]] auto complete_callback(void* operation) noexcept -> bool;
+
+    /**
+     * @brief Retires a cancelled registration after its queued completion runs.
+     * Pending remains true until this owner-thread acknowledgement.
+     */
+    void finish_callback(void* operation) noexcept;
+
     // =================================================================
     // Following fields are set internally by platform awaiter, users should not manipulate directly
     // =================================================================
 
     std::atomic<bool> cancelled_{false}; // Whether cancellation has been requested
     std::atomic<cancellation_reason> reason_{cancellation_reason::none};
-    std::atomic<bool> pending_{false};   // Whether an operation is pending
+    std::atomic<bool> pending_{false}; // Whether an operation is pending
 
     /// Platform-specific cancel function (set by cancel awaiter)
     void (*cancel_fn_)(cancel_token&) noexcept = nullptr;
@@ -70,6 +89,13 @@ public:
     int fd_{-1};                          // epoll/kqueue: file descriptor
     std::int16_t filter_{0};              // kqueue: EVFILT_READ / EVFILT_WRITE
     std::coroutine_handle<> coroutine_{}; // epoll/kqueue: suspended coroutine
+
+private:
+    auto dispatch_callback() noexcept -> bool;
+    concurrent_containers::atomic_rw_latch callback_latch_;
+    void* callback_operation_{};
+    void (*callback_notify_)(void*) noexcept = nullptr;
+    bool callback_mode_ = false;
 };
 
 } // namespace cnetmod

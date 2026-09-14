@@ -69,8 +69,11 @@ auto io_context::drain_post_queue() -> std::size_t
     {
         auto* node = reversed;
         reversed = node->next.load(std::memory_order_relaxed);
+        // A caller-owned node may live in the coroutine frame destroyed by
+        // dispatch. Capture ownership before resuming and never reread it.
+        const bool heap_owned = node->heap_owned;
         node->dispatch();
-        if (node->heap_owned)
+        if (heap_owned)
             delete node;
         ++count;
     }
@@ -120,7 +123,8 @@ auto post_awaitable::await_ready() const noexcept -> bool
 
 void post_awaitable::await_suspend(std::coroutine_handle<> coroutine) noexcept
 {
-    ctx.post(coroutine);
+    continuation.coroutine = coroutine;
+    ctx.post_node_raw(&continuation);
 }
 
 void post_awaitable::await_resume() noexcept {}

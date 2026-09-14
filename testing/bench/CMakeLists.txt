@@ -22,8 +22,14 @@ set(BENCH_TARGETS
     crosslang_cnetmod_server
 )
 
+if(CNETMOD_ENABLE_HTTP)
+    list(APPEND BENCH_TARGETS bench_http_observation bench_http_baseline bench_http_disabled)
+    set(bench_http_baseline_SOURCE bench_http_observation.cpp)
+    set(bench_http_disabled_SOURCE bench_http_observation.cpp)
+endif()
+
 if(NOT CNETMOD_ENABLE_HTTP)
-    list(REMOVE_ITEM BENCH_TARGETS bench_http bench_grpc)
+    list(REMOVE_ITEM BENCH_TARGETS bench_http bench_grpc crosslang_cnetmod_server)
 endif()
 if(NOT CNETMOD_ENABLE_GRPC)
     list(REMOVE_ITEM BENCH_TARGETS bench_grpc)
@@ -62,6 +68,11 @@ foreach(bench_name ${BENCH_TARGETS})
     endif()
 
     add_executable(${bench_name} ${_bench_src})
+    if(bench_name STREQUAL "bench_http_baseline")
+        target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_RAW_ONLY=1)
+    elseif(bench_name STREQUAL "bench_http_disabled")
+        target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_DISABLED_ONLY=1)
+    endif()
     target_link_libraries(${bench_name} PRIVATE cnetmod_core)
     cnetmod_deploy_mimalloc_runtime(${bench_name})
     target_include_directories(${bench_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

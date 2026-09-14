@@ -10,6 +10,7 @@ import :connection;
 import cnetmod.core.dns;
 import cnetmod.core.error;
 import cnetmod.coro.timer;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -198,7 +199,7 @@ namespace {
 
 } // namespace
 
-client::client(io_context& context) noexcept : context_(context)
+client::client(io_context& context) : context_(context)
 {
     format_options_.backslash_escapes = false;
 }
@@ -207,9 +208,28 @@ client::~client() = default;
 
 auto client::connect(connection_options options) -> task<result_set>
 {
+    return connect_impl(std::move(options), nullptr);
+}
+
+auto client::connect(connection_options options, cancel_token& cancellation) -> task<result_set>
+{
+    return connect_impl(std::move(options), &cancellation);
+}
+
+template <typename Cancellation>
+auto client::connect_impl(connection_options options, Cancellation cancellation) -> task<result_set>
+{
     if (operation_in_progress_.test_and_set(std::memory_order_acquire))
         co_return make_error("another PostgreSQL operation is already in progress");
     operation_guard guard{operation_in_progress_};
+    if constexpr (!std::same_as<Cancellation, std::nullptr_t>)
+    {
+        if (cancellation->is_cancelled())
+        {
+            last_error_ = std::make_error_code(std::errc::operation_canceled);
+            co_return make_error("PostgreSQL connect cancelled before execution");
+        }
+    }
     disconnect();
     options_ = std::move(options);
     if (options_.maximum_message_size < 8 || options_.maximum_message_size > 1024ULL * 1024 * 1024)
@@ -224,12 +244,27 @@ auto client::connect(connection_options options) -> task<result_set>
         std::unexpected(std::make_error_code(std::errc::host_unreachable));
     for (std::size_t attempt = 1; attempt <= maximum_attempts; ++attempt)
     {
-        connected = co_await async_connect_happy_eyeballs(
-            context_, options_.host, options_.port, connect_options);
+        if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+            connected = co_await async_connect_happy_eyeballs(
+                context_, options_.host, options_.port, connect_options);
+        else
+            connected = co_await async_connect_happy_eyeballs(
+                context_, options_.host, options_.port, connect_options, *cancellation);
         if (connected || !retryable_connect_error(connected.error()) ||
             attempt == maximum_attempts)
             break;
-        co_await async_sleep(context_, options_.connect_retry_backoff * static_cast<int>(attempt));
+        if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+            co_await async_sleep(context_, options_.connect_retry_backoff * static_cast<int>(attempt));
+        else
+        {
+            auto waited = co_await async_timer_wait(context_,
+                options_.connect_retry_backoff * static_cast<int>(attempt), *cancellation);
+            if (!waited)
+            {
+                connected = std::unexpected(waited.error());
+                break;
+            }
+        }
     }
     if (!connected)
     {
@@ -242,10 +277,10 @@ auto client::connect(connection_options options) -> task<result_set>
     {
 #ifdef CNETMOD_HAS_SSL
         auto request = detail::ssl_request();
-        if (!co_await write_all(request))
+        if (!co_await write_all(request, cancellation))
             co_return make_error("failed to send SSLRequest");
         std::uint8_t response{};
-        if (!co_await read_exact(&response, 1))
+        if (!co_await read_exact(&response, 1, cancellation))
             co_return make_error("failed to read SSL negotiation response");
         if (response == 'S')
         {
@@ -288,7 +323,11 @@ auto client::connect(connection_options options) -> task<result_set>
             ssl_stream_->set_connect_state();
             if (options_.tls == tls_mode::verify_full)
                 ssl_stream_->set_hostname(options_.host);
-            auto handshake = co_await ssl_stream_->async_handshake();
+            std::expected<void, std::error_code> handshake;
+            if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+                handshake = co_await ssl_stream_->async_handshake();
+            else
+                handshake = co_await ssl_stream_->async_handshake(*cancellation);
             if (!handshake)
             {
                 auto message = handshake.error().message();
@@ -317,28 +356,28 @@ auto client::connect(connection_options options) -> task<result_set>
     }
 
     auto startup = detail::startup_message(options_);
-    if (!co_await write_all(startup))
+    if (!co_await write_all(startup, cancellation))
         co_return make_error("failed to send StartupMessage");
-    auto authenticated = co_await authenticate();
+    auto authenticated = co_await authenticate(cancellation);
     if (authenticated.is_err())
-        disconnect();
+        disconnect(last_error_);
     co_return authenticated;
 }
 
 auto client::reconnect() -> task<result_set>
 {
     auto saved = options_;
-    disconnect();
     co_return co_await connect(std::move(saved));
 }
 
-auto client::authenticate() -> task<result_set>
+template <typename Cancellation>
+auto client::authenticate(Cancellation cancellation) -> task<result_set>
 {
     detail::scram_client scram;
     bool scram_started{};
     for (;;)
     {
-        auto message = co_await read_message();
+        auto message = co_await read_message(cancellation);
         if (!message)
             co_return make_error(message.error());
         auto payload = std::span<const std::uint8_t>(message->payload);
@@ -353,7 +392,7 @@ auto client::authenticate() -> task<result_set>
             {
                 if (!secure_)
                     co_return make_error("cleartext password authentication is refused without TLS");
-                if (!co_await write_all(detail::password_message(options_.password)))
+                if (!co_await write_all(detail::password_message(options_.password), cancellation))
                     co_return make_error("failed to send password");
             }
             else if (method == 5)
@@ -364,7 +403,7 @@ auto client::authenticate() -> task<result_set>
                     std::span<const std::uint8_t, 4>(payload.subspan(4, 4)));
                 if (!password)
                     co_return make_error(password.error());
-                if (!co_await write_all(detail::password_message(*password)))
+                if (!co_await write_all(detail::password_message(*password), cancellation))
                     co_return make_error("failed to send MD5 password");
             }
             else if (method == 10)
@@ -391,7 +430,7 @@ auto client::authenticate() -> task<result_set>
                     co_return make_error(error.what());
                 }
                 scram_started = true;
-                if (!co_await write_all(detail::scram_initial_response("SCRAM-SHA-256", first)))
+                if (!co_await write_all(detail::scram_initial_response("SCRAM-SHA-256", first), cancellation))
                     co_return make_error("failed to send SCRAM initial response");
             }
             else if (method == 11 && scram_started)
@@ -400,7 +439,7 @@ auto client::authenticate() -> task<result_set>
                 auto response = scram.respond(options_.password, challenge);
                 if (!response)
                     co_return make_error(response.error());
-                if (!co_await write_all(detail::scram_response(*response)))
+                if (!co_await write_all(detail::scram_response(*response), cancellation))
                     co_return make_error("failed to send SCRAM proof");
             }
             else if (method == 12 && scram_started)
@@ -450,6 +489,24 @@ auto client::query(std::string_view sql) -> task<result_set>
     if (!co_await write_all(command))
         co_return make_error("failed to send query");
     co_return co_await collect_results();
+}
+
+auto client::query(std::string_view sql, cancel_token& cancellation) -> task<result_set>
+{
+    if (!connected_)
+        co_return make_error("not connected");
+    if (operation_in_progress_.test_and_set(std::memory_order_acquire))
+        co_return make_error("another PostgreSQL operation is already in progress");
+    operation_guard guard{operation_in_progress_};
+    if (cancellation.is_cancelled())
+    {
+        last_error_ = std::make_error_code(std::errc::operation_canceled);
+        co_return make_error("PostgreSQL query cancelled before execution");
+    }
+    auto command = detail::simple_query_message(normalized_sql(sql));
+    if (!co_await write_all(command, &cancellation))
+        co_return make_error("failed to send query");
+    co_return co_await collect_results(&cancellation);
 }
 
 auto client::execute(std::string_view sql) -> task<result_set>
@@ -1000,13 +1057,14 @@ auto client::cancel_current_operation() -> task<result_set>
     co_return result_set{};
 }
 
-auto client::collect_results() -> task<result_set>
+template <typename Cancellation>
+auto client::collect_results(Cancellation cancellation) -> task<result_set>
 {
     result_set result;
     std::vector<std::uint32_t> oids;
     for (;;)
     {
-        auto message = co_await read_message();
+        auto message = co_await read_message(cancellation);
         if (!message)
             co_return make_error(message.error());
         auto payload = std::span<const std::uint8_t>(message->payload);
@@ -1150,7 +1208,40 @@ auto client::terminate() -> task<void>
     co_return;
 }
 
-auto client::write_all(std::span<const std::uint8_t> bytes) -> task<bool>
+auto client::terminate(cancel_token& cancellation) -> task<std::expected<void, std::error_code>>
+{
+    if (operation_in_progress_.test_and_set(std::memory_order_acquire))
+        co_return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+    operation_guard guard{operation_in_progress_};
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+    if (connected_)
+    {
+        auto message = detail::terminate_message();
+        if (!co_await write_all(message, &cancellation))
+            co_return std::unexpected(last_error_ ? last_error_ : std::make_error_code(std::errc::io_error));
+#ifdef CNETMOD_HAS_SSL
+        if (ssl_stream_)
+        {
+            auto shutdown = co_await ssl_stream_->async_shutdown(cancellation);
+            if (!shutdown)
+            {
+                const auto error = shutdown.error();
+                disconnect(error);
+                co_return std::unexpected(error);
+            }
+        }
+#endif
+    }
+    disconnect();
+    co_return {};
+}
+
+/**
+ * @brief Selects cancellable transport at compile time without a shared token slot.
+ */
+template <typename Cancellation>
+auto client::write_all(std::span<const std::uint8_t> bytes, Cancellation cancellation) -> task<bool>
 {
     if (bytes.empty() || bytes.size() > options_.maximum_message_size)
     {
@@ -1161,7 +1252,11 @@ auto client::write_all(std::span<const std::uint8_t> bytes) -> task<bool>
 #ifdef CNETMOD_HAS_SSL
     if (ssl_stream_)
     {
-        auto written = co_await ssl_stream_->async_write_all(buffer);
+        std::expected<void, std::error_code> written;
+        if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+            written = co_await ssl_stream_->async_write_all(buffer);
+        else
+            written = co_await ssl_stream_->async_write_all(buffer, *cancellation);
         if (!written)
         {
             disconnect(written.error());
@@ -1170,7 +1265,11 @@ auto client::write_all(std::span<const std::uint8_t> bytes) -> task<bool>
         co_return true;
     }
 #endif
-    auto written = co_await async_write_all(context_, socket_, buffer);
+    std::expected<void, std::error_code> written;
+    if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+        written = co_await async_write_all(context_, socket_, buffer);
+    else
+        written = co_await async_write_all(context_, socket_, buffer, *cancellation);
     if (!written)
     {
         disconnect(written.error());
@@ -1179,21 +1278,30 @@ auto client::write_all(std::span<const std::uint8_t> bytes) -> task<bool>
     co_return true;
 }
 
-auto client::read_exact(std::uint8_t* destination, std::size_t length) -> task<bool>
+template <typename Cancellation>
+auto client::read_exact(std::uint8_t* destination, std::size_t length, Cancellation cancellation) -> task<bool>
 {
     std::size_t received{};
     while (received < length)
     {
         mutable_buffer buffer{destination + received, length - received};
-#ifdef CNETMOD_HAS_SSL
         std::expected<std::size_t, std::error_code> part;
+#ifdef CNETMOD_HAS_SSL
         if (ssl_stream_)
-            part = co_await ssl_stream_->async_read(buffer);
+        {
+            if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+                part = co_await ssl_stream_->async_read(buffer);
+            else
+                part = co_await ssl_stream_->async_read(buffer, *cancellation);
+        }
         else
-            part = co_await async_read(context_, socket_, buffer);
-#else
-        auto part = co_await async_read(context_, socket_, buffer);
 #endif
+        {
+            if constexpr (std::same_as<Cancellation, std::nullptr_t>)
+                part = co_await async_read(context_, socket_, buffer);
+            else
+                part = co_await async_read(context_, socket_, buffer, *cancellation);
+        }
         if (!part || *part == 0)
         {
             disconnect(part ? std::make_error_code(std::errc::connection_reset) : part.error());
@@ -1204,10 +1312,11 @@ auto client::read_exact(std::uint8_t* destination, std::size_t length) -> task<b
     co_return true;
 }
 
-auto client::read_message() -> task<std::expected<detail::backend_message, std::string>>
+template <typename Cancellation>
+auto client::read_message(Cancellation cancellation) -> task<std::expected<detail::backend_message, std::string>>
 {
     std::array<std::uint8_t, 5> header{};
-    if (!co_await read_exact(header.data(), header.size()))
+    if (!co_await read_exact(header.data(), header.size(), cancellation))
         co_return std::unexpected("connection lost while reading PostgreSQL message");
     const auto length = read_u32(std::span<const std::uint8_t>(header).subspan(1));
     if (length < 4 || length > options_.maximum_message_size)
@@ -1217,7 +1326,7 @@ auto client::read_message() -> task<std::expected<detail::backend_message, std::
     }
     std::vector<std::uint8_t> wire(length + 1);
     std::copy(header.begin(), header.end(), wire.begin());
-    if (length > 4 && !co_await read_exact(wire.data() + 5, length - 4))
+    if (length > 4 && !co_await read_exact(wire.data() + 5, length - 4, cancellation))
         co_return std::unexpected("connection lost while reading PostgreSQL payload");
     co_return detail::parse_message(wire);
 }

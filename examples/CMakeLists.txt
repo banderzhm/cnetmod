@@ -61,6 +61,7 @@ set(CONCURRENCY_EXAMPLES
 set(HTTP_EXAMPLES)
 if(CNETMOD_ENABLE_HTTP)
     list(APPEND HTTP_EXAMPLES
+        application/application
         http/http_demo
         http/http2_demo
         http/hight_http
@@ -266,6 +267,16 @@ if(TARGET example_account_server_demo)
     # header context, so both third-party header dependencies belong here.
     cnetmod_link_jwt_cpp(example_account_server_demo)
     cnetmod_link_nlohmann_json(example_account_server_demo)
+endif()
+
+if(TARGET example_application)
+    add_custom_command(TARGET example_application POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/application/application.json
+                $<TARGET_FILE_DIR:example_application>/application.json
+        COMMENT "Copying application example configuration"
+        VERBATIM
+    )
 endif()
 
 if(MSVC)

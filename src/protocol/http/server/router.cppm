@@ -19,6 +19,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.utils.flat_map;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::http {
 export struct route_params
@@ -76,13 +77,44 @@ public:
     void set_deadline(cnetmod::deadline value) noexcept;
     [[nodiscard]] auto cancellation_token() noexcept -> cnetmod::cancel_token&;
 
-    /// Run one token-aware downstream operation in this request's remaining
-    /// budget. A fresh token is supplied to the factory for this operation.
+    /**
+     * @brief Cancels direct and registered downstream operations of this request.
+     *
+     * Terminal for the request. The request must outlive all child operations.
+     */
+    void cancel_pending_operations() noexcept;
+
+    /**
+     * @brief Runs an owned factory with an independent request-linked token.
+     *
+     * Cancelled completion returns to the event loop before unlinking its
+     * registration, including exceptional completion resumed by cancellation.
+     */
     template <class Factory>
-    auto with_deadline(Factory&& operation)
+    auto with_deadline(Factory operation)
+        -> decltype(cnetmod::with_deadline(std::declval<io_context&>(),
+            std::declval<cnetmod::deadline>(), std::declval<Factory&>()))
     {
-        return cnetmod::with_deadline(ctx_, deadline_,
-            std::forward<Factory>(operation));
+        cnetmod::cancel_token token;
+        operation_registration registration{*this, token};
+        using operation_type = std::invoke_result_t<Factory&, cnetmod::cancel_token&>;
+        using result_type = decltype(std::declval<operation_type&>().handle().promise().result());
+        std::optional<result_type> result;
+        std::exception_ptr failure;
+        try
+        {
+            result.emplace(co_await cnetmod::with_deadline(ctx_, deadline_,
+                std::invoke(operation, token), token));
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        if (token.is_cancelled())
+            co_await cnetmod::post_awaitable{ctx_};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return std::move(*result);
     }
 
     [[nodiscard]] auto trace_id() const noexcept -> std::string_view;
@@ -116,6 +148,22 @@ private:
     bool sse_started_ = false;
     cnetmod::deadline deadline_{};
     cnetmod::cancel_token cancellation_;
+
+    struct operation_registration
+    {
+        request_context* owner{};
+        cnetmod::cancel_token& token;
+        operation_registration* previous{};
+        operation_registration* next{};
+        operation_registration(request_context& request, cnetmod::cancel_token& cancellation) noexcept;
+        ~operation_registration();
+        operation_registration(const operation_registration&) = delete;
+        auto operator=(const operation_registration&) -> operation_registration& = delete;
+    };
+
+    concurrent_containers::atomic_rw_latch operations_latch_;
+    operation_registration* operations_{};
+    std::atomic<bool> operations_cancelled_{false};
     std::string trace_id_;
     std::string trace_span_id_;
     std::string trace_state_;

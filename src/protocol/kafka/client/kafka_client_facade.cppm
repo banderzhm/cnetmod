@@ -23,6 +23,10 @@ public:
     ~client_facade();
     client_facade(client_facade&&) noexcept;
     auto operator=(client_facade&&) noexcept -> client_facade&;
+    /**
+     * @brief Connects, creating a fresh runtime generation after explicit close.
+     * Existing handles retain their stopped generation and are not rebound.
+     */
     auto connect(cancel_token* = nullptr) -> task<result<void>>;
     auto refresh_metadata(std::vector<std::string> = {},
         cancel_token* = nullptr) -> task<result<void>>;
@@ -33,7 +37,34 @@ public:
         -> result<producer>;
     auto make_consumer(consumer_options) -> result<consumer>;
     void add_connection_observer(std::weak_ptr<connection_observer>);
+    /**
+     * @brief Seals runtime factories and metadata reconnect before closing transports.
+     * This synchronous operation does not join consumer maintenance or in-flight I/O.
+     * Access and lifecycle transitions must remain on the owning executor.
+     */
     void close() noexcept;
+    /**
+     * @brief Cancels and joins registered consumer maintenance before closing transports.
+     * Failed cleanup retains its runtime for retry. Already running user operations
+     * must be settled by their caller; cancellation is forwarded to group cleanup.
+     */
+    auto async_close(cancel_token* = nullptr) -> task<result<void>>;
+    /**
+     * @brief Reports whether consumer registrations still require a completion join.
+     */
+    [[nodiscard]] auto requires_async_close() const noexcept -> bool;
+    /**
+     * @brief Returns the first terminal consumer maintenance error without allocation.
+     * Running tasks and successfully completed tasks do not report an error.
+     * This does not consume failures or restart maintenance.
+     */
+    [[nodiscard]] auto background_error() const noexcept -> std::error_code;
+    /**
+     * @brief Restarts only terminally failed maintenance on still-open consumers.
+     * Replacement ownership is registered before dispatch. Running tasks and
+     * closed consumers are never restarted. Errors remain retryable by the owner.
+     */
+    [[nodiscard]] auto restart_failed_maintenance() -> std::expected<void, std::error_code>;
 
 private:
     class impl;

@@ -5,12 +5,18 @@ import std;
 import nlohmann.json;
 import cnetmod.orm;
 import cnetmod.io.io_context;
+import cnetmod.core.net_init;
+import cnetmod.core.socket;
+import cnetmod.core.buffer;
+import cnetmod.core.address;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http.middleware.tracing;
+import cnetmod.instrumentation.tracing;
 import cnetmod.protocol.mysql;
+import cnetmod.instrumentation.operation_result;
 
 namespace orm = cnetmod::orm;
 
@@ -84,14 +90,23 @@ CNETMOD_MODEL(orm_json_user_graph, "users",
 struct traced_database_client
 {
     orm::sql_format_options format_options{};
+    std::error_code failure;
+    orm::query_result response;
+    unsigned calls = 0;
 
     auto query(std::string_view) -> cnetmod::task<orm::query_result>
     {
-        co_return orm::query_result{};
+        ++calls;
+        if (failure)
+            throw std::system_error(failure);
+        co_return response;
     }
 
     auto execute(std::string_view) -> cnetmod::task<orm::query_result>
     {
+        ++calls;
+        if (failure)
+            throw std::system_error(failure);
         co_return orm::query_result{};
     }
 
@@ -457,15 +472,18 @@ TEST(xml_lazy_relation_coalesces_concurrent_first_loads)
             co_return 42;
         }};
     bool passed{};
-    cnetmod::spawn(*context,
-        [&]() -> cnetmod::task<void>
-        {
-            auto [first, second] = co_await cnetmod::when_all(relation.get(),
-                relation.get());
-            passed = first && second && **first == 42 && **second == 42;
-            context->stop();
-        }());
+    auto run = [&]() -> cnetmod::task<void>
+    {
+        auto [first, second] = co_await cnetmod::when_all(relation.get(),
+            relation.get());
+        passed = first && second && **first == 42 && **second == 42;
+        context->stop();
+    };
+    auto operation = run();
+    context->post(operation.handle());
     context->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
     ASSERT_TRUE(passed);
     ASSERT_EQ(loads.load(std::memory_order_acquire), std::size_t{1});
 }
@@ -474,12 +492,12 @@ TEST(orm_database_session_reports_explicit_sql_client_span)
 {
     traced_database_client client;
     orm::database_session session{client};
-    const auto parent = cnetmod::http::tracing::new_root_context();
-    std::optional<cnetmod::http::tracing::completed_span> reported;
+    const auto parent = cnetmod::instrumentation::new_root_context();
+    std::optional<cnetmod::instrumentation::completed_span> reported;
 
     const auto result = cnetmod::sync_wait(session.query(
         "SELECT * FROM users", parent,
-        [&reported](const cnetmod::http::tracing::completed_span& span)
+        [&reported](const cnetmod::instrumentation::completed_span& span)
         {
             reported = span;
         }));
@@ -489,8 +507,92 @@ TEST(orm_database_session_reports_explicit_sql_client_span)
     ASSERT_EQ(reported->context.trace_id, parent.trace_id);
     ASSERT_NE(reported->context.span_id, parent.span_id);
     ASSERT_EQ(reported->name, "SQL QUERY");
-    ASSERT_EQ(reported->attributes.at(0).first, "db.system");
-    ASSERT_EQ(reported->attributes.at(0).second, "sql");
+    ASSERT_EQ(reported->attributes.at(0).first, "db.system.name");
+    ASSERT_EQ(reported->attributes.at(0).second, "mysql");
+}
+
+TEST(orm_error_spans_report_only_valid_database_codes)
+{
+    for (const auto dialect : {orm::sql_dialect::mysql, orm::sql_dialect::postgresql})
+    {
+        traced_database_client client;
+        client.response.error_msg = "private database diagnostic";
+        client.response.error_code = 1054;
+        client.response.sql_state = "42S22";
+        orm::database_session session{client, dialect};
+        const auto parent = cnetmod::instrumentation::new_root_context();
+        std::optional<cnetmod::instrumentation::completed_span> reported;
+        cnetmod::instrumentation::span_exporter sink = [&](const auto& span)
+        {
+            reported = span;
+        };
+        for (const bool malformed : {false, true})
+        {
+            if (malformed)
+            {
+                client.response.error_code = 0;
+                client.response.sql_state = "private-secret";
+            }
+            const auto result = cnetmod::sync_wait(session.query("private query", parent, sink));
+            ASSERT_EQ(result.error_msg, client.response.error_msg);
+            ASSERT_EQ(result.sql_state, client.response.sql_state);
+            ASSERT_TRUE(reported.has_value());
+            if (!reported)
+                continue;
+            ASSERT_TRUE(reported->failed);
+            unsigned codes = 0;
+            for (const auto& [key, value] : reported->attributes)
+            {
+                ASSERT_FALSE(value.contains("private"));
+                if (key == "db.response.status_code" || key == "error.type")
+                {
+                    ++codes;
+                    ASSERT_EQ(value, dialect == orm::sql_dialect::mysql ? "1054" : "42S22");
+                }
+            }
+            ASSERT_EQ(codes, malformed ? 0U : 2U);
+        }
+    }
+}
+
+TEST(orm_observation_preserves_exceptions_and_parent_sampling)
+{
+    traced_database_client client;
+    orm::database_session session{client};
+    auto parent = cnetmod::instrumentation::new_root_context();
+    unsigned exports = 0;
+    cnetmod::instrumentation::span_exporter sink = [&](const auto& span)
+    {
+        ++exports;
+        ASSERT_TRUE(span.result.status == cnetmod::instrumentation::operation_status::timeout);
+        ASSERT_TRUE(span.result.error == std::errc::timed_out);
+        throw std::runtime_error("export failure");
+    };
+    client.failure = std::make_error_code(std::errc::timed_out);
+    for (bool execution : {false, true})
+    {
+        bool caught = false;
+        try
+        {
+            (void)cnetmod::sync_wait(execution
+                    ? session.execute("private SQL", parent, sink)
+                    : session.query("private SQL", parent, sink));
+        }
+        catch (const std::system_error& error)
+        {
+            caught = error.code() == client.failure;
+        }
+        ASSERT_TRUE(caught);
+    }
+    ASSERT_EQ(exports, 2U);
+    client.failure.clear();
+    parent.flags = 0;
+    ASSERT_TRUE(cnetmod::sync_wait(session.query("private SQL", parent, sink,
+                                       {.capture_query_text = true}))
+            .ok());
+    ASSERT_EQ(exports, 2U);
+    ASSERT_TRUE(cnetmod::sync_wait(session.execute("private SQL", parent, {})).ok());
+    ASSERT_EQ(client.calls, 4U);
 }
 
 TEST(orm_database_session_unifies_mysql_crud_and_model_mapping)
@@ -652,7 +754,8 @@ TEST(orm_database_session_expected_transaction_supports_isolation_level)
         []() -> cnetmod::task<std::expected<void, std::string>>
         {
             co_return std::expected<void, std::string>{};
-        }, orm::isolation_level::serializable));
+        },
+        orm::isolation_level::serializable));
 
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(client.statements.size(), 2U);
@@ -752,6 +855,103 @@ TEST(parameterized_query_accepts_string_literals_without_overload_ambiguity)
     ASSERT_EQ(query.args.front().int_val, 7);
 }
 
+TEST(observed_bound_execution_preserves_bindings_without_exporting_values)
+{
+    postgresql_style_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::postgresql};
+    const auto parent = cnetmod::instrumentation::new_root_context();
+    std::optional<cnetmod::instrumentation::completed_span> reported;
+    auto pending = session.execute(cnetmod::database::with_params(
+                                       "SELECT $1", {orm::param_value::from_string("private-binding")}),
+        parent,
+        [&](const auto& span)
+        {
+            reported = span;
+        },
+        {.capture_query_text = true});
+    ASSERT_TRUE(client.last_sql.empty());
+    const auto result = cnetmod::sync_wait(std::move(pending));
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(client.last_sql, "SELECT $1");
+    ASSERT_EQ(client.last_parameters.size(), 1U);
+    ASSERT_EQ(client.last_parameters.front().str_val, "private-binding");
+    ASSERT_TRUE(reported.has_value());
+    ASSERT_EQ(reported->name, "SQL EXECUTE");
+    ASSERT_EQ(reported->attributes.at(0).first, "db.system.name");
+    ASSERT_EQ(reported->attributes.at(0).second, "postgresql");
+    ASSERT_EQ(reported->parent_span_id, parent.span_id);
+    bool query_present = false;
+    for (const auto& [key, value] : reported->attributes)
+    {
+        ASSERT_FALSE(value.contains("private-binding"));
+        if (key == "db.query.text")
+            query_present = value == "SELECT $1";
+    }
+    ASSERT_TRUE(query_present);
+}
+
+TEST(orm_observation_starts_only_when_the_database_task_runs)
+{
+    traced_database_client client;
+    orm::database_session session{client};
+    unsigned samples = 0;
+    unsigned exports = 0;
+    bool accept = false;
+    auto resumed_at = std::chrono::system_clock::time_point{};
+    cnetmod::instrumentation::span_exporter sink{
+        [&](const auto& span)
+        {
+            ++exports;
+            ASSERT_TRUE(span.started_at >= resumed_at);
+        },
+        [&](const auto&)
+        {
+            ++samples;
+            return accept;
+        }};
+    {
+        auto discarded = session.query("SELECT 1", {}, sink);
+    }
+    ASSERT_EQ(samples, 0U);
+    ASSERT_EQ(exports, 0U);
+    ASSERT_EQ(client.calls, 0U);
+    auto pending = session.execute("SELECT 1", {}, sink);
+    ASSERT_EQ(samples, 0U);
+    accept = true;
+    resumed_at = std::chrono::system_clock::now();
+    ASSERT_TRUE(cnetmod::sync_wait(std::move(pending)).ok());
+    ASSERT_EQ(samples, 1U);
+    ASSERT_EQ(exports, 1U);
+    ASSERT_EQ(client.calls, 1U);
+}
+
+TEST(orm_observation_copy_failure_does_not_prevent_execution)
+{
+    struct throwing_sink
+    {
+        bool* fail;
+
+        explicit throwing_sink(bool& value) : fail(&value) {}
+
+        throwing_sink(const throwing_sink& other) : fail(other.fail)
+        {
+            if (*fail)
+                throw std::bad_alloc{};
+        }
+
+        void operator()(const cnetmod::instrumentation::completed_span&) const {}
+    };
+
+    bool fail = false;
+    cnetmod::instrumentation::span_exporter sink{throwing_sink{fail}};
+    traced_database_client client;
+    orm::database_session session{client};
+    fail = true;
+    ASSERT_TRUE(cnetmod::sync_wait(session.query("SELECT 1", {}, sink)).ok());
+    ASSERT_TRUE(cnetmod::sync_wait(session.execute("SELECT 1", {}, sink)).ok());
+    ASSERT_EQ(client.calls, 2U);
+}
+
 TEST(update_wrapper_preserves_set_order_and_optional_conditions)
 {
     std::optional<std::int64_t> absent_id;
@@ -772,6 +972,466 @@ TEST(update_wrapper_preserves_set_order_and_optional_conditions)
     ASSERT_EQ(parameters[0].str_val, std::string("replacement"));
     ASSERT_TRUE(parameters[1].kind == orm::param_value::kind_t::int64_kind);
     ASSERT_EQ(parameters[1].int_val, 2);
+}
+
+TEST(mysql_pool_stop_wakes_idle_maintenance_and_preserves_prestart_stop)
+{
+    for (bool early : {false, true})
+    {
+        auto io = cnetmod::make_io_context();
+        cnetmod::mysql::pool_params options;
+        options.initial_size = 0;
+        options.ping_interval = std::chrono::hours{1};
+        cnetmod::mysql::connection_pool pool{*io, options};
+        if (early)
+            pool.request_stop();
+        bool finished = false;
+        auto run = [&]() -> cnetmod::task<void>
+        {
+            co_await pool.async_run();
+            co_await pool.cancel();
+            finished = true;
+            io->stop();
+        };
+        auto stop = [&]() -> cnetmod::task<void>
+        {
+            (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
+            pool.request_stop();
+        };
+        cnetmod::spawn(*io, run());
+        if (!early)
+            cnetmod::spawn(*io, stop());
+        const auto started = std::chrono::steady_clock::now();
+        io->run();
+        ASSERT_TRUE(finished);
+        ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds{2});
+    }
+}
+
+TEST(mysql_pool_stop_releases_queued_acquisition)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    cnetmod::mysql::connection_pool pool{*io, options};
+    cnetmod::cancel_token token;
+    bool cancelled = false;
+    auto acquire = [&]() -> cnetmod::task<void>
+    {
+        auto result = co_await pool.async_get_connection(token);
+        cancelled = !result && result.error() == std::errc::operation_canceled;
+        io->stop();
+    };
+    auto stop = [&]() -> cnetmod::task<void>
+    {
+        (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
+        ASSERT_EQ(pool.waiter_count(), 1U);
+        co_await pool.cancel();
+    };
+    cnetmod::spawn(*io, acquire());
+    cnetmod::spawn(*io, stop());
+    io->run();
+    ASSERT_TRUE(cancelled);
+    ASSERT_EQ(pool.waiter_count(), 0U);
+    auto immediate = pool.try_get_connection();
+    ASSERT_FALSE(immediate.has_value());
+    ASSERT_TRUE(immediate.error() == std::errc::operation_canceled);
+    auto after_stop = cnetmod::sync_wait(pool.async_get_connection(token));
+    ASSERT_FALSE(after_stop.has_value());
+    ASSERT_TRUE(after_stop.error() == std::errc::operation_canceled);
+}
+
+TEST(mysql_pool_pre_cancelled_acquisition_never_enters_queue)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    cnetmod::mysql::connection_pool pool{*io, options};
+    for (bool expired : {false, true})
+    {
+        cnetmod::cancel_token token;
+        if (expired)
+            token.cancel_due_to_deadline();
+        else
+            token.cancel();
+        auto pending = pool.async_get_connection(token);
+        pending.handle().resume();
+        ASSERT_TRUE(pending.handle().done());
+        auto result = pending.handle().promise().result();
+        ASSERT_FALSE(result.has_value());
+        ASSERT_TRUE(result.error() == (expired ? std::errc::timed_out : std::errc::operation_canceled));
+        ASSERT_EQ(pool.waiter_count(), 0U);
+        ASSERT_EQ(pool.size(), 0U);
+    }
+}
+
+TEST(mysql_connect_cancellation_interrupts_silent_server_greeting)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    std::optional<cnetmod::socket> peer;
+    cnetmod::mysql::client client{*io};
+    cnetmod::cancel_token token;
+    bool completed = false;
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto accepted = co_await cnetmod::async_accept(*io, *listener);
+        ASSERT_TRUE(accepted.has_value());
+        peer.emplace(std::move(*accepted));
+        (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
+        token.cancel();
+    };
+    auto connect = [&]() -> cnetmod::task<void>
+    {
+        cnetmod::mysql::connect_options options;
+        options.host = "127.0.0.1";
+        options.port = endpoint->port();
+        options.ssl = cnetmod::mysql::ssl_mode::disable;
+        auto result = co_await client.connect(options, token);
+        ASSERT_TRUE(result.is_err());
+        ASSERT_TRUE(token.is_cancelled());
+        ASSERT_TRUE(static_cast<bool>(client.last_error()));
+        ASSERT_FALSE(client.is_open());
+        completed = true;
+        io->stop();
+    };
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, connect());
+    io->run();
+    ASSERT_TRUE(completed);
+    ASSERT_TRUE(peer.has_value());
+    ASSERT_TRUE(peer->is_open());
+}
+
+TEST(mysql_pool_run_joins_worker_waiting_for_server_greeting)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    cnetmod::mysql::pool_params options;
+    options.port = endpoint->port();
+    options.ssl = cnetmod::mysql::ssl_mode::disable;
+    auto pool = std::make_unique<cnetmod::mysql::connection_pool>(*io, options);
+    std::optional<cnetmod::socket> peer;
+    bool completed = false;
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto accepted = co_await cnetmod::async_accept(*io, *listener);
+        ASSERT_TRUE(accepted.has_value());
+        peer.emplace(std::move(*accepted));
+        (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
+        pool->request_stop();
+    };
+    auto run = [&]() -> cnetmod::task<void>
+    {
+        co_await pool->async_run();
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE(peer->is_open());
+        pool.reset();
+        completed = true;
+        io->stop();
+    };
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, run());
+    io->run();
+    ASSERT_TRUE(completed);
+    // Drain any remaining queued completion after destroying the pool.
+    io->restart();
+    io->poll();
+}
+
+TEST(mysql_sharded_run_remains_pending_until_all_shards_stop)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    auto pool = std::make_unique<cnetmod::mysql::sharded_connection_pool>(*io, options, 3);
+    auto running = pool->async_run();
+    running.handle().resume();
+    io->poll();
+    ASSERT_FALSE(running.handle().done());
+    pool->request_stop();
+    for (unsigned step = 0; step < 32; ++step)
+        io->poll();
+    ASSERT_TRUE(running.handle().done());
+    running.handle().promise().result();
+    pool.reset();
+    io->poll();
+}
+
+TEST(mysql_pool_rejects_duplicate_maintenance_without_stopping_owner)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    cnetmod::mysql::connection_pool pool{*io, options};
+    auto owner = pool.async_run();
+    owner.handle().resume();
+    ASSERT_FALSE(owner.handle().done());
+    for (unsigned attempt = 0; attempt < 3; ++attempt)
+    {
+        auto duplicate = pool.async_run();
+        duplicate.handle().resume();
+        ASSERT_TRUE(duplicate.handle().done());
+        bool rejected = false;
+        try
+        {
+            duplicate.handle().promise().result();
+        }
+        catch (const std::system_error& error)
+        {
+            rejected = error.code() == std::errc::operation_in_progress;
+        }
+        ASSERT_TRUE(rejected);
+        ASSERT_FALSE(owner.handle().done());
+    }
+    pool.request_stop();
+    for (unsigned step = 0; step < 32; ++step)
+        io->poll();
+    ASSERT_TRUE(owner.handle().done());
+    owner.handle().promise().result();
+    auto stopped = pool.async_run();
+    stopped.handle().resume();
+    ASSERT_TRUE(stopped.handle().done());
+    stopped.handle().promise().result();
+}
+
+TEST(mysql_sharded_duplicate_run_does_not_cancel_owner)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    cnetmod::mysql::sharded_connection_pool pool{*io, options, 3};
+    auto owner = pool.async_run();
+    owner.handle().resume();
+    for (unsigned attempt = 0; attempt < 3; ++attempt)
+    {
+        auto duplicate = pool.async_run();
+        duplicate.handle().resume();
+        ASSERT_TRUE(duplicate.handle().done());
+        bool rejected = false;
+        try
+        {
+            duplicate.handle().promise().result();
+        }
+        catch (const std::system_error& error)
+        {
+            rejected = error.code() == std::errc::operation_in_progress;
+        }
+        ASSERT_TRUE(rejected);
+        for (unsigned step = 0; step < 8; ++step)
+            io->poll();
+        ASSERT_FALSE(owner.handle().done());
+    }
+    pool.request_stop();
+    for (unsigned step = 0; step < 32; ++step)
+        io->poll();
+    ASSERT_TRUE(owner.handle().done());
+    owner.handle().promise().result();
+    auto stopped = pool.async_run();
+    stopped.handle().resume();
+    for (unsigned step = 0; step < 32; ++step)
+        io->poll();
+    ASSERT_TRUE(stopped.handle().done());
+    stopped.handle().promise().result();
+}
+
+TEST(mysql_sharded_scoped_workload_joins_on_success_and_exception)
+{
+    for (bool fail : {false, true})
+    {
+        auto io = cnetmod::make_io_context();
+        cnetmod::mysql::pool_params options;
+        options.initial_size = 0;
+        cnetmod::mysql::sharded_connection_pool pool{*io, options, 2};
+        bool completed = false;
+        bool propagated = false;
+        auto workload = [&]() -> cnetmod::task<void>
+        {
+            struct stop_on_exit
+            {
+                cnetmod::mysql::sharded_connection_pool& pool;
+                ~stop_on_exit()
+                {
+                    pool.request_stop();
+                }
+            } stop{pool};
+            (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{1});
+            if (fail)
+                throw std::runtime_error("workload failed");
+        };
+        auto run = [&]() -> cnetmod::task<void>
+        {
+            try
+            {
+                co_await cnetmod::when_all(pool.async_run(), workload());
+            }
+            catch (const std::runtime_error& error)
+            {
+                propagated = std::string_view{error.what()} == "workload failed";
+            }
+            completed = true;
+            io->stop();
+        };
+        cnetmod::spawn(*io, run());
+        io->run();
+        ASSERT_TRUE(completed);
+        ASSERT_EQ(propagated, fail);
+    }
+}
+
+TEST(mysql_sharded_stop_joins_two_event_loop_threads)
+{
+    for (unsigned trial = 0; trial < 32; ++trial)
+    {
+        auto first = cnetmod::make_io_context();
+        auto second = cnetmod::make_io_context();
+        cnetmod::mysql::pool_params options;
+        options.initial_size = 0;
+        auto pool = std::make_unique<cnetmod::mysql::sharded_connection_pool>(
+            std::vector<cnetmod::io_context*>{first.get(), second.get()}, options);
+        std::atomic<unsigned> ready{0};
+        bool completed = false;
+        std::exception_ptr failure;
+        auto run = [&]() -> cnetmod::task<void>
+        {
+            try
+            {
+                co_await pool->async_run();
+                completed = true;
+            }
+            catch (...)
+            {
+                failure = std::current_exception();
+            }
+            first->stop();
+            second->stop();
+        };
+        auto signal_ready = [&](cnetmod::io_context& io) -> cnetmod::task<void>
+        {
+            (void)co_await cnetmod::async_timer_wait(io, std::chrono::milliseconds{1});
+            ready.fetch_add(1);
+            ready.notify_one();
+        };
+        cnetmod::spawn(*first, run());
+        cnetmod::spawn(*first, signal_ready(*first));
+        cnetmod::spawn(*second, signal_ready(*second));
+        std::jthread first_thread([&]
+            {
+                first->run();
+            });
+        std::jthread second_thread([&]
+            {
+                second->run();
+            });
+        for (auto count = ready.load(); count < 2; count = ready.load())
+            ready.wait(count);
+        pool->request_stop();
+        first_thread.join();
+        second_thread.join();
+        ASSERT_TRUE(completed);
+        ASSERT_FALSE(static_cast<bool>(failure));
+        pool.reset();
+        first->restart();
+        second->restart();
+        first->poll();
+        second->poll();
+    }
+}
+
+TEST(mysql_pool_stop_and_caller_cancel_complete_waiters_once)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    cnetmod::mysql::connection_pool pool{*io, options};
+    std::array<cnetmod::cancel_token, 32> tokens;
+    std::array<unsigned, 32> completions{};
+    unsigned completed = 0;
+    auto acquire = [&](std::size_t index) -> cnetmod::task<void>
+    {
+        auto result = co_await pool.async_get_connection(tokens[index]);
+        ASSERT_FALSE(result.has_value());
+        ASSERT_TRUE(result.error() == std::errc::operation_canceled);
+        ++completions[index];
+        if (++completed == tokens.size())
+            io->stop();
+    };
+    auto stop = [&]() -> cnetmod::task<void>
+    {
+        (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
+        ASSERT_EQ(pool.waiter_count(), tokens.size());
+        for (std::size_t index = 0; index < tokens.size(); index += 2)
+            tokens[index].cancel();
+        co_await pool.cancel();
+        for (auto& token : tokens)
+            token.cancel();
+        co_await pool.cancel();
+    };
+    for (std::size_t index = 0; index < tokens.size(); ++index)
+        cnetmod::spawn(*io, acquire(index));
+    cnetmod::spawn(*io, stop());
+    io->run();
+    ASSERT_EQ(pool.waiter_count(), 0U);
+    for (auto count : completions)
+        ASSERT_EQ(count, 1U);
+}
+
+TEST(mysql_pool_stop_races_cross_thread_caller_cancellation)
+{
+    for (unsigned trial = 0; trial < 32; ++trial)
+    {
+        auto io = cnetmod::make_io_context();
+        cnetmod::mysql::pool_params options;
+        options.initial_size = 0;
+        cnetmod::mysql::connection_pool pool{*io, options};
+        std::array<cnetmod::cancel_token, 16> tokens;
+        std::array<unsigned, 16> completions{};
+        std::atomic<bool> armed{false};
+        unsigned completed = 0;
+        std::jthread caller([&]
+            {
+                armed.wait(false);
+                for (std::size_t index = tokens.size(); index > 0; --index)
+                    tokens[index - 1].cancel();
+            });
+        auto acquire = [&](std::size_t index) -> cnetmod::task<void>
+        {
+            auto result = co_await pool.async_get_connection(tokens[index]);
+            ASSERT_FALSE(result.has_value());
+            ASSERT_TRUE(result.error() == std::errc::operation_canceled);
+            ++completions[index];
+            if (++completed == tokens.size())
+                io->stop();
+        };
+        auto shutdown = [&]() -> cnetmod::task<void>
+        {
+            (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{1});
+            ASSERT_EQ(pool.waiter_count(), tokens.size());
+            armed.store(true);
+            armed.notify_one();
+            co_await pool.cancel();
+        };
+        for (std::size_t index = 0; index < tokens.size(); ++index)
+            cnetmod::spawn(*io, acquire(index));
+        cnetmod::spawn(*io, shutdown());
+        io->run();
+        caller.join();
+        ASSERT_EQ(pool.waiter_count(), 0U);
+        for (auto count : completions)
+            ASSERT_EQ(count, 1U);
+    }
 }
 
 RUN_TESTS()

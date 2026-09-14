@@ -13,6 +13,8 @@ import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.executor.async_op;
 
 namespace cnetmod::http {
@@ -199,6 +201,51 @@ void request_context::set_deadline(cnetmod::deadline value) noexcept
 auto request_context::cancellation_token() noexcept -> cnetmod::cancel_token&
 {
     return cancellation_;
+}
+
+request_context::operation_registration::operation_registration(request_context& request,
+    cnetmod::cancel_token& cancellation) noexcept
+    : token(cancellation)
+{
+    if (request.operations_cancelled_.load(std::memory_order_acquire))
+    {
+        token.cancel();
+        return;
+    }
+    concurrent_containers::exclusive_latch_guard lock{request.operations_latch_};
+    if (request.operations_cancelled_.load(std::memory_order_acquire))
+    {
+        token.cancel();
+        return;
+    }
+    owner = &request;
+    next = owner->operations_;
+    if (next)
+        next->previous = this;
+    owner->operations_ = this;
+}
+
+request_context::operation_registration::~operation_registration()
+{
+    if (!owner)
+        return;
+    concurrent_containers::exclusive_latch_guard lock{owner->operations_latch_};
+    if (previous)
+        previous->next = next;
+    else
+        owner->operations_ = next;
+    if (next)
+        next->previous = previous;
+}
+
+void request_context::cancel_pending_operations() noexcept
+{
+    if (operations_cancelled_.exchange(true, std::memory_order_acq_rel))
+        return;
+    cancellation_.cancel();
+    concurrent_containers::exclusive_latch_guard lock{operations_latch_};
+    for (auto* operation = operations_; operation; operation = operation->next)
+        operation->token.cancel();
 }
 
 auto request_context::trace_id() const noexcept -> std::string_view

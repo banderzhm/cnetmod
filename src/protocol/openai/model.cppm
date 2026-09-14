@@ -50,11 +50,15 @@ export struct run_event
     std::size_t attempt = 0;
     std::chrono::system_clock::time_point timestamp =
         std::chrono::system_clock::now();
-    json attributes = json::object();
+    json attributes = {};
     /// Optional distributed-trace parent copied from run_config. It is a
     /// value, not a thread-local scope, so coroutine migration is safe.
     std::optional<http::tracing::trace_context> trace_parent;
     std::string parent_operation_id;
+    /**
+     * @brief Identifies this operation independently of optional JSON attributes.
+     */
+    std::string operation_id;
 };
 
 export using run_callback = std::function<void(const run_event&)>;
@@ -89,39 +93,147 @@ export struct run_config
     std::string parent_operation_id;
 
     [[nodiscard]] auto is_cancelled() const noexcept -> bool;
+    /**
+     * @brief Returns whether a callback or non-null listener observes this run.
+     */
+    [[nodiscard]] auto has_observers() const noexcept -> bool;
+    /**
+     * @brief Synchronously notifies observers, borrowing fully populated events.
+     *
+     * A copy is made only when configuration supplies missing context or
+     * metadata. Observers must not retain the borrowed reference. Recoverable
+     * enrichment failures fall back to the original event, not a partial copy.
+     */
     void notify(const run_event& event) const;
+
+    /**
+     * @brief Constructs an event only when a callback or listener is present.
+     *
+     * The factory executes synchronously and is not retained. Recoverable
+     * preparation failures discard this optional notification, not the caller's
+     * operation result. Prefer this API over constructing an event before notify.
+     */
+    template <typename Factory>
+    void notify_lazy(Factory&& factory) const noexcept
+    {
+        if (!has_observers())
+            return;
+        try
+        {
+            notify(std::invoke(std::forward<Factory>(factory)));
+        }
+        catch (...)
+        {
+            // Optional event preparation must not interrupt model execution.
+        }
+    }
 };
 
-/// RAII lifecycle observation. Any scope that exits without an explicit
-/// success or failure event emits a failure event, including exception and
-/// coroutine cancellation paths.
+/**
+ * @brief Owns lifecycle observation while preserving child invocation settings.
+ *
+ * Without observers, no operation identity or default event payload is created.
+ * Observed scopes emit a terminal failure when abandoned without completion.
+ */
 export class run_scope
 {
 public:
     run_scope(const run_config& config, run_event_type start_type,
         run_event_type success_type, run_event_type error_type,
-        std::string name, std::string detail = {},
-        json attributes = json::object());
+        std::string_view name, std::string_view detail = {},
+        json attributes = {}) noexcept;
     ~run_scope();
     run_scope(const run_scope&) = delete;
     auto operator=(const run_scope&) -> run_scope& = delete;
     run_scope(run_scope&& other) noexcept;
     auto operator=(run_scope&& other) noexcept -> run_scope&;
 
-    void succeed(std::string detail = {}, std::size_t attempt = 0,
-        json attributes = json::object());
-    void fail(std::string detail = {}, std::size_t attempt = 0,
-        json attributes = json::object());
+    /**
+     * @brief Creates start attributes only when the run has observers.
+     *
+     * Factories execute synchronously and are never retained. Optional metadata
+     * failure falls back to an event without those attributes; initialization
+     * failure disables this observation without changing invocation settings.
+     */
+    template <typename Factory>
+    [[nodiscard]] static auto start_lazy(const run_config& config,
+        run_event_type start_type, run_event_type success_type,
+        run_event_type error_type, std::string_view name, Factory&& factory,
+        std::string_view detail = {}) noexcept -> run_scope
+    {
+        if (config.has_observers())
+        {
+            try
+            {
+                return run_scope{config, start_type, success_type, error_type,
+                    name, detail, std::invoke(std::forward<Factory>(factory))};
+            }
+            catch (...)
+            {
+                // Optional metadata must not prevent the underlying operation.
+            }
+        }
+        return run_scope{config, start_type, success_type, error_type, name, detail};
+    }
+
+    void succeed(std::string_view detail = {}, std::size_t attempt = 0,
+        json attributes = {});
+    void fail(std::string_view detail = {}, std::size_t attempt = 0,
+        json attributes = {});
+
+    /**
+     * @brief Builds success attributes only for an active observed operation.
+     *
+     * The factory runs synchronously at most once. Factory failures discard
+     * optional attributes without changing the successful operation outcome.
+     */
+    template <typename Factory>
+    void succeed_lazy(Factory&& factory, std::string_view detail = {},
+        std::size_t attempt = 0) noexcept
+    {
+        finish_lazy(success_type_, std::forward<Factory>(factory), detail, attempt);
+    }
+
+    /**
+     * @brief Builds failure attributes without evaluating disabled observation.
+     */
+    template <typename Factory>
+    void fail_lazy(Factory&& factory, std::string_view detail = {},
+        std::size_t attempt = 0) noexcept
+    {
+        finish_lazy(error_type_, std::forward<Factory>(factory), detail, attempt);
+    }
+
     [[nodiscard]] auto operation_id() const noexcept -> std::string_view;
-    /// Copy the invocation configuration and make subsequent lifecycle
-    /// scopes children of this operation.
+    /**
+     * @brief Preserves cancellation and metadata for nested invocations.
+     *
+     * An active observed scope also supplies the child's parent operation ID.
+     */
     [[nodiscard]] auto child_config() const -> run_config;
 
 private:
-    void finish(run_event_type type, std::string detail,
+    template <typename Factory>
+    void finish_lazy(run_event_type type, Factory&& factory,
+        std::string_view detail, std::size_t attempt) noexcept
+    {
+        if (!config_)
+            return;
+        try
+        {
+            finish(type, detail, attempt, std::invoke(std::forward<Factory>(factory)));
+        }
+        catch (...)
+        {
+            finish(type, detail, attempt, {});
+        }
+    }
+
+    void finish(run_event_type type, std::string_view detail,
         std::size_t attempt, json attributes) noexcept;
 
     const run_config* config_ = nullptr;
+    const run_config* source_config_ = nullptr;
     run_event_type success_type_ = run_event_type::model_end;
     run_event_type error_type_ = run_event_type::model_error;
     std::string name_;

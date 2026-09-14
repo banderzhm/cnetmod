@@ -36,83 +36,134 @@ namespace {
             sequence.fetch_add(1, std::memory_order_relaxed) + 1);
     }
 
+    void report_observer_failure() noexcept
+    {
+        try
+        {
+            logger::warn{"OpenAI run observer failed; exception details omitted"};
+        }
+        catch (...)
+        {
+            // Diagnostic logging must not suppress subsequent observers.
+        }
+    }
+
+    /**
+     * @brief Delivers a borrowed event synchronously with per-observer isolation.
+     */
+    void deliver_event(const run_config& config, const run_event& event) noexcept
+    {
+        if (config.callback)
+        {
+            try
+            {
+                config.callback(event);
+            }
+            catch (...)
+            {
+                report_observer_failure();
+            }
+        }
+        for (auto* listener : config.listeners)
+        {
+            if (!listener)
+                continue;
+            try
+            {
+                listener->on_event(event);
+            }
+            catch (...)
+            {
+                report_observer_failure();
+            }
+        }
+    }
+
 } // namespace
 
 void run_config::notify(const run_event& event) const
 {
-    auto observed = event;
-    if (observed.run_id.empty())
-        observed.run_id = run_id;
-    if (!observed.attributes.is_object())
-        observed.attributes = json::object();
-    if (!tags.empty() && !observed.attributes.contains("tags"))
-        observed.attributes["tags"] = tags;
-    if (!metadata.empty() && !observed.attributes.contains("metadata"))
-        observed.attributes["metadata"] = metadata;
-    if (!observed.trace_parent && trace_parent)
-        observed.trace_parent = trace_parent;
-    if (observed.parent_operation_id.empty())
-        observed.parent_operation_id = parent_operation_id;
-    if (callback)
+    if (!has_observers())
+        return;
+    const bool add_run_id = event.run_id.empty() && !run_id.empty();
+    const bool add_tags = !tags.empty() && !event.attributes.contains("tags");
+    const bool add_metadata = !metadata.empty() && !event.attributes.contains("metadata");
+    const bool add_trace = !event.trace_parent && trace_parent.has_value();
+    const bool add_parent = event.parent_operation_id.empty() && !parent_operation_id.empty();
+    if (!add_run_id && !add_tags && !add_metadata && !add_trace && !add_parent)
     {
-        try
-        {
-            callback(observed);
-        }
-        catch (const std::exception& error)
-        {
-            logger::warn{"OpenAI run callback failed: {}", error.what()};
-        }
-        catch (...)
-        {
-            logger::warn{"OpenAI run callback failed with an unknown error"};
-        }
+        deliver_event(*this, event);
+        return;
     }
-    for (auto* listener : listeners)
+    std::optional<run_event> observed;
+    try
     {
-        if (listener)
-        {
-            try
-            {
-                listener->on_event(observed);
-            }
-            catch (const std::exception& error)
-            {
-                logger::warn{"OpenAI run listener failed: {}", error.what()};
-            }
-            catch (...)
-            {
-                logger::warn{
-                    "OpenAI run listener failed with an unknown error"};
-            }
-        }
+        observed.emplace(event);
+        if (add_run_id)
+            observed->run_id = run_id;
+        if ((add_tags || add_metadata) && !observed->attributes.is_object())
+            observed->attributes = json::object();
+        if (add_tags)
+            observed->attributes["tags"] = tags;
+        if (add_metadata)
+            observed->attributes["metadata"] = metadata;
+        if (add_trace)
+            observed->trace_parent = trace_parent;
+        if (add_parent)
+            observed->parent_operation_id = parent_operation_id;
     }
+    catch (...)
+    {
+        deliver_event(*this, event);
+        return;
+    }
+    deliver_event(*this, *observed);
+}
+
+auto run_config::has_observers() const noexcept -> bool
+{
+    return static_cast<bool>(callback) || std::ranges::any_of(listeners, [](const run_listener* listener)
+                                              {
+                                                  return listener != nullptr;
+                                              });
 }
 
 run_scope::run_scope(const run_config& config, run_event_type start_type,
-    run_event_type success_type, run_event_type error_type, std::string name,
-    std::string detail, json attributes)
-    : config_(&config), success_type_(success_type), error_type_(error_type), name_(std::move(name)), operation_id_(next_operation_id(config.run_id))
+    run_event_type success_type, run_event_type error_type, std::string_view name,
+    std::string_view detail, json attributes) noexcept
+    : source_config_(&config), success_type_(success_type), error_type_(error_type)
 {
-    if (!attributes.is_object())
-        attributes = json::object();
-    attributes["operation_id"] = operation_id_;
-    config_->notify({.type = start_type,
-        .run_id = config_->run_id,
-        .name = name_,
-        .detail = std::move(detail),
-        .attributes = std::move(attributes)});
+    if (!config.has_observers())
+        return;
+    try
+    {
+        name_ = name;
+        operation_id_ = next_operation_id(config.run_id);
+        config.notify({.type = start_type,
+            .run_id = config.run_id,
+            .name = name_,
+            .detail = std::string{detail},
+            .attributes = std::move(attributes),
+            .operation_id = operation_id_});
+        config_ = &config;
+    }
+    catch (...)
+    {
+        operation_id_.clear();
+        name_.clear();
+    }
 }
 
 run_scope::~run_scope()
 {
     if (config_)
         finish(error_type_, "operation exited without a completion event", 0,
-            json::object());
+            {});
 }
 
 run_scope::run_scope(run_scope&& other) noexcept
     : config_(std::exchange(other.config_, nullptr)),
+      source_config_(std::exchange(other.source_config_, nullptr)),
       success_type_(other.success_type_),
       error_type_(other.error_type_),
       name_(std::move(other.name_)),
@@ -126,8 +177,9 @@ auto run_scope::operator=(run_scope&& other) noexcept -> run_scope&
         return *this;
     if (config_)
         finish(error_type_, "operation observation replaced before completion",
-            0, json::object());
+            0, {});
     config_ = std::exchange(other.config_, nullptr);
+    source_config_ = std::exchange(other.source_config_, nullptr);
     success_type_ = other.success_type_;
     error_type_ = other.error_type_;
     name_ = std::move(other.name_);
@@ -135,13 +187,13 @@ auto run_scope::operator=(run_scope&& other) noexcept -> run_scope&
     return *this;
 }
 
-void run_scope::succeed(std::string detail, std::size_t attempt,
+void run_scope::succeed(std::string_view detail, std::size_t attempt,
     json attributes)
 {
     finish(success_type_, std::move(detail), attempt, std::move(attributes));
 }
 
-void run_scope::fail(std::string detail, std::size_t attempt,
+void run_scope::fail(std::string_view detail, std::size_t attempt,
     json attributes)
 {
     finish(error_type_, std::move(detail), attempt, std::move(attributes));
@@ -154,14 +206,15 @@ auto run_scope::operation_id() const noexcept -> std::string_view
 
 auto run_scope::child_config() const -> run_config
 {
-    if (!config_)
+    if (!source_config_)
         return {};
-    auto child = *config_;
-    child.parent_operation_id = operation_id_;
+    auto child = *source_config_;
+    if (config_)
+        child.parent_operation_id = operation_id_;
     return child;
 }
 
-void run_scope::finish(run_event_type type, std::string detail,
+void run_scope::finish(run_event_type type, std::string_view detail,
     std::size_t attempt, json attributes) noexcept
 {
     if (!config_)
@@ -169,15 +222,13 @@ void run_scope::finish(run_event_type type, std::string detail,
     const auto* config = std::exchange(config_, nullptr);
     try
     {
-        if (!attributes.is_object())
-            attributes = json::object();
-        attributes["operation_id"] = operation_id_;
         config->notify({.type = type,
             .run_id = config->run_id,
             .name = name_,
-            .detail = std::move(detail),
+            .detail = std::string{detail},
             .attempt = attempt,
-            .attributes = std::move(attributes)});
+            .attributes = std::move(attributes),
+            .operation_id = operation_id_});
     }
     catch (...)
     {
@@ -197,16 +248,19 @@ void functional_run_listener::on_event(const run_event& event)
 }
 
 namespace {
-    void emit(const run_config& config, run_event_type type, std::string name,
-        std::string detail = {}, std::size_t attempt = 0,
-        json attributes = json::object())
+    void emit(const run_config& config, run_event_type type, std::string_view name,
+        std::string_view detail = {}, std::size_t attempt = 0,
+        bool streaming = false) noexcept
     {
-        config.notify({.type = type,
-            .run_id = config.run_id,
-            .name = std::move(name),
-            .detail = std::move(detail),
-            .attempt = attempt,
-            .attributes = std::move(attributes)});
+        config.notify_lazy([&]
+            {
+                return run_event{.type = type,
+                    .run_id = config.run_id,
+                    .name = std::string{name},
+                    .detail = std::string{detail},
+                    .attempt = attempt,
+                    .attributes = streaming ? json{{"stream", true}} : json{}};
+            });
     }
 } // namespace
 
@@ -244,11 +298,14 @@ auto openai_chat_model::invoke(chat_request request, const run_config& config)
         run_event_type::model_end, run_event_type::model_error, request.model};
     auto result = co_await api_.chat(std::move(request));
     if (result)
-        model_run.succeed({}, 0,
-            {{"input_tokens", result->token_usage.prompt_tokens},
-                {"output_tokens", result->token_usage.completion_tokens},
-                {"response_model", result->model},
-                {"total_tokens", result->token_usage.total_tokens}});
+        model_run.succeed_lazy([&]
+            {
+                return json{
+                    {"input_tokens", result->token_usage.prompt_tokens},
+                    {"output_tokens", result->token_usage.completion_tokens},
+                    {"response_model", result->model},
+                    {"total_tokens", result->token_usage.total_tokens}};
+            });
     else
         model_run.fail(result.error());
     co_return result;
@@ -262,9 +319,12 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
         co_return std::unexpected("model stream cancelled");
     const auto requested_model = request.model;
     request.extra_body["stream_options"]["include_usage"] = true;
-    run_scope model_run{config, run_event_type::model_start,
+    auto model_run = run_scope::start_lazy(config, run_event_type::model_start,
         run_event_type::model_end, run_event_type::model_error,
-        requested_model, {}, {{"stream", true}}};
+        requested_model, []
+        {
+            return json{{"stream", true}};
+        });
 
     chat_response aggregate;
     message output{.role = "assistant"};
@@ -299,13 +359,20 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
         });
     if (!streamed)
     {
-        model_run.fail(streamed.error(), 0, {{"stream", true}});
+        model_run.fail_lazy([]
+            {
+                return json{{"stream", true}};
+            },
+            streamed.error());
         co_return std::unexpected(streamed.error());
     }
     if (config.is_cancelled())
     {
-        model_run.fail("model stream cancelled", 0,
-            {{"stream", true}, {"cancelled", true}});
+        model_run.fail_lazy([]
+            {
+                return json{{"stream", true}, {"cancelled", true}};
+            },
+            "model stream cancelled");
         co_return std::unexpected("model stream cancelled");
     }
     if (aggregate.model.empty())
@@ -313,12 +380,15 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
     aggregate.choices.push_back({.index = 0,
         .msg = std::move(output),
         .finish_reason = std::move(finish_reason)});
-    model_run.succeed({}, 0,
-        {{"input_tokens", aggregate.token_usage.prompt_tokens},
-            {"output_tokens", aggregate.token_usage.completion_tokens},
-            {"response_model", aggregate.model},
-            {"stream", true},
-            {"total_tokens", aggregate.token_usage.total_tokens}});
+    model_run.succeed_lazy([&]
+        {
+            return json{
+                {"input_tokens", aggregate.token_usage.prompt_tokens},
+                {"output_tokens", aggregate.token_usage.completion_tokens},
+                {"response_model", aggregate.model},
+                {"stream", true},
+                {"total_tokens", aggregate.token_usage.total_tokens}};
+        });
     co_return aggregate;
 }
 
@@ -461,7 +531,7 @@ auto resilient_chat_model::stream(chat_request request,
             if (attempt < attempts)
             {
                 emit(config, run_event_type::model_retry, request.model,
-                    result.error(), attempt, {{"stream", true}});
+                    result.error(), attempt, true);
                 if (config.is_cancelled())
                     co_return std::unexpected("model stream cancelled");
                 co_await async_sleep(context_, delay);
@@ -537,7 +607,7 @@ auto governed_chat_model::stream(chat_request request,
     {
         constexpr auto message = "model request rate limit exceeded";
         emit(config, run_event_type::model_rejected, request.model, message,
-            0, {{"stream", true}});
+            0, true);
         co_return std::unexpected(message);
     }
 
@@ -565,7 +635,7 @@ auto governed_chat_model::stream(chat_request request,
     {
         constexpr auto message = "model circuit breaker is open";
         emit(config, run_event_type::model_rejected, {}, message, 0,
-            {{"stream", true}});
+            true);
         co_return std::unexpected(message);
     }
     co_return result;
@@ -622,16 +692,24 @@ auto openai_image_model::generate(image_generation_request request,
 {
     if (config.is_cancelled())
         co_return std::unexpected("image generation cancelled");
-    run_scope model_run{config, run_event_type::model_start,
-        run_event_type::model_end, run_event_type::model_error, request.model,
-        "image generation", {{"operation", "image_generation"}}};
+    auto model_run = run_scope::start_lazy(config, run_event_type::model_start, run_event_type::model_end, run_event_type::model_error, request.model, []
+        {
+            return json{{"operation", "image_generation"}};
+        },
+        "image generation");
     auto result = co_await api_.create_image(std::move(request));
     if (result)
-        model_run.succeed("image generation",
-            0, {{"operation", "image_generation"}});
+        model_run.succeed_lazy([]
+            {
+                return json{{"operation", "image_generation"}};
+            },
+            "image generation");
     else
-        model_run.fail(result.error(), 0,
-            {{"operation", "image_generation"}});
+        model_run.fail_lazy([]
+            {
+                return json{{"operation", "image_generation"}};
+            },
+            result.error());
     co_return result;
 }
 
@@ -646,15 +724,24 @@ auto openai_moderation_model::moderate(moderation_request request,
 {
     if (config.is_cancelled())
         co_return std::unexpected("content moderation cancelled");
-    run_scope model_run{config, run_event_type::model_start,
-        run_event_type::model_end, run_event_type::model_error, request.model,
-        "content moderation", {{"operation", "moderation"}}};
+    auto model_run = run_scope::start_lazy(config, run_event_type::model_start, run_event_type::model_end, run_event_type::model_error, request.model, []
+        {
+            return json{{"operation", "moderation"}};
+        },
+        "content moderation");
     auto result = co_await api_.moderate(std::move(request));
     if (result)
-        model_run.succeed("content moderation", 0,
-            {{"operation", "moderation"}, {"response_model", result->model}});
+        model_run.succeed_lazy([&]
+            {
+                return json{{"operation", "moderation"}, {"response_model", result->model}};
+            },
+            "content moderation");
     else
-        model_run.fail(result.error(), 0, {{"operation", "moderation"}});
+        model_run.fail_lazy([]
+            {
+                return json{{"operation", "moderation"}};
+            },
+            result.error());
     co_return result;
 }
 

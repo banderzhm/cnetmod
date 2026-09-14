@@ -129,7 +129,7 @@ auto moderation_input_guardrail::validate(const message& input,
     -> task<std::expected<guardrail_result, std::string>>
 {
     auto response = co_await model_->moderate(
-        moderation_request{.model = model_name_, .input = input.content},
+        moderation_request{.model = model_name_, .input = {input.content}},
         config);
     if (!response)
         co_return std::unexpected("moderation request failed: " + response.error());

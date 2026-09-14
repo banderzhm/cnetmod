@@ -11,6 +11,12 @@ from pathlib import Path
 SKIP_RETURN_CODE = 77
 
 
+def _unavailable(message: str) -> int:
+    required = os.environ.get("CNETMOD_MESSAGING_REQUIRED") == "1"
+    print(("ERROR: " if required else "SKIP: ") + message)
+    return 1 if required else SKIP_RETURN_CODE
+
+
 def _external_endpoint_exists(protocol: str) -> bool:
     prefix = protocol.upper()
     return bool(
@@ -24,8 +30,10 @@ def _docker_is_usable() -> bool:
         from docker import from_env as docker_from_environment
 
         client = docker_from_environment()
-        client.ping()
-        client.close()
+        try:
+            client.ping()
+        finally:
+            client.close()
         return True
     except Exception:
         return False
@@ -50,11 +58,10 @@ def main() -> int:
     )
     missing = [name for name in required_modules if importlib.util.find_spec(name) is None]
     if missing:
-        print(
-            "SKIP: messaging interoperability dependencies are not installed: "
+        return _unavailable(
+            "messaging interoperability dependencies are not installed: "
             + ", ".join(missing)
         )
-        return SKIP_RETURN_CODE
     from dotenv import load_dotenv
 
     load_dotenv(Path(__file__).resolve().parent / ".env.external.local", override=False)
@@ -65,17 +72,14 @@ def main() -> int:
     external_exists = _external_endpoint_exists(protocol)
     docker_usable = False if mode == "external" else _docker_is_usable()
     if mode == "container" and not docker_usable:
-        print("SKIP: container mode requires a usable Docker engine")
-        return SKIP_RETURN_CODE
+        return _unavailable("container mode requires a usable Docker engine")
     if mode == "external" and not external_exists:
-        print("SKIP: external mode requires at least one configured broker endpoint")
-        return SKIP_RETURN_CODE
+        return _unavailable("external mode requires a configured broker endpoint")
     if mode == "auto" and not external_exists and not docker_usable:
-        print(
-            "SKIP: messaging interoperability requires Docker or an external "
+        return _unavailable(
+            "messaging interoperability requires Docker or an external "
             "AMQP/Kafka endpoint"
         )
-        return SKIP_RETURN_CODE
 
     import pytest
 

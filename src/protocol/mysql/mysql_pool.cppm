@@ -18,6 +18,7 @@ import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
 import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
 import cnetmod.executor.async_op;
 
 namespace cnetmod::mysql {
@@ -47,6 +48,7 @@ enum class conn_state : std::uint8_t
     connecting,
     idle,
     in_use,
+    returning,
     resetting,
     pinging,
     dead
@@ -56,10 +58,10 @@ struct conn_node
 {
     std::unique_ptr<client> conn;
     std::atomic<conn_state> state = conn_state::initial;
-    std::chrono::steady_clock::time_point last_used;
-    std::atomic<bool> needs_reset = false;
     cancel_token ping_sleep_token{};
-    std::coroutine_handle<> task_waiting{};
+    cancel_token network_token{};
+    std::atomic<std::coroutine_handle<>> task_waiting{};
+    post_node task_completion;
     std::size_t index = 0;
     conn_node() = default;
     conn_node(conn_node&&) = delete;
@@ -70,6 +72,7 @@ struct conn_node
 
 struct pool_waiter
 {
+    post_node completion;
     std::coroutine_handle<> handle{};
     conn_node** result_node = nullptr;
     pool_waiter* next = nullptr;
@@ -108,6 +111,11 @@ public:
     connection_pool(io_context& ctx, pool_params params);
     connection_pool(const connection_pool&) = delete;
     auto operator=(const connection_pool&) -> connection_pool& = delete;
+    /**
+     * @brief Runs maintenance and waits for all connection workers before returning.
+     * The pool must outlive this task and every borrowed connection.
+     * A concurrent run throws operation_in_progress without stopping the owner.
+     */
     auto async_run() -> task<void>;
     auto async_get_connection(cancel_token& token)
         -> task<std::expected<pooled_connection, std::error_code>>;
@@ -119,8 +127,18 @@ public:
     auto try_get_connection()
         -> std::expected<pooled_connection, std::error_code>;
     auto cancel() -> task<void>;
+    /**
+     * @brief Permanently requests maintenance shutdown without blocking.
+     * Safe before async_run starts; pool ownership must outlive the run task.
+     */
+    void request_stop() noexcept;
     auto size() const noexcept -> std::size_t;
     auto idle_count() const noexcept -> std::size_t;
+    /**
+     * @brief Counts outstanding leases on the owning execution thread.
+     * Scans existing node states without adding work to acquisition or return.
+     */
+    [[nodiscard]] auto checked_out_count() const noexcept -> std::size_t;
     auto waiter_count() const noexcept -> std::size_t;
 
 private:
@@ -130,6 +148,11 @@ private:
     std::deque<conn_node> conns_;
     async_mutex mtx_;
     bool running_ = false;
+    std::atomic<bool> run_active_{false};
+    std::atomic<bool> stop_requested_{false};
+    cancel_token run_cancel_;
+    std::exception_ptr maintenance_failure_;
+    async_wait_group connection_workers_;
     pool_waiter* waiters_head_ = nullptr;
     pool_waiter* waiters_tail_ = nullptr;
     std::size_t num_pending_requests_ = 0;
@@ -140,6 +163,14 @@ private:
     auto make_connect_options() const -> connect_options;
     auto count_ready_connections() const noexcept -> std::size_t;
     auto connection_task(conn_node& node) -> task<void>;
+    /**
+     * @brief Runs maintenance inside the primary task's exception boundary.
+     */
+    auto run_maintenance() -> task<void>;
+    /**
+     * @brief Registers a worker for joined completion and maintenance failure reporting.
+     */
+    void start_worker(task<void> work);
     void spawn_connection();
     void set_idle_bit(std::size_t index);
     void clear_idle_bit(std::size_t index);
@@ -150,6 +181,11 @@ private:
     void notify_waiters_with_idle_locked();
     auto remove_waiter(pool_waiter* target) -> bool;
     void return_connection(conn_node& node, bool needs_reset);
+    /**
+     * @brief Publishes a returned lease and wakes its existing maintenance worker.
+     * The connection state alone determines whether reset is required.
+     */
+    [[nodiscard]] auto publish_returned_connection(conn_node& node, conn_state reusable_state) -> bool;
 };
 
 export class sharded_connection_pool
@@ -164,7 +200,18 @@ public:
     sharded_connection_pool(const sharded_connection_pool&) = delete;
     auto operator=(const sharded_connection_pool&)
         -> sharded_connection_pool& = delete;
+    /**
+     * @brief Runs all shards until stopped and joins them before returning.
+     * Start this lifecycle task concurrently with requests; do not await it as
+     * a startup-only barrier. All shard event loops must remain running.
+     * Duplicate runs fail before dispatching shards or changing their state.
+     */
     auto async_run() -> task<void>;
+    /**
+     * @brief Requests every shard to stop on its own event loop.
+     * Thread-safe. Await the running async_run task to observe completion.
+     */
+    void request_stop() noexcept;
     auto async_get_connection()
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto async_get_connection(cancel_token& token)
@@ -182,6 +229,7 @@ public:
 
 private:
     pool_params base_params_;
+    std::atomic<bool> run_active_{false};
     std::vector<std::unique_ptr<connection_pool>> shards_;
     std::vector<io_context*> shard_ctxs_;
     std::unordered_map<io_context*, std::size_t> shard_by_ctx_;

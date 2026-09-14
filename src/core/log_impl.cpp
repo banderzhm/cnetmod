@@ -25,10 +25,13 @@ struct log_event
     level severity{};
     output_format format{output_format::text};
     bool has_source{};
+    std::chrono::system_clock::time_point observed_at;
     std::string timestamp;
     std::string thread_id;
     std::string source;
     std::string message;
+    std::string trace_id;
+    std::string span_id;
 };
 
 struct logger_state
@@ -52,6 +55,8 @@ struct logger_state
     bool console{true};
     std::atomic_bool stopping{};
     bool ansi{};
+    std::vector<std::pair<observer_id, observer>> observers;
+    observer_id next_observer_id{1};
 };
 
 auto state() -> logger_state&
@@ -194,6 +199,44 @@ void sink(logger_state& s, const log_event& event)
         s.file << line << '\n';
 }
 
+auto snapshot_observers(logger_state& s) -> std::vector<observer>
+{
+    concurrent_containers::shared_latch_guard lock{s.config_latch};
+    std::vector<observer> result;
+    result.reserve(s.observers.size());
+    for (const auto& [identifier, callback] : s.observers)
+    {
+        (void)identifier;
+        result.push_back(callback);
+    }
+    return result;
+}
+
+void notify_observers(const log_event& event, const std::vector<observer>& observers) noexcept
+{
+    if (observers.empty())
+        return;
+    const log_record record{
+        .severity = event.severity,
+        .message = event.message,
+        .source = event.source,
+        .thread_id = event.thread_id,
+        .trace_id = event.trace_id,
+        .span_id = event.span_id,
+        .observed_at = event.observed_at};
+    for (const auto& callback : observers)
+    {
+        try
+        {
+            callback(record);
+        }
+        catch (...)
+        {
+            // Observer failure must not interrupt the logger worker.
+        }
+    }
+}
+
 void worker_loop(std::stop_token token)
 {
     auto& s = state();
@@ -212,6 +255,14 @@ void worker_loop(std::stop_token token)
                 concurrent_containers::exclusive_latch_guard lock{
                     s.config_latch};
                 sink(s, *event);
+            }
+            try
+            {
+                notify_observers(*event, snapshot_observers(s));
+            }
+            catch (...)
+            {
+                // Allocation while snapshotting observers is non-fatal.
             }
             s.active_writes.fetch_sub(1U, std::memory_order_release);
         }
@@ -283,9 +334,10 @@ void write_log(level value, std::string_view message,
         s.dropped.fetch_add(1U, std::memory_order_relaxed);
         return;
     }
-    if (!s.queue.try_enqueue({value, event_format, true, timestamp(), thread_id(),
+    const auto observed_at = std::chrono::system_clock::now();
+    if (!s.queue.try_enqueue({value, event_format, true, observed_at, timestamp(), thread_id(),
             std::format("{}:{}", filename(location.file_name()), location.line()),
-            std::string(message)}))
+            std::string(message), {}, {}}))
     {
         s.queued.fetch_sub(1U, std::memory_order_release);
         s.dropped.fetch_add(1U, std::memory_order_relaxed);
@@ -318,13 +370,54 @@ void write_log_no_src(level value, std::string_view message)
         s.dropped.fetch_add(1U, std::memory_order_relaxed);
         return;
     }
+    const auto observed_at = std::chrono::system_clock::now();
     if (!s.queue.try_enqueue({value,
             event_format,
             false,
+            observed_at,
             timestamp(),
             thread_id(),
             {},
-            std::string(message)}))
+            std::string(message),
+            {},
+            {}}))
+    {
+        s.queued.fetch_sub(1U, std::memory_order_release);
+        s.dropped.fetch_add(1U, std::memory_order_relaxed);
+        return;
+    }
+    s.work_epoch.fetch_add(1U, std::memory_order_release);
+    s.work_epoch.notify_one();
+}
+
+void write_log_with_correlation(level value, log_correlation correlation,
+    std::string_view message, const std::source_location& location)
+{
+    auto& s = state();
+    output_format event_format;
+    {
+        concurrent_containers::shared_latch_guard lock{s.config_latch};
+        if (value < s.threshold || s.threshold == level::off)
+            return;
+        event_format = s.format;
+    }
+    ensure_worker();
+    const auto queued = s.queued.fetch_add(1U, std::memory_order_acq_rel);
+    const auto configured_limit = s.queue_limit.load(std::memory_order_acquire);
+    const auto limit = configured_limit < s.queue.capacity()
+        ? configured_limit
+        : s.queue.capacity();
+    if (queued >= limit)
+    {
+        s.queued.fetch_sub(1U, std::memory_order_release);
+        s.dropped.fetch_add(1U, std::memory_order_relaxed);
+        return;
+    }
+    const auto observed_at = std::chrono::system_clock::now();
+    if (!s.queue.try_enqueue({value, event_format, true, observed_at, timestamp(), thread_id(),
+            std::format("{}:{}", filename(location.file_name()), location.line()),
+            std::string(message), std::string(correlation.trace_id),
+            std::string(correlation.span_id)}))
     {
         s.queued.fetch_sub(1U, std::memory_order_release);
         s.dropped.fetch_add(1U, std::memory_order_relaxed);
@@ -415,6 +508,44 @@ void set_async_queue_limit(std::size_t limit)
 auto dropped_messages() -> std::uint64_t
 {
     return detail::state().dropped.load(std::memory_order_acquire);
+}
+
+void log(level severity, log_correlation correlation, std::string_view message,
+    const std::source_location& location)
+{
+    detail::write_log_with_correlation(severity, correlation, message, location);
+}
+
+auto add_observer(observer callback) -> observer_id
+{
+    if (!callback)
+        return 0;
+    auto& s = detail::state();
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
+    const auto identifier = s.next_observer_id++;
+    if (identifier == 0)
+        return 0;
+    try
+    {
+        s.observers.emplace_back(identifier, std::move(callback));
+        return identifier;
+    }
+    catch (...)
+    {
+        return 0;
+    }
+}
+
+void remove_observer(observer_id identifier) noexcept
+{
+    if (identifier == 0)
+        return;
+    auto& s = detail::state();
+    concurrent_containers::exclusive_latch_guard lock{s.config_latch};
+    std::erase_if(s.observers, [identifier](const auto& item)
+        {
+            return item.first == identifier;
+        });
 }
 
 void flush()

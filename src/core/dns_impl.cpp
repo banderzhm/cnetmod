@@ -24,6 +24,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
+import cnetmod.coro.wait_group;
 import cnetmod.core.address;
 import cnetmod.core.error;
 import cnetmod.core.socket;
@@ -38,6 +39,10 @@ namespace cnetmod {
 // =============================================================================
 
 namespace detail {
+
+    inline std::atomic<std::size_t> pending_lookups{};
+    inline std::atomic<std::size_t> lookup_limit{64};
+    inline std::atomic<std::uint64_t> rejected_lookups{};
 
     inline auto& blocking_pool()
     {
@@ -171,6 +176,11 @@ export struct dns_cache_config
 {
     bool enabled = true;
     std::chrono::milliseconds ttl{60000};
+    /**
+     * @brief Maximum owned cancellable system lookups, including abandoned waits.
+     * Zero rejects uncached hostname lookups; literals and cache hits bypass it.
+     */
+    std::size_t max_pending_lookups{64};
 };
 
 export struct dns_cache_metrics
@@ -183,6 +193,8 @@ export struct dns_cache_metrics
     std::uint64_t connection_failures = 0;
     std::size_t cached_hosts = 0;
     std::size_t downgraded_addresses = 0;
+    std::size_t pending_lookups{};
+    std::uint64_t rejected_lookups{};
 };
 
 export struct connect_metrics
@@ -216,6 +228,7 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
 
 export void configure_dns_cache(dns_cache_config cfg)
 {
+    detail::lookup_limit.store(cfg.max_pending_lookups, std::memory_order_relaxed);
     auto& state = detail::resolver_state_instance();
     concurrent_containers::exclusive_latch_guard lock{state.state_latch};
     state.cache_enabled = cfg.enabled;
@@ -255,6 +268,8 @@ export auto get_dns_cache_metrics() -> dns_cache_metrics
         .connection_failures = state.connection_failures,
         .cached_hosts = state.cache.size(),
         .downgraded_addresses = downgraded,
+        .pending_lookups = detail::pending_lookups.load(std::memory_order_relaxed),
+        .rejected_lookups = detail::rejected_lookups.load(std::memory_order_relaxed),
     };
 }
 
@@ -303,12 +318,9 @@ namespace detail {
         }
     };
 
-    auto resolve_on_pool(io_context& ctx, std::string host,
-        std::string service)
-        -> task<std::expected<std::vector<std::string>, std::string>>
+    auto resolve_system(const std::string& host, const std::string& service)
+        -> std::expected<std::vector<std::string>, std::string>
     {
-        co_await pool_post_awaitable{blocking_pool()};
-
         std::expected<std::vector<std::string>, std::string> result =
             std::unexpected(std::string("not resolved"));
         try
@@ -381,8 +393,96 @@ namespace detail {
                 std::format("getaddrinfo processing failed: {}", error.what()));
         }
 
+        return result;
+    }
+
+    auto resolve_on_pool(io_context& ctx, std::string host, std::string service)
+        -> task<std::expected<std::vector<std::string>, std::string>>
+    {
+        co_await pool_post_awaitable{blocking_pool()};
+        auto result = resolve_system(host, service);
         co_await post_awaitable{ctx};
         co_return result;
+    }
+
+    /**
+     * @brief Owns lookup results independently of the cancelling event loop.
+     */
+    struct cancellable_lookup
+    {
+        bool admitted{};
+        std::atomic<bool> complete{};
+        std::expected<std::vector<std::string>, std::string> result;
+        std::exception_ptr error;
+
+        ~cancellable_lookup()
+        {
+            if (admitted)
+                pending_lookups.fetch_sub(1, std::memory_order_relaxed);
+        }
+
+        auto admit() noexcept -> bool
+        {
+            auto pending = pending_lookups.load(std::memory_order_relaxed);
+            while (pending < lookup_limit.load(std::memory_order_relaxed))
+            {
+                if (pending_lookups.compare_exchange_weak(pending, pending + 1,
+                        std::memory_order_relaxed))
+                {
+                    admitted = true;
+                    return true;
+                }
+            }
+            rejected_lookups.fetch_add(1, std::memory_order_relaxed);
+            return false;
+        }
+    };
+
+    auto resolve_owned(std::shared_ptr<cancellable_lookup> state,
+        std::string host, std::string service) -> task<void>
+    {
+        co_await pool_post_awaitable{blocking_pool()};
+        try
+        {
+            state->result = resolve_system(host, service);
+        }
+        catch (...)
+        {
+            state->error = std::current_exception();
+        }
+        state->complete.store(true, std::memory_order_release);
+    }
+
+    /**
+     * @brief Cancels the waiter without posting a late result into its context.
+     *
+     * The system lookup remains owned by the CPU pool and shared result state;
+     * it cannot be interrupted portably. No worker accesses the waiter's token.
+     */
+    auto resolve_cancellable(io_context& ctx, std::string host,
+        std::string service, cancel_token& token)
+        -> task<std::expected<std::vector<std::string>, std::string>>
+    {
+        if (token.is_cancelled())
+            co_return std::unexpected(std::string{"resolution cancelled"});
+        auto state = std::make_shared<cancellable_lookup>();
+        if (!state->admit())
+            co_return std::unexpected(std::string{"resolver capacity exceeded"});
+        spawn_guarded(ctx, resolve_owned(state, std::move(host), std::move(service)),
+            [state](std::exception_ptr error) noexcept
+            {
+                state->error = error;
+                state->complete.store(true, std::memory_order_release);
+            });
+        while (!state->complete.load(std::memory_order_acquire))
+        {
+            const auto waited = co_await async_timer_wait(ctx, std::chrono::milliseconds{1}, token);
+            if (!waited)
+                co_return std::unexpected(std::string{"resolution cancelled"});
+        }
+        if (state->error)
+            std::rethrow_exception(state->error);
+        co_return std::move(state->result);
     }
 
 } // namespace detail
@@ -404,9 +504,9 @@ export auto async_resolve(io_context& ctx, std::string_view host,
         ctx, std::string(host), std::string(service));
 }
 
-export auto async_resolve_addresses(io_context& ctx,
+auto resolve_addresses_impl(io_context& ctx,
     std::string_view host,
-    std::string_view service = {})
+    std::string_view service, cancel_token* token)
     -> task<std::expected<std::vector<ip_address>, std::string>>
 {
     if (auto literal = ip_address::from_string(host))
@@ -442,7 +542,9 @@ export auto async_resolve_addresses(io_context& ctx,
     if (cached_addresses)
         co_return detail::apply_address_policy(std::move(*cached_addresses));
 
-    auto resolved = co_await async_resolve(ctx, host, service);
+    auto resolved = token
+        ? co_await detail::resolve_cancellable(ctx, std::string{host}, std::string{service}, *token)
+        : co_await async_resolve(ctx, host, service);
     if (!resolved)
     {
         auto& state = detail::resolver_state_instance();
@@ -487,6 +589,13 @@ export auto async_resolve_addresses(io_context& ctx,
     co_return detail::apply_address_policy(std::move(addrs));
 }
 
+export auto async_resolve_addresses(io_context& ctx, std::string_view host,
+    std::string_view service = {})
+    -> task<std::expected<std::vector<ip_address>, std::string>>
+{
+    return resolve_addresses_impl(ctx, host, service, nullptr);
+}
+
 namespace detail {
 
     struct connect_race_state
@@ -496,6 +605,8 @@ namespace detail {
         // publishes metrics and the waiter outcome atomically.
         concurrent_containers::atomic_rw_latch state_latch;
         std::coroutine_handle<> waiter{};
+        post_node completion_post{};
+        async_wait_group children;
         bool completed = false;
         std::size_t remaining = 0;
         std::optional<connect_result> winner;
@@ -505,7 +616,7 @@ namespace detail {
         std::vector<std::shared_ptr<cancel_token>> tokens;
     };
 
-    inline void resume_connect_waiter(std::shared_ptr<connect_race_state> state)
+    inline void resume_connect_waiter(connect_race_state* state) noexcept
     {
         std::coroutine_handle<> waiter;
         {
@@ -514,35 +625,29 @@ namespace detail {
         }
         if (waiter)
         {
-            state->ctx->post(waiter);
+            state->completion_post.coroutine = waiter;
+            state->ctx->post_node_raw(&state->completion_post);
         }
     }
 
-    void cancel_connect_race(cancel_token& token) noexcept
+    void cancel_connect_race(void* operation) noexcept
     {
-        auto* state = static_cast<connect_race_state*>(token.ctx_);
-        if (!state)
-            return;
-
-        std::vector<std::shared_ptr<cancel_token>> attempts;
-        std::coroutine_handle<> waiter;
+        auto* state = static_cast<connect_race_state*>(operation);
         {
             concurrent_containers::exclusive_latch_guard lock{state->state_latch};
             if (state->completed)
                 return;
             state->completed = true;
             state->last_error_code = make_error_code(errc::operation_aborted);
-            attempts = state->tokens;
-            waiter = std::exchange(state->waiter, {});
         }
-        for (auto& attempt : attempts)
+        for (auto& attempt : state->tokens)
             attempt->cancel();
-        if (waiter)
-            state->ctx->post(waiter);
+        resume_connect_waiter(state);
     }
 
     inline auto connect_attempt(io_context& ctx,
         std::shared_ptr<connect_race_state> state,
+        std::shared_ptr<cancel_token> token,
         endpoint remote,
         socket_options socket_opts,
         std::chrono::steady_clock::duration start_delay,
@@ -551,7 +656,7 @@ namespace detail {
     {
         if (start_delay > std::chrono::steady_clock::duration::zero())
         {
-            (void)co_await async_timer_wait(ctx, start_delay);
+            (void)co_await async_timer_wait(ctx, start_delay, *token);
         }
 
         {
@@ -582,7 +687,7 @@ namespace detail {
                     state->completed = true;
             }
             if (done)
-                resume_connect_waiter(std::move(state));
+                resume_connect_waiter(state.get());
             co_return;
         }
 
@@ -600,14 +705,8 @@ namespace detail {
                     state->completed = true;
             }
             if (done)
-                resume_connect_waiter(std::move(state));
+                resume_connect_waiter(state.get());
             co_return;
-        }
-
-        auto token = std::make_shared<cancel_token>();
-        {
-            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
-            state->tokens.push_back(token);
         }
 
         auto cr = timeout > std::chrono::steady_clock::duration::zero()
@@ -619,7 +718,6 @@ namespace detail {
         {
             report_address_connect_success(remote.address());
             bool won = false;
-            std::vector<std::shared_ptr<cancel_token>> attempts_to_cancel;
             {
                 concurrent_containers::exclusive_latch_guard lock{state->state_latch};
                 if (!state->completed)
@@ -632,16 +730,17 @@ namespace detail {
                         .remote = remote,
                         .metrics = state->metrics,
                     });
-                    attempts_to_cancel = state->tokens;
                     won = true;
                 }
             }
             // A token callback can synchronously re-enter cancel_connect_race.
             // Cancel only after dropping the latch to avoid self-deadlock.
-            for (auto& other : attempts_to_cancel)
-                other->cancel();
             if (won)
-                resume_connect_waiter(std::move(state));
+            {
+                for (auto& other : state->tokens)
+                    other->cancel();
+                resume_connect_waiter(state.get());
+            }
             co_return;
         }
 
@@ -656,7 +755,36 @@ namespace detail {
                 state->completed = true;
         }
         if (done)
-            resume_connect_waiter(std::move(state));
+            resume_connect_waiter(state.get());
+    }
+
+    /**
+     * @brief Publishes an attempt exception and cancels all remaining work.
+     */
+    void fail_connect_attempt(const std::shared_ptr<connect_race_state>& state,
+        std::error_code error) noexcept
+    {
+        {
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
+            if (!state->completed)
+            {
+                state->completed = true;
+                state->last_error_code = error;
+            }
+        }
+        for (auto& attempt : state->tokens)
+            attempt->cancel();
+        resume_connect_waiter(state.get());
+    }
+
+    /**
+     * @brief Releases completion ownership after the attempt frame is destroyed.
+     */
+    auto supervised_connect_attempt(std::shared_ptr<connect_race_state> state,
+        task<void> attempt) -> task<void>
+    {
+        co_await std::move(attempt);
+        state->children.done();
     }
 
     struct connect_race_awaitable
@@ -669,24 +797,13 @@ namespace detail {
             return state->completed;
         }
 
-        void await_suspend(std::coroutine_handle<> h)
+        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
         {
-            bool resume_now = false;
-            {
-                concurrent_containers::exclusive_latch_guard lock{state->state_latch};
-                if (state->completed)
-                {
-                    resume_now = true;
-                }
-                else
-                {
-                    state->waiter = h;
-                }
-            }
-            if (resume_now)
-            {
-                state->ctx->post(h);
-            }
+            concurrent_containers::exclusive_latch_guard lock{state->state_latch};
+            if (state->completed)
+                return false;
+            state->waiter = h;
+            return true;
         }
 
         auto await_resume() -> std::expected<connect_result, std::error_code>
@@ -712,9 +829,12 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
     co_return co_await async_connect_happy_eyeballs(ctx, host, port, opts, token);
 }
 
-/// The DNS resolver may already be executing a blocking system lookup when a
-/// cancellation arrives. Once resolution completes, all in-flight Happy
-/// Eyeballs connect attempts are cancelled and the caller is resumed.
+/**
+ * @brief Cancels DNS waiting and in-flight connection attempts.
+ *
+ * A system lookup already executing on the CPU pool may finish later, but owns
+ * its result independently and never posts back into the cancelled context.
+ */
 export auto async_connect_happy_eyeballs(io_context& ctx,
     std::string_view host,
     std::uint16_t port,
@@ -724,7 +844,7 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
 {
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
-    auto resolved = co_await async_resolve_addresses(ctx, host, std::to_string(port));
+    auto resolved = co_await resolve_addresses_impl(ctx, host, std::to_string(port), &token);
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (!resolved || resolved->empty())
@@ -735,25 +855,54 @@ export auto async_connect_happy_eyeballs(io_context& ctx,
     state->ctx = &ctx;
     state->remaining = ordered.size();
     state->metrics.resolved_address_count = ordered.size();
+    state->tokens.reserve(ordered.size());
+    for (std::size_t i = 0; i < ordered.size(); ++i)
+        state->tokens.push_back(std::make_shared<cancel_token>());
 
     // A Happy Eyeballs race owns several child connect tokens, so the caller's
     // token is a cancellation relay rather than a platform I/O token itself.
-    token.ctx_ = state.get();
-    token.cancel_fn_ = &detail::cancel_connect_race;
-    token.pending_.store(true, std::memory_order_release);
-    if (token.is_cancelled())
-        detail::cancel_connect_race(token);
+    if (!token.register_callback(state.get(), &detail::cancel_connect_race))
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     for (std::size_t i = 0; i < ordered.size(); ++i)
     {
-        auto delay = opts.fallback_delay * static_cast<int>(i);
-        spawn(ctx, detail::connect_attempt(ctx, state, endpoint{ordered[i], port}, opts.socket_opts, delay, opts.connect_timeout));
+        state->children.add();
+        auto failed = [state](std::exception_ptr exception) noexcept
+        {
+            auto error = std::make_error_code(std::errc::io_error);
+            try
+            {
+                std::rethrow_exception(exception);
+            }
+            catch (const std::bad_alloc&)
+            {
+                error = std::make_error_code(std::errc::not_enough_memory);
+            }
+            catch (const std::system_error& failure)
+            {
+                error = failure.code();
+            }
+            catch (...)
+            {}
+            detail::fail_connect_attempt(state, error);
+            state->children.done();
+        };
+        try
+        {
+            const auto delay = opts.fallback_delay * static_cast<int>(i);
+            spawn_guarded(ctx, detail::supervised_connect_attempt(state, detail::connect_attempt(ctx, state, state->tokens[i], endpoint{ordered[i], port}, opts.socket_opts, delay, opts.connect_timeout)), failed);
+        }
+        catch (...)
+        {
+            failed(std::current_exception());
+            break;
+        }
     }
 
     auto result = co_await detail::connect_race_awaitable{state};
-    token.pending_.store(false, std::memory_order_release);
-    token.cancel_fn_ = nullptr;
-    token.ctx_ = nullptr;
+    co_await state->children.wait();
+    (void)token.complete_callback(state.get());
+    token.finish_callback(state.get());
     co_return result;
 }
 

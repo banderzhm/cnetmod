@@ -1,0 +1,5 @@
+# Test-only identity configuration, independent of the host OpenSSL installation.
+[req]
+distinguished_name = subject
+
+[subject]

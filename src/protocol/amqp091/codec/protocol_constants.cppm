@@ -22,7 +22,8 @@ enum class error_code
     precondition_failed,
     command_invalid,
     timeout,
-    cancelled
+    cancelled,
+    not_enough_memory
 };
 
 struct error

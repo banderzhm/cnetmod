@@ -117,7 +117,7 @@ namespace {
     // epoll Cancel Version Awaiter
     // =============================================================================
 
-    static void epoll_cancel_fn(cancel_token& token) noexcept;
+    static void epoll_cancel_fn(void* operation) noexcept;
 
     /// epoll awaiter with cancel support
     /// Register fd to epoll, resume coroutine on ready or cancel
@@ -128,6 +128,27 @@ namespace {
         uint32_t events;
         cancel_token& token;
         std::error_code sync_error{};
+
+        /**
+         * Cancellation must remain allocation-free. The suspended frame owns
+         * this node until the event loop dispatches its continuation.
+         */
+        post_node cancellation_post{};
+        std::coroutine_handle<> continuation{};
+
+        static void ready(void* operation) noexcept
+        {
+            auto& awaiter = *static_cast<epoll_cancel_awaiter*>(operation);
+            if (awaiter.token.complete_callback(&awaiter))
+                awaiter.continuation.resume();
+        }
+
+        static void cancelled(void* operation) noexcept
+        {
+            auto& awaiter = *static_cast<epoll_cancel_awaiter*>(operation);
+            (void)awaiter.ctx.remove(awaiter.fd, awaiter.events, &awaiter);
+            awaiter.continuation.resume();
+        }
 
         auto await_ready() const noexcept -> bool
         {
@@ -142,27 +163,20 @@ namespace {
                 return false;
             }
 
-            // Write cancel info
-            token.ctx_ = this;
-            token.fd_ = fd;
-            token.coroutine_ = h;
-            token.cancel_fn_ = &epoll_cancel_fn;
+            continuation = h;
 
             auto r = ctx.add(fd, events | EPOLLONESHOT,
-                reinterpret_cast<void*>(h.address()));
+                this, &ready);
             if (!r)
             {
                 sync_error = r.error();
                 return false;
             }
 
-            token.pending_.store(true, std::memory_order_release);
-
-            // Double check: check cancelled again after setting pending
-            if (token.is_cancelled())
+            if (!token.register_callback(this, &epoll_cancel_fn))
             {
                 token.pending_.store(false, std::memory_order_relaxed);
-                (void)ctx.remove(fd, events, reinterpret_cast<void*>(h.address()));
+                (void)ctx.remove(fd, events, this);
                 sync_error = make_error_code(errc::operation_aborted);
                 return false;
             }
@@ -172,22 +186,19 @@ namespace {
 
         void await_resume() noexcept
         {
-            token.pending_.store(false, std::memory_order_relaxed);
+            token.finish_callback(this);
         }
     };
 
     /// Cancellation only removes this awaiter's readiness direction.  A UDP
     /// listener may concurrently hold EPOLLIN while a separate coroutine is
     /// waiting for EPOLLOUT on the same fd.
-    static void epoll_cancel_fn(cancel_token& token) noexcept
+    static void epoll_cancel_fn(void* operation) noexcept
     {
-        auto* awaiter = static_cast<epoll_cancel_awaiter*>(token.ctx_);
-        if (!awaiter)
-            return;
-        (void)awaiter->ctx.remove(awaiter->fd, awaiter->events,
-            reinterpret_cast<void*>(token.coroutine_.address()));
-        if (token.coroutine_)
-            awaiter->ctx.post(token.coroutine_);
+        auto* awaiter = static_cast<epoll_cancel_awaiter*>(operation);
+        awaiter->cancellation_post.callback = &epoll_cancel_awaiter::cancelled;
+        awaiter->cancellation_post.callback_arg = awaiter;
+        awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
     }
 
     auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint

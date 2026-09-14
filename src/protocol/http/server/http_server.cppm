@@ -18,10 +18,12 @@ import cnetmod.core.address;
 import cnetmod.core.file;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
@@ -121,7 +123,11 @@ public:
     /// Set router
     void set_router(router r);
 
-    /// Add middleware
+    /**
+     * @brief Registers a middleware, ignoring empty optional components.
+     *
+     * Empty components do not occupy a pipeline slot or add request-time work.
+     */
     void use(middleware_fn mw);
 
     /// Set max concurrent connections
@@ -136,13 +142,28 @@ public:
     /// Run server (accept loop)
     auto run() -> task<void>;
 
-    /// Stop server
+    /**
+     * @brief Stops admission and cancels the pending accept operation.
+     *
+     * Call on the accept event loop. Keep that loop running until run() has
+     * completed; active connections have their own completion lifetime.
+     */
     void stop();
+
+    /**
+     * @brief Interrupts socket I/O for current and queued connections.
+     *
+     * Call stop() first to end admission. This is a terminal operation for
+     * this server instance. Keep worker event loops alive until connections
+     * finish; this does not forcibly destroy handlers awaiting non-socket work.
+     */
+    void abort_connections() noexcept;
 
 private:
     struct conn_count_guard;
+    struct connection_registration;
 
-    auto handle_connection(socket client, io_context& io) -> task<void>;
+    auto handle_connection(socket client, io_context& io, conn_count_guard ownership) -> task<void>;
 
     auto handle_h1_clear(socket& client, io_context& io,
         const char* initial_data = nullptr,
@@ -179,8 +200,12 @@ private:
     std::string host_;
     std::uint16_t port_ = 0;
     bool running_ = false;
+    cancel_token accept_cancellation_;
     std::size_t max_connections_ = 0;
     std::atomic<std::size_t> active_connections_{0};
+    concurrent_containers::atomic_rw_latch connections_latch_;
+    connection_registration* connections_{};
+    bool connections_aborted_{};
     date_cache date_cache_;
     response_header_options response_headers_;
 #ifdef CNETMOD_HAS_SSL

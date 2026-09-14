@@ -430,7 +430,7 @@ auto client::connect(std::string_view host, std::uint16_t port, bool use_ssl,
     state_->is_ssl = use_ssl;
 
     auto connect_r = co_await async_connect_happy_eyeballs(
-        *ctx_, host, port, {}, token);
+        *ctx_, host, port, {.connect_timeout = options_.connect_timeout}, token);
     if (!connect_r)
     {
         co_return std::unexpected(connect_r.error());
@@ -576,6 +576,15 @@ auto client::send_http1(const request& req)
 }
 
 auto client::send_http1(const request& req, cancel_token& token)
+    -> task<std::expected<response, std::error_code>>
+{
+    if (options_.http1_response_body_limit != 0)
+        return send_http1_impl<true>(req, token);
+    return send_http1_impl<false>(req, token);
+}
+
+template <bool Bounded>
+auto client::send_http1_impl(const request& req, cancel_token& token)
     -> task<std::expected<response, std::error_code>>
 {
     if (!state_)
@@ -884,6 +893,8 @@ auto client::send_http1(const request& req, cancel_token& token)
     auto& body = state_->body_buffer;
     body.clear();
     auto content_length_str = resp.get_header("Content-Length");
+    const auto body_limit = Bounded ? options_.http1_response_body_limit : std::size_t{0};
+    bool close_delimited = false;
 
     if (!content_length_str.empty())
     {
@@ -892,9 +903,11 @@ auto client::send_http1(const request& req, cancel_token& token)
             content_length_str.data() +
                 content_length_str.size(),
             content_length);
+        if (body_limit != 0 && (ec2 != std::errc{} || ptr2 != content_length_str.data() + content_length_str.size()))
+            co_return std::unexpected(make_error_code(http_errc::invalid_header));
         if (ec2 == std::errc{})
         {
-            if (content_length > max_body_size)
+            if (content_length > max_body_size || (body_limit != 0 && content_length > body_limit))
             {
                 co_return std::unexpected(make_error_code(http_errc::body_too_large));
             }
@@ -904,7 +917,7 @@ auto client::send_http1(const request& req, cancel_token& token)
             // Append any body data already in buffer
             if (!view.empty())
             {
-                body.append(view);
+                body.append(body_limit != 0 ? view.substr(0, content_length) : view);
             }
 
             // Read remaining body
@@ -915,10 +928,14 @@ auto client::send_http1(const request& req, cancel_token& token)
                 auto result = co_await read_data(temp, to_read, token);
                 if (!result)
                 {
+                    if (body_limit != 0 && result.error() == cnetmod::make_error_code(errc::end_of_file))
+                        co_return std::unexpected(make_error_code(http_errc::invalid_header));
                     co_return std::unexpected(result.error());
                 }
                 if (*result == 0)
                 {
+                    if (body_limit != 0)
+                        co_return std::unexpected(make_error_code(http_errc::invalid_header));
                     break;
                 }
                 body.append(temp, *result);
@@ -939,8 +956,12 @@ auto client::send_http1(const request& req, cancel_token& token)
             // Complete, read
             while (crlf_pos == std::string::npos)
             {
+                if (body_limit != 0 && remaining_data.size() > max_header_size)
+                    co_return std::unexpected(make_error_code(http_errc::header_too_large));
                 char temp[4096];
                 auto result = co_await read_data(temp, sizeof(temp), token);
+                if (body_limit != 0 && ((!result && result.error() == cnetmod::make_error_code(errc::end_of_file)) || (result && *result == 0)))
+                    co_return std::unexpected(make_error_code(http_errc::invalid_chunk));
                 if (!result)
                 {
                     co_return std::unexpected(result.error());
@@ -952,6 +973,9 @@ auto client::send_http1(const request& req, cancel_token& token)
                 remaining_data.append(temp, *result);
                 crlf_pos = remaining_data.find("\r\n");
             }
+
+            if (body_limit != 0 && crlf_pos > max_header_size)
+                co_return std::unexpected(make_error_code(http_errc::header_too_large));
 
             // Parse chunk size ()
             auto size_str = remaining_data.substr(0, crlf_pos);
@@ -969,27 +993,39 @@ auto client::send_http1(const request& req, cancel_token& token)
                 size_str.data() + size_str.size(),
                 chunk_size, 16); // Implementation note.
 
-            if (ec != std::errc{})
+            if (ec != std::errc{} || (body_limit != 0 && ptr != size_str.data() + size_str.size()))
             {
                 co_return std::unexpected(make_error_code(http_errc::invalid_chunk));
             }
+
+            if (body_limit != 0 && (chunk_size > body_limit - body.size() || chunk_size > std::numeric_limits<std::size_t>::max() - 2U))
+                co_return std::unexpected(make_error_code(http_errc::body_too_large));
 
             // Chunk size 0
             if (chunk_size == 0)
             {
                 // Read trailer headers()
                 remaining_data = remaining_data.substr(crlf_pos + 2);
+                std::size_t trailer_bytes{};
 
                 // Implementation note: trailer.
                 while (true)
                 {
+                    if (body_limit != 0 && remaining_data.size() > max_header_size - trailer_bytes)
+                        co_return std::unexpected(make_error_code(http_errc::header_too_large));
                     auto trailer_crlf = remaining_data.find("\r\n");
                     if (trailer_crlf == std::string::npos)
                     {
                         char temp[4096];
                         auto result = co_await read_data(temp, sizeof(temp), token);
                         if (!result || *result == 0)
+                        {
+                            if (body_limit != 0)
+                                co_return std::unexpected(result || result.error() == cnetmod::make_error_code(errc::end_of_file)
+                                        ? make_error_code(http_errc::invalid_chunk)
+                                        : result.error());
                             break;
+                        }
                         remaining_data.append(temp, *result);
                         continue;
                     }
@@ -1001,6 +1037,7 @@ auto client::send_http1(const request& req, cancel_token& token)
                     }
 
                     // Implementation note.
+                    trailer_bytes += trailer_crlf + 2;
                     remaining_data = remaining_data.substr(trailer_crlf + 2);
                 }
 
@@ -1015,6 +1052,8 @@ auto client::send_http1(const request& req, cancel_token& token)
             {
                 char temp[4096];
                 auto result = co_await read_data(temp, sizeof(temp), token);
+                if (body_limit != 0 && ((!result && result.error() == cnetmod::make_error_code(errc::end_of_file)) || (result && *result == 0)))
+                    co_return std::unexpected(make_error_code(http_errc::invalid_chunk));
                 if (!result)
                 {
                     co_return std::unexpected(result.error());
@@ -1027,10 +1066,42 @@ auto client::send_http1(const request& req, cancel_token& token)
             }
 
             // Implementation note: chunk.
+            if (body_limit != 0 && remaining_data.compare(chunk_size, 2, "\r\n") != 0)
+                co_return std::unexpected(make_error_code(http_errc::invalid_chunk));
             body.append(remaining_data.substr(0, chunk_size));
 
             // Chunk \r\n
             remaining_data = remaining_data.substr(chunk_size + 2);
+        }
+    }
+
+    else if (body_limit != 0 && req.method() != http_method::HEAD &&
+        resp.status_code() >= 200 && resp.status_code() != 204 && resp.status_code() != 304 &&
+        !(req.method() == http_method::CONNECT && resp.status_code() < 300))
+    {
+        if (!resp.get_header("Transfer-Encoding").empty())
+            co_return std::unexpected(make_error_code(http_errc::invalid_header));
+        close_delimited = true;
+        if (view.size() > body_limit)
+            co_return std::unexpected(make_error_code(http_errc::body_too_large));
+        body.append(view);
+        for (;;)
+        {
+            char bytes[4096];
+            const auto remaining = body_limit - body.size();
+            const auto capacity = remaining == 0 ? std::size_t{1} : std::min(sizeof(bytes), remaining);
+            const auto received = co_await read_data(bytes, capacity, token);
+            if (!received)
+            {
+                if (received.error() == cnetmod::make_error_code(errc::end_of_file))
+                    break;
+                co_return std::unexpected(received.error());
+            }
+            if (*received == 0)
+                break;
+            if (*received > remaining)
+                co_return std::unexpected(make_error_code(http_errc::body_too_large));
+            body.append(bytes, *received);
         }
     }
 
@@ -1050,7 +1121,7 @@ auto client::send_http1(const request& req, cancel_token& token)
 
     // Handle Connection header
     auto connection = resp.get_header("Connection");
-    if (!options_.keep_alive || connection == "close")
+    if (close_delimited || !options_.keep_alive || connection == "close")
     {
         close();
     }
@@ -1768,6 +1839,8 @@ auto client::send_with_redirects(const request& req, std::size_t redirect_count,
         if (state_->protocol == protocol_type::http1)
         {
             result = co_await send_http1(req, token);
+            if (!result && options_.http1_response_body_limit != 0)
+                close();
         }
         else if (state_->protocol == protocol_type::http2)
         {

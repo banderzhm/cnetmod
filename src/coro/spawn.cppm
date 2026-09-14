@@ -12,6 +12,28 @@ namespace cnetmod {
 
 namespace detail {
 
+    /**
+     * @brief Contains diagnostic failures outside the dispatch coroutine frame.
+     */
+    template <typename ErrorHandler>
+    void report_spawn_failure(ErrorHandler& report) noexcept
+    {
+        try
+        {
+            std::invoke(report, std::current_exception());
+        }
+        catch (...)
+        {
+        }
+    }
+
+    template <auto OnError>
+    void report_static_spawn_failure() noexcept
+    {
+        auto report = OnError;
+        report_spawn_failure(report);
+    }
+
     struct detached_post_state
     {
         std::coroutine_handle<> coroutine;
@@ -101,6 +123,57 @@ export void spawn(io_context& ctx, task<void> task_to_run)
     {
         co_await detail::detached_post_awaitable{context};
         co_await std::move(inner);
+    }(ctx, std::move(task_to_run));
+}
+
+/**
+ * @brief Dispatches a background task with an explicit failure observer.
+ *
+ * Exceptions from posting or executing the task are reported once. Exceptions
+ * from the observer are contained. Allocation before the wrapper coroutine
+ * starts may throw to the caller. The existing spawn() contract is unchanged.
+ * This template remains visible for handler instantiation and MSVC coroutine
+ * code generation, like the existing detached spawn implementation above.
+ */
+export template <typename ErrorHandler>
+void spawn_guarded(io_context& ctx, task<void> task_to_run, ErrorHandler on_error)
+{
+    [](io_context& context, task<void> inner, ErrorHandler report) -> detached_task
+    {
+        try
+        {
+            co_await detail::detached_post_awaitable{context};
+            co_await std::move(inner);
+        }
+        catch (...)
+        {
+            detail::report_spawn_failure(report);
+        }
+    }(ctx, std::move(task_to_run), std::move(on_error));
+}
+
+/**
+ * @brief Dispatches with a compile-time observer and no runtime callback state.
+ *
+ * Use for fixed infrastructure diagnostics. Stateful observers continue to use
+ * the three-argument overload. Posting and execution failures are contained in
+ * the same way; allocation before wrapper startup can still reach the caller.
+ */
+export template <auto OnError>
+requires std::invocable<decltype(OnError), std::exception_ptr>
+void spawn_guarded(io_context& ctx, task<void> task_to_run)
+{
+    [](io_context& context, task<void> inner) -> detached_task
+    {
+        try
+        {
+            co_await detail::detached_post_awaitable{context};
+            co_await std::move(inner);
+        }
+        catch (...)
+        {
+            detail::report_static_spawn_failure<OnError>();
+        }
     }(ctx, std::move(task_to_run));
 }
 

@@ -7,6 +7,7 @@ import :protocol_constants;
 import :field_table_codec;
 import :channel_options;
 import :message_delivery;
+import :delivery_acknowledgement;
 import :publisher_confirm;
 
 export namespace cnetmod::amqp091 {
@@ -43,6 +44,12 @@ public:
         -> task<result<std::uint64_t>>;
     auto async_consume(consume_options options, delivery_handler handler,
         field_table arguments = {}) -> task<result<std::string>>;
+    /**
+     * @brief Subscribes with session-bound acknowledgement handles.
+     * Rejects no_ack mode. Recovery rebinds handles to the restored channel.
+     */
+    auto async_consume_acknowledged(consume_options options, acknowledged_delivery_handler handler,
+        field_table arguments = {}) -> task<result<std::string>>;
     auto async_cancel_consumer(std::string consumer_tag, bool no_wait = false)
         -> task<result<void>>;
     auto async_ack(std::uint64_t delivery_tag, bool multiple = false)
@@ -59,6 +66,8 @@ public:
     auto async_rollback_transaction() -> task<result<void>>;
 
 private:
+    template <typename Handler>
+    auto consume(consume_options options, Handler handler, field_table arguments) -> task<result<std::string>>;
     friend class protocol_connection;
     logical_channel(std::shared_ptr<protocol_connection> connection,
         std::uint16_t number);

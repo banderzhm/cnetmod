@@ -1,15 +1,18 @@
 #include "test_framework.hpp"
 
 import std;
+import cnetmod.instrumentation.metric;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
+import cnetmod.coro.circuit_breaker;
 import cnetmod.io.io_context;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.http.middleware.metrics;
 import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.protocol.openai;
+import cnetmod.observability.openai;
 import nlohmann.json;
 
 namespace openai = cnetmod::openai;
@@ -1254,6 +1257,181 @@ TEST(openai_run_config_cancels_before_model_execution)
     ASSERT_EQ(model.calls, std::size_t{0});
 }
 
+TEST(openai_unobserved_scope_preserves_child_cancellation_without_operation_id)
+{
+    cnetmod::cancel_token cancellation;
+    openai::run_config config;
+    config.cancellation = &cancellation;
+    config.metadata.emplace("tenant", "test");
+    config.parent_operation_id = "upstream";
+    config.listeners.push_back(nullptr);
+    ASSERT_FALSE(config.has_observers());
+    openai::run_scope scope{config, openai::run_event_type::agent_start,
+        openai::run_event_type::agent_end, openai::run_event_type::agent_error,
+        "unobserved"};
+    ASSERT_TRUE(scope.operation_id().empty());
+    const auto child = scope.child_config();
+    ASSERT_TRUE(child.cancellation == &cancellation);
+    ASSERT_EQ(child.metadata.at("tenant"), "test");
+    ASSERT_EQ(child.parent_operation_id, "upstream");
+    scope.succeed();
+    ASSERT_TRUE(scope.child_config().cancellation == &cancellation);
+}
+
+TEST(openai_lazy_start_skips_disabled_and_preserves_factory_failure_lifecycle)
+{
+    unsigned factories = 0;
+    auto factory = [&]() -> nlohmann::json
+    {
+        ++factories;
+        throw std::bad_alloc{};
+    };
+    openai::run_config disabled;
+    auto skipped = openai::run_scope::start_lazy(disabled,
+        openai::run_event_type::model_start, openai::run_event_type::model_end,
+        openai::run_event_type::model_error, "model", factory);
+    ASSERT_EQ(factories, 0U);
+    ASSERT_TRUE(skipped.operation_id().empty());
+    std::vector<openai::run_event_type> events;
+    openai::run_config enabled{.callback = [&](const openai::run_event& event)
+        {
+            events.push_back(event.type);
+        }};
+    auto observed = openai::run_scope::start_lazy(enabled,
+        openai::run_event_type::model_start, openai::run_event_type::model_end,
+        openai::run_event_type::model_error, "model", factory);
+    observed.succeed();
+    ASSERT_EQ(factories, 1U);
+    ASSERT_EQ(events.size(), std::size_t{2});
+    ASSERT_TRUE(events.front() == openai::run_event_type::model_start);
+    ASSERT_TRUE(events.back() == openai::run_event_type::model_end);
+}
+
+TEST(openai_lazy_completion_skips_disabled_and_completed_scopes)
+{
+    unsigned factories = 0;
+    auto factory = [&]() -> nlohmann::json
+    {
+        ++factories;
+        return {{"input_tokens", 4}};
+    };
+    openai::run_config disabled;
+    openai::run_scope unobserved{disabled, openai::run_event_type::model_start,
+        openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
+    unobserved.succeed_lazy(factory);
+    unobserved.fail_lazy(factory);
+    ASSERT_EQ(factories, 0U);
+    std::vector<openai::run_event> events;
+    openai::run_config enabled{.callback = [&](const openai::run_event& event)
+        {
+            events.push_back(event);
+        }};
+    openai::run_scope observed{enabled, openai::run_event_type::model_start,
+        openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
+    observed.succeed_lazy(factory, "done", 2);
+    observed.fail_lazy(factory);
+    ASSERT_EQ(factories, 1U);
+    ASSERT_EQ(events.size(), std::size_t{2});
+    ASSERT_EQ(events.back().attributes.at("input_tokens"), 4);
+    ASSERT_EQ(events.back().attempt, std::size_t{2});
+    ASSERT_EQ(events.back().detail, "done");
+    openai::run_scope failure{enabled, openai::run_event_type::model_start,
+        openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
+    failure.fail_lazy([]() -> nlohmann::json
+        {
+            throw std::bad_alloc{};
+        },
+        "original failure");
+    ASSERT_TRUE(events.back().type == openai::run_event_type::model_error);
+    ASSERT_EQ(events.back().detail, "original failure");
+}
+
+TEST(openai_trace_only_listener_does_not_aggregate_metrics)
+{
+    cnetmod::metrics::registry metrics;
+    unsigned spans = 0;
+    openai::telemetry_listener listener{metrics,
+        [&](const cnetmod::http::tracing::completed_span&)
+        {
+            ++spans;
+        },
+        {.record_metrics = false}};
+    openai::run_config config{.listeners = {&listener}};
+    {
+        openai::run_scope scope{config, openai::run_event_type::model_start,
+            openai::run_event_type::model_end, openai::run_event_type::model_error,
+            "test-model"};
+        scope.succeed({}, 0, {{"input_tokens", 10}, {"output_tokens", 20}});
+    }
+    config.notify({.type = openai::run_event_type::model_retry});
+    ASSERT_EQ(spans, 1U);
+    ASSERT_FALSE(metrics.render_openmetrics().contains("gen_ai"));
+}
+
+TEST(openai_lazy_notification_skips_disabled_and_isolates_factory_failure)
+{
+    unsigned factories = 0;
+    openai::run_config disabled{.listeners = {nullptr}};
+    disabled.notify_lazy([&]() -> openai::run_event
+        {
+            ++factories;
+            throw std::runtime_error("must not run");
+        });
+    ASSERT_EQ(factories, 0U);
+    unsigned delivered = 0;
+    openai::run_config enabled{.callback = [&](const openai::run_event&)
+        {
+            ++delivered;
+        }};
+    enabled.notify_lazy([&]() -> openai::run_event
+        {
+            ++factories;
+            throw std::bad_alloc{};
+        });
+    ASSERT_EQ(factories, 1U);
+    ASSERT_EQ(delivered, 0U);
+    enabled.notify_lazy([&]
+        {
+            ++factories;
+            return openai::run_event{.type = openai::run_event_type::model_retry};
+        });
+    ASSERT_EQ(factories, 2U);
+    ASSERT_EQ(delivered, 1U);
+}
+
+TEST(openai_event_dispatch_borrows_complete_events_and_preserves_overrides)
+{
+    openai::run_event event{.run_id = "explicit-run", .name = "model", .attributes = {{"tags", {"explicit-tag"}}, {"metadata", {{"tenant", "explicit"}}}}, .trace_parent = cnetmod::http::tracing::new_root_context(), .parent_operation_id = "explicit-parent"};
+    const openai::run_event* received = nullptr;
+    openai::run_config config{.run_id = "default-run", .tags = {"default-tag"}, .metadata = {{"tenant", "default"}}, .callback = [&](const openai::run_event& value)
+        {
+            received = &value;
+        },
+        .trace_parent = cnetmod::http::tracing::new_root_context(),
+        .parent_operation_id = "default-parent"};
+    config.notify(event);
+    ASSERT_TRUE(received == &event);
+    openai::run_event missing;
+    openai::run_event enriched;
+    bool copied = false;
+    unsigned calls = 0;
+    config.callback = [&](const openai::run_event& value)
+    {
+        ++calls;
+        copied = &value != &missing;
+        enriched = value;
+    };
+    config.notify(missing);
+    ASSERT_EQ(calls, 1U);
+    ASSERT_TRUE(copied);
+    ASSERT_EQ(enriched.run_id, "default-run");
+    ASSERT_EQ(enriched.attributes.at("metadata").at("tenant"), "default");
+    ASSERT_EQ(enriched.parent_operation_id, "default-parent");
+    ASSERT_EQ(enriched.trace_parent->trace_id, config.trace_parent->trace_id);
+    ASSERT_TRUE(missing.run_id.empty());
+    ASSERT_TRUE(missing.attributes.is_null());
+}
+
 TEST(openai_run_listeners_are_isolated_and_receive_structured_events)
 {
     std::size_t received = 0;
@@ -1280,6 +1458,59 @@ TEST(openai_run_listeners_are_isolated_and_receive_structured_events)
         .attributes = {{"tenant", "alpha"}}});
 
     ASSERT_EQ(received, std::size_t{1});
+}
+
+TEST(openai_telemetry_publishes_structured_metrics_and_isolates_sink_errors)
+{
+    namespace instrumentation = cnetmod::instrumentation;
+    std::vector<instrumentation::metric_measurement> measurements;
+    unsigned spans = 0;
+    bool reject = false;
+    openai::telemetry_listener listener{
+        instrumentation::metric_sink{[&](instrumentation::metric_measurement metric)
+            {
+                if (reject)
+                    throw std::runtime_error("metric sink failed");
+                measurements.push_back(std::move(metric));
+            }},
+        [&](const cnetmod::http::tracing::completed_span&)
+        {
+            ++spans;
+        }};
+    openai::run_config config{.run_id = "private-run", .listeners = {&listener}};
+    auto invoke = [&]
+    {
+        config.notify({.type = openai::run_event_type::model_start, .name = "model", .detail = "private-prompt"});
+        config.notify({.type = openai::run_event_type::model_end, .name = "model", .attributes = {{"input_tokens", 100}, {"output_tokens", 25}}});
+    };
+    invoke();
+    ASSERT_EQ(measurements.size(), std::size_t{7});
+    double tokens = 0;
+    unsigned durations = 0;
+    for (const auto& metric : measurements)
+    {
+        ASSERT_TRUE(instrumentation::valid_metric_measurement(metric));
+        for (const auto& [key, value] : metric.attributes)
+        {
+            ASSERT_FALSE(value == "private-run" || value == "private-prompt");
+        }
+        if (metric.name == "gen_ai_client_tokens")
+            tokens += metric.value;
+        if (metric.name == "gen_ai_client_operation_duration")
+        {
+            ++durations;
+            ASSERT_EQ(metric.unit, "s");
+            ASSERT_TRUE(metric.kind == instrumentation::metric_kind::histogram);
+            ASSERT_FALSE(metric.explicit_bounds.empty());
+        }
+    }
+    ASSERT_EQ(tokens, 125.0);
+    ASSERT_EQ(durations, 1U);
+    reject = true;
+    invoke();
+    ASSERT_EQ(spans, 2U);
+    ASSERT_EQ(listener.statistics().completed, std::uint64_t{2});
+    ASSERT_TRUE(listener.statistics().metric_failures > 0);
 }
 
 TEST(openai_telemetry_listener_exports_metrics_cost_and_correlated_spans)
@@ -1403,6 +1634,159 @@ TEST(openai_telemetry_preserves_nested_agent_model_hierarchy)
     ASSERT_EQ(model_span.context.trace_id, inbound.trace_id);
 }
 
+TEST(openai_telemetry_root_is_exported_and_children_reference_it)
+{
+    cnetmod::metrics::registry metrics;
+    std::vector<cnetmod::http::tracing::completed_span> spans;
+    openai::telemetry_listener listener{metrics,
+        [&](const cnetmod::http::tracing::completed_span& span)
+        {
+            spans.push_back(span);
+        }};
+    for (const bool invalid_parent : {false, true})
+    {
+        spans.clear();
+        openai::run_config config{.run_id = "root-run", .listeners = {&listener}};
+        if (invalid_parent)
+            config.trace_parent = cnetmod::http::tracing::trace_context{};
+        openai::run_scope root{config, openai::run_event_type::agent_start,
+            openai::run_event_type::agent_end, openai::run_event_type::agent_error, "agent"};
+        auto child_config = root.child_config();
+        openai::run_scope child{child_config, openai::run_event_type::model_start,
+            openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
+        child.succeed();
+        root.succeed();
+        ASSERT_EQ(spans.size(), std::size_t{2});
+        ASSERT_TRUE(spans[1].parent_span_id.empty());
+        ASSERT_FALSE(spans[1].context.trace_id.empty());
+        ASSERT_EQ(spans[0].parent_span_id, spans[1].context.span_id);
+        ASSERT_EQ(spans[0].context.trace_id, spans[1].context.trace_id);
+    }
+}
+
+TEST(openai_metrics_only_listener_preserves_completion_and_usage)
+{
+    cnetmod::metrics::registry metrics;
+    openai::telemetry_listener listener{metrics};
+    openai::run_config config{.listeners = {&listener}};
+    openai::run_scope operation{config, openai::run_event_type::model_start,
+        openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
+    operation.succeed({}, 0, {{"input_tokens", 7}});
+    ASSERT_EQ(listener.statistics().completed, std::uint64_t{1});
+    ASSERT_EQ(listener.statistics().dropped_spans, std::uint64_t{0});
+    ASSERT_TRUE(metrics.render_openmetrics().contains("gen_ai_client_tokens_total"));
+}
+
+TEST(openai_telemetry_ignores_malformed_attributes_and_contains_export_failures)
+{
+    cnetmod::metrics::registry metrics;
+    unsigned calls = 0;
+    openai::telemetry_listener listener{metrics,
+        [&](const cnetmod::http::tracing::completed_span&)
+        {
+            ++calls;
+            if (calls == 1)
+                throw std::runtime_error("export failure");
+        }};
+    for (unsigned attempt = 0; attempt != 3; ++attempt)
+    {
+        listener.on_event({.type = openai::run_event_type::model_start,
+            .run_id = "fault-test"});
+        openai::run_event end{.type = openai::run_event_type::model_end,
+            .run_id = "fault-test"};
+        if (attempt == 0)
+            end.attributes = nlohmann::json::array({1});
+        listener.on_event(end);
+    }
+    ASSERT_EQ(calls, 3U);
+    ASSERT_EQ(listener.statistics().completed, std::uint64_t{3});
+    ASSERT_EQ(listener.statistics().dropped_spans, std::uint64_t{1});
+    ASSERT_EQ(listener.statistics().unmatched_end_events, std::uint64_t{0});
+}
+
+TEST(openai_telemetry_parent_operation_lookup_is_scoped_to_run)
+{
+    cnetmod::metrics::registry metrics;
+    std::vector<cnetmod::http::tracing::completed_span> spans;
+    openai::telemetry_listener listener{metrics,
+        [&](const cnetmod::http::tracing::completed_span& span)
+        {
+            spans.push_back(span);
+        }};
+    for (const auto run : {"first", "second"})
+        listener.on_event({.type = openai::run_event_type::agent_start,
+            .run_id = run,
+            .attributes = {{"operation_id", "shared-id"}}});
+    listener.on_event({.type = openai::run_event_type::model_start,
+        .run_id = "first",
+        .attributes = {{"operation_id", "child"}},
+        .parent_operation_id = "shared-id"});
+    listener.on_event({.type = openai::run_event_type::model_end,
+        .run_id = "first",
+        .attributes = {{"operation_id", "child"}}});
+    for (const auto run : {"second", "first"})
+        listener.on_event({.type = openai::run_event_type::agent_end,
+            .run_id = run,
+            .attributes = {{"operation_id", "shared-id"}}});
+    ASSERT_EQ(spans.size(), std::size_t{3});
+    ASSERT_EQ(spans[0].parent_span_id, spans[2].context.span_id);
+    ASSERT_EQ(spans[0].context.trace_id, spans[2].context.trace_id);
+    ASSERT_FALSE(spans[0].context.trace_id == spans[1].context.trace_id);
+    ASSERT_TRUE(spans[1].parent_span_id.empty());
+    ASSERT_TRUE(spans[2].parent_span_id.empty());
+}
+
+TEST(openai_telemetry_exports_only_allowlisted_scalar_attributes)
+{
+    for (const bool capture : {false, true})
+    {
+        cnetmod::metrics::registry metrics;
+        std::vector<cnetmod::http::tracing::completed_span> spans;
+        openai::telemetry_listener listener{metrics,
+            [&](const cnetmod::http::tracing::completed_span& span)
+            {
+                spans.push_back(span);
+            },
+            {.capture_details = capture, .max_attribute_bytes = 8}};
+        openai::run_config config{.run_id = "privacy",
+            .tags = {"tag-secret"},
+            .metadata = {{"api_key", "credential-secret"}},
+            .listeners = {&listener}};
+        openai::run_scope operation{config, openai::run_event_type::model_start,
+            openai::run_event_type::model_end, openai::run_event_type::model_error,
+            "model", "request-detail"};
+        operation.succeed("response-detail", 0,
+            {{"input_tokens", 12}, {"output_tokens", 3}, {"total_tokens", 15},
+                {"response_model", "long-model-name"}, {"stream", true},
+                {"authorization", "Bearer secret"}, {"prompt", "prompt-secret"},
+                {"tool_arguments", {{"password", "tool-secret"}}}});
+        ASSERT_EQ(spans.size(), std::size_t{1});
+        auto value = [&](std::string_view name) -> std::string
+        {
+            for (const auto& [key, item] : spans[0].attributes)
+                if (key == name)
+                    return item;
+            return {};
+        };
+        ASSERT_EQ(value("gen_ai.input_tokens"), "12");
+        ASSERT_EQ(value("gen_ai.output_tokens"), "3");
+        ASSERT_EQ(value("gen_ai.total_tokens"), "15");
+        ASSERT_EQ(value("gen_ai.response_model"), "long-mod");
+        ASSERT_EQ(value("gen_ai.stream"), "true");
+        for (const auto key : {"metadata", "tags", "authorization", "prompt", "tool_arguments", "operation_id"})
+            ASSERT_TRUE(value(std::string{"gen_ai."} + key).empty());
+        ASSERT_EQ(value("gen_ai.request.detail"), capture ? "request-" : "");
+        ASSERT_EQ(value("gen_ai.response.detail"), capture ? "response" : "");
+
+        spans.clear();
+        openai::run_scope invalid{config, openai::run_event_type::model_start,
+            openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
+        invalid.succeed({}, 0, {{"input_tokens", "secret"}, {"output_tokens", -1}, {"total_tokens", 1.5}, {"response_model", {{"secret", "payload"}}}, {"stream", "secret"}});
+        for (const auto key : {"input_tokens", "output_tokens", "total_tokens", "response_model", "stream"})
+            ASSERT_TRUE(value(std::string{"gen_ai."} + key).empty());
+    }
+}
+
 TEST(openai_governed_model_opens_circuit_after_provider_failure)
 {
     failing_model provider;
@@ -1515,6 +1899,35 @@ TEST(openai_governed_model_rejects_requests_above_rate_limit)
     ASSERT_EQ(second.error(),
         std::string("model request rate limit exceeded"));
     ASSERT_EQ(provider.calls, std::size_t{1});
+}
+
+TEST(openai_rejection_observation_preserves_results_and_stream_attributes)
+{
+    scripted_model provider;
+    provider.responses.push_back(response_with(openai::message::model_output("accepted")));
+    openai::governed_chat_model model{provider,
+        {.request_rate = {.tokens_per_second = 0.001, .burst = 1.0}}};
+    ASSERT_TRUE(cnetmod::sync_wait(model.invoke({.model = "fixture"})).has_value());
+    recording_listener listener;
+    openai::run_config observed{
+        .callback = [](const openai::run_event&)
+        {
+            throw std::runtime_error("observer failure");
+        },
+        .listeners = {&listener}};
+    const auto ordinary = cnetmod::sync_wait(model.invoke({.model = "fixture"}));
+    const auto enabled = cnetmod::sync_wait(model.invoke({.model = "fixture"}, observed));
+    const auto streamed = cnetmod::sync_wait(model.stream({.model = "fixture"}, {}, observed));
+    ASSERT_FALSE(ordinary.has_value());
+    ASSERT_FALSE(enabled.has_value());
+    ASSERT_FALSE(streamed.has_value());
+    ASSERT_EQ(ordinary.error(), enabled.error());
+    ASSERT_EQ(ordinary.error(), streamed.error());
+    ASSERT_EQ(provider.calls, std::size_t{1});
+    ASSERT_EQ(listener.events.size(), std::size_t{2});
+    ASSERT_TRUE(listener.events[0].type == openai::run_event_type::model_rejected);
+    ASSERT_TRUE(listener.events[0].attributes.is_null());
+    ASSERT_EQ(listener.events[1].attributes.at("stream"), true);
 }
 
 TEST(openai_memory_persists_sessions_and_applies_windows)

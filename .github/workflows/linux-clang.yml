@@ -12,6 +12,21 @@ permissions:
 jobs:
   build-clang-linux:
     runs-on: ubuntu-22.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: disposable-root-password
+          MYSQL_DATABASE: cnetmod_test
+          MYSQL_USER: cnetmod_test
+          MYSQL_PASSWORD: disposable-test-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
     
     strategy:
       fail-fast: false
@@ -72,6 +87,17 @@ jobs:
         cache: 'pip'
         cache-dependency-path: testing/messaging/requirements.txt
 
+    - name: Verify observability dependency boundary
+      run: |
+        python -m unittest discover -s tools -p test_observability_dependencies.py
+        python tools/check_observability_dependencies.py
+
+    - name: Verify integration test execution gates
+      run: |
+        python -m unittest discover -s testing/database -p test_required_runner.py
+        python -m unittest discover -s testing/database -p test_mysql_live_configuration.py
+        python -m unittest discover -s testing/messaging -p test_runner_gate.py
+
     - name: Configure CMake
       run: |
         cmake -B ${{ github.workspace }}/build \
@@ -89,6 +115,22 @@ jobs:
 
     - name: Build
       run: cmake --build ${{ github.workspace }}/build --parallel 2
+
+    - name: Verify protocol-free module graph
+      if: matrix.build_type == 'Release'
+      run: |
+        cmake -B ${{ github.workspace }}/build-core-only \
+          -G Ninja \
+          -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
+          -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1 \
+          -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
+          -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF \
+          -DCNETMOD_BUILD_TESTS=OFF -DCNETMOD_BUILD_EXAMPLES=OFF \
+          -S ${{ github.workspace }}
+        cmake --build ${{ github.workspace }}/build-core-only \
+          --target cnetmod_core --parallel 2
 
     - name: Configure minimal PostgreSQL feature probe
       if: matrix.build_type == 'Release'
@@ -129,6 +171,69 @@ jobs:
           --output-on-failure --timeout 180 \
           -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
+    - name: Run application lifecycle and OTEL gates
+      run: |
+        set -euo pipefail
+        for gate in test_application test_application_integrations test_otlp_exporter test_instrumentation test_metric_aggregation test_http_observability test_http_disabled_overhead test_mysql_pool test_ssl_shutdown; do
+          ctest --test-dir "${{ github.workspace }}/build" \
+            --output-on-failure --timeout 60 --no-tests=error -R "^${gate}$"
+        done
+
+    # The database gate never silently skips in CI.
+    - name: Run real MySQL application lifecycle
+      env:
+        CNETMOD_MYSQL_INTEGRATION: '1'
+        CNETMOD_MYSQL_TEST_USER: cnetmod_test
+        CNETMOD_MYSQL_TEST_PASSWORD: disposable-test-password
+        CNETMOD_MYSQL_TEST_DATABASE: cnetmod_test
+      run: |
+        cmake --build "${{ github.workspace }}/build" --target test_application_mysql_live --parallel 2
+        python testing/database/check_mysql_live_configuration.py "${{ github.workspace }}/build/testing/tests/test_application_mysql_live"
+        ctest --test-dir "${{ github.workspace }}/build" --output-on-failure --no-tests=error --timeout 30 -R '^test_application_mysql_live$'
+
+    - name: Run isolated Redis application lifecycle
+      env:
+        CNETMOD_REDIS_INTEGRATION: '1'
+      run: |
+        set -euo pipefail
+        container=$(docker run --detach --publish 127.0.0.1::6379 \
+          --tmpfs /data:rw,noexec,nosuid,size=64m \
+          redis:7.4 redis-server --save '' --appendonly no --protected-mode no)
+        cleanup() {
+          status=$?
+          docker logs "$container" || true
+          docker rm --force "$container" >/dev/null || true
+          exit "$status"
+        }
+        trap cleanup EXIT
+        ready=false
+        for attempt in $(seq 1 30); do
+          if docker exec "$container" redis-cli ping | grep -qx PONG; then
+            ready=true
+            break
+          fi
+          sleep 1
+        done
+        if [ "$ready" != true ]; then
+          echo 'Isolated Redis did not become ready.' >&2
+          exit 1
+        fi
+        export CNETMOD_REDIS_TEST_PORT=$(docker port "$container" 6379/tcp | sed -n 's/^127\.0\.0\.1://p')
+        test -n "$CNETMOD_REDIS_TEST_PORT"
+        cmake --build "${{ github.workspace }}/build" --target test_application_redis_live --parallel 2
+        # Invoke the executable directly: an unexpected skip (77) fails this gate.
+        timeout 30 "${{ github.workspace }}/build/testing/tests/test_application_redis_live"
+
+    - name: Run real PostgreSQL and MongoDB interoperability
+      if: matrix.build_type == 'Release'
+      run: |
+        set -euo pipefail
+        python -m pip install --requirement testing/database/requirements.txt
+        python -m unittest discover -s testing/database -p test_required_runner.py
+        cmake --build "${{ github.workspace }}/build" \
+          --target postgresql_interoperability_driver mongodb_interoperability_driver --parallel 2
+        bash testing/database/run_linux_ci.sh "${{ github.workspace }}/build"
+
     - name: Install messaging interoperability libraries
       if: matrix.build_type == 'Release'
       run: python -m pip install --requirement testing/messaging/requirements.txt
@@ -137,15 +242,16 @@ jobs:
       if: matrix.build_type == 'Release'
       env:
         CNETMOD_MESSAGING_SERVICE_MODE: container
+        CNETMOD_MESSAGING_REQUIRED: '1'
       run: |
-        if ctest --test-dir "${{ github.workspace }}/build" -N | grep -q python_messaging_broker_interoperability; then
+        set -euo pipefail
+        python testing/messaging/test_runner_gate.py
+        for protocol in amqp091 amqp10 kafka; do
           ctest --test-dir "${{ github.workspace }}/build" \
-            --output-on-failure \
+            --output-on-failure --no-tests=error \
             --timeout 900 \
-            -R '^python_messaging_broker_interoperability$'
-        else
-          echo 'Messaging client driver targets are not present in this build; interoperability test is not registered yet.'
-        fi
+            -R "^python_${protocol}_interoperability$"
+        done
 
     - name: Run smoke tests
       run: |

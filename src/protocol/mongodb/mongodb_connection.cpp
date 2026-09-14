@@ -8,6 +8,7 @@ import cnetmod.core.dns;
 import cnetmod.executor.async_op;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
+import cnetmod.io.io_context;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -20,6 +21,67 @@ import :connection;
 
 namespace cnetmod::mongodb {
 namespace {
+    /**
+     * Queues cancellation without resuming a protocol coroutine under the token
+     * registration lock. Awaiting this bridge retires the registration and joins
+     * any queued notification before the connection can be reused or destroyed.
+     */
+    class connection_cancellation final
+    {
+    public:
+        connection_cancellation(io_context& io, connection& owner, cancel_token& token,
+            cancel_token* transport = nullptr) noexcept
+            : io_(io), owner_(owner), token_(token), transport_(transport)
+        {
+            node_.callback_arg = this;
+            node_.callback = [](void* value)
+            {
+                auto& self = *static_cast<connection_cancellation*>(value);
+                if (self.transport_)
+                    self.transport_->cancel();
+                self.owner_.cancel_active_command();
+                self.dispatched_ = true;
+                const auto waiter = self.waiter_;
+                if (waiter)
+                    waiter.resume();
+            };
+            auto notify = [](void* value) noexcept
+            {
+                auto& self = *static_cast<connection_cancellation*>(value);
+                self.io_.post_node_raw(&self.node_);
+            };
+            if (!token_.register_callback(this, notify))
+                notify(this);
+        }
+
+        connection_cancellation(const connection_cancellation&) = delete;
+        auto operator=(const connection_cancellation&) -> connection_cancellation& = delete;
+
+        auto await_ready() noexcept -> bool
+        {
+            return token_.complete_callback(this) || dispatched_;
+        }
+
+        void await_suspend(std::coroutine_handle<> waiter) noexcept
+        {
+            waiter_ = waiter;
+        }
+
+        void await_resume() noexcept
+        {
+            token_.finish_callback(this);
+        }
+
+    private:
+        io_context& io_;
+        connection& owner_;
+        cancel_token& token_;
+        cancel_token* transport_;
+        post_node node_;
+        std::coroutine_handle<> waiter_;
+        bool dispatched_ = false;
+    };
+
     auto integer(const bson_value* value) -> std::optional<std::int64_t>
     {
         if (!value)
@@ -96,6 +158,73 @@ connection::~connection()
 
 auto connection::connect(connection_options options) -> task<result<void>>
 {
+    return connect_impl<false>(std::move(options), nullptr);
+}
+
+auto connection::connect(connection_options options, cancel_token& cancellation) -> task<result<void>>
+{
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(make_error(error_code::operation_cancelled,
+            "MongoDB connection was cancelled"));
+    if (connecting_ || command_in_progress_)
+        co_return std::unexpected(make_error(error_code::protocol_error,
+            "MongoDB connection already has an active operation"));
+    cancel_token transport;
+    connection_cancellation notification{context_, *this, cancellation, &transport};
+    result<void> outcome;
+    std::exception_ptr failure;
+    try
+    {
+        outcome = co_await connect_impl<true>(std::move(options), &transport);
+    }
+    catch (...)
+    {
+        failure = std::current_exception();
+    }
+    connecting_ = true;
+    command_in_progress_ = true;
+    co_await notification;
+    command_in_progress_ = false;
+    connecting_ = false;
+    if (failure)
+        std::rethrow_exception(failure);
+    if (cancellation.is_cancelled())
+    {
+        close();
+        co_return std::unexpected(make_error(error_code::operation_cancelled,
+            "MongoDB connection was cancelled"));
+    }
+    co_return outcome;
+}
+
+template <bool Cancellable>
+auto connection::connect_impl(connection_options options, cancel_token* transport) -> task<result<void>>
+{
+    if (connecting_ || command_in_progress_)
+        co_return std::unexpected(make_error(error_code::protocol_error,
+            "MongoDB connection already has an active operation"));
+    connecting_ = true;
+    bool completed = false;
+
+    /**
+     * A connection attempt owns its transport through exception unwinding.
+     * Reject reentry before touching resources and retire partial setup unless
+     * authentication completed successfully.
+     */
+    struct connection_attempt_guard
+    {
+        connection& owner;
+        bool& active;
+        bool& completed;
+
+        ~connection_attempt_guard()
+        {
+            if (!completed)
+                owner.close();
+            active = false;
+        }
+    } guard{*this, connecting_, completed};
+
     close();
     if (options.host.empty() || options.max_message_bytes < 1024 ||
         options.max_bson_document_bytes < 5 || options.max_bson_document_bytes > options.max_message_bytes)
@@ -105,8 +234,9 @@ auto connection::connect(connection_options options) -> task<result<void>>
     happy_eyeballs_options connect_options;
     connect_options.connect_timeout = options_.connect_timeout;
     connect_options.socket_opts.no_delay = true;
-    auto connected = co_await async_connect_happy_eyeballs(
-        context_, options_.host, options_.port, connect_options);
+    auto connected = co_await (Cancellable
+            ? async_connect_happy_eyeballs(context_, options_.host, options_.port, connect_options, *transport)
+            : async_connect_happy_eyeballs(context_, options_.host, options_.port, connect_options));
     if (!connected)
         co_return std::unexpected(make_error(error_code::connection_failed,
             "MongoDB TCP connect failed: " + connected.error().message()));
@@ -166,7 +296,8 @@ auto connection::connect(connection_options options) -> task<result<void>>
         tls_stream_ = std::make_unique<ssl_stream>(*tls_context_, context_, socket_);
         tls_stream_->set_connect_state();
         tls_stream_->set_hostname(options_.tls_sni.empty() ? options_.host : options_.tls_sni);
-        auto handshake = co_await tls_stream_->async_handshake();
+        auto handshake = co_await (Cancellable ? tls_stream_->async_handshake(*transport)
+                                               : tls_stream_->async_handshake());
         if (!handshake)
         {
             close();
@@ -182,6 +313,10 @@ auto connection::connect(connection_options options) -> task<result<void>>
             "MongoDB TLS requested but OpenSSL support is unavailable"));
     }
 #endif
+    if constexpr (Cancellable)
+        if (transport->is_cancelled())
+            co_return std::unexpected(make_error(error_code::operation_cancelled,
+                "MongoDB connection was cancelled"));
     connected_ = true;
     std::string operating_system;
 #if defined(_WIN32)
@@ -244,6 +379,10 @@ auto connection::connect(connection_options options) -> task<result<void>>
         static_cast<std::size_t>(std::max(capabilities_.maximum_message_size_bytes, 1024)));
     options_.max_bson_document_bytes = std::min(options_.max_bson_document_bytes,
         static_cast<std::size_t>(std::max(capabilities_.maximum_bson_object_size, 5)));
+    if constexpr (Cancellable)
+        if (transport->is_cancelled())
+            co_return std::unexpected(make_error(error_code::operation_cancelled,
+                "MongoDB connection was cancelled"));
     auto authentication = co_await authenticate();
     if (!authentication)
     {
@@ -252,6 +391,7 @@ auto connection::connect(connection_options options) -> task<result<void>>
         co_return std::unexpected(std::move(failure));
     }
     authenticated_ = true;
+    completed = true;
     co_return result<void>{};
 }
 
@@ -338,10 +478,24 @@ auto connection::command_stream(std::string_view database, bson_document documen
             "concurrent commands on one MongoDB connection are not allowed"));
 
     command_in_progress_ = true;
-    active_command_.store(true, std::memory_order_release);
+    command_io_cancel_.reset();
     command_cancel_requested_.store(false, std::memory_order_release);
-    auto streamed = co_await execute_command_stream(database, std::move(document),
-        std::move(on_message));
+    active_command_.store(true, std::memory_order_release);
+    result<void> streamed;
+    try
+    {
+        streamed = co_await execute_command_stream(database, std::move(document),
+            std::move(on_message));
+    }
+    catch (...)
+    {
+        /**
+         * A failed consumer may leave unread exhaust responses on the wire.
+         * Retire the transport and command state before propagating its error.
+         */
+        close();
+        throw;
+    }
     active_command_.store(false, std::memory_order_release);
     command_in_progress_ = false;
     if (command_cancel_requested_.load(std::memory_order_acquire))
@@ -357,23 +511,47 @@ auto connection::execute_command_with_timer(std::string database,
     bson_document document, cancel_token& timer_token)
     -> task<result<bson_document>>
 {
-    auto response = co_await execute_command_without_deadline(
-        database, std::move(document));
-    timer_token.cancel();
-    co_return response;
+    try
+    {
+        auto response = co_await execute_command_without_deadline(
+            database, std::move(document));
+        timer_token.cancel();
+        co_return response;
+    }
+    catch (...)
+    {
+        timer_token.cancel();
+        throw;
+    }
 }
 
 auto connection::command_timeout_watchdog(cancel_token& timer_token,
     std::atomic<bool>& timed_out) -> task<int>
 {
-    auto waited = co_await async_timer_wait(
-        context_, options_.command_timeout, timer_token);
+    std::expected<void, std::error_code> waited;
+    try
+    {
+        waited = co_await async_timer_wait(context_, options_.command_timeout, timer_token);
+    }
+    catch (...)
+    {
+        command_io_cancel_.cancel();
+        throw;
+    }
+    if (!waited && !timer_token.is_cancelled())
+    {
+        command_io_cancel_.cancel();
+        throw std::system_error(waited.error());
+    }
     if (waited)
     {
         timed_out.store(true, std::memory_order_release);
-        // Closing only the transport is safe while ssl_stream is executing;
-        // full state cleanup happens after the pending I/O unwinds.
-        socket_.close();
+        /**
+         * Cancel the pending operation explicitly. Closing a descriptor alone
+         * does not complete a suspended epoll read; transport cleanup follows
+         * after the command and watchdog have both settled.
+         */
+        command_io_cancel_.cancel_due_to_deadline();
     }
     co_return 0;
 }
@@ -392,17 +570,20 @@ auto connection::execute_command(std::string_view database, bson_document docume
     struct reset_guard
     {
         bool* flag;
+        std::atomic<bool>* active;
 
         ~reset_guard()
         {
             *flag = false;
+            active->store(false, std::memory_order_release);
         }
-    } command_guard{&command_in_progress_};
+    } command_guard{&command_in_progress_, &active_command_};
 
     if (options_.command_timeout <= std::chrono::milliseconds::zero())
     {
-        active_command_.store(true, std::memory_order_release);
+        command_io_cancel_.reset();
         command_cancel_requested_.store(false, std::memory_order_release);
+        active_command_.store(true, std::memory_order_release);
         auto response = co_await execute_command_without_deadline(
             database, std::move(document));
         active_command_.store(false, std::memory_order_release);
@@ -417,8 +598,9 @@ auto connection::execute_command(std::string_view database, bson_document docume
 
     cancel_token timer_token;
     std::atomic<bool> timed_out{false};
-    active_command_.store(true, std::memory_order_release);
+    command_io_cancel_.reset();
     command_cancel_requested_.store(false, std::memory_order_release);
+    active_command_.store(true, std::memory_order_release);
 
     auto operation = execute_command_with_timer(
         std::string(database), std::move(document), timer_token);
@@ -545,7 +727,7 @@ void connection::cancel_active_command() noexcept
     if (!active_command_.load(std::memory_order_acquire))
         return;
     command_cancel_requested_.store(true, std::memory_order_release);
-    socket_.close();
+    command_io_cancel_.cancel();
 }
 
 auto connection::receive_message(std::int32_t expected) -> task<result<decoded_message>>
@@ -603,14 +785,16 @@ auto connection::read_exact(std::span<std::byte> destination) -> task<result<voi
         if (tls_stream_)
             read = co_await tls_stream_->async_read(
                 mutable_buffer{destination.data() + position,
-                    destination.size() - position});
+                    destination.size() - position},
+                command_io_cancel_);
         else
             read = co_await async_read(context_, socket_,
                 mutable_buffer{destination.data() + position,
-                    destination.size() - position});
+                    destination.size() - position},
+                command_io_cancel_);
 #else
         auto read = co_await async_read(context_, socket_,
-            mutable_buffer{destination.data() + position, destination.size() - position});
+            mutable_buffer{destination.data() + position, destination.size() - position}, command_io_cancel_);
 #endif
         if (!read || *read == 0)
             co_return std::unexpected(make_error(error_code::connection_closed,
@@ -626,17 +810,54 @@ auto connection::write_all(std::span<const std::byte> source) -> task<result<voi
     std::expected<void, std::error_code> written;
     if (tls_stream_)
         written = co_await tls_stream_->async_write_all(
-            const_buffer{source.data(), source.size()});
+            const_buffer{source.data(), source.size()}, command_io_cancel_);
     else
         written = co_await async_write_all(context_, socket_,
-            const_buffer{source.data(), source.size()});
+            const_buffer{source.data(), source.size()}, command_io_cancel_);
 #else
-    auto written = co_await async_write_all(context_, socket_, const_buffer{source.data(), source.size()});
+    auto written = co_await async_write_all(context_, socket_, const_buffer{source.data(), source.size()}, command_io_cancel_);
 #endif
     if (!written)
         co_return std::unexpected(make_error(error_code::connection_closed,
             "MongoDB write failed: " + written.error().message()));
     co_return result<void>{};
+}
+
+auto connection::ping(cancel_token& cancellation) -> task<result<void>>
+{
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(make_error(error_code::operation_cancelled,
+            "MongoDB ping was cancelled"));
+    if (connecting_ || command_in_progress_)
+        co_return std::unexpected(make_error(error_code::protocol_error,
+            "MongoDB connection already has an active operation"));
+    connection_cancellation notification{context_, *this, cancellation};
+    result<void> outcome;
+    std::exception_ptr failure;
+    try
+    {
+        outcome = co_await ping();
+    }
+    catch (...)
+    {
+        failure = std::current_exception();
+    }
+    command_in_progress_ = true;
+    co_await notification;
+    command_in_progress_ = false;
+    if (failure)
+    {
+        /**
+         * The exception may follow a partial exchange. Retire the transport
+         * only after its cancellation notification has relinquished ownership.
+         */
+        close();
+        std::rethrow_exception(failure);
+    }
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(make_error(error_code::operation_cancelled,
+            "MongoDB ping was cancelled"));
+    co_return outcome;
 }
 
 auto connection::ping() -> task<result<void>>

@@ -225,9 +225,32 @@ cnetmod_filter_disabled_component_sources(
         REGULAR_CPP_SOURCES
 )
 
+# The application host and OTLP adapters are HTTP-based composition features.
+# Keep a protocol-free core build valid when HTTP is intentionally disabled.
+if(NOT CNETMOD_ENABLE_HTTP)
+    foreach(source_list_variable IN ITEMS MODULE_INTERFACE_FILES
+            MODULE_IMPLEMENTATION_CPP_FILES REGULAR_CPP_SOURCES)
+        # Neutral monitoring contracts remain available to protocol-only users.
+        # Their physical application directory does not introduce Host/HTTP imports.
+        set(monitoring_core_sources "${${source_list_variable}}")
+        list(FILTER monitoring_core_sources INCLUDE REGEX
+            "[/\\]src[/\\]application[/\\]monitoring[/\\]core[/\\]")
+        list(FILTER ${source_list_variable} EXCLUDE REGEX
+            "[/\\]src[/\\]application([/\\]|\\.cppm$)")
+        list(APPEND ${source_list_variable} ${monitoring_core_sources})
+    endforeach()
+endif()
+
 # JWT signing depends on the TLS/crypto provider. Keep SSL-free protocol-only
 # probes free of both the implementation unit and its module interface.
 if(NOT CNETMOD_ENABLE_SSL)
+    # HMAC is an OpenSSL-backed optional primitive, not a protocol-free utility.
+    # Exclude both halves so SSL-free consumers never see a dangling interface.
+    foreach(source_list_variable IN ITEMS MODULE_INTERFACE_FILES
+            MODULE_IMPLEMENTATION_CPP_FILES REGULAR_CPP_SOURCES)
+        list(FILTER ${source_list_variable} EXCLUDE REGEX
+            "[/\\]utils[/\\]hmac_sha256\\.(cppm|ixx|cpp)$")
+    endforeach()
     list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.(cppm|ixx)$")
     list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
     list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")

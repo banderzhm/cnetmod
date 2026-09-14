@@ -25,10 +25,17 @@ class publisher_confirm_tracker
 {
 public:
     publisher_confirm_tracker() = default;
-    [[nodiscard]] auto reserve_sequence() noexcept -> std::uint64_t;
+    /**
+     * @brief Reserves a sequence, preserving the counter if allocation fails.
+     */
+    [[nodiscard]] auto reserve_sequence() -> std::uint64_t;
     void observe(std::weak_ptr<publisher_confirm_observer> observer);
     void settle(std::uint64_t tag, bool acknowledged, bool multiple);
-    void fail_all(error reason);
+    /**
+     * @brief Clears pending confirmations and isolates observer failures.
+     * Notification uses an immutable registration snapshot without allocation.
+     */
+    void fail_all(const error& reason) noexcept;
     [[nodiscard]] auto pending() const noexcept -> std::size_t;
 
 private:
@@ -38,6 +45,7 @@ private:
     mutable concurrent_containers::atomic_rw_latch state_latch_;
     std::uint64_t next_ = 1;
     std::set<std::uint64_t> pending_;
-    std::vector<std::weak_ptr<publisher_confirm_observer>> observers_;
+    using observer_list = std::vector<std::weak_ptr<publisher_confirm_observer>>;
+    std::shared_ptr<const observer_list> observers_;
 };
 } // namespace cnetmod::amqp091

@@ -1,73 +1,56 @@
 module cnetmod.application.amqp10;
-
 #ifdef CNETMOD_HAS_PROTOCOL_AMQP10
 import std;
-import cnetmod.core.log;
-
 namespace cnetmod::application {
-
-amqp10_service::amqp10_service(io_context& context,
-    amqp10::client_options options)
-    : options_(std::move(options)), client_(context)
+amqp10_service::amqp10_service(io_context& io, amqp10::client_options options,
+    std::string instance, service_requirement requirement, recovery_policy recovery)
+    : options_(std::move(options)), client_(io), instance_(std::move(instance)),
+      requirement_(requirement), recovery_(recovery) {}
+auto amqp10_service::client() noexcept -> amqp10::client& { return client_; }
+auto amqp10_service::key() const -> service_key { return {"amqp10", instance_}; }
+auto amqp10_service::requirement() const noexcept -> service_requirement { return requirement_; }
+auto amqp10_service::recovery() const noexcept -> recovery_policy { return recovery_; }
+auto amqp10_service::start(service_context& context) -> task<std::expected<void, std::error_code>>
 {
-}
-
-auto amqp10_service::client() noexcept -> amqp10::client&
-{
-    return client_;
-}
-
-auto amqp10_service::start() -> task<std::expected<void, std::error_code>>
-{
-    if (started_)
-        co_return {};
-    operation_cancel_.reset();
-    auto connected = co_await client_.connect(options_, operation_cancel_);
-    if (!connected)
-    {
-        logger::error("AMQP 1.0 startup failed: {}",
-            connected.error().message);
-        co_return std::unexpected(
-            std::make_error_code(std::errc::connection_refused));
-    }
-    started_ = true;
+    auto connected = co_await client_.connect(options_, context.cancellation);
+    if (!connected) co_return std::unexpected(std::make_error_code(std::errc::connection_refused));
     co_return {};
 }
-
-auto amqp10_service::stop() -> task<std::expected<void, std::error_code>>
+auto amqp10_service::stop(service_context& context) -> task<std::expected<void, std::error_code>>
 {
-    if (!started_)
-        co_return {};
-    operation_cancel_.reset();
-    auto closed = co_await client_.close(operation_cancel_);
-    started_ = false;
-    if (!closed)
-    {
-        logger::warn("AMQP 1.0 shutdown failed: {}", closed.error().message);
-        co_return std::unexpected(std::make_error_code(std::errc::io_error));
-    }
+    auto closed = co_await client_.close(context.cancellation);
+    if (!closed) co_return std::unexpected(std::make_error_code(std::errc::io_error));
     co_return {};
 }
-
-auto install_amqp10(http_application& application,
-    amqp10::client_options options) -> amqp10_service&
+auto amqp10_service::probe(service_context&) -> task<health_report>
 {
-    if (application.services().find<amqp10_service>())
-        throw std::logic_error("AMQP 1.0 is already installed");
-    auto service = std::make_shared<amqp10_service>(application.context(),
-        std::move(options));
-    auto& result = *service;
-    application.services().add<amqp10_service>(service);
-    application.lifecycle().on_start([service]
-        {
-            return service->start();
-        });
-    application.lifecycle().on_stop([service]
-        {
-            return service->stop();
-        });
-    return result;
+    const auto up = client_.state() == amqp10::connection_state::opened;
+    co_return health_report{.status = up ? service_health::up : service_health::down,
+        .message = up ? "amqp 1.0 connected" : "amqp 1.0 disconnected"};
 }
-
+auto auto_configure_amqp10(const configured_service& configuration,
+    auto_configuration_context& context) -> std::expected<void, std::error_code>
+{
+    if (!properties_are_known(configuration.properties, {"host", "port",
+            "username", "password", "container_id"}))
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    try
+    {
+        if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        amqp10::client_options options;
+        options.endpoint.host = configuration.properties.value("host", options.endpoint.host);
+        options.endpoint.port = configuration.properties.value("port", options.endpoint.port);
+        options.credentials.username = configuration.properties.value("username", std::string{});
+        options.credentials.password = configuration.properties.value("password", std::string{});
+        options.container_id = configuration.properties.value("container_id", std::string{"cnetmod"});
+        auto service = std::make_shared<amqp10_service>(context.io, std::move(options),
+            configuration.instance, configuration.requirement, configuration.recovery);
+        return context.services.add_managed_named<amqp10_service>(
+            configuration.instance, std::move(service));
+    }
+    catch (...) { return std::unexpected(std::make_error_code(std::errc::invalid_argument)); }
+}
 } // namespace cnetmod::application
 #endif

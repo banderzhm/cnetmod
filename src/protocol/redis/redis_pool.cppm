@@ -10,6 +10,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.coro.mutex;
+import cnetmod.coro.wait_group;
 
 namespace cnetmod::redis {
 
@@ -50,6 +51,13 @@ public:
     auto operator=(const connection_pool&) -> connection_pool& = delete;
 
     auto async_run() -> task<void>;
+    /**
+     * @brief Permanently requests shutdown without waiting for owned maintenance.
+     *
+     * May be called from another thread, including before async_run starts.
+     * Await async_run or cancel before destroying the pool.
+     */
+    void request_stop() noexcept;
     auto async_get_connection(cancel_token& token)
         -> task<std::expected<pooled_connection, std::error_code>>;
     /// Acquires a connection using the remaining request budget.
@@ -62,7 +70,16 @@ public:
     auto cancel() -> task<void>;
     [[nodiscard]] auto size() const noexcept -> std::size_t;
     [[nodiscard]] auto idle_count() const noexcept -> std::size_t;
+    /**
+     * Counts outstanding leases, including leases retained after cancellation.
+     * Query on the owning execution thread; acquisition needs no extra counter.
+     */
+    [[nodiscard]] auto checked_out_count() const noexcept -> std::size_t;
     [[nodiscard]] auto waiter_count() const noexcept -> std::size_t;
+    /**
+     * @brief Returns maintenance operations whose completion is still owned by the pool.
+     */
+    [[nodiscard]] auto pending_maintenance() const noexcept -> int;
 
 private:
     friend class pooled_connection;
@@ -71,6 +88,12 @@ private:
     std::deque<conn_node> conns_;
     async_mutex mtx_;
     bool running_ = false;
+    bool stopped_ = false;
+    cancel_token run_cancellation_;
+    std::atomic<bool> stop_requested_{false};
+    std::atomic<bool> run_active_{false};
+    async_wait_group maintenance_;
+    std::exception_ptr maintenance_failure_;
     pool_waiter* waiters_head_ = nullptr;
     pool_waiter* waiters_tail_ = nullptr;
     std::size_t num_pending_requests_ = 0;
@@ -93,6 +116,14 @@ private:
     void notify_waiters_with_idle_locked();
     auto remove_waiter(pool_waiter* target) -> bool;
     void return_connection(conn_node& node);
+    /**
+     * Completes a queued return without allocating a detached coroutine.
+     */
+    static void dispatch_return(void* argument) noexcept;
+    /**
+     * @brief Releases exclusive ownership without publishing a closed client.
+     */
+    auto release_connection(conn_node& node) -> bool;
 };
 
 export class sharded_connection_pool

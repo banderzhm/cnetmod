@@ -26,7 +26,7 @@ public:
     void stop() override;
     [[nodiscard]] auto stopped() const noexcept -> bool override;
     void restart() override;
-    [[nodiscard]] auto add(int fd, uint32_t events, void* user_data)
+    [[nodiscard]] auto add(int fd, uint32_t events, void* user_data, void (*ready)(void*) noexcept = nullptr)
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto modify(int fd, uint32_t events, void* user_data)
         -> std::expected<void, std::error_code>;
@@ -47,6 +47,9 @@ private:
         uint32_t events{};
         void* read_waiter{};
         void* write_waiter{};
+        void (*read_ready)(void*) noexcept = nullptr;
+        void (*write_ready)(void*) noexcept = nullptr;
+        std::unique_ptr<readiness_registration> retired_next;
     };
 
     [[nodiscard]] auto arm(readiness_registration& registration)
@@ -56,10 +59,18 @@ private:
 
     auto run_one_impl(int timeout_ms) -> std::size_t;
 
+    /**
+     * Keeps removed registrations alive while a fetched event batch references them.
+     */
+    void retire_registration(int fd) noexcept;
+    void release_retired() noexcept;
+
     int epoll_fd_ = -1;
     int event_fd_ = -1;
     std::vector<::epoll_event> events_;
     std::unordered_map<int, std::unique_ptr<readiness_registration>> registrations_;
+    std::unique_ptr<readiness_registration> retired_;
+    bool dispatching_ = false;
     std::atomic<bool> stopped_{false};
 };
 

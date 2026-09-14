@@ -19,16 +19,20 @@ import :router;
 import :cookie;
 import :server;
 import cnetmod.core.error;
+import cnetmod.core.log;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
 import cnetmod.core.address;
 import cnetmod.core.file;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.coro.spawn;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.protocol.http.v2.session;
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)
@@ -482,21 +486,65 @@ auto date_cache::get() -> std::array<char, 29U>
 
 struct server::conn_count_guard
 {
-    std::atomic<std::size_t>& counter;
+    std::atomic<std::size_t>* counter;
 
     conn_count_guard(std::atomic<std::size_t>& c) noexcept
-        : counter(c)
+        : counter(&c)
     {
-        counter.fetch_add(1, std::memory_order_relaxed);
+        counter->fetch_add(1, std::memory_order_relaxed);
     }
 
     ~conn_count_guard()
     {
-        counter.fetch_sub(1, std::memory_order_relaxed);
+        if (counter)
+            counter->fetch_sub(1, std::memory_order_release);
     }
+
+    conn_count_guard(conn_count_guard&& other) noexcept
+        : counter(std::exchange(other.counter, nullptr)) {}
 
     conn_count_guard(const conn_count_guard&) = delete;
     auto operator=(const conn_count_guard&) -> conn_count_guard& = delete;
+};
+
+/**
+ * @brief Tracks a socket only while its owning coroutine can use it.
+ *
+ * Intrusive registration does not allocate. Removal precedes destruction of
+ * the socket parameter, preventing shutdown from accessing a retired socket.
+ */
+struct server::connection_registration
+{
+    server& owner;
+    socket& client;
+    connection_registration* previous{};
+    connection_registration* next{};
+
+    connection_registration(server& server, socket& connection) noexcept
+        : owner(server), client(connection)
+    {
+        concurrent_containers::exclusive_latch_guard lock{owner.connections_latch_};
+        next = owner.connections_;
+        if (next)
+            next->previous = this;
+        owner.connections_ = this;
+        if (owner.connections_aborted_)
+            client.shutdown_both();
+    }
+
+    ~connection_registration()
+    {
+        concurrent_containers::exclusive_latch_guard lock{owner.connections_latch_};
+        if (previous)
+            previous->next = next;
+        else
+            owner.connections_ = next;
+        if (next)
+            next->previous = previous;
+    }
+
+    connection_registration(const connection_registration&) = delete;
+    auto operator=(const connection_registration&) -> connection_registration& = delete;
 };
 
 server::server(io_context& ctx)
@@ -539,7 +587,8 @@ void server::set_router(router r)
 
 void server::use(middleware_fn mw)
 {
-    middlewares_.push_back(std::move(mw));
+    if (mw)
+        middlewares_.push_back(std::move(mw));
 }
 
 void server::set_max_connections(std::size_t n)
@@ -555,26 +604,98 @@ void server::set_response_header_options(
 
 auto server::active_connections() const noexcept -> std::size_t
 {
-    return active_connections_.load(std::memory_order_relaxed);
+    return active_connections_.load(std::memory_order_acquire);
 }
 
 void server::stop()
 {
     running_ = false;
-    if (acc_)
+    accept_cancellation_.cancel();
+    if (acc_ && !accept_cancellation_.pending_.load(std::memory_order_acquire))
         acc_->close();
+}
+
+void server::abort_connections() noexcept
+{
+    concurrent_containers::exclusive_latch_guard lock{connections_latch_};
+    connections_aborted_ = true;
+    for (auto* connection = connections_; connection; connection = connection->next)
+        connection->client.shutdown_both();
 }
 
 // =============================================================================
 // Server Run Method
 // =============================================================================
 
+namespace {
+
+    /**
+ * @brief Reports an isolated connection failure without exposing exception text.
+ *
+ * Called while the guarded dispatch still owns the connection coroutine.
+ * Diagnostic failures are contained by spawn_guarded.
+ */
+    void report_connection_failure(std::exception_ptr failure)
+    {
+        std::error_code code = std::make_error_code(std::errc::io_error);
+        try
+        {
+            if (failure)
+                std::rethrow_exception(failure);
+        }
+        catch (const std::system_error& error)
+        {
+            code = error.code();
+        }
+        catch (const std::bad_alloc&)
+        {
+            code = std::make_error_code(std::errc::not_enough_memory);
+        }
+        catch (...)
+        {
+        }
+        logger::error("HTTP connection task failed: category={}, code={}", code.category().name(), code.value());
+    }
+
+    /**
+ * @brief Delivers an admission response before draining the rejected peer.
+ *
+ * The caller bounds both writing and draining with one cancellation deadline.
+ * Half-closing avoids discarding the response when unread request bytes remain.
+ */
+    auto reject_connection(io_context& io, socket& client, cancel_token& token)
+        -> task<std::expected<void, std::error_code>>
+    {
+        response resp(status::too_many_requests);
+        resp.set_header("Connection", "close");
+        resp.set_header("Retry-After", "1");
+        resp.set_body(std::string_view{"429 Too Many Requests: too many connections"});
+        const auto data = resp.serialize();
+        const auto written = co_await async_write_all(io, client,
+            const_buffer{data.data(), data.size()}, token);
+        if (!written)
+            co_return std::unexpected(written.error());
+        client.shutdown_send();
+        std::array<std::byte, 4096> discarded;
+        while (!token.is_cancelled())
+        {
+            const auto received = co_await async_read(io, client,
+                mutable_buffer{discarded.data(), discarded.size()}, token);
+            if (!received || *received == 0)
+                break;
+        }
+        co_return {};
+    }
+
+} // namespace
+
 auto server::run() -> task<void>
 {
+    accept_cancellation_.reset();
     running_ = true;
     while (running_)
     {
-        auto r = co_await async_accept(ctx_, acc_->native_socket());
+        auto r = co_await async_accept(ctx_, acc_->native_socket(), accept_cancellation_);
         if (!r)
         {
             if (!running_)
@@ -582,22 +703,21 @@ auto server::run() -> task<void>
             continue;
         }
 
+        if (!running_)
+            break;
+
         // Connection limit check
         if (max_connections_ > 0 &&
             active_connections_.load(std::memory_order_relaxed) >=
                 max_connections_)
         {
-            // This is admission control, not a server outage: tell the
-            // caller it exceeded the listener's accepted-connection budget.
-            response resp(status::too_many_requests);
-            resp.set_header("Connection", "close");
-            resp.set_header("Retry-After", "1");
-            resp.set_body(
-                std::string_view{"429 Too Many Requests: too many connections"});
-            auto data = resp.serialize();
-            (void)co_await async_write_all(ctx_, *r,
-                const_buffer{data.data(), data.size()});
+            // A rejected peer cannot hold the listener indefinitely. The
+            // deadline wrapper joins its timer and I/O before token reuse.
+            (void)co_await with_timeout(ctx_, std::chrono::seconds{1},
+                reject_connection(ctx_, *r, accept_cancellation_), accept_cancellation_);
             r->close();
+            if (running_)
+                accept_cancellation_.reset();
             continue;
         }
 
@@ -605,23 +725,27 @@ auto server::run() -> task<void>
         {
             // Multi-core mode: round-robin dispatch to worker io_context
             auto& worker = sctx_->next_worker_io();
-            spawn_on(worker, handle_connection(std::move(*r), worker));
+            spawn_guarded<report_connection_failure>(worker,
+                handle_connection(std::move(*r), worker, conn_count_guard{active_connections_}));
         }
         else
         {
             // Single-threaded mode: handle on current io_context
-            spawn(ctx_, handle_connection(std::move(*r), ctx_));
+            spawn_guarded<report_connection_failure>(ctx_,
+                handle_connection(std::move(*r), ctx_, conn_count_guard{active_connections_}));
         }
     }
+    if (acc_)
+        acc_->close();
 }
 
 // =============================================================================
 // Connection Handling
 // =============================================================================
 
-auto server::handle_connection(socket client, io_context& io) -> task<void>
+auto server::handle_connection(socket client, io_context& io, conn_count_guard ownership) -> task<void>
 {
-    conn_count_guard cg(active_connections_);
+    connection_registration registration{*this, client};
 
 #ifdef CNETMOD_PLATFORM_WINDOWS
     // A local, small HTTP response commonly completes WSASend inline.  The
@@ -643,7 +767,6 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         auto hr = co_await ssl.async_handshake();
         if (!hr)
         {
-            client.close();
             co_return;
         }
 
@@ -655,7 +778,6 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         {
             co_await handle_h1_tls(client, io, ssl);
         }
-        client.close();
         co_return;
     }
 #endif
@@ -669,7 +791,6 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         io, client, mutable_buffer{peek_buf.data(), peek_buf.size()});
     if (!peek_rd || *peek_rd == 0)
     {
-        client.close();
         co_return;
     }
     auto peek_len = *peek_rd;
@@ -692,7 +813,6 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
             mutable_buffer{peek_buf.data() + peek_len, peek_buf.size() - peek_len});
         if (!rd || *rd == 0)
         {
-            client.close();
             co_return;
         }
         peek_len += *rd;
@@ -706,14 +826,12 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
         co_await handle_h2(client, io, {peek_buf.data(), peek_len});
-        client.close();
         co_return;
     }
 
     // HTTP/1.1 cleartext — feed already-read bytes to parser
     co_await handle_h1_clear(
         client, io, reinterpret_cast<const char*>(peek_buf.data()), peek_len);
-    client.close();
 }
 
 auto server::make_h2_handler(io_context& io, socket& client)

@@ -658,7 +658,7 @@ auto ssl_stream::async_handshake(cancel_token& token)
 auto ssl_stream::async_read(mutable_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
-#ifdef CNETMOD_PLATFORM_WINDOWS
+    #ifdef CNETMOD_PLATFORM_WINDOWS
     // The no-token API must remain on the no-token IOCP path. Creating a
     // throwaway cancel_token here forces every TLS record through cancellation
     // registration and several atomic stores even though the caller cannot
@@ -695,10 +695,10 @@ auto ssl_stream::async_read(mutable_buffer buffer)
             co_return std::unexpected(make_ssl_error(error));
         }
     }
-#else
+    #else
     cancel_token token;
     co_return co_await async_read(buffer, token);
-#endif
+    #endif
 }
 
 auto ssl_stream::async_read(mutable_buffer buffer, cancel_token& token)
@@ -766,7 +766,7 @@ auto ssl_stream::async_read(mutable_buffer buffer, cancel_token& token)
 auto ssl_stream::async_write(const_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
-#ifdef CNETMOD_PLATFORM_WINDOWS
+    #ifdef CNETMOD_PLATFORM_WINDOWS
     for (;;)
     {
         const int ret = SSL_write(ssl_, buffer.data, static_cast<int>(buffer.size));
@@ -801,10 +801,10 @@ auto ssl_stream::async_write(const_buffer buffer)
             co_return std::unexpected(make_ssl_error(error));
         }
     }
-#else
+    #else
     cancel_token token;
     co_return co_await async_write(buffer, token);
-#endif
+    #endif
 }
 
 auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
@@ -878,7 +878,7 @@ auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
 auto ssl_stream::async_write_all(const_buffer buffer)
     -> task<std::expected<void, std::error_code>>
 {
-#ifdef CNETMOD_PLATFORM_WINDOWS
+    #ifdef CNETMOD_PLATFORM_WINDOWS
     const auto* data = static_cast<const std::byte*>(buffer.data);
     std::size_t written = 0;
     while (written < buffer.size)
@@ -892,10 +892,10 @@ auto ssl_stream::async_write_all(const_buffer buffer)
         written += *result;
     }
     co_return {};
-#else
+    #else
     cancel_token token;
     co_return co_await async_write_all(buffer, token);
-#endif
+    #endif
 }
 
 auto ssl_stream::async_write_all(const_buffer buffer, cancel_token& token)
@@ -920,17 +920,46 @@ auto ssl_stream::async_write_all(const_buffer buffer, cancel_token& token)
     co_return {};
 }
 
-auto ssl_stream::async_shutdown()
+template <typename Cancellation>
+auto ssl_stream::shutdown_impl(Cancellation cancellation)
     -> task<std::expected<void, std::error_code>>
 {
+    auto flush = [&]()
+    {
+        if constexpr (std::is_same_v<Cancellation, std::nullptr_t>)
+            return flush_wbio();
+        else
+            return flush_wbio(*cancellation);
+    };
+    auto fill = [&]()
+    {
+        if constexpr (std::is_same_v<Cancellation, std::nullptr_t>)
+            return fill_rbio();
+        else
+            return fill_rbio(*cancellation);
+    };
+    #if defined(CNETMOD_PLATFORM_LINUX)
+    auto ready_for = [&](bool writable)
+    {
+        if constexpr (std::is_same_v<Cancellation, std::nullptr_t>)
+            return wait_for_ssl_socket(io_ctx_, sock_, writable);
+        else
+            return wait_for_ssl_socket(io_ctx_, sock_, writable, *cancellation);
+    };
+    #endif
     for (int attempt = 0; attempt < 2; ++attempt)
     {
+        if constexpr (!std::is_same_v<Cancellation, std::nullptr_t>)
+        {
+            if (cancellation->is_cancelled())
+                co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+        }
         const int ret = SSL_shutdown(ssl_);
         if (ret == 1)
         {
             if (!direct_socket_bio_)
             {
-                auto flushed = co_await flush_wbio();
+                auto flushed = co_await flush();
                 if (!flushed)
                     co_return std::unexpected(flushed.error());
             }
@@ -941,18 +970,18 @@ auto ssl_stream::async_shutdown()
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false);
+                auto ready = co_await ready_for(false);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 continue;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush();
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
             }
-            auto filled = co_await fill_rbio();
+            auto filled = co_await fill();
             if (!filled)
             {
                 co_return std::unexpected(filled.error());
@@ -967,14 +996,14 @@ auto ssl_stream::async_shutdown()
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, true);
+                auto ready = co_await ready_for(true);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 --attempt;
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush();
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
@@ -987,19 +1016,19 @@ auto ssl_stream::async_shutdown()
             if (direct_socket_bio_)
             {
     #if defined(CNETMOD_PLATFORM_LINUX)
-                auto ready = co_await wait_for_ssl_socket(io_ctx_, sock_, false);
+                auto ready = co_await ready_for(false);
                 if (!ready)
                     co_return std::unexpected(ready.error());
                 --attempt;
                 break;
     #endif
             }
-            auto flushed = co_await flush_wbio();
+            auto flushed = co_await flush();
             if (!flushed)
             {
                 co_return std::unexpected(flushed.error());
             }
-            auto filled = co_await fill_rbio();
+            auto filled = co_await fill();
             if (!filled)
             {
                 co_return std::unexpected(filled.error());
@@ -1012,6 +1041,16 @@ auto ssl_stream::async_shutdown()
         }
     }
     co_return {};
+}
+
+auto ssl_stream::async_shutdown() -> task<std::expected<void, std::error_code>>
+{
+    return shutdown_impl(nullptr);
+}
+
+auto ssl_stream::async_shutdown(cancel_token& token) -> task<std::expected<void, std::error_code>>
+{
+    return shutdown_impl(&token);
 }
 
 auto ssl_stream::get_alpn_selected() const noexcept -> std::string_view
@@ -1037,7 +1076,7 @@ auto ssl_stream::native() const noexcept -> SSL*
 auto ssl_stream::flush_wbio()
     -> task<std::expected<void, std::error_code>>
 {
-#ifdef CNETMOD_PLATFORM_WINDOWS
+    #ifdef CNETMOD_PLATFORM_WINDOWS
     for (;;)
     {
         char* encrypted = nullptr;
@@ -1052,10 +1091,10 @@ auto ssl_stream::flush_wbio()
             co_return std::unexpected(make_ssl_error(SSL_ERROR_SSL));
     }
     co_return {};
-#else
+    #else
     cancel_token token;
     co_return co_await flush_wbio(token);
-#endif
+    #endif
 }
 
 auto ssl_stream::flush_wbio(cancel_token& token)
@@ -1092,7 +1131,7 @@ auto ssl_stream::flush_wbio(cancel_token& token)
 auto ssl_stream::fill_rbio()
     -> task<std::expected<void, std::error_code>>
 {
-#ifdef CNETMOD_PLATFORM_WINDOWS
+    #ifdef CNETMOD_PLATFORM_WINDOWS
     // Only the completed range reaches BIO_write. Avoid both cancellation
     // registration and needless initialization for this record scratch area.
     std::array<std::byte, 8192> buffer;
@@ -1107,10 +1146,10 @@ auto ssl_stream::fill_rbio()
     }
     BIO_write(rbio_, buffer.data(), static_cast<int>(*read));
     co_return {};
-#else
+    #else
     cancel_token token;
     co_return co_await fill_rbio(token);
-#endif
+    #endif
 }
 
 auto ssl_stream::fill_rbio(cancel_token& token)
