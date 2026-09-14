@@ -189,12 +189,9 @@ TEST(request_middleware_preserves_handler_system_error)
     };
     bool preserved = false;
     auto middleware = shutdown.track_middleware();
-    auto operation = middleware(request, next);
-    operation.handle().resume();
-    ASSERT_TRUE(operation.handle().done());
     try
     {
-        operation.handle().promise().result();
+        cnetmod::sync_wait(middleware(request, next));
     }
     catch (const std::system_error& error)
     {

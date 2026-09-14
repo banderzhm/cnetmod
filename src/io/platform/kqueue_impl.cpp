@@ -3,6 +3,7 @@ module;
 #include <cnetmod/config.hpp>
 
 #include <cerrno>
+#include <fcntl.h>
 #include <sys/event.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -13,6 +14,18 @@ module cnetmod.io.platform.kqueue;
 import std;
 
 namespace cnetmod {
+
+namespace {
+
+    auto make_non_blocking(int descriptor) noexcept -> std::error_code
+    {
+        const auto flags = ::fcntl(descriptor, F_GETFL, 0);
+        if (flags < 0 || ::fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) < 0)
+            return std::error_code(errno, std::generic_category());
+        return {};
+    }
+
+} // namespace
 
 kqueue_context::kqueue_context(std::size_t max_events)
     : events_(max_events)
@@ -25,10 +38,18 @@ kqueue_context::kqueue_context(std::size_t max_events)
         ::close(kqueue_fd_);
         throw std::system_error(errno, std::generic_category(), "pipe failed");
     }
-
-    struct kevent event
+    const auto read_error = make_non_blocking(pipe_fds_[0]);
+    const auto write_error = read_error ? std::error_code{}
+                                        : make_non_blocking(pipe_fds_[1]);
+    if (const auto error = read_error ? read_error : write_error)
     {
-    };
+        ::close(pipe_fds_[0]);
+        ::close(pipe_fds_[1]);
+        ::close(kqueue_fd_);
+        throw std::system_error(error, "fcntl(O_NONBLOCK) failed");
+    }
+
+    struct kevent event{};
 
     EV_SET(&event, pipe_fds_[0], EVFILT_READ, EV_ADD, 0, 0, nullptr);
     if (::kevent(kqueue_fd_, &event, 1, nullptr, 0, nullptr) < 0)
@@ -64,9 +85,7 @@ auto kqueue_context::run_one() -> std::size_t
 
 auto kqueue_context::poll() -> std::size_t
 {
-    struct timespec zero
-    {
-    };
+    struct timespec zero{};
 
     return run_one_impl(&zero);
 }
@@ -96,9 +115,7 @@ auto kqueue_context::add_event(int ident, int16_t filter, uint16_t flags,
     void* udata)
     -> std::expected<void, std::error_code>
 {
-    struct kevent event
-    {
-    };
+    struct kevent event{};
 
     EV_SET(&event, static_cast<uintptr_t>(ident), filter, flags, 0, 0, udata);
     if (::kevent(kqueue_fd_, &event, 1, nullptr, 0, nullptr) < 0)
@@ -109,9 +126,7 @@ auto kqueue_context::add_event(int ident, int16_t filter, uint16_t flags,
 auto kqueue_context::delete_event(int ident, int16_t filter)
     -> std::expected<void, std::error_code>
 {
-    struct kevent event
-    {
-    };
+    struct kevent event{};
 
     EV_SET(&event, static_cast<uintptr_t>(ident), filter, EV_DELETE, 0, 0,
         nullptr);
