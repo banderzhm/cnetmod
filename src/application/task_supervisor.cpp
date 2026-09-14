@@ -52,6 +52,38 @@ class task_supervisor::implementation
     : public std::enable_shared_from_this<implementation>
 {
 public:
+    struct completion_ticket
+    {
+        std::shared_ptr<implementation> owner;
+        std::atomic<bool> registered{false};
+        std::atomic<bool> settled{false};
+
+        /**
+         * @brief Releases the registered completion count at most once.
+         */
+        void settle() noexcept
+        {
+            if (registered.load(std::memory_order_acquire) &&
+                !settled.exchange(true, std::memory_order_acq_rel))
+                owner->completed.done();
+        }
+
+        ~completion_ticket()
+        {
+            settle();
+        }
+    };
+
+    struct completion_guard
+    {
+        std::shared_ptr<completion_ticket> ticket;
+
+        ~completion_guard()
+        {
+            ticket->settle();
+        }
+    };
+
     struct entry
     {
         std::string name;
@@ -96,8 +128,10 @@ public:
         }
     }
 
-    auto run(std::string name, std::shared_ptr<entry> item) -> task<void>
+    auto run(std::string name, std::shared_ptr<entry> item,
+        std::shared_ptr<completion_ticket> ticket) -> task<void>
     {
+        completion_guard completion{std::move(ticket)};
         auto recovery_limit = item->recovery_deadline;
         std::size_t attempt = 0;
         for (;;)
@@ -227,25 +261,8 @@ auto task_supervisor::supervise(std::string name,
     item->recovery_deadline = recovery_deadline;
     item->required = required;
 
-    /**
-     * @brief Retains supervisor state and releases registered completion exactly once.
-     *
-     * Dispatch and execution share this ticket. Failed wrapper allocation or
-     * discarded queued work cannot leave a completion registered indefinitely.
-     */
-    struct completion_ticket
-    {
-        std::shared_ptr<implementation> owner;
-        bool registered = false;
-
-        ~completion_ticket()
-        {
-            if (registered)
-                owner->completed.done();
-        }
-    };
-
-    auto ticket = std::make_shared<completion_ticket>(implementation_);
+    auto ticket = std::make_shared<implementation::completion_ticket>();
+    ticket->owner = implementation_;
     {
         concurrent_containers::exclusive_latch_guard lock{
             implementation_->latch};
@@ -263,7 +280,7 @@ auto task_supervisor::supervise(std::string name,
         }
         implementation_->entries.emplace(name, item);
         implementation_->completed.add();
-        ticket->registered = true;
+        ticket->registered.store(true, std::memory_order_release);
     }
     auto failed = [ticket, item](std::exception_ptr failure)
     {
@@ -284,22 +301,41 @@ auto task_supervisor::supervise(std::string name,
         {
         }
         std::shared_ptr<const recovery_exhausted_handler> callback;
+        bool already_failed = false;
         {
             concurrent_containers::exclusive_latch_guard lock{ticket->owner->latch};
             if (item->state == supervised_task_state::failed)
-                return;
-            item->state = supervised_task_state::failed;
-            item->error = error;
-            if (item->required)
-                callback = ticket->owner->exhausted;
+                already_failed = true;
+            else
+            {
+                item->state = supervised_task_state::failed;
+                item->error = error;
+                if (item->required)
+                    callback = ticket->owner->exhausted;
+            }
+        }
+        if (already_failed)
+        {
+            ticket->settle();
+            return;
         }
         if (callback)
-            (*callback)(item->name, error);
+        {
+            try
+            {
+                (*callback)(item->name, error);
+            }
+            catch (...)
+            {
+                // Observer failures must not prevent completion settlement.
+            }
+        }
+        ticket->settle();
     };
     try
     {
         spawn_guarded(implementation_->context,
-            implementation_->run(std::move(name), item), failed);
+            implementation_->run(std::move(name), item, ticket), failed);
     }
     catch (...)
     {

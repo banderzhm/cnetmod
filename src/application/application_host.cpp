@@ -250,6 +250,24 @@ public:
             {.budget = std::chrono::milliseconds::zero()}, true);
     }
 
+    /**
+     * @brief Rolls back a started host after task registration fails.
+     */
+    auto rollback_registration(std::error_code error) -> task<void>
+    {
+        run_error = error;
+        shutdown_deadline = deadline::after(
+            configuration.lifecycle.total_stop_timeout);
+        state.store(application_state::stopping, std::memory_order_release);
+        health.mark_stopping();
+        business_server.stop();
+        management_server.stop();
+        shutdown.cancel_requests();
+        business_server.abort_connections();
+        management_server.abort_connections();
+        co_await std::move(finish_task);
+    }
+
     auto run_lifecycle() -> task<void>
     {
         health.mark_starting();
@@ -302,7 +320,10 @@ public:
             }
             const auto registered = supervise_listener("application-management-http", management_server);
             if (!registered)
-                throw std::system_error(registered.error());
+            {
+                co_await rollback_registration(registered.error());
+                co_return;
+            }
         }
 
         if (configuration.install_signal_handlers)
@@ -311,14 +332,20 @@ public:
         health.mark_running();
         const auto registered = supervise_listener("application-business-http", business_server);
         if (!registered)
-            throw std::system_error(registered.error());
+        {
+            co_await rollback_registration(registered.error());
+            co_return;
+        }
         auto monitored = supervisor.supervise("application-health", [this](cancel_token& token)
             {
                 return health_loop(token);
             },
             {}, false);
         if (!monitored)
-            throw std::system_error(monitored.error());
+        {
+            co_await rollback_registration(monitored.error());
+            co_return;
+        }
         try
         {
             logger::info("{} listening on {}:{}", configuration.name,
