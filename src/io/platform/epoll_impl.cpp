@@ -2,12 +2,10 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_EPOLL
-
-    #include <cerrno>
-    #include <sys/epoll.h>
-    #include <sys/eventfd.h>
-    #include <unistd.h>
+#include <cerrno>
+#include <sys/epoll.h>
+#include <sys/eventfd.h>
+#include <unistd.h>
 
 module cnetmod.io.platform.epoll;
 
@@ -328,5 +326,3 @@ auto epoll_context::run_one_impl(int timeout_ms) -> std::size_t
 }
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_EPOLL

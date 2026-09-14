@@ -2,10 +2,6 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_SSL
-
-    #ifdef CNETMOD_ENABLE_QUIC
-
 export module cnetmod.protocol.quic:stream;
 
 import std;
@@ -164,6 +160,3 @@ private:
 };
 
 } // namespace cnetmod::quic
-
-    #endif // CNETMOD_ENABLE_QUIC
-#endif     // CNETMOD_HAS_SSL

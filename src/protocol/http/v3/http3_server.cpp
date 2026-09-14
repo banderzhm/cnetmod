@@ -6,9 +6,6 @@ module;
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
 
-#ifdef CNETMOD_ENABLE_QUIC
-    #ifdef CNETMOD_HAS_SSL
-
 module cnetmod.protocol.http.v3.server;
 import std;
 import cnetmod.core.log;
@@ -1953,6 +1950,3 @@ auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep,
 }
 
 } // namespace cnetmod::http::v3
-
-    #endif
-#endif

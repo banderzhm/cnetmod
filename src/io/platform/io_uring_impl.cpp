@@ -2,12 +2,10 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_IO_URING
-
-    #include <cstdlib>
-    #include <fcntl.h>
-    #include <liburing.h>
-    #include <unistd.h>
+#include <cstdlib>
+#include <fcntl.h>
+#include <liburing.h>
+#include <unistd.h>
 
 module cnetmod.io.platform.io_uring;
 
@@ -276,5 +274,3 @@ void io_uring_context::submit_wake_read()
 }
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_IO_URING

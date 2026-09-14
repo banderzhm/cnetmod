@@ -2,9 +2,6 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_SSL
-    #ifdef CNETMOD_ENABLE_QUIC
-
 export module cnetmod.protocol.http.v3.session;
 
 import std;
@@ -497,5 +494,3 @@ export auto make_http3_server_session(quic_connection& conn, http3_server_handle
 export auto make_http3_client_session(quic_connection& conn, client_request_handler handler)
     -> std::unique_ptr<http3_client_session>;
 } // namespace cnetmod::http::v3
-    #endif
-#endif

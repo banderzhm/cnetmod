@@ -2,8 +2,6 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_IOCP
-
 #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
 #endif
@@ -66,5 +64,3 @@ private:
 };
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_IOCP

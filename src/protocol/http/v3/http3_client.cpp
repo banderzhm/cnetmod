@@ -1,7 +1,5 @@
 module;
 #include <cnetmod/config.hpp>
-#ifdef CNETMOD_ENABLE_QUIC
-    #ifdef CNETMOD_HAS_SSL
 module cnetmod.protocol.http.v3.client;
 import std;
 import cnetmod.core.buffer;
@@ -910,5 +908,3 @@ auto http3_client::early_data_status() const noexcept -> quic::early_data_state
     return connection_->early_data_status();
 }
 } // namespace cnetmod::http::v3
-    #endif
-#endif

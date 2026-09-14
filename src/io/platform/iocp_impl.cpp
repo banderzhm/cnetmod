@@ -2,8 +2,6 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_IOCP
-
 #ifndef WIN32_LEAN_AND_MEAN
     #define WIN32_LEAN_AND_MEAN
 #endif
@@ -190,5 +188,3 @@ auto iocp_context::ntstatus_to_win32(long ntstatus) noexcept -> unsigned long
 }
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_IOCP

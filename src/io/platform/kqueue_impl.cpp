@@ -2,13 +2,11 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_KQUEUE
-
-    #include <cerrno>
-    #include <sys/event.h>
-    #include <sys/time.h>
-    #include <sys/types.h>
-    #include <unistd.h>
+#include <cerrno>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 module cnetmod.io.platform.kqueue;
 
@@ -157,5 +155,3 @@ auto kqueue_context::run_one_impl(struct timespec* timeout) -> std::size_t
 }
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_KQUEUE

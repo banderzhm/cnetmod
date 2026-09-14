@@ -2,9 +2,7 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_IO_URING
-
-    #include <liburing.h>
+#include <liburing.h>
 
 export module cnetmod.io.platform.io_uring;
 
@@ -78,5 +76,3 @@ private:
 };
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_IO_URING

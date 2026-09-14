@@ -2,9 +2,6 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_ENABLE_QUIC
-    #ifdef CNETMOD_HAS_SSL
-
 export module cnetmod.protocol.http.v3.server;
 
 import std;
@@ -153,6 +150,3 @@ export auto make_http3_server(server_context& ctx, ssl_context& tls, endpoint ep
     http3_server_handlers handlers) -> std::unique_ptr<http3_server>;
 
 } // namespace cnetmod::http::v3
-
-    #endif
-#endif

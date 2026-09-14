@@ -2,11 +2,9 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_KQUEUE
-
-    #include <sys/event.h>
-    #include <sys/time.h>
-    #include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
+#include <sys/types.h>
 
 export module cnetmod.io.platform.kqueue;
 
@@ -48,5 +46,3 @@ private:
 };
 
 } // namespace cnetmod
-
-#endif // CNETMOD_HAS_KQUEUE

@@ -1,7 +1,5 @@
 module;
 #include <cnetmod/config.hpp>
-#ifdef CNETMOD_ENABLE_QUIC
-    #ifdef CNETMOD_HAS_SSL
 export module cnetmod.protocol.http.v3.client;
 import std;
 import cnetmod.core.ssl;
@@ -178,5 +176,3 @@ private:
     bool early_data_attempted_{};
 };
 } // namespace cnetmod::http::v3
-    #endif
-#endif

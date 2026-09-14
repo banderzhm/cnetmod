@@ -2,11 +2,7 @@ module;
 
 #include <cnetmod/config.hpp>
 
-#ifdef CNETMOD_HAS_SSL
-
-    #ifdef CNETMOD_ENABLE_QUIC
-
-        #include <openssl/ssl.h>
+#include <openssl/ssl.h>
 
 export module cnetmod.protocol.quic:crypto;
 
@@ -92,7 +88,6 @@ export struct transport_params
 };
 
 } // namespace cnetmod::quic
-
 // =============================================================================
 // Hash specialization for transport_params (if needed)
 // =============================================================================
@@ -678,6 +673,3 @@ private:
 };
 
 } // namespace cnetmod::quic
-
-    #endif // CNETMOD_ENABLE_QUIC
-#endif     // CNETMOD_HAS_SSL
