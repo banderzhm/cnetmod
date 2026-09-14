@@ -110,6 +110,18 @@ namespace {
         }
     }
 
+    /**
+     * @brief Allocates a process-unique kqueue timer identifier.
+     *
+     * Cancellable and non-cancellable timers share one kqueue namespace, so
+     * their identifiers must come from the same sequence.
+     */
+    auto next_kqueue_timer_id() noexcept -> int
+    {
+        static std::atomic<int> next_id{1000000};
+        return next_id.fetch_add(1, std::memory_order_relaxed);
+    }
+
     // =============================================================================
     // kqueue awaiter with cancellation support
     // =============================================================================
@@ -869,9 +881,7 @@ auto async_timer_wait(io_context& ctx,
     if (ms <= 0)
         ms = 1;
 
-    // Use globally incrementing ID as EVFILT_TIMER ident
-    static std::atomic<int> next_id{1000000};
-    int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
+    const int timer_id = next_kqueue_timer_id();
 
     // Register EVFILT_TIMER + EV_ONESHOT directly via native kqueue fd
     struct kqueue_timer_awaiter
@@ -927,8 +937,7 @@ auto async_timer_wait(io_context& ctx,
     if (ms <= 0)
         ms = 1;
 
-    static std::atomic<int> next_id{1000000};
-    int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
+    const int timer_id = next_kqueue_timer_id();
 
     kqueue_timer_cancel_awaiter aw{kq, timer_id,
         static_cast<intptr_t>(ms), token};
