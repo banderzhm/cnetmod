@@ -296,18 +296,40 @@ auto service_lifecycle::stop(deadline budget)
     supervisor_.request_stop();
     const auto total_deadline = budget.constrain(deadline::after(policy_.total_stop_timeout));
     std::unordered_set<service_key, service_key_hash> started;
-    {
-        concurrent_containers::shared_latch_guard lock{started_latch_};
-        for (const auto& [key, active] : service_started_)
-            if (active)
-                started.insert(key);
-    }
-    const auto graph = services_.validate_dependencies();
-    const auto& layers = graph ? *graph : started_layers_;
+    std::vector<std::vector<service_key>> layers;
     std::unordered_map<service_key, std::vector<service_key>, service_key_hash> dependencies;
-    for (const auto& key : started)
-        if (const auto service = services_.managed(key))
-            dependencies.emplace(key, service->dependencies());
+    try
+    {
+        {
+            concurrent_containers::shared_latch_guard lock{started_latch_};
+            for (const auto& [key, active] : service_started_)
+                if (active)
+                    started.insert(key);
+        }
+        const auto graph = services_.validate_dependencies();
+        if (graph)
+            layers = *graph;
+        else
+        {
+            concurrent_containers::shared_latch_guard lock{started_latch_};
+            layers = started_layers_;
+        }
+        for (const auto& key : started)
+            if (const auto service = services_.managed(key))
+                dependencies.emplace(key, service->dependencies());
+    }
+    catch (const std::bad_alloc&)
+    {
+        co_return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+    }
+    catch (const std::system_error& error)
+    {
+        co_return std::unexpected(error.code());
+    }
+    catch (...)
+    {
+        co_return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
     for (auto layer = layers.rbegin(); layer != layers.rend(); ++layer)
     {
         for (auto key = layer->rbegin(); key != layer->rend(); ++key)
