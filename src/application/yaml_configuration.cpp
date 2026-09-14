@@ -51,14 +51,15 @@ namespace {
     auto convert_node(const yaml_cpp::Node& node, std::size_t depth)
         -> std::expected<nlohmann::json, std::error_code>
     {
+        const auto kind = yaml_cpp::kind_of(node);
         if (depth > maximum_yaml_depth || !node ||
-            node.Type() == yaml_cpp::NodeType::Undefined)
+            kind == yaml_cpp::node_kind::undefined)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-        if (node.Type() == yaml_cpp::NodeType::Null)
+        if (kind == yaml_cpp::node_kind::null)
             return nlohmann::json{nullptr};
-        if (node.Type() == yaml_cpp::NodeType::Scalar)
+        if (kind == yaml_cpp::node_kind::scalar)
             return convert_scalar(node);
-        if (node.Type() == yaml_cpp::NodeType::Sequence)
+        if (kind == yaml_cpp::node_kind::sequence)
         {
             auto result = nlohmann::json::array();
             for (std::size_t index = 0; index < node.size(); ++index)
@@ -70,13 +71,13 @@ namespace {
             }
             return result;
         }
-        if (node.Type() != yaml_cpp::NodeType::Map)
+        if (kind != yaml_cpp::node_kind::map)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
         auto result = nlohmann::json::object();
         for (const auto& entry : node)
         {
-            if (entry.first.Type() != yaml_cpp::NodeType::Scalar)
+            if (yaml_cpp::kind_of(entry.first) != yaml_cpp::node_kind::scalar)
                 return std::unexpected(std::make_error_code(std::errc::invalid_argument));
             const auto key = entry.first.Scalar();
             if (result.contains(key))

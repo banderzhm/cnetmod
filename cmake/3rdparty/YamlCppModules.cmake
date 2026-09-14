@@ -16,7 +16,7 @@ macro(cnetmod_configure_yaml_cpp_modules)
     set(CNETMOD_YAML_CPP_MODULES_SOURCE_DIR "" CACHE PATH
         "Local yaml-cpp-modules source directory (development override)")
     set(CNETMOD_YAML_CPP_MODULES_REVISION
-        "29ed5a9ac035e5ab168cb8397330d24178dea0e1" CACHE STRING
+        "aaa6f47aea74e3e25fc2494ae76b0d422ad4f03b" CACHE STRING
         "Immutable yaml-cpp-modules Git revision")
 
     if(NOT CNETMOD_ENABLE_YAML_CONFIGURATION OR NOT CNETMOD_ENABLE_HTTP)
@@ -31,6 +31,8 @@ macro(cnetmod_configure_yaml_cpp_modules)
         endif()
         set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
             "Build yaml-cpp module smoke tests" FORCE)
+        set(YAML_CPP_MODULES_INSTALL ON CACHE BOOL
+            "Install yaml-cpp module facade targets" FORCE)
         add_subdirectory("${CNETMOD_YAML_CPP_MODULES_SOURCE_DIR}"
             "${CMAKE_BINARY_DIR}/_deps/yaml-cpp-modules-build" EXCLUDE_FROM_ALL)
     else()
@@ -40,6 +42,8 @@ macro(cnetmod_configure_yaml_cpp_modules)
             EXCLUDE_FROM_ALL)
         set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
             "Build yaml-cpp module smoke tests" FORCE)
+        set(YAML_CPP_MODULES_INSTALL ON CACHE BOOL
+            "Install yaml-cpp module facade targets" FORCE)
         FetchContent_MakeAvailable(yaml_cpp_modules)
     endif()
 
@@ -51,6 +55,6 @@ endmacro()
 
 function(cnetmod_link_yaml_cpp_modules TARGET_NAME)
     if(CNETMOD_HAS_YAML_CONFIGURATION)
-        target_link_libraries(${TARGET_NAME} PUBLIC yaml_cpp::yaml_cpp)
+        target_link_libraries(${TARGET_NAME} PRIVATE yaml_cpp::yaml_cpp)
     endif()
 endfunction()
