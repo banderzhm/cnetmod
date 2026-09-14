@@ -75,7 +75,7 @@ public:
     /**
      * @brief Publishes terminal recovery failure without holding a latch across callbacks.
      */
-    void report_exhausted(const std::shared_ptr<entry>& item)
+    void report_exhausted(const std::shared_ptr<entry>& item) noexcept
     {
         std::shared_ptr<const recovery_exhausted_handler> callback;
         {
@@ -84,7 +84,16 @@ public:
             callback = exhausted;
         }
         if (item->required && callback)
-            (*callback)(item->name, item->error);
+        {
+            try
+            {
+                (*callback)(item->name, item->error);
+            }
+            catch (...)
+            {
+                // Observer failures must not escape the supervised task.
+            }
+        }
     }
 
     auto run(std::string name, std::shared_ptr<entry> item) -> task<void>
