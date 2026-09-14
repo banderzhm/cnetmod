@@ -315,8 +315,8 @@ auto service_lifecycle::stop(deadline budget)
             layers = started_layers_;
         }
         for (const auto& key : started)
-            if (const auto service = services_.managed(key))
-                dependencies.emplace(key, service->dependencies());
+            if (const auto service_dependencies = services_.managed_dependencies(key))
+                dependencies.emplace(key, *service_dependencies);
     }
     catch (const std::bad_alloc&)
     {

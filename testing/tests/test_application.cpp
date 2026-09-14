@@ -611,6 +611,18 @@ TEST(application_rejects_invalid_custom_service_policy_without_partial_registrat
     ASSERT_FALSE(routes_configured);
     ASSERT_TRUE(events->empty());
     service->recovery_options = {};
+    service->has_started = true;
+    service->reject_dependencies_after_start = true;
+    untyped = registry.manage(service);
+    ASSERT_FALSE(untyped.has_value());
+    ASSERT_EQ(untyped.error(), std::make_error_code(std::errc::not_enough_memory));
+    typed = registry.add_managed_named("test", service);
+    ASSERT_FALSE(typed.has_value());
+    ASSERT_EQ(typed.error(), std::make_error_code(std::errc::not_enough_memory));
+    ASSERT_EQ(registry.managed_size(), 0U);
+    ASSERT_EQ(registry.size(), 0U);
+    service->has_started = false;
+    service->reject_dependencies_after_start = false;
     ASSERT_TRUE(registry.add_managed_named("test", service));
     ASSERT_EQ(registry.managed_size(), 1U);
     ASSERT_EQ(registry.size(), 1U);
@@ -1112,7 +1124,7 @@ TEST(application_startup_rollback_retains_callers_cleanup_reserve)
     operation.handle().promise().result();
 }
 
-TEST(application_rollback_preparation_failure_preserves_startup_error_and_ownership)
+TEST(application_rollback_uses_frozen_dependency_metadata)
 {
     auto io = cnetmod::make_io_context();
     cnetmod::observability::telemetry_hub telemetry{*io,
@@ -1143,9 +1155,9 @@ TEST(application_rollback_preparation_failure_preserves_startup_error_and_owners
         ASSERT_TRUE(failure.has_value());
         ASSERT_TRUE(failure->service == child->key());
         ASSERT_EQ(failure->error, child->start_error);
-        ASSERT_EQ(lifecycle.last_rollback_error(), std::make_error_code(std::errc::not_enough_memory));
+        ASSERT_FALSE(lifecycle.last_rollback_error());
         ASSERT_FALSE(lifecycle.last_rollback_failure().has_value());
-        ASSERT_EQ(lifecycle.started_services().size(), 1U);
+        ASSERT_TRUE(lifecycle.started_services().empty());
         parent->reject_dependencies_after_start = false;
         ASSERT_TRUE(co_await lifecycle.stop());
         ASSERT_TRUE(lifecycle.started_services().empty());
@@ -2181,43 +2193,36 @@ TEST(application_task_supervisor_join_distinguishes_required_and_optional_failur
 
 TEST(application_host_preserves_required_worker_failure_through_cleanup)
 {
-    for (const bool preparation_failure : {false, true})
-    {
-        auto events = std::make_shared<std::vector<std::string>>();
-        auto service = std::make_shared<fake_service>(application::service_key{"worker", "test"},
-            std::vector<application::service_key>{}, application::service_requirement::required, events, 0, true);
-        service->reject_dependencies_after_start = preparation_failure;
-        const auto port = static_cast<std::uint16_t>(30000U +
-            std::chrono::steady_clock::now().time_since_epoch().count() % 20000U);
-        auto built = application::application_builder{"worker-failure-test"}
-                         .configure([port](application::application_configuration& value)
-                             {
-                                 value.http.port = port;
-                                 value.management.enabled = false;
-                                 value.install_signal_handlers = false;
-                                 value.logging.manage_lifecycle = false;
-                                 value.observability.tracing = false;
-                                 value.observability.metrics = false;
-                                 value.observability.logs = false;
-                                 value.lifecycle.http_drain_timeout = std::chrono::milliseconds{100};
-                                 value.lifecycle.total_stop_timeout = std::chrono::milliseconds{80};
-                             })
-                         .service(service)
-                         .build();
-        ASSERT_TRUE(built.has_value());
-        const auto begin = std::chrono::steady_clock::now();
-        const auto result = built->run();
-        ASSERT_FALSE(result.has_value());
-        ASSERT_EQ(result.error(), std::make_error_code(std::errc::permission_denied));
-        if (preparation_failure)
-            ASSERT_EQ(events->size(), 1U);
-        else
-            ASSERT_TRUE(events->size() >= 3U);
-        ASSERT_TRUE(events->size() < 30U);
-        ASSERT_TRUE(std::chrono::steady_clock::now() - begin < std::chrono::seconds{2});
-        ASSERT_TRUE(built->state() == application::application_state::cleanup_failed);
-        ASSERT_TRUE(events->back().starts_with(preparation_failure ? "start:" : "stop:"));
-    }
+    auto events = std::make_shared<std::vector<std::string>>();
+    auto service = std::make_shared<fake_service>(application::service_key{"worker", "test"},
+        std::vector<application::service_key>{}, application::service_requirement::required, events, 0, true);
+    const auto port = static_cast<std::uint16_t>(30000U +
+        std::chrono::steady_clock::now().time_since_epoch().count() % 20000U);
+    auto built = application::application_builder{"worker-failure-test"}
+                     .configure([port](application::application_configuration& value)
+                         {
+                             value.http.port = port;
+                             value.management.enabled = false;
+                             value.install_signal_handlers = false;
+                             value.logging.manage_lifecycle = false;
+                             value.observability.tracing = false;
+                             value.observability.metrics = false;
+                             value.observability.logs = false;
+                             value.lifecycle.http_drain_timeout = std::chrono::milliseconds{100};
+                             value.lifecycle.total_stop_timeout = std::chrono::milliseconds{80};
+                         })
+                     .service(service)
+                     .build();
+    ASSERT_TRUE(built.has_value());
+    const auto begin = std::chrono::steady_clock::now();
+    const auto result = built->run();
+    ASSERT_FALSE(result.has_value());
+    ASSERT_EQ(result.error(), std::make_error_code(std::errc::permission_denied));
+    ASSERT_TRUE(events->size() >= 3U);
+    ASSERT_TRUE(events->size() < 30U);
+    ASSERT_TRUE(std::chrono::steady_clock::now() - begin < std::chrono::seconds{2});
+    ASSERT_TRUE(built->state() == application::application_state::cleanup_failed);
+    ASSERT_TRUE(events->back().starts_with("stop:"));
 }
 
 TEST(application_host_accepts_concurrent_stop_requests)
@@ -2283,17 +2288,36 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
     {
         auto business_reservation = cnetmod::socket::create(cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
         auto management_reservation = cnetmod::socket::create(cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
-        ASSERT_TRUE(business_reservation.has_value() && management_reservation.has_value());
-        if (!business_reservation || !management_reservation)
+        auto collector_reservation = cnetmod::socket::create(cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+        ASSERT_TRUE(business_reservation.has_value() && management_reservation.has_value() &&
+            collector_reservation.has_value());
+        if (!business_reservation || !management_reservation || !collector_reservation)
             return;
         ASSERT_TRUE(business_reservation->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
         ASSERT_TRUE(management_reservation->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
+        ASSERT_TRUE(collector_reservation->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
         const auto business_endpoint = business_reservation->local_endpoint();
         const auto management_endpoint = management_reservation->local_endpoint();
-        ASSERT_TRUE(business_endpoint.has_value() && management_endpoint.has_value());
-        if (!business_endpoint || !management_endpoint)
+        const auto collector_endpoint = collector_reservation->local_endpoint();
+        ASSERT_TRUE(business_endpoint.has_value() && management_endpoint.has_value() &&
+            collector_endpoint.has_value());
+        if (!business_endpoint || !management_endpoint || !collector_endpoint)
             return;
         std::atomic<unsigned> collector_requests{};
+        auto collector_io = cnetmod::make_io_context();
+        cnetmod::http::router collector_routes;
+        collector_routes.post("/test-collector", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
+            {
+                (void)co_await request.read_full_body();
+                const auto index = collector_requests.fetch_add(1U, std::memory_order_relaxed);
+                request.json(cnetmod::http::status::ok,
+                    index == 0 ? "private-invalid-acknowledgement" : "{}");
+                co_return;
+            });
+        cnetmod::http::server collector{*collector_io};
+        collector.set_router(std::move(collector_routes));
+        collector_reservation->close();
+        ASSERT_TRUE(collector.listen("127.0.0.1", collector_endpoint->port()).has_value());
         auto built = application::application_builder{"management-scrape-test"}
                          .configure([&](auto& value)
                              {
@@ -2312,25 +2336,20 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
                                  value.observability.otlp = {};
                                  if (metrics_enabled)
                                      value.observability.otlp.logs_endpoint = std::format(
-                                         "http://127.0.0.1:{}/test-collector", business_endpoint->port());
+                                         "http://127.0.0.1:{}/test-collector", collector_endpoint->port());
                                  value.health.interval = std::chrono::milliseconds{10};
                                  value.lifecycle.http_drain_timeout = std::chrono::milliseconds{100};
-                             })
-                         .routes([&](cnetmod::http::router& routes)
-                             {
-                                 routes.post("/test-collector", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
-                                     {
-                                         (void)co_await request.read_full_body();
-                                         const auto index = collector_requests.fetch_add(1U, std::memory_order_relaxed);
-                                         request.json(cnetmod::http::status::ok,
-                                             index == 0 ? "private-invalid-acknowledgement" : "{}");
-                                         co_return;
-                                     });
                              })
                          .build();
         ASSERT_TRUE(built.has_value());
         if (!built)
             return;
+        auto collector_accept = collector.run();
+        collector_accept.handle().resume();
+        std::jthread collector_runner([&]
+            {
+                collector_io->run();
+            });
         auto host = std::move(*built);
         business_reservation->close();
         management_reservation->close();
@@ -2393,6 +2412,10 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
         }
         host.request_stop();
         runner.join();
+        collector.stop();
+        collector.abort_connections();
+        collector_io->stop();
+        collector_runner.join();
         ASSERT_TRUE(started);
         ASSERT_TRUE(scraped);
         ASSERT_TRUE(isolated);

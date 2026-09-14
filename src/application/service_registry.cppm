@@ -118,28 +118,33 @@ public:
             return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
         binding_key binding{std::type_index{typeid(Service)}, instance};
-        const auto managed_key = service->key();
-        if (managed_key.name.empty() || managed_key.instance.empty() ||
-            !valid_recovery_policy(service->recovery()))
-            return std::unexpected(
-                std::make_error_code(std::errc::invalid_argument));
-        if (services_.contains(binding) || managed_.contains(managed_key))
-            return std::unexpected(
-                std::make_error_code(std::errc::file_exists));
+        service_key managed_key;
         try
         {
+            managed_key = service->key();
+            const auto dependencies = service->dependencies();
+            if (managed_key.name.empty() || managed_key.instance.empty() ||
+                !valid_recovery_policy(service->recovery()))
+                return std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+            if (services_.contains(binding) || managed_.contains(managed_key))
+                return std::unexpected(
+                    std::make_error_code(std::errc::file_exists));
+            dependencies_.emplace(managed_key, dependencies);
             managed_.emplace(managed_key, service);
             services_.emplace(std::move(binding), std::move(service));
         }
         catch (const std::bad_alloc&)
         {
             managed_.erase(managed_key);
+            dependencies_.erase(managed_key);
             return std::unexpected(
                 std::make_error_code(std::errc::not_enough_memory));
         }
         catch (...)
         {
             managed_.erase(managed_key);
+            dependencies_.erase(managed_key);
             return std::unexpected(std::make_error_code(std::errc::io_error));
         }
         return {};
@@ -191,6 +196,12 @@ public:
         -> std::shared_ptr<managed_service>;
 
     /**
+     * @brief Returns immutable dependency metadata captured at registration.
+     */
+    [[nodiscard]] auto managed_dependencies(const service_key& key) const noexcept
+        -> const std::vector<service_key>*;
+
+    /**
      * @brief Validates dependencies and returns parallel topological layers.
      */
     [[nodiscard]] auto validate_dependencies() const
@@ -232,6 +243,8 @@ private:
     std::unordered_map<service_key, std::shared_ptr<managed_service>,
         service_key_hash>
         managed_;
+    std::unordered_map<service_key, std::vector<service_key>, service_key_hash>
+        dependencies_;
     bool frozen_ = false;
 };
 

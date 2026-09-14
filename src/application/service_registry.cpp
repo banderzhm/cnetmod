@@ -13,23 +13,30 @@ auto service_registry::manage(std::shared_ptr<managed_service> service)
     if (!service)
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
-    const auto key = service->key();
-    if (key.name.empty() || key.instance.empty() || !valid_recovery_policy(service->recovery()))
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    if (managed_.contains(key))
-        return std::unexpected(std::make_error_code(std::errc::file_exists));
+    service_key key;
     try
     {
+        key = service->key();
+        const auto dependencies = service->dependencies();
+        if (key.name.empty() || key.instance.empty() ||
+            !valid_recovery_policy(service->recovery()))
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+        if (managed_.contains(key))
+            return std::unexpected(
+                std::make_error_code(std::errc::file_exists));
+        dependencies_.emplace(key, dependencies);
         managed_.emplace(key, std::move(service));
     }
     catch (const std::bad_alloc&)
     {
+        dependencies_.erase(key);
         return std::unexpected(
             std::make_error_code(std::errc::not_enough_memory));
     }
     catch (...)
     {
+        dependencies_.erase(key);
         return std::unexpected(std::make_error_code(std::errc::io_error));
     }
     return {};
@@ -55,6 +62,13 @@ auto service_registry::managed(const service_key& key) const noexcept
     return found == managed_.end() ? nullptr : found->second;
 }
 
+auto service_registry::managed_dependencies(const service_key& key) const noexcept
+    -> const std::vector<service_key>*
+{
+    const auto found = dependencies_.find(key);
+    return found == dependencies_.end() ? nullptr : &found->second;
+}
+
 auto service_registry::validate_dependencies() const
     -> std::expected<std::vector<std::vector<service_key>>, std::error_code>
 {
@@ -63,8 +77,13 @@ auto service_registry::validate_dependencies() const
         dependents;
     for (const auto& [key, service] : managed_)
     {
-        indegree.emplace(key, service->dependencies().size());
-        for (const auto& dependency : service->dependencies())
+        (void)service;
+        const auto dependencies = managed_dependencies(key);
+        if (!dependencies)
+            return std::unexpected(
+                std::make_error_code(std::errc::state_not_recoverable));
+        indegree.emplace(key, dependencies->size());
+        for (const auto& dependency : *dependencies)
         {
             if (!managed_.contains(dependency))
                 return std::unexpected(
