@@ -189,21 +189,17 @@ TEST(request_middleware_preserves_handler_system_error)
     };
     bool preserved = false;
     auto middleware = shutdown.track_middleware();
-    auto run = [&]() -> cnetmod::task<void>
-    {
-        try
-        {
-            co_await middleware(request, next);
-        }
-        catch (const std::system_error& error)
-        {
-            preserved = error.code() == original;
-        }
-    };
-    auto operation = run();
+    auto operation = middleware(request, next);
     operation.handle().resume();
     ASSERT_TRUE(operation.handle().done());
-    operation.handle().promise().result();
+    try
+    {
+        operation.handle().promise().result();
+    }
+    catch (const std::system_error& error)
+    {
+        preserved = error.code() == original;
+    }
     ASSERT_TRUE(preserved);
     ASSERT_EQ(shutdown.in_flight(), 0);
 }
