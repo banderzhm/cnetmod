@@ -131,7 +131,7 @@ public:
     explicit application_builder(std::string name);
 
     /**
-     * @brief Selects the JSON configuration file.
+     * @brief Selects a JSON, YAML, or YML configuration file.
      */
     auto configuration_file(std::filesystem::path path)
         -> application_builder&;

@@ -1662,6 +1662,57 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_FALSE(redacted.at("endpoint").get<std::string>().contains("password"));
 }
 
+TEST(application_yaml_configuration_uses_the_json_validation_pipeline)
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        "cnetmod-application-test.yaml";
+    {
+        std::ofstream output{path};
+        output << R"(application:
+  name: yaml-name
+http:
+  address: 127.0.0.1
+  port: 18083
+management:
+  enabled: false
+logging:
+  manage_lifecycle: false
+services:
+  primary:
+    type: redis
+    instance: cache
+    enabled: false
+    password: ${CNETMOD_YAML_TEST_PASSWORD}
+)";
+    }
+#ifdef _WIN32
+    _putenv_s("CNETMOD_YAML_TEST_PASSWORD", "yaml-secret");
+#else
+    setenv("CNETMOD_YAML_TEST_PASSWORD", "yaml-secret", 1);
+#endif
+    auto host = application::application_builder{"builder-name"}
+                    .configuration_file(path)
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.observability.tracing = false;
+                            value.observability.metrics = false;
+                            value.observability.logs = false;
+                        })
+                    .build();
+#ifdef _WIN32
+    _putenv_s("CNETMOD_YAML_TEST_PASSWORD", "");
+#else
+    unsetenv("CNETMOD_YAML_TEST_PASSWORD");
+#endif
+    std::filesystem::remove(path);
+    ASSERT_TRUE(host.has_value());
+    ASSERT_EQ(host->configuration().name, "builder-name");
+    ASSERT_EQ(host->configuration().http.port, std::uint16_t{18083});
+    ASSERT_EQ(host->configuration().services.at("primary").instance, "cache");
+    ASSERT_EQ(host->configuration().services.at("primary").properties.at("password"),
+        "yaml-secret");
+}
+
 TEST(application_task_supervisor_rejects_invalid_recovery_before_registration)
 {
     auto io = cnetmod::make_io_context();

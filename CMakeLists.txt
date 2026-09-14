@@ -241,6 +241,16 @@ if(NOT CNETMOD_ENABLE_HTTP)
     endforeach()
 endif()
 
+# YAML configuration is an Application-only extension.  Preserve the JSON-only
+# build when consumers explicitly turn it off, including its module interface.
+if(NOT CNETMOD_HAS_YAML_CONFIGURATION)
+    foreach(source_list_variable IN ITEMS MODULE_INTERFACE_FILES
+            MODULE_IMPLEMENTATION_CPP_FILES REGULAR_CPP_SOURCES)
+        list(FILTER ${source_list_variable} EXCLUDE REGEX
+            "[/\\]src[/\\]application[/\\]yaml_configuration\\.(cppm|cpp)$")
+    endforeach()
+endif()
+
 # JWT signing depends on the TLS/crypto provider. Keep SSL-free protocol-only
 # probes free of both the implementation unit and its module interface.
 if(NOT CNETMOD_ENABLE_SSL)
@@ -360,6 +370,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_LZ4}>:CNETMOD_HAS_LZ4>
     $<$<BOOL:${CNETMOD_HAS_LEVELDB}>:CNETMOD_HAS_LEVELDB>
     $<$<BOOL:${CNETMOD_HAS_ICU}>:CNETMOD_HAS_ICU>
+    $<$<BOOL:${CNETMOD_HAS_YAML_CONFIGURATION}>:CNETMOD_HAS_YAML_CONFIGURATION>
     $<$<BOOL:${CNETMOD_ENABLE_ORM}>:CNETMOD_HAS_ORM>
 )
 foreach(protocol IN LISTS CNETMOD_PROTOCOLS)

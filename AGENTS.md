@@ -8958,7 +8958,13 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 
 ## 配置
 
-优先级固定为：框架默认值 < JSON < 环境变量 < builder `configure()` 显式覆盖。
+优先级固定为：框架默认值 < JSON/YAML < 环境变量 < builder `configure()` 显式覆盖。
+
+`application_builder::configuration_file()` 根据 `.json`、`.yaml` 或 `.yml`
+扩展名选择解析器。YAML 由独立的 `yaml_cpp` C++23 Modules 门面和
+`cnetmod.application.yaml_configuration` 适配器转换为同一个 JSON 文档模型；因此
+两种格式有完全相同的字段校验、`${ENV_VAR}` 注入、脱敏及热重载语义。YAML 映射键
+必须为字符串且不得重复，文档根必须为映射；锚点展开限制为 64 层以拒绝循环或病态输入。
 
 ```json
 {

@@ -1,0 +1,43 @@
+# Application accepts .json, .yaml, and .yml through the same validated model.
+application:
+  name: cnetmod-service
+  install_signal_handlers: true
+
+crash_dump:
+  directory: crash
+
+logging:
+  manage_lifecycle: true
+  level: info
+  format: json
+
+http:
+  address: 0.0.0.0
+  port: 8080
+  request_timeout_ms: 30000
+
+management:
+  enabled: true
+  address: 127.0.0.1
+  port: 8081
+
+observability:
+  tracing: true
+  metrics: true
+  logs: true
+  sampling_ratio: 1.0
+  otlp:
+    traces_endpoint: http://127.0.0.1:4318/v1/traces
+    metrics_endpoint: http://127.0.0.1:4318/v1/metrics
+    logs_endpoint: http://127.0.0.1:4318/v1/logs
+    service_name: cnetmod-service
+
+services:
+  primary-cache:
+    type: redis
+    instance: primary
+    enabled: false
+    required: true
+    host: 127.0.0.1
+    port: 6379
+    password: ""

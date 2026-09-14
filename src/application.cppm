@@ -18,6 +18,10 @@ export import cnetmod.application.auto_configuration;
 export import cnetmod.application.host;
 export import cnetmod.application.http_client;
 
+#ifdef CNETMOD_HAS_YAML_CONFIGURATION
+export import cnetmod.application.yaml_configuration;
+#endif
+
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
 export import cnetmod.application.redis;
 #endif

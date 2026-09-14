@@ -274,6 +274,9 @@ if(TARGET example_application)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 ${CMAKE_CURRENT_SOURCE_DIR}/application/application.json
                 $<TARGET_FILE_DIR:example_application>/application.json
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${CMAKE_CURRENT_SOURCE_DIR}/application/application.yaml
+                $<TARGET_FILE_DIR:example_application>/application.yaml
         COMMENT "Copying application example configuration"
         VERBATIM
     )

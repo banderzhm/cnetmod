@@ -2,6 +2,9 @@ module cnetmod.application.configuration;
 
 import std;
 import cnetmod.application.recovery_policy;
+#if defined(CNETMOD_HAS_YAML_CONFIGURATION)
+import cnetmod.application.yaml_configuration;
+#endif
 
 namespace cnetmod::application {
 namespace {
@@ -62,6 +65,15 @@ namespace {
     auto read_document(const std::filesystem::path& path)
         -> std::expected<nlohmann::json, std::error_code>
     {
+        const auto extension = path.extension().string();
+#if defined(CNETMOD_HAS_YAML_CONFIGURATION)
+        if (extension == ".yaml" || extension == ".yml")
+            return load_yaml_configuration_document(path);
+#else
+        if (extension == ".yaml" || extension == ".yml")
+            return std::unexpected(
+                std::make_error_code(std::errc::not_supported));
+#endif
         std::ifstream input{path, std::ios::binary};
         if (!input)
             return std::unexpected(
