@@ -215,7 +215,7 @@ namespace {
     auto apply_document(application_configuration& result,
         const nlohmann::json& root) -> bool
     {
-        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "lifecycle", "health", "services"}))
+        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "services"}))
             return false;
         try
         {
@@ -336,6 +336,12 @@ namespace {
                     assign_duration(*otlp, "max_retry_delay_ms",
                         result.observability.otlp.max_retry_delay);
                 }
+            }
+            if (const auto item = root.find("crash_dump"); item != root.end())
+            {
+                if (!keys_are_known(*item, {"directory"}))
+                    return false;
+                assign(*item, "directory", result.crash_dump.directory);
             }
             if (const auto item = root.find("lifecycle"); item != root.end())
             {
@@ -531,7 +537,7 @@ auto validate_configuration(const application_configuration& value)
             std::chrono::steady_clock::duration::max() / 2);
         return duration.count() > 0 && duration <= horizon;
     };
-    if (value.name.empty() || value.http.address.empty() ||
+    if (value.name.empty() || value.crash_dump.directory.empty() || value.http.address.empty() ||
         value.http.port == 0U ||
         (value.http.request_timeout && !positive(*value.http.request_timeout)) ||
         !std::isfinite(value.observability.sampling_ratio) || value.observability.sampling_ratio < 0.0 ||
@@ -657,6 +663,7 @@ static auto prepare_configuration_reload(application_configuration& active,
     result.applied = !result.changed.empty();
     result.restart_required = active.name != candidate.name ||
         active.install_signal_handlers != candidate.install_signal_handlers ||
+        active.crash_dump.directory != candidate.crash_dump.directory ||
         active.logging.manage_lifecycle != candidate.logging.manage_lifecycle ||
         active.logging.format != candidate.logging.format ||
         active.http.address != candidate.http.address ||

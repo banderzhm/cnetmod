@@ -3,6 +3,9 @@
     "name": "cnetmod-service",
     "install_signal_handlers": true
   },
+  "crash_dump": {
+    "directory": "crash"
+  },
   "logging": {
     "manage_lifecycle": true,
     "level": "info",

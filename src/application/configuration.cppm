@@ -66,6 +66,18 @@ export struct observability_configuration
 };
 
 /**
+ * @brief Process-crash artifact settings installed by every application host.
+ *
+ * Crash artifact capture is deliberately independent from logging and OTLP:
+ * a fatal process failure must still leave an analyzable artifact when those
+ * subsystems are disabled or already unhealthy.
+ */
+export struct crash_dump_configuration
+{
+    std::filesystem::path directory{"crash"};
+};
+
+/**
  * @brief One named, explicitly enabled external service definition.
  */
 export struct configured_service
@@ -88,6 +100,7 @@ export struct application_configuration
     http_configuration http;
     management_configuration management;
     observability_configuration observability;
+    crash_dump_configuration crash_dump;
     lifecycle_policy lifecycle;
     health_policy health;
     bool install_signal_handlers = true;

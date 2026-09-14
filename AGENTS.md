@@ -8966,6 +8966,9 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
     "name": "order-service",
     "install_signal_handlers": true
   },
+  "crash_dump": {
+    "directory": "crash"
+  },
   "logging": {
     "level": "info",
     "format": "json"
@@ -9034,6 +9037,11 @@ Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 运行期截止时间运算的溢出安全证明。
 
 `${ENV_VAR}` 在解析阶段展开。`password`、`secret`、`token`、`api_key`、凭据和连接串会由 `redact_configuration()` 脱敏；框架不把请求正文、提示词、SQL 参数、凭据或消息载荷写入健康响应和遥测。
+
+每个 `application_host` 默认在构建完成后、打开监听端口前安装进程级崩溃转存。Windows
+生成 `.dmp` 和文本报告；Unix 开启系统 core dump 并写入最小崩溃记录。该安全网不依赖
+日志或 OTEL，二者关闭、阻塞或故障时仍保持工作。`crash_dump.directory` 只允许在下次
+进程启动时变更，因此运行时重载会报告需要重启。
 
 支持的环境变量包括：
 

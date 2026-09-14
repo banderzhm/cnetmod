@@ -5,6 +5,7 @@ import cnetmod.application.auto_configuration;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.service_lifecycle;
 import cnetmod.application.task_supervisor;
+import cnetmod.core.crash_dump;
 import cnetmod.core.log;
 import cnetmod.core.net_init;
 import cnetmod.coro.cancel;
@@ -626,6 +627,11 @@ application_host::application_host(
     std::unique_ptr<implementation> implementation)
     : implementation_(std::move(implementation))
 {
+    // Install before logging, listeners, or background tasks.  This is a
+    // process-level safety net and therefore intentionally not coupled to
+    // the optional observability pipeline.
+    crash_dump::set_app_name(implementation_->configuration.name);
+    crash_dump::install(implementation_->configuration.crash_dump.directory.string());
     if (implementation_->configuration.logging.manage_lifecycle)
     {
         logger::init(implementation_->configuration.name,

@@ -1619,7 +1619,7 @@ TEST(application_configuration_precedence_and_redaction)
         "cnetmod-application-test.json";
     {
         std::ofstream output{path};
-        output << R"({"application":{"name":"json-name"},"http":{"port":18080},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
+        output << R"({"application":{"name":"json-name"},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
     }
 #ifdef _WIN32
     _putenv_s("CNETMOD_HTTP_PORT", "18081");
@@ -1649,6 +1649,8 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_TRUE(host.has_value());
     ASSERT_EQ(host->configuration().name, "builder-name");
     ASSERT_EQ(host->configuration().http.port, std::uint16_t{18082});
+    ASSERT_EQ(host->configuration().crash_dump.directory,
+        std::filesystem::path{"application-crashes"});
     ASSERT_TRUE(host->configuration().observability.otlp.capture_framework_logs);
     ASSERT_EQ(host->configuration().services.at("primary").name, "redis");
 

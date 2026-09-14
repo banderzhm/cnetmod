@@ -7,13 +7,21 @@ module;
     #include <signal.h>
 #endif
 
-/** Crash reporting public contract. */
+/**
+ * @brief Defines the process-crash artifact capture contract.
+ *
+ * Windows writes a minidump; Unix enables the operating system core-dump
+ * policy and emits a companion text report when the runtime permits it.
+ */
 export module cnetmod.core.crash_dump;
 
 import std;
 
 export namespace cnetmod {
 
+/**
+ * @brief Describes the artifact produced for a fatal process failure.
+ */
 struct crash_info
 {
     std::string signal_name;
@@ -23,14 +31,40 @@ struct crash_info
     std::string dump_file_path;
 };
 
+/**
+ * @brief Installs process-wide fatal-crash artifact capture.
+ *
+ * Install this during process bootstrap, before worker threads or listeners
+ * start. Handlers are intentionally independent from application logging and
+ * telemetry because those subsystems may be unavailable during a crash.
+ */
 class crash_dump
 {
 public:
     using callback_fn = std::function<void(const crash_info&)>;
 
+    /**
+     * @brief Installs the platform fatal-error handlers and creates dump_dir.
+     * @param dump_dir Directory receiving crash artifacts.
+     */
     static void install(std::string dump_dir = "crash");
+
+    /**
+     * @brief Sets the best-effort notification invoked after an artifact write.
+     * @param fn Callback that must never throw or depend on a live event loop.
+     */
     static void set_callback(callback_fn fn);
+
+    /**
+     * @brief Sets the application label included in text crash reports.
+     * @param name Process name suitable for diagnostics.
+     */
     static void set_app_name(std::string name);
+
+    /**
+     * @brief Writes a non-fatal diagnostic report for the supplied reason.
+     * @param reason Stable failure classification; do not include secrets.
+     */
     static void trigger_crash_report(std::string_view reason);
 
 private:
