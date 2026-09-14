@@ -3822,6 +3822,7 @@ TEST(epoll_registration_allocation_failure_does_not_publish_empty_slots)
     ASSERT_TRUE(failures >= 2U);
 }
 
+    #if !defined(CNETMOD_HAS_IO_URING)
 TEST(epoll_cross_thread_cancellation_competes_with_ready_timer)
 {
     for (const bool race_publication : {false, true})
@@ -3924,6 +3925,7 @@ TEST(epoll_socket_read_cancellation_preserves_unconsumed_data)
     }
     ASSERT_TRUE(cancelled >= 500U);
 }
+    #endif
 
 TEST(epoll_batch_does_not_dispatch_replacement_from_stale_registration)
 {

@@ -555,6 +555,8 @@ auto client::ping(cancel_token& cancellation)
 auto client::do_write(const_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    if (!sock_.is_open())
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
 #ifdef CNETMOD_HAS_SSL
     if (ssl_)
     {
@@ -573,6 +575,8 @@ auto client::do_write(const_buffer buffer)
 auto client::do_read(mutable_buffer buffer)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    if (!sock_.is_open())
+        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
 #ifdef CNETMOD_HAS_SSL
     if (ssl_)
         co_return co_await ssl_->async_read(buffer);
