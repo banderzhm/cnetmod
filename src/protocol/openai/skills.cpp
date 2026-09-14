@@ -132,9 +132,8 @@ namespace {
         std::size_t total_bytes = skill.instructions.size();
         for (std::filesystem::recursive_directory_iterator iterator{
                  root, std::filesystem::directory_options::skip_permission_denied,
-                 error},
-            end;
-            iterator != end; iterator.increment(error))
+                 error};
+            iterator != std::default_sentinel; iterator.increment(error))
         {
             if (error)
                 return std::unexpected("cannot enumerate skill directory: " +

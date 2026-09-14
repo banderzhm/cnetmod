@@ -357,9 +357,8 @@ namespace {
         if (options.recursive)
         {
             for (std::filesystem::recursive_directory_iterator iterator{
-                     root, iterator_options, error},
-                end;
-                iterator != end; iterator.increment(error))
+                     root, iterator_options, error};
+                iterator != std::default_sentinel; iterator.increment(error))
             {
                 if (error)
                 {
@@ -378,9 +377,8 @@ namespace {
         else
         {
             for (std::filesystem::directory_iterator iterator{
-                     root, iterator_options, error},
-                end;
-                iterator != end; iterator.increment(error))
+                     root, iterator_options, error};
+                iterator != std::default_sentinel; iterator.increment(error))
             {
                 if (error)
                 {
