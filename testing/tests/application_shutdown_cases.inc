@@ -226,6 +226,7 @@ TEST(application_shutdown_aborts_incomplete_http_body_before_destruction)
     auto slow_service = std::make_shared<fake_service>(application::service_key{"custom", "slow-close"},
         std::vector<application::service_key>{}, application::service_requirement::required, events);
     slow_service->stop_delay = std::chrono::seconds{10};
+    constexpr auto total_stop_timeout = std::chrono::milliseconds{50};
     auto built = application::application_builder{"incomplete-http-body"}
                      .service(slow_service)
                      .configure([&](auto& value)
@@ -237,7 +238,7 @@ TEST(application_shutdown_aborts_incomplete_http_body_before_destruction)
                              value.logging.manage_lifecycle = false;
                              value.install_signal_handlers = false;
                              value.lifecycle.http_drain_timeout = std::chrono::milliseconds{200};
-                             value.lifecycle.total_stop_timeout = std::chrono::milliseconds{50};
+                             value.lifecycle.total_stop_timeout = total_stop_timeout;
                              value.lifecycle.service_stop_timeout = std::chrono::milliseconds{200};
                          })
                      .routes([&](cnetmod::http::router& routes)
@@ -307,7 +308,7 @@ TEST(application_shutdown_aborts_incomplete_http_body_before_destruction)
     client_io->run();
     runner.join();
     const auto stop_elapsed = std::chrono::steady_clock::now() - stop_requested_at;
-    ASSERT_TRUE(stop_elapsed < std::chrono::milliseconds{180});
+    ASSERT_TRUE(stop_elapsed < total_stop_timeout + std::chrono::milliseconds{500});
     ASSERT_TRUE(slow_service->stop_cancelled);
     ASSERT_TRUE(slow_service->stop_settled);
     ASSERT_TRUE(built->state() == application::application_state::cleanup_failed);

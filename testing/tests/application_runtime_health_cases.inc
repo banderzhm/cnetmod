@@ -23,9 +23,10 @@ static void verify_required_outage_host(required_outage_scenario scenario)
     auto events = std::make_shared<std::vector<std::string>>();
     auto service = std::make_shared<fake_service>(application::service_key{"required-outage"},
         std::vector<application::service_key>{}, application::service_requirement::required, events);
+    constexpr auto recovery_budget = std::chrono::seconds{1};
     service->recovery_options = {.initial_delay = std::chrono::milliseconds{5},
         .maximum_delay = std::chrono::milliseconds{10},
-        .budget = std::chrono::milliseconds{200},
+        .budget = recovery_budget,
         .jitter = 0.0};
     auto built = application::application_builder{"required-outage"}
                      .configure([&](auto& value)
@@ -98,7 +99,8 @@ static void verify_required_outage_host(required_outage_scenario scenario)
                 const auto ready = co_await client.get(url + "/actuator/ready");
                 recovered = ready && ready->status_code() == 200;
             }
-            (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{300});
+            (void)co_await cnetmod::async_timer_wait(*io,
+                recovery_budget + std::chrono::milliseconds{200});
             const auto ready = co_await client.get(url + "/actuator/ready");
             survived_old_budget = ready && ready->status_code() == 200 &&
                 built->state() == application::application_state::running;
