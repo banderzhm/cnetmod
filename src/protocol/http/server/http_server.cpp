@@ -620,7 +620,10 @@ void server::abort_connections() noexcept
     concurrent_containers::exclusive_latch_guard lock{connections_latch_};
     connections_aborted_ = true;
     for (auto* connection = connections_; connection; connection = connection->next)
+    {
         connection->client.shutdown_both();
+        connection->client.close();
+    }
 }
 
 // =============================================================================
