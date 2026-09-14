@@ -435,7 +435,7 @@ TEST(application_startup_failure_settles_previously_accepted_telemetry)
         auto dependent = std::make_shared<fake_service>(application::service_key{"dependent"},
             std::vector<application::service_key>{service->key()}, application::service_requirement::required, events);
         if (service_failure)
-            dependent->start_exception = std::make_error_code(std::errc::permission_denied);
+            dependent->start_error = std::make_error_code(std::errc::permission_denied);
         std::error_code binding_error;
         {
             auto probe_io = cnetmod::make_io_context();
@@ -473,7 +473,7 @@ TEST(application_startup_failure_settles_previously_accepted_telemetry)
         const auto started = std::chrono::steady_clock::now();
         const auto result = built->run();
         ASSERT_FALSE(result.has_value());
-        ASSERT_EQ(result.error(), service_failure ? dependent->start_exception : binding_error);
+        ASSERT_EQ(result.error(), service_failure ? dependent->start_error : binding_error);
         ASSERT_TRUE(std::chrono::steady_clock::now() - started < std::chrono::seconds{2});
         ASSERT_TRUE(built->state() == application::application_state::stopped);
         ASSERT_TRUE(service->stop_settled);

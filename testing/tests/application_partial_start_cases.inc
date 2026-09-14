@@ -1,6 +1,6 @@
 TEST(application_partial_start_cleanup_retains_dependency_and_original_error)
 {
-    for (bool throws : {false, true})
+    for (bool explicit_error : {false, true})
     {
         auto io = cnetmod::make_io_context();
         cnetmod::observability::telemetry_hub telemetry{*io,
@@ -16,8 +16,8 @@ TEST(application_partial_start_cleanup_retains_dependency_and_original_error)
         partial->retain_failed_start = true;
         partial->stop_failures_remaining = 1;
         const auto original = std::make_error_code(std::errc::connection_refused);
-        if (throws)
-            partial->start_exception = original;
+        if (explicit_error)
+            partial->start_error = original;
         for (const auto& service : {dependency, partial})
         {
             ASSERT_TRUE(services.manage(service));
