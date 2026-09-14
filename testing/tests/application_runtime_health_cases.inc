@@ -79,7 +79,9 @@ static void verify_required_outage_host(required_outage_scenario scenario)
     auto io = cnetmod::make_io_context();
     auto inspect = [&]() -> cnetmod::task<void>
     {
-        cnetmod::http::client client{*io, {.request_timeout = std::chrono::milliseconds{100}}};
+        cnetmod::http::client client{*io,
+            {.request_timeout = std::chrono::milliseconds{100},
+                .keep_alive = false}};
         const auto url = std::format("http://127.0.0.1:{}", endpoint->port());
         const auto initial = co_await client.get(url + "/actuator/ready");
         initially_ready = initial && initial->status_code() == 200;
@@ -115,6 +117,7 @@ static void verify_required_outage_host(required_outage_scenario scenario)
                     built->state() == application::application_state::running;
             }
         }
+        client.close();
         io->stop();
     };
     if (built->state() == application::application_state::running)

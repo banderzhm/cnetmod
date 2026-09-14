@@ -2372,7 +2372,9 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
         auto io = cnetmod::make_io_context();
         auto inspect = [&]() -> cnetmod::task<void>
         {
-            cnetmod::http::client client{*io, {.request_timeout = std::chrono::milliseconds{300}}};
+            cnetmod::http::client client{*io,
+                {.request_timeout = std::chrono::milliseconds{300},
+                    .keep_alive = false}};
             const auto url = std::format("http://127.0.0.1:{}", management_endpoint->port());
             for (unsigned attempt = 0; attempt < 20; ++attempt)
             {
@@ -2403,6 +2405,7 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
             const auto business = co_await client.get(std::format(
                 "http://127.0.0.1:{}/actuator/prometheus", business_endpoint->port()));
             isolated = business && business->status_code() == 404;
+            client.close();
             io->stop();
         };
         if (started)
