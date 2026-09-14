@@ -105,7 +105,9 @@ TEST(mysql_optional_outage_keeps_host_live_but_not_ready)
         ASSERT_TRUE(result->has_value());
     ASSERT_TRUE(built->state() == application::application_state::stopped);
     ASSERT_FALSE(built->health().ready());
-    ASSERT_EQ(built->services().require<application::mysql_service>("default").pool().waiter_count(), 0U);
+    auto registered = built->services().require<application::mysql_service>("default");
+    ASSERT_TRUE(registered.has_value());
+    ASSERT_EQ(registered->get().pool().waiter_count(), 0U);
     ASSERT_EQ(events->size(), 2U);
     if (events->size() == 2)
     {
@@ -158,7 +160,9 @@ TEST(mysql_host_failed_start_cleans_supervised_pool)
         ASSERT_TRUE(std::chrono::steady_clock::now() - began < std::chrono::seconds{2});
         ASSERT_TRUE(built->state() == application::application_state::stopped);
         ASSERT_FALSE(built->health().ready());
-        auto& service = built->services().require<application::mysql_service>("default");
+        auto registered = built->services().require<application::mysql_service>("default");
+        ASSERT_TRUE(registered.has_value());
+        auto& service = registered->get();
         ASSERT_EQ(service.pool().waiter_count(), 0U);
     }
 }

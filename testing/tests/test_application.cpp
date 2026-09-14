@@ -615,26 +615,21 @@ TEST(application_rejects_invalid_custom_service_policy_without_partial_registrat
 TEST(application_service_registry_supports_named_bindings_and_freeze)
 {
     application::service_registry services;
-    auto& primary = services.emplace_named<greeting_service,
+    auto primary = services.emplace_named<greeting_service,
         default_greeting_service>("primary", "hello");
-    auto& secondary = services.emplace_named<greeting_service,
+    auto secondary = services.emplace_named<greeting_service,
         default_greeting_service>("secondary", "world");
 
-    ASSERT_EQ(primary.greeting(), "hello");
-    ASSERT_EQ(secondary.greeting(), "world");
+    ASSERT_TRUE(primary.has_value());
+    ASSERT_TRUE(secondary.has_value());
+    ASSERT_EQ(primary->get().greeting(), "hello");
+    ASSERT_EQ(secondary->get().greeting(), "world");
     ASSERT_TRUE(services.find<greeting_service>("missing") == nullptr);
 
-    bool duplicate_rejected = false;
-    try
-    {
-        services.emplace_named<greeting_service, default_greeting_service>(
-            "primary", "duplicate");
-    }
-    catch (const std::logic_error&)
-    {
-        duplicate_rejected = true;
-    }
-    ASSERT_TRUE(duplicate_rejected);
+    const auto duplicate = services.emplace_named<greeting_service,
+        default_greeting_service>("primary", "duplicate");
+    ASSERT_FALSE(duplicate.has_value());
+    ASSERT_EQ(duplicate.error(), std::make_error_code(std::errc::file_exists));
     services.freeze();
     ASSERT_TRUE(services.frozen());
 }

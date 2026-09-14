@@ -23,7 +23,8 @@ public:
     template <class Service, class Implementation = Service, class... Arguments>
     requires(std::same_as<Service, Implementation> ||
         std::derived_from<Implementation, Service>)
-    auto emplace(Arguments&&... arguments) -> Service&
+    [[nodiscard]] auto emplace(Arguments&&... arguments)
+        -> std::expected<std::reference_wrapper<Service>, std::error_code>
     {
         return emplace_named<Service, Implementation>("default",
             std::forward<Arguments>(arguments)...);
@@ -36,38 +37,70 @@ public:
     requires(std::same_as<Service, Implementation> ||
         std::derived_from<Implementation, Service>)
     auto emplace_named(std::string instance, Arguments&&... arguments)
-        -> Service&
+        -> std::expected<std::reference_wrapper<Service>, std::error_code>
     {
-        auto implementation = std::make_shared<Implementation>(
-            std::forward<Arguments>(arguments)...);
-        std::shared_ptr<Service> service = implementation;
-        auto& result = *service;
-        add_named<Service>(std::move(instance), std::move(service));
-        return result;
+        try
+        {
+            auto implementation = std::make_shared<Implementation>(
+                std::forward<Arguments>(arguments)...);
+            std::shared_ptr<Service> service = implementation;
+            auto& result = *service;
+            auto added = add_named<Service>(std::move(instance), std::move(service));
+            if (!added)
+                return std::unexpected(added.error());
+            return std::ref(result);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return std::unexpected(
+                std::make_error_code(std::errc::not_enough_memory));
+        }
+        catch (...)
+        {
+            return std::unexpected(std::make_error_code(std::errc::io_error));
+        }
     }
 
     /**
      * @brief Registers an existing service under the default instance name.
      */
     template <class Service>
-    void add(std::shared_ptr<Service> service)
+    [[nodiscard]] auto add(std::shared_ptr<Service> service)
+        -> std::expected<void, std::error_code>
     {
-        add_named<Service>("default", std::move(service));
+        return add_named<Service>("default", std::move(service));
     }
 
     /**
      * @brief Registers an existing service under an explicit instance name.
      */
     template <class Service>
-    void add_named(std::string instance, std::shared_ptr<Service> service)
+    [[nodiscard]] auto add_named(std::string instance,
+        std::shared_ptr<Service> service)
+        -> std::expected<void, std::error_code>
     {
-        ensure_mutable();
+        if (auto mutable_registry = ensure_mutable(); !mutable_registry)
+            return std::unexpected(mutable_registry.error());
         if (!service || instance.empty())
-            throw std::invalid_argument("invalid application service binding");
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
         binding_key key{std::type_index{typeid(Service)}, std::move(instance)};
         if (services_.contains(key))
-            throw std::logic_error("application service is already registered");
-        services_.emplace(std::move(key), std::move(service));
+            return std::unexpected(std::make_error_code(std::errc::file_exists));
+        try
+        {
+            services_.emplace(std::move(key), std::move(service));
+        }
+        catch (const std::bad_alloc&)
+        {
+            return std::unexpected(
+                std::make_error_code(std::errc::not_enough_memory));
+        }
+        catch (...)
+        {
+            return std::unexpected(std::make_error_code(std::errc::io_error));
+        }
+        return {};
     }
 
     /**
@@ -79,7 +112,8 @@ public:
         std::shared_ptr<Service> service)
         -> std::expected<void, std::error_code>
     {
-        ensure_mutable();
+        if (auto mutable_registry = ensure_mutable(); !mutable_registry)
+            return std::unexpected(mutable_registry.error());
         if (!service || instance.empty())
             return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
@@ -92,15 +126,21 @@ public:
         if (services_.contains(binding) || managed_.contains(managed_key))
             return std::unexpected(
                 std::make_error_code(std::errc::file_exists));
-        managed_.emplace(managed_key, service);
         try
         {
+            managed_.emplace(managed_key, service);
             services_.emplace(std::move(binding), std::move(service));
+        }
+        catch (const std::bad_alloc&)
+        {
+            managed_.erase(managed_key);
+            return std::unexpected(
+                std::make_error_code(std::errc::not_enough_memory));
         }
         catch (...)
         {
             managed_.erase(managed_key);
-            throw;
+            return std::unexpected(std::make_error_code(std::errc::io_error));
         }
         return {};
     }
@@ -120,15 +160,16 @@ public:
     }
 
     /**
-     * @brief Returns a named service or throws if the binding does not exist.
+     * @brief Returns a named service or an error when the binding is absent.
      */
     template <class Service>
     [[nodiscard]] auto require(std::string_view instance = "default") const
-        -> Service&
+        -> std::expected<std::reference_wrapper<Service>, std::error_code>
     {
         if (auto* service = find<Service>(instance))
-            return *service;
-        throw std::out_of_range("application service is not registered");
+            return std::ref(*service);
+        return std::unexpected(
+            std::make_error_code(std::errc::no_such_file_or_directory));
     }
 
     /**
@@ -183,7 +224,8 @@ private:
         }
     };
 
-    void ensure_mutable() const;
+    [[nodiscard]] auto ensure_mutable() const noexcept
+        -> std::expected<void, std::error_code>;
 
     std::unordered_map<binding_key, std::shared_ptr<void>, binding_hash>
         services_;

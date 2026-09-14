@@ -8,7 +8,8 @@ namespace cnetmod::application {
 auto service_registry::manage(std::shared_ptr<managed_service> service)
     -> std::expected<void, std::error_code>
 {
-    ensure_mutable();
+    if (auto mutable_registry = ensure_mutable(); !mutable_registry)
+        return std::unexpected(mutable_registry.error());
     if (!service)
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
@@ -18,7 +19,19 @@ auto service_registry::manage(std::shared_ptr<managed_service> service)
             std::make_error_code(std::errc::invalid_argument));
     if (managed_.contains(key))
         return std::unexpected(std::make_error_code(std::errc::file_exists));
-    managed_.emplace(key, std::move(service));
+    try
+    {
+        managed_.emplace(key, std::move(service));
+    }
+    catch (const std::bad_alloc&)
+    {
+        return std::unexpected(
+            std::make_error_code(std::errc::not_enough_memory));
+    }
+    catch (...)
+    {
+        return std::unexpected(std::make_error_code(std::errc::io_error));
+    }
     return {};
 }
 
@@ -111,11 +124,13 @@ void service_registry::freeze() noexcept
     frozen_ = true;
 }
 
-void service_registry::ensure_mutable() const
+auto service_registry::ensure_mutable() const noexcept
+    -> std::expected<void, std::error_code>
 {
     if (frozen_)
-        throw std::logic_error(
-            "application services are immutable after build");
+        return std::unexpected(
+            std::make_error_code(std::errc::operation_not_permitted));
+    return {};
 }
 
 } // namespace cnetmod::application

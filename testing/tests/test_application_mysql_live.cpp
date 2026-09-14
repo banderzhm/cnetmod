@@ -554,7 +554,10 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
         probe_io->stop();
         return;
     }
-    holder->database = &host->services().require<app::mysql_service>("default");
+    auto database = host->services().require<app::mysql_service>("default");
+    if (!database)
+        return;
+    holder->database = &database->get();
     const auto result = host->run();
     ASSERT_FALSE(result.has_value());
     if (!result)
