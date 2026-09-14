@@ -25,6 +25,7 @@ except ImportError as error:
 
 HOST = "127.0.0.1"
 TIMEOUT = 8.0
+STARTUP_TIMEOUT = 30.0
 
 
 def reserve_port() -> int:
@@ -117,7 +118,16 @@ async def assert_cnetmod_client(client_binary: Path) -> None:
     """aiosmtpd verifies cnetmod client serialization and dot unstuffing."""
     handler = CapturingHandler()
     port = reserve_port()
-    controller = Controller(handler, hostname=HOST, port=port)
+    # GitHub's macOS runners can be CPU-starved while four module-build matrix
+    # jobs finish.  aiosmtpd's five-second default is an environment startup
+    # budget, not a protocol assertion, so give its controller a separate
+    # bounded readiness window while keeping SMTP operations at TIMEOUT.
+    controller = Controller(
+        handler,
+        hostname=HOST,
+        port=port,
+        ready_timeout=STARTUP_TIMEOUT,
+    )
     controller.start()
     try:
         completed = await asyncio.to_thread(

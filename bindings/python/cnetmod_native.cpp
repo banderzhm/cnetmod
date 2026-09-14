@@ -3,9 +3,12 @@
 
 #include <cnetmod/c_api.h>
 
+#include <atomic>
+#include <chrono>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 
 namespace {
 
@@ -15,7 +18,7 @@ struct sync_request_state
     cnetmod_http_response* response{};
     int error_code{};
     std::string error_message;
-    bool completed{};
+    std::atomic<bool> completed{};
 };
 
 void complete(void* raw, cnetmod_http_response* response, int error_code,
@@ -26,7 +29,7 @@ void complete(void* raw, cnetmod_http_response* response, int error_code,
     state.error_code = error_code;
     if (error_message)
         state.error_message = error_message;
-    state.completed = true;
+    state.completed.store(true, std::memory_order_release);
     // A synchronous Python call drives exactly one request. Waking/stopping
     // the caller's run_one() prevents a completed callback from waiting for a
     // second IOCP/epoll event.
@@ -135,13 +138,43 @@ auto request(PyObject*, PyObject* args, PyObject* keywords) -> PyObject*
         return nullptr;
     }
 
-    // The native callback uses only C++ memory and is safe while Python's GIL
-    // is released. This lets other Python threads progress during I/O.
-    Py_BEGIN_ALLOW_THREADS while (!state.completed)
+    // poll() is deliberately non-blocking. A blocking run_one() cannot enforce
+    // this binding's synchronous deadline if a platform backend loses a wakeup;
+    // bounded polling also lets the Python HTTP fixture and other Python
+    // threads run while the GIL is released.
+    bool binding_timeout = false;
+    const auto deadline = std::chrono::steady_clock::now() +
+        std::chrono::milliseconds{timeout_ms};
+    Py_BEGIN_ALLOW_THREADS while (!state.completed.load(std::memory_order_acquire))
     {
-        cnetmod_runtime_run_one(runtime);
-        if (!state.completed)
-            cnetmod_runtime_restart(runtime);
+        cnetmod_runtime_poll(runtime);
+        if (state.completed.load(std::memory_order_acquire))
+            break;
+        if (std::chrono::steady_clock::now() >= deadline)
+        {
+            binding_timeout = true;
+            cnetmod_http_request_cancel(pending);
+            break;
+        }
+        cnetmod_runtime_restart(runtime);
+        std::this_thread::sleep_for(std::chrono::milliseconds{1});
+    }
+
+    if (binding_timeout)
+    {
+        const auto cancellation_deadline = std::chrono::steady_clock::now() +
+            std::chrono::seconds{2};
+        while (!state.completed.load(std::memory_order_acquire) &&
+            std::chrono::steady_clock::now() < cancellation_deadline)
+        {
+            cnetmod_runtime_poll(runtime);
+            if (!state.completed.load(std::memory_order_acquire))
+            {
+                cnetmod_runtime_restart(runtime);
+                std::this_thread::sleep_for(std::chrono::milliseconds{1});
+            }
+        }
+        cnetmod_runtime_stop(runtime);
     }
     Py_END_ALLOW_THREADS
 
@@ -149,6 +182,11 @@ auto request(PyObject*, PyObject* args, PyObject* keywords) -> PyObject*
     cnetmod_http_client_destroy(client);
     cnetmod_runtime_destroy(runtime);
 
+    if (binding_timeout && !state.response)
+    {
+        PyErr_SetString(PyExc_TimeoutError, "cnetmod request timed out");
+        return nullptr;
+    }
     if (!state.response)
     {
         PyErr_SetString(PyExc_ConnectionError,

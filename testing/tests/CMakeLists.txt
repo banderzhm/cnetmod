@@ -234,9 +234,11 @@ if(MSVC AND TARGET test_raft)
 endif()
 if(TARGET test_raft)
     # The five-node TCP chaos cases intentionally consume the event loop and
-    # several loopback sockets.  Running unrelated network suites beside them
-    # can exhaust their convergence budget without exposing a Raft defect.
-    set_tests_properties(test_raft PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
+    # several loopback sockets.  The executable contains all Raft cases, and
+    # its slow scenarios have their own bounded watchdogs.  A 60-second CTest
+    # limit can kill a healthy macOS Debug run before the final watchdog-backed
+    # case starts, so the outer process budget must cover the complete suite.
+    set_tests_properties(test_raft PROPERTIES RUN_SERIAL TRUE TIMEOUT 180)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)

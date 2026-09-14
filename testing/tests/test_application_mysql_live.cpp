@@ -20,8 +20,8 @@ import cnetmod.instrumentation.tracing;
 namespace {
 
 std::uint16_t mysql_test_port = 3306;
-
-}
+std::string mysql_test_host = "127.0.0.1";
+} // namespace
 
 TEST(mysql_live_authentication_health_and_supervised_stop)
 {
@@ -30,7 +30,7 @@ TEST(mysql_live_authentication_health_and_supervised_stop)
     cnetmod::observability::telemetry_hub telemetry{*io};
     cnetmod::application::task_supervisor supervisor{*io};
     cnetmod::mysql::pool_params options;
-    options.host = "127.0.0.1";
+    options.host = mysql_test_host;
     options.port = mysql_test_port;
     options.username = std::getenv("CNETMOD_MYSQL_TEST_USER");
     options.password = std::getenv("CNETMOD_MYSQL_TEST_PASSWORD");
@@ -544,7 +544,7 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                             }
                             value.lifecycle.total_stop_timeout = std::chrono::milliseconds{100};
                             app::configured_service database{.name = "mysql", .enabled = true};
-                            database.properties = {{"host", "127.0.0.1"}, {"port", mysql_test_port},
+                            database.properties = {{"host", mysql_test_host}, {"port", mysql_test_port},
                                 {"username", std::getenv("CNETMOD_MYSQL_TEST_USER")},
                                 {"password", std::getenv("CNETMOD_MYSQL_TEST_PASSWORD")},
                                 {"database", std::getenv("CNETMOD_MYSQL_TEST_DATABASE")},
@@ -658,6 +658,12 @@ int main()
         if (error != std::errc{} || end != text.data() + text.size() || port == 0 || port > 65535)
             return EXIT_FAILURE;
         mysql_test_port = static_cast<std::uint16_t>(port);
+    }
+    if (const auto* configured = std::getenv("CNETMOD_MYSQL_TEST_HOST"))
+    {
+        if (*configured == '\0')
+            return EXIT_FAILURE;
+        mysql_test_host = configured;
     }
     for (const auto* name : {"CNETMOD_MYSQL_TEST_USER", "CNETMOD_MYSQL_TEST_PASSWORD", "CNETMOD_MYSQL_TEST_DATABASE"})
         if (!std::getenv(name))

@@ -120,6 +120,19 @@ public:
         socket_options opts = {.reuse_address = true})
         -> std::expected<void, std::error_code>;
 
+    /**
+     * @brief Returns the endpoint selected by the listening socket.
+     *
+     * This also exposes the operating-system-assigned port after listen() is
+     * called with port zero, which avoids fixed-port races in embedded servers
+     * and integration tests.
+     *
+     * @return The bound endpoint, or bad_descriptor when the server is not
+     * listening.
+     */
+    [[nodiscard]] auto local_endpoint()
+        -> std::expected<endpoint, std::error_code>;
+
     /// Set router
     void set_router(router r);
 

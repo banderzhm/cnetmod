@@ -557,6 +557,7 @@ if(CNETMOD_BUILD_TESTS AND TARGET cnetmod_python AND Python3_Interpreter_FOUND)
         COMMAND Python3::Interpreter
             "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/test_cnetmod_native.py"
             "$<TARGET_FILE:cnetmod_python>")
+    set_tests_properties(python_cnetmod_native_binding PROPERTIES TIMEOUT 45)
 endif()
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/testing/CMakeLists.txt")
     add_subdirectory(testing)

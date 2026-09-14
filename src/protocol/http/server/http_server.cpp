@@ -584,6 +584,14 @@ auto server::listen(std::string_view host, std::uint16_t port,
     return {};
 }
 
+auto server::local_endpoint()
+    -> std::expected<endpoint, std::error_code>
+{
+    if (!acc_)
+        return std::unexpected(make_error_code(errc::bad_descriptor));
+    return acc_->native_socket().local_endpoint();
+}
+
 void server::set_router(router r)
 {
     router_ = std::move(r);
@@ -638,11 +646,11 @@ void server::abort_connections() noexcept
 namespace {
 
     /**
- * @brief Reports an isolated connection failure without exposing exception text.
- *
- * Called while the guarded dispatch still owns the connection coroutine.
- * Diagnostic failures are contained by spawn_guarded.
- */
+     * @brief Reports an isolated connection failure without exposing exception text.
+     *
+     * Called while the guarded dispatch still owns the connection coroutine.
+     * Diagnostic failures are contained by spawn_guarded.
+     */
     void report_connection_failure(std::exception_ptr failure)
     {
         std::error_code code = std::make_error_code(std::errc::io_error);
@@ -666,11 +674,11 @@ namespace {
     }
 
     /**
- * @brief Delivers an admission response before draining the rejected peer.
- *
- * The caller bounds both writing and draining with one cancellation deadline.
- * Half-closing avoids discarding the response when unread request bytes remain.
- */
+     * @brief Delivers an admission response before draining the rejected peer.
+     *
+     * The caller bounds both writing and draining with one cancellation deadline.
+     * Half-closing avoids discarding the response when unread request bytes remain.
+     */
     auto reject_connection(io_context& io, socket& client, cancel_token& token)
         -> task<std::expected<void, std::error_code>>
     {

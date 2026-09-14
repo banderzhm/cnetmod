@@ -56,11 +56,19 @@ thread = threading.Thread(target=server.serve_forever, daemon=True)
 thread.start()
 try:
     endpoint = f"http://127.0.0.1:{server.server_port}"
-    assert module.request("GET", endpoint + "/native", version="http1") == (
+    assert module.request(
+        "GET", endpoint + "/native", timeout_ms=10_000, version="http1"
+    ) == (
         200,
         b"python-native-e2e",
     )
-    assert module.request("POST", endpoint + "/echo", b"request-body", version="http1") == (
+    assert module.request(
+        "POST",
+        endpoint + "/echo",
+        b"request-body",
+        timeout_ms=10_000,
+        version="http1",
+    ) == (
         201,
         b"request-body",
     )

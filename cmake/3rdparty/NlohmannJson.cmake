@@ -21,7 +21,8 @@ endfunction()
 
 macro(cnetmod_configure_nlohmann_json)
     set(CNETMOD_JSON_INCLUDE_DIR "" CACHE PATH "nlohmann/json include directory")
-    set(CNETMOD_JSON_MODULE "" CACHE FILEPATH "nlohmann/json C++ module interface")
+    set(CNETMOD_JSON_MODULE "" CACHE FILEPATH
+        "C++ module interface compatible with the selected nlohmann/json package")
     set(CNETMOD_JSON_PROVIDER AUTO CACHE STRING "nlohmann/json provider: AUTO, PACKAGE, VENDORED")
     set_property(CACHE CNETMOD_JSON_PROVIDER PROPERTY STRINGS AUTO PACKAGE VENDORED)
     set(CNETMOD_JSON_MINIMUM_VERSION 3.12.0 CACHE STRING "Minimum nlohmann/json version")
@@ -39,13 +40,21 @@ macro(cnetmod_configure_nlohmann_json)
         endif()
         if(CNETMOD_JSON_INCLUDE_DIR)
             cnetmod_nlohmann_json_version(_json_version "${CNETMOD_JSON_INCLUDE_DIR}")
-            if(_json_version AND NOT _json_version VERSION_LESS CNETMOD_JSON_MINIMUM_VERSION)
+            if(_json_version AND NOT _json_version VERSION_LESS CNETMOD_JSON_MINIMUM_VERSION AND
+               CNETMOD_JSON_MODULE AND EXISTS "${CNETMOD_JSON_MODULE}")
                 set(CNETMOD_JSON_EFFECTIVE_INCLUDE_DIR "${CNETMOD_JSON_INCLUDE_DIR}")
                 set(CNETMOD_JSON_EFFECTIVE_MODULE "${CNETMOD_JSON_MODULE}")
-                if(NOT CNETMOD_JSON_EFFECTIVE_MODULE)
-                    set(CNETMOD_JSON_EFFECTIVE_MODULE "${PROJECT_SOURCE_DIR}/cmake/modules/nlohmann_json.cppm")
-                endif()
                 set(CNETMOD_JSON_EFFECTIVE_PROVIDER PACKAGE)
+            elseif(_json_version AND NOT _json_version VERSION_LESS CNETMOD_JSON_MINIMUM_VERSION)
+                if(CNETMOD_JSON_PROVIDER STREQUAL PACKAGE)
+                    message(FATAL_ERROR
+                        "CNETMOD_JSON_PROVIDER=PACKAGE requires CNETMOD_JSON_MODULE to name an "
+                        "existing module interface compatible with the selected package. Exporting "
+                        "arbitrary package headers through a synthesized module is not supported.")
+                endif()
+                message(STATUS
+                    "The nlohmann/json package has no explicitly compatible module interface; "
+                    "using the vendored module instead")
             endif()
         endif()
     endif()

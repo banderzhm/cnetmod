@@ -24,9 +24,15 @@ class RequiredCTestTests(unittest.TestCase):
             return type("Completed", (), {"returncode": 0})()
 
         with patch.object(sys, "argv", ["run_required_ctest.py"]), patch.object(
-            runner.subprocess, "run", side_effect=execute
-        ):
+            runner.shutil, "which", return_value="ctest"
+        ), patch.object(runner.subprocess, "run", side_effect=execute):
             return runner.main()
+
+    def test_missing_ctest_is_an_explicit_configuration_error(self):
+        with patch.object(sys, "argv", ["run_required_ctest.py"]), patch.object(
+            runner.shutil, "which", return_value=None
+        ):
+            self.assertEqual(runner.main(), 2)
 
 
 if __name__ == "__main__":

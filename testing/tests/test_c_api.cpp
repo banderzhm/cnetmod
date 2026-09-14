@@ -17,7 +17,7 @@ struct c_api_completion_state
     cnetmod_http_response* response{};
     int error_code{};
     std::string error_message;
-    bool completed{};
+    std::atomic<bool> completed{};
 };
 
 void record_completion(void* raw, cnetmod_http_response* response, int error_code,
@@ -28,8 +28,43 @@ void record_completion(void* raw, cnetmod_http_response* response, int error_cod
     state.error_code = error_code;
     if (error_message)
         state.error_message = error_message;
-    state.completed = true;
+    state.completed.store(true, std::memory_order_release);
     cnetmod_runtime_stop(state.runtime);
+}
+
+auto drive_request_until_complete(cnetmod_runtime* runtime,
+    cnetmod_http_request* request, c_api_completion_state& completion,
+    std::chrono::milliseconds timeout) -> bool
+{
+    std::atomic<bool> expired{};
+    std::jthread watchdog{[&](std::stop_token stop_token)
+        {
+            const auto deadline = std::chrono::steady_clock::now() + timeout;
+            while (!stop_token.stop_requested() &&
+                std::chrono::steady_clock::now() < deadline)
+                std::this_thread::sleep_for(std::chrono::milliseconds{1});
+
+            if (!stop_token.stop_requested())
+            {
+                expired.store(true, std::memory_order_release);
+                cnetmod_http_request_cancel(request);
+                cnetmod_runtime_stop(runtime);
+            }
+        }};
+
+    while (!completion.completed.load(std::memory_order_acquire) &&
+        !expired.load(std::memory_order_acquire))
+    {
+        cnetmod_runtime_run_one(runtime);
+        if (!completion.completed.load(std::memory_order_acquire) &&
+            !expired.load(std::memory_order_acquire))
+            cnetmod_runtime_restart(runtime);
+    }
+
+    watchdog.request_stop();
+    watchdog.join();
+    return completion.completed.load(std::memory_order_acquire) &&
+        !expired.load(std::memory_order_acquire);
 }
 
 } // namespace
@@ -64,7 +99,6 @@ TEST(c_api_exposes_defaults_and_null_handle_safety)
 
 TEST(c_api_gets_a_real_loopback_http_response)
 {
-    constexpr std::uint16_t port = 19432;
     auto server_context = cnetmod::make_io_context();
     cnetmod::net_init network;
     cnetmod::http::router routes;
@@ -75,11 +109,17 @@ TEST(c_api_gets_a_real_loopback_http_response)
         });
     cnetmod::http::server server{*server_context};
     server.set_router(std::move(routes));
-    ASSERT_TRUE(server.listen("127.0.0.1", port).has_value());
+    auto listened = server.listen("127.0.0.1", 0);
+    if (!listened)
+        throw std::system_error(listened.error(), "failed to listen for C API test");
+    auto local = server.local_endpoint();
+    if (!local)
+        throw std::system_error(local.error(), "failed to read C API test endpoint");
+    const auto port = local->port();
 
+    cnetmod::spawn(*server_context, server.run());
     std::thread server_thread{[&]
         {
-            cnetmod::spawn(*server_context, server.run());
             server_context->run();
         }};
 
@@ -96,12 +136,8 @@ TEST(c_api_gets_a_real_loopback_http_response)
     auto* pending = cnetmod_http_request_start(client, CNETMOD_HTTP_GET,
         url.c_str(), nullptr, 0U, record_completion, &completion);
     ASSERT_TRUE(pending != nullptr);
-    while (!completion.completed)
-    {
-        cnetmod_runtime_run_one(runtime);
-        if (!completion.completed)
-            cnetmod_runtime_restart(runtime);
-    }
+    ASSERT_TRUE(drive_request_until_complete(runtime, pending, completion,
+        std::chrono::seconds{10}));
 
     ASSERT_EQ(completion.error_code, 0);
     ASSERT_TRUE(completion.response != nullptr);
@@ -122,7 +158,6 @@ TEST(c_api_gets_a_real_loopback_http_response)
 
 TEST(c_api_cross_thread_cancel_aborts_an_inflight_http_request)
 {
-    constexpr std::uint16_t port = 19433;
     auto server_context = cnetmod::make_io_context();
     cnetmod::net_init network;
     cnetmod::http::router routes;
@@ -135,10 +170,16 @@ TEST(c_api_cross_thread_cancel_aborts_an_inflight_http_request)
         });
     cnetmod::http::server server{*server_context};
     server.set_router(std::move(routes));
-    ASSERT_TRUE(server.listen("127.0.0.1", port).has_value());
+    auto listened = server.listen("127.0.0.1", 0);
+    if (!listened)
+        throw std::system_error(listened.error(), "failed to listen for cancellation test");
+    auto local = server.local_endpoint();
+    if (!local)
+        throw std::system_error(local.error(), "failed to read cancellation endpoint");
+    const auto port = local->port();
+    cnetmod::spawn(*server_context, server.run());
     std::thread server_thread{[&]
         {
-            cnetmod::spawn(*server_context, server.run());
             server_context->run();
         }};
 
@@ -160,12 +201,8 @@ TEST(c_api_cross_thread_cancel_aborts_an_inflight_http_request)
             std::this_thread::sleep_for(std::chrono::milliseconds{20});
             cnetmod_http_request_cancel(pending);
         }};
-    while (!completion.completed)
-    {
-        cnetmod_runtime_run_one(runtime);
-        if (!completion.completed)
-            cnetmod_runtime_restart(runtime);
-    }
+    ASSERT_TRUE(drive_request_until_complete(runtime, pending, completion,
+        std::chrono::seconds{10}));
     canceller.join();
 
     ASSERT_TRUE(completion.response == nullptr);
