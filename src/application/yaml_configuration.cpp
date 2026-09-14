@@ -3,6 +3,7 @@ module cnetmod.application.yaml_configuration;
 import std;
 import nlohmann.json;
 import yaml_cpp;
+import cnetmod.utils.charconv;
 
 namespace cnetmod::application {
 namespace {
@@ -36,10 +37,7 @@ namespace {
             return integer;
 
         double decimal = 0.0;
-        const auto decimal_result = std::from_chars(
-            value.data(), value.data() + value.size(), decimal);
-        if (decimal_result.ec == std::errc{} &&
-            decimal_result.ptr == value.data() + value.size() &&
+        if (cnetmod::from_chars_double(value, decimal) == std::errc{} &&
             std::isfinite(decimal))
             return decimal;
         return value;

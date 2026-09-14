@@ -8,6 +8,7 @@ set(TEST_SOURCES
     test_instrumentation.cpp
     test_metric_aggregation.cpp
     test_flat_map.cpp
+    test_charconv.cpp
     test_concurrent_containers.cpp
     test_application_result.cpp
     test_application.cpp
