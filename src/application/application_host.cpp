@@ -491,6 +491,14 @@ public:
                 // Failure reporting must not prevent shutdown under memory pressure.
             }
         }
+        /**
+         * @brief Releases idle keep-alive peers after request and telemetry drain.
+         * @details No application handler remains active at this phase. Closing
+         * both directions prevents an exporter targeting this host from making
+         * shutdown wait for its own otherwise-idle collector connection.
+         */
+        business_server.abort_connections();
+        management_server.abort_connections();
         // Telemetry may have used this application's HTTP endpoint as its
         // collector. Its client closes during shutdown, so the corresponding
         // server EOF completion must run before the event loop is stopped.

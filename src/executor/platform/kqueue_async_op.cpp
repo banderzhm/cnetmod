@@ -183,7 +183,7 @@ namespace {
     static void kqueue_cancel_fn(cancel_token& token) noexcept
     {
         auto* awaiter = static_cast<kqueue_cancel_awaiter*>(token.ctx_);
-        if (!awaiter)
+        if (!awaiter || !token.pending_.exchange(false, std::memory_order_acq_rel))
             return;
         (void)awaiter->ctx.delete_event(awaiter->fd, awaiter->filter);
         if (token.coroutine_)
@@ -256,7 +256,7 @@ namespace {
     static void kqueue_timer_cancel_fn(cancel_token& token) noexcept
     {
         auto* awaiter = static_cast<kqueue_timer_cancel_awaiter*>(token.ctx_);
-        if (!awaiter)
+        if (!awaiter || !token.pending_.exchange(false, std::memory_order_acq_rel))
             return;
         (void)awaiter->ctx.delete_event(awaiter->id, EVFILT_TIMER);
         if (token.coroutine_)
