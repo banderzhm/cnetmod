@@ -21,35 +21,34 @@ macro(cnetmod_configure_yaml_cpp_modules)
 
     if(NOT CNETMOD_ENABLE_YAML_CONFIGURATION OR NOT CNETMOD_ENABLE_HTTP)
         set(CNETMOD_HAS_YAML_CONFIGURATION OFF)
-        return()
-    endif()
-
-    if(CNETMOD_YAML_CPP_MODULES_SOURCE_DIR)
-        if(NOT EXISTS "${CNETMOD_YAML_CPP_MODULES_SOURCE_DIR}/CMakeLists.txt")
-            message(FATAL_ERROR
-                "CNETMOD_YAML_CPP_MODULES_SOURCE_DIR must contain CMakeLists.txt")
-        endif()
-        set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
-            "Build yaml-cpp module smoke tests" FORCE)
-        set(YAML_CPP_MODULES_INSTALL ON CACHE BOOL
-            "Install yaml-cpp module facade targets" FORCE)
-        add_subdirectory("${CNETMOD_YAML_CPP_MODULES_SOURCE_DIR}"
-            "${CMAKE_BINARY_DIR}/_deps/yaml-cpp-modules-build")
     else()
-        FetchContent_Declare(yaml_cpp_modules
-            GIT_REPOSITORY https://github.com/banderzhm/yaml-cpp-modules.git
-            GIT_TAG ${CNETMOD_YAML_CPP_MODULES_REVISION})
-        set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
-            "Build yaml-cpp module smoke tests" FORCE)
-        set(YAML_CPP_MODULES_INSTALL ON CACHE BOOL
-            "Install yaml-cpp module facade targets" FORCE)
-        FetchContent_MakeAvailable(yaml_cpp_modules)
-    endif()
+        if(CNETMOD_YAML_CPP_MODULES_SOURCE_DIR)
+            if(NOT EXISTS "${CNETMOD_YAML_CPP_MODULES_SOURCE_DIR}/CMakeLists.txt")
+                message(FATAL_ERROR
+                    "CNETMOD_YAML_CPP_MODULES_SOURCE_DIR must contain CMakeLists.txt")
+            endif()
+            set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
+                "Build yaml-cpp module smoke tests" FORCE)
+            set(YAML_CPP_MODULES_INSTALL ON CACHE BOOL
+                "Install yaml-cpp module facade targets" FORCE)
+            add_subdirectory("${CNETMOD_YAML_CPP_MODULES_SOURCE_DIR}"
+                "${CMAKE_BINARY_DIR}/_deps/yaml-cpp-modules-build")
+        else()
+            FetchContent_Declare(yaml_cpp_modules
+                GIT_REPOSITORY https://github.com/banderzhm/yaml-cpp-modules.git
+                GIT_TAG ${CNETMOD_YAML_CPP_MODULES_REVISION})
+            set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
+                "Build yaml-cpp module smoke tests" FORCE)
+            set(YAML_CPP_MODULES_INSTALL ON CACHE BOOL
+                "Install yaml-cpp module facade targets" FORCE)
+            FetchContent_MakeAvailable(yaml_cpp_modules)
+        endif()
 
-    if(NOT TARGET yaml_cpp::yaml_cpp)
-        message(FATAL_ERROR "yaml-cpp-modules did not provide yaml_cpp::yaml_cpp")
+        if(NOT TARGET yaml_cpp::yaml_cpp)
+            message(FATAL_ERROR "yaml-cpp-modules did not provide yaml_cpp::yaml_cpp")
+        endif()
+        set(CNETMOD_HAS_YAML_CONFIGURATION ON)
     endif()
-    set(CNETMOD_HAS_YAML_CONFIGURATION ON)
 endmacro()
 
 function(cnetmod_link_yaml_cpp_modules TARGET_NAME)
