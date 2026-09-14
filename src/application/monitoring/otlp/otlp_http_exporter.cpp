@@ -869,6 +869,7 @@ void otlp_http_exporter::abort() noexcept
     {
         state_->aborted = true;
         state_->delivery_token.cancel();
+        state_->client.close();
         if (!state_->scheduled.load(std::memory_order_acquire))
             state_->discard_pending();
     }
