@@ -28,20 +28,17 @@ jobs:
     - name: Setup Homebrew and install LLVM
       run: |
         brew update
-        brew install icu4c llvm ninja cmake
-        
-        LLVM_VERSION=$(/opt/homebrew/opt/llvm/bin/clang++ --version 2>/dev/null || /usr/local/opt/llvm/bin/clang++ --version)
+        brew install icu4c llvm@21 ninja cmake
+
+        LLVM_PREFIX="$(brew --prefix llvm@21)"
+        LLVM_VERSION="$("${LLVM_PREFIX}/bin/clang++" --version)"
         echo "Installed LLVM version:"
         echo "$LLVM_VERSION"
 
     - name: Detect Homebrew LLVM paths
       id: llvm-paths
       run: |
-        if [ -d "/opt/homebrew/opt/llvm" ]; then
-          LLVM_PREFIX="/opt/homebrew/opt/llvm"
-        else
-          LLVM_PREFIX="/usr/local/opt/llvm"
-        fi
+        LLVM_PREFIX="$(brew --prefix llvm@21)"
         
         echo "LLVM_PREFIX=${LLVM_PREFIX}" >> $GITHUB_OUTPUT
         echo "Detected LLVM prefix: ${LLVM_PREFIX}"
