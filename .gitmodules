@@ -24,3 +24,6 @@
 	path = 3rdparty/icu
 	url = https://github.com/unicode-org/icu.git
 	branch = release-78.1
+[submodule "3rdparty/yaml-cpp-modules"]
+	path = 3rdparty/yaml-cpp-modules
+	url = https://github.com/banderzhm/yaml-cpp-modules.git
