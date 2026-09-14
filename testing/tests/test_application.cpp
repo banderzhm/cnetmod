@@ -152,7 +152,13 @@ TEST(request_cancellation_can_resume_completion_inline)
                         });
                     nested_cancelled = !nested && nested.error() == cnetmod::make_error_code(cnetmod::errc::operation_aborted);
                     if (throws)
+                    {
+                        // A noexcept cancellation callback may complete the wait
+                        // inline. Hand exception propagation back to the owning
+                        // event loop before exercising middleware preservation.
+                        co_await cnetmod::post_awaitable{*io};
                         throw std::system_error(original);
+                    }
                     co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
                 };
                 if (child)
