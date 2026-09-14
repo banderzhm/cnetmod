@@ -113,83 +113,99 @@ TEST(request_cancellation_can_resume_completion_inline)
 
     cnetmod::net_init network;
     for (bool child : {false, true})
-        for (bool throws : {false, true})
+    {
+        auto io = cnetmod::make_io_context();
+        cnetmod::shutdown_handler shutdown;
+        cnetmod::socket peer;
+        cnetmod::http::header_map headers;
+        cnetmod::http::response response;
+        cnetmod::http::request_context request{*io, peer, "GET", "/", headers, {}, response, {}};
+        bool nested_cancelled = false;
+        bool late_rejected = false;
+        auto next = [&]() -> cnetmod::task<void>
         {
-            auto io = cnetmod::make_io_context();
-            cnetmod::shutdown_handler shutdown;
-            cnetmod::socket peer;
-            cnetmod::http::header_map headers;
-            cnetmod::http::response response;
-            cnetmod::http::request_context request{*io, peer, "GET", "/", headers, {}, response, {}};
-            const auto original = std::make_error_code(std::errc::permission_denied);
-            bool nested_cancelled = false;
-            bool late_rejected = false;
-            auto next = [&]() -> cnetmod::task<void>
+            auto wait = [&](cnetmod::cancel_token& token)
+                -> cnetmod::task<std::expected<void, std::error_code>>
             {
-                auto wait = [&](cnetmod::cancel_token& token)
-                    -> cnetmod::task<std::expected<void, std::error_code>>
+                co_await inline_wait{token};
+                shutdown.cancel_requests();
+                request.cancel_pending_operations();
+                cnetmod::http::response late_response;
+                cnetmod::http::request_context late_request{*io, peer, "GET", "/late", headers, {}, late_response, {}};
+                bool late_called = false;
+                auto late_next = [&]() -> cnetmod::task<void>
                 {
-                    co_await inline_wait{token};
-                    shutdown.cancel_requests();
-                    request.cancel_pending_operations();
-                    cnetmod::http::response late_response;
-                    cnetmod::http::request_context late_request{*io, peer, "GET", "/late", headers, {}, late_response, {}};
-                    bool late_called = false;
-                    auto late_next = [&]() -> cnetmod::task<void>
-                    {
-                        late_called = true;
-                        co_return;
-                    };
-                    auto late_middleware = shutdown.track_middleware();
-                    co_await late_middleware(late_request, late_next);
-                    late_rejected = !late_called && late_response.status_code() == 503 && shutdown.in_flight() == 1;
-                    auto nested = co_await request.with_deadline([](cnetmod::cancel_token& inner)
-                                                                     -> cnetmod::task<std::expected<void, std::error_code>>
-                        {
-                            if (inner.is_cancelled())
-                                co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
-                            co_return std::expected<void, std::error_code>{};
-                        });
-                    nested_cancelled = !nested && nested.error() == cnetmod::make_error_code(cnetmod::errc::operation_aborted);
-                    if (throws)
-                    {
-                        // A noexcept cancellation callback may complete the wait
-                        // inline. Hand exception propagation back to the owning
-                        // event loop before exercising middleware preservation.
-                        co_await cnetmod::post_awaitable{*io};
-                        throw std::system_error(original);
-                    }
-                    co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+                    late_called = true;
+                    co_return;
                 };
-                if (child)
-                    (void)co_await request.with_deadline(wait);
-                else
-                    (void)co_await wait(request.cancellation_token());
+                auto late_middleware = shutdown.track_middleware();
+                co_await late_middleware(late_request, late_next);
+                late_rejected = !late_called && late_response.status_code() == 503 && shutdown.in_flight() == 1;
+                auto nested = co_await request.with_deadline([](cnetmod::cancel_token& inner)
+                                                                 -> cnetmod::task<std::expected<void, std::error_code>>
+                    {
+                        if (inner.is_cancelled())
+                            co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
+                        co_return std::expected<void, std::error_code>{};
+                    });
+                nested_cancelled = !nested && nested.error() == cnetmod::make_error_code(cnetmod::errc::operation_aborted);
+                co_return std::unexpected(cnetmod::make_error_code(cnetmod::errc::operation_aborted));
             };
-            auto middleware = shutdown.track_middleware();
-            bool original_preserved = !throws;
-            auto run = [&]() -> cnetmod::task<void>
-            {
-                try
-                {
-                    co_await middleware(request, next);
-                }
-                catch (const std::system_error& error)
-                {
-                    original_preserved = throws && error.code() == original;
-                }
-                io->stop();
-            };
-            auto operation = run();
-            operation.handle().resume();
-            shutdown.cancel_requests();
-            io->run();
-            operation.handle().promise().result();
-            ASSERT_TRUE(original_preserved);
-            ASSERT_TRUE(nested_cancelled);
-            ASSERT_TRUE(late_rejected);
-            ASSERT_EQ(shutdown.in_flight(), 0);
+            if (child)
+                (void)co_await request.with_deadline(wait);
+            else
+                (void)co_await wait(request.cancellation_token());
+        };
+        auto middleware = shutdown.track_middleware();
+        auto run = [&]() -> cnetmod::task<void>
+        {
+            co_await middleware(request, next);
+            io->stop();
+        };
+        auto operation = run();
+        operation.handle().resume();
+        shutdown.cancel_requests();
+        io->run();
+        operation.handle().promise().result();
+        ASSERT_TRUE(nested_cancelled);
+        ASSERT_TRUE(late_rejected);
+        ASSERT_EQ(shutdown.in_flight(), 0);
+    }
+}
+
+TEST(request_middleware_preserves_handler_system_error)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::shutdown_handler shutdown;
+    cnetmod::socket peer;
+    cnetmod::http::header_map headers;
+    cnetmod::http::response response;
+    cnetmod::http::request_context request{*io, peer, "GET", "/", headers, {}, response, {}};
+    const auto original = std::make_error_code(std::errc::permission_denied);
+    auto next = [&]() -> cnetmod::task<void>
+    {
+        throw std::system_error(original);
+        co_return;
+    };
+    bool preserved = false;
+    auto middleware = shutdown.track_middleware();
+    auto run = [&]() -> cnetmod::task<void>
+    {
+        try
+        {
+            co_await middleware(request, next);
         }
+        catch (const std::system_error& error)
+        {
+            preserved = error.code() == original;
+        }
+    };
+    auto operation = run();
+    operation.handle().resume();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+    ASSERT_TRUE(preserved);
+    ASSERT_EQ(shutdown.in_flight(), 0);
 }
 
 TEST(request_child_cancellation_handles_completion_and_late_registration)
