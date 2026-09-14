@@ -193,6 +193,79 @@ namespace {
         }
     }
 
+    static void kqueue_timer_cancel_fn(cancel_token& token) noexcept;
+
+    struct kqueue_timer_cancel_awaiter
+    {
+        kqueue_context& ctx;
+        int id;
+        intptr_t timeout_ms;
+        cancel_token& token;
+        std::error_code sync_error{};
+        post_node cancellation_post{};
+
+        auto await_ready() const noexcept -> bool
+        {
+            return token.is_cancelled();
+        }
+
+        auto await_suspend(std::coroutine_handle<> continuation) noexcept -> bool
+        {
+            if (token.is_cancelled())
+            {
+                sync_error = make_error_code(errc::operation_aborted);
+                return false;
+            }
+
+            token.ctx_ = this;
+            token.fd_ = id;
+            token.filter_ = EVFILT_TIMER;
+            token.coroutine_ = continuation;
+            token.cancel_fn_ = &kqueue_timer_cancel_fn;
+
+            struct kevent event{};
+            EV_SET(&event, static_cast<uintptr_t>(id), EVFILT_TIMER,
+                EV_ADD | EV_ONESHOT, 0, timeout_ms,
+                reinterpret_cast<void*>(continuation.address()));
+            if (::kevent(ctx.native_handle(), &event, 1, nullptr, 0, nullptr) < 0)
+            {
+                sync_error = std::error_code(errno, std::generic_category());
+                return false;
+            }
+
+            token.pending_.store(true, std::memory_order_release);
+            if (token.is_cancelled())
+            {
+                token.pending_.store(false, std::memory_order_relaxed);
+                (void)ctx.delete_event(id, EVFILT_TIMER);
+                sync_error = make_error_code(errc::operation_aborted);
+                return false;
+            }
+            return true;
+        }
+
+        void await_resume() noexcept
+        {
+            token.pending_.store(false, std::memory_order_relaxed);
+        }
+    };
+
+    /**
+     * @brief Removes a timer and resumes its coroutine through the owner queue.
+     */
+    static void kqueue_timer_cancel_fn(cancel_token& token) noexcept
+    {
+        auto* awaiter = static_cast<kqueue_timer_cancel_awaiter*>(token.ctx_);
+        if (!awaiter)
+            return;
+        (void)awaiter->ctx.delete_event(awaiter->id, EVFILT_TIMER);
+        if (token.coroutine_)
+        {
+            awaiter->cancellation_post.coroutine = token.coroutine_;
+            awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
+        }
+    }
+
     auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint
     {
         if (sa.ss_family == AF_INET6)
@@ -857,51 +930,7 @@ auto async_timer_wait(io_context& ctx,
     static std::atomic<int> next_id{1000000};
     int timer_id = next_id.fetch_add(1, std::memory_order_relaxed);
 
-    // kqueue EVFILT_TIMER cannot use cancel_awaiter (ident is timer_id not fd)
-    // Use raw kqueue_timer_awaiter + manual token check
-    struct kqueue_timer_cancel_awaiter
-    {
-        int kq_fd;
-        int id;
-        intptr_t timeout_ms;
-        cancel_token& tk;
-        std::error_code sync_error{};
-
-        auto await_ready() const noexcept -> bool
-        {
-            return tk.is_cancelled();
-        }
-
-        auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
-        {
-            if (tk.is_cancelled())
-            {
-                sync_error = make_error_code(errc::operation_aborted);
-                return false;
-            }
-
-            struct kevent ev{};
-
-            EV_SET(&ev, static_cast<uintptr_t>(id), EVFILT_TIMER,
-                EV_ADD | EV_ONESHOT, 0, timeout_ms,
-                reinterpret_cast<void*>(h.address()));
-            if (::kevent(kq_fd, &ev, 1, nullptr, 0, nullptr) < 0)
-            {
-                sync_error = std::error_code(errno, std::generic_category());
-                return false;
-            }
-
-            tk.pending_.store(true, std::memory_order_release);
-            return true;
-        }
-
-        void await_resume() noexcept
-        {
-            tk.pending_.store(false, std::memory_order_relaxed);
-        }
-    };
-
-    kqueue_timer_cancel_awaiter aw{kq.native_handle(), timer_id,
+    kqueue_timer_cancel_awaiter aw{kq, timer_id,
         static_cast<intptr_t>(ms), token};
     co_await aw;
 

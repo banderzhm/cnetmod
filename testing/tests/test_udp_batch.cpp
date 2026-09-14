@@ -222,6 +222,7 @@ auto run_udp_batch_short_burst_probe(cnetmod::io_context& context)
     co_return {};
 }
 
+#ifdef CNETMOD_PLATFORM_WINDOWS
 auto run_udp_batch_ordering_stress(cnetmod::io_context& context)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
@@ -285,6 +286,7 @@ auto run_udp_batch_ordering_stress(cnetmod::io_context& context)
     }
     co_return {};
 }
+#endif
 
 } // namespace
 
@@ -378,6 +380,7 @@ TEST(udp_batch_short_burst_does_not_wait_for_full_batch)
     ASSERT_TRUE(result && *result);
 }
 
+#ifdef CNETMOD_PLATFORM_WINDOWS
 TEST(udp_batch_iocp_fallback_preserves_order_under_pressure)
 {
     cnetmod::net_init network;
@@ -396,7 +399,6 @@ TEST(udp_batch_iocp_fallback_preserves_order_under_pressure)
     ASSERT_TRUE(result && *result);
 }
 
-#ifdef CNETMOD_PLATFORM_WINDOWS
 TEST(socket_release_rejects_live_async_backend)
 {
     cnetmod::net_init network;
