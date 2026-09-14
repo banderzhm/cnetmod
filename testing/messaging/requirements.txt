@@ -7,3 +7,4 @@ python-qpid-proton==0.40.0
 confluent-kafka==2.11.0
 docker==7.1.0
 python-dotenv==1.1.1
+cryptography>=45,<51

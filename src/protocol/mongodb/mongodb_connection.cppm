@@ -18,9 +18,12 @@ import :wire_protocol;
 
 export namespace cnetmod::mongodb {
 
-/// Consumer for an exhaust / OP_MSG moreToCome response sequence. Returning
-/// an error stops consumption and retires the connection so unread messages
-/// cannot corrupt a later command on the same socket.
+/**
+ * Consumes an exhaust OP_MSG response sequence.
+ *
+ * Returning an error stops consumption and retires the connection so unread
+ * messages cannot corrupt a later command on the same socket.
+ */
 using command_stream_handler =
     std::function<task<result<void>>(bson_document)>;
 
@@ -44,6 +47,13 @@ public:
         -> task<result<bson_document>>;
     auto command(bson_document command_document)
         -> task<result<bson_document>>;
+    /**
+     * Executes a getMore command with the exhaustAllowed capability.
+     *
+     * The caller must first execute find or aggregate and pass the returned
+     * cursor identifier in a getMore command. The handler receives every
+     * response until the server clears the moreToCome flag.
+     */
     auto command_stream(std::string_view database, bson_document command_document,
         command_stream_handler on_message) -> task<result<void>>;
     auto ping() -> task<result<void>>;

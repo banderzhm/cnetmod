@@ -641,6 +641,7 @@ public:
         : impl(context, tls, std::move(listen_endpoint), std::move(handlers.request), shared_port)
     {
         webtransport_handler_ = std::move(handlers.webtransport);
+        push_cancellation_observer_ = std::move(handlers.push_cancelled);
     }
 
     impl(io_context& context, io_context& socket_context, ssl_context& tls,
@@ -771,8 +772,12 @@ public:
         : impl(context, tls, std::move(listen_endpoint), std::move(handlers.request))
     {
         webtransport_handler_ = std::move(handlers.webtransport);
+        push_cancellation_observer_ = std::move(handlers.push_cancelled);
         for (auto& shard : shards_)
+        {
             shard->webtransport_handler_ = webtransport_handler_;
+            shard->push_cancellation_observer_ = push_cancellation_observer_;
+        }
     }
 
     [[nodiscard]] auto start() -> std::expected<void, std::error_code>
@@ -905,6 +910,19 @@ public:
             shard->h3_settings_.qpack_max_table_capacity = max_table_capacity;
             shard->h3_settings_.qpack_blocked_streams = max_blocked_streams;
         }
+        return {};
+    }
+
+    auto set_push_cancellation_observer(
+        server_push_cancellation_observer observer)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(
+                std::make_error_code(std::errc::operation_in_progress));
+        push_cancellation_observer_ = std::move(observer);
+        for (auto& shard : shards_)
+            shard->push_cancellation_observer_ = push_cancellation_observer_;
         return {};
     }
 
@@ -1212,12 +1230,15 @@ private:
         }
         auto session = std::shared_ptr<http3_server_session>{webtransport_handler_ && async_handler_
                 ? make_http3_server_session(*connection,
-                      http3_server_handlers{async_handler_, webtransport_handler_})
+                      http3_server_handlers{async_handler_, webtransport_handler_,
+                          push_cancellation_observer_})
                 : webtransport_handler_ ? make_http3_server_session(*connection, webtransport_handler_)
                 : streaming_handler_    ? make_http3_server_session(*connection, streaming_handler_)
                 : async_handler_        ? make_http3_server_session(*connection, async_handler_)
                                         : make_http3_server_session(*connection, handler_)};
         session->configure_local_settings(h3_settings_);
+        session->configure_push_cancellation_observer(
+            push_cancellation_observer_);
         {
             concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
             if (sessions_.contains(connection.get()))
@@ -1738,6 +1759,7 @@ private:
     async_server_request_handler async_handler_;
     streaming_server_request_handler streaming_handler_;
     async_webtransport_handler webtransport_handler_;
+    server_push_cancellation_observer push_cancellation_observer_;
     udp::udp_socket socket_;
     udp::udp_socket* datagram_socket_{};
     // `run_loop` and `run_timer_loop` can be resumed by different IOCP
@@ -1831,6 +1853,13 @@ http3_server::~http3_server() = default;
 auto http3_server::start() -> std::expected<void, std::error_code>
 {
     return impl_->start();
+}
+
+auto http3_server::set_push_cancellation_observer(
+    server_push_cancellation_observer observer)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_push_cancellation_observer(std::move(observer));
 }
 
 auto http3_server::set_max_datagram_frame_size(std::uint64_t bytes)

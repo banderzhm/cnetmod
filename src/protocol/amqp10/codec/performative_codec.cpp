@@ -22,6 +22,8 @@ namespace {
     {
         if (auto p = std::get_if<std::uint32_t>(&v.data))
             return *p;
+        if (auto p = std::get_if<std::uint16_t>(&v.data))
+            return *p;
         if (auto p = std::get_if<std::uint8_t>(&v.data))
             return *p;
         return {};
@@ -120,6 +122,18 @@ namespace {
                 t.dynamic ? value{true} : value{}});
     }
 
+    auto error_value(const error_condition& error) -> value
+    {
+        map info;
+        info.reserve(error.info.size());
+        for (const auto& [key, entry] : error.info)
+            info.emplace_back(value{key}, entry);
+        return composite_value(0x1d,
+            {value{error.condition},
+                error.description.empty() ? value{} : value{error.description},
+                info.empty() ? value{} : value::make_map(std::move(info))});
+    }
+
     auto outcome_value(const delivery_outcome& o) -> value
     {
         std::uint64_t code = 0x24;
@@ -127,7 +141,7 @@ namespace {
         if (o.kind == outcome_kind::rejected)
         {
             code = 0x25;
-            fields.push_back(value{});
+            fields.push_back(o.error ? error_value(*o.error) : value{});
         }
         else if (o.kind == outcome_kind::released)
             code = 0x26;
@@ -135,6 +149,11 @@ namespace {
         {
             code = 0x27;
             fields = {value{o.delivery_failed}, value{o.undeliverable_here}};
+        }
+        else if (o.kind == outcome_kind::declared)
+        {
+            code = 0x33;
+            fields = {o.transaction_id ? value{*o.transaction_id} : value{}};
         }
         else if (o.kind == outcome_kind::transactional)
         {
@@ -203,6 +222,15 @@ namespace {
                 result.undeliverable_here = boolean(field(*f, 1));
             }
             break;
+        case 0x33:
+            result.kind = outcome_kind::declared;
+            if (f)
+            {
+                auto id = bin(field(*f, 0));
+                if (!id.empty())
+                    result.transaction_id = std::move(id);
+            }
+            break;
         case 0x34:
             result.kind = outcome_kind::transactional;
             if (f)
@@ -218,6 +246,24 @@ namespace {
         default:
             return {};
         }
+        return result;
+    }
+
+    auto error_from_value(const value& v) -> std::optional<error_condition>
+    {
+        if (descriptor_code(v) != std::optional<std::uint64_t>{0x1d})
+            return {};
+        const auto* fields = described_fields(v);
+        if (!fields)
+            return {};
+        error_condition result;
+        result.condition = symbol{text(field(*fields, 0))};
+        result.description = text(field(*fields, 1));
+        if (const auto* entries =
+                std::get_if<std::shared_ptr<map>>(&field(*fields, 2).data);
+            entries && *entries)
+            for (const auto& [key, entry] : **entries)
+                result.info.emplace(symbol{text(key)}, entry);
         return result;
     }
 } // namespace
@@ -270,7 +316,7 @@ auto encode_performative(const performative& p) -> binary
                     {value{x.handle}, x.delivery_id ? value{*x.delivery_id} : value{},
                         x.delivery_tag.empty() ? value{} : value{x.delivery_tag},
                         x.message_format ? value{*x.message_format} : value{},
-                        value{x.settled}, value{x.more},
+                        value{x.settled}, value{x.more}, value{},
                         x.state ? outcome_value(*x.state) : value{}, value{x.resume},
                         value{x.aborted}, value{x.batchable}});
                 b.insert(b.end(), x.payload.begin(), x.payload.end());
@@ -284,11 +330,15 @@ auto encode_performative(const performative& p) -> binary
                         x.state ? outcome_value(*x.state) : value{},
                         value{x.batchable}});
             else if constexpr (std::same_as<T, detach>)
-                return described_list(0x16, {value{x.handle}, value{x.closed}});
+                return described_list(0x16,
+                    {value{x.handle}, value{x.closed},
+                        x.error ? error_value(*x.error) : value{}});
             else if constexpr (std::same_as<T, end>)
-                return described_list(0x17, {});
+                return described_list(
+                    0x17, {x.error ? error_value(*x.error) : value{}});
             else if constexpr (std::same_as<T, close>)
-                return described_list(0x18, {});
+                return described_list(
+                    0x18, {x.error ? error_value(*x.error) : value{}});
             else if constexpr (std::same_as<T, coordinator>)
                 return described_list(0x30, {});
             else if constexpr (std::same_as<T, declare>)
@@ -386,10 +436,10 @@ auto decode_performative(std::span<const std::byte> b)
             x.message_format = *v;
         x.settled = boolean(field(*f, 4));
         x.more = boolean(field(*f, 5));
-        x.state = outcome_from_value(field(*f, 6));
-        x.resume = boolean(field(*f, 7));
-        x.aborted = boolean(field(*f, 8));
-        x.batchable = boolean(field(*f, 9));
+        x.state = outcome_from_value(field(*f, 7));
+        x.resume = boolean(field(*f, 8));
+        x.aborted = boolean(field(*f, 9));
+        x.batchable = boolean(field(*f, 10));
         auto consumed = b.size() - d.remaining();
         x.payload.assign(b.begin() + static_cast<std::ptrdiff_t>(consumed),
             b.end());
@@ -408,12 +458,12 @@ auto decode_performative(std::span<const std::byte> b)
         return performative{x};
     }
     case 0x16:
-        return performative{
-            detach{u32(field(*f, 0)).value_or(0), boolean(field(*f, 1)), {}}};
+        return performative{detach{u32(field(*f, 0)).value_or(0),
+            boolean(field(*f, 1)), error_from_value(field(*f, 2))}};
     case 0x17:
-        return performative{end{}};
+        return performative{end{error_from_value(field(*f, 0))}};
     case 0x18:
-        return performative{close{}};
+        return performative{close{error_from_value(field(*f, 0))}};
     case 0x30:
         return performative{coordinator{}};
     case 0x31:

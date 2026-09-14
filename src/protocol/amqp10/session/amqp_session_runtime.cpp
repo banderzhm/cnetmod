@@ -15,7 +15,8 @@ struct session::impl : recovery_observer
     std::uint16_t channel_id;
     session_options options;
     session_state current = session_state::unmapped;
-    std::uint32_t next_outgoing_id = 1;
+    std::shared_ptr<std::atomic<std::uint32_t>> next_outgoing_id =
+        std::make_shared<std::atomic<std::uint32_t>>(1);
     std::uint32_t next_handle = 0;
 
     ~impl()
@@ -36,7 +37,7 @@ struct session::impl : recovery_observer
             co_return {};
         current = session_state::unmapped;
         cnetmod::amqp10::begin request{.remote_channel = {},
-            .next_outgoing_id = next_outgoing_id,
+            .next_outgoing_id = next_outgoing_id->load(std::memory_order_relaxed),
             .incoming_window = options.incoming_window,
             .outgoing_window = options.outgoing_window,
             .handle_max = options.handle_max};
@@ -82,7 +83,8 @@ auto session::begin(cancel_token& token)
             errc::protocol_state,
             "session is already begun"));
     cnetmod::amqp10::begin request{
-        .next_outgoing_id = impl_->next_outgoing_id,
+        .next_outgoing_id =
+            impl_->next_outgoing_id->load(std::memory_order_relaxed),
         .incoming_window = impl_->options.incoming_window,
         .outgoing_window = impl_->options.outgoing_window,
         .handle_max = impl_->options.handle_max};
@@ -115,7 +117,8 @@ auto session::make_sender(sender_options options)
     return sender_link::create(
         *impl_->owner, impl_->channel_id, impl_->next_handle++,
         std::move(options.name), std::move(options.target_terminus),
-        options.sender_settlement, options.receiver_settlement);
+        options.sender_settlement, options.receiver_settlement,
+        impl_->next_outgoing_id);
 }
 
 auto session::make_receiver(receiver_options options)
@@ -147,7 +150,7 @@ auto session::make_transaction_controller()
             errc::protocol_state,
             "session handle maximum reached"));
     return transaction_controller::create(*impl_->owner, impl_->channel_id,
-        impl_->next_handle++);
+        impl_->next_handle++, impl_->next_outgoing_id);
 }
 
 auto session::end(cancel_token& token)

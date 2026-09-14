@@ -27,3 +27,6 @@
 [submodule "3rdparty/yaml-cpp-modules"]
 	path = 3rdparty/yaml-cpp-modules
 	url = https://github.com/banderzhm/yaml-cpp-modules.git
+[submodule "3rdparty/yaml-cpp"]
+	path = 3rdparty/yaml-cpp
+	url = https://github.com/jbeder/yaml-cpp.git

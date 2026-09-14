@@ -111,9 +111,9 @@ auto main(int argc, char** argv) -> int
     auto* context_ptr = context.get();
     auto early_data_cache = std::make_shared<cnetmod::quic::early_data_replay_cache>();
     auto priority = std::make_shared<priority_fixture>();
-    auto cancelled_push_bodies = std::make_shared<std::atomic<std::size_t>>();
+    auto cancelled_push_frames = std::make_shared<std::atomic<std::size_t>>();
     cnetmod::http::v3::streaming_server_request_handler handler =
-        [context_ptr, early_data_cache, priority, cancelled_push_bodies](cnetmod::http::v3::http3_request& request,
+        [context_ptr, early_data_cache, priority, cancelled_push_frames](cnetmod::http::v3::http3_request& request,
             cnetmod::http::v3::http3_response& response,
             cnetmod::http::request_body_stream& body_stream,
             cnetmod::cancel_token& token) -> cnetmod::task<std::expected<void, std::error_code>>
@@ -275,26 +275,25 @@ auto main(int argc, char** argv) -> int
             auto emitted = std::make_shared<bool>();
             pushed->body_source = std::make_shared<
                 cnetmod::http::response_body_source>(
-                [context_ptr, emitted, cancelled_push_bodies](cnetmod::cancel_token& response_token)
+                [context_ptr, emitted](cnetmod::cancel_token& response_token)
                     -> cnetmod::task<std::optional<cnetmod::http::request_body_chunk>>
                 {
                     if (*emitted)
                         co_return std::nullopt;
                     if (response_token.is_cancelled())
-                    {
-                        cancelled_push_bodies->fetch_add(1U, std::memory_order_release);
                         co_return std::nullopt;
-                    }
                     // Give the peer a deterministic window to consume the
                     // PUSH_PROMISE and send CANCEL_PUSH before DATA begins.
+                    // This fixture validates remote cancellation, not a
+                    // latency target. Dynamic QPACK can defer the promise
+                    // callback until encoder instructions arrive. Keep this
+                    // synthetic producer pending beyond the observer's
+                    // bounded cancellation window so it cannot unregister
+                    // its token before the on-wire CANCEL_PUSH is evaluated.
                     const auto waited = co_await cnetmod::async_timer_wait(
-                        *context_ptr, std::chrono::milliseconds{250}, response_token);
+                        *context_ptr, std::chrono::seconds{10}, response_token);
                     if (!waited || response_token.is_cancelled())
-                    {
-                        if (response_token.is_cancelled())
-                            cancelled_push_bodies->fetch_add(1U, std::memory_order_release);
                         co_return std::nullopt;
-                    }
                     *emitted = true;
                     constexpr std::string_view content{"must-not-arrive"};
                     cnetmod::http::request_body_chunk chunk;
@@ -315,10 +314,26 @@ auto main(int argc, char** argv) -> int
         }
         if (request.path == "/push-cancel-count")
         {
+            // Request streams and the client control stream are independent,
+            // so this request can legally overtake the earlier CANCEL_PUSH on
+            // the wire. Wait asynchronously for the observable cancellation
+            // instead of turning cross-stream scheduling into a flaky test
+            // ordering assumption.
+            const auto deadline = std::chrono::steady_clock::now() +
+                std::chrono::seconds{8};
+            while (cancelled_push_frames->load(std::memory_order_acquire) == 0U &&
+                std::chrono::steady_clock::now() < deadline &&
+                !token.is_cancelled())
+            {
+                const auto waited = co_await cnetmod::async_timer_wait(
+                    *context_ptr, std::chrono::milliseconds{5}, token);
+                if (!waited)
+                    break;
+            }
             response.status = 200;
             response.headers["content-type"] = "text/plain";
             response.body = std::to_string(
-                cancelled_push_bodies->load(std::memory_order_acquire));
+                cancelled_push_frames->load(std::memory_order_acquire));
             co_return {};
         }
         if (request.path == "/post")
@@ -425,6 +440,17 @@ auto main(int argc, char** argv) -> int
 
     auto server = cnetmod::http::v3::make_http3_server(*context, tls,
         cnetmod::endpoint{*address, arguments.port}, std::move(handler));
+    if (auto configured = server->set_push_cancellation_observer(
+            [cancelled_push_frames](std::uint64_t)
+            {
+                cancelled_push_frames->fetch_add(1U, std::memory_order_release);
+            });
+        !configured)
+    {
+        logger::error{"Push cancellation observer configuration failed: {}",
+            configured.error().message()};
+        return 1;
+    }
     if (arguments.enable_dynamic_qpack)
     {
         if (auto configured = server->set_qpack_settings(64U * 1024U, 100U);

@@ -697,9 +697,10 @@ auto connection::execute_command_stream(std::string_view database,
         co_return std::unexpected(written.error());
     }
 
+    auto expected_response_to = request_id;
     for (;;)
     {
-        auto message = co_await receive_message(request_id);
+        auto message = co_await receive_message(expected_response_to);
         if (!message)
         {
             close();
@@ -719,6 +720,12 @@ auto connection::execute_command_stream(std::string_view database,
         }
         if (!more_to_come)
             co_return result<void>{};
+        /**
+         * In an exhaust sequence, each server message becomes the correlation
+         * parent of the following message. MongoDB therefore sets responseTo
+         * to the previous server requestId, not to the original client id.
+         */
+        expected_response_to = message->header.request_id;
     }
 }
 

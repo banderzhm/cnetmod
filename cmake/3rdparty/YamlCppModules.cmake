@@ -6,13 +6,17 @@ include_guard(GLOBAL)
   The facade is deliberately a composition dependency rather than a core
   dependency: only the Application YAML document adapter imports it.  A local
   source directory is useful while developing the facade; ordinary builds use
-  the repository's pinned 3rdparty/yaml-cpp-modules submodule.
+  the repository's pinned yaml-cpp and yaml-cpp-modules submodules.  Keeping
+  both repositories in 3rdparty avoids an implicit configure-time download and
+  makes the complete YAML dependency graph visible in the parent repository.
 ]]
 macro(cnetmod_configure_yaml_cpp_modules)
     option(CNETMOD_ENABLE_YAML_CONFIGURATION
         "Enable YAML files for cnetmod.application configuration" ON)
     set(CNETMOD_YAML_CPP_MODULES_SOURCE_DIR "" CACHE PATH
         "Local yaml-cpp-modules source directory (development override)")
+    set(CNETMOD_YAML_CPP_SOURCE_DIR "" CACHE PATH
+        "Local yaml-cpp source directory (development override)")
 
     if(NOT CNETMOD_ENABLE_YAML_CONFIGURATION OR NOT CNETMOD_ENABLE_HTTP)
         set(CNETMOD_HAS_YAML_CONFIGURATION OFF)
@@ -24,10 +28,34 @@ macro(cnetmod_configure_yaml_cpp_modules)
             set(_cnetmod_yaml_cpp_modules_source
                 "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/yaml-cpp-modules")
         endif()
+        if(CNETMOD_YAML_CPP_SOURCE_DIR)
+            set(_cnetmod_yaml_cpp_source "${CNETMOD_YAML_CPP_SOURCE_DIR}")
+        else()
+            set(_cnetmod_yaml_cpp_source
+                "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/yaml-cpp")
+        endif()
+        if(NOT EXISTS "${_cnetmod_yaml_cpp_source}/CMakeLists.txt")
+            message(FATAL_ERROR
+                "yaml-cpp is unavailable at ${_cnetmod_yaml_cpp_source}. "
+                "Initialize submodules with: git submodule update --init --recursive")
+        endif()
         if(NOT EXISTS "${_cnetmod_yaml_cpp_modules_source}/CMakeLists.txt")
             message(FATAL_ERROR
                 "yaml-cpp-modules is unavailable at ${_cnetmod_yaml_cpp_modules_source}. "
                 "Initialize submodules with: git submodule update --init --recursive")
+        endif()
+
+        set(YAML_CPP_BUILD_TESTS OFF CACHE BOOL
+            "Build yaml-cpp tests" FORCE)
+        set(YAML_CPP_BUILD_TOOLS OFF CACHE BOOL
+            "Build yaml-cpp tools" FORCE)
+        set(YAML_CPP_INSTALL ON CACHE BOOL
+            "Install yaml-cpp with cnetmod" FORCE)
+        add_subdirectory("${_cnetmod_yaml_cpp_source}"
+            "${CMAKE_BINARY_DIR}/_deps/yaml-cpp-build")
+
+        if(NOT TARGET yaml-cpp::yaml-cpp)
+            message(FATAL_ERROR "yaml-cpp did not provide yaml-cpp::yaml-cpp")
         endif()
         set(YAML_CPP_MODULES_BUILD_TESTS OFF CACHE BOOL
             "Build yaml-cpp module smoke tests" FORCE)

@@ -35,7 +35,11 @@ TEST(mysql_live_authentication_health_and_supervised_stop)
     options.username = std::getenv("CNETMOD_MYSQL_TEST_USER");
     options.password = std::getenv("CNETMOD_MYSQL_TEST_PASSWORD");
     options.database = std::getenv("CNETMOD_MYSQL_TEST_DATABASE");
-    options.ssl = cnetmod::mysql::ssl_mode::disable;
+    // MySQL 8.4 uses caching_sha2_password by default.  Require TLS so the
+    // full authentication exchange never sends credentials in clear text.
+    // The ephemeral CI server uses its generated self-signed certificate.
+    options.ssl = cnetmod::mysql::ssl_mode::require;
+    options.tls_verify = false;
     options.initial_size = 1;
     options.max_size = 1;
     cnetmod::application::mysql_service service{*io, options, "live",
@@ -131,6 +135,8 @@ TEST(mysql_live_authentication_health_and_supervised_stop)
                     control_options.username = options.username;
                     control_options.password = options.password;
                     control_options.database = options.database;
+                    control_options.ssl = cnetmod::mysql::ssl_mode::require;
+                    control_options.tls_verify = false;
                     auto connected = co_await control.connect(std::move(control_options));
                     ASSERT_FALSE(connected.is_err());
                     if (connected.is_err())

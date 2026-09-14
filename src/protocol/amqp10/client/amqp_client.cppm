@@ -62,6 +62,8 @@ private:
         -> task<std::expected<void, error>> override;
     auto receive(std::uint16_t, cancel_token&)
         -> task<std::expected<performative, error>> override;
+    void restore_received(
+        std::uint16_t, std::vector<performative>) override;
     [[nodiscard]] auto maximum_frame_size() const noexcept
         -> std::uint32_t override;
     void register_recovery_observer(recovery_observer&) override;

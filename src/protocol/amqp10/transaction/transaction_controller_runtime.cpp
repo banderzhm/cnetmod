@@ -17,7 +17,7 @@ struct transaction_controller::impl
     std::uint16_t channel;
     std::uint32_t handle;
     bool attached = false;
-    std::uint32_t next_delivery_id = 0;
+    std::shared_ptr<std::atomic<std::uint32_t>> next_delivery_id;
 };
 
 transaction_controller::transaction_controller(std::unique_ptr<impl> p)
@@ -30,9 +30,12 @@ auto transaction_controller::operator=(transaction_controller&&) noexcept
     -> transaction_controller& = default;
 
 auto transaction_controller::create(performative_channel& o, std::uint16_t c,
-    std::uint32_t h) -> transaction_controller
+    std::uint32_t h,
+    std::shared_ptr<std::atomic<std::uint32_t>> delivery_ids)
+    -> transaction_controller
 {
-    return transaction_controller(std::make_unique<impl>(impl{&o, c, h}));
+    return transaction_controller(
+        std::make_unique<impl>(impl{&o, c, h, false, std::move(delivery_ids)}));
 }
 
 namespace {
@@ -65,22 +68,39 @@ auto transaction_controller::declare(cancel_token& token)
             .transaction_coordinator = true,
             .unsettled = {},
             .incomplete_unsettled = false,
-            .initial_delivery_count = {},
+            .initial_delivery_count = 0,
             .properties = {}};
         auto sent =
             co_await impl_->owner->send(impl_->channel, performative{a}, token);
         if (!sent)
             co_return std::unexpected(sent.error());
-        auto peer = co_await impl_->owner->receive(impl_->channel, token);
-        if (!peer || !std::holds_alternative<attach>(*peer))
-            co_return std::unexpected(
-                peer ? make_error(error_stage::transaction,
-                           errc::unexpected_performative,
-                           "expected transaction coordinator Attach")
-                     : peer.error());
+        std::vector<performative> deferred;
+        while (true)
+        {
+            auto peer = co_await impl_->owner->receive(impl_->channel, token);
+            if (!peer)
+                co_return std::unexpected(peer.error());
+            if (const auto* attached = std::get_if<attach>(&*peer);
+                attached && attached->name == a.name)
+            {
+                impl_->owner->restore_received(
+                    impl_->channel, std::move(deferred));
+                break;
+            }
+            if (const auto* detached = std::get_if<detach>(&*peer);
+                detached && detached->handle == impl_->handle)
+                co_return std::unexpected(make_error(error_stage::transaction,
+                    errc::transaction_failed,
+                    "transaction coordinator link was detached"));
+            if (const auto* credit = std::get_if<flow>(&*peer);
+                credit && credit->handle == impl_->handle)
+                continue;
+            deferred.push_back(std::move(*peer));
+        }
         impl_->attached = true;
     }
-    auto id = impl_->next_delivery_id++;
+    auto id = impl_->next_delivery_id->fetch_add(
+        1, std::memory_order_relaxed);
     transfer tx{.handle = impl_->handle,
         .delivery_id = id,
         .delivery_tag = binary{std::byte(id >> 24), std::byte(id >> 16),
@@ -90,31 +110,32 @@ auto transaction_controller::declare(cancel_token& token)
         performative{std::move(tx)}, token);
     if (!sent)
         co_return std::unexpected(sent.error());
+    std::vector<performative> deferred;
     while (true)
     {
         auto peer = co_await impl_->owner->receive(impl_->channel, token);
         if (!peer)
             co_return std::unexpected(peer.error());
-        if (auto t = std::get_if<transfer>(&*peer);
-            t && t->handle == impl_->handle)
-        {
-            auto decoded_message = decode_message(t->payload);
-            if (decoded_message)
-                if (auto body = std::get_if<value>(&decoded_message->body))
-                {
-                    encoder encoded;
-                    encoded.write_value(*body);
-                    auto response = decode_performative(encoded.bytes());
-                    if (response && std::holds_alternative<declared>(*response))
-                        co_return std::get<declared>(*response).transaction_id;
-                }
-        }
         if (auto d = std::get_if<disposition>(&*peer);
-            d && d->first == id && d->state &&
-            d->state->kind == outcome_kind::rejected)
-            co_return std::unexpected(make_error(error_stage::transaction,
-                errc::transaction_failed,
-                "transaction declaration rejected"));
+            d && d->first == id && d->state)
+        {
+            if (d->state->kind == outcome_kind::declared &&
+                d->state->transaction_id)
+            {
+                impl_->owner->restore_received(
+                    impl_->channel, std::move(deferred));
+                co_return *d->state->transaction_id;
+            }
+            if (d->state->kind == outcome_kind::rejected)
+            {
+                impl_->owner->restore_received(
+                    impl_->channel, std::move(deferred));
+                co_return std::unexpected(make_error(error_stage::transaction,
+                    errc::transaction_failed,
+                    "transaction declaration rejected"));
+            }
+        }
+        deferred.push_back(std::move(*peer));
     }
 }
 
@@ -126,7 +147,8 @@ auto transaction_controller::discharge(
         co_return std::unexpected(
             make_error(error_stage::transaction, errc::protocol_state,
                 "transaction controller is not attached"));
-    auto id = impl_->next_delivery_id++;
+    auto id = impl_->next_delivery_id->fetch_add(
+        1, std::memory_order_relaxed);
     binary transaction(transaction_id.begin(), transaction_id.end());
     transfer tx{.handle = impl_->handle,
         .delivery_id = id,
@@ -138,6 +160,7 @@ auto transaction_controller::discharge(
         performative{std::move(tx)}, token);
     if (!sent)
         co_return std::unexpected(sent.error());
+    std::vector<performative> deferred;
     while (true)
     {
         auto peer = co_await impl_->owner->receive(impl_->channel, token);
@@ -146,11 +169,18 @@ auto transaction_controller::discharge(
         if (auto d = std::get_if<disposition>(&*peer); d && d->first == id)
         {
             if (d->state && d->state->kind == outcome_kind::rejected)
+            {
+                impl_->owner->restore_received(
+                    impl_->channel, std::move(deferred));
                 co_return std::unexpected(make_error(
                     error_stage::transaction, errc::transaction_failed,
                     "transaction discharge rejected"));
+            }
+            impl_->owner->restore_received(
+                impl_->channel, std::move(deferred));
             co_return {};
         }
+        deferred.push_back(std::move(*peer));
     }
 }
 } // namespace cnetmod::amqp10

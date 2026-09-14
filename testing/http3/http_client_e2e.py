@@ -131,7 +131,6 @@ def main() -> int:
                     if proxy.poll() is not None:
                         stdout, stderr = proxy.communicate()
                         raise RuntimeError(f"PMTU proxy exited early\nstdout:\n{stdout}\nstderr:\n{stderr}")
-                    client_port = proxy_port
                 try:
                     client_command = [str(args.client), str(client_port)]
                     if args.multipath:
@@ -139,13 +138,21 @@ def main() -> int:
                     elif args.multipath_pmtu:
                         client_command.append("--multipath-pmtu")
                     elif args.multipath_pmtu_blackhole:
-                        client_command.extend(["--multipath-pmtu-blackhole", str(arm_marker)])
+                        client_command.extend(["--multipath-pmtu-blackhole",
+                                               str(arm_marker), str(proxy_port)])
                     elif args.multipath_timeout:
                         client_command.append("--multipath-timeout")
                     elif args.multipath_close:
                         client_command.append("--multipath-close")
                     elif args.connect_close:
                         client_command.append("--connect-close")
+                    if os.environ.get("CNETMOD_GDB"):
+                        debugger = shutil.which("gdb")
+                        if debugger is None:
+                            raise RuntimeError("CNETMOD_GDB requires gdb")
+                        client_command = [debugger, "--batch", "-ex", "run",
+                                          "-ex", "thread apply all bt", "--args",
+                                          *client_command]
                     completed = subprocess.run(
                         client_command, cwd=directory,
                         env=environment,
@@ -179,6 +186,8 @@ def main() -> int:
                     if server.poll() is None:
                         server.terminate()
                     stdout, stderr = server.communicate(timeout=5)
+                    print(f"client exited with status {completed.returncode}",
+                          file=sys.stderr)
                     print(f"server stdout:\n{stdout}\nserver stderr:\n{stderr}",
                           file=sys.stderr)
                     return completed.returncode

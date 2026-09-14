@@ -279,6 +279,24 @@ auto test_cnetmod_client_against_broker(cn::io_context& ctx, std::string host,
     co_return true;
 }
 
+auto run_interop(cn::io_context& ctx, std::string host, std::uint16_t port,
+                 std::string prefix, std::string& error, int& exit_code)
+    -> cn::task<void> {
+    auto ok = co_await test_cnetmod_client_against_broker(
+        ctx, std::move(host), port, std::move(prefix), error);
+    exit_code = ok ? 0 : 1;
+    ctx.stop();
+}
+
+auto enforce_global_timeout(cn::io_context& ctx, std::string& error,
+                            int& exit_code) -> cn::task<void> {
+    co_await cn::async_sleep(ctx, std::chrono::seconds{20});
+    if (exit_code != 0 && error.empty()) {
+        error = "global timeout";
+    }
+    ctx.stop();
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -298,20 +316,8 @@ int main(int argc, char** argv) {
     std::string error;
     int exit_code = 1;
 
-    cn::spawn(*ctx, [&]() -> cn::task<void> {
-        auto ok = co_await test_cnetmod_client_against_broker(
-            *ctx, argv[1], *port, argv[3], error);
-        exit_code = ok ? 0 : 1;
-        ctx->stop();
-    }());
-
-    cn::spawn(*ctx, [&]() -> cn::task<void> {
-        co_await cn::async_sleep(*ctx, std::chrono::seconds{20});
-        if (exit_code != 0 && error.empty()) {
-            error = "global timeout";
-        }
-        ctx->stop();
-    }());
+    cn::spawn(*ctx, run_interop(*ctx, argv[1], *port, argv[3], error, exit_code));
+    cn::spawn(*ctx, enforce_global_timeout(*ctx, error, exit_code));
 
     ctx->run();
     if (exit_code != 0) {

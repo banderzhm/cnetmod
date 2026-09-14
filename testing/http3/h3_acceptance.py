@@ -146,7 +146,8 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="cnetmod-h3-") as temp:
             directory = Path(temp)
             make_certificate(directory)
-            process = subprocess.Popen([str(args.server), "--port", str(args.port),
+            port = reserve_udp_port()
+            process = subprocess.Popen([str(args.server), "--port", str(port),
                 "--workers", str(args.server_workers)], cwd=directory, text=True,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
@@ -157,7 +158,7 @@ def main() -> int:
                 # protocol failure but causes a misleading handshake timeout.
                 # Keep this loopback acceptance path on the explicit IPv4
                 # address covered by the generated certificate SAN.
-                curl_http3(f"https://127.0.0.1:{args.port}/health")
+                curl_http3(f"https://127.0.0.1:{port}/health")
             finally:
                 process.terminate()
                 try:
@@ -306,12 +307,14 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="cnetmod-h3-") as temp:
             directory = Path(temp)
             make_certificate(directory)
-            process = subprocess.Popen([str(args.server), "--port", str(args.port),
+            port = reserve_udp_port()
+            process = subprocess.Popen([str(args.server), "--port", str(port),
                 "--workers", str(args.server_workers)], cwd=directory, text=True,
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 wait_for_process(process)
-                command = shlex.split(args.nghttp3_client_command.format(url=f"https://127.0.0.1:{args.port}/health"))
+                command = shlex.split(args.nghttp3_client_command.format(
+                    url=f"https://127.0.0.1:{port}/health"))
                 completed = run(command, 20)
                 if completed.returncode:
                     raise AssertionError(completed.stderr.strip() or completed.stdout.strip())
@@ -333,12 +336,14 @@ def main() -> int:
             directory = Path(temp)
             cert, key = make_certificate(directory)
             (directory / "health").write_text("ok\n", encoding="utf-8")
-            command = shlex.split(args.nghttp3_server_command.format(port=args.port, cert=cert, key=key, root=directory))
+            port = reserve_udp_port()
+            command = shlex.split(args.nghttp3_server_command.format(
+                port=port, cert=cert, key=key, root=directory))
             process = subprocess.Popen(command, cwd=directory, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             try:
                 wait_for_process(process)
                 try:
-                    cnetmod_client(args.client, args.port)
+                    cnetmod_client(args.client, port)
                 except AssertionError as exc:
                     process.terminate()
                     stdout, stderr = process.communicate(timeout=5)

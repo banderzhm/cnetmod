@@ -21,7 +21,7 @@ class RunnerGateTests(unittest.TestCase):
         }
         modules = {
             "dotenv": types.SimpleNamespace(load_dotenv=lambda *a, **kw: None),
-            "pytest": types.SimpleNamespace(main=lambda arguments: 3),
+            "pytest": types.SimpleNamespace(main=lambda arguments, **kwargs: 3),
         }
         output = io.StringIO()
         with (
@@ -52,6 +52,20 @@ class RunnerGateTests(unittest.TestCase):
     def test_pytest_failure_is_preserved(self):
         result, _ = self.run_gate(True, "container", docker=True)
         self.assertEqual(result, 3)
+
+    def test_required_execution_rejects_skipped_tests(self):
+        gate = runner._RequiredExecutionGate()
+        gate.pytest_runtest_logreport(types.SimpleNamespace(skipped=True))
+        session = types.SimpleNamespace(exitstatus=0)
+        gate.pytest_sessionfinish(session, 0)
+        self.assertEqual(session.exitstatus, 1)
+
+    def test_optional_execution_preserves_success_with_skips(self):
+        gate = runner._RequiredExecutionGate()
+        gate.pytest_collectreport(types.SimpleNamespace(skipped=True))
+        session = types.SimpleNamespace(exitstatus=0)
+        gate.pytest_sessionfinish(session, 2)
+        self.assertEqual(session.exitstatus, 0)
 
     def test_docker_probe_always_closes_created_client(self):
         for failed in (False, True):

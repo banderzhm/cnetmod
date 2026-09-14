@@ -511,11 +511,12 @@ auto http3_client::send_request(const http3_request& r) -> task<std::expected<ht
         if (!session || !connection)
             co_return std::unexpected(std::make_error_code(std::errc::connection_aborted));
     }
-    // Capture this before submitting the stream. Once TLS has accepted early
-    // data, later requests are ordinary 1-RTT traffic and must retain the
-    // normal connection-error semantics instead of being replayed here.
-    const bool replay_early_request = early_data_attempted_ &&
-        connection->early_data_status() == quic::early_data_state::pending;
+    // Consume the replay allowance before submitting the first request. The
+    // TLS outcome may change from pending to rejected between the checks
+    // above and this point; tying retry eligibility to that transient state
+    // loses the safe 1-RTT fallback. Later requests are ordinary traffic and
+    // must retain normal connection-error semantics.
+    const bool replay_early_request = std::exchange(early_data_attempted_, false);
     auto result = co_await session->send_request(r);
     if (!result && replay_early_request &&
         options_.retry_idempotent_requests && detail::is_replay_safe(r.method))
@@ -603,8 +604,10 @@ auto http3_client::send_request(const http3_request& r,
         if (!session || !connection)
             co_return std::unexpected(std::make_error_code(std::errc::connection_aborted));
     }
-    const bool replay_early_request = early_data_attempted_ &&
-        connection->early_data_status() == quic::early_data_state::pending;
+    // See the non-cancellable overload: retry eligibility belongs to the
+    // first request submitted by an early-data connection, not to a racy
+    // snapshot of BoringSSL's handshake state.
+    const bool replay_early_request = std::exchange(early_data_attempted_, false);
     auto result = co_await session->send_request(r, token);
     if (!result && replay_early_request &&
         options_.retry_idempotent_requests && detail::is_replay_safe(r.method) &&
@@ -753,24 +756,32 @@ auto http3_client::async_probe_path(std::uint32_t path_id, endpoint peer,
     if (!connection || !session)
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
 
-    auto socket = std::make_shared<udp::udp_socket>(ctx_);
-    const auto opened = socket->open(local_endpoint);
-    if (!opened)
-        co_return std::unexpected(opened.error());
-
-    auto receiver = std::make_shared<detail::local_path_receiver>();
-    receiver->socket = std::move(socket);
+    std::shared_ptr<detail::local_path_receiver> receiver;
     // Publishing the receiver and starting its driver is a single lifecycle
-    // transition.  Otherwise close() could finish between the map insertion
-    // and receiver start, leaving a newly-created socket unowned by shutdown.
+    // transition. A probe may return operation_in_progress until the peer's
+    // PATH_NEW_CONNECTION_ID arrives; retain and reuse its bound socket for
+    // that explicit retry instead of rejecting every later attempt because a
+    // receiver already exists.
     co_await lifecycle_mutex_.lock();
     cnetmod::async_lock_guard lifecycle_guard{lifecycle_mutex_, std::adopt_lock};
     if (connection_ != connection || session_ != session || connection->is_closed())
         co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
-    if (local_path_receivers_.contains(path_id))
-        co_return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
-    local_path_receivers_.emplace(path_id, receiver);
-    spawn(ctx_, detail::drive_local_path_receiver(ctx_, connection, receiver));
+    if (const auto existing = local_path_receivers_.find(path_id);
+        existing != local_path_receivers_.end())
+    {
+        receiver = existing->second;
+    }
+    else
+    {
+        auto socket = std::make_shared<udp::udp_socket>(ctx_);
+        const auto opened = socket->open(local_endpoint);
+        if (!opened)
+            co_return std::unexpected(opened.error());
+        receiver = std::make_shared<detail::local_path_receiver>();
+        receiver->socket = std::move(socket);
+        local_path_receivers_.emplace(path_id, receiver);
+        spawn(ctx_, detail::drive_local_path_receiver(ctx_, connection, receiver));
+    }
     lifecycle_guard.release();
     lifecycle_mutex_.unlock();
 

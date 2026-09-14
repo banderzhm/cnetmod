@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import socket
 import time
 from dataclasses import dataclass
 from typing import Callable
@@ -104,14 +105,27 @@ def _probe_kafka(endpoint: KafkaBrokerEndpoint) -> None:
     AdminClient(configuration).list_topics(timeout=3)
 
 
+def _available_loopback_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
+        listener.bind(("127.0.0.1", 0))
+        return int(listener.getsockname()[1])
+
+
 class RabbitMqService:
     def __init__(self) -> None:
         from testcontainers.rabbitmq import RabbitMqContainer
 
+        self.host_port = _available_loopback_port()
         self.container = (
-            RabbitMqContainer("rabbitmq:4.1-management")
-            .with_env("RABBITMQ_DEFAULT_USER", "cnetmod")
-            .with_env("RABBITMQ_DEFAULT_PASS", "cnetmod-test-password")
+            RabbitMqContainer(
+                "rabbitmq:4.1-management",
+                username="cnetmod",
+                password="cnetmod-test-password",
+            )
+            # Bound Erlang scheduler creation so the disposable broker starts
+            # deterministically on high-core CI and WSL hosts.
+            .with_env("RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS", "+S 2:2")
+            .with_bind_ports(5672, self.host_port)
         )
         self.endpoint: Amqp091BrokerEndpoint | None = None
 
@@ -120,7 +134,7 @@ class RabbitMqService:
             self.container.start()
             endpoint = Amqp091BrokerEndpoint(
                 self.container.get_container_host_ip(),
-                int(self.container.get_exposed_port(5672)),
+                self.host_port,
                 "cnetmod",
                 "cnetmod-test-password",
             )
@@ -135,10 +149,19 @@ class RabbitMqService:
             raise
 
     def restart(self) -> None:
-        self.container.get_wrapped_container().restart(timeout=10)
+        wrapped = self.container.get_wrapped_container()
+        wrapped.stop(timeout=10)
+        wrapped.start()
         if self.endpoint is None:
             raise RuntimeError("RabbitMQ service has not been started")
-        _wait_until_usable("RabbitMQ", lambda: _probe_rabbitmq(self.endpoint), 60)
+        try:
+            _wait_until_usable("RabbitMQ", lambda: _probe_rabbitmq(self.endpoint), 60)
+        except Exception as error:
+            wrapped.reload()
+            logs = wrapped.logs(tail=40).decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"RabbitMQ restart failed with container status {wrapped.status}:\n{logs}"
+            ) from error
 
     def stop(self) -> None:
         self.container.stop()
@@ -148,9 +171,10 @@ class ArtemisService:
     def __init__(self) -> None:
         from testcontainers.core.container import DockerContainer
 
+        self.host_port = _available_loopback_port()
         self.container = (
             DockerContainer("apache/activemq-artemis:2.40.0")
-            .with_exposed_ports(5672)
+            .with_bind_ports(5672, self.host_port)
             .with_env("ARTEMIS_USER", "cnetmod")
             .with_env("ARTEMIS_PASSWORD", "cnetmod-test-password")
             .with_env("ANONYMOUS_LOGIN", "false")
@@ -162,7 +186,7 @@ class ArtemisService:
             self.container.start()
             endpoint = Amqp10BrokerEndpoint(
                 self.container.get_container_host_ip(),
-                int(self.container.get_exposed_port(5672)),
+                self.host_port,
                 "cnetmod",
                 "cnetmod-test-password",
                 supports_transactions=True,
@@ -178,7 +202,9 @@ class ArtemisService:
             raise
 
     def restart(self) -> None:
-        self.container.get_wrapped_container().restart(timeout=10)
+        wrapped = self.container.get_wrapped_container()
+        wrapped.stop(timeout=10)
+        wrapped.start()
         if self.endpoint is None:
             raise RuntimeError("ActiveMQ Artemis service has not been started")
         _wait_until_usable("ActiveMQ Artemis", lambda: _probe_artemis(self.endpoint), 90)
@@ -191,7 +217,22 @@ class KafkaService:
     def __init__(self) -> None:
         from testcontainers.kafka import KafkaContainer
 
-        self.container = KafkaContainer("confluentinc/cp-kafka:7.9.1")
+        self.host_port = _available_loopback_port()
+        container = KafkaContainer("confluentinc/cp-kafka:7.9.1").with_kraft()
+        container.security_protocol_map = "BROKER:PLAINTEXT,PLAINTEXT:SASL_PLAINTEXT"
+        self.container = (
+            container
+            .with_bind_ports(9093, self.host_port)
+            .with_env("KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR", "1")
+            .with_env("KAFKA_TRANSACTION_STATE_LOG_MIN_ISR", "1")
+            .with_env("KAFKA_SASL_ENABLED_MECHANISMS", "PLAIN")
+            .with_env(
+                "KAFKA_LISTENER_NAME_PLAINTEXT_PLAIN_SASL_JAAS_CONFIG",
+                "org.apache.kafka.common.security.plain.PlainLoginModule required "
+                'username="cnetmod" password="cnetmod-test-password" '
+                'user_cnetmod="cnetmod-test-password";',
+            )
+        )
         self.endpoint: KafkaBrokerEndpoint | None = None
 
     def start(self) -> KafkaBrokerEndpoint:
@@ -199,7 +240,14 @@ class KafkaService:
             self.container.start()
             bootstrap = self.container.get_bootstrap_server().removeprefix("PLAINTEXT://")
             host, port = bootstrap.rsplit(":", 1)
-            endpoint = KafkaBrokerEndpoint(host, int(port))
+            endpoint = KafkaBrokerEndpoint(
+                host,
+                int(port),
+                security_protocol="SASL_PLAINTEXT",
+                sasl_mechanism="PLAIN",
+                username="cnetmod",
+                password="cnetmod-test-password",
+            )
             self.endpoint = endpoint
             _wait_until_usable("Kafka", lambda: _probe_kafka(endpoint), 90)
             return endpoint
@@ -211,10 +259,18 @@ class KafkaService:
             raise
 
     def restart(self) -> None:
-        self.container.get_wrapped_container().restart(timeout=10)
+        wrapped = self.container.get_wrapped_container()
+        wrapped.restart(timeout=10)
         if self.endpoint is None:
             raise RuntimeError("Kafka service has not been started")
-        _wait_until_usable("Kafka", lambda: _probe_kafka(self.endpoint), 90)
+        try:
+            _wait_until_usable("Kafka", lambda: _probe_kafka(self.endpoint), 90)
+        except Exception as error:
+            wrapped.reload()
+            logs = wrapped.logs(tail=80).decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Kafka restart failed with container status {wrapped.status}:\n{logs}"
+            ) from error
 
     def stop(self) -> None:
         self.container.stop()

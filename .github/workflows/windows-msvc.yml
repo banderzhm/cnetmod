@@ -83,10 +83,30 @@ jobs:
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
             -DCNETMOD_BUILD_EXAMPLES=ON `
+            -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON `
             -S "${{ github.workspace }}"
 
       - name: Build
         run: cmake --build ${{ github.workspace }}/build --target cnetmod_build_all --config ${{ matrix.build_type }} -- /m:1
+
+      - name: Install complete interoperability runtime
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check `
+            --requirement testing/mail/requirements.txt `
+            --requirement testing/http2/requirements.txt `
+            --requirement testing/http3/requirements.txt `
+            --requirement testing/grpc/requirements.txt `
+            --requirement testing/mqtt/requirements.txt
+
+      - name: Run complete non-external test suite without skips
+        shell: pwsh
+        run: |
+          python testing/run_required_ctest.py `
+            --test-dir "${{ github.workspace }}/build" `
+            -C "${{ matrix.build_type }}" `
+            --output-on-failure --timeout 180 `
+            -E '^(test_application_mysql_live|test_application_redis_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_postgresql_production_example_e2e|python_mongodb_production_example_e2e)$'
 
       - name: Verify protocol-free module graph
         if: matrix.build_type == 'Release'
@@ -135,10 +155,6 @@ jobs:
       # the Python cases exercise the public HTTP client against a real local
       # HTTP/3 listener, dynamic QPACK recovery, cancellation, migration and
       # aioquic/WebTransport interoperability.
-      - name: Install required HTTP/3 and WebTransport interoperability peer
-        shell: pwsh
-        run: python -m pip install --disable-pip-version-check --requirement testing/http3/requirements.txt
-
       - name: Run QUIC and HTTP/3 release gates
         shell: pwsh
         run: |
@@ -148,13 +164,16 @@ jobs:
           # Windows HTTP/3 coverage.
           $env:CNETMOD_REQUIRE_RIO = "1"
           ctest --test-dir "${{ github.workspace }}/build" -C "${{ matrix.build_type }}" `
-            --output-on-failure --timeout 180 `
+            --output-on-failure --timeout 180 --no-tests=error `
             -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|h3_interop_multi_worker_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
       - name: Run application lifecycle and OTEL gates
         shell: pwsh
         run: |
-          $gates = @('test_application', 'test_application_integrations', 'test_otlp_exporter', 'test_instrumentation', 'test_metric_aggregation', 'test_http_observability', 'test_http_disabled_overhead', 'test_mysql_pool', 'test_ssl_shutdown')
+          $gates = @('test_application', 'test_application_integrations', 'test_otlp_exporter', 'test_instrumentation', 'test_metric_aggregation', 'test_http_observability', 'test_mysql_pool', 'test_ssl_shutdown')
+          if ('${{ matrix.build_type }}' -eq 'Release') {
+            $gates += 'test_http_disabled_overhead'
+          }
           foreach ($gate in $gates) {
             ctest --test-dir "${{ github.workspace }}/build" -C "${{ matrix.build_type }}" `
               --output-on-failure --timeout 60 --no-tests=error -R "^${gate}$"

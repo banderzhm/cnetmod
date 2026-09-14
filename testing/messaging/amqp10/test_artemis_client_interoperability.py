@@ -12,6 +12,11 @@ def _url(endpoint) -> str:
     return f"amqp://{endpoint.host}:{endpoint.port}"
 
 
+def _queue_address(prefix: str) -> str:
+    name = f"{prefix}.{uuid.uuid4().hex}"
+    return f"{name}::{name}"
+
+
 def _reference_send(endpoint, address: str, body) -> None:
     connection = BlockingConnection(
         _url(endpoint), user=endpoint.username, password=endpoint.password,
@@ -38,7 +43,7 @@ def _reference_receive(endpoint, address: str):
 @pytest.mark.asyncio
 async def test_transfer_and_accepted_outcome(artemis_service, amqp10_driver):
     _, endpoint = artemis_service
-    address = f"cnetmod.amqp10.accepted.{uuid.uuid4().hex}"
+    address = _queue_address("cnetmod.amqp10.accepted")
     result = await asyncio.to_thread(
         amqp10_driver.request,
         "send",
@@ -59,7 +64,7 @@ async def test_transfer_and_accepted_outcome(artemis_service, amqp10_driver):
 @pytest.mark.asyncio
 async def test_receive_message_sections_and_settlement(artemis_service, amqp10_driver):
     _, endpoint = artemis_service
-    address = f"cnetmod.amqp10.receive.{uuid.uuid4().hex}"
+    address = _queue_address("cnetmod.amqp10.receive")
     await asyncio.to_thread(_reference_send, endpoint, address, "from-proton")
     result = await asyncio.to_thread(
         amqp10_driver.request,
@@ -80,7 +85,7 @@ async def test_receive_message_sections_and_settlement(artemis_service, amqp10_d
 @pytest.mark.interoperability
 def test_link_credit_blocks_second_delivery(artemis_service, amqp10_driver):
     _, endpoint = artemis_service
-    address = f"cnetmod.amqp10.credit.{uuid.uuid4().hex}"
+    address = _queue_address("cnetmod.amqp10.credit")
     _reference_send(endpoint, address, "first")
     _reference_send(endpoint, address, "second")
     result = amqp10_driver.request(
@@ -101,7 +106,7 @@ def test_link_credit_blocks_second_delivery(artemis_service, amqp10_driver):
 @pytest.mark.interoperability
 def test_released_and_rejected_outcomes(artemis_service, amqp10_driver):
     _, endpoint = artemis_service
-    address = f"cnetmod.amqp10.outcomes.{uuid.uuid4().hex}"
+    address = _queue_address("cnetmod.amqp10.outcomes")
     result = amqp10_driver.request(
         "delivery_outcome_probe",
         host=endpoint.host,
@@ -128,7 +133,7 @@ def test_session_link_recovery_after_broker_restart(artemis_service, amqp10_driv
         port=endpoint.port,
         username=endpoint.username,
         password=endpoint.password,
-        address=f"cnetmod.amqp10.reconnect.{uuid.uuid4().hex}",
+        address=_queue_address("cnetmod.amqp10.reconnect"),
         idle_timeout_milliseconds=1000,
     )
     assert result["connection_reopened"] is True
@@ -162,7 +167,7 @@ def test_empty_data_unicode_properties_and_remote_frame_limit(
         port=endpoint.port,
         username=endpoint.username,
         password=endpoint.password,
-        address=f"cnetmod.amqp10.boundary.{uuid.uuid4().hex}",
+        address=_queue_address("cnetmod.amqp10.boundary"),
         bodies=[None, "", "紫微-消息", "x" * 262144],
         application_properties={"unicode": "边界", "maximum_unsigned": 18446744073709551615},
         honor_remote_max_frame_size=True,
@@ -183,7 +188,7 @@ def test_transaction_coordinator_commit_and_rollback(artemis_service, amqp10_dri
         port=endpoint.port,
         username=endpoint.username,
         password=endpoint.password,
-        address=f"cnetmod.amqp10.transaction.{uuid.uuid4().hex}",
+        address=_queue_address("cnetmod.amqp10.transaction"),
         committed_bodies=["committed-1", "committed-2"],
         rolled_back_bodies=["rolled-back"],
     )
@@ -206,7 +211,7 @@ def test_sustained_unsettled_window_resolves_every_delivery(
         port=endpoint.port,
         username=endpoint.username,
         password=endpoint.password,
-        address=f"cnetmod.amqp10.stability.{uuid.uuid4().hex}",
+        address=_queue_address("cnetmod.amqp10.stability"),
         delivery_count=10000,
         unsettled_window=256,
         receiver_credit=128,

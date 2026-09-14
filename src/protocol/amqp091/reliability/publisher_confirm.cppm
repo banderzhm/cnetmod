@@ -30,7 +30,15 @@ public:
      */
     [[nodiscard]] auto reserve_sequence() -> std::uint64_t;
     void observe(std::weak_ptr<publisher_confirm_observer> observer);
-    void settle(std::uint64_t tag, bool acknowledged, bool multiple);
+    /**
+     * @brief Settles confirmations and isolates failures from every observer.
+     *
+     * Notifications use an immutable registration snapshot, allowing observers
+     * to register additional listeners reentrantly. Exceptions raised by one
+     * observer never prevent later observers from receiving the settlement and
+     * never escape into the protocol frame pump.
+     */
+    void settle(std::uint64_t tag, bool acknowledged, bool multiple) noexcept;
     /**
      * @brief Clears pending confirmations and isolates observer failures.
      * Notification uses an immutable registration snapshot without allocation.

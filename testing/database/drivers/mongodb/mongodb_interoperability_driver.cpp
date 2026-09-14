@@ -170,6 +170,20 @@ namespace {
         return batch ? batch->size() : 0;
     }
 
+    auto cursor_id(const mongodb::bson_document& reply) -> std::int64_t
+    {
+        const auto* cursor_value = reply.find("cursor");
+        const auto* cursor = cursor_value ? cursor_value->as_document() : nullptr;
+        const auto* id = cursor ? cursor->find("id") : nullptr;
+        if (!id)
+            return 0;
+        if (const auto* value = id->get_if<std::int64_t>())
+            return *value;
+        if (const auto* value = id->get_if<std::int32_t>())
+            return *value;
+        return 0;
+    }
+
     auto pool_options(mongodb::connection_options connection,
         const json& parameters) -> mongodb::connection_pool_options
     {
@@ -236,12 +250,14 @@ auto execute_mongodb_interoperability_request(io_context& context,
             std::size_t successful_writes{};
             std::size_t transient_failures{};
             std::int64_t sequence{};
+            const auto marker_prefix = parameters.value(
+                "marker_prefix", std::string("failover"));
             while (std::chrono::steady_clock::now() < deadline)
             {
                 auto selected = pool.topology().select_server();
                 if (selected)
                     primaries.emplace(address_text(selected->address));
-                auto marker = std::format("failover-{}-{}", sequence++,
+                auto marker = std::format("{}-{}-{}", marker_prefix, sequence++,
                     std::chrono::steady_clock::now().time_since_epoch().count());
                 mongodb::bson_array documents{mongodb::bson_value{
                     mongodb::bson_document{{"_id", marker}, {"sequence", sequence}}}};
@@ -407,11 +423,24 @@ auto execute_mongodb_interoperability_request(io_context& context,
                 co_return failure(error_name(inserted.error().code), inserted.error().message);
             }
 
-            std::size_t batch_count = 0;
-            std::size_t document_count = 0;
-            auto streamed = co_await stream_connection.command_stream(options.database,
+            auto initial = co_await stream_connection.command(options.database,
                 mongodb::bson_document{{"find", "cnetmod_exhaust_interop"},
                     {"filter", mongodb::bson_document{{"marker", marker}}},
+                    {"batchSize", std::int32_t{1}}});
+            if (!initial)
+            {
+                stream_connection.close();
+                co_return failure(error_name(initial.error().code), initial.error().message);
+            }
+
+            std::size_t batch_count = 1;
+            std::size_t document_count = cursor_batch_size(*initial);
+            const auto id = cursor_id(*initial);
+            auto streamed = id == 0
+                ? mongodb::result<void>{}
+                : co_await stream_connection.command_stream(options.database,
+                mongodb::bson_document{{"getMore", id},
+                    {"collection", "cnetmod_exhaust_interop"},
                     {"batchSize", std::int32_t{1}}},
                 [&batch_count, &document_count](mongodb::bson_document reply)
                     -> task<std::expected<void, mongodb::error>>

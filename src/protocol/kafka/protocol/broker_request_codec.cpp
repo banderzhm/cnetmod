@@ -40,7 +40,7 @@ auto decode_api_versions(std::span<const std::byte> b, std::int16_t v)
 auto encode_metadata(std::span<const std::string> topics) -> bytes
 {
     encoder e;
-    e.int32(static_cast<std::int32_t>(topics.size()));
+    e.int32(topics.empty() ? -1 : static_cast<std::int32_t>(topics.size()));
     for (auto& t : topics)
         e.string(t);
     e.boolean(true);

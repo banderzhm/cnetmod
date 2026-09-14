@@ -30,7 +30,7 @@ struct sender_link::impl : recovery_observer
     link_state current = link_state::detached;
     std::uint32_t available_credit = 0;
     std::uint32_t delivery_count = 0;
-    std::uint32_t next_delivery_id = 0;
+    std::shared_ptr<std::atomic<std::uint32_t>> next_delivery_id;
     std::map<std::uint32_t, pending_transfer> unsettled;
     std::map<std::uint32_t, delivery_outcome> completed_outcomes;
 
@@ -143,7 +143,8 @@ auto sender_link::operator=(sender_link&&) noexcept -> sender_link& = default;
 
 auto sender_link::create(performative_channel& o, std::uint16_t c,
     std::uint32_t h, std::string n, target t,
-    sender_settle_mode s, receiver_settle_mode r)
+    sender_settle_mode s, receiver_settle_mode r,
+    std::shared_ptr<std::atomic<std::uint32_t>> delivery_ids)
     -> sender_link
 {
     auto state = std::make_unique<impl>();
@@ -154,6 +155,7 @@ auto sender_link::create(performative_channel& o, std::uint16_t c,
     state->terminus = std::move(t);
     state->snd = s;
     state->rcv = r;
+    state->next_delivery_id = std::move(delivery_ids);
     o.register_recovery_observer(*state);
     return sender_link(std::move(state));
 }
@@ -235,7 +237,8 @@ auto sender_link::begin_send(const message& m, send_options options,
                 "peer drained sender credit"));
     }
 
-    const auto id = impl_->next_delivery_id++;
+    const auto id = impl_->next_delivery_id->fetch_add(
+        1, std::memory_order_relaxed);
     binary tag{std::byte(id >> 24), std::byte(id >> 16), std::byte(id >> 8),
         std::byte(id)};
     auto encoded = encode_message(m);

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 import contextlib
 import ssl
+import struct
 import os
 import queue
 import socket
 import subprocess
 import sys
+import threading
 import time
 import uuid
 
@@ -21,6 +23,7 @@ except Exception as exc:
 HOST = "127.0.0.1"
 TIMEOUT = 8.0
 TLS_CERT = None
+_PUBLISHERS = {}
 
 
 def free_port() -> int:
@@ -163,13 +166,25 @@ class Subscriber:
 
 def publish(port: int, topic: str, payload: str, qos=0, retain=False, *,
             client_id=None, protocol=mqtt.MQTTv311):
-    client = new_client(client_id or f"pub-{uuid.uuid4()}", protocol=protocol)
-    connect_client(client, port)
+    cache_key = (port, protocol)
+    client = _PUBLISHERS.get(cache_key) if client_id is None else None
+    if client is None:
+        client = new_client(client_id or f"pub-{uuid.uuid4()}", protocol=protocol)
+        connect_client(client, port)
+        if client_id is None:
+            _PUBLISHERS[cache_key] = client
     info = client.publish(topic, payload=payload, qos=qos, retain=retain)
     info.wait_for_publish(timeout=TIMEOUT)
     if info.rc != mqtt.MQTT_ERR_SUCCESS:
         raise AssertionError(f"publish failed rc={info.rc}")
-    disconnect_client(client)
+    if client_id is not None:
+        disconnect_client(client)
+
+
+def disconnect_publishers():
+    for client in _PUBLISHERS.values():
+        disconnect_client(client)
+    _PUBLISHERS.clear()
 
 
 def assert_payload(msg, payload: str, topic_prefix=None):
@@ -210,6 +225,8 @@ def test_qos2_exactly_once_bulk(port: int, prefix: str, protocol):
         expected = [f"qos2-{i}" for i in range(32)]
         for payload in expected:
             publish(port, topic, payload, qos=2, protocol=protocol)
+            if TLS_CERT:
+                time.sleep(0.01)
 
         got = []
         deadline = time.monotonic() + TIMEOUT
@@ -272,6 +289,8 @@ def test_shared_subscription(port: int, prefix: str, protocol):
         expected = {f"shared-{i}" for i in range(12)}
         for payload in expected:
             publish(port, topic, payload, qos=2, protocol=protocol)
+            if TLS_CERT:
+                time.sleep(0.02)
         got = set()
         deadline = time.monotonic() + TIMEOUT
         while time.monotonic() < deadline and len(got) < len(expected):
@@ -303,7 +322,8 @@ def test_will_message(port: int, prefix: str, protocol):
         sock = getattr(will_client, "_sock", None)
         if sock is not None:
             try:
-                sock.shutdown(socket.SHUT_RDWR)
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER,
+                                struct.pack("hh", 1, 0))
             except OSError:
                 pass
         with contextlib.suppress(Exception):
@@ -359,10 +379,26 @@ def start_broker(exe: str, port: int, tls_cert: str | None, tls_key: str | None)
         bufsize=1,
     )
     assert proc.stdout is not None
+    output = queue.Queue()
+
+    def read_output():
+        try:
+            for line in proc.stdout:
+                output.put(line)
+        finally:
+            output.put(None)
+
+    threading.Thread(target=read_output, daemon=True).start()
     deadline = time.monotonic() + TIMEOUT
     lines = []
     while time.monotonic() < deadline:
-        line = proc.stdout.readline()
+        remaining = deadline - time.monotonic()
+        try:
+            line = output.get(timeout=min(0.1, max(remaining, 0.0)))
+        except queue.Empty:
+            line = ""
+        if line is None:
+            line = ""
         if line:
             print("broker:", line.rstrip())
             lines.append(line)
@@ -371,6 +407,11 @@ def start_broker(exe: str, port: int, tls_cert: str | None, tls_key: str | None)
         if proc.poll() is not None:
             raise RuntimeError(f"broker exited early rc={proc.returncode}; output={''.join(lines)}")
     proc.terminate()
+    try:
+        proc.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=3)
     raise RuntimeError(f"broker did not become ready; output={''.join(lines)}")
 
 
@@ -396,26 +437,31 @@ def main() -> int:
             print(f"TLS cert/key not found: {TLS_CERT} {tls_key}", file=sys.stderr)
             return 2
 
-    port = free_port()
-    proc = start_broker(exe, port, TLS_CERT, tls_key)
     prefix = f"paho/{uuid.uuid4().hex}"
-    try:
-        for protocol in (mqtt.MQTTv311, mqtt.MQTTv5):
+    cases = (
+        test_qos_roundtrip,
+        test_qos2_exactly_once_bulk,
+        test_retained,
+        test_wildcard,
+        test_shared_subscription,
+        test_persistent_offline_queue,
+        test_will_message,
+    )
+    for protocol in (mqtt.MQTTv311, mqtt.MQTTv5):
+        for case in cases:
+            port = free_port()
+            proc = start_broker(exe, port, TLS_CERT, tls_key)
             proto_prefix = f"{prefix}/{protocol_name(protocol)}"
-            test_qos_roundtrip(port, proto_prefix, protocol)
-            test_qos2_exactly_once_bulk(port, proto_prefix, protocol)
-            test_retained(port, proto_prefix, protocol)
-            test_wildcard(port, proto_prefix, protocol)
-            test_shared_subscription(port, proto_prefix, protocol)
-            test_will_message(port, proto_prefix, protocol)
-            test_persistent_offline_queue(port, proto_prefix, protocol)
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=3)
+            try:
+                case(port, proto_prefix, protocol)
+            finally:
+                disconnect_publishers()
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait(timeout=3)
     print("PASS paho mqtt interop")
     return 0
 

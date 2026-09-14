@@ -38,7 +38,7 @@ TEST(amqp091_confirmation_callbacks_are_isolated_and_reentrant)
     tracker.observe(second);
     auto sequence = tracker.reserve_sequence();
     ASSERT_EQ(sequence, 1U);
-    ASSERT_THROWS(tracker.settle(sequence, true, false));
+    tracker.settle(sequence, true, false);
     ASSERT_EQ(first->confirmed, 1U);
     ASSERT_EQ(second->confirmed, 1U);
     ASSERT_EQ(tracker.pending(), 0U);

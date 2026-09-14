@@ -517,6 +517,7 @@ struct server::connection_registration
 {
     server& owner;
     socket& client;
+    cancel_token cancellation;
     connection_registration* previous{};
     connection_registration* next{};
 
@@ -529,7 +530,10 @@ struct server::connection_registration
             next->previous = this;
         owner.connections_ = this;
         if (owner.connections_aborted_)
+        {
+            cancellation.cancel();
             client.shutdown_both();
+        }
     }
 
     ~connection_registration()
@@ -621,6 +625,7 @@ void server::abort_connections() noexcept
     connections_aborted_ = true;
     for (auto* connection = connections_; connection; connection = connection->next)
     {
+        connection->cancellation.cancel();
         connection->client.shutdown_both();
         connection->client.close();
     }
@@ -767,7 +772,7 @@ auto server::handle_connection(socket client, io_context& io, conn_count_guard o
     {
         ssl_stream ssl(*ssl_ctx_, io, client);
         ssl.set_accept_state();
-        auto hr = co_await ssl.async_handshake();
+        auto hr = co_await ssl.async_handshake(registration.cancellation);
         if (!hr)
         {
             co_return;
@@ -775,11 +780,11 @@ auto server::handle_connection(socket client, io_context& io, conn_count_guard o
 
         if (ssl.get_alpn_selected() == "h2")
         {
-            co_await handle_h2_tls(client, io, ssl);
+            co_await handle_h2_tls(client, io, ssl, registration.cancellation);
         }
         else
         {
-            co_await handle_h1_tls(client, io, ssl);
+            co_await handle_h1_tls(client, io, ssl, registration.cancellation);
         }
         co_return;
     }
@@ -791,7 +796,8 @@ auto server::handle_connection(socket client, io_context& io, conn_count_guard o
         "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
     std::array<std::byte, 8192> peek_buf{};
     auto peek_rd = co_await async_read(
-        io, client, mutable_buffer{peek_buf.data(), peek_buf.size()});
+        io, client, mutable_buffer{peek_buf.data(), peek_buf.size()},
+        registration.cancellation);
     if (!peek_rd || *peek_rd == 0)
     {
         co_return;
@@ -813,7 +819,8 @@ auto server::handle_connection(socket client, io_context& io, conn_count_guard o
     {
         auto rd = co_await async_read(
             io, client,
-            mutable_buffer{peek_buf.data() + peek_len, peek_buf.size() - peek_len});
+            mutable_buffer{peek_buf.data() + peek_len, peek_buf.size() - peek_len},
+            registration.cancellation);
         if (!rd || *rd == 0)
         {
             co_return;
@@ -828,13 +835,15 @@ auto server::handle_connection(socket client, io_context& io, conn_count_guard o
         // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
-        co_await handle_h2(client, io, {peek_buf.data(), peek_len});
+        co_await handle_h2(client, io, {peek_buf.data(), peek_len},
+            registration.cancellation);
         co_return;
     }
 
     // HTTP/1.1 cleartext — feed already-read bytes to parser
     co_await handle_h1_clear(
-        client, io, reinterpret_cast<const char*>(peek_buf.data()), peek_len);
+        client, io, reinterpret_cast<const char*>(peek_buf.data()), peek_len,
+        registration.cancellation);
 }
 
 auto server::make_h2_handler(io_context& io, socket& client)
@@ -928,9 +937,20 @@ auto server::make_h2_handler(io_context& io, socket& client)
 }
 
 auto server::handle_h2(socket& client, io_context& io,
-    std::span<const std::byte> initial) -> task<void>
+    std::span<const std::byte> initial, cancel_token& cancellation) -> task<void>
 {
-    v2::session session(io, client, make_h2_handler(io, client));
+    auto reader = [&io, &client, &cancellation](mutable_buffer buffer)
+        -> task<std::expected<std::size_t, std::error_code>>
+    {
+        co_return co_await async_read(io, client, buffer, cancellation);
+    };
+    auto writer = [&io, &client, &cancellation](const_buffer buffer)
+        -> task<std::expected<void, std::error_code>>
+    {
+        co_return co_await async_write_all(io, client, buffer, cancellation);
+    };
+    v2::session session(io, client, make_h2_handler(io, client),
+        std::move(reader), std::move(writer));
     co_await session.run(initial);
 }
 
@@ -939,7 +959,8 @@ auto server::handle_h2(socket& client, io_context& io,
 // =============================================================================
 
 auto server::handle_h1_clear(socket& client, io_context& io,
-    const char* initial_data, std::size_t initial_len)
+    const char* initial_data, std::size_t initial_len,
+    cancel_token& cancellation)
     -> task<void>
 {
     bool keep_alive = true;
@@ -1023,7 +1044,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             }
 #endif
             auto rd = co_await async_read(io, client,
-                mutable_buffer{buf.data(), buf.size()});
+                mutable_buffer{buf.data(), buf.size()}, cancellation);
             if (!rd || *rd == 0)
             {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1092,14 +1113,16 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             if (use_chunked)
             {
                 // Send chunked response
-                co_await send_chunked_response(io, client, resp);
+                co_await send_chunked_response(io, client, resp, cancellation);
             }
             else
             {
                 // Send normal response
                 resp.serialize_to(response_wire);
                 auto wr = co_await async_write_all(
-                    io, client, const_buffer{response_wire.data(), response_wire.size()});
+                    io, client,
+                    const_buffer{response_wire.data(), response_wire.size()},
+                    cancellation);
                 if (!wr)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1135,27 +1158,27 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 // TLS Handlers
 // =============================================================================
 
-auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl)
-    -> task<void>
+auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
+    cancel_token& cancellation) -> task<void>
 {
-    auto reader = [&ssl](mutable_buffer buffer)
+    auto reader = [&ssl, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
     {
-        co_return co_await ssl.async_read(buffer);
+        co_return co_await ssl.async_read(buffer, cancellation);
     };
     auto writer =
-        [&ssl](
+        [&ssl, &cancellation](
             const_buffer buffer) -> task<std::expected<void, std::error_code>>
     {
-        co_return co_await ssl.async_write_all(buffer);
+        co_return co_await ssl.async_write_all(buffer, cancellation);
     };
     v2::session session(io, client, make_h2_handler(io, client),
         std::move(reader), std::move(writer));
     co_await session.run();
 }
 
-auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
-    -> task<void>
+auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
+    cancel_token& cancellation) -> task<void>
 {
     bool keep_alive = true;
     response resp(status::ok);
@@ -1169,7 +1192,8 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
 
         while (!parser.ready())
         {
-            auto rd = co_await ssl.async_read(mutable_buffer{buf.data(), buf.size()});
+            auto rd = co_await ssl.async_read(
+                mutable_buffer{buf.data(), buf.size()}, cancellation);
             if (!rd || *rd == 0)
                 co_return;
 
@@ -1223,14 +1247,15 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
             if (use_chunked)
             {
                 // Send chunked response (TLS)
-                co_await send_chunked_response_tls(io, ssl, resp);
+                co_await send_chunked_response_tls(io, ssl, resp, cancellation);
             }
             else
             {
                 // Send normal response
                 resp.serialize_to(response_wire);
                 auto wr = co_await ssl.async_write_all(
-                    const_buffer{response_wire.data(), response_wire.size()});
+                    const_buffer{response_wire.data(), response_wire.size()},
+                    cancellation);
                 if (!wr)
                     co_return;
             }
@@ -1275,7 +1300,7 @@ auto server::execute_chain(request_context& ctx, handler_fn& handler,
 // =============================================================================
 
 auto server::send_chunked_response(io_context& io, socket& client,
-    response& resp) -> task<void>
+    response& resp, cancel_token& cancellation) -> task<void>
 {
     // Send headers (without body)
     auto body = std::move(resp.body());
@@ -1283,7 +1308,7 @@ auto server::send_chunked_response(io_context& io, socket& client,
 
     auto header_data = resp.serialize();
     auto wr = co_await async_write_all(
-        io, client, const_buffer{header_data.data(), header_data.size()});
+        io, client, const_buffer{header_data.data(), header_data.size()}, cancellation);
     if (!wr)
         co_return;
 
@@ -1298,18 +1323,19 @@ auto server::send_chunked_response(io_context& io, socket& client,
         // Send chunk size (hex)
         auto size_str = std::format("{:x}\r\n", chunk_size);
         auto wr1 = co_await async_write_all(
-            io, client, const_buffer{size_str.data(), size_str.size()});
+            io, client, const_buffer{size_str.data(), size_str.size()}, cancellation);
         if (!wr1)
             co_return;
 
         // Send chunk data
         auto wr2 = co_await async_write_all(
-            io, client, const_buffer{body.data() + offset, chunk_size});
+            io, client, const_buffer{body.data() + offset, chunk_size}, cancellation);
         if (!wr2)
             co_return;
 
         // Send chunk ending \r\n
-        auto wr3 = co_await async_write_all(io, client, const_buffer{"\r\n", 2});
+        auto wr3 = co_await async_write_all(
+            io, client, const_buffer{"\r\n", 2}, cancellation);
         if (!wr3)
             co_return;
 
@@ -1318,13 +1344,14 @@ auto server::send_chunked_response(io_context& io, socket& client,
 
     // Send end chunk (0\r\n\r\n)
     auto wr_end =
-        co_await async_write_all(io, client, const_buffer{"0\r\n\r\n", 5});
+        co_await async_write_all(
+            io, client, const_buffer{"0\r\n\r\n", 5}, cancellation);
     (void)wr_end;
 }
 
 #ifdef CNETMOD_HAS_SSL
 auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl,
-    response& resp) -> task<void>
+    response& resp, cancel_token& cancellation) -> task<void>
 {
     // Send headers (without body)
     auto body = std::move(resp.body());
@@ -1332,7 +1359,7 @@ auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl,
 
     auto header_data = resp.serialize();
     auto wr = co_await ssl.async_write_all(
-        const_buffer{header_data.data(), header_data.size()});
+        const_buffer{header_data.data(), header_data.size()}, cancellation);
     if (!wr)
         co_return;
 
@@ -1350,7 +1377,7 @@ auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl,
         record.append(body.data() + offset, chunk_size);
         record += "\r\n";
         auto written = co_await ssl.async_write_all(
-            const_buffer{record.data(), record.size()});
+            const_buffer{record.data(), record.size()}, cancellation);
         if (!written)
             co_return;
 
@@ -1358,7 +1385,8 @@ auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl,
     }
 
     // Send end chunk (0\r\n\r\n)
-    auto wr_end = co_await ssl.async_write_all(const_buffer{"0\r\n\r\n", 5});
+    auto wr_end = co_await ssl.async_write_all(
+        const_buffer{"0\r\n\r\n", 5}, cancellation);
     (void)wr_end;
 }
 #endif

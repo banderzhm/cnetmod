@@ -16,6 +16,7 @@ from container_services import (
     RabbitMqService,
 )
 from driver_process import MessagingDriver
+from tls_proxy import TlsProxy
 
 
 load_dotenv(Path(__file__).resolve().parent / ".env.external.local", override=False)
@@ -184,14 +185,16 @@ def kafka_service(kafka_driver: MessagingDriver):
     service.stop()
 
 
-def _security_endpoint(prefix: str):
+def _external_security_endpoint(prefix: str):
     required = tuple(
         f"CNETMOD_{prefix}_{suffix}"
         for suffix in ("HOST", "PORT", "USERNAME", "PASSWORD", "CA_FILE")
     )
     missing = [name for name in required if not os.environ.get(name)]
+    if len(missing) == len(required):
+        return None
     if missing:
-        pytest.skip("security endpoint is not configured: " + ", ".join(missing))
+        pytest.fail("incomplete security endpoint: " + ", ".join(missing))
     return {
         "host": os.environ[f"CNETMOD_{prefix}_HOST"],
         "port": int(os.environ[f"CNETMOD_{prefix}_PORT"]),
@@ -201,16 +204,64 @@ def _security_endpoint(prefix: str):
     }
 
 
-@pytest.fixture
-def amqp091_security_endpoint():
-    return _security_endpoint("AMQP091_SECURITY")
+@pytest.fixture(scope="session")
+def amqp091_security_endpoint(rabbitmq_service):
+    external = _external_security_endpoint("AMQP091_SECURITY")
+    if external is not None:
+        yield external
+        return
+    if _service_mode() == "external":
+        _unavailable("AMQP 0-9-1 security endpoint is not configured")
+    _, endpoint = rabbitmq_service
+    proxy = TlsProxy(endpoint.host, endpoint.port)
+    host, port, ca_file = proxy.start()
+    yield {
+        "host": host,
+        "port": port,
+        "username": endpoint.username,
+        "password": endpoint.password,
+        "ca_file": ca_file,
+    }
+    proxy.stop()
 
 
-@pytest.fixture
-def amqp10_security_endpoint():
-    return _security_endpoint("AMQP10_SECURITY")
+@pytest.fixture(scope="session")
+def amqp10_security_endpoint(artemis_service):
+    external = _external_security_endpoint("AMQP10_SECURITY")
+    if external is not None:
+        yield external
+        return
+    if _service_mode() == "external":
+        _unavailable("AMQP 1.0 security endpoint is not configured")
+    _, endpoint = artemis_service
+    proxy = TlsProxy(endpoint.host, endpoint.port)
+    host, port, ca_file = proxy.start()
+    yield {
+        "host": host,
+        "port": port,
+        "username": endpoint.username,
+        "password": endpoint.password,
+        "ca_file": ca_file,
+    }
+    proxy.stop()
 
 
-@pytest.fixture
-def kafka_security_endpoint():
-    return _security_endpoint("KAFKA_SECURITY")
+@pytest.fixture(scope="session")
+def kafka_security_endpoint(kafka_service):
+    external = _external_security_endpoint("KAFKA_SECURITY")
+    if external is not None:
+        yield external
+        return
+    if _service_mode() == "external":
+        _unavailable("Kafka security endpoint is not configured")
+    _, endpoint = kafka_service
+    proxy = TlsProxy(endpoint.host, endpoint.port)
+    host, port, ca_file = proxy.start()
+    yield {
+        "host": host,
+        "port": port,
+        "username": endpoint.username,
+        "password": endpoint.password,
+        "ca_file": ca_file,
+    }
+    proxy.stop()

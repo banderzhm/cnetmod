@@ -11,7 +11,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
-import cnetmod.protocol.amqp10;
+import cnetmod.executor.async_op;
 import cnetmod.protocol.amqp10;
 
 namespace cnetmod::testing::messaging::amqp10 {
@@ -187,6 +187,8 @@ namespace {
             return "released";
         case protocol::outcome_kind::modified:
             return "modified";
+        case protocol::outcome_kind::declared:
+            return "declared";
         case protocol::outcome_kind::transactional:
             return "transactional";
         }
@@ -217,6 +219,8 @@ namespace {
         std::unique_ptr<cnetmod::io_context> context;
         protocol::client connection;
         cnetmod::cancel_token cancellation;
+        std::string_view stage = "initialization";
+        bool timed_out = false;
 
         explicit connected_client(std::unique_ptr<cnetmod::io_context> io)
             : context(std::move(io)), connection(*context) {}
@@ -246,12 +250,14 @@ namespace {
     auto connect_client(connected_client& runtime, const json& parameters)
         -> cnetmod::task<void>
     {
+        runtime.stage = "connection establishment";
         require_success(co_await runtime.connection.connect(
             client_options_from(parameters), runtime.cancellation));
     }
 
     auto begin_session(connected_client& runtime) -> cnetmod::task<protocol::session>
     {
+        runtime.stage = "session begin";
         auto session = require_value(runtime.connection.make_session());
         require_success(co_await session.begin(runtime.cancellation));
         co_return session;
@@ -288,9 +294,11 @@ namespace {
     {
         co_await connect_client(runtime, parameters);
         auto session = co_await begin_session(runtime);
+        runtime.stage = "sender link attach";
         auto sender = co_await make_sender(session, parameters.at("address").get<std::string>(),
             runtime.cancellation);
         const bool settled = parameters.value("settlement", "unsettled") == "settled";
+        runtime.stage = "message transfer";
         auto sent = require_value(co_await sender.send(
             make_message(parameters.at("body")), {.settled = settled},
             runtime.cancellation));
@@ -473,24 +481,41 @@ namespace {
             runtime.cancellation);
         auto controller = require_value(session.make_transaction_controller());
 
+        runtime.stage = "transaction declaration";
         auto commit_id = require_value(co_await controller.declare(runtime.cancellation));
+        runtime.stage = "committed transactional transfers";
+        std::vector<std::uint32_t> committed_delivery_ids;
         for (const auto& body : parameters.at("committed_bodies"))
-            require_value(co_await sender.send(make_message(body),
+            committed_delivery_ids.push_back(require_value(
+                co_await sender.begin_send(make_message(body),
                 {.settled = false,
                     .transaction_id = commit_id},
-                runtime.cancellation));
+                runtime.cancellation)));
+        runtime.stage = "transaction commit";
         require_success(co_await controller.discharge(commit_id, false,
             runtime.cancellation));
+        for (const auto delivery_id : committed_delivery_ids)
+            require_value(co_await sender.await_outcome(
+                delivery_id, runtime.cancellation));
 
+        runtime.stage = "rollback transaction declaration";
         auto rollback_id = require_value(co_await controller.declare(runtime.cancellation));
+        runtime.stage = "rolled-back transactional transfers";
+        std::vector<std::uint32_t> rolled_back_delivery_ids;
         for (const auto& body : parameters.at("rolled_back_bodies"))
-            require_value(co_await sender.send(make_message(body),
+            rolled_back_delivery_ids.push_back(require_value(
+                co_await sender.begin_send(make_message(body),
                 {.settled = false,
                     .transaction_id = rollback_id},
-                runtime.cancellation));
+                runtime.cancellation)));
+        runtime.stage = "transaction rollback";
         require_success(co_await controller.discharge(rollback_id, true,
             runtime.cancellation));
+        for (const auto delivery_id : rolled_back_delivery_ids)
+            require_value(co_await sender.await_outcome(
+                delivery_id, runtime.cancellation));
 
+        runtime.stage = "transaction verification session";
         auto receiver_session = co_await begin_session(runtime);
         auto receiver = co_await make_receiver(
             receiver_session, parameters.at("address").get<std::string>(),
@@ -638,8 +663,25 @@ namespace {
             }
             runtime.context->stop();
         };
+        auto watchdog = [&]() -> cnetmod::task<void>
+        {
+            const auto timeout = std::chrono::milliseconds{
+                request.at("parameters").value(
+                    "operation_timeout_milliseconds", 30000)};
+            auto waited = co_await cnetmod::async_timer_wait(
+                *runtime.context, timeout, runtime.cancellation);
+            if (waited && !runtime.cancellation.is_cancelled())
+            {
+                runtime.timed_out = true;
+                runtime.cancellation.cancel();
+            }
+        };
         cnetmod::spawn(*runtime.context, operation());
+        cnetmod::spawn(*runtime.context, watchdog());
         runtime.context->run();
+        if (runtime.timed_out)
+            throw std::runtime_error(std::format(
+                "AMQP 1.0 operation timed out during {}", runtime.stage));
         if (failure)
             std::rethrow_exception(failure);
         if (!result)

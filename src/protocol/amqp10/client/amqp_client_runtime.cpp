@@ -35,6 +35,8 @@ struct client::impl
     // pop/push and reconnect-clear transactions.
     concurrent_containers::atomic_rw_latch pending_latch;
     std::map<std::uint16_t, std::deque<performative>> pending;
+    std::map<std::uint16_t, std::uint16_t> remote_to_local_channel;
+    std::optional<error> terminal_error;
     std::shared_ptr<cancel_token> heartbeat_cancel;
     std::shared_ptr<cancel_token> pump_cancel;
     std::shared_ptr<cancel_token> reconnect_cancel;
@@ -284,6 +286,8 @@ auto client::reconnect(cancel_token& token)
     {
         concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
         impl_->pending.clear();
+        impl_->remote_to_local_channel.clear();
+        impl_->terminal_error.reset();
     }
     reconnect_context context;
     while (true)
@@ -417,9 +421,9 @@ auto client::receive(std::uint16_t channel, cancel_token& token)
             }
             if (impl_->current == connection_state::failed ||
                 impl_->current == connection_state::closed)
-                co_return std::unexpected(make_error(
-                    error_stage::transport, errc::connection_closed,
-                    "AMQP receive pump stopped", true));
+                co_return std::unexpected(impl_->terminal_error.value_or(
+                    make_error(error_stage::transport, errc::connection_closed,
+                        "AMQP receive pump stopped", true)));
             auto waited = co_await async_timer_wait(
                 impl_->ctx, std::chrono::milliseconds{2}, token);
             if (!waited)
@@ -454,7 +458,21 @@ auto client::receive(std::uint16_t channel, cancel_token& token)
         if (incoming->channel == channel)
             co_return std::move(*decoded);
         concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
-        impl_->pending[incoming->channel].push_back(std::move(*decoded));
+        auto local_channel = incoming->channel;
+        if (const auto* begun = std::get_if<begin>(&*decoded);
+            begun && begun->remote_channel)
+        {
+            local_channel = *begun->remote_channel;
+            impl_->remote_to_local_channel.insert_or_assign(
+                incoming->channel, local_channel);
+        }
+        else if (const auto mapped =
+                     impl_->remote_to_local_channel.find(incoming->channel);
+                 mapped != impl_->remote_to_local_channel.end())
+        {
+            local_channel = mapped->second;
+        }
+        impl_->pending[local_channel].push_back(std::move(*decoded));
     }
 }
 
@@ -469,6 +487,7 @@ auto client::read_pump(std::shared_ptr<cancel_token> token) -> task<void>
             if (!token->is_cancelled())
             {
                 impl_->transition(connection_state::failed);
+                impl_->terminal_error = incoming.error();
                 if (impl_->disconnect_callback)
                     impl_->disconnect_callback(incoming.error());
                 if (impl_->options.reconnect && !impl_->reconnecting)
@@ -493,25 +512,57 @@ auto client::read_pump(std::shared_ptr<cancel_token> token) -> task<void>
                     .code = decoded.error(),
                     .message = "cannot decode AMQP performative"};
             impl_->transition(connection_state::failed);
+            impl_->terminal_error = failure;
             if (impl_->disconnect_callback)
                 impl_->disconnect_callback(failure);
             impl_->transport->close();
             co_return;
         }
-        if (std::holds_alternative<cnetmod::amqp10::close>(*decoded))
+        if (const auto* peer_close =
+                std::get_if<cnetmod::amqp10::close>(&*decoded))
         {
+            auto message = std::string{"peer closed the AMQP connection"};
+            if (peer_close->error)
+            {
+                message = std::format("{}: {}", peer_close->error->condition.text,
+                    peer_close->error->description);
+            }
             auto closed = make_error(error_stage::protocol,
                 errc::connection_closed,
-                "peer closed the AMQP connection");
+                std::move(message));
             impl_->transition(connection_state::closed);
+            impl_->terminal_error = closed;
             if (impl_->disconnect_callback)
                 impl_->disconnect_callback(closed);
             impl_->transport->close();
             co_return;
         }
         concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
-        impl_->pending[incoming->channel].push_back(std::move(*decoded));
+        auto local_channel = incoming->channel;
+        if (const auto* begun = std::get_if<begin>(&*decoded);
+            begun && begun->remote_channel)
+        {
+            local_channel = *begun->remote_channel;
+            impl_->remote_to_local_channel.insert_or_assign(
+                incoming->channel, local_channel);
+        }
+        else if (const auto mapped =
+                     impl_->remote_to_local_channel.find(incoming->channel);
+                 mapped != impl_->remote_to_local_channel.end())
+        {
+            local_channel = mapped->second;
+        }
+        impl_->pending[local_channel].push_back(std::move(*decoded));
     }
+}
+
+void client::restore_received(
+    std::uint16_t channel, std::vector<performative> values)
+{
+    concurrent_containers::exclusive_latch_guard lock{impl_->pending_latch};
+    auto& queue = impl_->pending[channel];
+    for (auto iterator = values.rbegin(); iterator != values.rend(); ++iterator)
+        queue.push_front(std::move(*iterator));
 }
 
 auto client::automatic_reconnect(std::shared_ptr<cancel_token> token)

@@ -14,6 +14,8 @@ import cnetmod.protocol.http;
 import cnetmod.protocol.http.v3.client;
 import cnetmod.protocol.http.v3.frame;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.quic;
+import cnetmod.protocol.udp;
 
 namespace {
 
@@ -31,6 +33,41 @@ struct test_state
         }
     }
 };
+
+struct close_request_state
+{
+    std::atomic<bool> done{};
+    std::optional<std::expected<cnetmod::http::v3::http3_response,
+        std::error_code>>
+        result;
+};
+
+auto run_close_request(
+    std::shared_ptr<cnetmod::http::v3::http3_client> client,
+    std::shared_ptr<cnetmod::ssl_context> tls,
+    cnetmod::http::v3::http3_request request,
+    std::shared_ptr<close_request_state> state) -> cnetmod::task<void>
+{
+    // The client stores a reference to its TLS context. Retain both owners in
+    // the coroutine frame until the in-flight request has observed close.
+    (void)tls;
+    state->result = co_await client->send_request(request);
+    state->done.store(true, std::memory_order_release);
+}
+
+struct connect_state
+{
+    std::atomic<bool> done{};
+    std::optional<std::expected<void, std::error_code>> result;
+};
+
+auto run_connect_attempt(cnetmod::http::v3::http3_client& client,
+    std::uint16_t port, std::shared_ptr<connect_state> state)
+    -> cnetmod::task<void>
+{
+    state->result = co_await client.connect("127.0.0.1", port);
+    state->done.store(true, std::memory_order_release);
+}
 
 auto require_response(test_state& state,
     const std::expected<cnetmod::http::response, std::error_code>& result,
@@ -123,7 +160,8 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
     }
     else
     {
-        auto streaming_tls = std::move(*tls_result);
+        auto streaming_tls = std::make_shared<cnetmod::ssl_context>(
+            std::move(*tls_result));
         cnetmod::http::v3::http3_client_options streaming_options;
         streaming_options.verify_certificate = false;
         streaming_options.tls_sni_host = "127.0.0.1";
@@ -170,9 +208,9 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             push_count->fetch_add(1U, std::memory_order_release);
             co_return {};
         };
-        cnetmod::http::v3::http3_client streaming_client{
-            context, streaming_tls, std::move(streaming_options)};
-        auto connected = co_await streaming_client.connect("127.0.0.1", port);
+        auto streaming_client = std::make_shared<cnetmod::http::v3::http3_client>(
+            context, *streaming_tls, std::move(streaming_options));
+        auto connected = co_await streaming_client->connect("127.0.0.1", port);
         if (!connected)
         {
             state.fail("low-level HTTP/3 streaming client connect failed: " +
@@ -186,7 +224,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             streaming_request.path = "/stream-response";
             std::string streamed_chunks;
             std::size_t streamed_chunk_count = 0U;
-            auto streaming_result = co_await streaming_client.send_request_streaming(
+            auto streaming_result = co_await streaming_client->send_request_streaming(
                 streaming_request,
                 [&streamed_chunks, &streamed_chunk_count](cnetmod::http::v3::http3_response& response,
                     cnetmod::http::request_body_stream& body,
@@ -220,7 +258,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             trailer_request.path = "/request-trailers";
             trailer_request.body = "trailer-body";
             trailer_request.trailers["x-request-complete"] = "1";
-            auto trailers_result = co_await streaming_client.send_request(trailer_request);
+            auto trailers_result = co_await streaming_client->send_request(trailer_request);
             if (!trailers_result || trailers_result->status != 200 ||
                 trailers_result->body != "request-trailers-ok")
                 state.fail("HTTP/3 request trailers were not delivered");
@@ -229,7 +267,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             push_request.host = "127.0.0.1";
             push_request.port = port;
             push_request.path = "/push";
-            auto parent = co_await streaming_client.send_request(push_request);
+            auto parent = co_await streaming_client->send_request(push_request);
             if (!parent || parent->status != 200 || parent->body != "parent-ok")
             {
                 state.fail("HTTP/3 server-push parent response was invalid");
@@ -251,7 +289,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             stream_push_request.host = "127.0.0.1";
             stream_push_request.port = port;
             stream_push_request.path = "/push-stream";
-            auto stream_parent = co_await streaming_client.send_request(
+            auto stream_parent = co_await streaming_client->send_request(
                 stream_push_request);
             if (!stream_parent || stream_parent->status != 200 ||
                 stream_parent->body != "stream-parent-ok")
@@ -280,7 +318,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
             cancelled_push_request.port = port;
             cancelled_push_request.path = "/push-cancel";
             std::string cancelled_parent_body;
-            auto cancelled_parent = co_await streaming_client.send_request_streaming(
+            auto cancelled_parent = co_await streaming_client->send_request_streaming(
                 cancelled_push_request,
                 [&cancelled_parent_body](cnetmod::http::v3::http3_response& response,
                     cnetmod::http::request_body_stream& body,
@@ -324,48 +362,46 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
                     push_count->load(std::memory_order_acquire) != 2U)
                     state.fail("HTTP/3 PUSH_PROMISE rejection did not cancel the Push stream");
 
-                // The server fixture increments this only when the body
-                // producer's cancel token is signalled by the received
-                // CANCEL_PUSH control frame. This rules out a client-only
-                // suppression implementation.
-                (void)co_await cnetmod::async_timer_wait(context,
-                    std::chrono::milliseconds{25});
+                // The server fixture increments this from the session's
+                // validated CANCEL_PUSH observer. This proves that the peer
+                // received and applied the on-wire control frame, including
+                // the valid case where cancellation precedes body startup.
                 cnetmod::http::v3::http3_request cancellation_count_request;
                 cancellation_count_request.host = "127.0.0.1";
                 cancellation_count_request.port = port;
                 cancellation_count_request.path = "/push-cancel-count";
-                auto cancellation_count = co_await streaming_client.send_request(
+                // The fixture endpoint waits asynchronously for the control
+                // stream outcome. A request on this independent stream may
+                // otherwise overtake CANCEL_PUSH even when both transports
+                // are correct.
+                auto cancellation_count = co_await streaming_client->send_request(
                     cancellation_count_request);
                 if (!cancellation_count || cancellation_count->status != 200 ||
                     cancellation_count->body != "1")
-                    state.fail("HTTP/3 server did not observe CANCEL_PUSH");
+                {
+                    const auto detail = cancellation_count
+                        ? std::to_string(cancellation_count->status) + " / " +
+                            cancellation_count->body
+                        : cancellation_count.error().message();
+                    state.fail("HTTP/3 server did not observe CANCEL_PUSH: " +
+                        detail);
+                }
             }
 
             // A public close() may race an application request that is already
             // suspended in response I/O.  The request retains its session and
             // transport until QUIC wakes it, then must finish promptly rather
             // than dereferencing the client's now-cleared owner.
-            struct close_request_state
-            {
-                std::atomic<bool> done{};
-                std::optional<std::expected<cnetmod::http::v3::http3_response,
-                    std::error_code>>
-                    result;
-            };
-
             auto close_request = std::make_shared<close_request_state>();
             cnetmod::http::v3::http3_request slow_request;
             slow_request.host = "127.0.0.1";
             slow_request.port = port;
             slow_request.path = "/slow";
-            cnetmod::spawn(context, [&streaming_client, slow_request, close_request]() -> cnetmod::task<void>
-                {
-                    close_request->result = co_await streaming_client.send_request(slow_request);
-                    close_request->done.store(true, std::memory_order_release);
-                }());
+            cnetmod::spawn(context, run_close_request(streaming_client,
+                streaming_tls, std::move(slow_request), close_request));
             (void)co_await cnetmod::async_timer_wait(context,
                 std::chrono::milliseconds{25});
-            co_await streaming_client.close();
+            co_await streaming_client->close();
             const auto close_request_deadline = std::chrono::steady_clock::now() +
                 std::chrono::seconds{1};
             while (!close_request->done.load(std::memory_order_acquire) &&
@@ -558,7 +594,8 @@ auto run_priority_semantics(cnetmod::io_context& context, std::uint16_t port,
 auto run_multipath_smoke(cnetmod::io_context& context, std::uint16_t port,
     test_state& state, bool enable_path_mtu_discovery = false,
     bool expect_path_mtu_growth = true,
-    const std::filesystem::path& pmtu_blackhole_arm_marker = {}) -> cnetmod::task<void>
+    const std::filesystem::path& pmtu_blackhole_arm_marker = {},
+    std::uint16_t secondary_peer_port = 0U) -> cnetmod::task<void>
 {
     auto tls_result = cnetmod::ssl_context::quic_client();
     if (!tls_result)
@@ -597,8 +634,12 @@ auto run_multipath_smoke(cnetmod::io_context& context, std::uint16_t port,
         // ID 1 has a different four-tuple and exercises its owned receiver
         // lifecycle rather than merely using a second logical Path ID over
         // the original socket.
+        const auto path_port = secondary_peer_port == 0U
+            ? port
+            : secondary_peer_port;
         probed = co_await client.async_probe_path(1U,
-            cnetmod::endpoint{*address, port}, cnetmod::endpoint{*address, 0U});
+            cnetmod::endpoint{*address, path_port},
+            cnetmod::endpoint{*address, 0U});
         if (probed)
             break;
         if (probed.error() != std::make_error_code(std::errc::no_such_file_or_directory) &&
@@ -735,9 +776,23 @@ auto run_multipath_timeout_smoke(cnetmod::io_context& context, std::uint16_t por
     // Deliberately send a path validation challenge to an unbound loopback
     // port. Successful UDP submission is insufficient: the public API must
     // wait for PATH_RESPONSE and report the bounded validation timeout.
-    const auto blackhole_port = port == std::numeric_limits<std::uint16_t>::max()
-        ? static_cast<std::uint16_t>(port - 1U)
-        : static_cast<std::uint16_t>(port + 1U);
+    // Hold an ephemeral UDP port open without reading it. Deriving a
+    // "blackhole" as server_port + 1 can collide with another parallel CTest
+    // HTTP/3 fixture and turn this cancellation test into a real handshake.
+    cnetmod::udp::udp_socket blackhole{context};
+    if (const auto opened = blackhole.open(
+            {cnetmod::ipv4_address::loopback(), 0U}); !opened)
+    {
+        state.fail("could not reserve HTTP/3 connect-close blackhole port");
+        co_return;
+    }
+    const auto blackhole_endpoint = blackhole.native_socket().local_endpoint();
+    if (!blackhole_endpoint)
+    {
+        state.fail("could not inspect HTTP/3 connect-close blackhole port");
+        co_return;
+    }
+    const auto blackhole_port = blackhole_endpoint->port();
     const auto probe = co_await client.async_probe_path(1U,
         cnetmod::endpoint{*address, blackhole_port});
     if (probe || probe.error() != std::make_error_code(std::errc::timed_out))
@@ -880,21 +935,11 @@ auto run_connect_close_smoke(cnetmod::io_context& context, std::uint16_t port,
     options.connect_timeout = std::chrono::seconds{5};
     cnetmod::http::v3::http3_client client{context, *tls_result, std::move(options)};
 
-    struct connect_state
-    {
-        std::atomic<bool> done{};
-        std::optional<std::expected<void, std::error_code>> result;
-    };
-
     const auto blackhole_port = port == std::numeric_limits<std::uint16_t>::max()
         ? static_cast<std::uint16_t>(port - 1U)
         : static_cast<std::uint16_t>(port + 1U);
     auto attempt = std::make_shared<connect_state>();
-    cnetmod::spawn(context, [&client, blackhole_port, attempt]() -> cnetmod::task<void>
-        {
-            attempt->result = co_await client.connect("127.0.0.1", blackhole_port);
-            attempt->done.store(true, std::memory_order_release);
-        }());
+    cnetmod::spawn(context, run_connect_attempt(client, blackhole_port, attempt));
     (void)co_await cnetmod::async_timer_wait(context, std::chrono::milliseconds{25});
     co_await client.close();
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{1};
@@ -909,7 +954,8 @@ auto run_connect_close_smoke(cnetmod::io_context& context, std::uint16_t port,
 auto run_suite(cnetmod::io_context& context, std::uint16_t port, test_state& state,
     bool multipath, bool enable_path_mtu_discovery, bool multipath_timeout,
     bool multipath_pmtu_blackhole, bool multipath_close, bool connect_close,
-    const std::filesystem::path& pmtu_blackhole_arm_marker)
+    const std::filesystem::path& pmtu_blackhole_arm_marker,
+    std::uint16_t secondary_peer_port)
     -> cnetmod::task<void>
 {
     if (multipath_timeout)
@@ -933,7 +979,8 @@ auto run_suite(cnetmod::io_context& context, std::uint16_t port, test_state& sta
     if (multipath)
     {
         co_await run_multipath_smoke(context, port, state, enable_path_mtu_discovery,
-            !multipath_pmtu_blackhole, pmtu_blackhole_arm_marker);
+            !multipath_pmtu_blackhole, pmtu_blackhole_arm_marker,
+            secondary_peer_port);
         context.stop();
         co_return;
     }
@@ -1039,14 +1086,15 @@ auto run_suite(cnetmod::io_context& context, std::uint16_t port, test_state& sta
 
 auto main(int argc, char** argv) -> int
 {
-    const auto has_mode = argc == 3 || argc == 4;
+    const auto has_mode = argc >= 3 && argc <= 5;
     const auto mode = has_mode ? std::string_view{argv[2]} : std::string_view{};
-    const auto blackhole_marker_argument = argc == 4 && mode == "--multipath-pmtu-blackhole";
-    if (argc != 2 && !(has_mode && (mode == "--multipath" || mode == "--multipath-pmtu" || mode == "--multipath-timeout" || mode == "--multipath-close" || mode == "--connect-close" || mode == "--multipath-pmtu-blackhole")) ||
-        (argc == 4 && !blackhole_marker_argument) ||
-        (mode == "--multipath-pmtu-blackhole" && argc != 4))
+    const auto blackhole_marker_argument = argc == 5 &&
+        mode == "--multipath-pmtu-blackhole";
+    if ((argc != 2 && !(has_mode && (mode == "--multipath" || mode == "--multipath-pmtu" || mode == "--multipath-timeout" || mode == "--multipath-close" || mode == "--connect-close" || mode == "--multipath-pmtu-blackhole"))) ||
+        (argc > 3 && !blackhole_marker_argument) ||
+        (mode == "--multipath-pmtu-blackhole" && argc != 5))
     {
-        logger::error{"usage: http_client_http3_e2e <port> [--multipath|--multipath-pmtu|--multipath-timeout|--multipath-close|--connect-close|--multipath-pmtu-blackhole <arm-marker>]"};
+        logger::error{"usage: http_client_http3_e2e <port> [--multipath|--multipath-pmtu|--multipath-timeout|--multipath-close|--connect-close|--multipath-pmtu-blackhole <arm-marker> <secondary-port>]"};
         return 2;
     }
     cnetmod::net_init network;
@@ -1055,7 +1103,10 @@ auto main(int argc, char** argv) -> int
     const auto pmtu_blackhole_arm_marker = blackhole_marker_argument
         ? std::filesystem::path{argv[3]}
         : std::filesystem::path{};
-    cnetmod::spawn(*context, run_suite(*context, static_cast<std::uint16_t>(std::stoul(argv[1])), state, mode == "--multipath" || mode == "--multipath-pmtu" || mode == "--multipath-pmtu-blackhole", mode == "--multipath-pmtu" || mode == "--multipath-pmtu-blackhole", mode == "--multipath-timeout", mode == "--multipath-pmtu-blackhole", mode == "--multipath-close", mode == "--connect-close", pmtu_blackhole_arm_marker));
+    const auto secondary_peer_port = blackhole_marker_argument
+        ? static_cast<std::uint16_t>(std::stoul(argv[4]))
+        : std::uint16_t{};
+    cnetmod::spawn(*context, run_suite(*context, static_cast<std::uint16_t>(std::stoul(argv[1])), state, mode == "--multipath" || mode == "--multipath-pmtu" || mode == "--multipath-pmtu-blackhole", mode == "--multipath-pmtu" || mode == "--multipath-pmtu-blackhole", mode == "--multipath-timeout", mode == "--multipath-pmtu-blackhole", mode == "--multipath-close", mode == "--connect-close", pmtu_blackhole_arm_marker, secondary_peer_port));
     context->run();
     if (!state.ok)
     {

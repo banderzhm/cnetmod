@@ -19,6 +19,8 @@ public:
         -> task<std::expected<void, error>> = 0;
     virtual auto receive(std::uint16_t, cancel_token&)
         -> task<std::expected<performative, error>> = 0;
+    virtual void restore_received(
+        std::uint16_t, std::vector<performative>) = 0;
     [[nodiscard]] virtual auto maximum_frame_size() const noexcept
         -> std::uint32_t = 0;
     virtual void register_recovery_observer(recovery_observer&) = 0;

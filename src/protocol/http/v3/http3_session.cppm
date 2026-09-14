@@ -203,12 +203,20 @@ export using async_webtransport_handler = std::function<
     task<std::expected<void, std::error_code>>(http3_request&, webtransport_session&,
         cnetmod::cancel_token&)>;
 
+/**
+ * Observes a peer CANCEL_PUSH after the frame has passed HTTP/3 validation.
+ * Exceptions are contained by the session and never affect the connection.
+ */
+export using server_push_cancellation_observer =
+    std::function<void(std::uint64_t push_id)>;
+
 /// Handlers for a complete HTTP/3 listener.  WebTransport is an extension of
 /// HTTP/3, so normal requests and Extended CONNECT share one endpoint.
 export struct http3_server_handlers
 {
     async_server_request_handler request;
     async_webtransport_handler webtransport;
+    server_push_cancellation_observer push_cancelled;
 };
 
 export using client_request_handler =
@@ -263,6 +271,13 @@ public:
     /// `run()`.  A non-zero QPACK capacity is explicit opt-in so existing
     /// deployments keep the zero-risk static-table default.
     auto configure_local_settings(http3_settings settings) noexcept -> void;
+    /**
+     * Installs an optional observer for validated peer CANCEL_PUSH frames.
+     * This is intended for metrics and diagnostics; protocol behavior does
+     * not depend on the observer.
+     */
+    auto configure_push_cancellation_observer(
+        server_push_cancellation_observer observer) -> void;
     auto run() -> task<void>;
     auto close() -> task<void>;
     auto send_goaway(stream_id last_stream) -> task<void>;
@@ -326,6 +341,7 @@ private:
     cnetmod::flat_map<std::uint64_t, std::shared_ptr<cnetmod::cancel_token>>
         active_push_cancellations_;
     cnetmod::flat_map<std::uint64_t, bool> peer_cancelled_pushes_;
+    server_push_cancellation_observer push_cancellation_observer_;
     bool received_goaway_{};
     std::uint64_t goaway_stream_id_{std::numeric_limits<std::uint64_t>::max()};
     cnetmod::flat_map<stream_id, std::uint64_t> peer_unidirectional_stream_types_;

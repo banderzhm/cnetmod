@@ -181,7 +181,7 @@ auto client::connect(connect_options opts) -> task<result_set>
     if (opts.ssl == ssl_mode::require)
     {
         sock_.close();
-        err_rs.error_msg = "SSL not available (compiled without OpenSSL)";
+        err_rs.error_msg = "TLS support is unavailable in this build";
         err_rs.diag.assign_client(err_rs.error_msg);
         co_return err_rs;
     }

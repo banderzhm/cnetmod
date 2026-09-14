@@ -30,7 +30,8 @@ private:
     friend class session;
     struct impl;
     explicit transaction_controller(std::unique_ptr<impl>);
-    static auto create(performative_channel&, std::uint16_t, std::uint32_t)
+    static auto create(performative_channel&, std::uint16_t, std::uint32_t,
+        std::shared_ptr<std::atomic<std::uint32_t>>)
         -> transaction_controller;
     std::unique_ptr<impl> impl_;
 };

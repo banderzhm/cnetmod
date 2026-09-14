@@ -127,6 +127,7 @@ jobs:
           -DCMAKE_PREFIX_PATH="${ICU_PREFIX}" \
           -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \
           -DLIBCXX_INCLUDE_DIRS="${LIBCXX_INCLUDE}" \
+          -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
           -DCNETMOD_BUILD_EXAMPLES=ON \
           -S ${{ github.workspace }}
       env:
@@ -135,6 +136,22 @@ jobs:
 
     - name: Build
       run: cmake --build ${{ github.workspace }}/build --parallel $(sysctl -n hw.ncpu)
+
+    - name: Install complete interoperability runtime
+      run: |
+        python -m pip install --disable-pip-version-check \
+          --requirement testing/mail/requirements.txt \
+          --requirement testing/http2/requirements.txt \
+          --requirement testing/http3/requirements.txt \
+          --requirement testing/grpc/requirements.txt \
+          --requirement testing/mqtt/requirements.txt
+
+    - name: Run complete non-external test suite without skips
+      run: |
+        python testing/run_required_ctest.py \
+          --test-dir "${{ github.workspace }}/build" \
+          --output-on-failure --timeout 180 \
+          -E '^(test_application_mysql_live|test_application_redis_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_postgresql_production_example_e2e|python_mongodb_production_example_e2e)$'
 
     - name: Verify protocol-free module graph
       if: matrix.build_type == 'Release'
@@ -154,9 +171,6 @@ jobs:
           -S ${{ github.workspace }}
         cmake --build ${{ github.workspace }}/build-core-only \
           --target cnetmod_core --parallel $(sysctl -n hw.ncpu)
-
-    - name: Install required HTTP/3 and WebTransport interoperability peer
-      run: python -m pip install --disable-pip-version-check --requirement testing/http3/requirements.txt
 
     - name: Run QUIC and HTTP/3 release gates
       run: |

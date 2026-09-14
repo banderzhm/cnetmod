@@ -166,30 +166,31 @@ private:
     auto handle_connection(socket client, io_context& io, conn_count_guard ownership) -> task<void>;
 
     auto handle_h1_clear(socket& client, io_context& io,
-        const char* initial_data = nullptr,
-        std::size_t initial_len = 0) -> task<void>;
+        const char* initial_data, std::size_t initial_len,
+        cancel_token& cancellation) -> task<void>;
 
     auto handle_h2(socket& client, io_context& io,
-        std::span<const std::byte> initial = {}) -> task<void>;
+        std::span<const std::byte> initial,
+        cancel_token& cancellation) -> task<void>;
 
     auto make_h2_handler(io_context& io, socket& client) -> v2::server_handler;
 
 #ifdef CNETMOD_HAS_SSL
-    auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl)
-        -> task<void>;
-    auto handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl)
-        -> task<void>;
+    auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
+        cancel_token& cancellation) -> task<void>;
+    auto handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
+        cancel_token& cancellation) -> task<void>;
 #endif
 
     auto execute_chain(request_context& ctx, handler_fn& handler,
         std::size_t idx = 0) -> task<void>;
 
-    auto send_chunked_response(io_context& io, socket& client, response& resp)
-        -> task<void>;
+    auto send_chunked_response(io_context& io, socket& client, response& resp,
+        cancel_token& cancellation) -> task<void>;
 
 #ifdef CNETMOD_HAS_SSL
     auto send_chunked_response_tls(io_context& io, ssl_stream& ssl,
-        response& resp) -> task<void>;
+        response& resp, cancel_token& cancellation) -> task<void>;
 #endif
 
     io_context& ctx_;

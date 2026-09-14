@@ -7,6 +7,7 @@ module cnetmod.protocol.http.v3.session;
 import std;
 import cnetmod.core.buffer;
 import cnetmod.core.error;
+import cnetmod.core.log;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
@@ -1138,6 +1139,12 @@ auto http3_server_session::configure_local_settings(http3_settings settings) noe
     decoder_.set_max_blocked_streams(settings.qpack_blocked_streams);
 }
 
+auto http3_server_session::configure_push_cancellation_observer(
+    server_push_cancellation_observer observer) -> void
+{
+    push_cancellation_observer_ = std::move(observer);
+}
+
 auto http3_server_session::run() -> task<void>
 {
 
@@ -2234,6 +2241,17 @@ auto http3_server_session::apply_push_cancellations(
             active->second->cancel();
         else
             peer_cancelled_pushes_.insert_or_assign(id, true);
+        if (push_cancellation_observer_)
+        {
+            try
+            {
+                push_cancellation_observer_(id);
+            }
+            catch (...)
+            {
+                // Observability must never alter HTTP/3 protocol behavior.
+            }
+        }
     }
 }
 
@@ -2583,7 +2601,12 @@ auto http3_client_session::dispatch_server_push_promises(stream_id parent_stream
         const auto push_id = promise.push_id;
         const auto accepted = co_await push_promise_handler_(std::move(promise));
         if (!accepted)
-            (void)co_await cancel_server_push(push_id);
+        {
+            const auto cancelled = co_await cancel_server_push(push_id);
+            if (!cancelled)
+                logger::warn{"HTTP/3 could not send CANCEL_PUSH {}: {} ({})",
+                    push_id, cancelled.error().message(), cancelled.error().value()};
+        }
     }
 }
 
@@ -3616,23 +3639,57 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
 auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
     byte_view bytes) -> task<std::expected<void, std::error_code>>
 {
-    // Peer streams are serviced in independent coroutines.  The QPACK
-    // encoder stream mutates `decoder_`, and the decoder stream mutates
-    // `encoder_`, so both must be sequenced with request/response HEADERS.
-    // These are cooperative coroutine gates; no worker thread is blocked and
-    // QUIC packet reception continues while this task waits.
-    co_await request_header_mutex_.lock();
-    cnetmod::async_lock_guard request_guard{
-        request_header_mutex_, std::adopt_lock};
-    co_await response_header_mutex_.lock();
-    cnetmod::async_lock_guard response_guard{
-        response_header_mutex_, std::adopt_lock};
+    // Peer streams are serviced in independent coroutines. QPACK encoder
+    // instructions mutate `decoder_` and therefore serialize only with
+    // request HEADERS; decoder instructions mutate `encoder_` and serialize
+    // only with response HEADERS. The control stream must not take either
+    // gate: a request handler may wait for CANCEL_PUSH while its response is
+    // pending, and gating that control frame behind response serialization
+    // creates a protocol-level dependency cycle.
+    std::uint64_t peer_stream_type{};
+    if (const auto known = peer_unidirectional_stream_types_.find(id);
+        known != peer_unidirectional_stream_types_.end())
+    {
+        peer_stream_type = known->second;
+    }
+    else
+    {
+        std::size_t type_size{};
+        const auto decoded = read_varint(bytes, type_size);
+        if (!decoded)
+            co_return std::unexpected(decoded.error());
+        peer_stream_type = *decoded;
+    }
+
     std::vector<std::uint64_t> cancelled_push_ids;
-    auto result = validate_peer_uni_stream(conn_, decoder_, encoder_, peer_control_stream_seen_, peer_settings_seen_,
-        peer_qpack_encoder_stream_seen_, peer_qpack_decoder_stream_seen_, peer_datagram_enabled_,
-        peer_connect_protocol_enabled_, peer_webtransport_enabled_, peer_max_push_id_, received_goaway_,
-        goaway_stream_id_, &cancelled_push_ids, false, id, bytes, peer_unidirectional_stream_types_,
-        peer_unidirectional_stream_bytes_);
+    const auto validate = [&]
+    {
+        return validate_peer_uni_stream(conn_, decoder_, encoder_,
+            peer_control_stream_seen_, peer_settings_seen_,
+            peer_qpack_encoder_stream_seen_, peer_qpack_decoder_stream_seen_,
+            peer_datagram_enabled_, peer_connect_protocol_enabled_,
+            peer_webtransport_enabled_, peer_max_push_id_, received_goaway_,
+            goaway_stream_id_, &cancelled_push_ids, false, id, bytes,
+            peer_unidirectional_stream_types_, peer_unidirectional_stream_bytes_);
+    };
+
+    std::expected<void, std::error_code> result;
+    if (peer_stream_type == qpack_encoder_stream_type)
+    {
+        co_await request_header_mutex_.lock();
+        cnetmod::async_lock_guard guard{request_header_mutex_, std::adopt_lock};
+        result = validate();
+    }
+    else if (peer_stream_type == qpack_decoder_stream_type)
+    {
+        co_await response_header_mutex_.lock();
+        cnetmod::async_lock_guard guard{response_header_mutex_, std::adopt_lock};
+        result = validate();
+    }
+    else
+    {
+        result = validate();
+    }
     if (result)
     {
         co_await apply_push_cancellations(cancelled_push_ids);

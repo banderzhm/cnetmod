@@ -43,7 +43,9 @@ class WeakTcpProxy:
         self.server = None
         self.ready = threading.Event()
         self.stop_event = None
-        self.connections = []
+        self.connections = {}
+        self.handlers = set()
+        self.next_connection_id = 1
 
     async def _pipe(self, reader, writer, rng: random.Random, label: str):
         try:
@@ -68,22 +70,47 @@ class WeakTcpProxy:
                 await writer.wait_closed()
 
     async def _handle(self, client_reader, client_writer):
-        conn_id = len(self.connections) + 1
-        self.connections.append(client_writer)
+        handler = asyncio.current_task()
+        if handler is not None:
+            self.handlers.add(handler)
+        conn_id = self.next_connection_id
+        self.next_connection_id += 1
         rng = random.Random(self.seed + conn_id * 131)
+        backend_writer = None
         try:
             backend_reader, backend_writer = await asyncio.open_connection(HOST, self.target_port)
-        except Exception:
+            self.connections[conn_id] = (client_writer, backend_writer)
+            await asyncio.gather(
+                self._pipe(client_reader, backend_writer, rng, "c2s"),
+                self._pipe(backend_reader, client_writer, rng, "s2c"),
+                return_exceptions=True,
+            )
+        except (ConnectionError, OSError):
+            pass
+        finally:
+            self.connections.pop(conn_id, None)
             client_writer.close()
             with contextlib.suppress(Exception):
                 await client_writer.wait_closed()
-            return
+            if backend_writer is not None:
+                backend_writer.close()
+                with contextlib.suppress(Exception):
+                    await backend_writer.wait_closed()
+            if handler is not None:
+                self.handlers.discard(handler)
 
-        await asyncio.gather(
-            self._pipe(client_reader, backend_writer, rng, "c2s"),
-            self._pipe(backend_reader, client_writer, rng, "s2c"),
-            return_exceptions=True,
-        )
+    async def _close_connections(self):
+        handlers = list(self.handlers)
+        for client_writer, backend_writer in list(self.connections.values()):
+            client_writer.close()
+            backend_writer.close()
+        if handlers:
+            done, pending = await asyncio.wait(handlers, timeout=TIMEOUT)
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
+        self.connections.clear()
 
     async def _run(self):
         self.stop_event = asyncio.Event()
@@ -93,10 +120,7 @@ class WeakTcpProxy:
             await self.stop_event.wait()
             self.server.close()
             await self.server.wait_closed()
-        for writer in list(self.connections):
-            writer.close()
-            with contextlib.suppress(Exception):
-                await writer.wait_closed()
+        await self._close_connections()
 
     def start(self):
         def runner():
@@ -113,15 +137,7 @@ class WeakTcpProxy:
     def reset_all(self):
         if not self.loop:
             return
-
-        async def closer():
-            for writer in list(self.connections):
-                writer.close()
-                with contextlib.suppress(Exception):
-                    await writer.wait_closed()
-            self.connections.clear()
-
-        fut = asyncio.run_coroutine_threadsafe(closer(), self.loop)
+        fut = asyncio.run_coroutine_threadsafe(self._close_connections(), self.loop)
         fut.result(timeout=TIMEOUT)
 
     def stop(self):
@@ -205,6 +221,7 @@ def session_expiry_props(seconds=3600):
 
 
 def test_forced_drop_persistent_qos(proxy: WeakTcpProxy, port: int, prefix: str, protocol):
+    interop.disconnect_publishers()
     topic = f"{prefix}/{interop.protocol_name(protocol)}/drop/offline"
     client_id = f"weak-persist-{uuid.uuid4()}"
     messages = queue.Queue()
@@ -229,6 +246,7 @@ def test_forced_drop_persistent_qos(proxy: WeakTcpProxy, port: int, prefix: str,
     sub.loop_stop()
     with contextlib.suppress(Exception):
         sub.disconnect()
+    time.sleep(0.25)
 
     for idx in range(8):
         interop.publish(port, topic, f"offline-{idx}", qos=2, protocol=protocol)
@@ -278,6 +296,29 @@ def run_suite_through_proxy(proxy_port: int, *, full_matrix: bool):
         interop.test_shared_subscription(proxy_port, proto_prefix, protocol)
 
 
+def stop_broker(broker):
+    broker.terminate()
+    try:
+        broker.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        broker.kill()
+        broker.wait(timeout=3)
+
+
+def run_proxy_phase(broker_exe: str, tls_key, action):
+    broker_port = free_port()
+    proxy_port = free_port()
+    broker = interop.start_broker(broker_exe, broker_port, interop.TLS_CERT, tls_key)
+    proxy = WeakTcpProxy(proxy_port, broker_port)
+    proxy.start()
+    try:
+        action(proxy, proxy_port)
+    finally:
+        interop.disconnect_publishers()
+        proxy.stop()
+        stop_broker(broker)
+
+
 def main() -> int:
     if len(sys.argv) not in (2, 5):
         print("usage: paho_mqtt_weaknet.py <mqtt_interop_broker_exe> [--tls <cert.pem> <key.pem>]",
@@ -298,30 +339,28 @@ def main() -> int:
         interop.TLS_CERT = sys.argv[3]
         tls_key = sys.argv[4]
 
-    broker_port = free_port()
-    proxy_port = free_port()
-    broker = interop.start_broker(broker_exe, broker_port, interop.TLS_CERT, tls_key)
-    proxy = WeakTcpProxy(proxy_port, broker_port)
-    proxy.start()
-    try:
-        full_matrix = interop.TLS_CERT is None or os.environ.get("CNETMOD_MQTT_WEAKNET_FULL") == "1"
-        transport = "mqtts" if interop.TLS_CERT else "mqtt"
-        matrix = "full" if full_matrix else "reduced"
-        print(f"INFO paho mqtt weaknet transport={transport} matrix={matrix} proxy=chunk+jitter+forced-drop")
-        run_suite_through_proxy(proxy_port, full_matrix=full_matrix)
-        drop_protocols = (mqtt.MQTTv311, mqtt.MQTTv5) if full_matrix else (mqtt.MQTTv5,)
-        for protocol in drop_protocols:
-            test_forced_drop_persistent_qos(proxy, proxy_port,
-                                            f"weaknet/drop/{uuid.uuid4().hex}",
-                                            protocol)
-    finally:
-        proxy.stop()
-        broker.terminate()
-        try:
-            broker.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            broker.kill()
-            broker.wait(timeout=3)
+    full_matrix = interop.TLS_CERT is None or os.environ.get("CNETMOD_MQTT_WEAKNET_FULL") == "1"
+    transport = "mqtts" if interop.TLS_CERT else "mqtt"
+    matrix = "full" if full_matrix else "reduced"
+    print(f"INFO paho mqtt weaknet transport={transport} matrix={matrix} proxy=chunk+jitter+forced-drop")
+    run_proxy_phase(
+        broker_exe,
+        tls_key,
+        lambda proxy, proxy_port: run_suite_through_proxy(proxy_port, full_matrix=full_matrix),
+    )
+
+    drop_protocols = (mqtt.MQTTv311, mqtt.MQTTv5) if full_matrix else (mqtt.MQTTv5,)
+    for protocol in drop_protocols:
+        run_proxy_phase(
+            broker_exe,
+            tls_key,
+            lambda proxy, proxy_port, protocol=protocol: test_forced_drop_persistent_qos(
+                proxy,
+                proxy_port,
+                f"weaknet/drop/{uuid.uuid4().hex}",
+                protocol,
+            ),
+        )
     print("PASS paho mqtt weaknet")
     return 0
 

@@ -443,6 +443,7 @@ def test_cnetmod_mongodb_three_node_primary_failover(
     parameters = {
         **_topology_parameters(mongodb_uri, mongodb_native_options),
         "replica_set_name": replica_set_name,
+        "marker_prefix": f"failover-{uuid.uuid4().hex}",
         "duration_milliseconds": 25_000,
         "interval_milliseconds": 150,
     }
@@ -450,8 +451,18 @@ def test_cnetmod_mongodb_three_node_primary_failover(
         watching = executor.submit(
             mongodb_driver.request, "failover_watch", timeout_seconds=40, **parameters
         )
-        time.sleep(3)
+        marker_filter = {"_id": {"$regex": f"^{parameters['marker_prefix']}-"}}
         with MongoClient(mongodb_uri, serverSelectionTimeoutMS=10_000) as client:
+            collection = client[mongodb_native_options["database"]][
+                "cnetmod_failover_probe"
+            ]
+            ready_deadline = time.monotonic() + 15
+            while collection.count_documents(marker_filter, limit=1) == 0:
+                if watching.done():
+                    watching.result()
+                if time.monotonic() >= ready_deadline:
+                    pytest.fail("failover watcher did not complete an initial primary write")
+                time.sleep(0.1)
             try:
                 client.admin.command({"replSetStepDown": 8, "force": True})
             except (AutoReconnect, OperationFailure):

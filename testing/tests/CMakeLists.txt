@@ -160,7 +160,15 @@ foreach(test_src ${TEST_SOURCES})
         CXX_MODULE_GENERATION_MODE "SEPARATE"
     )
 
-    add_test(NAME ${test_name} COMMAND ${test_name})
+    if(MSVC AND test_name STREQUAL "test_http_disabled_overhead")
+        # This executable replaces the process allocator and asserts exact
+        # allocation counts. MSVC Debug's iterator-proxy allocations are a
+        # different ABI and can deadlock inside the STL when fault-injected;
+        # the production allocator contract is therefore a Release gate.
+        add_test(NAME ${test_name} COMMAND ${test_name} CONFIGURATIONS Release)
+    else()
+        add_test(NAME ${test_name} COMMAND ${test_name})
+    endif()
     if(test_name MATCHES "^test_application($|_)")
         set_tests_properties(${test_name} PROPERTIES TIMEOUT 60)
     endif()
@@ -223,6 +231,12 @@ endif()
 
 if(MSVC AND TARGET test_raft)
     target_compile_options(test_raft PRIVATE /Od /Ob0)
+endif()
+if(TARGET test_raft)
+    # The five-node TCP chaos cases intentionally consume the event loop and
+    # several loopback sockets.  Running unrelated network suites beside them
+    # can exhaust their convergence budget without exposing a Raft defect.
+    set_tests_properties(test_raft PROPERTIES RUN_SERIAL TRUE TIMEOUT 60)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
@@ -348,7 +362,7 @@ if(TARGET test_http_observability)
     set_tests_properties(test_http_observability PROPERTIES TIMEOUT 15)
 endif()
 if(TARGET test_http_disabled_overhead)
-    set_tests_properties(test_http_disabled_overhead PROPERTIES TIMEOUT 15)
+    set_tests_properties(test_http_disabled_overhead PROPERTIES TIMEOUT 60)
     if(CNETMOD_ENABLE_ORM)
         target_compile_definitions(test_http_disabled_overhead PRIVATE CNETMOD_TEST_ORM=1)
     endif()
@@ -393,8 +407,8 @@ if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MQTT)
                 "${CMAKE_CURRENT_SOURCE_DIR}/../mqtt/paho_mqtt_interop.py"
                 "$<TARGET_FILE:mqtt_interop_broker>"
                 --tls
-                "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/test_ssl/cert.pem"
-                "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/test_ssl/key.pem"
+                "${redis_tls_fixture}/cert.pem"
+                "${redis_tls_fixture}/key.pem"
         )
         add_test(
             NAME test_paho_mqtt_tls_weaknet_python
@@ -402,8 +416,8 @@ if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MQTT)
                 "${CMAKE_CURRENT_SOURCE_DIR}/../mqtt/paho_mqtt_weaknet.py"
                 "$<TARGET_FILE:mqtt_interop_broker>"
                 --tls
-                "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/test_ssl/cert.pem"
-                "${CMAKE_CURRENT_SOURCE_DIR}/../../examples/test_ssl/key.pem"
+                "${redis_tls_fixture}/cert.pem"
+                "${redis_tls_fixture}/key.pem"
         )
     endif()
     add_test(

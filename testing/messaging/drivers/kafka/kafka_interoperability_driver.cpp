@@ -7,6 +7,7 @@ module cnetmod.testing.messaging.kafka_interoperability_driver;
 import std;
 import nlohmann.json;
 import cnetmod.coro.spawn;
+import cnetmod.coro.timer;
 import cnetmod.coro.wait_group;
 import cnetmod.protocol.kafka;
 import cnetmod.protocol.kafka.client_facade;
@@ -84,6 +85,13 @@ namespace {
     auto failure(const error& value) -> std::string
     {
         return failure(error_name(value.code), value.message.empty() ? "Kafka operation failed" : value.message);
+    }
+
+    auto failure_at(std::string_view stage, const error& value) -> std::string
+    {
+        auto contextual = value;
+        contextual.message = std::format("{}: {}", stage, value.message);
+        return failure(contextual);
     }
 
     auto bytes_from_hex(std::string_view text) -> kafka::result<kafka::bytes>
@@ -605,7 +613,7 @@ namespace {
             value.value = text_bytes(text.get<std::string>());
             auto delivered = co_await producer->send(topic, std::move(value));
             if (!delivered)
-                co_return failure(delivered.error());
+                co_return failure_at("committed transactional send", delivered.error());
         }
         auto committed = co_await producer->commit_transaction();
         if (!committed)
@@ -620,7 +628,7 @@ namespace {
             value.value = text_bytes(text.get<std::string>());
             auto delivered = co_await producer->send(topic, std::move(value));
             if (!delivered)
-                co_return failure(delivered.error());
+                co_return failure_at("rolled-back transactional send", delivered.error());
         }
         auto aborted = co_await producer->abort_transaction();
         if (!aborted)
@@ -637,7 +645,8 @@ namespace {
         auto replacement_delivery =
             co_await replacement->send(topic, std::move(replacement_record));
         if (!replacement_delivery)
-            co_return failure(replacement_delivery.error());
+            co_return failure_at(
+                "replacement producer send", replacement_delivery.error());
 
         auto stale_begun = co_await producer->begin_transaction();
         if (!stale_begun)
@@ -725,26 +734,29 @@ namespace {
             co_return failure(producer.error());
         bool retried = false;
         std::size_t records_lost = 0;
+        const auto retry_budget = std::chrono::milliseconds(
+            parameters.value("request_timeout_milliseconds", 30000));
         for (std::size_t index = 0; index < 40; ++index)
         {
-            kafka::record value;
-            value.value = text_bytes(std::format("restart-probe-{}", index));
-            auto delivered = co_await producer->send(topic, std::move(value));
-            if (!delivered)
+            const auto deadline = std::chrono::steady_clock::now() + retry_budget;
+            bool delivered = false;
+            do
             {
-                retried = true;
-                auto refreshed = co_await client.refresh_metadata({topic});
-                if (!refreshed)
+                kafka::record value;
+                value.value = text_bytes(std::format("restart-probe-{}", index));
+                auto attempt = co_await producer->send(topic, std::move(value));
+                if (attempt)
                 {
-                    ++records_lost;
-                    continue;
+                    delivered = true;
+                    break;
                 }
-                kafka::record retry;
-                retry.value = text_bytes(std::format("restart-probe-{}", index));
-                delivered = co_await producer->send(topic, std::move(retry));
-                if (!delivered)
-                    ++records_lost;
-            }
+                retried = true;
+                (void)co_await client.refresh_metadata({topic});
+                if (std::chrono::steady_clock::now() < deadline)
+                    co_await async_sleep(context, std::chrono::milliseconds(100));
+            } while (std::chrono::steady_clock::now() < deadline);
+            if (!delivered)
+                ++records_lost;
         }
         auto refreshed = co_await client.refresh_metadata({topic});
         co_return success({{"metadata_refreshed", refreshed.has_value()},

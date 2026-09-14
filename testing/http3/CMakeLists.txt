@@ -1,27 +1,7 @@
 # QUIC handshake verification tools
 
 if(CNETMOD_HAS_QUIC)
-    # Phase 1: Basic echo server for handshake verification
-    add_executable(quic_echo_server
-        quic_echo_server.cpp
-        quic_echo_server_main.cpp)
-    target_link_libraries(quic_echo_server PRIVATE cnetmod_core)
-
-    set_property(TARGET quic_echo_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
-    set_target_properties(quic_echo_server PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
-
-    # Phase 2: Minimal QUIC echo server for comprehensive handshake testing
-    add_executable(quic_echo_server_minimal
-        quic_echo_server_minimal.cpp
-        quic_echo_server_minimal_main.cpp)
-    target_link_libraries(quic_echo_server_minimal PRIVATE cnetmod_core)
-
-    set_property(TARGET quic_echo_server_minimal PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
-    set_target_properties(quic_echo_server_minimal PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
-
-    # Phase 5: HTTP/3 interop test binaries (server + client).
+    # HTTP/3 interop test binaries (server + client).
     # testing/tests may already define these targets; avoid duplicates.
     if(NOT TARGET h3_interop_server)
         add_executable(h3_interop_server

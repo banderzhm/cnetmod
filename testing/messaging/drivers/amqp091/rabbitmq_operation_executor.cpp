@@ -188,7 +188,9 @@ namespace {
         void on_confirm_failure(const amqp091::error& reason) override
         {
             std::scoped_lock lock(mutex_);
-            failure_ = reason.message;
+            failure_ = reason.message.empty()
+                ? std::format("AMQP error code {}", std::to_underlying(reason.code))
+                : reason.message;
         }
 
         [[nodiscard]] auto confirmed(std::uint64_t tag) const -> bool
@@ -580,8 +582,9 @@ namespace {
         }
         ensure(co_await channel->async_cancel_consumer(consumer),
             "cancel sustained-delivery consumer");
+        const auto confirmed_count = confirms->confirmed_count();
         co_await close_client(context, std::move(connection));
-        co_return json{{"confirmed_count", confirms->confirmed_count()},
+        co_return json{{"confirmed_count", confirmed_count},
             {"consumed_count", acknowledged},
             {"duplicate_count", duplicates},
             {"payload_mismatch_count", mismatches}};

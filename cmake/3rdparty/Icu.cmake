@@ -36,16 +36,23 @@ macro(cnetmod_configure_icu)
             # configurations may leave a newer executable from the other
             # configuration, bypassing ICU's incremental custom copy step.
             # Restore matching tools without recompilation or redundant writes.
-            foreach(_cnetmod_icu_tool IN ITEMS genrb gencnval gencfu icupkg makeconv pkgdata)
+            set(_cnetmod_icu_data_tools
+                genrb gencnval gencfu genbrk genccode gencmn gendict gennorm2
+                gensprep gentest icupkg makeconv pkgdata)
+            foreach(_cnetmod_icu_tool IN LISTS _cnetmod_icu_data_tools)
                 list(APPEND _cnetmod_icu_stage_tools
                     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
                         "${_cnetmod_icu_source}/tools/${_cnetmod_icu_tool}/x64/${_cnetmod_icu_configuration}/${_cnetmod_icu_tool}.exe"
                         "${_cnetmod_icu_source}/../bin64/${_cnetmod_icu_tool}.exe")
             endforeach()
-            add_custom_target(cnetmod_icu
-                COMMAND "${CMAKE_COMMAND}" -E env "PATH=${_cnetmod_icu_python_dir}\;$ENV{PATH}"
+            set(_cnetmod_icu_stamp
+                "${CMAKE_CURRENT_BINARY_DIR}/cnetmod_icu_$<CONFIG>.stamp")
+            add_custom_command(
+                OUTPUT "${_cnetmod_icu_stamp}"
+                COMMAND "${CMAKE_COMMAND}" -E env
+                    "PATH=${_cnetmod_icu_python_dir}\;${_cnetmod_icu_source}/../bin64\;$ENV{PATH}"
                     "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/allinone/allinone.sln"
-                    /target:common,i18n,genrb,gencnval,gencfu,icupkg,makeconv,pkgdata
+                    /target:common,i18n,genrb,gencnval,gencfu,genbrk,genccode,gencmn,gendict,gennorm2,gensprep,gentest,icupkg,makeconv,pkgdata
                     /property:Configuration=${_cnetmod_icu_configuration} /property:Platform=x64
                 ${_cnetmod_icu_stage_tools}
                 # ICU's makedata project declares its own test projects as
@@ -54,12 +61,25 @@ macro(cnetmod_configure_icu)
                 # on Windows.  Build just the data tools above, then run the
                 # data project's NMake recipe without traversing those test
                 # references.
-                COMMAND "${CMAKE_COMMAND}" -E env "PATH=${_cnetmod_icu_python_dir}\;$ENV{PATH}"
+                # Data generators are linked against the just-built ICU DLLs.
+                # A developer machine can accidentally hide this dependency
+                # through an existing PATH; clean runners cannot.  Keep the
+                # bundled runtime directory first for deterministic execution.
+                COMMAND "${CMAKE_COMMAND}" -E env
+                    "PATH=${_cnetmod_icu_python_dir}\;${_cnetmod_icu_source}/../bin64\;$ENV{PATH}"
                     "${_cnetmod_icu_msbuild}" "${_cnetmod_icu_source}/data/makedata.vcxproj"
                     /property:Configuration=${_cnetmod_icu_configuration} /property:Platform=x64
                     /property:BuildProjectReferences=false
                     /property:SolutionDir=${_cnetmod_icu_source}/allinone/
-                    COMMENT "Building bundled ICU libraries and data for $<CONFIG>")
+                COMMAND "${CMAKE_COMMAND}" -E touch "${_cnetmod_icu_stamp}"
+                DEPENDS
+                    "${CMAKE_SOURCE_DIR}/cmake/3rdparty/Icu.cmake"
+                    "${_cnetmod_icu_source}/allinone/allinone.sln"
+                    "${_cnetmod_icu_source}/data/makedata.mak"
+                    "${_cnetmod_icu_source}/data/BUILDRULES.py"
+                    "${_cnetmod_icu_source}/test/testdata/BUILDRULES.py"
+                COMMENT "Building bundled ICU libraries and data for $<CONFIG>")
+            add_custom_target(cnetmod_icu DEPENDS "${_cnetmod_icu_stamp}")
             foreach(_cnetmod_icu_lib IN ITEMS uc i18n)
                 add_library(ICU::${_cnetmod_icu_lib} SHARED IMPORTED GLOBAL)
                 set(_cnetmod_icu_project "${_cnetmod_icu_lib}")

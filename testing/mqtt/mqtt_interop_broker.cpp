@@ -1,15 +1,35 @@
 #include <cnetmod/config.hpp>
+#include <csignal>
 #include <cstdio>
 
 import std;
 import cnetmod.core.net_init;
 import cnetmod.core.log;
+import cnetmod.coro.task;
 import cnetmod.coro.spawn;
+import cnetmod.coro.timer;
 import cnetmod.io.io_context;
 import cnetmod.protocol.mqtt;
 
 namespace cn = cnetmod;
 namespace mqtt = cnetmod::mqtt;
+
+namespace {
+
+volatile std::sig_atomic_t stop_requested = 0;
+
+extern "C" void request_stop_from_signal(int) {
+    stop_requested = 1;
+}
+
+auto monitor_stop_signal(cn::io_context& ctx) -> cn::task<void> {
+    while (stop_requested == 0) {
+        co_await cn::async_sleep(ctx, std::chrono::milliseconds{25});
+    }
+    ctx.stop();
+}
+
+} // namespace
 
 auto parse_port(std::string_view text) -> std::optional<std::uint16_t> {
     unsigned value = 0;
@@ -34,6 +54,8 @@ int main(int argc, char** argv) {
 
     cn::net_init net;
     auto ctx = cn::make_io_context();
+    std::signal(SIGINT, request_stop_from_signal);
+    std::signal(SIGTERM, request_stop_from_signal);
 
     mqtt::broker broker(*ctx);
     mqtt::broker_options opts;
@@ -72,6 +94,7 @@ int main(int argc, char** argv) {
     std::fflush(stdout);
 
     cn::spawn(*ctx, broker.run());
+    cn::spawn(*ctx, monitor_stop_signal(*ctx));
     ctx->run();
     logger::shutdown();
     return 0;

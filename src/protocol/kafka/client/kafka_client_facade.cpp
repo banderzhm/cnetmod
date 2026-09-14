@@ -183,45 +183,64 @@ namespace {
                 co_return std::unexpected(
                     make_error(error_code::unsupported_version,
                         "broker has no compatible InitProducerId version"));
-            broker_connection* connection = nullptr;
-            if (transactional)
+            const auto deadline = std::chrono::steady_clock::now() + timeout;
+            error failure = make_error(error_code::coordinator_not_available);
+            for (std::size_t attempt = 0;; ++attempt)
             {
-                auto located = co_await locate_transaction_coordinator(*transactional,
-                    token);
-                if (!located)
-                    co_return std::unexpected(located.error());
-                connection = transaction_coordinator();
+                broker_connection* connection = nullptr;
+                if (transactional)
+                {
+                    auto located = co_await locate_transaction_coordinator(
+                        *transactional, token);
+                    if (!located)
+                        failure = located.error();
+                    else
+                        connection = transaction_coordinator();
+                }
+                else
+                    connection = seed_();
+
+                if (connection)
+                {
+                    protocol::encoder encoder;
+                    if (transactional)
+                        encoder.nullable_string(std::optional<std::string>{
+                            std::string(*transactional)});
+                    else
+                        encoder.nullable_string({});
+                    encoder.int32(static_cast<std::int32_t>(timeout.count()));
+                    auto raw = co_await request_with_cancel(*connection,
+                        protocol::api_key::init_producer_id, init_version_,
+                        std::move(encoder).take(), token);
+                    if (!raw)
+                        failure = raw.error();
+                    else
+                    {
+                        protocol::decoder decoder(*raw);
+                        auto throttle = decoder.int32();
+                        auto ec = decoder.int16();
+                        auto producer_id = decoder.int64();
+                        auto epoch = decoder.int16();
+                        if (!throttle || !ec || !producer_id || !epoch)
+                            co_return std::unexpected(make_error(
+                                error_code::malformed_response,
+                                "truncated InitProducerId response"));
+                        if (*ec == 0)
+                            co_return std::pair{*producer_id, *epoch};
+                        failure = make_error(static_cast<error_code>(*ec));
+                    }
+                }
+
+                auto decision = retry_.decide(failure, attempt, deadline);
+                if (!decision)
+                    co_return std::unexpected(decision.error());
+                if (transactional && decision->recovery ==
+                        kafka_retry_recovery::rediscover_coordinator)
+                    transaction_coordinator_id_.reset();
+                auto waited = co_await retry_.wait(*decision, token);
+                if (!waited)
+                    co_return std::unexpected(waited.error());
             }
-            else
-            {
-                connection = seed_();
-            }
-            if (!connection)
-                co_return std::unexpected(
-                    make_error(error_code::coordinator_not_available));
-            protocol::encoder encoder;
-            if (transactional)
-                encoder.nullable_string(
-                    std::optional<std::string>{std::string(*transactional)});
-            else
-                encoder.nullable_string({});
-            encoder.int32(static_cast<std::int32_t>(timeout.count()));
-            auto raw = co_await request_with_cancel(
-                *connection, protocol::api_key::init_producer_id, init_version_,
-                std::move(encoder).take(), token);
-            if (!raw)
-                co_return std::unexpected(raw.error());
-            protocol::decoder decoder(*raw);
-            auto throttle = decoder.int32();
-            auto ec = decoder.int16();
-            auto producer_id = decoder.int64();
-            auto epoch = decoder.int16();
-            if (!throttle || !ec || !producer_id || !epoch)
-                co_return std::unexpected(make_error(
-                    error_code::malformed_response, "truncated InitProducerId response"));
-            if (*ec != 0)
-                co_return std::unexpected(make_error(static_cast<error_code>(*ec)));
-            co_return std::pair{*producer_id, *epoch};
         }
 
         auto wait_for_linger(std::chrono::milliseconds duration, cancel_token* token)
@@ -351,65 +370,86 @@ namespace {
             std::int16_t producer_epoch, std::span<const topic_partition> partitions,
             cancel_token* token) -> task<result<void>> override
         {
-            auto located =
-                co_await locate_transaction_coordinator(transactional_id, token);
-            if (!located)
-                co_return std::unexpected(located.error());
-            auto* connection = transaction_coordinator();
-            if (!connection)
-                co_return std::unexpected(
-                    make_error(error_code::coordinator_not_available));
-            protocol::encoder encoder;
-            encoder.string(transactional_id);
-            encoder.int64(producer_id);
-            encoder.int16(producer_epoch);
             std::map<std::string, std::vector<std::int32_t>, std::less<>> topics;
             for (const auto& partition : partitions)
                 topics[partition.topic].push_back(partition.partition);
-            encoder.int32(static_cast<std::int32_t>(topics.size()));
-            for (const auto& [topic, topic_partitions] : topics)
+            const auto deadline = std::chrono::steady_clock::now() +
+                client_configuration_.request_timeout *
+                    static_cast<std::int64_t>(client_configuration_.retries + 1);
+            error failure = make_error(error_code::coordinator_not_available);
+            for (std::size_t attempt = 0;; ++attempt)
             {
-                encoder.string(topic);
-                encoder.int32(static_cast<std::int32_t>(topic_partitions.size()));
-                for (auto partition : topic_partitions)
-                    encoder.int32(partition);
-            }
-            auto response = co_await request_with_cancel(
-                *connection, protocol::api_key::add_partitions_to_txn, 1,
-                std::move(encoder).take(), token);
-            if (!response)
-                co_return std::unexpected(response.error());
-            protocol::decoder decoder(*response);
-            auto throttle = decoder.int32();
-            auto topic_count = decoder.int32();
-            if (!throttle || !topic_count || *topic_count < 0)
-                co_return std::unexpected(make_error(
-                    error_code::malformed_response,
-                    "truncated AddPartitionsToTxn response"));
-            for (std::int32_t topic_index = 0; topic_index < *topic_count;
-                ++topic_index)
-            {
-                auto topic = decoder.string();
-                auto partition_count = decoder.int32();
-                if (!topic || !partition_count || *partition_count < 0)
-                    co_return std::unexpected(make_error(
-                        error_code::malformed_response,
-                        "truncated AddPartitionsToTxn topic response"));
-                for (std::int32_t partition_index = 0;
-                    partition_index < *partition_count; ++partition_index)
+                auto located = co_await locate_transaction_coordinator(
+                    transactional_id, token);
+                if (!located)
+                    failure = located.error();
+                else if (auto* connection = transaction_coordinator())
                 {
-                    auto partition = decoder.int32();
-                    auto code = decoder.int16();
-                    if (!partition || !code)
-                        co_return std::unexpected(make_error(
-                            error_code::malformed_response,
-                            "truncated AddPartitionsToTxn partition response"));
-                    if (*code != 0)
-                        co_return std::unexpected(
-                            make_error(static_cast<error_code>(*code)));
+                    protocol::encoder encoder;
+                    encoder.string(transactional_id);
+                    encoder.int64(producer_id);
+                    encoder.int16(producer_epoch);
+                    encoder.int32(static_cast<std::int32_t>(topics.size()));
+                    for (const auto& [topic, topic_partitions] : topics)
+                    {
+                        encoder.string(topic);
+                        encoder.int32(
+                            static_cast<std::int32_t>(topic_partitions.size()));
+                        for (auto partition : topic_partitions)
+                            encoder.int32(partition);
+                    }
+                    auto response = co_await request_with_cancel(*connection,
+                        protocol::api_key::add_partitions_to_txn, 1,
+                        std::move(encoder).take(), token);
+                    if (!response)
+                        failure = response.error();
+                    else
+                    {
+                        protocol::decoder decoder(*response);
+                        auto throttle = decoder.int32();
+                        auto topic_count = decoder.int32();
+                        if (!throttle || !topic_count || *topic_count < 0)
+                            co_return std::unexpected(make_error(
+                                error_code::malformed_response,
+                                "truncated AddPartitionsToTxn response"));
+                        failure = make_error(error_code::none);
+                        for (std::int32_t topic_index = 0;
+                            topic_index < *topic_count; ++topic_index)
+                        {
+                            auto topic = decoder.string();
+                            auto partition_count = decoder.int32();
+                            if (!topic || !partition_count || *partition_count < 0)
+                                co_return std::unexpected(make_error(
+                                    error_code::malformed_response,
+                                    "truncated AddPartitionsToTxn topic response"));
+                            for (std::int32_t partition_index = 0;
+                                partition_index < *partition_count; ++partition_index)
+                            {
+                                auto partition = decoder.int32();
+                                auto code = decoder.int16();
+                                if (!partition || !code)
+                                    co_return std::unexpected(make_error(
+                                        error_code::malformed_response,
+                                        "truncated AddPartitionsToTxn partition response"));
+                                if (*code != 0 && failure.code == error_code::none)
+                                    failure = make_error(
+                                        static_cast<error_code>(*code));
+                            }
+                        }
+                        if (failure.code == error_code::none)
+                            co_return result<void>{};
+                    }
                 }
+                auto decision = retry_.decide(failure, attempt, deadline);
+                if (!decision)
+                    co_return std::unexpected(decision.error());
+                if (decision->recovery ==
+                    kafka_retry_recovery::rediscover_coordinator)
+                    transaction_coordinator_id_.reset();
+                auto waited = co_await retry_.wait(*decision, token);
+                if (!waited)
+                    co_return std::unexpected(waited.error());
             }
-            co_return result<void>{};
         }
 
         auto add_transaction_offsets(

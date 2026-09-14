@@ -73,6 +73,7 @@ enum class outcome_kind
     rejected,
     released,
     modified,
+    declared,
     transactional
 };
 

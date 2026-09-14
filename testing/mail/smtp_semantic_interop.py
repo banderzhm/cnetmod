@@ -148,7 +148,7 @@ def main() -> int:
         return 2
     server, client = (Path(argument) for argument in sys.argv[1:])
     asyncio.run(run(server, client))
-    print("PASS aiosmtplib ↔ cnetmod SMTP semantic interoperability")
+    print("PASS aiosmtplib <-> cnetmod SMTP semantic interoperability")
     return 0
 
 

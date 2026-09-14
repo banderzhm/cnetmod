@@ -74,9 +74,12 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 `cnetmod.application.yaml_configuration` 适配器转换为同一个 JSON 文档模型；因此
 两种格式有完全相同的字段校验、`${ENV_VAR}` 注入、脱敏及热重载语义。YAML 映射键
 必须为字符串且不得重复，文档根必须为映射；锚点展开限制为 64 层以拒绝循环或病态输入。
-模块门面以固定提交收录在 `3rdparty/yaml-cpp-modules` Git submodule 中；克隆后应执行
-`git submodule update --init --recursive`，也可用 `CNETMOD_YAML_CPP_MODULES_SOURCE_DIR`
-指向本地开发版本。
+解析器与模块门面分别以固定提交收录在 `3rdparty/yaml-cpp` 和
+`3rdparty/yaml-cpp-modules` Git submodule 中。cnetmod 构建不会再通过
+`FetchContent` 隐式下载 YAML 依赖；克隆后应执行
+`git submodule update --init --recursive`。开发时可分别用
+`CNETMOD_YAML_CPP_SOURCE_DIR` 和 `CNETMOD_YAML_CPP_MODULES_SOURCE_DIR`
+指向本地版本。
 
 ```json
 {

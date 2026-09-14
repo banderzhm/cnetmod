@@ -11,6 +11,23 @@ from pathlib import Path
 SKIP_RETURN_CODE = 77
 
 
+class _RequiredExecutionGate:
+    """Fail a required interoperability run when pytest skips any test."""
+
+    def __init__(self) -> None:
+        self.skipped = False
+
+    def pytest_runtest_logreport(self, report) -> None:
+        self.skipped |= report.skipped
+
+    def pytest_collectreport(self, report) -> None:
+        self.skipped |= report.skipped
+
+    def pytest_sessionfinish(self, session, exitstatus) -> None:
+        if self.skipped and exitstatus == 0:
+            session.exitstatus = 1
+
+
 def _unavailable(message: str) -> int:
     required = os.environ.get("CNETMOD_MESSAGING_REQUIRED") == "1"
     print(("ERROR: " if required else "SKIP: ") + message)
@@ -84,13 +101,16 @@ def main() -> int:
     import pytest
 
     directory = Path(__file__).resolve().parent
+    required = os.environ.get("CNETMOD_MESSAGING_REQUIRED") == "1"
+    plugins = [_RequiredExecutionGate()] if required else []
     return pytest.main(
         [
             "-c",
             str(directory / "pytest.ini"),
             str(directory / protocol),
             "--strict-markers",
-        ]
+        ],
+        plugins=plugins,
     )
 
 

@@ -27,7 +27,6 @@ def main() -> int:
     # the distinct server-observed four-tuples required by Multipath QUIC.
     clients: dict[tuple[str, int], socket.socket] = {}
     upstream_clients: dict[socket.socket, tuple[str, int]] = {}
-    primary_client: tuple[str, int] | None = None
     target = ("127.0.0.1", args.target_port)
     try:
         deadline = time.monotonic() + 90
@@ -41,17 +40,13 @@ def main() -> int:
                     path_client = sender
                 else:
                     path_client = upstream_clients[key.fileobj]
-                # The client arms the black hole after PATH_RESPONSE validates
-                # Path 1. Restrict it to the independently bound secondary
-                # path: a PMTU failure must not stall unrelated Path 0
-                # control traffic while testing Path 1's fallback ceiling.
-                if (args.arm_marker.exists() and primary_client is not None and
-                        path_client != primary_client and len(packet) > args.maximum):
+                # Only the independently bound secondary path traverses this
+                # proxy. The primary handshake goes directly to the server,
+                # so arming the black hole cannot perturb Path 0 traffic.
+                if args.arm_marker.exists() and len(packet) > args.maximum:
                     args.dropped_marker.write_text("oversized UDP datagram dropped\n", encoding="ascii")
                     continue
                 if key.data == "client":
-                    if primary_client is None:
-                        primary_client = sender
                     upstream = clients.get(sender)
                     if upstream is None:
                         upstream = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

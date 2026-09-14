@@ -89,6 +89,14 @@ public:
     http3_server(const http3_server&) = delete;
     auto operator=(const http3_server&) -> http3_server& = delete;
     [[nodiscard]] auto start() -> std::expected<void, std::error_code>;
+    /**
+     * Installs a listener-wide observer for validated peer CANCEL_PUSH frames.
+     * The observer must be configured before start and is inherited by every
+     * accepted HTTP/3 session.
+     */
+    [[nodiscard]] auto set_push_cancellation_observer(
+        server_push_cancellation_observer observer)
+        -> std::expected<void, std::error_code>;
     /// Enable RFC 9221 transport negotiation before `start()`.
     /// A zero size disables HTTP Datagrams/WebTransport support.
     auto set_max_datagram_frame_size(std::uint64_t bytes) -> std::expected<void, std::error_code>;

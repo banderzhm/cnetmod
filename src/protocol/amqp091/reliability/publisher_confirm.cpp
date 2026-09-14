@@ -32,7 +32,7 @@ void publisher_confirm_tracker::observe(
 }
 
 void publisher_confirm_tracker::settle(std::uint64_t tag, bool ack,
-    bool multiple)
+    bool multiple) noexcept
 {
     std::shared_ptr<const observer_list> listeners;
     {
@@ -44,7 +44,6 @@ void publisher_confirm_tracker::settle(std::uint64_t tag, bool ack,
         listeners = observers_;
     }
     publisher_confirmation event{tag, ack, multiple};
-    std::exception_ptr first_failure;
     if (listeners)
         for (const auto& observer : *listeners)
             if (auto listener = observer.lock())
@@ -53,12 +52,7 @@ void publisher_confirm_tracker::settle(std::uint64_t tag, bool ack,
                     listener->on_confirm(event);
                 }
                 catch (...)
-                {
-                    if (!first_failure)
-                        first_failure = std::current_exception();
-                }
-    if (first_failure)
-        std::rethrow_exception(first_failure);
+                {}
 }
 
 void publisher_confirm_tracker::fail_all(const error& reason) noexcept

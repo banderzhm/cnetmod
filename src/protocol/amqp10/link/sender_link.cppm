@@ -61,7 +61,8 @@ private:
     explicit sender_link(std::unique_ptr<impl>);
     static auto create(performative_channel&, std::uint16_t, std::uint32_t,
         std::string, target, sender_settle_mode,
-        receiver_settle_mode) -> sender_link;
+        receiver_settle_mode,
+        std::shared_ptr<std::atomic<std::uint32_t>>) -> sender_link;
     std::unique_ptr<impl> impl_;
 };
 } // namespace cnetmod::amqp10
