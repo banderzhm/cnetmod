@@ -149,12 +149,26 @@ endif()
 # ==============================================================================
 # Platform-specific I/O Backend Detection
 # ==============================================================================
+option(CNETMOD_USE_LIBKQUEUE
+    "Use the libkqueue compatibility backend on non-Apple Unix systems"
+    OFF)
+
 if(WIN32)
     set(CNETMOD_HAS_IOCP ON)
     message(STATUS "I/O backend: IOCP (Windows)")
 elseif(APPLE)
     set(CNETMOD_HAS_KQUEUE ON)
     message(STATUS "I/O backend: kqueue (macOS)")
+elseif(UNIX AND CNETMOD_USE_LIBKQUEUE)
+    find_path(CNETMOD_LIBKQUEUE_INCLUDE_DIR
+        NAMES sys/event.h
+        PATH_SUFFIXES kqueue
+        REQUIRED)
+    find_library(CNETMOD_LIBKQUEUE_LIBRARY
+        NAMES kqueue
+        REQUIRED)
+    set(CNETMOD_HAS_KQUEUE ON)
+    message(STATUS "I/O backend: libkqueue compatibility layer (Unix)")
 elseif(UNIX)
     # Detect io_uring support
     include(CheckIncludeFileCXX)
@@ -359,6 +373,7 @@ target_compile_definitions(cnetmod_core PUBLIC
     $<$<BOOL:${CNETMOD_HAS_IO_URING_BUFFER_RING}>:CNETMOD_HAS_IO_URING_BUFFER_RING>
     $<$<BOOL:${CNETMOD_HAS_EPOLL}>:CNETMOD_HAS_EPOLL>
     $<$<BOOL:${CNETMOD_HAS_KQUEUE}>:CNETMOD_HAS_KQUEUE>
+    $<$<BOOL:${CNETMOD_USE_LIBKQUEUE}>:CNETMOD_DISABLE_EPOLL>
     $<$<BOOL:${CNETMOD_HAS_SSL}>:CNETMOD_HAS_SSL>
     $<$<BOOL:${BoringSSL_FOUND}>:CNETMOD_USING_BORINGSSL>
     $<$<BOOL:${CNETMOD_HAS_QUIC}>:CNETMOD_HAS_SSL>
@@ -384,6 +399,11 @@ add_library(cnetmod::core ALIAS cnetmod_core)
 # Platform-specific linking
 if(WIN32)
     target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock)
+elseif(CNETMOD_USE_LIBKQUEUE)
+    target_include_directories(cnetmod_core PRIVATE
+        "${CNETMOD_LIBKQUEUE_INCLUDE_DIR}")
+    target_link_libraries(cnetmod_core PRIVATE
+        "${CNETMOD_LIBKQUEUE_LIBRARY}")
 elseif(CNETMOD_HAS_IO_URING)
     target_link_libraries(cnetmod_core PUBLIC uring)
 endif()
@@ -439,11 +459,11 @@ endif()
 # DLL and owns the same event-loop lifetime as the binding.
 option(CNETMOD_BUILD_PYTHON_BINDINGS "Build the CPython native extension" ON)
 if(CNETMOD_BUILD_C_API AND CNETMOD_BUILD_PYTHON_BINDINGS)
-    find_package(Python3 COMPONENTS Interpreter Development.Module QUIET)
-    if(Python3_Development.Module_FOUND)
-        add_library(cnetmod_python MODULE
+    find_package(Python3 COMPONENTS Interpreter Development.SABIModule QUIET)
+    if(Python3_Development.SABIModule_FOUND)
+        Python3_add_library(cnetmod_python MODULE USE_SABI 3.11 WITH_SOABI
             "${CMAKE_CURRENT_SOURCE_DIR}/bindings/python/cnetmod_native.cpp")
-        target_link_libraries(cnetmod_python PRIVATE cnetmod_c Python3::Module)
+        target_link_libraries(cnetmod_python PRIVATE cnetmod_c)
         target_compile_features(cnetmod_python PRIVATE cxx_std_23)
         target_include_directories(cnetmod_python PRIVATE
             "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -453,7 +473,7 @@ if(CNETMOD_BUILD_C_API AND CNETMOD_BUILD_PYTHON_BINDINGS)
             set_target_properties(cnetmod_python PROPERTIES SUFFIX ".pyd")
         endif()
     else()
-        message(STATUS "CPython development headers not found; skipping cnetmod_python")
+        message(STATUS "CPython stable-ABI development files not found; skipping cnetmod_python")
     endif()
 endif()
 

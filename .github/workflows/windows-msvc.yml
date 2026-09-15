@@ -44,6 +44,20 @@ jobs:
         with:
           runVcpkgInstall: false
 
+      - name: Identify runner toolchain image
+        id: runner-image
+        shell: pwsh
+        run: '"version=$env:ImageVersion" >> $env:GITHUB_OUTPUT'
+
+      # The binary cache avoids recompiling ports, while this cache also keeps
+      # the materialized include/lib tree.  Restoring it makes the manifest
+      # verification effectively incremental on a fresh hosted runner.
+      - name: Restore materialized vcpkg dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg_installed
+          key: vcpkg-installed-${{ runner.os }}-vs18-x64-${{ steps.runner-image.outputs.version }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
+
       - name: Install manifest dependencies
         shell: pwsh
         run: |

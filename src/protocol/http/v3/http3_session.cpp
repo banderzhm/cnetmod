@@ -253,6 +253,12 @@ namespace {
         auto stream = co_await connection.async_open_stream(false);
         if (!stream)
             co_return std::unexpected(stream.error());
+        // HTTP/3 control and QPACK streams are connection-critical.  Their
+        // instructions can unblock every request stream, so they must not sit
+        // behind application streams whose RFC 9218 urgency was raised.
+        if (!connection.set_stream_priority(*stream, 0U, false))
+            co_return std::unexpected(
+                std::make_error_code(std::errc::resource_unavailable_try_again));
         byte_buffer preface;
         append_varint(type, preface);
         auto sent = co_await connection.async_send(*stream, preface, false);

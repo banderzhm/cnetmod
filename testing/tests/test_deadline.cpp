@@ -143,6 +143,24 @@ TEST(with_deadline_cancels_underlying_wait)
         static_cast<int>(cancellation_reason::deadline_exceeded));
 }
 
+TEST(overlapping_timers_keep_independent_completion_ownership)
+{
+    auto context = make_io_context();
+    std::atomic<unsigned> completed{};
+    auto wait = [&](std::chrono::milliseconds delay) -> task<void>
+    {
+        const auto result = co_await async_timer_wait(*context, delay);
+        ASSERT_TRUE(result.has_value());
+        if (completed.fetch_add(1, std::memory_order_acq_rel) + 1 == 2)
+            context->stop();
+    };
+
+    spawn(*context, wait(std::chrono::milliseconds{5}));
+    spawn(*context, wait(std::chrono::milliseconds{20}));
+    context->run();
+    ASSERT_EQ(completed.load(std::memory_order_acquire), 2U);
+}
+
 TEST(happy_eyeballs_honors_pre_cancelled_token)
 {
     auto context = make_io_context();

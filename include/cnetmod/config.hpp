@@ -28,7 +28,7 @@
     #endif
 #endif
 
-#ifdef CNETMOD_PLATFORM_LINUX
+#if defined(CNETMOD_PLATFORM_LINUX) && !defined(CNETMOD_DISABLE_EPOLL)
     #ifndef CNETMOD_HAS_EPOLL
         #define CNETMOD_HAS_EPOLL
     #endif

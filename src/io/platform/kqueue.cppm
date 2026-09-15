@@ -44,10 +44,11 @@ public:
     void stop() override;
     [[nodiscard]] auto stopped() const noexcept -> bool override;
     void restart() override;
-    [[nodiscard]] auto add_event(int ident, int16_t filter, uint16_t flags,
+    [[nodiscard]] auto add_event(std::uintptr_t ident, int16_t filter,
+        uint16_t flags,
         void* udata)
         -> std::expected<void, std::error_code>;
-    [[nodiscard]] auto delete_event(int ident, int16_t filter)
+    [[nodiscard]] auto delete_event(std::uintptr_t ident, int16_t filter)
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto native_handle() const noexcept -> int;
 

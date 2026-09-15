@@ -79,6 +79,18 @@ jobs:
         sudo ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local
         cmake --version
 
+    - name: Install pinned libkqueue compatibility backend
+      if: matrix.build_type == 'Release'
+      run: |
+        git clone https://github.com/mheily/libkqueue.git /tmp/libkqueue
+        git -C /tmp/libkqueue checkout 46a3e130f88b0b0742575dcb01d77e336538024b
+        cmake -S /tmp/libkqueue -B /tmp/libkqueue-build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release -DENABLE_STATIC=OFF -DENABLE_SHARED=ON
+        cmake --build /tmp/libkqueue-build --parallel 2
+        ctest --test-dir /tmp/libkqueue-build --output-on-failure
+        sudo cmake --install /tmp/libkqueue-build
+        sudo ldconfig
+
     - name: Check libc++ modules availability
       run: |
         if [ -d "/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1" ]; then
@@ -130,6 +142,7 @@ jobs:
           -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1 \
           -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
           -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
+          -DCNETMOD_USE_LIBKQUEUE=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -S ${{ github.workspace }}

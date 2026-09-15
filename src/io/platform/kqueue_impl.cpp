@@ -116,8 +116,8 @@ void kqueue_context::restart()
     stopped_.store(false, std::memory_order_relaxed);
 }
 
-auto kqueue_context::add_event(int ident, int16_t filter, uint16_t flags,
-    void* udata)
+auto kqueue_context::add_event(std::uintptr_t ident, int16_t filter,
+    uint16_t flags, void* udata)
     -> std::expected<void, std::error_code>
 {
     struct kevent event{};
@@ -128,7 +128,7 @@ auto kqueue_context::add_event(int ident, int16_t filter, uint16_t flags,
     return {};
 }
 
-auto kqueue_context::delete_event(int ident, int16_t filter)
+auto kqueue_context::delete_event(std::uintptr_t ident, int16_t filter)
     -> std::expected<void, std::error_code>
 {
     struct kevent event{};

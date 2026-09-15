@@ -10,6 +10,10 @@ module;
     #include <fcntl.h>
     #include <netinet/in.h>
     #include <sys/event.h>
+    #if defined(__linux__)
+        #include <sys/sendfile.h>
+        #include <sys/timerfd.h>
+    #endif
     #include <sys/socket.h>
     #include <sys/types.h>
     #include <unistd.h>
@@ -74,6 +78,12 @@ struct kqueue_awaiter
 
 namespace {
 
+#if defined(MSG_NOSIGNAL)
+    constexpr int socket_send_flags = MSG_NOSIGNAL;
+#else
+    constexpr int socket_send_flags = 0;
+#endif
+
     auto last_error() noexcept -> std::error_code
     {
         return make_error_code(from_native_error(errno));
@@ -115,16 +125,45 @@ namespace {
         }
     }
 
-    /**
-     * @brief Allocates a process-unique kqueue timer identifier.
-     *
-     * Cancellable and non-cancellable timers share one kqueue namespace, so
-     * their identifiers must come from the same sequence.
-     */
-    auto next_kqueue_timer_id() noexcept -> int
+    auto completed_connect_error(int descriptor) noexcept -> std::error_code
     {
-        static std::atomic<int> next_id{1000000};
-        return next_id.fetch_add(1, std::memory_order_relaxed);
+        int socket_error = 0;
+        ::socklen_t error_length = sizeof(socket_error);
+        if (::getsockopt(descriptor, SOL_SOCKET, SO_ERROR, &socket_error,
+                &error_length) < 0)
+            return last_error();
+        if (socket_error != 0)
+            return make_error_code(from_native_error(socket_error));
+
+        ::sockaddr_storage peer{};
+        ::socklen_t peer_length = sizeof(peer);
+        if (::getpeername(descriptor,
+                reinterpret_cast<::sockaddr*>(&peer), &peer_length) < 0)
+            return last_error();
+        return {};
+    }
+
+    struct send_file_attempt
+    {
+        off_t transferred{};
+        int result{};
+    };
+
+    auto send_file_once(int source, int destination, off_t offset,
+        off_t requested) noexcept -> send_file_attempt
+    {
+#if defined(__linux__)
+        auto position = offset;
+        const auto result = ::sendfile(destination, source, &position,
+            static_cast<std::size_t>(requested));
+        return {result > 0 ? static_cast<off_t>(result) : 0,
+            result < 0 ? -1 : 0};
+#else
+        auto transferred = requested;
+        const auto result = ::sendfile(source, destination, offset,
+            &transferred, nullptr, 0);
+        return {transferred, result};
+#endif
     }
 
     // =============================================================================
@@ -219,7 +258,7 @@ namespace {
     struct kqueue_timer_cancel_awaiter
     {
         kqueue_context& ctx;
-        int id;
+        std::uintptr_t id{};
         intptr_t timeout_ms;
         cancel_token& token;
         std::error_code sync_error{};
@@ -256,6 +295,7 @@ namespace {
 
             continuation = handle;
             completion = {this, &ready};
+            id = reinterpret_cast<std::uintptr_t>(this);
 
             struct kevent event{};
             EV_SET(&event, static_cast<uintptr_t>(id), EVFILT_TIMER,
@@ -386,13 +426,9 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep)
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
 
-    // Check connection result
-    int so_error = 0;
-    ::socklen_t len = sizeof(so_error);
-    ::getsockopt(static_cast<int>(sock.native_handle()),
-        SOL_SOCKET, SO_ERROR, &so_error, &len);
-    if (so_error != 0)
-        co_return std::unexpected(make_error_code(from_native_error(so_error)));
+    if (const auto error =
+            completed_connect_error(static_cast<int>(sock.native_handle())))
+        co_return std::unexpected(error);
 
     co_return std::expected<void, std::error_code>{};
 }
@@ -425,12 +461,9 @@ auto async_connect(io_context& ctx, socket& sock, const endpoint& ep,
     if (token.is_cancelled())
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
-    int so_error = 0;
-    ::socklen_t len = sizeof(so_error);
-    ::getsockopt(static_cast<int>(sock.native_handle()),
-        SOL_SOCKET, SO_ERROR, &so_error, &len);
-    if (so_error != 0)
-        co_return std::unexpected(make_error_code(from_native_error(so_error)));
+    if (const auto error =
+            completed_connect_error(static_cast<int>(sock.native_handle())))
+        co_return std::unexpected(error);
 
     co_return std::expected<void, std::error_code>{};
 }
@@ -493,7 +526,7 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
         co_return std::unexpected(aw.sync_error);
 
     ssize_t n = ::send(static_cast<int>(sock.native_handle()),
-        buf.data, buf.size, 0);
+        buf.data, buf.size, socket_send_flags);
     if (n < 0)
         co_return std::unexpected(last_error());
 
@@ -518,11 +551,69 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     ssize_t n = ::send(static_cast<int>(sock.native_handle()),
-        buf.data, buf.size, 0);
+        buf.data, buf.size, socket_send_flags);
     if (n < 0)
         co_return std::unexpected(last_error());
 
     co_return static_cast<std::size_t>(n);
+}
+
+auto async_wait_readable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto& kq = static_cast<kqueue_context&>(ctx);
+    kqueue_awaiter awaiter{
+        kq, static_cast<int>(sock.native_handle()), EVFILT_READ};
+    co_await awaiter;
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_readable(io_context& ctx, socket& sock, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& kq = static_cast<kqueue_context&>(ctx);
+    kqueue_cancel_awaiter awaiter{
+        kq, static_cast<int>(sock.native_handle()), EVFILT_READ, token};
+    co_await awaiter;
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_writable(io_context& ctx, socket& sock)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto& kq = static_cast<kqueue_context&>(ctx);
+    kqueue_awaiter awaiter{
+        kq, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
+    co_await awaiter;
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_wait_writable(io_context& ctx, socket& sock, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+
+    auto& kq = static_cast<kqueue_context&>(ctx);
+    kqueue_cancel_awaiter awaiter{
+        kq, static_cast<int>(sock.native_handle()), EVFILT_WRITE, token};
+    co_await awaiter;
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return std::expected<void, std::error_code>{};
 }
 
 // =============================================================================
@@ -715,18 +806,18 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
     std::uint64_t transferred = 0;
     while (transferred < byte_count)
     {
-        off_t sent = static_cast<off_t>(std::min<std::uint64_t>(
+        const auto requested = static_cast<off_t>(std::min<std::uint64_t>(
             byte_count - transferred,
             static_cast<std::uint64_t>(std::numeric_limits<off_t>::max())));
-        const auto result = ::sendfile(
+        const auto attempt = send_file_once(
             static_cast<int>(source.native_handle()),
             static_cast<int>(sock.native_handle()),
-            static_cast<off_t>(offset + transferred), &sent, nullptr, 0);
-        if (sent > 0)
-            transferred += static_cast<std::uint64_t>(sent);
-        if (result == 0)
+            static_cast<off_t>(offset + transferred), requested);
+        if (attempt.transferred > 0)
+            transferred += static_cast<std::uint64_t>(attempt.transferred);
+        if (attempt.result == 0)
         {
-            if (sent == 0)
+            if (attempt.transferred == 0)
                 break;
             continue;
         }
@@ -758,18 +849,18 @@ auto async_send_file(io_context& ctx, socket& sock, file& source,
     std::uint64_t transferred = 0;
     while (transferred < byte_count)
     {
-        off_t sent = static_cast<off_t>(std::min<std::uint64_t>(
+        const auto requested = static_cast<off_t>(std::min<std::uint64_t>(
             byte_count - transferred,
             static_cast<std::uint64_t>(std::numeric_limits<off_t>::max())));
-        const auto result = ::sendfile(
+        const auto attempt = send_file_once(
             static_cast<int>(source.native_handle()),
             static_cast<int>(sock.native_handle()),
-            static_cast<off_t>(offset + transferred), &sent, nullptr, 0);
-        if (sent > 0)
-            transferred += static_cast<std::uint64_t>(sent);
-        if (result == 0)
+            static_cast<off_t>(offset + transferred), requested);
+        if (attempt.transferred > 0)
+            transferred += static_cast<std::uint64_t>(attempt.transferred);
+        if (attempt.result == 0)
         {
-            if (sent == 0)
+            if (attempt.transferred == 0)
                 break;
             continue;
         }
@@ -893,17 +984,45 @@ auto async_timer_wait(io_context& ctx,
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
 
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+#if defined(__linux__)
+    const int timer = ::timerfd_create(
+        CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (timer < 0)
+        co_return std::unexpected(last_error());
+
+    const auto ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+    struct ::itimerspec specification{};
+    specification.it_value.tv_sec = static_cast<time_t>(ns / 1000000000LL);
+    specification.it_value.tv_nsec = static_cast<long>(ns % 1000000000LL);
+    if (specification.it_value.tv_sec == 0 &&
+        specification.it_value.tv_nsec == 0)
+        specification.it_value.tv_nsec = 1;
+    if (::timerfd_settime(timer, 0, &specification, nullptr) < 0)
+    {
+        const auto error = last_error();
+        ::close(timer);
+        co_return std::unexpected(error);
+    }
+
+    kqueue_awaiter awaiter{kq, timer, EVFILT_READ};
+    co_await awaiter;
+    std::uint64_t expirations{};
+    (void)::read(timer, &expirations, sizeof(expirations));
+    ::close(timer);
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    co_return std::expected<void, std::error_code>{};
+#else
+
+    auto ms = std::chrono::ceil<std::chrono::milliseconds>(duration).count();
     if (ms <= 0)
         ms = 1;
-
-    const int timer_id = next_kqueue_timer_id();
 
     // Register EVFILT_TIMER + EV_ONESHOT directly via native kqueue fd
     struct kqueue_timer_awaiter
     {
         int kq_fd;
-        int id;
         intptr_t timeout_ms;
         std::error_code sync_error{};
         kqueue_completion completion{};
@@ -916,6 +1035,7 @@ auto async_timer_wait(io_context& ctx,
         auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
         {
             struct kevent ev{};
+            const auto id = reinterpret_cast<std::uintptr_t>(this);
 
             completion = {h.address(), [](void* address) noexcept
                 {
@@ -936,13 +1056,15 @@ auto async_timer_wait(io_context& ctx,
         void await_resume() noexcept {}
     };
 
-    kqueue_timer_awaiter aw{kq.native_handle(), timer_id, static_cast<intptr_t>(ms)};
+    kqueue_timer_awaiter aw{
+        kq.native_handle(), static_cast<intptr_t>(ms)};
     co_await aw;
 
     if (aw.sync_error)
         co_return std::unexpected(aw.sync_error);
 
     co_return std::expected<void, std::error_code>{};
+#endif
 }
 
 auto async_timer_wait(io_context& ctx,
@@ -955,14 +1077,45 @@ auto async_timer_wait(io_context& ctx,
 
     auto& kq = static_cast<kqueue_context&>(ctx);
 
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration).count();
+#if defined(__linux__)
+    const int timer = ::timerfd_create(
+        CLOCK_MONOTONIC, TFD_NONBLOCK | TFD_CLOEXEC);
+    if (timer < 0)
+        co_return std::unexpected(last_error());
+
+    const auto ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count();
+    struct ::itimerspec specification{};
+    specification.it_value.tv_sec = static_cast<time_t>(ns / 1000000000LL);
+    specification.it_value.tv_nsec = static_cast<long>(ns % 1000000000LL);
+    if (specification.it_value.tv_sec == 0 &&
+        specification.it_value.tv_nsec == 0)
+        specification.it_value.tv_nsec = 1;
+    if (::timerfd_settime(timer, 0, &specification, nullptr) < 0)
+    {
+        const auto error = last_error();
+        ::close(timer);
+        co_return std::unexpected(error);
+    }
+
+    kqueue_cancel_awaiter awaiter{kq, timer, EVFILT_READ, token};
+    co_await awaiter;
+    std::uint64_t expirations{};
+    (void)::read(timer, &expirations, sizeof(expirations));
+    ::close(timer);
+    if (awaiter.sync_error)
+        co_return std::unexpected(awaiter.sync_error);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return std::expected<void, std::error_code>{};
+#else
+
+    auto ms = std::chrono::ceil<std::chrono::milliseconds>(duration).count();
     if (ms <= 0)
         ms = 1;
 
-    const int timer_id = next_kqueue_timer_id();
-
-    kqueue_timer_cancel_awaiter aw{kq, timer_id,
-        static_cast<intptr_t>(ms), token};
+    kqueue_timer_cancel_awaiter aw{
+        kq, {}, static_cast<intptr_t>(ms), token};
     co_await aw;
 
     if (aw.sync_error)
@@ -971,6 +1124,7 @@ auto async_timer_wait(io_context& ctx,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     co_return std::expected<void, std::error_code>{};
+#endif
 }
 
 // =============================================================================
@@ -1045,7 +1199,7 @@ auto async_sendto(io_context& ctx, socket& sock,
         if (aw.sync_error)
             co_return std::unexpected(aw.sync_error);
         const ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-            buf.data, buf.size, 0,
+            buf.data, buf.size, socket_send_flags,
             reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
         if (n >= 0)
             co_return static_cast<std::size_t>(n);
@@ -1076,7 +1230,7 @@ auto async_sendto(io_context& ctx, socket& sock,
         if (token.is_cancelled())
             co_return std::unexpected(make_error_code(errc::operation_aborted));
         const ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
-            buf.data, buf.size, 0,
+            buf.data, buf.size, socket_send_flags,
             reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
         if (n >= 0)
             co_return static_cast<std::size_t>(n);
