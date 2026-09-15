@@ -11,6 +11,12 @@ import cnetmod.protocol.mail;
 
 namespace {
 
+void report_stage(std::string_view stage) {
+  std::fprintf(stderr, "STAGE %.*s\n", static_cast<int>(stage.size()),
+               stage.data());
+  std::fflush(stderr);
+}
+
 auto parse_port(std::string_view text) -> std::optional<std::uint16_t> {
   unsigned value = 0;
   const auto [end, error] =
@@ -25,11 +31,13 @@ auto parse_port(std::string_view text) -> std::optional<std::uint16_t> {
 auto run_client(cnetmod::io_context &context, std::uint16_t port,
                 std::string &failure) -> cnetmod::task<void> {
   cnetmod::mail::client client(context, {.hostname = "client.cnetmod.test"});
+  report_stage("connect:start");
   if (const auto connected = co_await client.connect("127.0.0.1", port);
       !connected) {
     failure = connected.error();
     co_return;
   }
+  report_stage("connect:complete");
   cnetmod::mail::envelope envelope{
       .sender = "sender@example.test",
       .recipients = {"primary@example.test", "copy@example.test"}};
@@ -42,9 +50,11 @@ auto run_client(cnetmod::io_context &context, std::uint16_t port,
     failure = sent.error();
     co_return;
   }
+  report_stage("send:complete");
   if (const auto quit = co_await client.quit(); !quit) {
     failure = quit.error();
   }
+  report_stage("quit:complete");
 }
 
 } // namespace
@@ -65,9 +75,12 @@ int main(int argc, char **argv) {
   std::string failure;
   cnetmod::spawn(*context, [&] -> cnetmod::task<void> {
     co_await run_client(*context, *port, failure);
+    report_stage("context:stop");
     context->stop();
   }());
+  report_stage("context:run");
   context->run();
+  report_stage("context:complete");
   if (!failure.empty()) {
     std::println(stderr, "FAIL {}", failure);
     return 1;

@@ -10,6 +10,7 @@ import cnetmod.io.io_context;
 import cnetmod.executor.async_op;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+import cnetmod.coro.semaphore;
 import cnetmod.coro.timer;
 
 #include "ssl_shutdown_cases.inc"

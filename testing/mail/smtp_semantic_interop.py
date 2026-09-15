@@ -124,13 +124,25 @@ async def assert_cnetmod_client(client_binary: Path) -> None:
     )
     port = int(server.sockets[0].getsockname()[1])
     try:
-        completed = await asyncio.to_thread(
-            subprocess.run,
-            [str(client_binary), str(port)],
-            capture_output=True,
-            text=True,
-            timeout=TIMEOUT,
-        )
+        try:
+            completed = await asyncio.to_thread(
+                subprocess.run,
+                [str(client_binary), str(port)],
+                capture_output=True,
+                text=True,
+                timeout=TIMEOUT,
+            )
+        except subprocess.TimeoutExpired as error:
+            stdout = error.stdout or ""
+            stderr = error.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            raise AssertionError(
+                "cnetmod SMTP client timed out\n"
+                f"stdout:\n{stdout}\nstderr:\n{stderr}"
+            ) from error
         assert completed.returncode == 0, completed.stderr or completed.stdout
         assert handler.mail_from == "sender@example.test"
         assert handler.recipients == ["primary@example.test", "copy@example.test"]

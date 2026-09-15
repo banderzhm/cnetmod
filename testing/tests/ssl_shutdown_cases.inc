@@ -18,6 +18,7 @@ TEST(tls_shutdown_deadline_cancels_a_silent_peer)
     ASSERT_TRUE(endpoint.has_value());
     bool received_shutdown_bytes = false;
     bool observed_eof = false;
+    cnetmod::async_semaphore peer_handshake_complete{0};
     unsigned finished = 0;
     auto finish = [&]
     {
@@ -31,6 +32,7 @@ TEST(tls_shutdown_deadline_cancels_a_silent_peer)
         cnetmod::ssl_stream stream{*identity, *io, *socket};
         stream.set_accept_state();
         ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        peer_handshake_complete.release();
         // Consume ciphertext without SSL_read/SSL_shutdown: deliberately never
         // acknowledge the client's close_notify, keeping shutdown pending.
         std::array<std::byte, 4096> bytes{};
@@ -58,6 +60,7 @@ TEST(tls_shutdown_deadline_cancels_a_silent_peer)
         cnetmod::ssl_stream stream{*context, *io, *socket};
         stream.set_connect_state();
         ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        co_await peer_handshake_complete.acquire();
         cnetmod::cancel_token cancellation;
         const auto started = std::chrono::steady_clock::now();
         auto result = co_await cnetmod::with_timeout(*io, std::chrono::milliseconds{30},
