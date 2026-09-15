@@ -172,7 +172,6 @@ jobs:
             -DCMAKE_C_COMPILER="${LLVM_PREFIX}/bin/clang" \
             -DCMAKE_CXX_COMPILER="${LLVM_PREFIX}/bin/clang++" \
             -DCMAKE_CXX_FLAGS="-isysroot ${SDKROOT} -stdlib=libc++" \
-            -DCMAKE_EXE_LINKER_FLAGS="-L${LLVM_PREFIX}/lib/c++ -Wl,-rpath,${LLVM_PREFIX}/lib/c++ -lc++ -lc++abi" \
             -DCMAKE_OSX_SYSROOT="${SDKROOT}" \
             -DCMAKE_PREFIX_PATH="${ICU_PREFIX}" \
             -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \

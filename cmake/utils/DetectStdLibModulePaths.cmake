@@ -101,7 +101,9 @@ function(detect_stdlib_module_paths)
 
                 # Infer LLVM installation path from module directory
                 get_filename_component(LLVM_LIB_PATH "${STDLIB_MODULE_DIRS}/../../../lib/c++" ABSOLUTE)
+                get_filename_component(LLVM_UNWIND_PATH "${STDLIB_MODULE_DIRS}/../../../lib/unwind" ABSOLUTE)
                 message(STATUS "LLVM libc++ library path: ${LLVM_LIB_PATH}")
+                message(STATUS "LLVM libunwind library path: ${LLVM_UNWIND_PATH}")
 
                 add_compile_options(
                     -stdlib=libc++
@@ -113,7 +115,9 @@ function(detect_stdlib_module_paths)
                 add_link_options(
                     -stdlib=libc++
                     -L${LLVM_LIB_PATH}
+                    -L${LLVM_UNWIND_PATH}
                     -Wl,-rpath,${LLVM_LIB_PATH}
+                    -Wl,-rpath,${LLVM_UNWIND_PATH}
                 )
             else()
                 # Linux
@@ -206,7 +210,15 @@ endfunction()
 ]]
 function(cnetmod_link_selected_stdlib TARGET_NAME)
     if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
-        target_link_libraries(${TARGET_NAME} PUBLIC c++ c++abi)
+        if(APPLE)
+            # A Homebrew libc++ must use the matching Homebrew libunwind.
+            # Linking libc++abi directly on Darwin can mix it with the ABI
+            # runtime supplied by macOS and break exception propagation across
+            # C++ module boundaries.
+            target_link_libraries(${TARGET_NAME} PUBLIC c++ unwind)
+        else()
+            target_link_libraries(${TARGET_NAME} PUBLIC c++ c++abi)
+        endif()
     endif()
 endfunction()
 
