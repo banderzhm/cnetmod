@@ -121,22 +121,6 @@ auto main(int argc, char** argv) -> int
         if (request.path.starts_with("/priority/"))
         {
             priority->arrivals.fetch_add(1U, std::memory_order_acq_rel);
-            while (priority->arrivals.load(std::memory_order_acquire) <
-                priority_fixture::request_count)
-            {
-                const auto waited = co_await cnetmod::async_timer_wait(
-                    *context_ptr, std::chrono::milliseconds{1}, token);
-                if (!waited)
-                    co_return std::unexpected(waited.error());
-            }
-            // PRIORITY_UPDATE travels on the control stream after request
-            // headers. Give the already-received packets one event-loop turn
-            // to apply their urgency before any response DATA is generated.
-            const auto settled = co_await cnetmod::async_timer_wait(
-                *context_ptr, std::chrono::milliseconds{20}, token);
-            if (!settled)
-                co_return std::unexpected(settled.error());
-
             response.status = 200;
             response.headers["content-type"] = "application/octet-stream";
             auto chunk_index = std::make_shared<std::size_t>();
@@ -152,6 +136,28 @@ auto main(int argc, char** argv) -> int
                         co_return std::nullopt;
                     if (*chunk_index == 0U)
                     {
+                        // Do not block the request handler while waiting for
+                        // the other streams. A peer may deliver several
+                        // request streams in one UDP datagram, and the session
+                        // must be free to dispatch every handler before this
+                        // response-body barrier can open.
+                        while (priority->arrivals.load(std::memory_order_acquire) <
+                            priority_fixture::request_count)
+                        {
+                            const auto waited = co_await cnetmod::async_timer_wait(
+                                *context_ptr, std::chrono::milliseconds{1},
+                                response_token);
+                            if (!waited)
+                                co_return std::nullopt;
+                        }
+                        // PRIORITY_UPDATE travels on the control stream after
+                        // request headers. Let already-received packets apply
+                        // their urgency before any response DATA is generated.
+                        const auto priority_settled = co_await cnetmod::async_timer_wait(*context_ptr,
+                            std::chrono::milliseconds{20}, response_token);
+                        if (!priority_settled)
+                            co_return std::nullopt;
+
                         // `next()` is reached only after this response's
                         // HEADERS have been enqueued.  Hold all producers
                         // here so the first DATA frames become simultaneously
