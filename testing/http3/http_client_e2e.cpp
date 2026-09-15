@@ -149,6 +149,11 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
     auto streamed_response = co_await client.get(url("/stream-response"));
     require_response(state, streamed_response, 200, "stream-response-body",
         "streaming response");
+    // The low-level streaming and push checks below deliberately use a
+    // separate connection. Close this unified-client connection first so it
+    // cannot expire at QUIC's idle deadline while the independent scenario
+    // runs. The later HEAD request then also verifies a clean reconnect.
+    co_await client.close_async();
     // Exercise the explicit low-level HTTP/3 response streaming API.  The
     // unified client intentionally keeps its established complete-body
     // response contract; callers that need bounded incremental consumption
@@ -498,6 +503,24 @@ auto run_priority_semantics(cnetmod::io_context& context, std::uint16_t port,
     {
         state.fail("HTTP/3 priority client connect failed: " +
             connected.error().message());
+        co_return;
+    }
+
+    // Complete one ordinary request before the concurrent priority burst so
+    // this regression measures RFC 9218 scheduling after the fresh QUIC
+    // session is fully usable. On a loaded kqueue runner, launching several
+    // streams immediately after SETTINGS can otherwise turn a post-handshake
+    // transport delay into an unrelated 30-second idle-timeout failure.
+    cnetmod::http::v3::http3_request warmup;
+    warmup.host = "127.0.0.1";
+    warmup.port = port;
+    warmup.path = "/get";
+    auto warmed = co_await client.send_request(warmup);
+    if (!warmed || warmed->status != 200 || warmed->body != "get-ok")
+    {
+        state.fail("HTTP/3 priority client warm-up failed" +
+            (warmed ? std::string{} : ": " + warmed.error().message()));
+        co_await client.close();
         co_return;
     }
 

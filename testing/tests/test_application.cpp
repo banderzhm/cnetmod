@@ -2193,11 +2193,23 @@ TEST(application_task_supervisor_join_distinguishes_required_and_optional_failur
 
 TEST(application_host_preserves_required_worker_failure_through_cleanup)
 {
+    cnetmod::net_init network;
+    auto port_reservation = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(port_reservation.has_value());
+    if (!port_reservation)
+        return;
+    ASSERT_TRUE(port_reservation->bind(
+        {cnetmod::ipv4_address::loopback(), 0}).has_value());
+    const auto reserved_endpoint = port_reservation->local_endpoint();
+    ASSERT_TRUE(reserved_endpoint.has_value());
+    if (!reserved_endpoint)
+        return;
+
     auto events = std::make_shared<std::vector<std::string>>();
     auto service = std::make_shared<fake_service>(application::service_key{"worker", "test"},
         std::vector<application::service_key>{}, application::service_requirement::required, events, 0, true);
-    const auto port = static_cast<std::uint16_t>(30000U +
-        std::chrono::steady_clock::now().time_since_epoch().count() % 20000U);
+    const auto port = reserved_endpoint->port();
     auto built = application::application_builder{"worker-failure-test"}
                      .configure([port](application::application_configuration& value)
                          {
@@ -2214,6 +2226,7 @@ TEST(application_host_preserves_required_worker_failure_through_cleanup)
                      .service(service)
                      .build();
     ASSERT_TRUE(built.has_value());
+    port_reservation->close();
     const auto begin = std::chrono::steady_clock::now();
     const auto result = built->run();
     ASSERT_FALSE(result.has_value());
@@ -2227,8 +2240,19 @@ TEST(application_host_preserves_required_worker_failure_through_cleanup)
 
 TEST(application_host_accepts_concurrent_stop_requests)
 {
-    const auto port = static_cast<std::uint16_t>(30000U +
-        (std::chrono::steady_clock::now().time_since_epoch().count() % 20000U));
+    cnetmod::net_init network;
+    auto port_reservation = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(port_reservation.has_value());
+    if (!port_reservation)
+        return;
+    ASSERT_TRUE(port_reservation->bind(
+        {cnetmod::ipv4_address::loopback(), 0}).has_value());
+    const auto reserved_endpoint = port_reservation->local_endpoint();
+    ASSERT_TRUE(reserved_endpoint.has_value());
+    if (!reserved_endpoint)
+        return;
+    const auto port = reserved_endpoint->port();
     auto built = application::application_builder{"concurrent-stop-test"}
                      .configure([port](application::application_configuration& value)
                          {
@@ -2244,6 +2268,7 @@ TEST(application_host_accepts_concurrent_stop_requests)
     if (!built)
         return;
     auto host = std::move(*built);
+    port_reservation->close();
     std::optional<std::expected<void, std::error_code>> result;
     std::jthread runner([&]
         {
