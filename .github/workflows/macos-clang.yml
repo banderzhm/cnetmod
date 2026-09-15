@@ -170,10 +170,22 @@ jobs:
 
     - name: Run complete non-external test suite without skips
       run: |
-        python testing/run_required_ctest.py \
-          --test-dir "${{ github.workspace }}/build" \
-          --output-on-failure --timeout 180 \
+        PYTHON_EXECUTABLE="$(command -v python)"
+        CTEST_EXECUTABLE="$(command -v ctest)"
+        TEST_ARGUMENTS=(
+          --ctest-command "${CTEST_EXECUTABLE}"
+          --test-dir "${{ github.workspace }}/build"
+          --output-on-failure --timeout 180
           -E '^(test_application_mysql_live|test_application_redis_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_postgresql_production_example_e2e|python_mongodb_production_example_e2e)$'
+        )
+        if [[ "${{ matrix.os }}" == "macos-15" ]]; then
+          # GitHub's runner service is subject to macOS 15 Local Network
+          # Privacy. Root processes are explicitly exempt, so only the
+          # loopback-heavy test process tree is elevated; the build is not.
+          sudo -E "${PYTHON_EXECUTABLE}" testing/run_required_ctest.py "${TEST_ARGUMENTS[@]}"
+        else
+          "${PYTHON_EXECUTABLE}" testing/run_required_ctest.py "${TEST_ARGUMENTS[@]}"
+        fi
 
     - name: Verify protocol-free module graph
       if: matrix.build_type == 'Release'
@@ -198,15 +210,23 @@ jobs:
 
     - name: Run QUIC and HTTP/3 release gates
       run: |
-        ctest --test-dir "${{ github.workspace }}/build" \
+        CTEST_COMMAND=("$(command -v ctest)")
+        if [[ "${{ matrix.os }}" == "macos-15" ]]; then
+          CTEST_COMMAND=(sudo -E "${CTEST_COMMAND[0]}")
+        fi
+        "${CTEST_COMMAND[@]}" --test-dir "${{ github.workspace }}/build" \
           --output-on-failure --timeout 180 \
           -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
     - name: Run application lifecycle and OTEL gates
       run: |
         set -euo pipefail
+        CTEST_COMMAND=("$(command -v ctest)")
+        if [[ "${{ matrix.os }}" == "macos-15" ]]; then
+          CTEST_COMMAND=(sudo -E "${CTEST_COMMAND[0]}")
+        fi
         for gate in test_application test_application_integrations test_otlp_exporter test_instrumentation test_metric_aggregation test_http_observability test_http_disabled_overhead test_mysql_pool test_ssl_shutdown; do
-          ctest --test-dir "${{ github.workspace }}/build" \
+          "${CTEST_COMMAND[@]}" --test-dir "${{ github.workspace }}/build" \
             --output-on-failure --timeout 60 --no-tests=error -R "^${gate}$"
         done
 
