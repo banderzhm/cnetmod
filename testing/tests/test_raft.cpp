@@ -23,17 +23,24 @@ static auto make_node(std::string id, std::vector<std::string> peers = {})
 
 static auto reserve_loopback_endpoint() -> cnetmod::endpoint
 {
-    auto ctx = cnetmod::make_io_context();
-    cnetmod::tcp::acceptor acc{*ctx};
-    auto opened = acc.open(cnetmod::endpoint{cnetmod::ipv4_address::loopback(), 0},
-        cnetmod::socket_options{.reuse_address = true});
-    if (!opened)
-        throw std::runtime_error("failed to reserve loopback port");
-    auto local = acc.native_socket().local_endpoint();
-    acc.close();
-    if (!local)
-        throw std::runtime_error("failed to read reserved loopback port");
-    return *local;
+    static std::unordered_set<std::uint16_t> issued_ports;
+    for (auto attempt = 0; attempt < 32; ++attempt)
+    {
+        auto ctx = cnetmod::make_io_context();
+        cnetmod::tcp::acceptor acceptor{*ctx};
+        auto opened = acceptor.open(
+            cnetmod::endpoint{cnetmod::ipv4_address::loopback(), 0},
+            cnetmod::socket_options{.reuse_address = true});
+        if (!opened)
+            throw std::runtime_error("failed to reserve loopback port");
+        auto local = acceptor.native_socket().local_endpoint();
+        acceptor.close();
+        if (!local)
+            throw std::runtime_error("failed to read reserved loopback port");
+        if (issued_ports.insert(local->port()).second)
+            return *local;
+    }
+    throw std::runtime_error("failed to reserve a unique loopback port");
 }
 
 static auto touch_file_async(cnetmod::io_context& ctx, const std::filesystem::path& path)
