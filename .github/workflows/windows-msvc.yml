@@ -15,6 +15,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-msvc:
     runs-on: windows-latest
@@ -55,6 +59,13 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            testing/mail/requirements.txt
+            testing/http2/requirements.txt
+            testing/http3/requirements.txt
+            testing/grpc/requirements.txt
+            testing/mqtt/requirements.txt
 
       - name: Verify observability dependency boundary
         shell: pwsh
@@ -82,12 +93,13 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DCNETMOD_BUILD_EXAMPLES=ON `
+            -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
+            -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
             -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON `
             -S "${{ github.workspace }}"
 
       - name: Build
-        run: cmake --build ${{ github.workspace }}/build --target cnetmod_build_all --config ${{ matrix.build_type }} -- /m:1
+        run: cmake --build ${{ github.workspace }}/build --target cnetmod_build_all --config ${{ matrix.build_type }} -- /m:2
 
       - name: Install complete interoperability runtime
         shell: pwsh
@@ -181,6 +193,7 @@ jobs:
           }
 
       - name: Run smoke tests
+        if: matrix.build_type == 'Release'
         shell: pwsh
         run: |
           Write-Host "=== Running cnetmod_app ==="

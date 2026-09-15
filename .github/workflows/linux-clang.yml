@@ -9,6 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SCCACHE_GHA_ENABLED: "true"
+  SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+
 jobs:
   build-clang-linux:
     runs-on: ubuntu-22.04
@@ -85,7 +93,19 @@ jobs:
       with:
         python-version: '3.12'
         cache: 'pip'
-        cache-dependency-path: testing/messaging/requirements.txt
+        cache-dependency-path: |
+          testing/mail/requirements.txt
+          testing/http2/requirements.txt
+          testing/http3/requirements.txt
+          testing/grpc/requirements.txt
+          testing/mqtt/requirements.txt
+          testing/database/requirements.txt
+          testing/messaging/requirements.txt
+
+    - name: Enable compiler cache
+      uses: mozilla-actions/sccache-action@v0.0.11
+      with:
+        version: "v0.16.0"
 
     - name: Verify observability dependency boundary
       run: |
@@ -104,11 +124,14 @@ jobs:
           -G "Ninja" \
           -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
           -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1 \
           -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
           -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
-          -DCNETMOD_BUILD_EXAMPLES=ON \
+          -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -S ${{ github.workspace }}
       env:
         CC: clang-${{ matrix.clang_version }}
@@ -140,6 +163,8 @@ jobs:
           -G Ninja \
           -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
           -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
           -DCMAKE_BUILD_TYPE=Release \
           -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1 \
           -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
@@ -156,6 +181,8 @@ jobs:
           -G "Ninja" \
           -DCMAKE_CXX_COMPILER=clang++-${{ matrix.clang_version }} \
           -DCMAKE_C_COMPILER=clang-${{ matrix.clang_version }} \
+          -DCMAKE_C_COMPILER_LAUNCHER=sccache \
+          -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \
           -DCMAKE_BUILD_TYPE=Release \
           -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/share/libc++/v1 \
           -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
@@ -178,9 +205,6 @@ jobs:
         ctest --test-dir ${{ github.workspace }}/build-postgresql-minimal \
           --output-on-failure \
           -R '^(test_task|test_orm_json_result_map)$'
-
-    - name: Install required HTTP/3 and WebTransport interoperability peer
-      run: python -m pip install --disable-pip-version-check --requirement testing/http3/requirements.txt
 
     - name: Run QUIC and HTTP/3 release gates
       run: |
@@ -271,6 +295,7 @@ jobs:
         done
 
     - name: Run smoke tests
+      if: matrix.build_type == 'Release'
       run: |
         echo "=== Running cnetmod_app ==="
         ${{ github.workspace }}/build/cnetmod_app || true

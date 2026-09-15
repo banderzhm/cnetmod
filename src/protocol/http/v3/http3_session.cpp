@@ -296,6 +296,24 @@ namespace {
         co_return {};
     }
 
+    auto qpack_waiter_for(cnetmod::flat_map<stream_id,
+                              std::shared_ptr<channel<std::monostate>>>& waiters,
+        stream_id stream) -> std::shared_ptr<channel<std::monostate>>
+    {
+        auto [position, inserted] = waiters.try_emplace(stream);
+        if (inserted || !position->second)
+            position->second = std::make_shared<channel<std::monostate>>(1);
+        return position->second;
+    }
+
+    auto notify_qpack_waiter(cnetmod::flat_map<stream_id,
+                                 std::shared_ptr<channel<std::monostate>>>& waiters,
+        stream_id stream) -> void
+    {
+        if (const auto waiter = waiters.find(stream); waiter != waiters.end())
+            (void)waiter->second->try_send({});
+    }
+
     auto flush_qpack_decoder_instructions(quic_connection& connection, qpack_decoder& decoder,
         const std::optional<stream_id>& stream) -> task<std::expected<void, std::error_code>>
     {
@@ -1329,6 +1347,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             if (first && std::holds_alternative<headers_frame>(first->first))
             {
                 std::expected<http3_request, std::error_code> parsed;
+                std::shared_ptr<channel<std::monostate>> qpack_waiter;
                 for (;;)
                 {
                     {
@@ -1345,6 +1364,11 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             if (!decoder_flush)
                                 parsed = std::unexpected(decoder_flush.error());
                         }
+                        if (!parsed && parsed.error() ==
+                                std::make_error_code(std::errc::resource_unavailable_try_again))
+                            qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
+                        else
+                            qpack_waiters_.erase(id);
                     }
                     if (parsed)
                         break;
@@ -1358,7 +1382,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     // stream while it is blocked: a later DATA frame cannot
                     // make HEADERS decodable, and retrying it as one combined
                     // buffer turns a valid request into a protocol error.
-                    const auto progress = co_await qpack_progress_.receive();
+                    const auto progress = co_await qpack_waiter->receive();
                     if (!progress)
                     {
                         co_await conn_.async_close(
@@ -1499,6 +1523,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     }
     else
     {
+        std::shared_ptr<channel<std::monostate>> qpack_waiter;
         for (;;)
         {
             std::expected<http3_request, std::error_code> parsed_request;
@@ -1515,6 +1540,11 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     if (!decoder_flush)
                         parsed_request = std::unexpected(decoder_flush.error());
                 }
+                if (!parsed_request && parsed_request.error() ==
+                        std::make_error_code(std::errc::resource_unavailable_try_again))
+                    qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
+                else
+                    qpack_waiters_.erase(id);
             }
             if (parsed_request)
             {
@@ -1527,7 +1557,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     "invalid HTTP/3 request stream");
                 co_return;
             }
-            const auto progress = co_await qpack_progress_.receive();
+            const auto progress = co_await qpack_waiter->receive();
             if (!progress)
             {
                 co_await conn_.async_close(
@@ -1565,6 +1595,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     body_stream->close();
                 }};
             bool trailers_seen = false;
+            std::shared_ptr<channel<std::monostate>> qpack_waiter;
             auto process_available = [&]()
                 -> task<std::expected<void, std::error_code>>
             {
@@ -1615,6 +1646,11 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                                 if (!decoder_flush)
                                     fields = std::unexpected(decoder_flush.error());
                             }
+                            if (!fields && fields.error() ==
+                                    std::make_error_code(std::errc::resource_unavailable_try_again))
+                                qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
+                            else
+                                qpack_waiters_.erase(id);
                         }
                         if (!fields)
                             co_return std::unexpected(fields.error());
@@ -1649,7 +1685,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                         // The trailer HEADERS frame remains at the front of
                         // `wire`; wait for its QPACK inserts instead of
                         // consuming it and misclassifying a later DATA frame.
-                        const auto progress = co_await qpack_progress_.receive();
+                        const auto progress = co_await qpack_waiter->receive();
                         if (progress)
                             continue;
                         request_token.cancel();
@@ -2712,25 +2748,36 @@ auto http3_client_session::send_request(const http3_request& request)
         wire.commit(*received);
     }
 
+    std::shared_ptr<channel<std::monostate>> qpack_waiter;
     auto parse_response = [&]() -> task<std::expected<http3_response, std::error_code>>
     {
         co_await qpack_mutex_.lock();
         cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
         auto& completed_headers = completed_headers_[*stream];
-        co_return response_from_frames(decoder_, wire.readable_view(), *stream,
+        auto parsed = response_from_frames(decoder_, wire.readable_view(), *stream,
             completed_headers, &promised_pushes_,
             local_max_push_id_ ? &local_max_push_id_ : nullptr,
             &push_promise_progress_);
+        if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+            qpack_waiter = qpack_waiter_for(qpack_waiters_, *stream);
+        else
+            qpack_waiters_.erase(*stream);
+        co_return parsed;
     };
     auto response = co_await parse_response();
     while (!response && response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
     {
-        const auto progress = co_await qpack_progress_.receive();
+        const auto progress = co_await qpack_waiter->receive();
         if (!progress)
             co_return std::unexpected(std::make_error_code(std::errc::not_connected));
         response = co_await parse_response();
     }
-    completed_headers_.erase(*stream);
+    {
+        co_await qpack_mutex_.lock();
+        cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
+        completed_headers_.erase(*stream);
+        qpack_waiters_.erase(*stream);
+    }
     if (!response)
         co_return std::unexpected(response.error());
 
@@ -2782,6 +2829,7 @@ auto http3_client_session::connect_webtransport(const http3_request& request)
         co_return std::unexpected(sent.error());
 
     dynamic_buffer wire{stream_read_chunk_size};
+    std::shared_ptr<channel<std::monostate>> qpack_waiter;
     for (;;)
     {
         const auto received = co_await conn_.async_recv(*stream,
@@ -2798,25 +2846,39 @@ auto http3_client_session::connect_webtransport(const http3_request& request)
         if (*received == 0U)
             co_return std::unexpected(std::make_error_code(std::errc::connection_aborted));
         wire.commit(*received);
-        auto& completed_headers = completed_headers_[*stream];
-        auto response = response_from_frames(decoder_, wire.readable_view(),
-            *stream, completed_headers, &promised_pushes_,
-            local_max_push_id_ ? &local_max_push_id_ : nullptr,
-            &push_promise_progress_);
+        std::expected<http3_response, std::error_code> response;
+        {
+            co_await qpack_mutex_.lock();
+            cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
+            auto& completed_headers = completed_headers_[*stream];
+            response = response_from_frames(decoder_, wire.readable_view(),
+                *stream, completed_headers, &promised_pushes_,
+                local_max_push_id_ ? &local_max_push_id_ : nullptr,
+                &push_promise_progress_);
+            if (!response && response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+                qpack_waiter = qpack_waiter_for(qpack_waiters_, *stream);
+            else
+                qpack_waiters_.erase(*stream);
+        }
         if (!response)
         {
             if (response.error() == std::make_error_code(std::errc::message_size))
                 continue;
             if (response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
             {
-                const auto progress = co_await qpack_progress_.receive();
+                const auto progress = co_await qpack_waiter->receive();
                 if (progress)
                     continue;
                 co_return std::unexpected(std::make_error_code(std::errc::not_connected));
             }
             co_return std::unexpected(response.error());
         }
-        completed_headers_.erase(*stream);
+        {
+            co_await qpack_mutex_.lock();
+            cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
+            completed_headers_.erase(*stream);
+            qpack_waiters_.erase(*stream);
+        }
         co_await dispatch_server_push_promises(*stream);
         const auto decoder_flush = co_await flush_qpack_decoder_instructions(
             conn_, decoder_, qpack_decoder_stream_);
@@ -3182,20 +3244,26 @@ auto http3_client_session::send_request(const http3_request& request,
         wire.commit(*received);
     }
 
+    std::shared_ptr<channel<std::monostate>> qpack_waiter;
     auto parse_response = [&]() -> task<std::expected<http3_response, std::error_code>>
     {
         co_await qpack_mutex_.lock();
         cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
         auto& completed_headers = completed_headers_[*stream];
-        co_return response_from_frames(decoder_, wire.readable_view(), *stream,
+        auto parsed = response_from_frames(decoder_, wire.readable_view(), *stream,
             completed_headers, &promised_pushes_,
             local_max_push_id_ ? &local_max_push_id_ : nullptr,
             &push_promise_progress_);
+        if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+            qpack_waiter = qpack_waiter_for(qpack_waiters_, *stream);
+        else
+            qpack_waiters_.erase(*stream);
+        co_return parsed;
     };
     auto response = co_await parse_response();
     while (!response && response.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
     {
-        const auto progress = co_await wait_for_qpack_progress(qpack_progress_, token);
+        const auto progress = co_await wait_for_qpack_progress(*qpack_waiter, token);
         if (!progress)
         {
             if (token.is_cancelled())
@@ -3204,7 +3272,12 @@ auto http3_client_session::send_request(const http3_request& request,
         }
         response = co_await parse_response();
     }
-    completed_headers_.erase(*stream);
+    {
+        co_await qpack_mutex_.lock();
+        cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
+        completed_headers_.erase(*stream);
+        qpack_waiters_.erase(*stream);
+    }
     if (!response)
         co_return std::unexpected(response.error());
 
@@ -3414,6 +3487,7 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
     auto declared_length = std::optional<std::uint64_t>{};
     std::error_code parse_error;
     std::optional<std::expected<void, std::error_code>> handler_result;
+    std::shared_ptr<channel<std::monostate>> qpack_waiter;
 
     auto parse_available = [&]() -> task<std::expected<void, std::error_code>>
     {
@@ -3443,6 +3517,10 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
                     }
                     else
                         fields = decoder_.decode(frame->encoded_headers, *stream);
+                    if (!fields && fields.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+                        qpack_waiter = qpack_waiter_for(qpack_waiters_, *stream);
+                    else
+                        qpack_waiters_.erase(*stream);
                 }
                 if (!fields)
                 {
@@ -3550,7 +3628,7 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
         auto parsed = co_await parse_available();
         if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
         {
-            auto progress = co_await wait_for_qpack_progress(qpack_progress_, token);
+            auto progress = co_await wait_for_qpack_progress(*qpack_waiter, token);
             if (!progress)
             {
                 parse_error = progress.error();
@@ -3608,6 +3686,11 @@ auto http3_client_session::send_request_streaming(const http3_request& request,
             parse_error = std::make_error_code(std::errc::message_size);
     }
     response.body_stream->close();
+    {
+        co_await qpack_mutex_.lock();
+        cnetmod::async_lock_guard qpack_guard{qpack_mutex_, std::adopt_lock};
+        qpack_waiters_.erase(*stream);
+    }
     if (parse_error)
     {
         co_await cancel_stream();
@@ -3679,6 +3762,15 @@ auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
         co_await request_header_mutex_.lock();
         cnetmod::async_lock_guard guard{request_header_mutex_, std::adopt_lock};
         result = validate();
+        if (result)
+        {
+            auto completed = decoder_.take_completed_header_blocks();
+            for (auto& block : completed)
+            {
+                completed_headers_[block.stream_id].push_back(std::move(block.headers));
+                notify_qpack_waiter(qpack_waiters_, block.stream_id);
+            }
+        }
     }
     else if (peer_stream_type == qpack_decoder_stream_type)
     {
@@ -3693,12 +3785,6 @@ auto http3_server_session::process_peer_unidirectional_stream(stream_id id,
     if (result)
     {
         co_await apply_push_cancellations(cancelled_push_ids);
-        auto completed = decoder_.take_completed_header_blocks();
-        const auto completed_count = completed.size();
-        for (auto& block : completed)
-            completed_headers_[block.stream_id].push_back(std::move(block.headers));
-        for (std::size_t index{}; index < completed_count; ++index)
-            (void)qpack_progress_.try_send({});
     }
     co_return result;
 }
@@ -3716,11 +3802,11 @@ auto http3_client_session::process_peer_unidirectional_stream(stream_id id,
     if (!result)
         co_return result;
     auto completed = decoder_.take_completed_header_blocks();
-    const auto completed_count = completed.size();
     for (auto& block : completed)
+    {
         completed_headers_[block.stream_id].push_back(std::move(block.headers));
-    for (std::size_t index{}; index < completed_count; ++index)
-        (void)qpack_progress_.try_send({});
+        notify_qpack_waiter(qpack_waiters_, block.stream_id);
+    }
     co_return {};
 }
 
@@ -3776,6 +3862,7 @@ auto http3_client_session::consume_server_push_stream(stream_id id,
 
     http3_request promise;
     http3_response response;
+    std::shared_ptr<channel<std::monostate>> qpack_waiter;
     for (;;)
     {
         std::expected<http3_response, std::error_code> parsed;
@@ -3790,6 +3877,10 @@ auto http3_client_session::consume_server_push_stream(stream_id id,
             parsed = response_from_frames(decoder_,
                 bytes.subspan(type->second + push_id->second), id,
                 completed_headers);
+            if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
+                qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
+            else
+                qpack_waiters_.erase(id);
             if (parsed)
             {
                 promised_pushes_.erase(push_id->first);
@@ -3810,7 +3901,7 @@ auto http3_client_session::consume_server_push_stream(stream_id id,
             co_return std::unexpected(parsed.error());
         // The peer encoder stream shares qpack_mutex_; wait outside the
         // critical section so its instruction consumer can make progress.
-        const auto progress = co_await qpack_progress_.receive();
+        const auto progress = co_await qpack_waiter->receive();
         if (!progress)
             co_return std::unexpected(std::make_error_code(std::errc::not_connected));
     }

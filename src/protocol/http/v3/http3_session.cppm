@@ -350,7 +350,9 @@ private:
     // The decoder completes those blocks asynchronously; retain the decoded
     // fields and wake the owning request coroutine without re-decoding (and
     // therefore without issuing a duplicate Header Acknowledgement).
-    channel<std::monostate> qpack_progress_{1024};
+    cnetmod::flat_map<stream_id,
+        std::shared_ptr<channel<std::monostate>>>
+        qpack_waiters_;
     cnetmod::flat_map<stream_id, std::deque<std::vector<header_field>>>
         completed_headers_;
     cnetmod::flat_map<stream_id, std::shared_ptr<webtransport_session_state>>
@@ -484,7 +486,9 @@ private:
     channel<std::monostate> push_promise_progress_{1024};
     cnetmod::flat_map<stream_id, std::uint64_t> peer_unidirectional_stream_types_;
     cnetmod::flat_map<stream_id, std::size_t> peer_unidirectional_stream_bytes_;
-    channel<std::monostate> qpack_progress_{1024};
+    cnetmod::flat_map<stream_id,
+        std::shared_ptr<channel<std::monostate>>>
+        qpack_waiters_;
     cnetmod::flat_map<stream_id,
         std::deque<std::vector<header_field>>>
         completed_headers_;

@@ -5,11 +5,13 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import queue
 import shutil
 import socket
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 
@@ -49,15 +51,23 @@ def make_certificate(directory: Path) -> tuple[Path, Path]:
 
 
 def wait_for_server(process: subprocess.Popen[str]) -> None:
-    deadline = time.monotonic() + 10
-    while time.monotonic() < deadline:
-        if process.poll() is not None:
-            stdout, stderr = process.communicate()
-            raise RuntimeError(
-                f"HTTP/3 server exited early ({process.returncode})\n"
-                f"stdout:\n{stdout}\nstderr:\n{stderr}"
-            )
-        time.sleep(0.02)
+    readiness: queue.Queue[str] = queue.Queue(maxsize=1)
+
+    def read_readiness() -> None:
+        assert process.stderr is not None
+        readiness.put(process.stderr.readline())
+
+    threading.Thread(target=read_readiness, daemon=True).start()
+    try:
+        line = readiness.get(timeout=10)
+    except queue.Empty as error:
+        raise RuntimeError("HTTP/3 server did not report readiness") from error
+    if "HTTP/3 E2E server listening" not in line:
+        stdout, stderr = stop_process(process)
+        raise RuntimeError(
+            f"HTTP/3 server exited before readiness ({process.returncode})\n"
+            f"stdout:\n{stdout}\nstderr:\n{line}{stderr}"
+        )
 
 
 def stop_process(process: subprocess.Popen[str]) -> tuple[str, str]:
