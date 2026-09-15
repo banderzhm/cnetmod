@@ -80,6 +80,16 @@ def stop_process(process: subprocess.Popen[str]) -> tuple[str, str]:
         return process.communicate()
 
 
+def wait_for_file(path: Path, timeout: float) -> bool:
+    """Wait for an asynchronously produced test artifact within a fixed budget."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if path.exists():
+            return True
+        time.sleep(0.01)
+    return path.exists()
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("server", type=Path)
@@ -202,7 +212,13 @@ def main() -> int:
                     print(f"server stdout:\n{stdout}\nserver stderr:\n{stderr}",
                           file=sys.stderr)
                     return completed.returncode
-                if args.multipath_pmtu_blackhole and not dropped_marker.exists():
+                # The client observes its unchanged path MTU before exiting,
+                # while the independently scheduled proxy records the dropped
+                # datagram.  A loaded CI host can reap the client before the
+                # proxy consumes an already queued probe, so synchronize the
+                # two observations without accepting a missing probe.
+                if (args.multipath_pmtu_blackhole and
+                        not wait_for_file(dropped_marker, 5.0)):
                     print("PMTU blackhole proxy did not drop an oversized probe", file=sys.stderr)
                     return 1
                 return 0
