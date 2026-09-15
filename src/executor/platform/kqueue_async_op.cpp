@@ -9,6 +9,7 @@ module;
     #include <exec/static_thread_pool.hpp>
     #include <fcntl.h>
     #include <netinet/in.h>
+    #include <poll.h>
     #include <sys/event.h>
     #if defined(__linux__)
         #include <sys/sendfile.h>
@@ -38,6 +39,30 @@ namespace cnetmod {
 // kqueue awaiter — readiness notification
 // =============================================================================
 
+namespace {
+
+/**
+ * Checks whether a descriptor became ready while its one-shot kqueue event
+ * was being installed.
+ *
+ * The second readiness probe closes the syscall-to-registration window on
+ * kernels that do not immediately replay an already-satisfied socket event.
+ */
+auto descriptor_ready(int descriptor, int16_t filter) noexcept -> bool
+{
+    const short requested = filter == EVFILT_WRITE ? POLLOUT : POLLIN;
+    struct ::pollfd candidate{descriptor, requested, 0};
+    int result = 0;
+    do
+    {
+        result = ::poll(&candidate, 1, 0);
+    } while (result < 0 && errno == EINTR);
+    return result > 0 &&
+        (candidate.revents & (requested | POLLERR | POLLHUP | POLLNVAL)) != 0;
+}
+
+} // namespace
+
 /// Register event to kqueue, resume coroutine when ready
 /// Use EV_ONESHOT to ensure single trigger
 struct kqueue_awaiter
@@ -64,6 +89,11 @@ struct kqueue_awaiter
         if (!r)
         {
             sync_error = r.error();
+            return false;
+        }
+        if (descriptor_ready(fd, filter))
+        {
+            (void)ctx.delete_event(fd, filter);
             return false;
         }
         return true;
@@ -234,6 +264,12 @@ namespace {
             if (!r)
             {
                 sync_error = r.error();
+                return false;
+            }
+
+            if (descriptor_ready(fd, filter))
+            {
+                (void)ctx.delete_event(fd, filter);
                 return false;
             }
 
