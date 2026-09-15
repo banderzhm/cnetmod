@@ -131,7 +131,7 @@ namespace {
     // kqueue awaiter with cancellation support
     // =============================================================================
 
-    static void kqueue_cancel_fn(cancel_token& token) noexcept;
+    static void kqueue_cancel_fn(void* operation) noexcept;
 
     /// kqueue awaiter with cancellation support
     struct kqueue_cancel_awaiter
@@ -148,6 +148,21 @@ namespace {
          * Cancellation must not allocate inside a noexcept callback.
          */
         post_node cancellation_post{};
+        std::coroutine_handle<> continuation{};
+
+        static void ready(void* operation) noexcept
+        {
+            auto& awaiter = *static_cast<kqueue_cancel_awaiter*>(operation);
+            if (awaiter.token.complete_callback(&awaiter))
+                awaiter.continuation.resume();
+        }
+
+        static void cancelled(void* operation) noexcept
+        {
+            auto& awaiter = *static_cast<kqueue_cancel_awaiter*>(operation);
+            (void)awaiter.ctx.delete_event(awaiter.fd, awaiter.filter);
+            awaiter.continuation.resume();
+        }
 
         auto await_ready() const noexcept -> bool
         {
@@ -162,19 +177,8 @@ namespace {
                 return false;
             }
 
-            token.ctx_ = this;
-            token.fd_ = fd;
-            token.filter_ = filter;
-            token.coroutine_ = h;
-            token.cancel_fn_ = &kqueue_cancel_fn;
-
-            completion = {this, [](void* state) noexcept
-                {
-                    auto* self = static_cast<kqueue_cancel_awaiter*>(state);
-                    if (self->token.pending_.exchange(false,
-                            std::memory_order_acq_rel))
-                        self->token.coroutine_.resume();
-                }};
+            continuation = h;
+            completion = {this, &ready};
 
             auto r = ctx.add_event(fd, filter, EV_ADD | EV_ONESHOT,
                 &completion);
@@ -184,47 +188,33 @@ namespace {
                 return false;
             }
 
-            token.pending_.store(true, std::memory_order_release);
-
-            if (token.is_cancelled())
+            if (!token.register_callback(this, &kqueue_cancel_fn))
             {
-                if (token.pending_.exchange(false, std::memory_order_acq_rel))
-                {
-                    (void)ctx.delete_event(fd, filter);
-                    sync_error = make_error_code(errc::operation_aborted);
-                    return false;
-                }
-
-                // The cancellation callback already owns the queued resume.
-                return true;
+                (void)ctx.delete_event(fd, filter);
+                sync_error = make_error_code(errc::operation_aborted);
+                return false;
             }
-
             return true;
         }
 
         void await_resume() noexcept
         {
-            token.pending_.store(false, std::memory_order_relaxed);
+            token.finish_callback(this);
         }
     };
 
     /**
      * @brief Removes readiness and queues cancellation without allocating.
      */
-    static void kqueue_cancel_fn(cancel_token& token) noexcept
+    static void kqueue_cancel_fn(void* operation) noexcept
     {
-        auto* awaiter = static_cast<kqueue_cancel_awaiter*>(token.ctx_);
-        if (!awaiter || !token.pending_.exchange(false, std::memory_order_acq_rel))
-            return;
-        (void)awaiter->ctx.delete_event(awaiter->fd, awaiter->filter);
-        if (token.coroutine_)
-        {
-            awaiter->cancellation_post.coroutine = token.coroutine_;
-            awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
-        }
+        auto* awaiter = static_cast<kqueue_cancel_awaiter*>(operation);
+        awaiter->cancellation_post.callback = &kqueue_cancel_awaiter::cancelled;
+        awaiter->cancellation_post.callback_arg = awaiter;
+        awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
     }
 
-    static void kqueue_timer_cancel_fn(cancel_token& token) noexcept;
+    static void kqueue_timer_cancel_fn(void* operation) noexcept;
 
     struct kqueue_timer_cancel_awaiter
     {
@@ -235,13 +225,28 @@ namespace {
         std::error_code sync_error{};
         post_node cancellation_post{};
         kqueue_completion completion{};
+        std::coroutine_handle<> continuation{};
+
+        static void ready(void* operation) noexcept
+        {
+            auto& awaiter = *static_cast<kqueue_timer_cancel_awaiter*>(operation);
+            if (awaiter.token.complete_callback(&awaiter))
+                awaiter.continuation.resume();
+        }
+
+        static void cancelled(void* operation) noexcept
+        {
+            auto& awaiter = *static_cast<kqueue_timer_cancel_awaiter*>(operation);
+            (void)awaiter.ctx.delete_event(awaiter.id, EVFILT_TIMER);
+            awaiter.continuation.resume();
+        }
 
         auto await_ready() const noexcept -> bool
         {
             return token.is_cancelled();
         }
 
-        auto await_suspend(std::coroutine_handle<> continuation) noexcept -> bool
+        auto await_suspend(std::coroutine_handle<> handle) noexcept -> bool
         {
             if (token.is_cancelled())
             {
@@ -249,19 +254,8 @@ namespace {
                 return false;
             }
 
-            token.ctx_ = this;
-            token.fd_ = id;
-            token.filter_ = EVFILT_TIMER;
-            token.coroutine_ = continuation;
-            token.cancel_fn_ = &kqueue_timer_cancel_fn;
-
-            completion = {this, [](void* state) noexcept
-                {
-                    auto* self = static_cast<kqueue_timer_cancel_awaiter*>(state);
-                    if (self->token.pending_.exchange(false,
-                            std::memory_order_acq_rel))
-                        self->token.coroutine_.resume();
-                }};
+            continuation = handle;
+            completion = {this, &ready};
 
             struct kevent event{};
             EV_SET(&event, static_cast<uintptr_t>(id), EVFILT_TIMER,
@@ -273,42 +267,31 @@ namespace {
                 return false;
             }
 
-            token.pending_.store(true, std::memory_order_release);
-            if (token.is_cancelled())
+            if (!token.register_callback(this, &kqueue_timer_cancel_fn))
             {
-                if (token.pending_.exchange(false, std::memory_order_acq_rel))
-                {
-                    (void)ctx.delete_event(id, EVFILT_TIMER);
-                    sync_error = make_error_code(errc::operation_aborted);
-                    return false;
-                }
-
-                // The cancellation callback already owns the queued resume.
-                return true;
+                (void)ctx.delete_event(id, EVFILT_TIMER);
+                sync_error = make_error_code(errc::operation_aborted);
+                return false;
             }
             return true;
         }
 
         void await_resume() noexcept
         {
-            token.pending_.store(false, std::memory_order_relaxed);
+            token.finish_callback(this);
         }
     };
 
     /**
      * @brief Removes a timer and resumes its coroutine through the owner queue.
      */
-    static void kqueue_timer_cancel_fn(cancel_token& token) noexcept
+    static void kqueue_timer_cancel_fn(void* operation) noexcept
     {
-        auto* awaiter = static_cast<kqueue_timer_cancel_awaiter*>(token.ctx_);
-        if (!awaiter || !token.pending_.exchange(false, std::memory_order_acq_rel))
-            return;
-        (void)awaiter->ctx.delete_event(awaiter->id, EVFILT_TIMER);
-        if (token.coroutine_)
-        {
-            awaiter->cancellation_post.coroutine = token.coroutine_;
-            awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
-        }
+        auto* awaiter = static_cast<kqueue_timer_cancel_awaiter*>(operation);
+        awaiter->cancellation_post.callback =
+            &kqueue_timer_cancel_awaiter::cancelled;
+        awaiter->cancellation_post.callback_arg = awaiter;
+        awaiter->ctx.post_node_raw(&awaiter->cancellation_post);
     }
 
     auto endpoint_from_sockaddr(const ::sockaddr_storage& sa) noexcept -> endpoint
