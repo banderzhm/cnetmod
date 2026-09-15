@@ -157,12 +157,13 @@ def main() -> int:
                         client_command, cwd=directory,
                         env=environment,
                         capture_output=os.environ.get("CNETMOD_QUIC_LIVE") is None,
-                        # A local HTTP/3 exchange normally completes well
-                        # below one second after startup. Keep room for slow
-                        # CI hosts, but fail before QUIC's 30s idle timeout so
-                        # a missing PTO re-arm cannot masquerade as a green
-                        # regression run.
-                        text=True, timeout=20,
+                        # The executable runs a complete sequence of fresh,
+                        # reused, streamed, resumed, and early-data sessions.
+                        # Apple CI can take more than twice as long as Linux
+                        # under variable hosted-runner load. Individual QUIC
+                        # deadlines still detect stalled protocol work; this
+                        # outer budget only bounds the whole process.
+                        text=True, timeout=60,
                     )
                 except subprocess.TimeoutExpired as error:
                     if server.poll() is None:

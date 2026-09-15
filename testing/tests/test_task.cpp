@@ -222,6 +222,38 @@ TEST(io_scheduler_schedule_resumes_on_target_io_context)
     ASSERT_EQ(execution_thread, context_thread);
 }
 
+TEST(io_context_restart_preserves_work_posted_while_stopped)
+{
+    auto context = make_io_context();
+    context->stop();
+
+    std::atomic<bool> callback_ran{};
+    context->post(
+        [](void* state) noexcept
+        {
+            static_cast<std::atomic<bool>*>(state)->store(
+                true, std::memory_order_release);
+        },
+        &callback_ran);
+    context->restart();
+
+    std::jthread watchdog{[&](std::stop_token stop_token)
+        {
+            const auto deadline = std::chrono::steady_clock::now() +
+                std::chrono::seconds{2};
+            while (!stop_token.stop_requested() &&
+                !callback_ran.load(std::memory_order_acquire) &&
+                std::chrono::steady_clock::now() < deadline)
+                std::this_thread::yield();
+            context->stop();
+        }};
+
+    context->run();
+    watchdog.request_stop();
+    watchdog.join();
+    ASSERT_TRUE(callback_ran.load(std::memory_order_acquire));
+}
+
 TEST(blocking_invoke_rethrows_on_requested_io_context)
 {
     auto context = make_io_context();

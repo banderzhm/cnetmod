@@ -80,8 +80,6 @@ auto epoll_context::stopped() const noexcept -> bool
 void epoll_context::restart()
 {
     stopped_.store(false, std::memory_order_relaxed);
-    std::uint64_t value = 0;
-    (void)::read(event_fd_, &value, sizeof(value));
 }
 
 auto epoll_context::arm(readiness_registration& registration)

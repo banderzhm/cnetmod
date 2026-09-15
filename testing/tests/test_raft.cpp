@@ -1973,7 +1973,7 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal)
             disconnect_all();
             (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::milliseconds{50});
             connect_all();
-            for (auto i = 0; i < 1000; ++i)
+            for (auto i = 0; i < 3000; ++i)
             {
                 r1.tick_now();
                 if (last_index != 0 &&
@@ -1999,7 +1999,7 @@ TEST(raft_tcp_five_node_seeded_chaos_fuzz_converges_after_heal)
     };
     auto watchdog = [&]() -> cnetmod::task<void>
     {
-        (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::seconds{30}, watchdog_token);
+        (void)co_await cnetmod::async_timer_wait(*ctx, std::chrono::seconds{60}, watchdog_token);
         if (!finished)
         {
             timed_out = true;

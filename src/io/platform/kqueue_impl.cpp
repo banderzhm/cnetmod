@@ -114,10 +114,6 @@ auto kqueue_context::stopped() const noexcept -> bool
 void kqueue_context::restart()
 {
     stopped_.store(false, std::memory_order_relaxed);
-    char buffer[64];
-    while (::read(pipe_fds_[0], buffer, sizeof(buffer)) > 0)
-    {
-    }
 }
 
 auto kqueue_context::add_event(int ident, int16_t filter, uint16_t flags,

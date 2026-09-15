@@ -14,7 +14,7 @@ from pathlib import Path
 
 try:
     import aiosmtplib
-    from aiosmtpd.controller import Controller
+    from aiosmtpd.smtp import SMTP
 except ImportError as error:
     print(
         f"SKIP: install testing/mail/requirements.txt to run SMTP interoperability: {error}",
@@ -25,7 +25,6 @@ except ImportError as error:
 
 HOST = "127.0.0.1"
 TIMEOUT = 8.0
-STARTUP_TIMEOUT = 30.0
 
 
 def reserve_port() -> int:
@@ -117,18 +116,13 @@ class CapturingHandler:
 async def assert_cnetmod_client(client_binary: Path) -> None:
     """aiosmtpd verifies cnetmod client serialization and dot unstuffing."""
     handler = CapturingHandler()
-    port = reserve_port()
-    # GitHub's macOS runners can be CPU-starved while four module-build matrix
-    # jobs finish.  aiosmtpd's five-second default is an environment startup
-    # budget, not a protocol assertion, so give its controller a separate
-    # bounded readiness window while keeping SMTP operations at TIMEOUT.
-    controller = Controller(
-        handler,
-        hostname=HOST,
-        port=port,
-        ready_timeout=STARTUP_TIMEOUT,
+    loop = asyncio.get_running_loop()
+    server = await loop.create_server(
+        lambda: SMTP(handler),
+        host=HOST,
+        port=0,
     )
-    controller.start()
+    port = int(server.sockets[0].getsockname()[1])
     try:
         completed = await asyncio.to_thread(
             subprocess.run,
@@ -144,7 +138,8 @@ async def assert_cnetmod_client(client_binary: Path) -> None:
         assert "Subject: cnetmod SMTP semantic interop\r\n" in text
         assert "first line\r\n.leading dot\r\n..double dot\r\n" in text
     finally:
-        controller.stop()
+        server.close()
+        await server.wait_closed()
 
 
 async def run(server: Path, client: Path) -> None:
