@@ -28,9 +28,10 @@ struct options
 };
 
 // The priority regression deliberately opens the background request first.
-// Every request waits here until all streams are established, so response DATA
-// enters QUIC's scheduler together.  This avoids asserting timing and makes
-// stream-id/FIFO scheduling observably different from RFC 9218 scheduling.
+// Requests briefly rendezvous here so response DATA normally enters QUIC's
+// scheduler together. The rendezvous is bounded because a dynamically QPACK-
+// blocked request may need existing response traffic before its control-stream
+// instructions are processed on a loaded event loop.
 struct priority_fixture
 {
     static constexpr std::size_t request_count = 3U;
@@ -141,8 +142,12 @@ auto main(int argc, char** argv) -> int
                         // request streams in one UDP datagram, and the session
                         // must be free to dispatch every handler before this
                         // response-body barrier can open.
+                        const auto arrival_deadline =
+                            std::chrono::steady_clock::now() +
+                            std::chrono::milliseconds{100};
                         while (priority->arrivals.load(std::memory_order_acquire) <
-                            priority_fixture::request_count)
+                                priority_fixture::request_count &&
+                            std::chrono::steady_clock::now() < arrival_deadline)
                         {
                             const auto waited = co_await cnetmod::async_timer_wait(
                                 *context_ptr, std::chrono::milliseconds{1},
@@ -168,8 +173,12 @@ auto main(int argc, char** argv) -> int
                         if (producer == priority_fixture::request_count)
                             priority->data_released.store(true,
                                 std::memory_order_release);
+                        const auto producer_deadline =
+                            std::chrono::steady_clock::now() +
+                            std::chrono::milliseconds{100};
                         while (!priority->data_released.load(
-                            std::memory_order_acquire))
+                                   std::memory_order_acquire) &&
+                            std::chrono::steady_clock::now() < producer_deadline)
                         {
                             const auto waited = co_await cnetmod::async_timer_wait(
                                 *context_ptr, std::chrono::milliseconds{1},
@@ -177,6 +186,8 @@ auto main(int argc, char** argv) -> int
                             if (!waited)
                                 co_return std::nullopt;
                         }
+                        priority->data_released.store(true,
+                            std::memory_order_release);
                         // All three coroutines yield after the release. That
                         // gives each producer a chance to enqueue its first
                         // DATA frame before the packet writer chooses one.

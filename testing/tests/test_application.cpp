@@ -2199,8 +2199,7 @@ TEST(application_host_preserves_required_worker_failure_through_cleanup)
     ASSERT_TRUE(port_reservation.has_value());
     if (!port_reservation)
         return;
-    ASSERT_TRUE(port_reservation->bind(
-        {cnetmod::ipv4_address::loopback(), 0}).has_value());
+    ASSERT_TRUE(port_reservation->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
     const auto reserved_endpoint = port_reservation->local_endpoint();
     ASSERT_TRUE(reserved_endpoint.has_value());
     if (!reserved_endpoint)
@@ -2246,8 +2245,7 @@ TEST(application_host_accepts_concurrent_stop_requests)
     ASSERT_TRUE(port_reservation.has_value());
     if (!port_reservation)
         return;
-    ASSERT_TRUE(port_reservation->bind(
-        {cnetmod::ipv4_address::loopback(), 0}).has_value());
+    ASSERT_TRUE(port_reservation->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
     const auto reserved_endpoint = port_reservation->local_endpoint();
     ASSERT_TRUE(reserved_endpoint.has_value());
     if (!reserved_endpoint)
