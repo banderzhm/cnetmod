@@ -529,7 +529,10 @@ void raft_tcp_transport::remove_peer(const node_id& peer)
     peers_.erase(peer);
     if (auto it = connections_.find(peer); it != connections_.end())
     {
+        const auto discarded = static_cast<std::uint64_t>(it->second.outbound.size());
         it->second.outbound.clear();
+        auto& queued = metrics_for(peer).queued_sends;
+        queued = discarded < queued ? queued - discarded : 0;
         it->second.write_token.cancel();
         it->second.sock.close();
     }
@@ -958,7 +961,11 @@ auto raft_tcp_transport::send_writer(node_id peer) -> task<void>
                 conn_it != connections_.end())
             {
                 auto& conn = conn_it->second;
+                const auto discarded =
+                    static_cast<std::uint64_t>(conn.outbound.size());
                 conn.outbound.clear();
+                auto& queued = metrics_for(peer).queued_sends;
+                queued = discarded < queued ? queued - discarded : 0;
                 conn.writer_running = false;
             }
             co_return;

@@ -11,7 +11,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
-import cnetmod.protocol.amqp091;
+import cnetmod.coro.wait_group;
 import cnetmod.protocol.amqp091;
 
 namespace cnetmod::testing::messaging::amqp091_driver {
@@ -119,22 +119,34 @@ namespace {
 
         std::unique_ptr<amqp091::amqp091_client> client;
         cancel_token read_loop_cancellation;
+        async_wait_group read_loop_completion;
     };
 
-    auto consume_connection_frames(connected_client& connection) -> task<void>
+    auto consume_connection_frames(std::shared_ptr<connected_client> connection) -> task<void>
     {
-        (void)co_await connection.client->async_run(connection.read_loop_cancellation);
+        struct completion_guard
+        {
+            async_wait_group& completion;
+
+            ~completion_guard()
+            {
+                completion.done();
+            }
+        } completed{connection->read_loop_completion};
+
+        (void)co_await connection->client->async_run(connection->read_loop_cancellation);
     }
 
     auto connect_client(io_context& context, const json& parameters)
-        -> task<std::unique_ptr<connected_client>>
+        -> task<std::shared_ptr<connected_client>>
     {
-        auto connection = std::make_unique<connected_client>(context);
+        auto connection = std::make_shared<connected_client>(context);
         ensure(co_await connection->client->async_connect(
                    connection_configuration(parameters)),
             "connect AMQP 0-9-1 client");
-        spawn(context, consume_connection_frames(*connection));
-        co_return std::move(connection);
+        connection->read_loop_completion.add();
+        spawn(context, consume_connection_frames(connection));
+        co_return connection;
     }
 
     auto open_channel(connected_client& connection)
@@ -144,14 +156,14 @@ namespace {
             "open AMQP channel");
     }
 
-    auto close_client(io_context& context,
-        std::unique_ptr<connected_client> connection) -> task<void>
+    auto close_client(io_context&,
+        std::shared_ptr<connected_client> connection) -> task<void>
     {
         if (!connection)
             co_return;
         connection->read_loop_cancellation.cancel();
         (void)co_await connection->client->async_close();
-        co_await async_sleep(context, 2ms);
+        co_await connection->read_loop_completion.wait();
     }
 
     template <class Predicate>
@@ -361,6 +373,7 @@ namespace {
             },
             std::chrono::seconds(parameters.value("reconnect_timeout_seconds", 60)),
             "injected broker disconnect");
+        co_await connection->read_loop_completion.wait();
         connection->read_loop_cancellation.reset();
         ensure(co_await connection->client->async_recover(
                    connection->read_loop_cancellation),

@@ -1181,6 +1181,33 @@ TEST(raft_tcp_transport_records_backpressure_metrics)
     ASSERT_TRUE(metrics->last_error == std::make_error_code(std::errc::no_buffer_space));
 }
 
+TEST(raft_tcp_transport_peer_removal_releases_queued_capacity)
+{
+    auto ctx = cnetmod::make_io_context();
+    raft_tcp_transport transport{*ctx, "n1", raft_tcp_transport_options{
+                                                 .max_send_attempts = 1,
+                                                 .max_outbound_queue = 2,
+                                             }};
+    cnetmod::endpoint ep{cnetmod::ip_address{cnetmod::ipv4_address::loopback()}, 65000};
+    transport.add_peer(raft_tcp_peer{.id = "n2", .address = ep});
+
+    transport.send_append_entries("n2", append_entries_request{.term = 1, .leader_id = "n1"});
+    transport.send_append_entries("n2", append_entries_request{.term = 1, .leader_id = "n1"});
+    ASSERT_EQ(transport.peer_metrics("n2")->queued_sends, 2u);
+
+    transport.remove_peer("n2");
+    ASSERT_EQ(transport.peer_metrics("n2")->queued_sends, 0u);
+
+    transport.add_peer(raft_tcp_peer{.id = "n2", .address = ep});
+    transport.send_append_entries("n2", append_entries_request{.term = 1, .leader_id = "n1"});
+    auto metrics = transport.peer_metrics("n2");
+    ASSERT_TRUE(metrics.has_value());
+    ASSERT_EQ(metrics->queued_sends, 1u);
+    ASSERT_EQ(metrics->send_failures, 0u);
+
+    transport.stop();
+}
+
 TEST(raft_pipeline_inflight_window_sends_heartbeat_when_full)
 {
     auto store = std::make_shared<memory_store>();
