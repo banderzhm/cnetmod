@@ -8,6 +8,8 @@ import std;
 
 namespace cnetmod {
 
+thread_local io_context* io_context::executing_context_ = nullptr;
+
 void post_node::dispatch() noexcept
 {
     if (callback)
@@ -19,6 +21,22 @@ void post_node::dispatch() noexcept
 io_context::~io_context()
 {
     discard_post_queue();
+}
+
+auto io_context::running_in_this_thread() const noexcept -> bool
+{
+    return executing_context_ == this;
+}
+
+io_context::execution_scope::execution_scope(io_context& context) noexcept
+    : previous_(executing_context_)
+{
+    executing_context_ = &context;
+}
+
+io_context::execution_scope::~execution_scope()
+{
+    executing_context_ = previous_;
 }
 
 void io_context::post(std::coroutine_handle<> coroutine)
@@ -86,12 +104,11 @@ void io_context::discard_post_queue() noexcept
     while (node)
     {
         auto* next = node->next.load(std::memory_order_relaxed);
-        if (node->heap_owned)
-        {
-            if (node->callback_cleanup)
-                node->callback_cleanup(node->callback_arg);
+        const bool heap_owned = node->heap_owned;
+        if (node->callback_cleanup)
+            node->callback_cleanup(node->callback_arg);
+        if (heap_owned)
             delete node;
-        }
         node = next;
     }
 }

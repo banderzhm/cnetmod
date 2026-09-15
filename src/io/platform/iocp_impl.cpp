@@ -60,17 +60,20 @@ iocp_context::~iocp_context()
 
 void iocp_context::run()
 {
+    execution_scope executing{*this};
     while (!stopped_.load(std::memory_order_relaxed))
         run_batch_impl(INFINITE);
 }
 
 auto iocp_context::run_one() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_batch_impl(INFINITE);
 }
 
 auto iocp_context::poll() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_batch_impl(0);
 }
 

@@ -27,6 +27,12 @@ namespace {
 
 } // namespace
 
+void kqueue_completion::dispatch() const noexcept
+{
+    if (dispatch_callback)
+        dispatch_callback(state);
+}
+
 kqueue_context::kqueue_context(std::size_t max_events)
     : events_(max_events)
 {
@@ -74,17 +80,20 @@ kqueue_context::~kqueue_context()
 
 void kqueue_context::run()
 {
+    execution_scope executing{*this};
     while (!stopped_.load(std::memory_order_relaxed))
         run_one_impl(nullptr);
 }
 
 auto kqueue_context::run_one() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_one_impl(nullptr);
 }
 
 auto kqueue_context::poll() -> std::size_t
 {
+    execution_scope executing{*this};
     struct timespec zero{};
 
     return run_one_impl(&zero);
@@ -153,18 +162,29 @@ auto kqueue_context::run_one_impl(struct timespec* timeout) -> std::size_t
     if (count <= 0)
         return 0;
     std::size_t handled = 0;
+    bool wake_pending = false;
     for (int i = 0; i < count; ++i)
     {
         auto* udata = events_[i].udata;
         if (!udata)
         {
-            char buffer[64];
-            (void)::read(pipe_fds_[0], buffer, sizeof(buffer));
-            handled += drain_post_queue();
+            wake_pending = true;
             continue;
         }
-        std::coroutine_handle<>::from_address(udata).resume();
+        static_cast<kqueue_completion*>(udata)->dispatch();
         ++handled;
+    }
+    // Cancellation removes its kernel registration before posting a resume.
+    // Process every event already returned by this kevent() call first so a
+    // stale readiness notification can lose the operation's atomic claim
+    // while the suspended frame is still alive.
+    if (wake_pending)
+    {
+        char buffer[64];
+        while (::read(pipe_fds_[0], buffer, sizeof(buffer)) > 0)
+        {
+        }
+        handled += drain_post_queue();
     }
     return handled;
 }

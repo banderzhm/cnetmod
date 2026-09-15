@@ -846,6 +846,18 @@ struct quic_connection::quic_connection_impl
         return nullptr;
     }
 
+    [[nodiscard]] static auto path_validation_timeout(
+        const application_path_state& path) noexcept -> time_point::duration
+    {
+        // A freshly observed path has no trustworthy RTT sample of its own.
+        // Reusing a very small localhost or previous-path PTO can otherwise
+        // expire validation in the same event batch that delivers a relayed
+        // PATH_RESPONSE. Retain QUIC's initial RTT floor until validation.
+        const auto initial_rtt = std::chrono::duration_cast<time_point::duration>(
+            std::chrono::milliseconds{333});
+        return std::max(path.recovery.pto_duration(), initial_rtt) * 3;
+    }
+
     [[nodiscard]] auto select_application_path_for_send() -> std::uint32_t
     {
         // Path zero remains the pre-negotiation and fallback path.  Once
@@ -2285,7 +2297,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     if (!post_handshake)
         co_return std::unexpected(post_handshake.error());
     const auto now = std::chrono::steady_clock::now();
-    const auto validation_timeout = application_path.recovery.pto_duration() * 3;
+    const auto validation_timeout = impl_->path_validation_timeout(application_path);
     std::erase_if(impl_->pending_path_validations,
         [now, validation_timeout](const auto& candidate)
         {
@@ -2997,10 +3009,19 @@ auto quic_connection::process_path_response_frame(const path_response_frame& fra
 {
     if (impl_->current_packet_sender)
     {
-        const auto candidate = impl_->pending_path_validations.find(
-            impl_->current_packet_sender->to_string());
-        if (candidate == impl_->pending_path_validations.end() ||
-            candidate->second.challenge != frame.data)
+        // A NAT or UDP relay can change the observed peer tuple between the
+        // PATH_CHALLENGE submission and its authenticated PATH_RESPONSE. The
+        // response is already bound to a Path ID by the destination CID and
+        // AEAD nonce, so correlate it with the unpredictable challenge rather
+        // than requiring the pre-validation endpoint string to remain stable.
+        const auto candidate = std::ranges::find_if(
+            impl_->pending_path_validations,
+            [this, &frame](const auto& pending)
+            {
+                return pending.second.path_id == impl_->receiving_application_path_id &&
+                    pending.second.challenge == frame.data;
+            });
+        if (candidate == impl_->pending_path_validations.end())
             co_return;
         const auto path_id = candidate->second.path_id;
         const auto path = impl_->application_paths.find(path_id);
@@ -3026,11 +3047,11 @@ auto quic_connection::process_path_response_frame(const path_response_frame& fra
                 impl_->active_peer_cid_sequence = replacement->first;
             }
         }
-        path->second->peer = candidate->second.peer;
+        path->second->peer = *impl_->current_packet_sender;
         path->second->validated = true;
         impl_->arm_path_mtu_discovery(std::chrono::steady_clock::now());
         if (path_id == 0U)
-            impl_->peer = candidate->second.peer;
+            impl_->peer = *impl_->current_packet_sender;
         impl_->pending_path_validations.erase(candidate);
     }
     co_return;
@@ -4727,10 +4748,11 @@ auto quic_connection::async_probe_path_impl(std::uint32_t path_id, endpoint peer
         }
         path->second->validated = false;
         // Validation is a control-plane exchange, not merely a successful
-        // UDP submission.  Bound the wait by three PTOs, while retrying the
-        // same challenge often enough to survive a single lost datagram.
+        // UDP submission. Bound the wait by three PTOs with the initial-RTT
+        // floor, while retrying often enough to survive a lost datagram.
         const auto pto = path->second->recovery.pto_duration();
-        validation_deadline = std::chrono::steady_clock::now() + pto * 3;
+        validation_deadline = std::chrono::steady_clock::now() +
+            impl_->path_validation_timeout(*path->second);
         retry_interval = std::clamp(
             std::chrono::duration_cast<std::chrono::milliseconds>(pto / 2),
             std::chrono::milliseconds{20}, std::chrono::milliseconds{200});

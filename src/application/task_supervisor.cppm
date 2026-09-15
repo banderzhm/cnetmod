@@ -75,6 +75,10 @@ public:
 
     /**
      * @brief Requests cooperative cancellation of every owned task.
+     *
+     * This method is thread-safe. Nonblocking stop adapters run before it
+     * returns; platform cancellation is serialized through the owning I/O
+     * context, and join() waits for that command and every supervised task.
      */
     void request_stop() noexcept;
 

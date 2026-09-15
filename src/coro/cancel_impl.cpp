@@ -6,11 +6,22 @@ import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 namespace cnetmod {
 void cancel_token::cancel() noexcept
 {
+    request_cancel();
+    dispatch_cancel();
+}
+
+void cancel_token::request_cancel() noexcept
+{
     cancellation_reason expected = cancellation_reason::none;
     if (!reason_.compare_exchange_strong(expected, cancellation_reason::caller_cancelled,
             std::memory_order_acq_rel))
         return;
-    if (cancelled_.exchange(true, std::memory_order_acq_rel))
+    cancelled_.store(true, std::memory_order_release);
+}
+
+void cancel_token::dispatch_cancel() noexcept
+{
+    if (!is_cancelled() || cancel_dispatched_.exchange(true, std::memory_order_acq_rel))
         return;
     (void)dispatch_callback();
 }
@@ -21,9 +32,8 @@ void cancel_token::cancel_due_to_deadline() noexcept
     if (!reason_.compare_exchange_strong(expected, cancellation_reason::deadline_exceeded,
             std::memory_order_acq_rel))
         return;
-    if (cancelled_.exchange(true, std::memory_order_acq_rel))
-        return;
-    (void)dispatch_callback();
+    cancelled_.store(true, std::memory_order_release);
+    dispatch_cancel();
 }
 
 auto cancel_token::is_cancelled() const noexcept -> bool
@@ -42,6 +52,7 @@ void cancel_token::reset() noexcept
     callback_mode_ = false;
     callback_operation_ = nullptr;
     callback_notify_ = nullptr;
+    cancel_dispatched_.store(false, std::memory_order_relaxed);
     cancelled_.store(false, std::memory_order_relaxed);
     reason_.store(cancellation_reason::none, std::memory_order_relaxed);
     pending_.store(false, std::memory_order_relaxed);

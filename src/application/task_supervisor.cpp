@@ -102,6 +102,17 @@ public:
     explicit implementation(io_context& context)
         : context(context)
     {
+        cancellation_post.callback = [](void* state) noexcept
+        {
+            auto* owner = static_cast<implementation*>(state);
+            owner->cancel_on_context();
+            owner->cancellation_lifetime.reset();
+        };
+        cancellation_post.callback_arg = this;
+        cancellation_post.callback_cleanup = [](void* state) noexcept
+        {
+            static_cast<implementation*>(state)->cancellation_lifetime.reset();
+        };
     }
 
     /**
@@ -223,11 +234,29 @@ public:
         }
     }
 
+    /**
+     * @brief Cancels every supervised task on the owning I/O thread.
+     *
+     * Platform cancellation adapters may submit kernel operations and are not
+     * generally safe to invoke concurrently with the event loop.
+     */
+    void cancel_on_context() noexcept
+    {
+        for (const auto& [name, item] : entries)
+        {
+            (void)name;
+            item->cancellation->dispatch_cancel();
+        }
+        completed.done();
+    }
+
     io_context& context;
     mutable concurrent_containers::atomic_rw_latch latch;
     std::unordered_map<std::string, std::shared_ptr<entry>, task_name_hash, std::equal_to<>> entries;
     async_wait_group completed;
     std::shared_ptr<const recovery_exhausted_handler> exhausted;
+    post_node cancellation_post{};
+    std::shared_ptr<implementation> cancellation_lifetime;
     std::atomic<bool> stopping{false};
 };
 
@@ -399,40 +428,48 @@ void task_supervisor::request_stop() noexcept
             return;
         owner->completed.add();
     }
-    for (const auto& [name, item] : implementation_->entries)
+    for (const auto& [name, item] : owner->entries)
     {
         (void)name;
-        item->cancellation->cancel();
-        if (item->stop_request)
+        item->cancellation->request_cancel();
+        if (!item->stop_request)
+            continue;
+
+        std::error_code error;
+        try
         {
-            std::error_code error;
-            try
-            {
-                item->stop_request();
-            }
-            catch (const std::system_error& failure)
-            {
-                error = failure.code();
-            }
-            catch (const std::bad_alloc&)
-            {
-                error = std::make_error_code(std::errc::not_enough_memory);
-            }
-            catch (...)
-            {
-                error = std::make_error_code(std::errc::io_error);
-            }
-            if (error)
-            {
-                concurrent_containers::exclusive_latch_guard lock{implementation_->latch};
-                item->stop_error = error;
-                if (item->state != supervised_task_state::failed)
-                    item->error = error;
-                item->state = supervised_task_state::failed;
-            }
+            item->stop_request();
+        }
+        catch (const std::system_error& failure)
+        {
+            error = failure.code();
+        }
+        catch (const std::bad_alloc&)
+        {
+            error = std::make_error_code(std::errc::not_enough_memory);
+        }
+        catch (...)
+        {
+            error = std::make_error_code(std::errc::io_error);
+        }
+        if (error)
+        {
+            concurrent_containers::exclusive_latch_guard lock{owner->latch};
+            item->stop_error = error;
+            if (item->state != supervised_task_state::failed)
+                item->error = error;
+            item->state = supervised_task_state::failed;
         }
     }
-    owner->completed.done();
+
+    if (owner->context.running_in_this_thread())
+    {
+        owner->cancel_on_context();
+        return;
+    }
+
+    owner->cancellation_lifetime = owner;
+    owner->context.post_node_raw(&owner->cancellation_post);
 }
 
 auto task_supervisor::join()

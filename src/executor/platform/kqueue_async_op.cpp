@@ -42,6 +42,7 @@ struct kqueue_awaiter
     int fd;
     int16_t filter; // EVFILT_READ or EVFILT_WRITE
     std::error_code sync_error{};
+    kqueue_completion completion{};
 
     auto await_ready() const noexcept -> bool
     {
@@ -50,8 +51,12 @@ struct kqueue_awaiter
 
     auto await_suspend(std::coroutine_handle<> h) noexcept -> bool
     {
+        completion = {h.address(), [](void* address) noexcept
+            {
+                std::coroutine_handle<>::from_address(address).resume();
+            }};
         auto r = ctx.add_event(fd, filter, EV_ADD | EV_ONESHOT,
-            reinterpret_cast<void*>(h.address()));
+            &completion);
         if (!r)
         {
             sync_error = r.error();
@@ -136,6 +141,7 @@ namespace {
         int16_t filter;
         cancel_token& token;
         std::error_code sync_error{};
+        kqueue_completion completion{};
 
         /**
          * The suspended frame owns cancellation queue storage until dispatch.
@@ -162,8 +168,16 @@ namespace {
             token.coroutine_ = h;
             token.cancel_fn_ = &kqueue_cancel_fn;
 
+            completion = {this, [](void* state) noexcept
+                {
+                    auto* self = static_cast<kqueue_cancel_awaiter*>(state);
+                    if (self->token.pending_.exchange(false,
+                            std::memory_order_acq_rel))
+                        self->token.coroutine_.resume();
+                }};
+
             auto r = ctx.add_event(fd, filter, EV_ADD | EV_ONESHOT,
-                reinterpret_cast<void*>(h.address()));
+                &completion);
             if (!r)
             {
                 sync_error = r.error();
@@ -174,10 +188,15 @@ namespace {
 
             if (token.is_cancelled())
             {
-                token.pending_.store(false, std::memory_order_relaxed);
-                (void)ctx.delete_event(fd, filter);
-                sync_error = make_error_code(errc::operation_aborted);
-                return false;
+                if (token.pending_.exchange(false, std::memory_order_acq_rel))
+                {
+                    (void)ctx.delete_event(fd, filter);
+                    sync_error = make_error_code(errc::operation_aborted);
+                    return false;
+                }
+
+                // The cancellation callback already owns the queued resume.
+                return true;
             }
 
             return true;
@@ -215,6 +234,7 @@ namespace {
         cancel_token& token;
         std::error_code sync_error{};
         post_node cancellation_post{};
+        kqueue_completion completion{};
 
         auto await_ready() const noexcept -> bool
         {
@@ -235,10 +255,18 @@ namespace {
             token.coroutine_ = continuation;
             token.cancel_fn_ = &kqueue_timer_cancel_fn;
 
+            completion = {this, [](void* state) noexcept
+                {
+                    auto* self = static_cast<kqueue_timer_cancel_awaiter*>(state);
+                    if (self->token.pending_.exchange(false,
+                            std::memory_order_acq_rel))
+                        self->token.coroutine_.resume();
+                }};
+
             struct kevent event{};
             EV_SET(&event, static_cast<uintptr_t>(id), EVFILT_TIMER,
                 EV_ADD | EV_ONESHOT, 0, timeout_ms,
-                reinterpret_cast<void*>(continuation.address()));
+                &completion);
             if (::kevent(ctx.native_handle(), &event, 1, nullptr, 0, nullptr) < 0)
             {
                 sync_error = std::error_code(errno, std::generic_category());
@@ -248,10 +276,15 @@ namespace {
             token.pending_.store(true, std::memory_order_release);
             if (token.is_cancelled())
             {
-                token.pending_.store(false, std::memory_order_relaxed);
-                (void)ctx.delete_event(id, EVFILT_TIMER);
-                sync_error = make_error_code(errc::operation_aborted);
-                return false;
+                if (token.pending_.exchange(false, std::memory_order_acq_rel))
+                {
+                    (void)ctx.delete_event(id, EVFILT_TIMER);
+                    sync_error = make_error_code(errc::operation_aborted);
+                    return false;
+                }
+
+                // The cancellation callback already owns the queued resume.
+                return true;
             }
             return true;
         }
@@ -890,6 +923,7 @@ auto async_timer_wait(io_context& ctx,
         int id;
         intptr_t timeout_ms;
         std::error_code sync_error{};
+        kqueue_completion completion{};
 
         auto await_ready() const noexcept -> bool
         {
@@ -900,9 +934,14 @@ auto async_timer_wait(io_context& ctx,
         {
             struct kevent ev{};
 
+            completion = {h.address(), [](void* address) noexcept
+                {
+                    std::coroutine_handle<>::from_address(address).resume();
+                }};
+
             EV_SET(&ev, static_cast<uintptr_t>(id), EVFILT_TIMER,
                 EV_ADD | EV_ONESHOT, 0, timeout_ms,
-                reinterpret_cast<void*>(h.address()));
+                &completion);
             if (::kevent(kq_fd, &ev, 1, nullptr, 0, nullptr) < 0)
             {
                 sync_error = std::error_code(errno, std::generic_category());

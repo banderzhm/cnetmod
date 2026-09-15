@@ -1903,17 +1903,17 @@ TEST(application_task_supervisor_stop_racing_registration_cancels_every_accepted
         ready.store(true, std::memory_order_release);
         supervisor.request_stop();
         registration.join();
+        auto wait = [&]() -> cnetmod::task<void>
+        {
+            (void)co_await supervisor.join();
+            io->stop();
+        };
+        auto joining = wait();
+        joining.handle().resume();
+        io->run();
         ASSERT_EQ(stop_callbacks, accepted ? 1U : 0U);
         if (accepted)
         {
-            auto wait = [&]() -> cnetmod::task<void>
-            {
-                (void)co_await supervisor.join();
-                io->stop();
-            };
-            auto joining = wait();
-            joining.handle().resume();
-            io->run();
             ASSERT_TRUE(cancelled);
             ASSERT_TRUE(joining.handle().done());
         }

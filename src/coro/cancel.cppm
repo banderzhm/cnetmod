@@ -40,6 +40,20 @@ public:
     /// Safe to call multiple times (only first call takes effect).
     void cancel() noexcept;
 
+    /**
+     * @brief Records caller cancellation without invoking the platform adapter.
+     *
+     * Event-loop owners use this operation to publish cancellation immediately
+     * and marshal kernel interaction onto the owning thread. A later call to
+     * dispatch_cancel() invokes the registered adapter at most once.
+     */
+    void request_cancel() noexcept;
+
+    /**
+     * @brief Dispatches a previously requested cancellation at most once.
+     */
+    void dispatch_cancel() noexcept;
+
     /// Request cancellation because the enclosing deadline elapsed.
     /// This is separate from `cancel()` so callers can map a deadline to a
     /// timeout response without losing an explicit caller cancellation.
@@ -96,6 +110,7 @@ private:
     void* callback_operation_{};
     void (*callback_notify_)(void*) noexcept = nullptr;
     bool callback_mode_ = false;
+    std::atomic<bool> cancel_dispatched_{false};
 };
 
 } // namespace cnetmod

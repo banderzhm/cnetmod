@@ -15,6 +15,24 @@ import cnetmod.io.io_operation;
 
 namespace cnetmod {
 
+/**
+ * Dispatches a readiness notification to its owning asynchronous operation.
+ *
+ * The notification object remains embedded in the suspended coroutine frame.
+ * Cancellable operations use the callback to arbitrate kernel readiness and
+ * cancellation before either path resumes the frame.
+ */
+export struct kqueue_completion
+{
+    void* state{};
+    void (*dispatch_callback)(void*) noexcept {};
+
+    /**
+     * Dispatches the completion callback when one is registered.
+     */
+    void dispatch() const noexcept;
+};
+
 export class kqueue_context : public io_context
 {
 public:

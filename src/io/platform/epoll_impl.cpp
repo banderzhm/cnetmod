@@ -48,17 +48,20 @@ epoll_context::~epoll_context()
 
 void epoll_context::run()
 {
+    execution_scope executing{*this};
     while (!stopped_.load(std::memory_order_relaxed))
         run_one_impl(-1);
 }
 
 auto epoll_context::run_one() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_one_impl(-1);
 }
 
 auto epoll_context::poll() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_one_impl(0);
 }
 

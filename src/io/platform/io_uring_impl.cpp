@@ -19,31 +19,31 @@ io_uring_context::io_uring_context(unsigned queue_depth)
     submit_batch_size_ = submit_batch_size_from_env();
     cqe_tick_limit_ = cqe_tick_limit_from_env();
     int ret = 0;
-    #ifdef IORING_SETUP_CQSIZE
+#ifdef IORING_SETUP_CQSIZE
     ::io_uring_params params{};
     params.flags = IORING_SETUP_CQSIZE;
     params.cq_entries = queue_depth * 2;
-        #ifdef IORING_SETUP_COOP_TASKRUN
+    #ifdef IORING_SETUP_COOP_TASKRUN
     const auto coop_taskrun = env_enabled("CNETMOD_IOURING_COOP_TASKRUN");
     if (coop_taskrun)
         params.flags |= IORING_SETUP_COOP_TASKRUN;
-        #endif
+    #endif
     ret = ::io_uring_queue_init_params(queue_depth, &ring_, &params);
     if (ret == -EINVAL)
     {
-        #ifdef IORING_SETUP_COOP_TASKRUN
+    #ifdef IORING_SETUP_COOP_TASKRUN
         if (coop_taskrun)
         {
             params.flags = IORING_SETUP_CQSIZE;
             ret = ::io_uring_queue_init_params(queue_depth, &ring_, &params);
         }
-        #endif
+    #endif
     }
     if (ret == -EINVAL)
         ret = ::io_uring_queue_init(queue_depth, &ring_, 0);
-    #else
+#else
     ret = ::io_uring_queue_init(queue_depth, &ring_, 0);
-    #endif
+#endif
     if (ret < 0)
         throw std::system_error(-ret, std::generic_category(),
             "io_uring_queue_init failed");
@@ -68,17 +68,20 @@ io_uring_context::~io_uring_context()
 
 void io_uring_context::run()
 {
+    execution_scope executing{*this};
     while (!stopped_.load(std::memory_order_relaxed))
         run_one_impl(true);
 }
 
 auto io_uring_context::run_one() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_one_impl(true);
 }
 
 auto io_uring_context::poll() -> std::size_t
 {
+    execution_scope executing{*this};
     return run_one_impl(false);
 }
 

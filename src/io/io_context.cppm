@@ -67,6 +67,14 @@ public:
     /// Reset context (can run again after stop)
     virtual void restart() = 0;
 
+    /**
+     * @brief Reports whether this context is executing on the calling thread.
+     *
+     * This permits cancellation adapters to run inline without self-posting
+     * while preserving serialized kernel queue access for foreign callers.
+     */
+    [[nodiscard]] auto running_in_this_thread() const noexcept -> bool;
+
     /// Post a coroutine to event loop for execution (thread-safe, lock-free)
     void post(std::coroutine_handle<> h);
 
@@ -85,6 +93,22 @@ public:
 
 protected:
     io_context() = default;
+
+    /**
+     * @brief Marks a public event-loop entry point for the current thread.
+     */
+    class execution_scope
+    {
+    public:
+        explicit execution_scope(io_context& context) noexcept;
+        ~execution_scope();
+
+        execution_scope(const execution_scope&) = delete;
+        auto operator=(const execution_scope&) -> execution_scope& = delete;
+
+    private:
+        io_context* previous_{};
+    };
 
     /// Platform-specific: wake blocked event loop
     virtual void wake() = 0;
@@ -105,6 +129,8 @@ private:
     void push_node_no_delete(post_node* node);
 
     std::atomic<post_node*> post_head_{nullptr};
+
+    static thread_local io_context* executing_context_;
 };
 
 /// co_await post_awaitable{ctx} — Switch current coroutine to io_context event
