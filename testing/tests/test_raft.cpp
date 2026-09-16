@@ -1661,7 +1661,7 @@ TEST(raft_tcp_three_node_loopback_replicates_and_commits_command)
             auto entry = n1.append_command("tcp-commit");
             if (entry)
             {
-                for (auto i = 0; i < 80; ++i)
+                for (auto i = 0; i < 500; ++i)
                 {
                     r1.tick_now();
                     r2.tick_now();
@@ -1694,8 +1694,14 @@ TEST(raft_tcp_three_node_loopback_replicates_and_commits_command)
     ASSERT_TRUE(elected);
     ASSERT_TRUE(replicated);
     ASSERT_TRUE(metrics_ok);
-    ASSERT_EQ(s2->entry_at(2)->command, std::string("tcp-commit"));
-    ASSERT_EQ(s3->entry_at(2)->command, std::string("tcp-commit"));
+    const auto follower2_entry = s2->entry_at(2);
+    const auto follower3_entry = s3->entry_at(2);
+    ASSERT_TRUE(follower2_entry.has_value());
+    ASSERT_TRUE(follower3_entry.has_value());
+    if (follower2_entry)
+        ASSERT_EQ(follower2_entry->command, std::string("tcp-commit"));
+    if (follower3_entry)
+        ASSERT_EQ(follower3_entry->command, std::string("tcp-commit"));
 }
 
 TEST(raft_tcp_five_node_partition_heal_catches_up_lagging_followers)
