@@ -1164,22 +1164,29 @@ auto async_recvfrom(io_context& ctx, socket& sock,
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
+    const auto descriptor = static_cast<int>(sock.native_handle());
+    for (;;)
+    {
+        ::sockaddr_storage from_addr{};
+        ::socklen_t from_len = sizeof(from_addr);
+        const auto received = ::recvfrom(descriptor, buf.data, buf.size,
+            socket_receive_flags,
+            reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
+        if (received >= 0)
+        {
+            peer = endpoint_from_sockaddr(from_addr);
+            co_return static_cast<std::size_t>(received);
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+            co_return std::unexpected(last_error());
 
-    kqueue_awaiter aw{kq, static_cast<int>(sock.native_handle()), EVFILT_READ};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-
-    ::sockaddr_storage from_addr{};
-    ::socklen_t from_len = sizeof(from_addr);
-    ssize_t n = ::recvfrom(static_cast<int>(sock.native_handle()),
-        buf.data, buf.size, 0,
-        reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-
-    peer = endpoint_from_sockaddr(from_addr);
-    co_return static_cast<std::size_t>(n);
+        kqueue_awaiter awaiter{kq, descriptor, EVFILT_READ};
+        co_await awaiter;
+        if (awaiter.sync_error)
+            co_return std::unexpected(awaiter.sync_error);
+    }
 }
 
 auto async_recvfrom(io_context& ctx, socket& sock,
@@ -1191,25 +1198,32 @@ auto async_recvfrom(io_context& ctx, socket& sock,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     auto& kq = static_cast<kqueue_context&>(ctx);
+    const auto descriptor = static_cast<int>(sock.native_handle());
+    for (;;)
+    {
+        if (token.is_cancelled())
+            co_return std::unexpected(make_error_code(errc::operation_aborted));
 
-    kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-        EVFILT_READ, token};
-    co_await aw;
-    if (aw.sync_error)
-        co_return std::unexpected(aw.sync_error);
-    if (token.is_cancelled())
-        co_return std::unexpected(make_error_code(errc::operation_aborted));
+        ::sockaddr_storage from_addr{};
+        ::socklen_t from_len = sizeof(from_addr);
+        const auto received = ::recvfrom(descriptor, buf.data, buf.size,
+            socket_receive_flags,
+            reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
+        if (received >= 0)
+        {
+            peer = endpoint_from_sockaddr(from_addr);
+            co_return static_cast<std::size_t>(received);
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno != EAGAIN && errno != EWOULDBLOCK)
+            co_return std::unexpected(last_error());
 
-    ::sockaddr_storage from_addr{};
-    ::socklen_t from_len = sizeof(from_addr);
-    ssize_t n = ::recvfrom(static_cast<int>(sock.native_handle()),
-        buf.data, buf.size, 0,
-        reinterpret_cast<::sockaddr*>(&from_addr), &from_len);
-    if (n < 0)
-        co_return std::unexpected(last_error());
-
-    peer = endpoint_from_sockaddr(from_addr);
-    co_return static_cast<std::size_t>(n);
+        kqueue_cancel_awaiter awaiter{kq, descriptor, EVFILT_READ, token};
+        co_await awaiter;
+        if (awaiter.sync_error)
+            co_return std::unexpected(awaiter.sync_error);
+    }
 }
 
 auto async_sendto(io_context& ctx, socket& sock,
@@ -1217,22 +1231,26 @@ auto async_sendto(io_context& ctx, socket& sock,
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& kq = static_cast<kqueue_context&>(ctx);
+    const auto descriptor = static_cast<int>(sock.native_handle());
 
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
     for (;;)
     {
-        kqueue_awaiter aw{kq, static_cast<int>(sock.native_handle()), EVFILT_WRITE};
-        co_await aw;
-        if (aw.sync_error)
-            co_return std::unexpected(aw.sync_error);
-        const ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+        const auto sent = ::sendto(descriptor,
             buf.data, buf.size, socket_send_flags,
             reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-        if (n >= 0)
-            co_return static_cast<std::size_t>(n);
+        if (sent >= 0)
+            co_return static_cast<std::size_t>(sent);
+        if (errno == EINTR)
+            continue;
         if (errno != EAGAIN && errno != EWOULDBLOCK)
             co_return std::unexpected(last_error());
+
+        kqueue_awaiter awaiter{kq, descriptor, EVFILT_WRITE};
+        co_await awaiter;
+        if (awaiter.sync_error)
+            co_return std::unexpected(awaiter.sync_error);
     }
 }
 
@@ -1245,25 +1263,28 @@ auto async_sendto(io_context& ctx, socket& sock,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
 
     auto& kq = static_cast<kqueue_context&>(ctx);
+    const auto descriptor = static_cast<int>(sock.native_handle());
 
     ::sockaddr_storage dest{};
     ::socklen_t dest_len = fill_sockaddr(peer, dest);
     for (;;)
     {
-        kqueue_cancel_awaiter aw{kq, static_cast<int>(sock.native_handle()),
-            EVFILT_WRITE, token};
-        co_await aw;
-        if (aw.sync_error)
-            co_return std::unexpected(aw.sync_error);
         if (token.is_cancelled())
             co_return std::unexpected(make_error_code(errc::operation_aborted));
-        const ssize_t n = ::sendto(static_cast<int>(sock.native_handle()),
+        const auto sent = ::sendto(descriptor,
             buf.data, buf.size, socket_send_flags,
             reinterpret_cast<const ::sockaddr*>(&dest), dest_len);
-        if (n >= 0)
-            co_return static_cast<std::size_t>(n);
+        if (sent >= 0)
+            co_return static_cast<std::size_t>(sent);
+        if (errno == EINTR)
+            continue;
         if (errno != EAGAIN && errno != EWOULDBLOCK)
             co_return std::unexpected(last_error());
+
+        kqueue_cancel_awaiter awaiter{kq, descriptor, EVFILT_WRITE, token};
+        co_await awaiter;
+        if (awaiter.sync_error)
+            co_return std::unexpected(awaiter.sync_error);
     }
 }
 
