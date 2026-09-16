@@ -1,5 +1,17 @@
 #define PY_SSIZE_T_CLEAN
+
+#if defined(_WIN32) && defined(_DEBUG)
+    // The official Windows CPython distribution does not ship pythonXY_d.lib.
+    // Keep cnetmod's Debug CRT while parsing Python's headers as a release ABI;
+    // the stable ABI import library is explicitly supplied by CMake.
+    #define CNETMOD_PYTHON_RESTORE_DEBUG
+    #undef _DEBUG
+#endif
 #include <Python.h>
+#if defined(CNETMOD_PYTHON_RESTORE_DEBUG)
+    #define _DEBUG
+    #undef CNETMOD_PYTHON_RESTORE_DEBUG
+#endif
 
 #include <cnetmod/c_api.h>
 
