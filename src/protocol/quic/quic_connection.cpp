@@ -267,6 +267,11 @@ struct quic_connection::quic_connection_impl
     // returns. QUIC packet processing and handlers share the same io_context,
     // so raw observer pointers need no cross-thread synchronization.
     std::map<stream_id, cancel_token*> stream_cancellation_observers;
+    /**
+     * Preserves remote stream cancellation until a late application observer
+     * is registered, preventing RESET_STREAM or STOP_SENDING from being lost.
+     */
+    std::set<stream_id> remotely_cancelled_streams;
 
     struct retired_stream_info
     {
@@ -3245,6 +3250,7 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
 
 auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>
 {
+    impl_->remotely_cancelled_streams.insert(frame.stream_id);
     if (const auto observer = impl_->stream_cancellation_observers.find(frame.stream_id);
         observer != impl_->stream_cancellation_observers.end())
     {
@@ -3276,6 +3282,7 @@ auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame
 
 auto quic_connection::process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>
 {
+    impl_->remotely_cancelled_streams.insert(frame.stream_id);
     if (const auto observer = impl_->stream_cancellation_observers.find(frame.stream_id);
         observer != impl_->stream_cancellation_observers.end())
     {
@@ -4582,6 +4589,14 @@ auto quic_connection::async_cancel_stream(stream_id sid,
 void quic_connection::register_stream_cancellation(stream_id sid,
     cancel_token& token) noexcept
 {
+    if (impl_->remotely_cancelled_streams.contains(sid) ||
+        impl_->connection_state == connection_state::closing ||
+        impl_->connection_state == connection_state::draining ||
+        impl_->connection_state == connection_state::closed)
+    {
+        token.cancel();
+        return;
+    }
     impl_->stream_cancellation_observers.insert_or_assign(sid, std::addressof(token));
 }
 
@@ -4635,6 +4650,7 @@ auto quic_connection::retire_stream(stream_id sid)
     impl_->retired_streams.insert_or_assign(sid,
         quic_connection_impl::retired_stream_info{
             stream->second.value->bytes_received(), stream->second.value->bytes_sent()});
+    impl_->remotely_cancelled_streams.erase(sid);
     stream->second.readiness->close();
     impl_->streams.erase(stream);
     return {};
