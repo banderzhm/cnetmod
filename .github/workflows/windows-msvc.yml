@@ -107,6 +107,7 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed" `
             -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
             -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
             -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON `
@@ -141,6 +142,7 @@ jobs:
           cmake -B "${{ github.workspace }}/build-core-only" `
             -G "Visual Studio 18 2026" -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed" `
             -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF `
             -DCNETMOD_BUILD_TESTS=OFF -DCNETMOD_BUILD_EXAMPLES=OFF `
             -S "${{ github.workspace }}"
