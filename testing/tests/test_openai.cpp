@@ -6,6 +6,11 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.coro.circuit_breaker;
+import cnetmod.coro.spawn;
+import cnetmod.core.net_init;
+import cnetmod.core.socket;
+import cnetmod.core.address;
+import cnetmod.core.buffer;
 import cnetmod.io.io_context;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
@@ -2800,6 +2805,140 @@ TEST(openai_model_judge_uses_strict_schema_and_application_threshold)
     ASSERT_EQ(model.last_request.response_schema_name,
         std::string("evaluation_score"));
     ASSERT_TRUE(model.last_request.response_schema_strict);
+}
+
+TEST(openai_stream_finishes_without_done_or_connection_close)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    if (!listener || !endpoint)
+        return;
+
+    bool completed = false;
+    bool timed_out = false;
+    std::string streamed_content;
+    std::string finish_reason;
+    std::optional<openai::usage> token_usage;
+    std::size_t callbacks = 0;
+
+    auto write_chunk = [&](cnetmod::socket& peer, std::string_view payload)
+        -> cnetmod::task<bool>
+    {
+        const auto wire = std::format("{:x}\r\n{}\r\n", payload.size(), payload);
+        const auto written = co_await cnetmod::async_write_all(*io, peer,
+            cnetmod::const_buffer{wire.data(), wire.size()});
+        co_return written.has_value();
+    };
+
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto accepted = co_await cnetmod::async_accept(*io, *listener);
+        if (!accepted)
+            co_return;
+
+        std::array<std::byte, 8192> request{};
+        const auto received = co_await cnetmod::async_read(*io, *accepted,
+            cnetmod::mutable_buffer{request.data(), request.size()});
+        if (!received)
+            co_return;
+
+        constexpr std::string_view header =
+            "HTTP/1.1 200 OK\r\n" "Content-Type: text/event-stream\r\n" "Transfer-Encoding: chunked\r\n" "Connection: keep-alive\r\n\r\n";
+        if (!(co_await cnetmod::async_write_all(*io, *accepted,
+                cnetmod::const_buffer{header.data(), header.size()})))
+            co_return;
+
+        constexpr std::string_view first =
+            R"(data:{"id":"stream-1","model":"fixture","choices":[{"delta":{"content":"Hello"},"finish_reason":null}]}
+
+)";
+        if (!(co_await write_chunk(*accepted, first)))
+            co_return;
+
+        co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{5});
+        constexpr std::string_view final =
+            R"(data: {"id":"stream-1","model":"fixture","choices":[{"delta":{},"finish_reason":"content_filter"}],"usage":null}
+
+)";
+        if (!(co_await write_chunk(*accepted, final)))
+            co_return;
+
+        co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{5});
+        constexpr std::string_view usage =
+            R"(data: {"id":"stream-1","model":"fixture","choices":[],"usage":{"prompt_tokens":7,"completion_tokens":1,"total_tokens":8}}
+
+)";
+        if (!(co_await write_chunk(*accepted, usage)))
+            co_return;
+
+        // Deliberately omit both [DONE] and the terminating HTTP chunk while
+        // retaining the connection. Semantic completion must unblock first.
+        for (std::size_t elapsed = 0; elapsed < 500U && !completed; ++elapsed)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        if (!completed)
+        {
+            timed_out = true;
+            accepted->close();
+            while (!completed)
+                co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        }
+        io->stop();
+    };
+
+    auto consumer = [&]() -> cnetmod::task<void>
+    {
+        openai::client api{*io};
+        auto connected = co_await api.connect({.api_base = std::format("http://127.0.0.1:{}/v1", endpoint->port()),
+            .api_key = "fixture"});
+        ASSERT_TRUE(connected.has_value());
+        if (!connected)
+        {
+            io->stop();
+            co_return;
+        }
+
+        openai::chat_request request{
+            .model = "fixture",
+            .messages = {openai::message::user("hello")}};
+        request.extra_body["stream_options"]["include_usage"] = true;
+        auto result = co_await api.chat_stream_async(std::move(request),
+            [&](const openai::chat_chunk& chunk) -> cnetmod::task<bool>
+            {
+                ++callbacks;
+                streamed_content += chunk.delta_content;
+                if (!chunk.finish_reason.empty())
+                    finish_reason = chunk.finish_reason;
+                if (chunk.token_usage)
+                    token_usage = chunk.token_usage;
+                co_return true;
+            });
+        ASSERT_TRUE(result.has_value());
+        if (result)
+            ASSERT_EQ(*result, std::string("Hello"));
+        completed = true;
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, consumer());
+    io->run();
+
+    ASSERT_TRUE(completed);
+    ASSERT_FALSE(timed_out);
+    ASSERT_EQ(callbacks, std::size_t{3});
+    ASSERT_EQ(streamed_content, std::string("Hello"));
+    ASSERT_EQ(finish_reason, std::string("content_filter"));
+    ASSERT_TRUE(token_usage.has_value());
+    if (token_usage)
+        ASSERT_EQ(token_usage->total_tokens, 8);
 }
 
 RUN_TESTS()

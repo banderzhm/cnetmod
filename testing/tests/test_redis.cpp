@@ -16,6 +16,52 @@ import cnetmod.coro.timer;
 
 using namespace cnetmod::redis;
 
+TEST(redis_dynamic_request_rejects_empty_and_counts_commands)
+{
+    request batch;
+    const std::vector<std::string> empty;
+    ASSERT_FALSE(batch.push(empty));
+    ASSERT_TRUE(batch.empty());
+
+    const std::vector<std::string> command{"SET", "key", "value"};
+    ASSERT_TRUE(batch.push(command));
+    ASSERT_EQ(batch.size(), 1U);
+    ASSERT_TRUE(batch.payload().starts_with("*3\r\n$3\r\nSET\r\n"));
+}
+
+TEST(redis_cluster_rejects_nonzero_database_before_network_io)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cluster_client cluster{*io};
+    connect_options options;
+    options.db = 1;
+    cnetmod::cancel_token cancellation;
+    auto result = cnetmod::sync_wait(cluster.connect(options, cancellation));
+    ASSERT_FALSE(result.has_value());
+    if (!result)
+        ASSERT_EQ(result.error(),
+            std::make_error_code(std::errc::invalid_argument));
+}
+
+TEST(redis_cluster_hash_tags_support_safe_multi_key_commands)
+{
+    const auto first = make_cluster_key("sessions", "tenant-42", "primary");
+    const auto second = make_cluster_key("sessions", "tenant-42", "backup");
+    ASSERT_TRUE(first.has_value());
+    ASSERT_TRUE(second.has_value());
+    if (!first || !second)
+        return;
+    const std::array<std::string_view, 2> colocated{*first, *second};
+    ASSERT_TRUE(keys_share_slot(colocated));
+    ASSERT_EQ(client::key_slot(*first), client::key_slot(*second));
+
+    const std::array<std::string_view, 2> split{
+        "sessions:{tenant-1}:primary", "sessions:{tenant-2}:backup"};
+    ASSERT_FALSE(keys_share_slot(split));
+    ASSERT_FALSE(make_cluster_key("sessions", "bad{tag", "key").has_value());
+}
+
 TEST(redis_pool_stop_joins_a_stalled_authentication_task)
 {
     cnetmod::net_init network;

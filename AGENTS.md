@@ -1485,7 +1485,7 @@ SSL 上下文（RAII 封装 `SSL_CTX*`），不可拷贝，仅可移动。
 | `load_cert_file` | `auto load_cert_file(string_view path) -> expected<void, error_code>` | 加载 PEM 证书 |
 | `load_key_file` | `auto load_key_file(string_view path) -> expected<void, error_code>` | 加载 PEM 私钥 |
 | `load_ca_file` | `auto load_ca_file(string_view path) -> expected<void, error_code>` | 加载 CA 证书 |
-| `set_default_ca` | `auto set_default_ca() -> expected<void, error_code>` | 使用系统默认 CA |
+| `set_default_ca` | `auto set_default_ca() -> expected<void, error_code>` | 使用系统默认 CA；Windows 将 ROOT 证书存储导入 BoringSSL |
 
 **配置**:
 
@@ -1742,6 +1742,7 @@ if (stream.kernel_tls_active()) {
 |---------|---------|
 | 用 `#ifdef CNETMOD_HAS_SSL` 保护 SSL 代码 | 无条件使用 SSL API（编译可能失败） |
 | 客户端握手前调用 `set_hostname` | 握手后才设置 SNI |
+| 公网 TLS 客户端调用 `set_default_ca` 并保持 peer verification | 为绕过证书错误关闭 peer verification |
 | 先 `set_connect_state` / `set_accept_state` 再握手 | 跳过状态设置直接握手 |
 | 用 `async_shutdown` 优雅关闭 TLS | 直接 `close` socket 跳过 TLS close_notify |
 | 服务端用 `configure_alpn_server` 按优先级排列 | 客户端和服务端都用相同的 ALPN 调用 |
@@ -3235,6 +3236,41 @@ co_await db.update(a);
 co_await db.remove(a);
 co_await db.remove_by_id<Article>(orm::param_value::from_int(1));
 ```
+
+## 分库分表
+
+`shard_catalog` 把稳定的 `shard_key` 同时映射到具名数据库实例和经过校验的物理表。
+默认 `hash_shard_strategy` 使用确定性哈希，不依赖进程随机种子；也可实现
+`shard_strategy` 注入范围、目录或租户路由。目录在 `freeze()` 后只读，启动前拒绝空拓扑、
+重复实例和非法 SQL 标识符。
+
+```cpp
+auto catalog = std::make_shared<orm::shard_catalog>();
+catalog->add_database("orders-0");
+catalog->add_database("orders-1");
+catalog->freeze("orders", 64,
+    std::make_shared<orm::hash_shard_strategy>());
+
+auto gateway = application::make_mysql_sharded_session_gateway(
+    host.services(), catalog);
+
+auto result = co_await gateway->write<OrderId>(orm::shard_key{tenant_id},
+    [&](auto& session) -> task<std::expected<OrderId, std::string>> {
+        Order order{/* ... */};
+        auto inserted = co_await session.insert(order);
+        if (inserted.is_err())
+            co_return std::unexpected(inserted.error_msg);
+        co_return order.id;
+    });
+```
+
+物理表名形如 `orders_00`～`orders_63`，所有 CRUD 和 wrapper SQL 都使用路由结果，
+值仍由参数绑定传输。`write()` 只向回调暴露已经固定到一个库和一张表的 session，并在
+同一连接上开启、提交或回滚事务，因此不会静默产生跨分片事务。跨分片查询、全局排序、
+分页聚合和分布式事务必须由业务层显式实现；框架不会把它们伪装成单库事务。
+
+Application 中先配置多个具名 `mysql_service`。工厂创建 gateway 时验证 catalog 引用的
+每个实例均已注册；连接池的启动、健康恢复和逆序停机仍由 Application 管理。
 
 ## ORM JSON：纯 import、零实体样板
 
@@ -6106,6 +6142,8 @@ enum class redis_errc {
 class request {
     request() = default;
 
+    auto push(std::span<const std::string> arguments) -> bool;
+
     /// 追加命令（可变参数）
     template <class... Ts> void push(std::string_view cmd, Ts const&... args);
 
@@ -6335,14 +6373,53 @@ class cluster_slot_cache {
 class cluster_client {
     explicit cluster_client(io_context& ctx) noexcept;
     auto connect(connect_options seed) -> task<std::expected<void, std::string>>;
+    auto connect(connect_options seed, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
     auto refresh_slots() -> task<std::expected<void, std::string>>;
     auto cmd_for_key(std::vector<std::string> args, std::string_view key, std::size_t max_redirects = 3)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto cmd_for_keys(std::vector<std::string> args,
+        std::span<const std::string_view> keys, cancel_token& cancellation,
+        std::size_t max_redirects = 3)
+        -> task<std::expected<std::vector<resp3_node>, std::error_code>>;
     auto pipeline(std::span<const cluster_pipeline_item> items)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto pipeline_ordered(std::span<const cluster_pipeline_item> items,
+        cancel_token& cancellation)
+        -> task<std::expected<std::vector<std::vector<resp3_node>>, std::error_code>>;
+    void close() noexcept;
     auto slots() const noexcept -> const cluster_slot_cache&;
 };
 ```
+
+Cluster 只支持逻辑数据库 0，`connect_options::db != 0` 会在网络 I/O 前失败。客户端维护
+16384 槽缓存，处理 MOVED，并在 ASKING 成功后把原命令真正重发到迁移目标。跨节点
+pipeline 会先按节点批量发送，再按调用者原始顺序恢复每条完整 RESP 响应。
+
+多 key 命令必须同槽。使用 `make_cluster_key("session", tenant, key)` 生成
+`session:{tenant}:key`，并用 `keys_share_slot()` 在发送前验证。Redis Cluster 已经负责
+Redis 数据分片和故障转移，不要再使用 SELECT/多 DB 模拟分库；业务隔离使用 key
+namespace，原子多 key 操作用 hash tag。
+
+Application 自动装配使用 `type: redis` 和 `mode: cluster`：
+
+```json
+{
+  "type": "redis",
+  "instance": "sessions",
+  "enabled": true,
+  "mode": "cluster",
+  "database": 0,
+  "seeds": [
+    {"host": "redis-0.internal", "port": 6379},
+    {"host": "redis-1.internal", "port": 6379}
+  ],
+  "password": "${REDIS_PASSWORD}"
+}
+```
+
+`redis_cluster_service` 依次尝试 seed、缓存槽表、用 PING 与完整槽覆盖做健康判断，并在
+停止时关闭 seed 和节点连接。恢复预算与 required/optional 语义沿用统一生命周期。
 
 ## 场景 1：基本命令
 
@@ -9121,7 +9198,7 @@ auto& users = registry.require<user_repository>("primary");
 |---|---|---|
 | `http_client` | `http_client_service` | 带 W3C Trace Context 的出站 HTTP 客户端 |
 | `openai` | `openai_service` | OpenAI 客户端和 GenAI telemetry listener |
-| `redis` | `redis_service` | Redis 连接池 |
+| `redis` | `redis_service` / `redis_cluster_service` | `mode=standalone` 连接池；`mode=cluster` 槽路由、seed failover 与健康检查 |
 | `mysql` | `mysql_service` | MySQL 连接池 |
 | `postgresql` | `postgresql_service` | PostgreSQL 连接池 |
 | `mongodb` | `mongodb_service` | MongoDB 连接池与维护任务 |
@@ -14333,6 +14410,13 @@ auto full = co_await client.chat_stream_async(req,
         co_return true; // return false to abort
     });
 ```
+
+流式回调按完整 SSE event 实时触发，不等待整个 HTTP body。客户端兼容
+`data:` 与 `data: `，并以 `[DONE]`、任意非空 `finish_reason`、HTTP
+分帧结束或连接关闭作为完成边界。请求 `stream_options.include_usage` 时，
+客户端会在 `finish_reason` 后继续接收独立 usage 尾帧，并使用一秒有界等待
+兼容省略 usage 与 `[DONE]` 的网关。消费端返回 `false` 时立即关闭当前连接，
+避免未消费的增量污染下一次请求。
 
 ### 场景：Runnable 与结构化输出
 

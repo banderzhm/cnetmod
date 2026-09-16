@@ -736,6 +736,56 @@ void client::compact_buffer()
 cluster_client::cluster_client(io_context& context) noexcept
     : ctx_(context), seed_(context) {}
 
+namespace {
+    auto response_extent(const std::vector<resp3_node>& nodes,
+        std::size_t root) noexcept -> std::size_t
+    {
+        if (root >= nodes.size())
+            return 0;
+        std::size_t extent = 1;
+        if (!nodes[root].is_aggregate())
+            return extent;
+        const auto children = nodes[root].aggregate_size *
+            element_multiplicity(nodes[root].data_type);
+        auto child = root + 1;
+        for (std::size_t index = 0; index < children; ++index)
+        {
+            const auto child_extent = response_extent(nodes, child);
+            if (child_extent == 0)
+                return 0;
+            extent += child_extent;
+            child += child_extent;
+        }
+        return extent;
+    }
+
+    auto split_pipeline_responses(std::vector<resp3_node> nodes,
+        std::size_t expected)
+        -> std::expected<std::vector<std::vector<resp3_node>>, std::error_code>
+    {
+        std::vector<std::vector<resp3_node>> responses;
+        responses.reserve(expected);
+        std::size_t cursor = 0;
+        while (cursor < nodes.size())
+        {
+            const auto count = response_extent(nodes, cursor);
+            if (count == 0 || count > nodes.size() - cursor)
+                return std::unexpected(
+                    std::make_error_code(std::errc::protocol_error));
+            std::vector<resp3_node> response;
+            response.reserve(count);
+            for (std::size_t index = 0; index < count; ++index)
+                response.push_back(std::move(nodes[cursor + index]));
+            responses.push_back(std::move(response));
+            cursor += count;
+        }
+        if (responses.size() != expected)
+            return std::unexpected(
+                std::make_error_code(std::errc::protocol_error));
+        return responses;
+    }
+} // namespace
+
 auto cluster_client::connect(connect_options seed)
     -> task<std::expected<void, std::string>>
 {
@@ -744,6 +794,23 @@ auto cluster_client::connect(connect_options seed)
     if (!connected)
         co_return connected;
     co_return co_await refresh_slots();
+}
+
+auto cluster_client::connect(connect_options seed, cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (seed.db != 0U)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    close();
+    seed_options_ = std::move(seed);
+    auto connected = co_await seed_.connect(seed_options_, cancellation);
+    if (!connected)
+        co_return std::unexpected(connected.error());
+    auto refreshed = co_await refresh_slots(cancellation);
+    if (!refreshed)
+        close();
+    co_return refreshed;
 }
 
 auto cluster_client::refresh_slots() -> task<std::expected<void, std::string>>
@@ -758,96 +825,214 @@ auto cluster_client::refresh_slots() -> task<std::expected<void, std::string>>
     co_return std::expected<void, std::string>{};
 }
 
+auto cluster_client::refresh_slots(cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    request command;
+    command.push("CLUSTER", "SLOTS");
+    auto response = co_await seed_.exchange(command, cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    if (has_error(*response))
+        co_return std::unexpected(make_error_code(redis_errc::resp3_simple_error));
+    auto ranges = client::parse_cluster_slots(*response);
+    if (!ranges)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::protocol_error));
+    slot_cache_.update(*ranges);
+    co_return {};
+}
+
 auto cluster_client::cmd_for_key(std::vector<std::string> args,
     std::string_view key, std::size_t limit)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
+    cancel_token cancellation;
+    auto response = co_await cmd_for_key(
+        std::move(args), key, cancellation, limit);
+    if (!response)
+        co_return std::unexpected(response.error().message());
+    co_return std::move(*response);
+}
+
+auto cluster_client::cmd_for_keys(std::vector<std::string> args,
+    std::span<const std::string_view> keys, cancel_token& cancellation,
+    std::size_t max_redirects)
+    -> task<std::expected<std::vector<resp3_node>, std::error_code>>
+{
+    if (!keys_share_slot(keys))
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    co_return co_await cmd_for_key(std::move(args), keys.front(),
+        cancellation, max_redirects);
+}
+
+auto cluster_client::cmd_for_key(std::vector<std::string> args,
+    std::string_view key, cancel_token& cancellation, std::size_t limit)
+    -> task<std::expected<std::vector<resp3_node>, std::error_code>>
+{
+    co_await operation_mutex_.lock();
+    async_lock_guard operation_guard(operation_mutex_, std::adopt_lock);
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(std::make_error_code(
+            cancellation.reason() == cancellation_reason::deadline_exceeded
+                ? std::errc::timed_out
+                : std::errc::operation_canceled));
     if (args.empty())
-        co_return std::unexpected(std::string("empty command"));
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+
+    request command;
+    if (!command.push(args))
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    auto endpoint = slot_cache_.endpoint_for_slot(client::key_slot(key));
     for (std::size_t attempt = 0; attempt <= limit; ++attempt)
     {
-        auto endpoint = slot_cache_.endpoint_for_slot(client::key_slot(key));
         if (!endpoint)
         {
-            auto refreshed = co_await refresh_slots();
+            auto refreshed = co_await refresh_slots(cancellation);
             if (!refreshed)
                 co_return std::unexpected(refreshed.error());
             endpoint = slot_cache_.endpoint_for_slot(client::key_slot(key));
         }
         if (!endpoint)
-            co_return std::unexpected(std::string("redis cluster slot not covered"));
-        auto* connection = co_await connection_for(*endpoint);
-        if (!connection)
             co_return std::unexpected(
-                std::string("redis cluster node connect failed"));
-        auto response = co_await connection->cmd(
-            std::span<const std::string>{args.data(), args.size()});
+                std::make_error_code(std::errc::host_unreachable));
+
+        auto connection = co_await connection_for(*endpoint, cancellation);
+        if (!connection)
+            co_return std::unexpected(connection.error());
+        auto response = co_await (*connection)->exchange(command, cancellation);
         if (!response)
-            co_return response;
+            co_return std::unexpected(response.error());
         auto redirect = client::parse_redirect(*response);
         if (!redirect)
             co_return response;
         if (attempt == limit)
             co_return std::unexpected(
-                std::string("redis cluster redirect limit exceeded"));
+                std::make_error_code(std::errc::too_many_symbolic_link_levels));
+
         if (redirect->kind == redirect_kind::moved)
-            slot_cache_.update_slot(redirect->slot, redirect->endpoint);
-        auto* next = co_await connection_for(redirect->endpoint);
-        if (!next)
-            co_return std::unexpected(
-                std::string("redis cluster redirect connect failed"));
-        if (redirect->kind == redirect_kind::ask)
         {
-            auto asking = co_await next->cmd({"ASKING"});
-            if (!asking)
-                co_return asking;
-            if (has_error(*asking))
-                co_return std::unexpected(std::string(error_message(*asking)));
+            slot_cache_.update_slot(redirect->slot, redirect->endpoint);
+            endpoint = redirect->endpoint;
+            continue;
         }
+
+        auto asking_connection = co_await connection_for(
+            redirect->endpoint, cancellation);
+        if (!asking_connection)
+            co_return std::unexpected(asking_connection.error());
+        request asking;
+        asking.push("ASKING");
+        auto acknowledged = co_await (*asking_connection)->exchange(asking, cancellation);
+        if (!acknowledged)
+            co_return std::unexpected(acknowledged.error());
+        if (has_error(*acknowledged) || !is_ok(*acknowledged))
+            co_return std::unexpected(
+                std::make_error_code(std::errc::protocol_error));
+        auto response_after_asking = co_await (*asking_connection)->exchange(command, cancellation);
+        if (!response_after_asking)
+            co_return std::unexpected(response_after_asking.error());
+        if (!client::parse_redirect(*response_after_asking))
+            co_return response_after_asking;
+        endpoint = redirect->endpoint;
     }
-    co_return std::unexpected(std::string("redis cluster command failed"));
+    co_return std::unexpected(std::make_error_code(std::errc::io_error));
 }
 
 auto cluster_client::pipeline(std::span<const cluster_pipeline_item> items)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
-    std::map<std::string, std::vector<std::vector<std::string>>> grouped;
-    std::map<std::string, endpoint_info> endpoints;
-    for (auto const& item : items)
+    cancel_token cancellation;
+    auto ordered = co_await pipeline_ordered(items, cancellation);
+    if (!ordered)
+        co_return std::unexpected(ordered.error().message());
+    std::vector<resp3_node> result;
+    for (auto& response : *ordered)
+        for (auto& node : response)
+            result.push_back(std::move(node));
+    co_return result;
+}
+
+auto cluster_client::pipeline_ordered(
+    std::span<const cluster_pipeline_item> items,
+    cancel_token& cancellation)
+    -> task<std::expected<std::vector<std::vector<resp3_node>>,
+        std::error_code>>
+{
+    co_await operation_mutex_.lock();
+    async_lock_guard operation_guard(operation_mutex_, std::adopt_lock);
+    if (cancellation.is_cancelled())
+        co_return std::unexpected(std::make_error_code(
+            cancellation.reason() == cancellation_reason::deadline_exceeded
+                ? std::errc::timed_out
+                : std::errc::operation_canceled));
+
+    struct indexed_command
     {
+        std::size_t index{};
+        std::vector<std::string> args;
+    };
+
+    std::map<std::string, std::vector<indexed_command>> grouped;
+    std::map<std::string, endpoint_info> endpoints;
+    for (std::size_t index = 0; index < items.size(); ++index)
+    {
+        const auto& item = items[index];
         if (item.args.empty())
             co_return std::unexpected(
-                std::string("empty command in cluster pipeline"));
+                std::make_error_code(std::errc::invalid_argument));
         auto endpoint = slot_cache_.endpoint_for_slot(client::key_slot(item.key));
         if (!endpoint)
         {
-            auto refreshed = co_await refresh_slots();
+            auto refreshed = co_await refresh_slots(cancellation);
             if (!refreshed)
                 co_return std::unexpected(refreshed.error());
             endpoint = slot_cache_.endpoint_for_slot(client::key_slot(item.key));
         }
         if (!endpoint)
-            co_return std::unexpected(std::string("redis cluster slot not covered"));
-        auto key = endpoint_key(*endpoint);
-        endpoints[key] = *endpoint;
-        grouped[key].push_back(item.args);
-    }
-    std::vector<resp3_node> result;
-    for (auto& [key, commands] : grouped)
-    {
-        auto* connection = co_await connection_for(endpoints[key]);
-        if (!connection)
             co_return std::unexpected(
-                std::string("redis cluster node connect failed"));
-        auto response =
-            co_await connection->pipe(std::span<const std::vector<std::string>>{
-                commands.data(), commands.size()});
+                std::make_error_code(std::errc::host_unreachable));
+        auto endpoint_name = endpoint_key(*endpoint);
+        endpoints[endpoint_name] = *endpoint;
+        grouped[endpoint_name].push_back(indexed_command{index, item.args});
+    }
+
+    std::vector<std::vector<resp3_node>> result(items.size());
+    for (auto& [endpoint_name, commands] : grouped)
+    {
+        auto connection = co_await connection_for(
+            endpoints[endpoint_name], cancellation);
+        if (!connection)
+            co_return std::unexpected(connection.error());
+
+        request batch;
+        for (const auto& command : commands)
+            if (!batch.push(command.args))
+                co_return std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+        auto response = co_await (*connection)->exchange(batch, cancellation);
         if (!response)
             co_return std::unexpected(response.error());
-        for (auto& node : *response)
-            result.push_back(std::move(node));
+        auto split = split_pipeline_responses(
+            std::move(*response), commands.size());
+        if (!split)
+            co_return std::unexpected(split.error());
+        for (std::size_t index = 0; index < commands.size(); ++index)
+            result[commands[index].index] = std::move((*split)[index]);
     }
     co_return result;
+}
+
+void cluster_client::close() noexcept
+{
+    for (auto& [_, connection] : nodes_)
+        connection->close();
+    nodes_.clear();
+    seed_.close();
+    slot_cache_.clear();
 }
 
 auto cluster_client::slots() const noexcept -> const cluster_slot_cache&
@@ -878,6 +1063,27 @@ auto cluster_client::connection_for(const endpoint_info& endpoint)
     auto connected = co_await connection->connect(options);
     if (!connected)
         co_return nullptr;
+    auto* result = connection.get();
+    nodes_[key] = std::move(connection);
+    co_return result;
+}
+
+auto cluster_client::connection_for(const endpoint_info& endpoint,
+    cancel_token& cancellation)
+    -> task<std::expected<client*, std::error_code>>
+{
+    auto key = endpoint_key(endpoint);
+    auto existing = nodes_.find(key);
+    if (existing != nodes_.end() && existing->second->is_open())
+        co_return existing->second.get();
+    auto options = seed_options_;
+    options.host = endpoint.host;
+    options.port = endpoint.port;
+    options.db = 0;
+    auto connection = std::make_unique<client>(ctx_);
+    auto connected = co_await connection->connect(options, cancellation);
+    if (!connected)
+        co_return std::unexpected(connected.error());
     auto* result = connection.get();
     nodes_[key] = std::move(connection);
     co_return result;

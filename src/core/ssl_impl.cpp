@@ -8,6 +8,13 @@ module;
     #include <openssl/ssl.h>
     #include <openssl/x509.h>
 #endif
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_PLATFORM_WINDOWS)
+    #include <windows.h>
+#endif
+
+#if defined(CNETMOD_HAS_SSL) && defined(CNETMOD_PLATFORM_WINDOWS)
+    #include <wincrypt.h>
+#endif
 
 module cnetmod.core.ssl;
 
@@ -65,6 +72,47 @@ namespace detail {
 } // namespace detail
 
 namespace {
+
+    #if defined(CNETMOD_PLATFORM_WINDOWS)
+    auto load_windows_root_certificates(SSL_CTX* context)
+        -> std::expected<void, std::error_code>
+    {
+        auto* certificate_store = ::CertOpenSystemStoreW(0, L"ROOT");
+        if (certificate_store == nullptr)
+        {
+            return std::unexpected(std::error_code{
+                static_cast<int>(::GetLastError()), std::system_category()});
+        }
+
+        auto* target_store = SSL_CTX_get_cert_store(context);
+        PCCERT_CONTEXT certificate = nullptr;
+        std::size_t imported = 0;
+        while ((certificate = ::CertEnumCertificatesInStore(
+                    certificate_store, certificate)) != nullptr)
+        {
+            const auto* encoded = certificate->pbCertEncoded;
+            auto* parsed = d2i_X509(
+                nullptr, &encoded, certificate->cbCertEncoded);
+            if (parsed == nullptr)
+            {
+                ERR_clear_error();
+                continue;
+            }
+
+            if (X509_STORE_add_cert(target_store, parsed) == 1)
+                ++imported;
+            else
+                ERR_clear_error();
+            X509_free(parsed);
+        }
+        ::CertCloseStore(certificate_store, 0);
+
+        if (imported == 0)
+            return std::unexpected(
+                std::make_error_code(std::errc::no_such_file_or_directory));
+        return {};
+    }
+    #endif
 
     #if defined(CNETMOD_PLATFORM_LINUX)
     auto wait_for_ssl_socket(io_context& context, socket& socket, bool writable)
@@ -402,11 +450,15 @@ auto ssl_context::load_ca_file(std::string_view path)
 
 auto ssl_context::set_default_ca() -> std::expected<void, std::error_code>
 {
+    #if defined(CNETMOD_PLATFORM_WINDOWS)
+    return load_windows_root_certificates(ctx_);
+    #else
     if (SSL_CTX_set_default_verify_paths(ctx_) != 1)
     {
         return std::unexpected(make_ssl_error());
     }
     return {};
+    #endif
 }
 
 void ssl_context::set_verify_peer(bool verify) noexcept

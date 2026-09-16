@@ -84,6 +84,8 @@ enum class redis_errc {
 class request {
     request() = default;
 
+    auto push(std::span<const std::string> arguments) -> bool;
+
     /// 追加命令（可变参数）
     template <class... Ts> void push(std::string_view cmd, Ts const&... args);
 
@@ -313,14 +315,53 @@ class cluster_slot_cache {
 class cluster_client {
     explicit cluster_client(io_context& ctx) noexcept;
     auto connect(connect_options seed) -> task<std::expected<void, std::string>>;
+    auto connect(connect_options seed, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
     auto refresh_slots() -> task<std::expected<void, std::string>>;
     auto cmd_for_key(std::vector<std::string> args, std::string_view key, std::size_t max_redirects = 3)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto cmd_for_keys(std::vector<std::string> args,
+        std::span<const std::string_view> keys, cancel_token& cancellation,
+        std::size_t max_redirects = 3)
+        -> task<std::expected<std::vector<resp3_node>, std::error_code>>;
     auto pipeline(std::span<const cluster_pipeline_item> items)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    auto pipeline_ordered(std::span<const cluster_pipeline_item> items,
+        cancel_token& cancellation)
+        -> task<std::expected<std::vector<std::vector<resp3_node>>, std::error_code>>;
+    void close() noexcept;
     auto slots() const noexcept -> const cluster_slot_cache&;
 };
 ```
+
+Cluster 只支持逻辑数据库 0，`connect_options::db != 0` 会在网络 I/O 前失败。客户端维护
+16384 槽缓存，处理 MOVED，并在 ASKING 成功后把原命令真正重发到迁移目标。跨节点
+pipeline 会先按节点批量发送，再按调用者原始顺序恢复每条完整 RESP 响应。
+
+多 key 命令必须同槽。使用 `make_cluster_key("session", tenant, key)` 生成
+`session:{tenant}:key`，并用 `keys_share_slot()` 在发送前验证。Redis Cluster 已经负责
+Redis 数据分片和故障转移，不要再使用 SELECT/多 DB 模拟分库；业务隔离使用 key
+namespace，原子多 key 操作用 hash tag。
+
+Application 自动装配使用 `type: redis` 和 `mode: cluster`：
+
+```json
+{
+  "type": "redis",
+  "instance": "sessions",
+  "enabled": true,
+  "mode": "cluster",
+  "database": 0,
+  "seeds": [
+    {"host": "redis-0.internal", "port": 6379},
+    {"host": "redis-1.internal", "port": 6379}
+  ],
+  "password": "${REDIS_PASSWORD}"
+}
+```
+
+`redis_cluster_service` 依次尝试 seed、缓存槽表、用 PING 与完整槽覆盖做健康判断，并在
+停止时关闭 seed 和节点连接。恢复预算与 required/optional 语义沿用统一生命周期。
 
 ## 场景 1：基本命令
 

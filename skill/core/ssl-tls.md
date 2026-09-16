@@ -37,7 +37,7 @@ SSL 上下文（RAII 封装 `SSL_CTX*`），不可拷贝，仅可移动。
 | `load_cert_file` | `auto load_cert_file(string_view path) -> expected<void, error_code>` | 加载 PEM 证书 |
 | `load_key_file` | `auto load_key_file(string_view path) -> expected<void, error_code>` | 加载 PEM 私钥 |
 | `load_ca_file` | `auto load_ca_file(string_view path) -> expected<void, error_code>` | 加载 CA 证书 |
-| `set_default_ca` | `auto set_default_ca() -> expected<void, error_code>` | 使用系统默认 CA |
+| `set_default_ca` | `auto set_default_ca() -> expected<void, error_code>` | 使用系统默认 CA；Windows 将 ROOT 证书存储导入 BoringSSL |
 
 **配置**:
 
@@ -294,6 +294,7 @@ if (stream.kernel_tls_active()) {
 |---------|---------|
 | 用 `#ifdef CNETMOD_HAS_SSL` 保护 SSL 代码 | 无条件使用 SSL API（编译可能失败） |
 | 客户端握手前调用 `set_hostname` | 握手后才设置 SNI |
+| 公网 TLS 客户端调用 `set_default_ca` 并保持 peer verification | 为绕过证书错误关闭 peer verification |
 | 先 `set_connect_state` / `set_accept_state` 再握手 | 跳过状态设置直接握手 |
 | 用 `async_shutdown` 优雅关闭 TLS | 直接 `close` socket 跳过 TLS close_notify |
 | 服务端用 `configure_alpn_server` 按优先级排列 | 客户端和服务端都用相同的 ALPN 调用 |

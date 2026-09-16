@@ -9,6 +9,39 @@ import cnetmod.executor.async_op;
 
 namespace cnetmod::application {
 
+    #ifdef CNETMOD_HAS_ORM
+auto make_mysql_sharded_session_gateway(service_registry& services,
+    std::shared_ptr<const orm::shard_catalog> catalog)
+    -> std::expected<mysql_sharded_session_gateway, std::error_code>
+{
+    if (!catalog || !catalog->frozen())
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    for (const auto& instance : catalog->instances())
+        if (!services.find<mysql_service>(instance))
+            return std::unexpected(
+                std::make_error_code(std::errc::no_such_file_or_directory));
+
+    return mysql_sharded_session_gateway{
+        std::move(catalog), orm::sql_dialect::mysql,
+        [&services](std::string_view instance)
+            -> task<std::expected<mysql::pooled_connection, std::string>>
+        {
+            auto* service = services.find<mysql_service>(instance);
+            if (!service)
+                co_return std::unexpected("mysql shard is not registered");
+            auto connection = co_await service->pool().async_get_connection();
+            if (!connection)
+                co_return std::unexpected(connection.error().message());
+            co_return std::move(*connection);
+        },
+        [](mysql::pooled_connection& connection) -> mysql::client&
+        {
+            return connection.get();
+        }};
+}
+    #endif
+
 namespace {
 
     auto ping_connection(mysql::client& connection, cancel_token& cancellation)

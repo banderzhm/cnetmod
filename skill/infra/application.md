@@ -230,7 +230,7 @@ auto& users = registry.require<user_repository>("primary");
 |---|---|---|
 | `http_client` | `http_client_service` | 带 W3C Trace Context 的出站 HTTP 客户端 |
 | `openai` | `openai_service` | OpenAI 客户端和 GenAI telemetry listener |
-| `redis` | `redis_service` | Redis 连接池 |
+| `redis` | `redis_service` / `redis_cluster_service` | `mode=standalone` 连接池；`mode=cluster` 槽路由、seed failover 与健康检查 |
 | `mysql` | `mysql_service` | MySQL 连接池 |
 | `postgresql` | `postgresql_service` | PostgreSQL 连接池 |
 | `mongodb` | `mongodb_service` | MongoDB 连接池与维护任务 |

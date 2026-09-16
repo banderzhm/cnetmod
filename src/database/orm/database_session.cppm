@@ -103,6 +103,17 @@ public:
         sql_dialect dialect = sql_dialect::mysql) noexcept
         : client_(&client), dialect_(dialect), dialect_config_(get_dialect_config(dialect)) {}
 
+    /**
+     * @brief Creates a session pinned to one routed physical table.
+     *
+     * Model metadata remains unchanged. Every typed CRUD statement generated
+     * by this session uses the supplied physical table, while raw SQL methods
+     * keep their original behavior.
+     */
+    database_session(Client& client, std::string physical_table,
+        sql_dialect dialect = sql_dialect::mysql)
+        : client_(&client), dialect_(dialect), dialect_config_(get_dialect_config(dialect)), physical_table_(std::move(physical_table)) {}
+
     [[nodiscard]] auto underlying() noexcept -> Client&
     {
         return *client_;
@@ -205,7 +216,7 @@ public:
             co_return failure<T>("model has no insertable fields");
 
         std::string sql = "INSERT INTO ";
-        sql += quote_identifier(meta.table_name, dialect_config_);
+        sql += quote_identifier(table_name<T>(), dialect_config_);
         sql += " (";
         std::vector<param_value> parameters;
         parameters.reserve(fields.size());
@@ -254,7 +265,7 @@ public:
             co_return failure<T>("model has no updatable fields");
 
         std::string sql = "UPDATE ";
-        sql += quote_identifier(meta.table_name, dialect_config_);
+        sql += quote_identifier(table_name<T>(), dialect_config_);
         sql += " SET ";
         std::vector<param_value> parameters;
         parameters.reserve(fields.size() + 1);
@@ -312,7 +323,7 @@ public:
 
     template <Model T> auto find(const query_wrapper<T>& query) -> task<model_result<T>>
     {
-        auto [sql, parameters] = query.build_select_sql(dialect_);
+        auto [sql, parameters] = query.build_select_sql(table_name<T>(), dialect_config_);
         co_return map<T>(co_await execute_bound(std::move(sql), std::move(parameters)));
     }
 
@@ -320,7 +331,7 @@ public:
     auto count(const query_wrapper<T>& query)
         -> task<std::expected<std::size_t, std::string>>
     {
-        auto [sql, parameters] = query.build_count_sql(dialect_);
+        auto [sql, parameters] = query.build_count_sql(table_name<T>(), dialect_config_);
         auto result = co_await execute_bound(std::move(sql), std::move(parameters));
         if (result.is_err())
             co_return std::unexpected(std::move(result.error_msg));
@@ -337,7 +348,7 @@ public:
 
     template <Model T> auto remove(const query_wrapper<T>& query) -> task<model_result<T>>
     {
-        auto [sql, parameters] = query.build_delete_sql(dialect_);
+        auto [sql, parameters] = query.build_delete_sql(table_name<T>(), dialect_config_);
         if (dialect_config_.supports_returning)
             sql += " RETURNING *";
         co_return map<T>(co_await execute_bound(std::move(sql), std::move(parameters)));
@@ -345,7 +356,7 @@ public:
 
     template <Model T> auto update(const update_wrapper<T>& update) -> task<model_result<T>>
     {
-        auto [sql, parameters] = update.build_sql(dialect_);
+        auto [sql, parameters] = update.build_sql(table_name<T>(), dialect_config_);
         if (dialect_config_.supports_returning)
             sql += " RETURNING *";
         co_return map<T>(co_await execute_bound(std::move(sql), std::move(parameters)));
@@ -515,6 +526,14 @@ public:
     }
 
 private:
+    template <Model T>
+    [[nodiscard]] auto table_name() const noexcept -> std::string_view
+    {
+        if (!physical_table_.empty())
+            return physical_table_;
+        return model_traits<T>::meta().table_name;
+    }
+
     /**
      * @brief Owns observation inputs without starting an unexecuted operation.
      */
@@ -806,6 +825,7 @@ private:
     Client* client_;
     sql_dialect dialect_;
     dialect_config dialect_config_;
+    std::string physical_table_;
 };
 
 } // namespace cnetmod::orm

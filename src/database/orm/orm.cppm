@@ -25,3 +25,8 @@ export import cnetmod.orm.automatic_field_fill;
 export import cnetmod.orm.result_map;
 export import cnetmod.orm.query_cache;
 export import cnetmod.orm.query_performance_monitor;
+export import cnetmod.orm.sharding.error;
+export import cnetmod.orm.sharding.shard_key;
+export import cnetmod.orm.sharding.shard_strategy;
+export import cnetmod.orm.sharding.shard_catalog;
+export import cnetmod.orm.sharding.session_gateway;

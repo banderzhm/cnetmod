@@ -362,6 +362,13 @@ auto full = co_await client.chat_stream_async(req,
     });
 ```
 
+流式回调按完整 SSE event 实时触发，不等待整个 HTTP body。客户端兼容
+`data:` 与 `data: `，并以 `[DONE]`、任意非空 `finish_reason`、HTTP
+分帧结束或连接关闭作为完成边界。请求 `stream_options.include_usage` 时，
+客户端会在 `finish_reason` 后继续接收独立 usage 尾帧，并使用一秒有界等待
+兼容省略 usage 与 `[DONE]` 的网关。消费端返回 `false` 时立即关闭当前连接，
+避免未消费的增量污染下一次请求。
+
 ### 场景：Runnable 与结构化输出
 
 ```cpp

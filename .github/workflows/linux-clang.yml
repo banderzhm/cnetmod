@@ -167,7 +167,7 @@ jobs:
         python testing/run_required_ctest.py \
           --test-dir "${{ github.workspace }}/build" \
           --output-on-failure --timeout 180 \
-          -E '^(test_application_mysql_live|test_application_redis_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_postgresql_production_example_e2e|python_mongodb_production_example_e2e)$'
+          -E '^(test_application_mysql_live|test_application_mysql_sharding_live|test_application_redis_live|test_application_redis_cluster_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_postgresql_production_example_e2e|python_mongodb_production_example_e2e)$'
 
     - name: Verify protocol-free module graph
       if: matrix.build_type == 'Release'
@@ -245,6 +245,15 @@ jobs:
         python testing/database/check_mysql_live_configuration.py "${{ github.workspace }}/build/testing/tests/test_application_mysql_live"
         ctest --test-dir "${{ github.workspace }}/build" --output-on-failure --no-tests=error --timeout 30 -R '^test_application_mysql_live$'
 
+    - name: Run real MySQL sharding lifecycle
+      if: matrix.build_type == 'Release'
+      env:
+        CNETMOD_MYSQL_ROOT_PASSWORD: disposable-root-password
+      run: |
+        cmake --build "${{ github.workspace }}/build" --target test_application_mysql_sharding_live --parallel 2
+        bash testing/database/run_mysql_sharding_ci.sh \
+          "${{ github.workspace }}/build/testing/tests/test_application_mysql_sharding_live"
+
     - name: Run isolated Redis application lifecycle
       env:
         CNETMOD_REDIS_INTEGRATION: '1'
@@ -277,6 +286,13 @@ jobs:
         cmake --build "${{ github.workspace }}/build" --target test_application_redis_live --parallel 2
         # Invoke the executable directly: an unexpected skip (77) fails this gate.
         timeout 30 "${{ github.workspace }}/build/testing/tests/test_application_redis_live"
+
+    - name: Run isolated Redis Cluster lifecycle
+      if: matrix.build_type == 'Release'
+      run: |
+        cmake --build "${{ github.workspace }}/build" --target test_application_redis_cluster_live --parallel 2
+        bash testing/redis/run_cluster_ci.sh \
+          "${{ github.workspace }}/build/testing/tests/test_application_redis_cluster_live"
 
     - name: Run real PostgreSQL and MongoDB interoperability
       if: matrix.build_type == 'Release'

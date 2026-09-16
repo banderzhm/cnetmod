@@ -56,6 +56,7 @@ set(TEST_SOURCES
     test_redis.cpp
     test_mongodb_wire.cpp
     test_orm_json_result_map.cpp
+    test_orm_sharding.cpp
 
     # QUIC/HTTP3 tests
     test_quic_varint.cpp
@@ -121,6 +122,9 @@ endif()
 if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_HTTP)
     list(APPEND TEST_SOURCES test_application_mysql_live.cpp)
 endif()
+if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
+    list(APPEND TEST_SOURCES test_application_mysql_sharding_live.cpp)
+endif()
 if(CNETMOD_ENABLE_MYSQL)
     list(APPEND TEST_SOURCES test_mysql_pool.cpp)
 endif()
@@ -129,7 +133,8 @@ if(NOT CNETMOD_ENABLE_ORM OR NOT CNETMOD_ENABLE_MYSQL)
 endif()
 
 if(CNETMOD_ENABLE_REDIS AND CNETMOD_ENABLE_HTTP)
-    list(APPEND TEST_SOURCES test_application_redis.cpp test_application_redis_live.cpp)
+    list(APPEND TEST_SOURCES test_application_redis.cpp test_application_redis_live.cpp
+        test_application_redis_cluster_live.cpp)
 endif()
 
 if(CNETMOD_HAS_SSL)
@@ -179,6 +184,11 @@ if(TARGET test_application_redis_live)
         TIMEOUT 30 SKIP_RETURN_CODE 77 LABELS "integration;redis")
 endif()
 
+if(TARGET test_application_redis_cluster_live)
+    set_tests_properties(test_application_redis_cluster_live PROPERTIES
+        TIMEOUT 45 SKIP_RETURN_CODE 77 LABELS "integration;redis;cluster")
+endif()
+
 if(TARGET test_mongodb_wire)
     set_tests_properties(test_mongodb_wire PROPERTIES TIMEOUT 5)
 endif()
@@ -194,6 +204,10 @@ if(TARGET test_application_mysql_live)
     endif()
     set_tests_properties(test_application_mysql_live PROPERTIES
         TIMEOUT 30 SKIP_RETURN_CODE 77 LABELS "integration;mysql")
+endif()
+if(TARGET test_application_mysql_sharding_live)
+    set_tests_properties(test_application_mysql_sharding_live PROPERTIES
+        TIMEOUT 45 SKIP_RETURN_CODE 77 LABELS "integration;mysql;sharding")
 endif()
 
 if(TARGET test_otlp_exporter AND CNETMOD_ENABLE_ORM)

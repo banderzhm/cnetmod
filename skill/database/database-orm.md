@@ -138,6 +138,41 @@ co_await db.remove(a);
 co_await db.remove_by_id<Article>(orm::param_value::from_int(1));
 ```
 
+## 分库分表
+
+`shard_catalog` 把稳定的 `shard_key` 同时映射到具名数据库实例和经过校验的物理表。
+默认 `hash_shard_strategy` 使用确定性哈希，不依赖进程随机种子；也可实现
+`shard_strategy` 注入范围、目录或租户路由。目录在 `freeze()` 后只读，启动前拒绝空拓扑、
+重复实例和非法 SQL 标识符。
+
+```cpp
+auto catalog = std::make_shared<orm::shard_catalog>();
+catalog->add_database("orders-0");
+catalog->add_database("orders-1");
+catalog->freeze("orders", 64,
+    std::make_shared<orm::hash_shard_strategy>());
+
+auto gateway = application::make_mysql_sharded_session_gateway(
+    host.services(), catalog);
+
+auto result = co_await gateway->write<OrderId>(orm::shard_key{tenant_id},
+    [&](auto& session) -> task<std::expected<OrderId, std::string>> {
+        Order order{/* ... */};
+        auto inserted = co_await session.insert(order);
+        if (inserted.is_err())
+            co_return std::unexpected(inserted.error_msg);
+        co_return order.id;
+    });
+```
+
+物理表名形如 `orders_00`～`orders_63`，所有 CRUD 和 wrapper SQL 都使用路由结果，
+值仍由参数绑定传输。`write()` 只向回调暴露已经固定到一个库和一张表的 session，并在
+同一连接上开启、提交或回滚事务，因此不会静默产生跨分片事务。跨分片查询、全局排序、
+分页聚合和分布式事务必须由业务层显式实现；框架不会把它们伪装成单库事务。
+
+Application 中先配置多个具名 `mysql_service`。工厂创建 gateway 时验证 catalog 引用的
+每个实例均已注册；连接池的启动、健康恢复和逆序停机仍由 Application 管理。
+
 ## ORM JSON：纯 import、零实体样板
 
 `CNETMOD_MODEL` 的字段元数据可直接用于 JSON，不需要 `#include <nlohmann/json.hpp>`，也不需要

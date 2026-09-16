@@ -478,6 +478,15 @@ public:
     /// @brief Build SELECT SQL with explicit dialect config
     auto build_select_sql(const dialect_config& cfg) const -> std::pair<std::string, std::vector<param_value>>;
 
+    /**
+     * @brief Builds SELECT SQL for a routed physical table.
+     *
+     * The caller owns table routing. The identifier is always quoted by the
+     * selected dialect and values remain bound parameters.
+     */
+    auto build_select_sql(std::string_view physical_table, const dialect_config& cfg) const
+        -> std::pair<std::string, std::vector<param_value>>;
+
     /// @brief Build COUNT SQL with default (MySQL) dialect
     auto build_count_sql() const -> std::pair<std::string, std::vector<param_value>>;
 
@@ -486,6 +495,10 @@ public:
 
     /// @brief Build COUNT SQL with explicit dialect config
     auto build_count_sql(const dialect_config& cfg) const -> std::pair<std::string, std::vector<param_value>>;
+
+    /** @brief Builds COUNT SQL for a routed physical table. */
+    auto build_count_sql(std::string_view physical_table, const dialect_config& cfg) const
+        -> std::pair<std::string, std::vector<param_value>>;
 
     /// @brief Build DELETE SQL with default (MySQL) dialect
     auto build_delete_sql() const -> std::pair<std::string, std::vector<param_value>>;
@@ -496,6 +509,10 @@ public:
     /// @brief Build DELETE SQL with explicit dialect config
     auto build_delete_sql(const dialect_config& cfg) const -> std::pair<std::string, std::vector<param_value>>;
 
+    /** @brief Builds DELETE SQL for a routed physical table. */
+    auto build_delete_sql(std::string_view physical_table, const dialect_config& cfg) const
+        -> std::pair<std::string, std::vector<param_value>>;
+
     /// @brief Build UPDATE SQL from entity with default (MySQL) dialect
     auto build_update_sql(const T& entity) const -> std::pair<std::string, std::vector<param_value>>;
 
@@ -504,6 +521,11 @@ public:
 
     /// @brief Build UPDATE SQL from entity with explicit dialect config
     auto build_update_sql(const T& entity, const dialect_config& cfg) const -> std::pair<std::string, std::vector<param_value>>;
+
+    /** @brief Builds entity UPDATE SQL for a routed physical table. */
+    auto build_update_sql(const T& entity, std::string_view physical_table,
+        const dialect_config& cfg) const
+        -> std::pair<std::string, std::vector<param_value>>;
 
     // =========================================================================
     // Accessors
@@ -987,6 +1009,10 @@ public:
 
     /// @brief Build UPDATE SQL with explicit dialect config
     auto build_sql(const dialect_config& cfg) const -> std::pair<std::string, std::vector<param_value>>;
+
+    /** @brief Builds UPDATE SQL for a routed physical table. */
+    auto build_sql(std::string_view physical_table, const dialect_config& cfg) const
+        -> std::pair<std::string, std::vector<param_value>>;
 
 private:
     std::vector<std::pair<std::string, param_value>> set_fields_;

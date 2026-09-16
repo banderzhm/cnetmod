@@ -90,6 +90,14 @@ export class request
 public:
     request() = default;
 
+    /**
+     * @brief Appends one dynamically assembled command.
+     *
+     * The first element is the command name. Empty input is rejected so the
+     * encoded batch and command count cannot diverge.
+     */
+    [[nodiscard]] auto push(std::span<const std::string> arguments) -> bool;
+
     /// Append a command (variadic)
     template <class... Ts> void push(std::string_view cmd, Ts const&... args)
     {

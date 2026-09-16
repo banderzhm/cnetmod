@@ -11,9 +11,14 @@ import cnetmod.application.auto_configuration;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
 import cnetmod.application.recovery_policy;
+import cnetmod.application.service_registry;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.protocol.mysql;
+    #ifdef CNETMOD_HAS_ORM
+import cnetmod.orm.sharding.shard_catalog;
+import cnetmod.orm.sharding.session_gateway;
+    #endif
 
 namespace cnetmod::application {
 
@@ -48,6 +53,24 @@ export [[nodiscard]] auto auto_configure_mysql(
     const configured_service& configuration,
     auto_configuration_context& context)
     -> std::expected<void, std::error_code>;
+
+    #ifdef CNETMOD_HAS_ORM
+/**
+ * @brief Application-owned MySQL sharding gateway type.
+ */
+export using mysql_sharded_session_gateway =
+    orm::sharded_session_gateway<mysql::client, mysql::pooled_connection>;
+
+/**
+ * @brief Binds a frozen shard catalog to named managed MySQL pools.
+ *
+ * All catalog instances must already exist in the frozen registry. Pool
+ * startup and recovery remain owned by the application lifecycle.
+ */
+export [[nodiscard]] auto make_mysql_sharded_session_gateway(
+    service_registry& services, std::shared_ptr<const orm::shard_catalog> catalog)
+    -> std::expected<mysql_sharded_session_gateway, std::error_code>;
+    #endif
 
 } // namespace cnetmod::application
 #endif

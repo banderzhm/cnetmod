@@ -29,6 +29,31 @@ namespace {
     }
 } // namespace
 
+auto keys_share_slot(std::span<const std::string_view> keys) noexcept -> bool
+{
+    if (keys.empty())
+        return false;
+    const auto expected = hash_slot(keys.front());
+    return std::ranges::all_of(keys,
+        [expected](std::string_view key)
+        {
+            return hash_slot(key) == expected;
+        });
+}
+
+auto make_cluster_key(std::string_view key_namespace,
+    std::string_view partition, std::string_view key)
+    -> std::expected<std::string, std::error_code>
+{
+    if (key_namespace.empty() || partition.empty() || key.empty() ||
+        key_namespace.contains('{') || key_namespace.contains('}') ||
+        partition.contains('{') || partition.contains('}') ||
+        key.contains('{') || key.contains('}'))
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    return std::format("{}:{{{}}}:{}", key_namespace, partition, key);
+}
+
 void cluster_slot_cache::clear()
 {
     slots_.fill(std::nullopt);

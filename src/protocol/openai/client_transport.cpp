@@ -14,6 +14,7 @@ import cnetmod.core.address;
 import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http;
 #ifdef CNETMOD_HAS_SSL
@@ -183,6 +184,27 @@ auto client::do_read_some() -> task<std::optional<std::string>>
     co_return std::string(reinterpret_cast<const char*>(buf.data()), *r);
 }
 
+auto client::do_read_some(cancel_token& token)
+    -> task<std::expected<std::string, std::error_code>>
+{
+    std::array<std::byte, 8192> buf{};
+#ifdef CNETMOD_HAS_SSL
+    auto read = ssl_
+        ? co_await ssl_->async_read(
+              mutable_buffer{buf.data(), buf.size()}, token)
+        : co_await async_read(ctx_, sock_,
+              mutable_buffer{buf.data(), buf.size()}, token);
+#else
+    auto read = co_await async_read(ctx_, sock_,
+        mutable_buffer{buf.data(), buf.size()}, token);
+#endif
+    if (!read)
+        co_return std::unexpected(read.error());
+    if (*read == 0)
+        co_return std::unexpected(make_error_code(errc::end_of_file));
+    co_return std::string(reinterpret_cast<const char*>(buf.data()), *read);
+}
+
 [[nodiscard]] auto client::build_path(std::string_view suffix) const
     -> std::string
 {
@@ -257,7 +279,7 @@ auto client::read_full_response()
 }
 
 auto client::read_response_header()
-    -> task<std::expected<std::tuple<int, std::string, bool>, std::string>>
+    -> task<std::expected<response_header, std::string>>
 {
     while (true)
     {
@@ -305,8 +327,31 @@ auto client::read_response_header()
             const auto chunked = header_text.find("transfer-encoding: chunked") !=
                 std::string::npos;
 
+            std::optional<std::size_t> content_length;
+            if (const auto length_pos = header_text.find("content-length:");
+                length_pos != std::string::npos)
+            {
+                auto value_start = length_pos + 15U;
+                while (value_start < header_text.size() &&
+                    (header_text[value_start] == ' ' ||
+                        header_text[value_start] == '\t'))
+                    ++value_start;
+                const auto value_end = header_text.find("\r\n", value_start);
+                const auto value = std::string_view{header_text}.substr(
+                    value_start, value_end - value_start);
+                std::size_t parsed_length = 0;
+                const auto parsed = std::from_chars(value.data(),
+                    value.data() + value.size(), parsed_length);
+                if (parsed.ec == std::errc{} &&
+                    parsed.ptr == value.data() + value.size())
+                    content_length = parsed_length;
+            }
+
             rbuf_.erase(0, header_end + 4);
-            co_return std::tuple{status, std::move(ct), chunked};
+            co_return response_header{.status = status,
+                .content_type = std::move(ct),
+                .chunked = chunked,
+                .content_length = content_length};
         }
 
         auto chunk = co_await do_read_some();

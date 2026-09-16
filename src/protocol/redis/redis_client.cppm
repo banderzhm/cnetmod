@@ -13,6 +13,7 @@ import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+import cnetmod.coro.mutex;
 import cnetmod.executor.async_op;
 import cnetmod.instrumentation.tracing;
 #ifdef CNETMOD_HAS_SSL
@@ -200,26 +201,99 @@ private:
 #endif
 };
 
+/**
+ * @brief Cancellation-aware Redis Cluster session with serialized operations.
+ *
+ * One instance owns one connection per visited node. Public command and
+ * pipeline operations are coroutine-serialized so RESP exchanges cannot
+ * interleave on those connections.
+ */
 class cluster_client
 {
 public:
+    /**
+     * @brief Creates a cluster client bound to an I/O context.
+     */
     explicit cluster_client(io_context& ctx) noexcept;
+
+    /**
+     * @brief Connects to a cluster seed using a compatibility error result.
+     */
     auto connect(connect_options seed) -> task<std::expected<void, std::string>>;
+    /**
+     * @brief Connects to a cluster seed with cancellation-aware negotiation.
+     *
+     * Redis Cluster supports database zero only. A non-zero database is
+     * rejected before network I/O.
+     */
+    [[nodiscard]] auto connect(connect_options seed, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
+    /**
+     * @brief Refreshes the slot cache using a compatibility error result.
+     */
     auto refresh_slots() -> task<std::expected<void, std::string>>;
+
+    /**
+     * @brief Refreshes the complete slot cache with cancellation support.
+     */
+    [[nodiscard]] auto refresh_slots(cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
+
+    /**
+     * @brief Routes one command by key using a compatibility error result.
+     */
     auto cmd_for_key(std::vector<std::string> args, std::string_view key,
         std::size_t max_redirects = 3)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
+
+    /**
+     * @brief Routes one command by key and follows bounded redirections.
+     */
+    [[nodiscard]] auto cmd_for_key(std::vector<std::string> args,
+        std::string_view key, cancel_token& cancellation,
+        std::size_t max_redirects = 3)
+        -> task<std::expected<std::vector<resp3_node>, std::error_code>>;
+    /**
+     * @brief Executes a multi-key command only when all keys share one slot.
+     */
+    [[nodiscard]] auto cmd_for_keys(std::vector<std::string> args,
+        std::span<const std::string_view> keys, cancel_token& cancellation,
+        std::size_t max_redirects = 3)
+        -> task<std::expected<std::vector<resp3_node>, std::error_code>>;
+    /**
+     * @brief Executes an ordered pipeline using a compatibility result shape.
+     */
     auto pipeline(std::span<const cluster_pipeline_item> items)
         -> task<std::expected<std::vector<resp3_node>, std::string>>;
+    /**
+     * @brief Executes node-local batches and restores the caller's item order.
+     *
+     * Each outer element is exactly one command response, including its RESP
+     * aggregate descendants. Transport cancellation invalidates the affected
+     * node connection before it can be reused.
+     */
+    [[nodiscard]] auto pipeline_ordered(
+        std::span<const cluster_pipeline_item> items,
+        cancel_token& cancellation)
+        -> task<std::expected<std::vector<std::vector<resp3_node>>,
+            std::error_code>>;
+    /** @brief Closes the seed and every cached node connection. */
+    void close() noexcept;
+    /**
+     * @brief Returns the current immutable view of the local slot cache.
+     */
     [[nodiscard]] auto slots() const noexcept -> const cluster_slot_cache&;
 
 private:
     static auto endpoint_key(const endpoint_info& ep) -> std::string;
     auto connection_for(const endpoint_info& ep) -> task<client*>;
+    auto connection_for(const endpoint_info& ep, cancel_token& cancellation)
+        -> task<std::expected<client*, std::error_code>>;
     io_context& ctx_;
     connect_options seed_options_;
     client seed_;
     cluster_slot_cache slot_cache_;
     std::map<std::string, std::unique_ptr<client>> nodes_;
+    async_mutex operation_mutex_;
 };
 } // namespace cnetmod::redis

@@ -396,7 +396,14 @@ template <Model T>
 auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
     -> std::pair<std::string, std::vector<param_value>>
 {
-    auto& meta = model_traits<T>::meta();
+    return build_select_sql(model_traits<T>::meta().table_name, cfg);
+}
+
+template <Model T>
+auto query_wrapper<T>::build_select_sql(std::string_view physical_table,
+    const dialect_config& cfg) const
+    -> std::pair<std::string, std::vector<param_value>>
+{
     std::string sql = "SELECT ";
 
     // --- SELECT columns (regular + aggregates) ---
@@ -433,7 +440,7 @@ auto query_wrapper<T>::build_select_sql(const dialect_config& cfg) const
     }
 
     // --- FROM ---
-    sql += " FROM " + quote_identifier(meta.table_name, cfg);
+    sql += " FROM " + quote_identifier(physical_table, cfg);
 
     // --- JOIN ---
     for (auto& j : joins_)
@@ -535,8 +542,15 @@ template <Model T>
 auto query_wrapper<T>::build_count_sql(const dialect_config& cfg) const
     -> std::pair<std::string, std::vector<param_value>>
 {
-    auto& meta = model_traits<T>::meta();
-    std::string sql = "SELECT COUNT(*) FROM " + quote_identifier(meta.table_name, cfg);
+    return build_count_sql(model_traits<T>::meta().table_name, cfg);
+}
+
+template <Model T>
+auto query_wrapper<T>::build_count_sql(std::string_view physical_table,
+    const dialect_config& cfg) const
+    -> std::pair<std::string, std::vector<param_value>>
+{
+    std::string sql = "SELECT COUNT(*) FROM " + quote_identifier(physical_table, cfg);
 
     // JOIN
     for (auto& j : joins_)
@@ -578,8 +592,15 @@ template <Model T>
 auto query_wrapper<T>::build_delete_sql(const dialect_config& cfg) const
     -> std::pair<std::string, std::vector<param_value>>
 {
-    auto& meta = model_traits<T>::meta();
-    std::string sql = "DELETE FROM " + quote_identifier(meta.table_name, cfg);
+    return build_delete_sql(model_traits<T>::meta().table_name, cfg);
+}
+
+template <Model T>
+auto query_wrapper<T>::build_delete_sql(std::string_view physical_table,
+    const dialect_config& cfg) const
+    -> std::pair<std::string, std::vector<param_value>>
+{
+    std::string sql = "DELETE FROM " + quote_identifier(physical_table, cfg);
 
     std::vector<param_value> params;
     int param_index = 0;
@@ -615,8 +636,16 @@ template <Model T>
 auto query_wrapper<T>::build_update_sql(const T& entity, const dialect_config& cfg) const
     -> std::pair<std::string, std::vector<param_value>>
 {
+    return build_update_sql(entity, model_traits<T>::meta().table_name, cfg);
+}
+
+template <Model T>
+auto query_wrapper<T>::build_update_sql(const T& entity,
+    std::string_view physical_table, const dialect_config& cfg) const
+    -> std::pair<std::string, std::vector<param_value>>
+{
     auto& meta = model_traits<T>::meta();
-    std::string sql = "UPDATE " + quote_identifier(meta.table_name, cfg) + " SET ";
+    std::string sql = "UPDATE " + quote_identifier(physical_table, cfg) + " SET ";
 
     std::vector<param_value> params;
     int param_index = 0;
@@ -941,8 +970,15 @@ template <Model T>
 auto update_wrapper<T>::build_sql(const dialect_config& cfg) const
     -> std::pair<std::string, std::vector<param_value>>
 {
-    auto& meta = model_traits<T>::meta();
-    std::string sql = "UPDATE " + quote_identifier(meta.table_name, cfg) + " SET ";
+    return build_sql(model_traits<T>::meta().table_name, cfg);
+}
+
+template <Model T>
+auto update_wrapper<T>::build_sql(std::string_view physical_table,
+    const dialect_config& cfg) const
+    -> std::pair<std::string, std::vector<param_value>>
+{
+    std::string sql = "UPDATE " + quote_identifier(physical_table, cfg) + " SET ";
 
     std::vector<param_value> params;
     int param_index = 0;

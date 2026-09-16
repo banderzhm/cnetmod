@@ -398,7 +398,7 @@ add_library(cnetmod::core ALIAS cnetmod_core)
 
 # Platform-specific linking
 if(WIN32)
-    target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock)
+    target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock crypt32)
 elseif(CNETMOD_USE_LIBKQUEUE)
     target_include_directories(cnetmod_core PRIVATE
         "${CNETMOD_LIBKQUEUE_INCLUDE_DIR}")

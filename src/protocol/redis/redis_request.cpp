@@ -45,6 +45,17 @@ void serialize_one(std::string& payload, const char* value)
 
 namespace cnetmod::redis {
 
+auto request::push(std::span<const std::string> arguments) -> bool
+{
+    if (arguments.empty())
+        return false;
+    detail::add_header(payload_, resp3_type::array, arguments.size());
+    for (const auto& argument : arguments)
+        detail::add_bulk(payload_, argument);
+    ++commands_;
+    return true;
+}
+
 auto request::payload() const noexcept -> std::string_view
 {
     return payload_;

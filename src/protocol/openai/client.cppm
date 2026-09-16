@@ -17,6 +17,7 @@ import cnetmod.core.address;
 import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http;
 #ifdef CNETMOD_HAS_SSL
@@ -135,6 +136,14 @@ public:
         -> task<std::expected<moderation_response, std::string>>;
 
 private:
+    struct response_header
+    {
+        int status = 0;
+        std::string content_type;
+        bool chunked = false;
+        std::optional<std::size_t> content_length;
+    };
+
     // ── Transport layer ──
 
     auto do_write(const_buffer buf)
@@ -144,6 +153,8 @@ private:
         -> task<std::expected<std::size_t, std::error_code>>;
 
     auto do_read_some() -> task<std::optional<std::string>>;
+    auto do_read_some(cancel_token& token)
+        -> task<std::expected<std::string, std::error_code>>;
 
     // ── Path / Common headers ──
 
@@ -166,7 +177,7 @@ private:
 
     /// Read HTTP response header (for streaming - only read until header ends)
     auto read_response_header()
-        -> task<std::expected<std::tuple<int, std::string, bool>, std::string>>;
+        -> task<std::expected<response_header, std::string>>;
 
     /// Read remaining body (for error responses)
     auto read_remaining_body() -> task<std::string>;

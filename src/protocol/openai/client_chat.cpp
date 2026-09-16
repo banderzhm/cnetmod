@@ -14,6 +14,8 @@ import cnetmod.core.address;
 import cnetmod.core.dns;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http;
 #ifdef CNETMOD_HAS_SSL
@@ -93,12 +95,71 @@ namespace {
             return output;
         }
 
+        [[nodiscard]] auto complete() const noexcept -> bool
+        {
+            return complete_;
+        }
+
     private:
         std::string pending_;
         std::optional<std::size_t> remaining_;
         bool reading_trailers_ = false;
         bool complete_ = false;
     };
+
+    class sse_event_decoder
+    {
+    public:
+        auto feed(std::string_view bytes) -> std::vector<std::string>
+        {
+            pending_.append(bytes);
+            std::vector<std::string> events;
+            while (true)
+            {
+                const auto newline = pending_.find('\n');
+                if (newline == std::string::npos)
+                    break;
+
+                auto line = pending_.substr(0, newline);
+                pending_.erase(0, newline + 1U);
+                if (!line.empty() && line.back() == '\r')
+                    line.pop_back();
+
+                if (line.empty())
+                {
+                    if (!data_.empty())
+                    {
+                        data_.pop_back();
+                        events.push_back(std::exchange(data_, {}));
+                    }
+                    continue;
+                }
+                if (!line.starts_with("data:"))
+                    continue;
+
+                auto value = std::string_view{line}.substr(5U);
+                if (!value.empty() && value.front() == ' ')
+                    value.remove_prefix(1U);
+                data_.append(value);
+                data_.push_back('\n');
+            }
+            return events;
+        }
+
+    private:
+        std::string pending_;
+        std::string data_;
+    };
+
+    [[nodiscard]] auto requests_stream_usage(const chat_request& request) -> bool
+    {
+        const auto options = request.extra_body.find("stream_options");
+        if (options == request.extra_body.end() || !options->is_object())
+            return false;
+        const auto include_usage = options->find("include_usage");
+        return include_usage != options->end() && include_usage->is_boolean() &&
+            include_usage->get<bool>();
+    }
 } // namespace
 
 auto client::chat(chat_request req)
@@ -169,6 +230,7 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
     if (auto r = co_await ensure_connected(); !r)
         co_return std::unexpected(r.error());
 
+    const bool expect_usage = requests_stream_usage(req);
     req.stream = true;
     auto body = req.to_json();
 
@@ -185,16 +247,21 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
     if (!header_r)
         co_return std::unexpected(header_r.error());
 
-    auto& [status, content_type, chunked] = *header_r;
-    if (status != 200)
+    const auto& header = *header_r;
+    if (header.status != 200)
     {
         auto err_body = co_await read_remaining_body();
         auto err = error_response::from_json(err_body);
-        co_return std::unexpected(std::format("HTTP {}: {}", status, err.message));
+        co_return std::unexpected(
+            std::format("HTTP {}: {}", header.status, err.message));
     }
 
     std::string full_content;
     chunked_body_decoder decoder;
+    sse_event_decoder events;
+    std::size_t body_bytes = 0;
+    bool finish_observed = false;
+    bool usage_observed = false;
     std::optional<std::string> pending_bytes{std::exchange(rbuf_, {})};
 
     for (;;)
@@ -207,13 +274,25 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
         }
         else
         {
-            auto read_result = co_await do_read_some();
-            if (!read_result || read_result->empty())
-                break;
-            bytes = std::move(*read_result);
+            if (finish_observed && expect_usage && !usage_observed)
+            {
+                cancel_token token;
+                auto read_result = co_await with_timeout(ctx_,
+                    std::chrono::seconds{1}, do_read_some(token), token);
+                if (!read_result)
+                    break;
+                bytes = std::move(*read_result);
+            }
+            else
+            {
+                auto read_result = co_await do_read_some();
+                if (!read_result || read_result->empty())
+                    break;
+                bytes = std::move(*read_result);
+            }
         }
 
-        if (chunked)
+        if (header.chunked)
         {
             auto decoded = decoder.feed(bytes);
             if (!decoded)
@@ -223,46 +302,38 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
         else
         {
             rbuf_.append(bytes);
+            body_bytes += bytes.size();
         }
 
-        while (true)
+        bool semantic_complete = false;
+        for (auto& data : events.feed(std::exchange(rbuf_, {})))
         {
-            auto nl = rbuf_.find('\n');
-            if (nl == std::string::npos)
-                break;
-
-            auto line = rbuf_.substr(0, nl);
-            if (!line.empty() && line.back() == '\r')
-                line.pop_back();
-            rbuf_.erase(0, nl + 1);
-
-            if (line.empty())
-                continue;
-
-            if (line.starts_with("data: "))
+            if (data == "[DONE]")
             {
-                auto data = line.substr(6);
-
-                if (data == "[DONE]")
-                {
-                    close();
-                    co_return full_content;
-                }
-
-                auto chunk = chat_chunk::from_json(data);
-                if (!chunk.delta_content.empty())
-                {
-                    full_content += chunk.delta_content;
-                }
-                if (on_chunk)
-                    on_chunk(chunk);
-
-                if (chunk.finish_reason == "stop" || chunk.finish_reason == "length")
-                {
-                    close();
-                    co_return full_content;
-                }
+                semantic_complete = true;
+                continue;
             }
+
+            auto chunk = chat_chunk::from_json(data);
+            if (!chunk.delta_content.empty())
+                full_content += chunk.delta_content;
+            if (on_chunk)
+                on_chunk(chunk);
+            finish_observed =
+                finish_observed || !chunk.finish_reason.empty();
+            usage_observed = usage_observed || chunk.token_usage.has_value();
+        }
+
+        const bool framed_complete =
+            (header.chunked && decoder.complete()) ||
+            (!header.chunked && header.content_length &&
+                body_bytes >= *header.content_length);
+        semantic_complete = semantic_complete ||
+            (finish_observed && (!expect_usage || usage_observed));
+        if (semantic_complete || framed_complete)
+        {
+            close();
+            co_return full_content;
         }
     }
 
@@ -276,6 +347,7 @@ auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
     if (auto r = co_await ensure_connected(); !r)
         co_return std::unexpected(r.error());
 
+    const bool expect_usage = requests_stream_usage(req);
     req.stream = true;
     auto body = req.to_json();
 
@@ -292,16 +364,21 @@ auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
     if (!header_r)
         co_return std::unexpected(header_r.error());
 
-    auto& [status, content_type, chunked] = *header_r;
-    if (status != 200)
+    const auto& header = *header_r;
+    if (header.status != 200)
     {
         auto err_body = co_await read_remaining_body();
         auto err = error_response::from_json(err_body);
-        co_return std::unexpected(std::format("HTTP {}: {}", status, err.message));
+        co_return std::unexpected(
+            std::format("HTTP {}: {}", header.status, err.message));
     }
 
     std::string full_content;
     chunked_body_decoder decoder;
+    sse_event_decoder events;
+    std::size_t body_bytes = 0;
+    bool finish_observed = false;
+    bool usage_observed = false;
     std::optional<std::string> pending_bytes{std::exchange(rbuf_, {})};
 
     for (;;)
@@ -314,13 +391,25 @@ auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
         }
         else
         {
-            auto read_result = co_await do_read_some();
-            if (!read_result || read_result->empty())
-                break;
-            bytes = std::move(*read_result);
+            if (finish_observed && expect_usage && !usage_observed)
+            {
+                cancel_token token;
+                auto read_result = co_await with_timeout(ctx_,
+                    std::chrono::seconds{1}, do_read_some(token), token);
+                if (!read_result)
+                    break;
+                bytes = std::move(*read_result);
+            }
+            else
+            {
+                auto read_result = co_await do_read_some();
+                if (!read_result || read_result->empty())
+                    break;
+                bytes = std::move(*read_result);
+            }
         }
 
-        if (chunked)
+        if (header.chunked)
         {
             auto decoded = decoder.feed(bytes);
             if (!decoded)
@@ -330,54 +419,46 @@ auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
         else
         {
             rbuf_.append(bytes);
+            body_bytes += bytes.size();
         }
 
-        while (true)
+        bool semantic_complete = false;
+        for (auto& data : events.feed(std::exchange(rbuf_, {})))
         {
-            auto nl = rbuf_.find('\n');
-            if (nl == std::string::npos)
-                break;
-
-            auto line = rbuf_.substr(0, nl);
-            if (!line.empty() && line.back() == '\r')
-                line.pop_back();
-            rbuf_.erase(0, nl + 1);
-
-            if (line.empty())
-                continue;
-
-            if (line.starts_with("data: "))
+            if (data == "[DONE]")
             {
-                auto data = line.substr(6);
+                semantic_complete = true;
+                continue;
+            }
 
-                if (data == "[DONE]")
-                {
-                    close();
-                    co_return full_content;
-                }
+            auto chunk = chat_chunk::from_json(data);
+            if (!chunk.delta_content.empty())
+                full_content += chunk.delta_content;
 
-                auto chunk = chat_chunk::from_json(data);
-                if (!chunk.delta_content.empty())
-                {
-                    full_content += chunk.delta_content;
-                }
-
-                if (on_chunk)
-                {
-                    bool cont = co_await on_chunk(chunk);
-                    if (!cont)
-                    {
-                        close();
-                        co_return full_content;
-                    }
-                }
-
-                if (chunk.finish_reason == "stop" || chunk.finish_reason == "length")
+            if (on_chunk)
+            {
+                const bool cont = co_await on_chunk(chunk);
+                if (!cont)
                 {
                     close();
                     co_return full_content;
                 }
             }
+            finish_observed =
+                finish_observed || !chunk.finish_reason.empty();
+            usage_observed = usage_observed || chunk.token_usage.has_value();
+        }
+
+        const bool framed_complete =
+            (header.chunked && decoder.complete()) ||
+            (!header.chunked && header.content_length &&
+                body_bytes >= *header.content_length);
+        semantic_complete = semantic_complete ||
+            (finish_observed && (!expect_usage || usage_observed));
+        if (semantic_complete || framed_complete)
+        {
+            close();
+            co_return full_content;
         }
     }
 

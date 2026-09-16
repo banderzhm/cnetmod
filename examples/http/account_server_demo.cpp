@@ -2114,7 +2114,7 @@ auto sse_send(cn::io_context& ctx, cn::socket& sock, std::string_view event_data
     -> cn::task<bool>
 {
     auto line = std::format("data: {}\n\n", event_data);
-    auto wr = co_await cn::async_write(ctx, sock,
+    auto wr = co_await cn::async_write_all(ctx, sock,
         cn::const_buffer{line.data(), line.size()});
     co_return wr.has_value();
 }
@@ -2272,9 +2272,10 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void>
     resp.set_header("Cache-Control", "no-cache");
     resp.set_header("Connection", "keep-alive");
     resp.set_header("X-Accel-Buffering", "no"); // Nginx disable
+    resp.set_header("X-Streamed", "1");
 
     auto header_data = resp.serialize();
-    auto wr = co_await cn::async_write(ctx.io_ctx(), ctx.raw_socket(),
+    auto wr = co_await cn::async_write_all(ctx.io_ctx(), ctx.raw_socket(),
         cn::const_buffer{header_data.data(), header_data.size()});
     if (!wr)
         co_return;
@@ -2310,7 +2311,7 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void>
                     json_escape(chunk.delta_content));
                 auto line = std::format("data: {}\n\n", event_json);
                 // Async SSE
-                auto wr = co_await cn::async_write(ctx.io_ctx(), ctx.raw_socket(),
+                auto wr = co_await cn::async_write_all(ctx.io_ctx(), ctx.raw_socket(),
                     cn::const_buffer{line.data(), line.size()});
                 if (!wr)
                     co_return false; // Writefailure
@@ -2342,7 +2343,6 @@ auto handle_ai_analyze(http::request_context& ctx) -> cn::task<void>
     co_await session.execute("AiMapper.replaceAnalysisHistory", save_params);
 
     // Response, response
-    resp.set_header("X-Streamed", "1");
 }
 
 // =============================================================================

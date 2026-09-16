@@ -1123,6 +1123,62 @@ TEST(application_openai_listener_is_optional_and_configuration_is_idempotent)
 }
 #endif
 
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
+TEST(application_auto_configuration_registers_redis_cluster_mode)
+{
+    auto host = application::application_builder{"redis-cluster-configuration"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service redis{
+                                .name = "redis",
+                                .instance = "sessions",
+                                .enabled = true,
+                                .requirement = application::service_requirement::optional,
+                            };
+                            redis.properties = {
+                                {"mode", "cluster"},
+                                {"database", 0},
+                                {"seeds", {{{"host", "127.0.0.1"}, {"port", 7000}}, {{"host", "127.0.0.1"}, {"port", 7001}}}},
+                            };
+                            value.services.emplace("redis-cluster", std::move(redis));
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    ASSERT_TRUE(host->services().find<application::redis_cluster_service>(
+                    "sessions") != nullptr);
+    ASSERT_TRUE(host->services().find<application::redis_service>(
+                    "sessions") == nullptr);
+}
+
+TEST(application_redis_cluster_rejects_nonzero_database)
+{
+    auto host = application::application_builder{"redis-cluster-invalid-db"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service redis{
+                                .name = "redis",
+                                .enabled = true,
+                            };
+                            redis.properties = {
+                                {"mode", "cluster"},
+                                {"database", 1},
+                                {"seeds", {{{"host", "127.0.0.1"}, {"port", 7000}}}},
+                            };
+                            value.services.emplace("redis", std::move(redis));
+                        })
+                    .build();
+    ASSERT_FALSE(host.has_value());
+}
+#endif
+
 TEST(application_auto_configuration_registers_compiled_integrations)
 {
     auto builder = application::application_builder{"auto-configuration-test"}
