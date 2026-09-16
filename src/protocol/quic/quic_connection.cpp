@@ -1984,15 +1984,12 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             const auto* read_keys = impl_->tls->read_keys(encryption_level::handshake);
             if (!read_keys)
             {
-                // RFC 9001 §4.9 permits Handshake keys to be discarded once
-                // TLS completed. A delayed duplicate of an authenticated
-                // Handshake packet is consequently not a new protocol error;
-                // silently ignore it instead of aborting an already usable
-                // connection. Before completion, however, missing keys still
-                // means the peer sent this packet at an invalid time.
-                if (impl_->tls->is_handshake_complete())
-                    co_return {};
-                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+                // UDP can deliver a Handshake packet before the Initial packet
+                // that installs its read keys. RFC 9000 permits discarding a
+                // packet whose keys are not available; loss recovery will
+                // retransmit it. A post-handshake duplicate is discarded for
+                // the same reason after the keys have been retired.
+                co_return {};
             }
             std::size_t offset = 1 + 4;
             if (offset >= packet.size())
