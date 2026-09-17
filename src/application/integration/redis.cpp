@@ -11,14 +11,21 @@ namespace cnetmod::application {
 
 redis_service::redis_service(io_context& io, redis::pool_params options,
     std::string instance, service_requirement requirement,
-    recovery_policy recovery)
-    : io_(io), pool_(io, std::move(options)), instance_(std::move(instance)), requirement_(requirement), recovery_(recovery)
+    recovery_policy recovery, instrumentation::span_exporter spans)
+    : io_(io), pool_(io, std::move(options)), instance_(std::move(instance)), requirement_(requirement), recovery_(recovery), spans_(std::move(spans))
 {
 }
 
 auto redis_service::pool() noexcept -> redis::connection_pool&
 {
     return pool_;
+}
+
+auto redis_service::make_template(redis::template_options options,
+    instrumentation::trace_context parent) -> redis::redis_template
+{
+    return redis::redis_template{
+        pool_, std::move(options), std::move(parent), spans_};
 }
 
 auto redis_service::key() const -> service_key
@@ -306,7 +313,8 @@ auto auto_configure_redis(const configured_service& configuration,
     }
     auto service = std::make_shared<redis_service>(context.io,
         std::move(options), configuration.instance,
-        configuration.requirement, configuration.recovery);
+        configuration.requirement, configuration.recovery,
+        context.telemetry.spans());
     return context.services.add_managed_named<redis_service>(
         configuration.instance, std::move(service));
 }

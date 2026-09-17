@@ -54,6 +54,7 @@ set(TEST_SOURCES
     test_mail.cpp
     test_openai.cpp
     test_redis.cpp
+    test_redis_template.cpp
     test_mongodb_wire.cpp
     test_orm_json_result_map.cpp
     test_orm_sharding.cpp
@@ -106,7 +107,7 @@ if(NOT CNETMOD_ENABLE_OPENAI)
     list(REMOVE_ITEM TEST_SOURCES test_openai.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_REDIS)
-    list(REMOVE_ITEM TEST_SOURCES test_redis.cpp)
+    list(REMOVE_ITEM TEST_SOURCES test_redis.cpp test_redis_template.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_MONGODB)
     list(REMOVE_ITEM TEST_SOURCES test_mongodb_wire.cpp)

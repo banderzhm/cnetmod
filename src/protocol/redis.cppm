@@ -11,3 +11,4 @@ export import :request;
 export import :parser;
 export import :client;
 export import :pool;
+export import :redis_template;

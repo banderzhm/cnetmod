@@ -18,6 +18,8 @@ export import :prompt;
 export import :runnable;
 export import :memory;
 export import :memory_store;
+export import :long_term_store;
+export import :checkpoint;
 export import :guardrails;
 export import :service;
 export import :structured;

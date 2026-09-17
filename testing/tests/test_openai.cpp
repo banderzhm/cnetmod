@@ -340,6 +340,38 @@ TEST(openai_prompt_template_formats_and_escapes)
     ASSERT_FALSE(prompt.format({}).has_value());
 }
 
+TEST(openai_prompt_template_supports_defaults_conditions_and_sections)
+{
+    openai::prompt_template prompt{
+        "{?title}{title}\n{/title}" "{#scopes}- {name}: {value|unset}{?note} ({note}){/note}\n{/scopes}" "mode={mode|safe}"};
+    const openai::prompt_context context{
+        .variables = {{"title", "Permissions"}},
+        .sections = {{"scopes",
+            {{{"name", "read"}, {"value", "allowed"}},
+                {{"name", "write"}, {"note", "approval required"}}}}}};
+
+    const auto rendered = prompt.format_context(context);
+
+    ASSERT_TRUE(rendered.has_value());
+    ASSERT_EQ(*rendered,
+        std::string("Permissions\n- read: allowed\n" "- write: unset (approval required)\nmode=safe"));
+}
+
+TEST(openai_prompt_template_omits_false_sections_and_rejects_bad_nesting)
+{
+    openai::prompt_template optional{
+        "before{?missing} hidden {/missing}{#empty} never {/empty}after"};
+    const auto rendered = optional.format_context(openai::prompt_context{});
+    ASSERT_TRUE(rendered.has_value());
+    ASSERT_EQ(*rendered, std::string("beforeafter"));
+
+    openai::prompt_template malformed{"{?enabled}value{/other}"};
+    const auto failed = malformed.format_context(
+        openai::prompt_context{.variables = {{"enabled", "yes"}}});
+    ASSERT_FALSE(failed.has_value());
+    ASSERT_TRUE(failed.error().contains("mismatched"));
+}
+
 TEST(openai_structured_output_serializes_and_validates)
 {
     const openai::json schema{{"type", "object"},
@@ -497,6 +529,30 @@ TEST(openai_runnable_composes_prompt_model_and_parser)
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(std::get<openai::json>(*result)["answer"], "42");
     ASSERT_EQ(model.last_request.messages.size(), std::size_t{2});
+}
+
+TEST(openai_prompt_runnable_accepts_rich_prompt_context)
+{
+    scripted_model model;
+    model.responses.push_back(
+        response_with(openai::message::model_output("accepted")));
+    openai::chat_prompt_template prompt{{
+        {.role = "user",
+            .prompt = openai::prompt_template{
+                "{?heading}{heading}: {/heading}{#items}{name};{/items}"}},
+    }};
+    openai::runnable chain{openai::prompt_runnable(std::move(prompt))};
+    chain = chain.pipe(openai::model_runnable(model));
+
+    auto result = cnetmod::sync_wait(chain.invoke(openai::prompt_context{
+        .variables = {{"heading", "Scopes"}},
+        .sections = {{"items", {{{"name", "read"}}, {{"name", "write"}}}}},
+    }));
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(model.last_request.messages.size(), std::size_t{1});
+    ASSERT_EQ(model.last_request.messages.front().content,
+        std::string("Scopes: read;write;"));
 }
 
 TEST(openai_agent_executes_validated_tool_loop)
@@ -1248,6 +1304,87 @@ TEST(openai_delegating_embedding_store_adapts_external_capabilities)
     ASSERT_FALSE(unsupported.has_value());
 }
 
+TEST(openai_long_term_store_supports_versions_filtering_and_pagination)
+{
+    openai::in_memory_long_term_store store;
+    auto first = cnetmod::sync_wait(store.put({"tenant", "42"}, "a",
+        {{"kind", "preference"}, {"value", "dark"}},
+        {.index_for_semantic_search = false, .expected_version = 0}));
+    auto second = cnetmod::sync_wait(store.put({"tenant", "42"}, "a",
+        {{"kind", "preference"}, {"value", "light"}},
+        {.index_for_semantic_search = false, .expected_version = 1}));
+    auto stale = cnetmod::sync_wait(store.put({"tenant", "42"}, "a",
+        {{"kind", "preference"}},
+        {.index_for_semantic_search = false, .expected_version = 1}));
+    ASSERT_TRUE(cnetmod::sync_wait(store.put({"tenant", "42"}, "b",
+                                       {{"kind", "fact"}},
+                                       {.index_for_semantic_search = false}))
+            .has_value());
+    ASSERT_TRUE(cnetmod::sync_wait(store.put({"tenant", "43"}, "c",
+                                       {{"kind", "fact"}},
+                                       {.index_for_semantic_search = false}))
+            .has_value());
+
+    auto page = cnetmod::sync_wait(store.search({
+        .namespace_prefix = {"tenant"},
+        .filter = openai::metadata_filter::where("kind",
+            openai::metadata_operator::equal, "fact"),
+        .limit = 1,
+        .offset = 1,
+    }));
+    auto namespaces = cnetmod::sync_wait(
+        store.list_namespaces({"tenant"}, 10));
+
+    ASSERT_TRUE(first.has_value());
+    ASSERT_EQ(first->version, std::uint64_t{1});
+    ASSERT_TRUE(second.has_value());
+    ASSERT_EQ(second->version, std::uint64_t{2});
+    ASSERT_FALSE(stale.has_value());
+    ASSERT_TRUE(stale.error().contains("version conflict"));
+    ASSERT_TRUE(page.has_value());
+    ASSERT_EQ(page->size(), std::size_t{1});
+    ASSERT_EQ(page->front().key, std::string("c"));
+    ASSERT_TRUE(namespaces.has_value());
+    ASSERT_EQ(namespaces->size(), std::size_t{2});
+}
+
+TEST(openai_long_term_store_enforces_ttl_and_semantic_search)
+{
+    auto now = std::chrono::system_clock::now();
+    deterministic_embeddings embeddings;
+    openai::in_memory_long_term_store store{&embeddings, [&now]
+        {
+            return now;
+        }};
+    ASSERT_TRUE(cnetmod::sync_wait(store.put({"memory", "user"}, "alpha",
+                                       {{"text", "alpha preference"}},
+                                       {.ttl = std::chrono::seconds{5}}))
+            .has_value());
+    ASSERT_TRUE(cnetmod::sync_wait(store.put({"memory", "user"}, "beta",
+                                       {{"text", "beta preference"}}))
+            .has_value());
+
+    auto matches = cnetmod::sync_wait(store.search({
+        .namespace_prefix = {"memory", "user"},
+        .query = "alpha question",
+        .minimum_score = 0.5F,
+    }));
+    ASSERT_TRUE(matches.has_value());
+    ASSERT_EQ(matches->size(), std::size_t{1});
+    ASSERT_EQ(matches->front().key, std::string("alpha"));
+    ASSERT_TRUE(matches->front().score.has_value());
+
+    now += std::chrono::seconds{6};
+    auto expired = cnetmod::sync_wait(
+        store.get({"memory", "user"}, "alpha"));
+    auto retained = cnetmod::sync_wait(
+        store.get({"memory", "user"}, "beta"));
+    ASSERT_TRUE(expired.has_value());
+    ASSERT_FALSE(*expired);
+    ASSERT_TRUE(retained.has_value());
+    ASSERT_TRUE(*retained);
+}
+
 TEST(openai_run_config_cancels_before_model_execution)
 {
     scripted_model model;
@@ -1962,6 +2099,75 @@ TEST(openai_memory_persists_sessions_and_applies_windows)
     ASSERT_TRUE(empty->empty());
 }
 
+TEST(openai_append_only_memory_preserves_history_and_trims_only_the_view)
+{
+    openai::in_memory_append_only_chat_memory_store store;
+    openai::conversation_memory memory{"append-session", store,
+        {.max_messages = 2, .preserve_system_messages = false}};
+
+    auto appended = cnetmod::sync_wait(memory.append({
+        openai::message::user("one"),
+        openai::message::model_output("two"),
+        openai::message::user("three"),
+        openai::message::model_output("four"),
+    }));
+    auto view = cnetmod::sync_wait(memory.snapshot());
+    auto history = cnetmod::sync_wait(store.load_recent("append-session", 0));
+    auto replaced = cnetmod::sync_wait(memory.replace({
+        openai::message::user("replacement"),
+    }));
+
+    ASSERT_TRUE(appended.has_value());
+    ASSERT_TRUE(view.has_value());
+    ASSERT_EQ(view->size(), std::size_t{2});
+    ASSERT_EQ(view->front().content, std::string("three"));
+    ASSERT_TRUE(history.has_value());
+    ASSERT_EQ(history->size(), std::size_t{4});
+    ASSERT_FALSE(replaced.has_value());
+    ASSERT_TRUE(replaced.error().contains("append-only"));
+}
+
+TEST(openai_append_only_store_keeps_required_protocol_prefixes)
+{
+    openai::in_memory_append_only_chat_memory_store store;
+    openai::tool_call request{
+        .id = "call-1",
+        .function = {.name = "lookup", .arguments = R"({"id":1})"},
+    };
+    auto appended = cnetmod::sync_wait(store.append_batch("protocol-session", {
+                                                                                  openai::message::system("policy"),
+                                                                                  openai::message::user("lookup"),
+                                                                                  openai::message::tool_call_request({request}),
+                                                                                  openai::message::tool_result("call-1", R"({"ok":true})"),
+                                                                              }));
+    auto recent = cnetmod::sync_wait(
+        store.load_recent("protocol-session", 1));
+
+    ASSERT_TRUE(appended.has_value());
+    ASSERT_TRUE(recent.has_value());
+    ASSERT_EQ(recent->size(), std::size_t{3});
+    ASSERT_EQ((*recent)[0].role, std::string("system"));
+    ASSERT_FALSE((*recent)[1].tool_calls.empty());
+    ASSERT_EQ((*recent)[2].role, std::string("tool"));
+}
+
+TEST(openai_trim_messages_is_reusable_without_persistence)
+{
+    std::vector<openai::message> messages{
+        openai::message::system("policy"),
+        openai::message::user("one"),
+        openai::message::model_output("two"),
+        openai::message::user("three"),
+    };
+
+    openai::trim_messages(messages,
+        {.max_messages = 3, .preserve_system_messages = true});
+
+    ASSERT_EQ(messages.size(), std::size_t{3});
+    ASSERT_EQ(messages.front().role, std::string("system"));
+    ASSERT_EQ(messages.back().content, std::string("three"));
+}
+
 TEST(openai_file_memory_store_round_trips_and_erases_session_atomically)
 {
     auto context = cnetmod::make_io_context();
@@ -2225,6 +2431,116 @@ TEST(openai_agentic_runtime_executes_parallel_plan_and_checkpoints)
         std::string("complete"));
     ASSERT_EQ(result->state["review"].get<std::string>(),
         std::string("approved"));
+}
+
+TEST(openai_checkpoint_store_versions_pending_writes_and_conflicts)
+{
+    openai::in_memory_checkpoint_store store;
+    auto first = cnetmod::sync_wait(store.commit({
+        .thread_id = "thread-1",
+        .state = {{"step", 1}},
+        .expected_head_version = 0,
+    }));
+    auto second = cnetmod::sync_wait(store.commit({
+        .thread_id = "thread-1",
+        .state = {{"step", 2}},
+        .expected_head_version = 1,
+    }));
+    auto stale = cnetmod::sync_wait(store.commit({
+        .thread_id = "thread-1",
+        .state = {{"step", 3}},
+        .expected_head_version = 1,
+    }));
+    auto writes = cnetmod::sync_wait(store.put_pending_writes(
+        "thread-1", "main", 2,
+        {{.id = "write-1", .channel = "tool", .value = {{"ok", true}}},
+            {.id = "write-1", .channel = "tool", .value = {{"ok", false}}}},
+        0));
+    auto write_conflict = cnetmod::sync_wait(store.put_pending_writes(
+        "thread-1", "main", 2,
+        {{.id = "write-2", .channel = "tool", .value = nullptr}}, 0));
+
+    ASSERT_TRUE(first.has_value());
+    ASSERT_EQ(first->version, std::uint64_t{1});
+    ASSERT_TRUE(second.has_value());
+    ASSERT_EQ(second->version, std::uint64_t{2});
+    ASSERT_TRUE(second->parent_version.has_value());
+    ASSERT_EQ(*second->parent_version, std::uint64_t{1});
+    ASSERT_FALSE(stale.has_value());
+    ASSERT_TRUE(stale.error().contains("version conflict"));
+    ASSERT_TRUE(writes.has_value());
+    ASSERT_EQ(writes->pending_writes.size(), std::size_t{1});
+    ASSERT_EQ(writes->write_revision, std::uint64_t{1});
+    ASSERT_FALSE(write_conflict.has_value());
+    ASSERT_TRUE(write_conflict.error().contains("revision conflict"));
+}
+
+TEST(openai_checkpoint_store_forks_rolls_back_and_paginates_history)
+{
+    openai::in_memory_checkpoint_store store;
+    ASSERT_TRUE(cnetmod::sync_wait(store.commit({
+                                       .thread_id = "thread-2",
+                                       .state = {{"value", "first"}},
+                                       .expected_head_version = 0,
+                                   }))
+            .has_value());
+    ASSERT_TRUE(cnetmod::sync_wait(store.commit({
+                                       .thread_id = "thread-2",
+                                       .state = {{"value", "second"}},
+                                       .expected_head_version = 1,
+                                   }))
+            .has_value());
+
+    auto forked = cnetmod::sync_wait(
+        store.fork("thread-2", "main", 1, "experiment"));
+    auto rolled_back = cnetmod::sync_wait(
+        store.rollback("thread-2", "main", 1, 2));
+    auto history = cnetmod::sync_wait(
+        store.list("thread-2", "main", 2, 3));
+    auto old_second = cnetmod::sync_wait(
+        store.load("thread-2", "main", 2));
+
+    ASSERT_TRUE(forked.has_value());
+    ASSERT_EQ(forked->state["value"], "first");
+    ASSERT_TRUE(forked->origin.has_value());
+    ASSERT_EQ(forked->origin->branch, std::string("main"));
+    ASSERT_TRUE(rolled_back.has_value());
+    ASSERT_EQ(rolled_back->version, std::uint64_t{3});
+    ASSERT_EQ(rolled_back->state["value"], "first");
+    ASSERT_TRUE(history.has_value());
+    ASSERT_EQ(history->size(), std::size_t{2});
+    ASSERT_EQ((*history)[0].version, std::uint64_t{2});
+    ASSERT_TRUE(old_second.has_value());
+    ASSERT_TRUE(*old_second);
+    ASSERT_EQ((**old_second).state["value"], "second");
+}
+
+TEST(openai_checkpoint_agentic_adapter_preserves_runtime_versions)
+{
+    openai::in_memory_checkpoint_store checkpoints;
+    openai::checkpoint_agentic_scope_store store{checkpoints};
+    openai::agentic_checkpoint first{
+        .scope = {{"value", 1}},
+        .planner = {{"cursor", 1}},
+        .completed_steps = 1,
+    };
+    openai::agentic_checkpoint second{
+        .scope = {{"value", 2}},
+        .planner = {{"cursor", 2}},
+        .completed_steps = 2,
+    };
+
+    ASSERT_TRUE(cnetmod::sync_wait(store.save("workflow-versioned", first)).has_value());
+    ASSERT_TRUE(cnetmod::sync_wait(store.save("workflow-versioned", second)).has_value());
+    auto loaded = cnetmod::sync_wait(store.load("workflow-versioned"));
+    auto history = cnetmod::sync_wait(
+        checkpoints.list("workflow-versioned", "main", 10));
+
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_TRUE(*loaded);
+    ASSERT_EQ((**loaded).scope["value"], 2);
+    ASSERT_TRUE(history.has_value());
+    ASSERT_EQ(history->size(), std::size_t{2});
 }
 
 TEST(openai_agentic_runtime_validates_and_resumes_human_input)

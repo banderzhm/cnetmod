@@ -13,6 +13,7 @@ import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import :model;
 import :prompt;
+import :checkpoint;
 import nlohmann.json;
 
 namespace cnetmod::openai {
@@ -152,6 +153,30 @@ public:
 private:
     async_mutex mutex_;
     std::map<std::string, agentic_checkpoint, std::less<>> checkpoints_;
+};
+
+/**
+ * Adapts the generic versioned checkpoint store to the Agent runtime.
+ *
+ * Every Agent save creates an immutable checkpoint version and uses optimistic
+ * concurrency, so concurrent workflow runners cannot silently overwrite state.
+ */
+export class checkpoint_agentic_scope_store final : public agentic_scope_store
+{
+public:
+    explicit checkpoint_agentic_scope_store(checkpoint_store& store,
+        std::string branch = "main");
+
+    auto load(std::string workflow_id)
+        -> task<std::expected<std::optional<agentic_checkpoint>, std::string>> override;
+    auto save(std::string workflow_id, agentic_checkpoint checkpoint)
+        -> task<std::expected<void, std::string>> override;
+    auto erase(std::string workflow_id)
+        -> task<std::expected<void, std::string>> override;
+
+private:
+    checkpoint_store& store_;
+    std::string branch_;
 };
 
 export struct file_agentic_store_options

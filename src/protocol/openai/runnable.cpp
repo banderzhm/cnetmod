@@ -49,10 +49,12 @@ auto prompt_runnable(chat_prompt_template prompt) -> runnable_step
     return [prompt = std::move(prompt)](runnable_value input,
                const run_config&) -> task<std::expected<runnable_value, std::string>>
     {
-        const auto* variables = std::get_if<prompt_variables>(&input);
-        if (!variables)
-            co_return std::unexpected("prompt runnable expects prompt_variables");
-        auto messages = prompt.format(*variables);
+        std::expected<std::vector<message>, std::string> messages =
+            std::unexpected("prompt runnable expects prompt_variables or prompt_context");
+        if (const auto* variables = std::get_if<prompt_variables>(&input))
+            messages = prompt.format(*variables);
+        else if (const auto* context = std::get_if<prompt_context>(&input))
+            messages = prompt.format_context(*context);
         if (!messages)
             co_return std::unexpected(messages.error());
         co_return runnable_value{std::move(*messages)};

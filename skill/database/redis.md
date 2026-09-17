@@ -14,6 +14,7 @@
 | Pipeline 批量命令 | `client::pipe` |
 | 请求构建器（复杂/流水线） | `request` + `client::exec` |
 | 连接池 | `connection_pool` |
+| Spring 风格值/Hash/Set 操作 | `redis_template` |
 | 多核分片连接池 | `sharded_connection_pool` |
 | 集群路由（MOVED/ASK） | `cluster_client` |
 | Pub/Sub | `client::subscribe` / `client::psubscribe` |
@@ -334,6 +335,47 @@ class cluster_client {
     auto slots() const noexcept -> const cluster_slot_cache&;
 };
 ```
+
+### `redis_template` — 业务语义门面
+
+`redis_template` 通过 `import cnetmod.protocol.redis;` 导出。它复用
+`connection_pool`、`client::exchange()` 与 `client::is_reusable()`，不创建协议实现或
+执行域。子模块的合法名称是 `cnetmod.protocol.redis:redis_template`；C++ 关键字
+`template` 不能直接作为模块名分段。
+
+```cpp
+redis::redis_template cache{pool, {
+    .ns = {.prefix = "orders:"},
+    .default_ttl = std::chrono::minutes{10},
+    .scan_page = 128,
+    .scan_limit = 100000,
+}};
+
+auto order = co_await cache.get_as<order_record>("42");
+auto saved = co_await cache.set_as("42", value);
+
+auto batch = cache.pipeline();
+batch.get("42").exists("43").incr("revision");
+auto replies = co_await cache.execute(batch);
+```
+
+公开操作提供无令牌便利重载以及 `cancel_token&` 重载。需要超时时，在所属
+`io_context` 上用 `with_timeout` / `with_deadline` 包装带令牌重载；取消会传到连接获取
+及完整 RESP exchange。任何未完整 exchange 都关闭连接，池只重新发布
+`is_reusable()` 为真的 lease。
+
+- `get` / `hget` 将 Redis nil 映射为成功的 `std::optional{}`，不映射成错误。
+- `mget` 保持与输入逐位对应，内部消化 RESP aggregate 根节点。
+- `hgetall` 同时规范化 RESP2 array 和 RESP3 map。
+- `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
+- Pipeline 只执行一次 `exchange()`，返回
+  `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
+- `json_codec` 是 `get_as` / `set_as` 的默认 codec，可用满足同一静态接口的业务 codec 替换。
+- 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
+  `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
+
+Application 的 `redis_service::make_template(options, parent)` 自动复用服务连接池及
+Telemetry Hub 的 span exporter；调用方只显式传递当前协程的 trace parent。
 
 `is_open()` 只表示传输层 socket 尚未关闭；连接池使用更严格的
 `is_reusable()`，同时要求不存在未消费的 RESP 数据。`cmd`、`exec`、`pipe` 和

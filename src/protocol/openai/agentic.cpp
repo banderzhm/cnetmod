@@ -22,6 +22,7 @@ import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import :model;
 import :prompt;
+import :checkpoint;
 import :agentic;
 import nlohmann.json;
 
@@ -332,6 +333,75 @@ auto in_memory_agentic_scope_store::erase(std::string workflow_id)
     async_lock_guard guard(mutex_, std::adopt_lock);
     checkpoints_.erase(workflow_id);
     co_return std::expected<void, std::string>{};
+}
+
+checkpoint_agentic_scope_store::checkpoint_agentic_scope_store(
+    checkpoint_store& store, std::string branch)
+    : store_(store), branch_(std::move(branch))
+{
+    if (branch_.empty())
+        throw std::invalid_argument("checkpoint branch cannot be empty");
+}
+
+auto checkpoint_agentic_scope_store::load(std::string workflow_id)
+    -> task<std::expected<std::optional<agentic_checkpoint>, std::string>>
+{
+    auto loaded = co_await store_.load_latest(workflow_id, branch_);
+    if (!loaded)
+        co_return std::unexpected(loaded.error());
+    if (!*loaded)
+        co_return std::optional<agentic_checkpoint>{};
+    const auto& value = (*loaded)->state;
+    if (!value.is_object() || !value.contains("scope") ||
+        !value["scope"].is_object() || !value.contains("planner") ||
+        !value["planner"].is_object() ||
+        !value.contains("completed_steps") ||
+        !value["completed_steps"].is_number_unsigned())
+        co_return std::unexpected("agentic checkpoint state is invalid");
+    agentic_checkpoint checkpoint{.scope = value["scope"],
+        .planner = value["planner"],
+        .completed_steps = value["completed_steps"].get<std::size_t>()};
+    if (value.contains("pending_human_input") &&
+        !value["pending_human_input"].is_null())
+    {
+        auto pending = decode_human_input(value["pending_human_input"]);
+        if (!pending)
+            co_return std::unexpected(pending.error());
+        checkpoint.pending_human_input = std::move(*pending);
+    }
+    co_return std::optional<agentic_checkpoint>{std::move(checkpoint)};
+}
+
+auto checkpoint_agentic_scope_store::save(std::string workflow_id,
+    agentic_checkpoint checkpoint) -> task<std::expected<void, std::string>>
+{
+    auto latest = co_await store_.load_latest(workflow_id, branch_);
+    if (!latest)
+        co_return std::unexpected(latest.error());
+    json state{{"scope", std::move(checkpoint.scope)},
+        {"planner", std::move(checkpoint.planner)},
+        {"completed_steps", checkpoint.completed_steps},
+        {"pending_human_input", nullptr}};
+    if (checkpoint.pending_human_input)
+        state["pending_human_input"] =
+            encode_human_input(*checkpoint.pending_human_input);
+    auto committed = co_await store_.commit({.thread_id = workflow_id,
+        .branch = branch_,
+        .state = std::move(state),
+        .metadata = {{"kind", "agentic_scope"}},
+        .expected_head_version = *latest
+            ? std::optional<std::uint64_t>{(*latest)->version}
+            : std::optional<std::uint64_t>{0}});
+    if (!committed)
+        co_return std::unexpected(committed.error());
+    co_return std::expected<void, std::string>{};
+}
+
+auto checkpoint_agentic_scope_store::erase(std::string workflow_id)
+    -> task<std::expected<void, std::string>>
+{
+    co_return co_await store_.erase_branch(
+        std::move(workflow_id), branch_);
 }
 
 file_agentic_scope_store::file_agentic_scope_store(io_context& context,

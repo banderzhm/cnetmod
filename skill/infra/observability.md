@@ -72,7 +72,7 @@ cnetmod::observability::instrumented_http_client client{
 auto response = co_await client.send(request, parent_context);
 ```
 
-Redis 和 SQL API 接受 `trace_context + span_exporter`，gRPC metadata 自动注入/提取 `traceparent` 与 `tracestate`。OpenAI Agent 使用 `telemetry_listener` 记录 GenAI span、token、重试、耗时和估算成本；详细提示词与输出默认关闭。
+Redis 和 SQL API 接受 `trace_context + span_exporter`，gRPC metadata 自动注入/提取 `traceparent` 与 `tracestate`。`redis_template` 在统一命令入口产生 CLIENT span；Application 的 `redis_service::make_template()` 自动注入 Hub exporter，调用方只传当前协程的 parent。Pipeline 仍按命令分别结束 span，而网络层只执行一次 exchange。属性不包含 key、value、服务端错误正文或凭据。OpenAI Agent 使用 `telemetry_listener` 记录 GenAI span、token、重试、耗时和估算成本；详细提示词与输出默认关闭。
 
 ### Kafka producer 装饰器
 

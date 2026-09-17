@@ -17,7 +17,7 @@ import :prompt;
 namespace cnetmod::openai {
 
 export using runnable_value = std::variant<std::monostate, prompt_variables,
-    std::string, std::vector<message>, chat_response, json>;
+    prompt_context, std::string, std::vector<message>, chat_response, json>;
 export using runnable_step = std::function<task<
     std::expected<runnable_value, std::string>>(runnable_value,
     const run_config&)>;

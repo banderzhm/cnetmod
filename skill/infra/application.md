@@ -274,6 +274,12 @@ auto& users = registry.require<user_repository>("primary");
 
 未启用相应 CMake 协议开关时，启用该服务会在构建阶段返回 `not_supported`，不会拖到运行期失败。
 
+Standalone Redis 服务通过 `redis_service::make_template(options, parent)` 创建业务门面。
+它借用服务拥有的连接池并自动使用 Application Telemetry Hub 的 span exporter；parent
+仍由请求协程显式传入，框架不使用 thread-local 活动 span。返回的 `redis_template`
+不能超过 `redis_service` 生命周期。Cluster 服务继续使用 `cluster_client`，当前模板不
+隐式跨 slot 路由或拆分 multi-key 操作。
+
 AMQP 0-9-1 帧泵只监管单次连接会话，任务自身的重试预算为零，不单独触发 required
 恢复耗尽通知；错误保留在任务状态中。连接重建由服务生命周期的健康恢复任务发起，
 required/optional 要求及恢复预算仍来自 managed_service，而不是帧泵任务标志。

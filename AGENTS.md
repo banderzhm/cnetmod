@@ -6118,6 +6118,7 @@ auto main() -> int
 | Pipeline 批量命令 | `client::pipe` |
 | 请求构建器（复杂/流水线） | `request` + `client::exec` |
 | 连接池 | `connection_pool` |
+| Spring 风格值/Hash/Set 操作 | `redis_template` |
 | 多核分片连接池 | `sharded_connection_pool` |
 | 集群路由（MOVED/ASK） | `cluster_client` |
 | Pub/Sub | `client::subscribe` / `client::psubscribe` |
@@ -6438,6 +6439,47 @@ class cluster_client {
     auto slots() const noexcept -> const cluster_slot_cache&;
 };
 ```
+
+### `redis_template` — 业务语义门面
+
+`redis_template` 通过 `import cnetmod.protocol.redis;` 导出。它复用
+`connection_pool`、`client::exchange()` 与 `client::is_reusable()`，不创建协议实现或
+执行域。子模块的合法名称是 `cnetmod.protocol.redis:redis_template`；C++ 关键字
+`template` 不能直接作为模块名分段。
+
+```cpp
+redis::redis_template cache{pool, {
+    .ns = {.prefix = "orders:"},
+    .default_ttl = std::chrono::minutes{10},
+    .scan_page = 128,
+    .scan_limit = 100000,
+}};
+
+auto order = co_await cache.get_as<order_record>("42");
+auto saved = co_await cache.set_as("42", value);
+
+auto batch = cache.pipeline();
+batch.get("42").exists("43").incr("revision");
+auto replies = co_await cache.execute(batch);
+```
+
+公开操作提供无令牌便利重载以及 `cancel_token&` 重载。需要超时时，在所属
+`io_context` 上用 `with_timeout` / `with_deadline` 包装带令牌重载；取消会传到连接获取
+及完整 RESP exchange。任何未完整 exchange 都关闭连接，池只重新发布
+`is_reusable()` 为真的 lease。
+
+- `get` / `hget` 将 Redis nil 映射为成功的 `std::optional{}`，不映射成错误。
+- `mget` 保持与输入逐位对应，内部消化 RESP aggregate 根节点。
+- `hgetall` 同时规范化 RESP2 array 和 RESP3 map。
+- `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
+- Pipeline 只执行一次 `exchange()`，返回
+  `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
+- `json_codec` 是 `get_as` / `set_as` 的默认 codec，可用满足同一静态接口的业务 codec 替换。
+- 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
+  `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
+
+Application 的 `redis_service::make_template(options, parent)` 自动复用服务连接池及
+Telemetry Hub 的 span exporter；调用方只显式传递当前协程的 trace parent。
 
 `is_open()` 只表示传输层 socket 尚未关闭；连接池使用更严格的
 `is_reusable()`，同时要求不存在未消费的 RESP 数据。`cmd`、`exec`、`pipe` 和
@@ -9294,6 +9336,12 @@ auto& users = registry.require<user_repository>("primary");
 
 未启用相应 CMake 协议开关时，启用该服务会在构建阶段返回 `not_supported`，不会拖到运行期失败。
 
+Standalone Redis 服务通过 `redis_service::make_template(options, parent)` 创建业务门面。
+它借用服务拥有的连接池并自动使用 Application Telemetry Hub 的 span exporter；parent
+仍由请求协程显式传入，框架不使用 thread-local 活动 span。返回的 `redis_template`
+不能超过 `redis_service` 生命周期。Cluster 服务继续使用 `cluster_client`，当前模板不
+隐式跨 slot 路由或拆分 multi-key 操作。
+
 AMQP 0-9-1 帧泵只监管单次连接会话，任务自身的重试预算为零，不单独触发 required
 恢复耗尽通知；错误保留在任务状态中。连接重建由服务生命周期的健康恢复任务发起，
 required/optional 要求及恢复预算仍来自 managed_service，而不是帧泵任务标志。
@@ -10400,7 +10448,7 @@ cnetmod::observability::instrumented_http_client client{
 auto response = co_await client.send(request, parent_context);
 ```
 
-Redis 和 SQL API 接受 `trace_context + span_exporter`，gRPC metadata 自动注入/提取 `traceparent` 与 `tracestate`。OpenAI Agent 使用 `telemetry_listener` 记录 GenAI span、token、重试、耗时和估算成本；详细提示词与输出默认关闭。
+Redis 和 SQL API 接受 `trace_context + span_exporter`，gRPC metadata 自动注入/提取 `traceparent` 与 `tracestate`。`redis_template` 在统一命令入口产生 CLIENT span；Application 的 `redis_service::make_template()` 自动注入 Hub exporter，调用方只传当前协程的 parent。Pipeline 仍按命令分别结束 span，而网络层只执行一次 exchange。属性不包含 key、value、服务端错误正文或凭据。OpenAI Agent 使用 `telemetry_listener` 记录 GenAI span、token、重试、耗时和估算成本；详细提示词与输出默认关闭。
 
 ### Kafka producer 装饰器
 
@@ -14279,7 +14327,7 @@ export struct tool { std::string type; std::string function_name; std::string fu
 | `resilient_chat_model` | Decorator：普通及流式调用的指数退避重试与有序模型回退；流已开始后禁止重放 |
 | `governed_chat_model` | Decorator：对普通及流式调用应用 Bulkhead 并发隔离、Token Bucket 速率限制与 Circuit Breaker 熔断保护 |
 | `runnable` | Composite/Pipeline：按顺序组合 prompt、model、parser 等异步步骤 |
-| `prompt_template` / `chat_prompt_template` | 校验并格式化 `{variable}`；`{{`/`}}` 表示字面花括号 |
+| `prompt_template` / `chat_prompt_template` | 严格变量、默认值、条件段与列表 section；`{{`/`}}` 表示字面花括号 |
 | `json_output_parser` | 解析 JSON 并校验 `type/required/properties/items/enum/additionalProperties` 子集 |
 | `tool_registry` | Command Registry：注册异步工具，执行前校验 JSON Schema，并以结构化错误区分取消、未注册、参数无效和执行失败 |
 | `tool_provider` / `functional_tool_provider` | Strategy：根据会话、调用参数和工具循环迭代动态提供工具 |
@@ -14287,7 +14335,11 @@ export struct tool { std::string type; std::string function_name; std::string fu
 | `tool_binding<Arguments, Result>` | Adapter：将强类型 C++ 异步命令绑定到 JSON Tool Calling 协议 |
 | `agent_executor` | State：有界执行 model → tools → model 循环 |
 | `conversation_memory` | Repository：协程安全、有界的会话消息存储 |
+| `append_only_chat_memory_store` | Repository：面向消息表的原子追加与最近窗口读取，不重写历史快照 |
 | `file_chat_memory_store` | Repository：按会话分文件、容量受限并以原子替换持久化完整消息 |
+| `long_term_store` | Repository：跨会话 namespace/key JSON 记忆、TTL、过滤分页与可选语义检索 |
+| `checkpoint_store` | Repository：版本化执行状态、pending writes、分支、回滚与乐观并发 |
+| `checkpoint_agentic_scope_store` | Adapter：将通用 Checkpointer 接入 `agentic_runtime` |
 | `retriever` / `embedding_store` | Repository/Strategy：供应商无关的过滤检索与向量存储契约 |
 | `in_memory_vector_store` | Repository：异步嵌入、余弦检索、更新和删除 |
 | `functional_retriever` | Adapter：将全文搜索、知识图谱、SQL、Web 搜索或应用检索函数接入统一检索契约 |
@@ -14346,6 +14398,8 @@ export struct tool { std::string type; std::string function_name; std::string fu
 | `:tool_search` | 关键词与向量语义工具检索策略 |
 | `:skills` | Agent Skills 目录加载、激活、资源读取与技能专属工具供应 |
 | `:memory_store` | 基于文件系统的持久化 Chat Memory Store |
+| `:long_term_store` | 跨会话、具名空间、可检索的长期 JSON Memory Store |
+| `:checkpoint` | 版本化 Checkpointer、pending writes、分支和回滚契约 |
 | `:agentic` | 多 Agent 工作流运行时与持久化 Scope |
 | `:planners` | 可恢复的并行、条件与循环 Planner |
 | `:mcp` | MCP client、Streamable HTTP/stdio transport 与 Tool Adapter |
@@ -14354,9 +14408,15 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化，存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。`append_batch` 必须保证原子性，避免 Agent 的模型工具请求和工具结果只保存一半。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+
+`prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行拥有局部变量作用域，局部值覆盖全局值；富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 
 `file_chat_memory_store` 提供开箱即用的持久化实现。每个 session 使用独立 JSON 文件，session ID 先稳定哈希为安全文件名并保存在文件信封中二次校验；写入使用同目录临时文件和原子替换。文件访问通过 executor bridge 执行，支持文本、多模态、模型工具调用和工具执行结果的完整往返恢复，并限制单会话文件大小。
+
+`long_term_store` 面向跨会话记忆，不与聊天记录混用。`store_namespace` 提供层级隔离，`put` 保存任意 JSON 并返回单键递增版本，`expected_version` 以 compare-and-swap 防止覆盖并发更新；`search` 支持 namespace 前缀、`metadata_filter`、limit/offset 分页、TTL 刷新和可选 embedding 相似度。`in_memory_long_term_store` 是具备完整语义的参考实现；生产数据库通过相同接口在事务中实现版本、过期和索引。
+
+`checkpoint_store` 保存不可变状态版本，并为每一版本维护幂等的 pending-write journal。`commit`、`put_pending_writes` 和 `rollback` 分别提供 head version 或 write revision 的乐观并发检查；`fork` 从指定历史版本创建隔离分支，`rollback` 通过追加新版本恢复旧状态，不删除审计历史。`checkpoint_agentic_scope_store` 将该契约适配到现有 `agentic_runtime`，因此 Agent 的暂停、恢复和每步保存自动得到版本历史与并发冲突保护。
 
 `ai_service` 是推荐的应用层入口。它在一次调用内按顺序执行输入 Guardrail、会话读取、Advanced RAG、模型或工具 Agent、输出 Guardrail 以及会话提交；不合规输出可在限定次数内带修正指令重新生成。工具 Agent 返回完整 `transcript`，AI Service 会把模型工具请求、带调用标识的工具结果和最终模型输出作为一个连续交换提交到记忆，不会只保留最终文本而破坏下一轮协议上下文。
 
@@ -14527,6 +14587,23 @@ auto result = co_await chain.invoke(
     cn::openai::prompt_variables{{"question", "What is C++23?"}});
 ```
 
+普通文本输出不需要安装 `output_parser`。条件与列表 Prompt 使用显式
+`prompt_context`：
+
+```cpp
+cn::openai::prompt_template scoped{
+    "{?title}{title}\n{/title}"
+    "{#scopes}- {name}: {value|unset}\n{/scopes}"};
+cn::openai::prompt_context values{
+    .variables = {{"title", "Permissions"}},
+    .sections = {{"scopes", {
+        {{"name", "read"}, {"value", "allowed"}},
+        {{"name", "write"}},
+    }}},
+};
+auto rendered = scoped.format_context(values);
+```
+
 ### 场景：工具调用 Agent
 
 ```cpp
@@ -14594,6 +14671,52 @@ auto answer = co_await agent.invoke("Execute the permitted operation", {},
 ```
 
 ### 场景：对话记忆与 RAG
+
+数据库消息表实现 `append_only_chat_memory_store` 后，可以直接作为
+`conversation_memory` 后端。框架追加时不会先读取或重写历史；批量追加应在
+同一数据库事务中完成，`load_recent(session_id, limit)` 可使用索引分页读取：
+
+```cpp
+database_chat_store store{/* application repository dependencies */};
+cn::openai::conversation_memory memory{"session-42", store,
+    {.max_messages = 32, .max_tokens = 8'000}};
+co_await memory.append(cn::openai::message::user("Hello"));
+auto context_messages = co_await memory.snapshot();
+
+// 只复用框架窗口策略时，无需实现 Store。
+cn::openai::trim_messages(messages,
+    {.max_messages = 32, .max_tokens = 8'000});
+```
+
+跨会话用户记忆使用独立的 Long-term Store：
+
+```cpp
+cn::openai::in_memory_long_term_store memories{&embeddings};
+auto saved = co_await memories.put({"users", user_id}, "preferences",
+    cn::openai::json{{"theme", "dark"}, {"language", "zh-CN"}},
+    {.ttl = std::chrono::hours{24 * 30}, .expected_version = 0});
+
+auto relevant = co_await memories.search({
+    .namespace_prefix = {"users", user_id},
+    .query = "preferred response language",
+    .limit = 5,
+});
+```
+
+需要暂停恢复、分支和审计历史的 Agent 使用通用 Checkpointer Adapter：
+
+```cpp
+cn::openai::in_memory_checkpoint_store checkpoints;
+cn::openai::checkpoint_agentic_scope_store workflow_store{checkpoints};
+cn::openai::agentic_runtime runtime{ctx, workflow_store};
+
+auto result = co_await runtime.execute("workflow-42", planner, initial_state);
+auto history = co_await checkpoints.list("workflow-42", "main", 20);
+auto branch = co_await checkpoints.fork(
+    "workflow-42", "main", 2, "experiment");
+auto restored = co_await checkpoints.rollback(
+    "workflow-42", "main", 1, history->front().version);
+```
 
 ```cpp
 cn::thread_pool cpu_pool{2};
