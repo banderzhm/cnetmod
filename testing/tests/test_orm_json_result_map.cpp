@@ -46,6 +46,16 @@ CNETMOD_MODEL(orm_crud_user, "users",
     CNETMOD_FIELD(name, "name", varchar),
     CNETMOD_FIELD(status, "status", int_))
 
+struct orm_soft_deleted_record
+{
+    std::int64_t id{};
+    std::optional<orm::calendar_datetime> deleted_at;
+};
+
+CNETMOD_MODEL(orm_soft_deleted_record, "soft_deleted_records",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(deleted_at, "deleted_at", datetime, NULLABLE | LOGIC_DELETE))
+
 [[maybe_unused]] auto mysql_database_session_compile_probe(
     cnetmod::mysql::client& client) -> cnetmod::task<void>
 {
@@ -118,6 +128,26 @@ struct traced_database_client
     auto current_format_opts() const -> const orm::sql_format_options&
     {
         return format_options;
+    }
+};
+
+struct diagnostic_database_client
+{
+    orm::query_result response;
+
+    auto query(std::string_view) -> cnetmod::task<orm::query_result>
+    {
+        co_return response;
+    }
+
+    auto execute(std::string_view) -> cnetmod::task<orm::query_result>
+    {
+        co_return response;
+    }
+
+    auto execute(orm::parameterized_query) -> cnetmod::task<orm::query_result>
+    {
+        co_return response;
     }
 };
 
@@ -509,6 +539,64 @@ TEST(orm_database_session_reports_explicit_sql_client_span)
     ASSERT_EQ(reported->name, "SQL QUERY");
     ASSERT_EQ(reported->attributes.at(0).first, "db.system.name");
     ASSERT_EQ(reported->attributes.at(0).second, "mysql");
+}
+
+TEST(orm_model_result_preserves_native_database_diagnostics)
+{
+    diagnostic_database_client client;
+    client.response.error_msg = "duplicate entry";
+    client.response.sql_state = "23000";
+    client.response.error_code = 1062;
+    orm::database_session session{client, orm::sql_dialect::mysql};
+
+    const auto result = cnetmod::sync_wait(session.find_all<orm_crud_user>());
+
+    ASSERT_TRUE(result.is_err());
+    ASSERT_EQ(result.error_code, 1062U);
+    ASSERT_EQ(result.sql_state, "23000");
+    ASSERT_EQ(result.error_msg, "duplicate entry");
+}
+
+TEST(orm_datetime_model_mapping_supports_nullable_and_utc_epoch_values)
+{
+    const orm::calendar_datetime datetime{
+        2026, 9, 17, 8, 31, 57, 123456};
+    const auto field = orm::field_value::from_datetime(datetime);
+
+    std::optional<orm::calendar_datetime> nullable;
+    orm::detail::set_member(nullable, field);
+    ASSERT_TRUE(nullable.has_value());
+    ASSERT_EQ(nullable->to_string(), "2026-09-17 08:31:57.123456");
+    const auto parameter = orm::detail::get_member(nullable);
+    ASSERT_TRUE(parameter.kind == orm::param_value::kind_t::datetime_kind);
+    ASSERT_EQ(parameter.datetime_val.to_string(), datetime.to_string());
+
+    orm::detail::set_member(nullable, orm::field_value::null());
+    ASSERT_FALSE(nullable.has_value());
+    ASSERT_TRUE(orm::detail::get_member(nullable).kind ==
+        orm::param_value::kind_t::null_kind);
+
+    std::int64_t unix_seconds{};
+    orm::detail::set_member(unix_seconds, field);
+    ASSERT_EQ(unix_seconds, std::int64_t{1789633917});
+}
+
+TEST(orm_logical_delete_supports_nullable_datetime_markers)
+{
+    orm::logical_delete_config config;
+    config.field_name = "deleted_at";
+    config.mode = orm::logical_delete_mode::nullable_datetime;
+    orm::logical_delete_interceptor interceptor{std::move(config)};
+
+    const auto selected = interceptor.inject_select_condition<orm_soft_deleted_record>(
+        "SELECT * FROM `soft_deleted_records` WHERE `id` = 7 ORDER BY `id`");
+    ASSERT_EQ(selected,
+        "SELECT * FROM `soft_deleted_records` WHERE `deleted_at` IS NULL AND `id` = 7 ORDER BY `id`");
+
+    const auto removed = interceptor.transform_delete_to_update<orm_soft_deleted_record>(
+        "DELETE FROM `soft_deleted_records` WHERE `id` = 7");
+    ASSERT_EQ(removed,
+        "UPDATE `soft_deleted_records` SET `deleted_at` = CURRENT_TIMESTAMP WHERE `id` = 7");
 }
 
 TEST(orm_error_spans_report_only_valid_database_codes)

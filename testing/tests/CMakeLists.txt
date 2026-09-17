@@ -58,6 +58,10 @@ set(TEST_SOURCES
     test_mongodb_wire.cpp
     test_orm_json_result_map.cpp
     test_orm_sharding.cpp
+    test_orm_sharding_sessions.cpp
+    test_orm_sharding_gateway.cpp
+    test_orm_sharding_scatter.cpp
+    test_orm_sharding_transactions.cpp
 
     # QUIC/HTTP3 tests
     test_quic_varint.cpp

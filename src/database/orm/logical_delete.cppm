@@ -16,13 +16,29 @@ export constexpr col_flag LOGIC_DELETE = static_cast<col_flag>(0x10);
 // logical_delete_config — Configuration for logical delete
 // =============================================================================
 
+/**
+ * @brief Selects how a logical deletion marker is represented.
+ */
+export enum class logical_delete_mode : std::uint8_t
+{
+    value,
+    nullable_datetime,
+};
+
+/**
+ * @brief Configures logical-delete predicates and update assignments.
+ *
+ * `nullable_datetime` treats a null marker as active and writes the database
+ * current timestamp when a row is deleted.
+ */
 export struct logical_delete_config
 {
     std::string field_name = "deleted";                   // Field name for logical delete flag
     param_value deleted_value = param_value::from_int(1); // Value when deleted
     param_value not_deleted_value =
         param_value::from_int(0); // Value when not deleted
-    bool enabled = true;          // Enable/disable logical delete globally
+    logical_delete_mode mode = logical_delete_mode::value;
+    bool enabled = true; // Enable/disable logical delete globally
 };
 
 // =============================================================================
@@ -79,7 +95,7 @@ public:
         if (!field)
             return sql;
         return inject_select_condition_impl(std::move(sql), *field,
-            config_.not_deleted_value);
+            config_.not_deleted_value, config_.mode);
     }
 
     /// Transform DELETE to UPDATE for logical delete
@@ -94,7 +110,7 @@ public:
 
         auto& meta = model_traits<T>::meta();
         return transform_delete_to_update_impl(std::move(sql), meta.table_name,
-            *field, config_.deleted_value);
+            *field, config_.deleted_value, config_.mode);
     }
 
     /// Get configuration
@@ -109,12 +125,14 @@ public:
 private:
     static auto inject_select_condition_impl(std::string sql,
         std::string_view field,
-        const param_value& not_deleted_value)
+        const param_value& not_deleted_value,
+        logical_delete_mode mode)
         -> std::string;
     static auto transform_delete_to_update_impl(std::string sql,
         std::string_view table_name,
         std::string_view field,
-        const param_value& deleted_value)
+        const param_value& deleted_value,
+        logical_delete_mode mode)
         -> std::string;
     logical_delete_config config_;
 };

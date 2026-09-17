@@ -18,16 +18,17 @@ using namespace cnetmod::orm;
 using param_value = cnetmod::orm::param_value;
 using field_value = cnetmod::orm::field_value;
 
-// =============================================================================
-// orm_result<T> 鈥?ORM operation result
-// =============================================================================
-
+/**
+ * @brief Carries MySQL ORM data and native server diagnostics.
+ */
 template <class T> struct orm_result
 {
     std::vector<T> data;
     std::uint64_t affected_rows = 0;
     std::uint64_t last_insert_id = 0;
     std::string error_msg;
+    std::string sql_state;
+    std::uint32_t error_code{};
 
     auto ok() const noexcept -> bool
     {
@@ -119,7 +120,7 @@ public:
         }
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         fill_insert_id<T>(model, rs.last_insert_id);
 
@@ -154,7 +155,7 @@ public:
 
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         // Fill back first auto_increment id
         if (rs.last_insert_id > 0 && !models.empty())
@@ -175,7 +176,7 @@ public:
             update_of<T>().set(model).build(orm_format_options());
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
@@ -189,7 +190,7 @@ public:
         auto [sql, params] = ub.build(orm_format_options());
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
@@ -216,7 +217,7 @@ public:
 
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
@@ -241,7 +242,7 @@ public:
 
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
@@ -255,7 +256,7 @@ public:
         auto [sql, params] = db.build(orm_format_options());
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
@@ -309,7 +310,7 @@ public:
             co_return make_err<T>("Failed to format delete query");
         auto rs = co_await cli_.execute(*formatted);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
         co_return r;
@@ -326,7 +327,7 @@ public:
             co_return make_err<T>("Failed to format update query");
         auto rs = co_await cli_.execute(*formatted);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
         orm_result<T> r;
         r.affected_rows = rs.affected_rows;
         co_return r;
@@ -340,7 +341,7 @@ public:
         auto sql = build_create_table_sql<T>();
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
         co_return orm_result<T>{};
     }
 
@@ -350,7 +351,7 @@ public:
         auto sql = build_drop_table_sql<T>();
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
         co_return orm_result<T>{};
     }
 
@@ -464,7 +465,7 @@ private:
     {
         auto rs = co_await cli_.execute(sql);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> r;
         r.data = mysql_map_result<T>(rs);
@@ -477,6 +478,21 @@ private:
         orm_result<T> r;
         r.error_msg = std::move(msg);
         return r;
+    }
+
+    template <class T, class Result>
+    requires requires(const Result& result) {
+        result.error_msg;
+        result.sql_state;
+        result.error_code;
+    }
+    static auto make_err(const Result& result) -> orm_result<T>
+    {
+        orm_result<T> mapped;
+        mapped.error_msg = result.error_msg;
+        mapped.sql_state = result.sql_state;
+        mapped.error_code = result.error_code;
+        return mapped;
     }
 };
 

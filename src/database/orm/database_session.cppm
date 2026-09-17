@@ -57,8 +57,12 @@ concept asynchronous_database_client = requires(Client& client,
     client.execute(std::move(statement));
 };
 
-/// Typed result shared by every database dialect.  It deliberately preserves
-/// the raw operation metadata while making the row-to-model mapping explicit.
+/**
+ * @brief Carries mapped models and native database diagnostics.
+ *
+ * The native error number and SQLSTATE remain available so callers can use
+ * precise vendor diagnostics without parsing human-readable messages.
+ */
 template <class T> struct model_result
 {
     std::vector<T> data;
@@ -66,6 +70,7 @@ template <class T> struct model_result
     std::uint64_t last_insert_id{};
     std::string error_msg;
     std::string sql_state;
+    std::uint32_t error_code{};
 
     [[nodiscard]] auto ok() const noexcept -> bool
     {
@@ -813,6 +818,7 @@ private:
         mapped.affected_rows = result.affected_rows;
         mapped.last_insert_id = result.last_insert_id;
         mapped.sql_state = std::move(result.sql_state);
+        mapped.error_code = result.error_code;
         if (result.is_err())
         {
             mapped.error_msg = std::move(result.error_msg);

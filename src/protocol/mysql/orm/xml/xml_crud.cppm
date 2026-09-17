@@ -23,6 +23,8 @@ struct exec_result
     std::uint64_t affected_rows = 0;
     std::uint64_t last_insert_id = 0;
     std::string error_msg;
+    std::string sql_state;
+    std::uint32_t error_code{};
 
     auto ok() const noexcept -> bool
     {
@@ -62,7 +64,7 @@ public:
 
         auto rs = co_await execute_built(*sql_result);
         if (rs.is_err())
-            co_return make_err<T>(rs.error_msg);
+            co_return make_err<T>(rs);
 
         orm_result<T> result;
         result.data = mysql_map_result<T>(rs);
@@ -118,6 +120,8 @@ public:
         {
             orm_result<std::tuple<Ts...>> result;
             result.error_msg = rs.error_msg;
+            result.sql_state = rs.sql_state;
+            result.error_code = rs.error_code;
             co_return result;
         }
 
@@ -251,6 +255,21 @@ private:
     {
         orm_result<T> result;
         result.error_msg = std::move(msg);
+        return result;
+    }
+
+    template <class T, class Result>
+    requires requires(const Result& source) {
+        source.error_msg;
+        source.sql_state;
+        source.error_code;
+    }
+    static auto make_err(const Result& source) -> orm_result<T>
+    {
+        orm_result<T> result;
+        result.error_msg = source.error_msg;
+        result.sql_state = source.sql_state;
+        result.error_code = source.error_code;
         return result;
     }
 

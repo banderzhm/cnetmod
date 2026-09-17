@@ -78,6 +78,26 @@ import std;
 
 使用 `std::println` / `std::format` 替代 iostream。
 
+### Clang 22 `std::format` visibility caveat
+
+Every translation unit that calls a standard-library facility must import
+`std` directly and before cnetmod aggregate modules:
+
+```cpp
+import std;
+import cnetmod.protocol.openai;
+
+auto text = std::format("request-{}", request_id);
+```
+
+Do not rely on a private `import std;` from an imported cnetmod module. With
+Clang 22 module visibility, importing `cnetmod.protocol.openai` without an
+earlier direct `import std;` can leave an incomplete overload set at a later
+`std::format` call. A narrow string literal may then be diagnosed against the
+wide-character overload. Replacing `std::format` with string concatenation is
+only a local workaround; it does not repair the translation unit's standard
+library visibility.
+
 ## 全局片段（Global Module Fragment）
 
 当需要引入平台头文件或项目配置头时，使用 `module;` 开头的全局片段：

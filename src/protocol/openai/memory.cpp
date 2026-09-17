@@ -15,6 +15,52 @@ import :memory;
 namespace cnetmod::openai {
 
 namespace {
+    class chat_record_store_error_category final : public std::error_category
+    {
+    public:
+        [[nodiscard]] auto name() const noexcept -> const char* override
+        {
+            return "cnetmod.openai.chat_record_store";
+        }
+
+        [[nodiscard]] auto message(int value) const -> std::string override
+        {
+            switch (static_cast<chat_record_store_errc>(value))
+            {
+            case chat_record_store_errc::session_not_found:
+                return "chat session not found";
+            case chat_record_store_errc::invalid_argument:
+                return "invalid chat record store argument";
+            case chat_record_store_errc::inconsistent_result:
+                return "chat record store returned an inconsistent result";
+            case chat_record_store_errc::storage_unavailable:
+                return "chat record storage is unavailable";
+            case chat_record_store_errc::conflict:
+                return "chat record storage conflict";
+            case chat_record_store_errc::operation_canceled:
+                return "chat record storage operation canceled";
+            case chat_record_store_errc::data_corruption:
+                return "chat record storage data is corrupt";
+            case chat_record_store_errc::resource_exhausted:
+                return "chat record storage resource exhausted";
+            case chat_record_store_errc::atomic_write_failed:
+                return "atomic chat record append failed";
+            }
+            return "unknown chat record store error";
+        }
+    };
+
+    auto chat_record_category() noexcept -> const std::error_category&
+    {
+        static const chat_record_store_error_category category;
+        return category;
+    }
+
+    auto record_error_message(const std::error_code& error) -> std::string
+    {
+        return error.message();
+    }
+
     auto message_tokens(const message& value, const memory_options& options)
         -> std::size_t
     {
@@ -28,6 +74,11 @@ namespace {
         return std::max<std::size_t>(1, (characters + 3) / 4);
     }
 } // namespace
+
+auto make_error_code(chat_record_store_errc error) noexcept -> std::error_code
+{
+    return {static_cast<int>(error), chat_record_category()};
+}
 
 auto trim_messages(std::vector<message>& messages,
     const memory_options& options) -> trim_result
@@ -216,62 +267,159 @@ auto in_memory_append_only_chat_memory_store::erase(std::string session_id)
 
 auto append_only_chat_record_store::append(std::string session_id,
     persisted_chat_message value)
-    -> task<std::expected<persisted_chat_message, std::string>>
+    -> task<std::expected<persisted_chat_message, std::error_code>>
 {
     auto appended = co_await append_batch(std::move(session_id),
         std::vector<persisted_chat_message>{std::move(value)});
     if (!appended)
         co_return std::unexpected(appended.error());
     if (appended->size() != 1)
-        co_return std::unexpected(
-            "chat record store returned an invalid append result");
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::inconsistent_result));
     co_return std::move(appended->front());
+}
+
+auto append_only_chat_record_store::load_recent(std::string session_id,
+    std::size_t limit)
+    -> task<std::expected<std::vector<persisted_chat_message>, std::error_code>>
+{
+    auto total = co_await count(session_id);
+    if (!total)
+        co_return std::unexpected(total.error());
+    const auto offset = limit == 0 || *total <= limit ? 0 : *total - limit;
+    co_return co_await load_page(std::move(session_id), offset,
+        limit == 0 ? *total : limit);
 }
 
 auto in_memory_append_only_chat_record_store::append(std::string session_id,
     persisted_chat_message value)
-    -> task<std::expected<persisted_chat_message, std::string>>
+    -> task<std::expected<persisted_chat_message, std::error_code>>
 {
     auto appended = co_await append_batch(std::move(session_id),
         std::vector<persisted_chat_message>{std::move(value)});
     if (!appended)
         co_return std::unexpected(appended.error());
+    if (appended->size() != 1)
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::inconsistent_result));
     co_return std::move(appended->front());
 }
 
 auto in_memory_append_only_chat_record_store::append_batch(
     std::string session_id, std::vector<persisted_chat_message> values)
-    -> task<std::expected<std::vector<persisted_chat_message>, std::string>>
+    -> task<std::expected<std::vector<persisted_chat_message>, std::error_code>>
 {
+    if (session_id.empty())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::invalid_argument));
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    auto& destination = sessions_[std::move(session_id)];
-    destination.insert(destination.end(), values.begin(), values.end());
+    try
+    {
+        const auto found = sessions_.find(session_id);
+        auto staged = found == sessions_.end()
+            ? std::vector<persisted_chat_message>{}
+            : found->second;
+        staged.insert(staged.end(), values.begin(), values.end());
+        sessions_.insert_or_assign(std::move(session_id), std::move(staged));
+    }
+    catch (const std::bad_alloc&)
+    {
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::resource_exhausted));
+    }
+    catch (...)
+    {
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::atomic_write_failed));
+    }
     co_return values;
 }
 
-auto in_memory_append_only_chat_record_store::load_recent(
-    std::string session_id, std::size_t limit)
-    -> task<std::expected<std::vector<persisted_chat_message>, std::string>>
+auto in_memory_append_only_chat_record_store::load_page(
+    std::string session_id, std::size_t offset, std::size_t limit)
+    -> task<std::expected<std::vector<persisted_chat_message>, std::error_code>>
 {
+    if (session_id.empty())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::invalid_argument));
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
     const auto found = sessions_.find(session_id);
     if (found == sessions_.end())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::session_not_found));
+    if (limit == 0 || offset >= found->second.size())
         co_return std::vector<persisted_chat_message>{};
+    const auto count = std::min(limit, found->second.size() - offset);
+    const auto begin = found->second.begin() + static_cast<std::ptrdiff_t>(offset);
+    try
+    {
+        co_return std::vector<persisted_chat_message>{begin,
+            begin + static_cast<std::ptrdiff_t>(count)};
+    }
+    catch (const std::bad_alloc&)
+    {
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::resource_exhausted));
+    }
+}
+
+auto in_memory_append_only_chat_record_store::count(std::string session_id)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (session_id.empty())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::invalid_argument));
+    co_await mutex_.lock();
+    async_lock_guard guard(mutex_, std::adopt_lock);
+    const auto found = sessions_.find(session_id);
+    if (found == sessions_.end())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::session_not_found));
+    co_return found->second.size();
+}
+
+auto in_memory_append_only_chat_record_store::load_recent(
+    std::string session_id, std::size_t limit)
+    -> task<std::expected<std::vector<persisted_chat_message>, std::error_code>>
+{
+    if (session_id.empty())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::invalid_argument));
+    co_await mutex_.lock();
+    async_lock_guard guard(mutex_, std::adopt_lock);
+    const auto found = sessions_.find(session_id);
+    if (found == sessions_.end())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::session_not_found));
     const auto begin = limit == 0 || found->second.size() <= limit
         ? found->second.begin()
         : found->second.end() - static_cast<std::ptrdiff_t>(limit);
-    co_return std::vector<persisted_chat_message>{begin, found->second.end()};
+    try
+    {
+        co_return std::vector<persisted_chat_message>{begin,
+            found->second.end()};
+    }
+    catch (const std::bad_alloc&)
+    {
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::resource_exhausted));
+    }
 }
 
 auto in_memory_append_only_chat_record_store::erase(std::string session_id)
-    -> task<std::expected<void, std::string>>
+    -> task<std::expected<void, std::error_code>>
 {
+    if (session_id.empty())
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::invalid_argument));
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    sessions_.erase(session_id);
-    co_return std::expected<void, std::string>{};
+    if (sessions_.erase(session_id) == 0)
+        co_return std::unexpected(make_error_code(
+            chat_record_store_errc::session_not_found));
+    co_return std::expected<void, std::error_code>{};
 }
 
 chat_record_memory_adapter::chat_record_memory_adapter(
@@ -286,7 +434,7 @@ auto chat_record_memory_adapter::append(std::string session_id, message value)
     auto appended = co_await store_.append(std::move(session_id),
         {.value = std::move(value)});
     if (!appended)
-        co_return std::unexpected(appended.error());
+        co_return std::unexpected(record_error_message(appended.error()));
     co_return std::expected<void, std::string>{};
 }
 
@@ -301,7 +449,7 @@ auto chat_record_memory_adapter::append_batch(std::string session_id,
     auto appended = co_await store_.append_batch(std::move(session_id),
         std::move(records));
     if (!appended)
-        co_return std::unexpected(appended.error());
+        co_return std::unexpected(record_error_message(appended.error()));
     co_return std::expected<void, std::string>{};
 }
 
@@ -311,7 +459,11 @@ auto chat_record_memory_adapter::load_recent(std::string session_id,
 {
     auto loaded = co_await store_.load_recent(std::move(session_id), limit);
     if (!loaded)
-        co_return std::unexpected(loaded.error());
+    {
+        if (loaded.error() == make_error_code(chat_record_store_errc::session_not_found))
+            co_return std::vector<message>{};
+        co_return std::unexpected(record_error_message(loaded.error()));
+    }
     std::vector<message> messages;
     messages.reserve(loaded->size());
     for (auto& record : *loaded)
@@ -322,7 +474,10 @@ auto chat_record_memory_adapter::load_recent(std::string session_id,
 auto chat_record_memory_adapter::erase(std::string session_id)
     -> task<std::expected<void, std::string>>
 {
-    co_return co_await store_.erase(std::move(session_id));
+    auto erased = co_await store_.erase(std::move(session_id));
+    if (!erased && erased.error() != make_error_code(chat_record_store_errc::session_not_found))
+        co_return std::unexpected(record_error_message(erased.error()));
+    co_return std::expected<void, std::string>{};
 }
 
 conversation_memory::conversation_memory(memory_options options)

@@ -121,6 +121,11 @@ concept Model = requires {
 } // namespace cnetmod::orm
 
 export namespace cnetmod::orm::detail {
+/**
+ * @brief Converts a timezone-free database datetime to Unix seconds as UTC.
+ */
+[[nodiscard]] auto datetime_to_unix_seconds(const calendar_datetime&)
+    -> std::optional<std::int64_t>;
 void set_member(std::int64_t&, const field_value&);
 void set_member(std::uint64_t&, const field_value&);
 void set_member(int&, const field_value&);
@@ -135,6 +140,7 @@ void set_member(clock_time&, const field_value&);
 void set_member(std::optional<std::string>&, const field_value&);
 void set_member(std::optional<std::int64_t>&, const field_value&);
 void set_member(std::optional<double>&, const field_value&);
+void set_member(std::optional<calendar_datetime>&, const field_value&);
 void set_member(uuid&, const field_value&);
 [[nodiscard]] auto get_member(std::int64_t) -> param_value;
 [[nodiscard]] auto get_member(std::uint64_t) -> param_value;
@@ -153,6 +159,8 @@ void set_member(uuid&, const field_value&);
 [[nodiscard]] auto get_member(const std::optional<std::int64_t>&)
     -> param_value;
 [[nodiscard]] auto get_member(const std::optional<double>&) -> param_value;
+[[nodiscard]] auto get_member(const std::optional<calendar_datetime>&)
+    -> param_value;
 [[nodiscard]] auto get_member(const uuid&) -> param_value;
 
 template <typename E>
@@ -181,6 +189,11 @@ inline void set_member(T& member, const field_value& value)
         member = static_cast<std::time_t>(value.get_int64());
     else if (value.is_uint64())
         member = static_cast<std::time_t>(value.get_uint64());
+    else if (value.is_datetime())
+    {
+        if (const auto seconds = datetime_to_unix_seconds(value.get_datetime()))
+            member = static_cast<std::time_t>(*seconds);
+    }
 }
 
 template <typename T>

@@ -3227,6 +3227,8 @@ template <class T> struct orm_result {
     std::uint64_t affected_rows = 0;
     std::uint64_t last_insert_id = 0;
     std::string error_msg;
+    std::string sql_state;
+    std::uint32_t error_code = 0;
     auto ok() const noexcept -> bool;
     auto is_err() const noexcept -> bool;
     auto empty() const noexcept -> bool;
@@ -3287,6 +3289,8 @@ auto result = co_await gateway->write<OrderId>(orm::shard_key{tenant_id},
   聚合及是否接受部分结果均由合并器决定。
 - `distributed_transaction<T>()` 在单数据库时使用普通事务，在多个 MySQL 实例时使用
   XA 两阶段提交，并把固定到物理表的 `distributed_session_context` 交给回调。
+- scatter 回调抛出的异常会转换为对应分片的失败结果；分布式事务回调抛出的异常会转换
+  为事务错误并回滚已经启动的分支，不会越过 ORM 边界泄漏异常。
 - 任一提交返回失败时会报告结果不确定；生产系统应配合 MySQL `XA RECOVER`、事务日志和
   运维补偿处理进程崩溃或网络分区，不能把 XA 当作无故障的本地事务。
 
@@ -3847,6 +3851,16 @@ auto work(mysql::client& cli) -> task<void>
 ### 软删除
 `CNETMOD_FIELD(deleted, "deleted", tinyint, LOGIC_DELETE)` — `logical_delete_interceptor` 自动将 DELETE 转为 `UPDATE SET deleted=1`，SELECT 追加 `deleted=0`。`global_logical_delete_interceptor()`。
 
+Nullable datetime markers use an explicit mode. Active rows are selected with
+`deleted_at IS NULL`, and deletion writes `CURRENT_TIMESTAMP`:
+
+```cpp
+logical_delete_config config;
+config.field_name = "deleted_at";
+config.mode = logical_delete_mode::nullable_datetime;
+logical_delete_interceptor interceptor{std::move(config)};
+```
+
 ### 多租户
 `CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)` — `tenant_context::set_tenant_id(id)` 设置线程级租户；`tenant_guard guard(id)` RAII 守卫；`multi_tenant_interceptor` 自动注入条件。`global_multi_tenant_interceptor()`。
 
@@ -3881,11 +3895,20 @@ class database_session {
 };
 ```
 
+MySQL failures retain both the native server error number (for example `1062`
+for a duplicate key) and SQLSTATE. Prefer `error_code` for vendor-specific
+classification and keep `sql_state` for portable error classes.
+
+Model fields may use `std::optional<calendar_datetime>` for nullable
+`DATETIME`/`TIMESTAMP` columns. Mapping a database datetime into an integral
+Unix time treats the stored wall-clock fields as UTC and therefore does not
+depend on the process or database-session timezone.
+
 `database_session` is the protocol-independent repository surface. It accepts
 either a MySQL or PostgreSQL client and preserves the native wire client below
 it. `model_result<T>` contains `data`, `affected_rows`, `last_insert_id`,
-`error_msg`, and `sql_state`; use `ok()` and `first()` to distinguish an empty
-query from a failed operation.
+`error_msg`, `sql_state`, and the native `error_code`; use `ok()` and `first()`
+to distinguish an empty query from a failed operation.
 
 ```cpp
 import cnetmod.orm;
@@ -10042,6 +10065,26 @@ import std;
 
 使用 `std::println` / `std::format` 替代 iostream。
 
+### Clang 22 `std::format` visibility caveat
+
+Every translation unit that calls a standard-library facility must import
+`std` directly and before cnetmod aggregate modules:
+
+```cpp
+import std;
+import cnetmod.protocol.openai;
+
+auto text = std::format("request-{}", request_id);
+```
+
+Do not rely on a private `import std;` from an imported cnetmod module. With
+Clang 22 module visibility, importing `cnetmod.protocol.openai` without an
+earlier direct `import std;` can leave an incomplete overload set at a later
+`std::format` call. A narrow string literal may then be diagnosed against the
+wide-character overload. Replacing `std::format` with string concatenation is
+only a local workaround; it does not repair the translation unit's standard
+library visibility.
+
 ## 全局片段（Global Module Fragment）
 
 当需要引入平台头文件或项目配置头时，使用 `module;` 开头的全局片段：
@@ -14433,7 +14476,7 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。`append_batch` 必须保证原子性，避免 Agent 的模型工具请求和工具结果只保存一半。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
 
 `prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行使用 `prompt_section`，拥有局部变量和可递归的子 section；变量及子 section 都按“当前行优先、根上下文兜底”解析。富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 
@@ -14698,8 +14741,10 @@ auto answer = co_await agent.invoke("Execute the permitted operation", {},
 ### 场景：对话记忆与 RAG
 
 数据库消息表实现 `append_only_chat_memory_store` 后，可以直接作为
-`conversation_memory` 后端。框架追加时不会先读取或重写历史；批量追加应在
-同一数据库事务中完成，`load_recent(session_id, limit)` 可使用索引分页读取：
+`conversation_memory` 后端。框架追加时不会先读取或重写历史；批量追加必须在
+同一数据库事务中完成。业务分页使用 `count(session_id)` 获取总数，再通过
+`load_page(session_id, offset, limit)` 读取稳定插入顺序的页面；模型上下文使用
+`load_recent(session_id, limit)` 读取最近窗口：
 
 ```cpp
 database_chat_store store{/* application repository dependencies */};

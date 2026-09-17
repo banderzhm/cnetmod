@@ -83,6 +83,8 @@ public:
         r.affected_rows = rs.affected_rows;
         r.last_insert_id = rs.last_insert_id;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -159,6 +161,8 @@ public:
         r.affected_rows = rs.affected_rows;
         r.last_insert_id = rs.last_insert_id;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -196,6 +200,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -244,6 +250,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -293,6 +301,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -353,6 +363,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -529,6 +541,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -549,6 +563,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 
@@ -569,6 +585,8 @@ public:
         exec_result r;
         r.affected_rows = rs.affected_rows;
         r.error_msg = rs.error_msg;
+        r.sql_state = rs.sql_state;
+        r.error_code = rs.error_code;
         co_return r;
     }
 

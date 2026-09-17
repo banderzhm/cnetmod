@@ -49,6 +49,13 @@ export struct trim_result
 {
     std::size_t removed_messages = 0;
     std::size_t removed_tokens = 0;
+
+    /**
+     * Token count of the budgeted suffix after trimming.
+     *
+     * Pinned prefix messages are deliberately excluded. When max_tokens is
+     * nonzero, this value is compared directly with that limit.
+     */
     std::size_t remaining_tokens = 0;
     bool limit_satisfied = true;
 };
@@ -155,23 +162,69 @@ export struct persisted_chat_message
 };
 
 /**
+ * Identifies portable failures produced by chat record stores.
+ */
+export enum class chat_record_store_errc
+{
+    session_not_found = 1,
+    invalid_argument,
+    inconsistent_result,
+    storage_unavailable,
+    conflict,
+    operation_canceled,
+    data_corruption,
+    resource_exhausted,
+    atomic_write_failed,
+};
+
+/**
+ * Creates a classified error code for a chat record store failure.
+ */
+export auto make_error_code(chat_record_store_errc error) noexcept
+    -> std::error_code;
+
+/**
  * Defines append-only persistence that returns database-enriched records.
+ *
+ * Records are ordered from oldest to newest. Batch append is an all-or-nothing
+ * storage boundary: an implementation must use its native transaction or an
+ * equivalent atomic operation and must never expose a partially appended
+ * batch. The abstraction intentionally does not leak a database transaction
+ * object, so SQL and non-SQL stores retain their native transaction models.
  */
 export class append_only_chat_record_store
 {
 public:
     virtual ~append_only_chat_record_store() = default;
     virtual auto append(std::string session_id, persisted_chat_message value)
-        -> task<std::expected<persisted_chat_message, std::string>>;
+        -> task<std::expected<persisted_chat_message, std::error_code>>;
     virtual auto append_batch(std::string session_id,
         std::vector<persisted_chat_message> values)
         -> task<std::expected<std::vector<persisted_chat_message>,
-            std::string>> = 0;
+            std::error_code>> = 0;
+
+    /**
+     * Loads an insertion-ordered page. A zero limit returns an empty page.
+     */
+    virtual auto load_page(std::string session_id, std::size_t offset,
+        std::size_t limit)
+        -> task<std::expected<std::vector<persisted_chat_message>,
+            std::error_code>> = 0;
+
+    /**
+     * Counts all records in a session without loading message bodies.
+     */
+    virtual auto count(std::string session_id)
+        -> task<std::expected<std::size_t, std::error_code>> = 0;
+
+    /**
+     * Loads the newest records in chronological order; zero requests all.
+     */
     virtual auto load_recent(std::string session_id, std::size_t limit)
         -> task<std::expected<std::vector<persisted_chat_message>,
-            std::string>> = 0;
+            std::error_code>>;
     virtual auto erase(std::string session_id)
-        -> task<std::expected<void, std::string>> = 0;
+        -> task<std::expected<void, std::error_code>> = 0;
 };
 
 /**
@@ -182,16 +235,22 @@ export class in_memory_append_only_chat_record_store final
 {
 public:
     auto append(std::string session_id, persisted_chat_message value)
-        -> task<std::expected<persisted_chat_message, std::string>> override;
+        -> task<std::expected<persisted_chat_message, std::error_code>> override;
     auto append_batch(std::string session_id,
         std::vector<persisted_chat_message> values)
         -> task<std::expected<std::vector<persisted_chat_message>,
-            std::string>> override;
+            std::error_code>> override;
+    auto load_page(std::string session_id, std::size_t offset,
+        std::size_t limit)
+        -> task<std::expected<std::vector<persisted_chat_message>,
+            std::error_code>> override;
+    auto count(std::string session_id)
+        -> task<std::expected<std::size_t, std::error_code>> override;
     auto load_recent(std::string session_id, std::size_t limit)
         -> task<std::expected<std::vector<persisted_chat_message>,
-            std::string>> override;
+            std::error_code>> override;
     auto erase(std::string session_id)
-        -> task<std::expected<void, std::string>> override;
+        -> task<std::expected<void, std::error_code>> override;
 
 private:
     async_mutex mutex_;

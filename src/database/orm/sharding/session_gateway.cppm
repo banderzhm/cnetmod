@@ -10,6 +10,42 @@ import cnetmod.orm.sharding.shard_catalog;
 import cnetmod.orm.sharding.shard_key;
 import cnetmod.orm.sql_dialect;
 
+namespace cnetmod::orm::detail {
+
+template <class T>
+auto capture_task_exception(task<T> operation)
+    -> task<std::expected<T, std::exception_ptr>>
+{
+    try
+    {
+        co_return co_await operation;
+    }
+    catch (...)
+    {
+        co_return std::unexpected(std::current_exception());
+    }
+}
+
+inline auto exception_message(std::exception_ptr failure,
+    std::string_view fallback) -> std::string
+{
+    try
+    {
+        if (failure)
+            std::rethrow_exception(failure);
+    }
+    catch (const std::exception& error)
+    {
+        return error.what();
+    }
+    catch (...)
+    {
+    }
+    return std::string{fallback};
+}
+
+} // namespace cnetmod::orm::detail
+
 export namespace cnetmod::orm {
 
 /**
@@ -93,6 +129,21 @@ public:
     using client_accessor = std::function<Client&(Lease&)>;
 
     /**
+     * @brief Defines one type-erased asynchronous operation for a routed shard.
+     */
+    template <class T>
+    using scatter_operation = std::function<task<std::expected<T, std::string>>(
+        const shard_route&, session_type&)>;
+
+    /**
+     * @brief Defines one type-erased callback for a coordinated transaction.
+     */
+    template <class T>
+    using distributed_operation = std::function<
+        task<std::expected<T, std::string>>(
+            distributed_session_context<session_type>&)>;
+
+    /**
      * @brief Creates a gateway over an immutable shard catalog.
      */
     sharded_session_gateway(std::shared_ptr<const shard_catalog> catalog,
@@ -151,8 +202,8 @@ public:
      * Scatter-gather is never implicit. Callers choose the operation and then
      * merge, sort, aggregate, or reject partial results explicitly.
      */
-    template <class T, class Operation>
-    auto scatter_read(Operation operation)
+    template <class T>
+    auto scatter_read(scatter_operation<T> operation)
         -> task<std::expected<std::vector<shard_read_result<T>>, std::string>>
     {
         if (!scatter_gather_enabled_)
@@ -183,20 +234,20 @@ public:
             }
             session_type session{client_(*lease), destination.physical_table,
                 dialect_};
+            auto invoked = co_await detail::capture_task_exception(
+                operation(destination, session));
+            auto result = invoked
+                ? std::move(*invoked)
+                : std::expected<T, std::string>{std::unexpected(
+                      detail::exception_message(invoked.error(),
+                          "scatter-gather operation failed"))};
             try
             {
-                results.push_back({destination,
-                    co_await operation(destination, session)});
+                results.push_back({destination, std::move(result)});
             }
-            catch (const std::exception& error)
+            catch (const std::bad_alloc&)
             {
-                results.push_back({destination,
-                    std::unexpected(std::string{error.what()})});
-            }
-            catch (...)
-            {
-                results.push_back({destination,
-                    std::unexpected("scatter-gather operation failed")});
+                co_return std::unexpected("scatter-gather allocation failed");
             }
         }
         co_return results;
@@ -209,8 +260,11 @@ public:
      * keeps partial-result, ordering, pagination, and aggregation policy out of
      * the routing layer.
      */
-    template <class Item, class Result, class Operation, class Merger>
-    auto scatter_gather(Operation operation, Merger merger)
+    template <class Item, class Result>
+    auto scatter_gather(scatter_operation<Item> operation,
+        std::function<std::expected<Result, std::string>(
+            std::vector<shard_read_result<Item>>)>
+            merger)
         -> task<std::expected<Result, std::string>>
     {
         auto scattered = co_await scatter_read<Item>(std::move(operation));
@@ -237,9 +291,9 @@ public:
      * use MySQL XA two-phase commit. The callback receives only sessions whose
      * leases are held until commit or rollback completes.
      */
-    template <class T, class Operation>
+    template <class T>
     auto distributed_transaction(std::span<const shard_key> keys,
-        Operation operation)
+        distributed_operation<T> operation)
         -> task<std::expected<T, std::string>>
     {
         if (!distributed_transactions_enabled_)
@@ -352,22 +406,11 @@ public:
             item.started = true;
         }
 
-        auto invoke_operation = [&]() -> task<std::expected<T, std::string>>
-        {
-            try
-            {
-                co_return co_await operation(context);
-            }
-            catch (const std::exception& error)
-            {
-                co_return std::unexpected(std::string{error.what()});
-            }
-            catch (...)
-            {
-                co_return std::unexpected("transaction callback failed");
-            }
-        };
-        auto value = co_await invoke_operation();
+        auto invoked = co_await detail::capture_task_exception(operation(context));
+        if (!invoked)
+            co_return co_await rollback(detail::exception_message(invoked.error(),
+                "transaction callback failed"));
+        auto value = std::move(*invoked);
         if (!value)
             co_return co_await rollback(std::move(value.error()));
 

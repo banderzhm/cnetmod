@@ -20,6 +20,12 @@ import cnetmod.protocol.openai;
 import cnetmod.observability.openai;
 import nlohmann.json;
 
+TEST(openai_aggregate_import_preserves_narrow_std_format_visibility)
+{
+    const auto formatted = std::format("openai-request-{}", 22);
+    ASSERT_EQ(formatted, "openai-request-22");
+}
+
 namespace openai = cnetmod::openai;
 
 namespace {
@@ -2205,6 +2211,50 @@ TEST(openai_chat_record_store_keeps_metadata_outside_protocol_messages)
     ASSERT_TRUE(stored->back().metadata.empty());
 }
 
+TEST(openai_chat_record_store_supports_paging_count_and_classified_errors)
+{
+    openai::in_memory_append_only_chat_record_store records;
+    std::vector<openai::persisted_chat_message> values;
+    for (int index = 0; index < 5; ++index)
+    {
+        values.push_back({.value = openai::message::user(
+                              std::format("message-{}", index)),
+            .metadata = {{"index", index}}});
+    }
+    const auto appended = cnetmod::sync_wait(
+        records.append_batch("paged-session", std::move(values)));
+    const auto total = cnetmod::sync_wait(records.count("paged-session"));
+    const auto page = cnetmod::sync_wait(
+        records.load_page("paged-session", 1, 2));
+    const auto empty = cnetmod::sync_wait(
+        records.load_page("paged-session", 2, 0));
+    const auto beyond = cnetmod::sync_wait(
+        records.load_page("paged-session", 100, 10));
+    const auto missing = cnetmod::sync_wait(records.count("missing-session"));
+
+    ASSERT_TRUE(appended.has_value());
+    ASSERT_TRUE(total.has_value());
+    ASSERT_EQ(*total, std::size_t{5});
+    ASSERT_TRUE(page.has_value());
+    ASSERT_EQ(page->size(), std::size_t{2});
+    ASSERT_EQ((*page)[0].metadata["index"], 1);
+    ASSERT_EQ((*page)[1].metadata["index"], 2);
+    ASSERT_TRUE(empty.has_value());
+    ASSERT_TRUE(empty->empty());
+    ASSERT_TRUE(beyond.has_value());
+    ASSERT_TRUE(beyond->empty());
+    ASSERT_FALSE(missing.has_value());
+    ASSERT_EQ(missing.error(), openai::make_error_code(openai::chat_record_store_errc::session_not_found));
+
+    openai::chat_record_memory_adapter adapter{records};
+    const auto absent = cnetmod::sync_wait(
+        adapter.load_recent("missing-session", 10));
+    const auto cleared = cnetmod::sync_wait(adapter.erase("missing-session"));
+    ASSERT_TRUE(absent.has_value());
+    ASSERT_TRUE(absent->empty());
+    ASSERT_TRUE(cleared.has_value());
+}
+
 TEST(openai_trim_messages_is_reusable_without_persistence)
 {
     std::vector<openai::message> messages{
@@ -2238,6 +2288,10 @@ TEST(openai_trim_messages_preserves_pinned_prefix_and_latest_input)
         {.max_messages = 1,
             .max_tokens = 1,
             .preserve_system_messages = false,
+            .count_tokens = [](const openai::message&)
+            {
+                return std::size_t{1};
+            },
             .pinned_prefix_messages = 1,
             .preserved_tail_messages = 1});
 
@@ -2246,7 +2300,8 @@ TEST(openai_trim_messages_preserves_pinned_prefix_and_latest_input)
         std::string("fixed application policy"));
     ASSERT_EQ(messages.back().content, std::string("current question"));
     ASSERT_EQ(trimmed.removed_messages, std::size_t{2});
-    ASSERT_FALSE(trimmed.limit_satisfied);
+    ASSERT_EQ(trimmed.remaining_tokens, std::size_t{1});
+    ASSERT_TRUE(trimmed.limit_satisfied);
 }
 
 TEST(openai_trim_messages_reports_unsatisfied_protected_window)

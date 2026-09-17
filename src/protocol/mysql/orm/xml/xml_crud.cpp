@@ -62,6 +62,8 @@ auto mapper_session::execute(std::string_view statement_id,
     result.affected_rows = rs.affected_rows;
     result.last_insert_id = rs.last_insert_id;
     result.error_msg = rs.error_msg;
+    result.sql_state = rs.sql_state;
+    result.error_code = rs.error_code;
     co_return result;
 }
 

@@ -116,6 +116,8 @@ template <class T> struct orm_result {
     std::uint64_t affected_rows = 0;
     std::uint64_t last_insert_id = 0;
     std::string error_msg;
+    std::string sql_state;
+    std::uint32_t error_code = 0;
     auto ok() const noexcept -> bool;
     auto is_err() const noexcept -> bool;
     auto empty() const noexcept -> bool;
@@ -176,6 +178,8 @@ auto result = co_await gateway->write<OrderId>(orm::shard_key{tenant_id},
   聚合及是否接受部分结果均由合并器决定。
 - `distributed_transaction<T>()` 在单数据库时使用普通事务，在多个 MySQL 实例时使用
   XA 两阶段提交，并把固定到物理表的 `distributed_session_context` 交给回调。
+- scatter 回调抛出的异常会转换为对应分片的失败结果；分布式事务回调抛出的异常会转换
+  为事务错误并回滚已经启动的分支，不会越过 ORM 边界泄漏异常。
 - 任一提交返回失败时会报告结果不确定；生产系统应配合 MySQL `XA RECOVER`、事务日志和
   运维补偿处理进程崩溃或网络分区，不能把 XA 当作无故障的本地事务。
 
@@ -736,6 +740,16 @@ auto work(mysql::client& cli) -> task<void>
 ### 软删除
 `CNETMOD_FIELD(deleted, "deleted", tinyint, LOGIC_DELETE)` — `logical_delete_interceptor` 自动将 DELETE 转为 `UPDATE SET deleted=1`，SELECT 追加 `deleted=0`。`global_logical_delete_interceptor()`。
 
+Nullable datetime markers use an explicit mode. Active rows are selected with
+`deleted_at IS NULL`, and deletion writes `CURRENT_TIMESTAMP`:
+
+```cpp
+logical_delete_config config;
+config.field_name = "deleted_at";
+config.mode = logical_delete_mode::nullable_datetime;
+logical_delete_interceptor interceptor{std::move(config)};
+```
+
 ### 多租户
 `CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)` — `tenant_context::set_tenant_id(id)` 设置线程级租户；`tenant_guard guard(id)` RAII 守卫；`multi_tenant_interceptor` 自动注入条件。`global_multi_tenant_interceptor()`。
 
@@ -770,11 +784,20 @@ class database_session {
 };
 ```
 
+MySQL failures retain both the native server error number (for example `1062`
+for a duplicate key) and SQLSTATE. Prefer `error_code` for vendor-specific
+classification and keep `sql_state` for portable error classes.
+
+Model fields may use `std::optional<calendar_datetime>` for nullable
+`DATETIME`/`TIMESTAMP` columns. Mapping a database datetime into an integral
+Unix time treats the stored wall-clock fields as UTC and therefore does not
+depend on the process or database-session timezone.
+
 `database_session` is the protocol-independent repository surface. It accepts
 either a MySQL or PostgreSQL client and preserves the native wire client below
 it. `model_result<T>` contains `data`, `affected_rows`, `last_insert_id`,
-`error_msg`, and `sql_state`; use `ok()` and `first()` to distinguish an empty
-query from a failed operation.
+`error_msg`, `sql_state`, and the native `error_code`; use `ok()` and `first()`
+to distinguish an empty query from a failed operation.
 
 ```cpp
 import cnetmod.orm;

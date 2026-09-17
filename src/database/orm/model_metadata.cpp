@@ -90,6 +90,19 @@ auto sql_type_str(column_type type) noexcept -> std::string_view
 } // namespace cnetmod::orm
 
 namespace cnetmod::orm::detail {
+auto datetime_to_unix_seconds(const calendar_datetime& value)
+    -> std::optional<std::int64_t>
+{
+    using namespace std::chrono;
+    const year_month_day date{year{value.year}, month{value.month}, day{value.day}};
+    if (!date.ok() || value.hour > 23 || value.minute > 59 || value.second > 59)
+        return std::nullopt;
+
+    const auto instant = sys_days{date} + hours{value.hour} +
+        minutes{value.minute} + seconds{value.second};
+    return duration_cast<seconds>(instant.time_since_epoch()).count();
+}
+
 void set_member(std::int64_t& m, const field_value& v)
 {
     if (v.is_int64())
@@ -99,6 +112,11 @@ void set_member(std::int64_t& m, const field_value& v)
     else if (v.is_string())
         std::from_chars(v.get_string().data(),
             v.get_string().data() + v.get_string().size(), m);
+    else if (v.is_datetime())
+    {
+        if (const auto seconds = datetime_to_unix_seconds(v.get_datetime()))
+            m = *seconds;
+    }
 }
 
 void set_member(std::uint64_t& m, const field_value& v)
@@ -210,6 +228,14 @@ void set_member(std::optional<double>& m, const field_value& v)
     }
 }
 
+void set_member(std::optional<calendar_datetime>& m, const field_value& v)
+{
+    if (v.is_null())
+        m.reset();
+    else if (v.is_datetime())
+        m = v.get_datetime();
+}
+
 void set_member(uuid& m, const field_value& v)
 {
     if (v.is_string())
@@ -290,6 +316,11 @@ auto get_member(const std::optional<std::int64_t>& v) -> param_value
 auto get_member(const std::optional<double>& v) -> param_value
 {
     return v ? param_value::from_double(*v) : param_value::null();
+}
+
+auto get_member(const std::optional<calendar_datetime>& v) -> param_value
+{
+    return v ? param_value::from_datetime(*v) : param_value::null();
 }
 
 auto get_member(const uuid& v) -> param_value
