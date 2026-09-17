@@ -42,12 +42,42 @@ class application_host::implementation
 public:
     implementation(application_configuration configuration,
         http::router routes, service_registry services,
+        std::vector<managed_service_factory> service_factories,
         bool auto_configuration,
         std::optional<std::filesystem::path> configuration_file)
         : configuration(std::move(configuration)), network(), io(make_io_context()), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), configuration_file(std::move(configuration_file))
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
-        if (auto_configuration)
+        application_service_context factory_context{*io, telemetry, supervisor,
+            this->configuration};
+        for (auto& factory : service_factories)
+        {
+            if (!preparation_error)
+                break;
+            try
+            {
+                auto service = factory(factory_context);
+                if (!service || !*service)
+                {
+                    preparation_error = std::unexpected(service
+                            ? std::make_error_code(std::errc::invalid_argument)
+                            : service.error());
+                    break;
+                }
+                preparation_error = this->services.manage(std::move(*service));
+            }
+            catch (const std::bad_alloc&)
+            {
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::not_enough_memory));
+            }
+            catch (...)
+            {
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+            }
+        }
+        if (preparation_error && auto_configuration)
         {
             register_builtin_auto_configurations(auto_configurations);
             auto_configuration_context context{*io, telemetry, supervisor,
@@ -916,6 +946,15 @@ auto application_builder::service(std::shared_ptr<managed_service> service)
     return *this;
 }
 
+auto application_builder::service_factory(managed_service_factory factory)
+    -> application_builder&
+{
+    if (!factory)
+        throw std::invalid_argument("managed service factory cannot be empty");
+    service_factories_.push_back(std::move(factory));
+    return *this;
+}
+
 auto application_builder::enable_auto_configuration() noexcept
     -> application_builder&
 {
@@ -966,7 +1005,8 @@ auto application_builder::build()
     {
         application_host host{std::make_unique<application_host::implementation>(
             std::move(*loaded), std::move(routes), std::move(registry),
-            auto_configuration_, configuration_file_)};
+            std::move(service_factories_), auto_configuration_,
+            configuration_file_)};
         if (!host.implementation_->preparation_error)
             return std::unexpected(
                 host.implementation_->preparation_error.error());

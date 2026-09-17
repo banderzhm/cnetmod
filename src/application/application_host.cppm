@@ -9,7 +9,9 @@ import cnetmod.application.health_registry;
 import cnetmod.application.managed_service;
 import cnetmod.application.service_registry;
 import cnetmod.application.service_lifecycle;
+import cnetmod.application.task_supervisor;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.protocol.http;
 
@@ -117,6 +119,26 @@ export using configuration_customizer =
     std::function<void(application_configuration&)>;
 
 /**
+ * @brief Exposes build-time infrastructure to custom managed-service factories.
+ *
+ * The context is valid only while application_builder::build() is composing
+ * the host. It avoids publishing mutable runtime internals after registry
+ * freeze while still allowing services to bind to the host event loop and
+ * telemetry root.
+ */
+export struct application_service_context
+{
+    io_context& io;
+    observability::telemetry_hub& telemetry;
+    task_supervisor& supervisor;
+    const application_configuration& configuration;
+};
+
+export using managed_service_factory = std::function<std::expected<
+    std::shared_ptr<managed_service>, std::error_code>(
+    application_service_context&)>;
+
+/**
  * @brief Builds a validated application composition root.
  *
  * Configuration precedence is defaults, JSON, environment, then explicit
@@ -153,6 +175,16 @@ public:
         -> application_builder&;
 
     /**
+     * @brief Registers a factory evaluated after configuration validation.
+     *
+     * Factories receive the host-owned event loop, telemetry root, supervisor,
+     * and immutable configuration. A null service or factory error fails
+     * build() before the registry is frozen.
+     */
+    auto service_factory(managed_service_factory factory)
+        -> application_builder&;
+
+    /**
      * @brief Enables opt-in auto-configuration for explicitly enabled services.
      */
     auto enable_auto_configuration() noexcept -> application_builder&;
@@ -170,6 +202,7 @@ private:
     std::vector<configuration_customizer> customizers_;
     std::vector<route_configurer> route_configurers_;
     std::vector<std::shared_ptr<managed_service>> services_;
+    std::vector<managed_service_factory> service_factories_;
     bool auto_configuration_ = false;
 };
 

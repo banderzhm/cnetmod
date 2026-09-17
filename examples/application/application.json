@@ -87,7 +87,14 @@
       "port": 3306,
       "username": "application",
       "password": "",
-      "database": "orders_0"
+      "database": "orders_0",
+      "ssl": "enable",
+      "tls_verify": false,
+      "connect_timeout_ms": 20000,
+      "pool_timeout_ms": 5000,
+      "retry_interval_ms": 30000,
+      "ping_interval_ms": 3600000,
+      "ping_timeout_ms": 10000
     },
     "orders-database-1": {
       "type": "mysql",

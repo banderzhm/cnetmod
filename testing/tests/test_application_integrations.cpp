@@ -1280,6 +1280,49 @@ TEST(application_auto_configuration_registers_compiled_integrations)
 #endif
 }
 
+#ifdef CNETMOD_HAS_PROTOCOL_MYSQL
+TEST(application_mysql_configuration_accepts_transport_and_pool_timeouts)
+{
+    auto make_host = [](std::string ssl, std::int64_t connect_timeout)
+    {
+        return application::application_builder{"mysql-configuration"}
+            .enable_auto_configuration()
+            .configure([ssl = std::move(ssl), connect_timeout](
+                           application::application_configuration& value)
+                {
+                    value.logging.manage_lifecycle = false;
+                    value.management.enabled = false;
+                    application::configured_service mysql{
+                        .name = "mysql",
+                        .enabled = true,
+                        .requirement = application::service_requirement::optional,
+                    };
+                    mysql.properties = {
+                        {"username", "test"},
+                        {"database", "test"},
+                        {"ssl", ssl},
+                        {"tls_verify", true},
+                        {"tls_ca_file", "ca.pem"},
+                        {"connect_timeout_ms", connect_timeout},
+                        {"pool_timeout_ms", 2'000},
+                        {"retry_interval_ms", 3'000},
+                        {"ping_interval_ms", 4'000},
+                        {"ping_timeout_ms", 1'000},
+                    };
+                    value.services.emplace("mysql", std::move(mysql));
+                })
+            .build();
+    };
+
+    auto valid = make_host("require", 5'000);
+    ASSERT_TRUE(valid.has_value());
+    if (valid)
+        ASSERT_TRUE(valid->services().find<application::mysql_service>() != nullptr);
+    ASSERT_FALSE(make_host("opportunistic", 5'000).has_value());
+    ASSERT_FALSE(make_host("require", 0).has_value());
+}
+#endif
+
 TEST(application_auto_configuration_is_opt_in)
 {
     auto host = application::application_builder{"manual-configuration-test"}

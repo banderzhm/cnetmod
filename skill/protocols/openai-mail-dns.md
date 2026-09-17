@@ -105,8 +105,8 @@ struct chat_response {
 | `connect` | `auto connect(connect_options) -> task<std::expected<void, std::string>>` | 连接 API |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
-| `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn) -> task<std::expected<std::string, std::string>>` | SSE 流式 |
-| `chat_stream_async` | `auto chat_stream_async(chat_request, async_chunk_fn) -> task<...>` | 异步回调流式 |
+| `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
+| `chat_stream_async` | `auto chat_stream_async(chat_request, async_chunk_fn[, cancel_token&]) -> task<...>` | 异步回调流式，可取消 |
 | `list_models` | `auto list_models() -> task<std::expected<std::vector<model_info>, std::string>>` | 列出模型 |
 | `embeddings` | `auto embeddings(embedding_request) -> task<std::expected<embedding_response, std::string>>` | 向量嵌入 |
 | `text_to_speech` | `auto text_to_speech(tts_request) -> task<std::expected<std::vector<std::byte>, std::string>>` | 语音合成 |
@@ -360,6 +360,10 @@ auto full = co_await client.chat_stream_async(req,
         cn::logger::info{"{}", chunk.delta_content};
         co_return true; // return false to abort
     });
+
+// 调用方取消会中止挂起的网络读取并淘汰当前连接。
+cn::cancel_token cancellation;
+auto cancellable = co_await client.chat_stream_async(req, callback, cancellation);
 ```
 
 流式回调按完整 SSE event 实时触发，不等待整个 HTTP body。客户端兼容
@@ -368,6 +372,8 @@ auto full = co_await client.chat_stream_async(req,
 客户端会在 `finish_reason` 后继续接收独立 usage 尾帧，并使用一秒有界等待
 兼容省略 usage 与 `[DONE]` 的网关。消费端返回 `false` 时立即关闭当前连接，
 避免未消费的增量污染下一次请求。
+每次流式网络读取受 `connect_options::timeout_seconds` 限制；调用方取消、
+读取超时、写入失败和解析失败都会关闭连接，后续请求通过自动重连获得干净会话。
 
 ### 场景：Runnable 与结构化输出
 

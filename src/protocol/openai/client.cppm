@@ -77,6 +77,16 @@ public:
     auto chat_stream(chat_request req, on_chunk_fn on_chunk)
         -> task<std::expected<std::string, std::string>>;
 
+    /**
+     * @brief Streams chat deltas with caller-controlled cancellation.
+     *
+     * Each network read is also bounded by connect_options::timeout_seconds.
+     * Cancellation or timeout invalidates the underlying HTTP connection.
+     */
+    auto chat_stream(chat_request req, on_chunk_fn on_chunk,
+        cancel_token& cancellation)
+        -> task<std::expected<std::string, std::string>>;
+
     // ── Streaming chat (async callback) ──────────────────────────
 
     /// Async callback type: (chunk) -> task<bool>, return false to abort stream
@@ -85,6 +95,13 @@ public:
     /// Streaming Chat Completions — Async callback version, supports co_await in
     /// callback
     auto chat_stream_async(chat_request req, async_chunk_fn on_chunk)
+        -> task<std::expected<std::string, std::string>>;
+
+    /**
+     * @brief Streams chat deltas to an asynchronous callback with cancellation.
+     */
+    auto chat_stream_async(chat_request req, async_chunk_fn on_chunk,
+        cancel_token& cancellation)
         -> task<std::expected<std::string, std::string>>;
 
     // ── Models API ─────────────────────────────────────
@@ -148,6 +165,8 @@ private:
 
     auto do_write(const_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
+    auto do_write(const_buffer buf, cancel_token& cancellation)
+        -> task<std::expected<std::size_t, std::error_code>>;
 
     auto do_read(mutable_buffer buf)
         -> task<std::expected<std::size_t, std::error_code>>;
@@ -170,6 +189,9 @@ private:
 
     auto send_http_request(const http::request& req)
         -> task<std::expected<void, std::string>>;
+    auto send_http_request(const http::request& req,
+        cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
 
     /// Read complete HTTP response (non-streaming)
     auto read_full_response()
@@ -178,9 +200,13 @@ private:
     /// Read HTTP response header (for streaming - only read until header ends)
     auto read_response_header()
         -> task<std::expected<response_header, std::string>>;
+    auto read_response_header(cancel_token& cancellation)
+        -> task<std::expected<response_header, std::error_code>>;
 
     /// Read remaining body (for error responses)
     auto read_remaining_body() -> task<std::string>;
+    auto read_remaining_body(cancel_token& cancellation)
+        -> task<std::expected<std::string, std::error_code>>;
 
     /// Read binary response (for TTS)
     auto read_binary_response() -> task<

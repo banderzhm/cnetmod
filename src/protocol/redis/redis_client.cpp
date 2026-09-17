@@ -747,8 +747,9 @@ auto client::parse_one_response()
             compact_buffer();
             co_return nodes;
         }
-        rpos_ += parser.consumed();
-        parser.reset();
+        // The parser retains the bulk header and its cumulative offset while
+        // the payload is fragmented. Keep both the parser and rpos_ anchored
+        // until the complete RESP value is available.
         if (!(co_await fill()))
             co_return std::unexpected(std::string("connection closed"));
     }
@@ -777,8 +778,8 @@ auto client::parse_children(std::size_t count)
                 co_return std::unexpected(error.message());
             if (!node)
             {
-                rpos_ += parser.consumed();
-                parser.reset();
+                // A partial bulk/aggregate must resume from the same base
+                // view because resp3_parser::consumed() is cumulative.
                 if (!(co_await fill()))
                     co_return std::unexpected(std::string("connection closed"));
                 continue;

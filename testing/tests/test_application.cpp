@@ -1651,6 +1651,53 @@ TEST(application_builder_validates_before_creating_host)
     ASSERT_FALSE(host.has_value());
 }
 
+TEST(application_builder_composes_host_owned_service_factories_before_freeze)
+{
+    auto events = std::make_shared<std::vector<std::string>>();
+    cnetmod::io_context* observed_io = nullptr;
+    application::task_supervisor* observed_supervisor = nullptr;
+    auto service = std::make_shared<fake_service>(
+        application::service_key{"factory", "primary"},
+        std::vector<application::service_key>{},
+        application::service_requirement::required, events);
+    auto host = application::application_builder{"factory-composition"}
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                        })
+                    .service_factory([&](application::application_service_context& context) -> std::expected<std::shared_ptr<application::managed_service>, std::error_code>
+                        {
+                            observed_io = &context.io;
+                            observed_supervisor = &context.supervisor;
+                            if (context.configuration.name != "factory-composition")
+                                return std::unexpected(std::make_error_code(
+                                    std::errc::invalid_argument));
+                            return service;
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    ASSERT_TRUE(observed_io != nullptr);
+    ASSERT_TRUE(observed_supervisor != nullptr);
+    if (host)
+    {
+        ASSERT_TRUE(host->services().frozen());
+        ASSERT_TRUE(host->services().managed(
+                        {"factory", "primary"}) == service);
+    }
+
+    auto rejected = application::application_builder{"invalid-factory"}
+                        .service_factory(
+                            [](application::application_service_context&)
+                                -> std::expected<std::shared_ptr<application::managed_service>,
+                                    std::error_code>
+                            {
+                                return std::shared_ptr<application::managed_service>{};
+                            })
+                        .build();
+    ASSERT_FALSE(rejected.has_value());
+}
+
 TEST(application_configuration_precedence_and_redaction)
 {
     const auto path = std::filesystem::temp_directory_path() /

@@ -2390,7 +2390,7 @@ auto response = cnetmod::http::to_http_response(
 **签名**:
 ```cpp
 export template <typename T> class task;       // 协程返回类型（不可拷贝，可移动）
-export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待
+export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待，不驱动 io_context
 export void sync_wait(task<void> t);
 ```
 
@@ -2406,6 +2406,17 @@ int main() {
     std::println("{}", r);
 }
 ```
+
+`sync_wait()` 只在当前线程恢复协程并等待结果，**不会运行 `io_context`**。
+因此它只适用于纯协程计算，或所依赖的事件循环已经在其他线程运行的任务。
+如果任务会等待由尚未运行的 `io_context` 完成的网络、定时器或文件 I/O，直接
+`sync_wait()` 会永久等待。应用入口应使用 `spawn(ctx, task)` 后调用 `ctx.run()`；
+不要用 `sync_wait()` 代替事件循环。
+
+`sync_wait()` 也不是第三方协程库或阻塞 API 的桥接器。接入阻塞函数时使用
+`thread_pool`、`spawn_on` 或 `blocking_invoke`；接入其他协程库提供的 awaitable
+时使用 `from_awaitable`。执行域切换、返回目标 `io_context` 及生命周期要求见
+[Executor 与 Bridge](executor-bridge.md)。
 
 ---
 
@@ -2609,7 +2620,8 @@ async_unique_lock_guard wg(rw, std::adopt_lock);
 
 | ✅ 正确 | ❌ 错误 |
 |---------|---------|
-| 用 `sync_wait()` 在 `main()` 入口等待协程 | 在协程内部调用 `sync_wait()` |
+| 仅对纯计算或已有独立事件循环的任务使用 `sync_wait()` | 用 `sync_wait()` 等待尚未运行的 `io_context` I/O |
+| 应用入口使用 `spawn(ctx, task)` + `ctx.run()` | 在协程内部调用 `sync_wait()` |
 | 用 `async_lock_guard` RAII 管理锁 | 手动 `unlock()` 忘记异常路径释放 |
 | `close()` 后仍可 `receive()` 读取缓冲数据 | 假设 `close()` 后 `receive()` 立即返回 `nullopt` |
 | `when_all()` 并发执行独立任务 | 用 `when_all()` 执行有依赖的任务 |
@@ -9061,6 +9073,12 @@ auto main() -> int
 
 `application_host` 自己创建 `net_init`、`io_context`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。
 
+自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。工厂通过
+`application_service_context` 获得 host 所有的 `io_context`、Telemetry Hub、
+`task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
+服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。框架不公开运行期
+`application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+
 host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 
 编排异常的清理入口停止监听后，立即取消被跟踪请求并中止业务和管理连接的 socket I/O，
@@ -9174,6 +9192,11 @@ HTTP client 的 `connect_timeout_ms`、`request_timeout_ms` 和 OpenAI 的
 Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
 不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
+
+MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`、
+`tls_ca_file`，以及 `connect_timeout_ms`、`pool_timeout_ms`、
+`retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
+1～86400000 毫秒的整数；未知 TLS 模式在 `build()` 阶段拒绝。
 
 四类数据库连接池的 `minimum_size` / `maximum_size` 使用共享校验：前者可为零，
 后者必须为正整数，按缺省值补齐后仍必须满足 minimum ≤ maximum。转换前拒绝
@@ -14214,8 +14237,8 @@ struct chat_response {
 | `connect` | `auto connect(connect_options) -> task<std::expected<void, std::string>>` | 连接 API |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
-| `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn) -> task<std::expected<std::string, std::string>>` | SSE 流式 |
-| `chat_stream_async` | `auto chat_stream_async(chat_request, async_chunk_fn) -> task<...>` | 异步回调流式 |
+| `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
+| `chat_stream_async` | `auto chat_stream_async(chat_request, async_chunk_fn[, cancel_token&]) -> task<...>` | 异步回调流式，可取消 |
 | `list_models` | `auto list_models() -> task<std::expected<std::vector<model_info>, std::string>>` | 列出模型 |
 | `embeddings` | `auto embeddings(embedding_request) -> task<std::expected<embedding_response, std::string>>` | 向量嵌入 |
 | `text_to_speech` | `auto text_to_speech(tts_request) -> task<std::expected<std::vector<std::byte>, std::string>>` | 语音合成 |
@@ -14469,6 +14492,10 @@ auto full = co_await client.chat_stream_async(req,
         cn::logger::info{"{}", chunk.delta_content};
         co_return true; // return false to abort
     });
+
+// 调用方取消会中止挂起的网络读取并淘汰当前连接。
+cn::cancel_token cancellation;
+auto cancellable = co_await client.chat_stream_async(req, callback, cancellation);
 ```
 
 流式回调按完整 SSE event 实时触发，不等待整个 HTTP body。客户端兼容
@@ -14477,6 +14504,8 @@ auto full = co_await client.chat_stream_async(req,
 客户端会在 `finish_reason` 后继续接收独立 usage 尾帧，并使用一秒有界等待
 兼容省略 usage 与 `[DONE]` 的网关。消费端返回 `false` 时立即关闭当前连接，
 避免未消费的增量污染下一次请求。
+每次流式网络读取受 `connect_options::timeout_seconds` 限制；调用方取消、
+读取超时、写入失败和解析失败都会关闭连接，后续请求通过自动重连获得干净会话。
 
 ### 场景：Runnable 与结构化输出
 

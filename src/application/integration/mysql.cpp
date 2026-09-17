@@ -239,11 +239,20 @@ auto auto_configure_mysql(const configured_service& configuration,
     auto_configuration_context& context)
     -> std::expected<void, std::error_code>
 {
-    if (!properties_are_known(configuration.properties, {"host", "port", "username", "password", "database", "minimum_size", "maximum_size", "tls_verify"}))
+    if (!properties_are_known(configuration.properties, {"host", "port", "username", "password", "database", "minimum_size", "maximum_size", "ssl", "tls_verify", "tls_ca_file", "connect_timeout_ms", "pool_timeout_ms", "retry_interval_ms", "ping_interval_ms", "ping_timeout_ms"}))
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
     if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    constexpr auto maximum_timeout_ms = std::int64_t{86'400'000};
+    for (const auto name : {"connect_timeout_ms", "pool_timeout_ms",
+             "retry_interval_ms", "ping_interval_ms", "ping_timeout_ms"})
+    {
+        if (!integer_property_in_range(configuration.properties, name, 1,
+                maximum_timeout_ms))
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+    }
     mysql::pool_params options;
     if (!pool_size_properties_are_valid(configuration.properties, options.initial_size, options.max_size))
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
@@ -257,7 +266,34 @@ auto auto_configure_mysql(const configured_service& configuration,
         options.database = value.value("database", options.database);
         options.initial_size = value.value("minimum_size", options.initial_size);
         options.max_size = value.value("maximum_size", options.max_size);
+        if (value.contains("ssl"))
+        {
+            const auto mode = value.at("ssl").get<std::string>();
+            if (mode == "disable")
+                options.ssl = mysql::ssl_mode::disable;
+            else if (mode == "enable")
+                options.ssl = mysql::ssl_mode::enable;
+            else if (mode == "require")
+                options.ssl = mysql::ssl_mode::require;
+            else
+                return std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+        }
         options.tls_verify = value.value("tls_verify", options.tls_verify);
+        options.tls_ca_file = value.value("tls_ca_file", options.tls_ca_file);
+        const auto duration = [&value](std::string_view name,
+                                  std::chrono::steady_clock::duration fallback)
+        {
+            if (!value.contains(name))
+                return fallback;
+            return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                std::chrono::milliseconds{value.at(name).get<std::int64_t>()});
+        };
+        options.connect_timeout = duration("connect_timeout_ms", options.connect_timeout);
+        options.pool_timeout = duration("pool_timeout_ms", options.pool_timeout);
+        options.retry_interval = duration("retry_interval_ms", options.retry_interval);
+        options.ping_interval = duration("ping_interval_ms", options.ping_interval);
+        options.ping_timeout = duration("ping_timeout_ms", options.ping_timeout);
     }
     catch (...)
     {

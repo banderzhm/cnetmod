@@ -53,6 +53,12 @@ auto main() -> int
 
 `application_host` 自己创建 `net_init`、`io_context`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。
 
+自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。工厂通过
+`application_service_context` 获得 host 所有的 `io_context`、Telemetry Hub、
+`task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
+服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。框架不公开运行期
+`application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+
 host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 
 编排异常的清理入口停止监听后，立即取消被跟踪请求并中止业务和管理连接的 socket I/O，
@@ -166,6 +172,11 @@ HTTP client 的 `connect_timeout_ms`、`request_timeout_ms` 和 OpenAI 的
 Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
 不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
+
+MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`、
+`tls_ca_file`，以及 `connect_timeout_ms`、`pool_timeout_ms`、
+`retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
+1～86400000 毫秒的整数；未知 TLS 模式在 `build()` 阶段拒绝。
 
 四类数据库连接池的 `minimum_size` / `maximum_size` 使用共享校验：前者可为零，
 后者必须为正整数，按缺省值补齐后仍必须满足 minimum ≤ maximum。转换前拒绝

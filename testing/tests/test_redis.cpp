@@ -283,6 +283,89 @@ TEST(redis_cancellable_exchange_handles_fragments_errors_and_total_budget)
     }
 }
 
+TEST(redis_cmd_preserves_fragmented_bulk_parser_state)
+{
+    for (const bool aggregate : {false, true})
+    {
+        cnetmod::net_init network;
+        auto io = cnetmod::make_io_context();
+        auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(listener.has_value());
+        ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+                                       cnetmod::ipv4_address::loopback(), 0})
+                .has_value());
+        ASSERT_TRUE(listener->listen().has_value());
+        const auto endpoint = listener->local_endpoint();
+        ASSERT_TRUE(endpoint.has_value());
+        if (!listener || !endpoint)
+            return;
+
+        const std::string payload(13'000, aggregate ? 'a' : 'b');
+        bool verified = false;
+        unsigned completed = 0;
+        auto finish = [&]
+        {
+            if (++completed == 2U)
+                io->stop();
+        };
+        auto server = [&]() -> cnetmod::task<void>
+        {
+            auto peer = co_await cnetmod::async_accept(*io, *listener);
+            if (!peer)
+            {
+                io->stop();
+                co_return;
+            }
+            std::array<char, 128> command{};
+            (void)co_await cnetmod::async_read(*io, *peer,
+                cnetmod::mutable_buffer{command.data(), command.size()});
+            const auto prefix = aggregate
+                ? std::format("*1\r\n${}\r\n", payload.size())
+                : std::format("${}\r\n", payload.size());
+            (void)co_await cnetmod::async_write_all(*io, *peer,
+                cnetmod::const_buffer{prefix.data(), prefix.size()});
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{2});
+            const auto first = std::string_view{payload}.substr(0, 6'300);
+            (void)co_await cnetmod::async_write_all(*io, *peer,
+                cnetmod::const_buffer{first.data(), first.size()});
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{2});
+            const auto tail = std::string_view{payload}.substr(first.size());
+            (void)co_await cnetmod::async_write_all(*io, *peer,
+                cnetmod::const_buffer{tail.data(), tail.size()});
+            constexpr std::string_view terminator = "\r\n";
+            (void)co_await cnetmod::async_write_all(*io, *peer,
+                cnetmod::const_buffer{terminator.data(), terminator.size()});
+            finish();
+        };
+        auto consumer = [&]() -> cnetmod::task<void>
+        {
+            client connection{*io};
+            auto connected = co_await connection.connect({
+                .host = "127.0.0.1",
+                .port = endpoint->port(),
+                .resp3 = false,
+            });
+            if (connected)
+            {
+                auto response = co_await connection.cmd({"GET", "fragmented"});
+                if (response)
+                {
+                    const auto index = aggregate ? 1U : 0U;
+                    verified = response->size() > index &&
+                        response->at(index).value == payload &&
+                        connection.is_reusable();
+                }
+            }
+            finish();
+        };
+        cnetmod::spawn(*io, server());
+        cnetmod::spawn(*io, consumer());
+        io->run();
+        ASSERT_TRUE(verified);
+    }
+}
+
 TEST(redis_failed_authentication_closes_the_uncommitted_session)
 {
     cnetmod::net_init network;

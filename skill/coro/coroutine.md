@@ -24,7 +24,7 @@
 **签名**:
 ```cpp
 export template <typename T> class task;       // 协程返回类型（不可拷贝，可移动）
-export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待
+export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待，不驱动 io_context
 export void sync_wait(task<void> t);
 ```
 
@@ -40,6 +40,17 @@ int main() {
     std::println("{}", r);
 }
 ```
+
+`sync_wait()` 只在当前线程恢复协程并等待结果，**不会运行 `io_context`**。
+因此它只适用于纯协程计算，或所依赖的事件循环已经在其他线程运行的任务。
+如果任务会等待由尚未运行的 `io_context` 完成的网络、定时器或文件 I/O，直接
+`sync_wait()` 会永久等待。应用入口应使用 `spawn(ctx, task)` 后调用 `ctx.run()`；
+不要用 `sync_wait()` 代替事件循环。
+
+`sync_wait()` 也不是第三方协程库或阻塞 API 的桥接器。接入阻塞函数时使用
+`thread_pool`、`spawn_on` 或 `blocking_invoke`；接入其他协程库提供的 awaitable
+时使用 `from_awaitable`。执行域切换、返回目标 `io_context` 及生命周期要求见
+[Executor 与 Bridge](executor-bridge.md)。
 
 ---
 
@@ -243,7 +254,8 @@ async_unique_lock_guard wg(rw, std::adopt_lock);
 
 | ✅ 正确 | ❌ 错误 |
 |---------|---------|
-| 用 `sync_wait()` 在 `main()` 入口等待协程 | 在协程内部调用 `sync_wait()` |
+| 仅对纯计算或已有独立事件循环的任务使用 `sync_wait()` | 用 `sync_wait()` 等待尚未运行的 `io_context` I/O |
+| 应用入口使用 `spawn(ctx, task)` + `ctx.run()` | 在协程内部调用 `sync_wait()` |
 | 用 `async_lock_guard` RAII 管理锁 | 手动 `unlock()` 忘记异常路径释放 |
 | `close()` 后仍可 `receive()` 读取缓冲数据 | 假设 `close()` 后 `receive()` 立即返回 `nullopt` |
 | `when_all()` 并发执行独立任务 | 用 `when_all()` 执行有依赖的任务 |

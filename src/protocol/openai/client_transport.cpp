@@ -146,16 +146,23 @@ void client::close() noexcept
 auto client::do_write(const_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    cancel_token cancellation;
+    co_return co_await do_write(buf, cancellation);
+}
+
+auto client::do_write(const_buffer buf, cancel_token& cancellation)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
 #ifdef CNETMOD_HAS_SSL
     if (ssl_)
     {
-        auto r = co_await ssl_->async_write_all(buf);
+        auto r = co_await ssl_->async_write_all(buf, cancellation);
         if (!r)
             co_return std::unexpected(r.error());
         co_return buf.size;
     }
 #endif
-    auto r = co_await async_write_all(ctx_, sock_, buf);
+    auto r = co_await async_write_all(ctx_, sock_, buf, cancellation);
     if (!r)
         co_return std::unexpected(r.error());
     co_return buf.size;
@@ -242,13 +249,26 @@ auto client::ensure_connected() -> task<std::expected<void, std::string>>
 auto client::send_http_request(const http::request& req)
     -> task<std::expected<void, std::string>>
 {
+    cancel_token cancellation;
+    auto result = co_await send_http_request(req, cancellation);
+    if (!result)
+        co_return std::unexpected("write failed: " + result.error().message());
+    co_return std::expected<void, std::string>{};
+}
+
+auto client::send_http_request(const http::request& req,
+    cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
     auto data = req.serialize();
-    auto wr = co_await do_write(const_buffer{data.data(), data.size()});
+    auto wr = co_await do_write(
+        const_buffer{data.data(), data.size()}, cancellation);
     if (!wr)
     {
-        co_return std::unexpected("write failed: " + wr.error().message());
+        close();
+        co_return std::unexpected(wr.error());
     }
-    co_return std::expected<void, std::string>{};
+    co_return std::expected<void, std::error_code>{};
 }
 
 auto client::read_full_response()
@@ -280,6 +300,17 @@ auto client::read_full_response()
 
 auto client::read_response_header()
     -> task<std::expected<response_header, std::string>>
+{
+    cancel_token cancellation;
+    auto result = co_await read_response_header(cancellation);
+    if (!result)
+        co_return std::unexpected("connection closed during header: " +
+            result.error().message());
+    co_return std::move(*result);
+}
+
+auto client::read_response_header(cancel_token& cancellation)
+    -> task<std::expected<response_header, std::error_code>>
 {
     while (true)
     {
@@ -354,22 +385,30 @@ auto client::read_response_header()
                 .content_length = content_length};
         }
 
-        auto chunk = co_await do_read_some();
+        auto chunk = co_await do_read_some(cancellation);
         if (!chunk)
-        {
-            co_return std::unexpected(std::string("connection closed during header"));
-        }
+            co_return std::unexpected(chunk.error());
         rbuf_ += *chunk;
     }
 }
 
 auto client::read_remaining_body() -> task<std::string>
 {
+    cancel_token cancellation;
+    auto result = co_await read_remaining_body(cancellation);
+    co_return result ? std::move(*result) : std::exchange(rbuf_, {});
+}
+
+auto client::read_remaining_body(cancel_token& cancellation)
+    -> task<std::expected<std::string, std::error_code>>
+{
     for (int i = 0; i < 5; ++i)
     {
-        auto chunk = co_await do_read_some();
-        if (!chunk || chunk->empty())
+        auto chunk = co_await do_read_some(cancellation);
+        if (!chunk)
         {
+            if (chunk.error() != make_error_code(errc::end_of_file))
+                co_return std::unexpected(chunk.error());
             break;
         }
         rbuf_ += *chunk;

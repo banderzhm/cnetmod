@@ -227,8 +227,27 @@ auto client::responses(response_request req)
 auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
     -> task<std::expected<std::string, std::string>>
 {
+    cancel_token cancellation;
+    co_return co_await chat_stream(
+        std::move(req), std::move(on_chunk), cancellation);
+}
+
+auto client::chat_stream(chat_request req, on_chunk_fn on_chunk,
+    cancel_token& cancellation)
+    -> task<std::expected<std::string, std::string>>
+{
     if (auto r = co_await ensure_connected(); !r)
         co_return std::unexpected(r.error());
+
+    struct stream_connection_guard
+    {
+        client& owner;
+
+        ~stream_connection_guard()
+        {
+            owner.close();
+        }
+    } connection_guard{*this};
 
     const bool expect_usage = requests_stream_usage(req);
     req.stream = true;
@@ -239,19 +258,28 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
     apply_common_headers(http_req, "text/event-stream");
     http_req.set_body(std::move(body));
 
-    auto send_r = co_await send_http_request(http_req);
+    const auto operation_timeout = std::chrono::seconds{opts_.timeout_seconds};
+    auto send_r = co_await with_timeout(ctx_, operation_timeout,
+        send_http_request(http_req, cancellation), cancellation);
     if (!send_r)
-        co_return std::unexpected(send_r.error());
+        co_return std::unexpected("stream write failed: " +
+            send_r.error().message());
 
-    auto header_r = co_await read_response_header();
+    auto header_r = co_await with_timeout(ctx_, operation_timeout,
+        read_response_header(cancellation), cancellation);
     if (!header_r)
-        co_return std::unexpected(header_r.error());
+        co_return std::unexpected("stream header failed: " +
+            header_r.error().message());
 
     const auto& header = *header_r;
     if (header.status != 200)
     {
-        auto err_body = co_await read_remaining_body();
-        auto err = error_response::from_json(err_body);
+        auto err_body = co_await with_timeout(ctx_, operation_timeout,
+            read_remaining_body(cancellation), cancellation);
+        if (!err_body)
+            co_return std::unexpected("stream error body failed: " +
+                err_body.error().message());
+        auto err = error_response::from_json(*err_body);
         co_return std::unexpected(
             std::format("HTTP {}: {}", header.status, err.message));
     }
@@ -276,18 +304,21 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
         {
             if (finish_observed && expect_usage && !usage_observed)
             {
-                cancel_token token;
+                cancel_token usage_token;
                 auto read_result = co_await with_timeout(ctx_,
-                    std::chrono::seconds{1}, do_read_some(token), token);
+                    std::chrono::seconds{1}, do_read_some(usage_token), usage_token);
                 if (!read_result)
                     break;
                 bytes = std::move(*read_result);
             }
             else
             {
-                auto read_result = co_await do_read_some();
-                if (!read_result || read_result->empty())
-                    break;
+                auto read_result = co_await with_timeout(ctx_,
+                    std::chrono::seconds{opts_.timeout_seconds},
+                    do_read_some(cancellation), cancellation);
+                if (!read_result)
+                    co_return std::unexpected("stream read failed: " +
+                        read_result.error().message());
                 bytes = std::move(*read_result);
             }
         }
@@ -344,8 +375,27 @@ auto client::chat_stream(chat_request req, on_chunk_fn on_chunk)
 auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
     -> task<std::expected<std::string, std::string>>
 {
+    cancel_token cancellation;
+    co_return co_await chat_stream_async(
+        std::move(req), std::move(on_chunk), cancellation);
+}
+
+auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk,
+    cancel_token& cancellation)
+    -> task<std::expected<std::string, std::string>>
+{
     if (auto r = co_await ensure_connected(); !r)
         co_return std::unexpected(r.error());
+
+    struct stream_connection_guard
+    {
+        client& owner;
+
+        ~stream_connection_guard()
+        {
+            owner.close();
+        }
+    } connection_guard{*this};
 
     const bool expect_usage = requests_stream_usage(req);
     req.stream = true;
@@ -356,19 +406,28 @@ auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
     apply_common_headers(http_req, "text/event-stream");
     http_req.set_body(std::move(body));
 
-    auto send_r = co_await send_http_request(http_req);
+    const auto operation_timeout = std::chrono::seconds{opts_.timeout_seconds};
+    auto send_r = co_await with_timeout(ctx_, operation_timeout,
+        send_http_request(http_req, cancellation), cancellation);
     if (!send_r)
-        co_return std::unexpected(send_r.error());
+        co_return std::unexpected("stream write failed: " +
+            send_r.error().message());
 
-    auto header_r = co_await read_response_header();
+    auto header_r = co_await with_timeout(ctx_, operation_timeout,
+        read_response_header(cancellation), cancellation);
     if (!header_r)
-        co_return std::unexpected(header_r.error());
+        co_return std::unexpected("stream header failed: " +
+            header_r.error().message());
 
     const auto& header = *header_r;
     if (header.status != 200)
     {
-        auto err_body = co_await read_remaining_body();
-        auto err = error_response::from_json(err_body);
+        auto err_body = co_await with_timeout(ctx_, operation_timeout,
+            read_remaining_body(cancellation), cancellation);
+        if (!err_body)
+            co_return std::unexpected("stream error body failed: " +
+                err_body.error().message());
+        auto err = error_response::from_json(*err_body);
         co_return std::unexpected(
             std::format("HTTP {}: {}", header.status, err.message));
     }
@@ -393,18 +452,21 @@ auto client::chat_stream_async(chat_request req, async_chunk_fn on_chunk)
         {
             if (finish_observed && expect_usage && !usage_observed)
             {
-                cancel_token token;
+                cancel_token usage_token;
                 auto read_result = co_await with_timeout(ctx_,
-                    std::chrono::seconds{1}, do_read_some(token), token);
+                    std::chrono::seconds{1}, do_read_some(usage_token), usage_token);
                 if (!read_result)
                     break;
                 bytes = std::move(*read_result);
             }
             else
             {
-                auto read_result = co_await do_read_some();
-                if (!read_result || read_result->empty())
-                    break;
+                auto read_result = co_await with_timeout(ctx_,
+                    std::chrono::seconds{opts_.timeout_seconds},
+                    do_read_some(cancellation), cancellation);
+                if (!read_result)
+                    co_return std::unexpected("stream read failed: " +
+                        read_result.error().message());
                 bytes = std::move(*read_result);
             }
         }

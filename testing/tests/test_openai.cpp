@@ -2941,4 +2941,84 @@ TEST(openai_stream_finishes_without_done_or_connection_close)
         ASSERT_EQ(token_usage->total_tokens, 8);
 }
 
+TEST(openai_stream_cancellation_interrupts_read_and_discards_connection)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    if (!listener || !endpoint)
+        return;
+
+    cnetmod::cancel_token cancellation;
+    bool request_seen = false;
+    bool consumer_finished = false;
+    bool peer_closed = false;
+    bool cancelled = false;
+
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto peer = co_await cnetmod::async_accept(*io, *listener);
+        if (!peer)
+            co_return;
+        std::array<std::byte, 8192> request{};
+        auto received = co_await cnetmod::async_read(*io, *peer,
+            cnetmod::mutable_buffer{request.data(), request.size()});
+        if (!received)
+            co_return;
+        constexpr std::string_view header =
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: keep-alive\r\n\r\n";
+        if (!(co_await cnetmod::async_write_all(*io, *peer,
+                cnetmod::const_buffer{header.data(), header.size()})))
+            co_return;
+        request_seen = true;
+        std::array<std::byte, 16> probe{};
+        auto closed = co_await cnetmod::async_read(*io, *peer,
+            cnetmod::mutable_buffer{probe.data(), probe.size()});
+        peer_closed = !closed || *closed == 0U;
+    };
+    auto consumer = [&]() -> cnetmod::task<void>
+    {
+        openai::client api{*io};
+        auto connected = co_await api.connect({
+            .api_base = std::format("http://127.0.0.1:{}/v1", endpoint->port()),
+            .api_key = "fixture",
+            .timeout_seconds = 5,
+        });
+        if (connected)
+        {
+            openai::chat_request request{
+                .model = "fixture",
+                .messages = {openai::message::user("cancel")}};
+            auto result = co_await api.chat_stream_async(std::move(request), {},
+                cancellation);
+            cancelled = !result && cancellation.is_cancelled() &&
+                !api.is_connected();
+        }
+        consumer_finished = true;
+    };
+    auto cancel = [&]() -> cnetmod::task<void>
+    {
+        while (!request_seen)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        cancellation.cancel();
+        while (!consumer_finished || !peer_closed)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, consumer());
+    cnetmod::spawn(*io, cancel());
+    io->run();
+    ASSERT_TRUE(cancelled);
+    ASSERT_TRUE(peer_closed);
+}
+
 RUN_TESTS()
