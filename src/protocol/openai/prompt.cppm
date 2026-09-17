@@ -15,15 +15,30 @@ namespace cnetmod::openai {
 
 export using prompt_variables =
     std::map<std::string, std::string, std::less<>>;
-export using prompt_section = prompt_variables;
+
+export struct prompt_section;
 export using prompt_sections =
     std::map<std::string, std::vector<prompt_section>, std::less<>>;
 
 /**
- * Supplies global scalar variables and repeated section rows to a prompt.
+ * Defines one repeated row with local variables and nested sections.
+ */
+export struct prompt_section
+{
+    prompt_section();
+    prompt_section(prompt_variables variables);
+    auto with_sections(prompt_sections nested) && -> prompt_section;
+
+    prompt_variables variables;
+    prompt_sections sections;
+};
+
+/**
+ * Supplies global scalar variables and recursively repeated sections.
  *
  * Section rows form a local scope whose values take precedence over global
- * variables while that row is rendered.
+ * variables while that row is rendered. Nested sections resolve from the
+ * current row before falling back to the root context.
  */
 export struct prompt_context
 {

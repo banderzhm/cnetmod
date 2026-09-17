@@ -42,10 +42,11 @@ class application_host::implementation
 public:
     implementation(application_configuration configuration,
         http::router routes, service_registry services,
+        std::vector<application_middleware> middlewares,
         std::vector<managed_service_factory> service_factories,
         bool auto_configuration,
         std::optional<std::filesystem::path> configuration_file)
-        : configuration(std::move(configuration)), network(), io(make_io_context()), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), configuration_file(std::move(configuration_file))
+        : configuration(std::move(configuration)), network(), io(make_io_context()), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
         application_service_context factory_context{*io, telemetry, supervisor,
@@ -142,6 +143,9 @@ public:
         if (configuration.http.request_timeout)
             business_server.use(
                 request_timeout(*configuration.http.request_timeout));
+        for (auto& middleware : business_middlewares)
+            business_server.use(std::move(middleware));
+        business_middlewares.clear();
         if (configuration.http.access_logging)
             business_server.use(access_log({
                 .lv = configuration.logging.level,
@@ -685,6 +689,7 @@ public:
     task_supervisor supervisor;
     service_lifecycle lifecycle;
     http::router business_routes;
+    std::vector<application_middleware> business_middlewares;
     shutdown_handler shutdown;
     auto_configuration_registry auto_configurations;
     std::optional<std::filesystem::path> configuration_file;
@@ -937,6 +942,15 @@ auto application_builder::routes(route_configurer configurer)
     return *this;
 }
 
+auto application_builder::middleware(application_middleware value)
+    -> application_builder&
+{
+    if (!value)
+        throw std::invalid_argument("application middleware cannot be empty");
+    middlewares_.push_back(std::move(value));
+    return *this;
+}
+
 auto application_builder::service(std::shared_ptr<managed_service> service)
     -> application_builder&
 {
@@ -1005,6 +1019,7 @@ auto application_builder::build()
     {
         application_host host{std::make_unique<application_host::implementation>(
             std::move(*loaded), std::move(routes), std::move(registry),
+            std::move(middlewares_),
             std::move(service_factories_), auto_configuration_,
             configuration_file_)};
         if (!host.implementation_->preparation_error)

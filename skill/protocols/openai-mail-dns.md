@@ -156,6 +156,8 @@ export struct tool { std::string type; std::string function_name; std::string fu
 | `agent_executor` | State：有界执行 model → tools → model 循环 |
 | `conversation_memory` | Repository：协程安全、有界的会话消息存储 |
 | `append_only_chat_memory_store` | Repository：面向消息表的原子追加与最近窗口读取，不重写历史快照 |
+| `append_only_chat_record_store` | Repository：协议消息与应用元数据分离，追加后返回数据库补全的记录 |
+| `chat_record_memory_adapter` | Adapter：将带 ID、模型、token、时间戳等元数据的记录仓库接入协议记忆 |
 | `file_chat_memory_store` | Repository：按会话分文件、容量受限并以原子替换持久化完整消息 |
 | `long_term_store` | Repository：跨会话 namespace/key JSON 记忆、TTL、过滤分页与可选语义检索 |
 | `checkpoint_store` | Repository：版本化执行状态、pending writes、分支、回滚与乐观并发 |
@@ -228,9 +230,9 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。`append_batch` 必须保证原子性，避免 Agent 的模型工具请求和工具结果只保存一半。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。`append_batch` 必须保证原子性，避免 Agent 的模型工具请求和工具结果只保存一半。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
 
-`prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行拥有局部变量作用域，局部值覆盖全局值；富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
+`prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行使用 `prompt_section`，拥有局部变量和可递归的子 section；变量及子 section 都按“当前行优先、根上下文兜底”解析。富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 
 `file_chat_memory_store` 提供开箱即用的持久化实现。每个 session 使用独立 JSON 文件，session ID 先稳定哈希为安全文件名并保存在文件信封中二次校验；写入使用同目录临时文件和原子替换。文件访问通过 executor bridge 执行，支持文本、多模态、模型工具调用和工具执行结果的完整往返恢复，并限制单会话文件大小。
 
@@ -417,8 +419,8 @@ cn::openai::prompt_template scoped{
 cn::openai::prompt_context values{
     .variables = {{"title", "Permissions"}},
     .sections = {{"scopes", {
-        {{"name", "read"}, {"value", "allowed"}},
-        {{"name", "write"}},
+        cn::openai::prompt_section{{{"name", "read"}, {"value", "allowed"}}},
+        cn::openai::prompt_section{{{"name", "write"}}},
     }}},
 };
 auto rendered = scoped.format_context(values);
@@ -504,8 +506,13 @@ co_await memory.append(cn::openai::message::user("Hello"));
 auto context_messages = co_await memory.snapshot();
 
 // 只复用框架窗口策略时，无需实现 Store。
-cn::openai::trim_messages(messages,
-    {.max_messages = 32, .max_tokens = 8'000});
+auto trimmed = cn::openai::trim_messages(messages,
+    {.max_messages = 32,
+     .max_tokens = 8'000,
+     .pinned_prefix_messages = 1,
+     .preserved_tail_messages = 1});
+if (!trimmed.limit_satisfied)
+    cn::logger::warn{"Protected prompt messages exceed the configured budget"};
 ```
 
 跨会话用户记忆使用独立的 Long-term Store：

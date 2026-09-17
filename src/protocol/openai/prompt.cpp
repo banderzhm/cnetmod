@@ -14,6 +14,19 @@ import nlohmann.json;
 
 namespace cnetmod::openai {
 
+prompt_section::prompt_section() = default;
+
+prompt_section::prompt_section(prompt_variables variables)
+    : variables(std::move(variables))
+{
+}
+
+auto prompt_section::with_sections(prompt_sections nested) && -> prompt_section
+{
+    sections = std::move(nested);
+    return std::move(*this);
+}
+
 auto string_output_parser::parse(std::string_view text) const
     -> std::expected<json, std::string>
 {

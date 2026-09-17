@@ -347,8 +347,10 @@ TEST(openai_prompt_template_supports_defaults_conditions_and_sections)
     const openai::prompt_context context{
         .variables = {{"title", "Permissions"}},
         .sections = {{"scopes",
-            {{{"name", "read"}, {"value", "allowed"}},
-                {{"name", "write"}, {"note", "approval required"}}}}}};
+            {openai::prompt_section{{{"name", "read"},
+                 {"value", "allowed"}}},
+                openai::prompt_section{{{"name", "write"},
+                    {"note", "approval required"}}}}}}};
 
     const auto rendered = prompt.format_context(context);
 
@@ -370,6 +372,28 @@ TEST(openai_prompt_template_omits_false_sections_and_rejects_bad_nesting)
         openai::prompt_context{.variables = {{"enabled", "yes"}}});
     ASSERT_FALSE(failed.has_value());
     ASSERT_TRUE(failed.error().contains("mismatched"));
+}
+
+TEST(openai_prompt_template_renders_nested_row_contexts)
+{
+    openai::prompt_template prompt{
+        "{#scopes}{scope}:{#permissions}{name}={value|unset};{/permissions}\n" "{/scopes}"};
+    openai::prompt_section orders{{{"scope", "orders"}}};
+    orders.sections["permissions"] = {
+        openai::prompt_section{{{"name", "read"}, {"value", "allow"}}},
+        openai::prompt_section{{{"name", "write"}}},
+    };
+    openai::prompt_section billing{{{"scope", "billing"}}};
+    billing.sections["permissions"] = {
+        openai::prompt_section{{{"name", "read"}}},
+    };
+    openai::prompt_context context{.variables = {{"value", "global"}}};
+    context.sections["scopes"] = {std::move(orders), std::move(billing)};
+
+    const auto rendered = prompt.format_context(context);
+
+    ASSERT_TRUE(rendered.has_value());
+    ASSERT_EQ(*rendered, std::string("orders:read=allow;write=global;\n" "billing:read=global;\n"));
 }
 
 TEST(openai_structured_output_serializes_and_validates)
@@ -546,7 +570,9 @@ TEST(openai_prompt_runnable_accepts_rich_prompt_context)
 
     auto result = cnetmod::sync_wait(chain.invoke(openai::prompt_context{
         .variables = {{"heading", "Scopes"}},
-        .sections = {{"items", {{{"name", "read"}}, {{"name", "write"}}}}},
+        .sections = {{"items",
+            {openai::prompt_section{{{"name", "read"}}},
+                openai::prompt_section{{{"name", "write"}}}}}},
     }));
 
     ASSERT_TRUE(result.has_value());
@@ -2151,6 +2177,34 @@ TEST(openai_append_only_store_keeps_required_protocol_prefixes)
     ASSERT_EQ((*recent)[2].role, std::string("tool"));
 }
 
+TEST(openai_chat_record_store_keeps_metadata_outside_protocol_messages)
+{
+    openai::in_memory_append_only_chat_record_store records;
+    auto persisted = cnetmod::sync_wait(records.append("record-session",
+        {.value = openai::message::user("hello"),
+            .metadata = {{"id", "message-42"},
+                {"model", "fixture"}, {"tokens", 7}}}));
+    ASSERT_TRUE(persisted.has_value());
+    ASSERT_EQ(persisted->metadata["id"], "message-42");
+
+    openai::chat_record_memory_adapter adapter{records};
+    openai::conversation_memory memory{"record-session", adapter,
+        {.max_messages = 4}};
+    const auto appended = cnetmod::sync_wait(
+        memory.append(openai::message::model_output("world")));
+    const auto snapshot = cnetmod::sync_wait(memory.snapshot());
+    const auto stored = cnetmod::sync_wait(
+        records.load_recent("record-session", 0));
+
+    ASSERT_TRUE(appended.has_value());
+    ASSERT_TRUE(snapshot.has_value());
+    ASSERT_EQ(snapshot->size(), std::size_t{2});
+    ASSERT_EQ(snapshot->front().content, "hello");
+    ASSERT_TRUE(stored.has_value());
+    ASSERT_EQ(stored->front().metadata["model"], "fixture");
+    ASSERT_TRUE(stored->back().metadata.empty());
+}
+
 TEST(openai_trim_messages_is_reusable_without_persistence)
 {
     std::vector<openai::message> messages{
@@ -2160,12 +2214,56 @@ TEST(openai_trim_messages_is_reusable_without_persistence)
         openai::message::user("three"),
     };
 
-    openai::trim_messages(messages,
+    const auto trimmed = openai::trim_messages(messages,
         {.max_messages = 3, .preserve_system_messages = true});
 
     ASSERT_EQ(messages.size(), std::size_t{3});
     ASSERT_EQ(messages.front().role, std::string("system"));
     ASSERT_EQ(messages.back().content, std::string("three"));
+    ASSERT_EQ(trimmed.removed_messages, std::size_t{1});
+    ASSERT_TRUE(trimmed.removed_tokens > 0);
+    ASSERT_TRUE(trimmed.limit_satisfied);
+}
+
+TEST(openai_trim_messages_preserves_pinned_prefix_and_latest_input)
+{
+    std::vector<openai::message> messages{
+        openai::message::system("fixed application policy"),
+        openai::message::user("old question"),
+        openai::message::model_output("old answer"),
+        openai::message::user("current question"),
+    };
+
+    const auto trimmed = openai::trim_messages(messages,
+        {.max_messages = 1,
+            .max_tokens = 1,
+            .preserve_system_messages = false,
+            .pinned_prefix_messages = 1,
+            .preserved_tail_messages = 1});
+
+    ASSERT_EQ(messages.size(), std::size_t{2});
+    ASSERT_EQ(messages.front().content,
+        std::string("fixed application policy"));
+    ASSERT_EQ(messages.back().content, std::string("current question"));
+    ASSERT_EQ(trimmed.removed_messages, std::size_t{2});
+    ASSERT_FALSE(trimmed.limit_satisfied);
+}
+
+TEST(openai_trim_messages_reports_unsatisfied_protected_window)
+{
+    std::vector<openai::message> messages{
+        openai::message::system("policy"),
+        openai::message::user("current question"),
+    };
+
+    const auto trimmed = openai::trim_messages(messages,
+        {.max_messages = 1,
+            .preserve_system_messages = true,
+            .preserved_tail_messages = 1});
+
+    ASSERT_EQ(messages.size(), std::size_t{2});
+    ASSERT_EQ(trimmed.removed_messages, std::size_t{0});
+    ASSERT_FALSE(trimmed.limit_satisfied);
 }
 
 TEST(openai_file_memory_store_round_trips_and_erases_session_atomically)

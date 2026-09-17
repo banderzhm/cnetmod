@@ -406,28 +406,53 @@ void request_context::not_found()
 
 auto request_context::sse_begin(int s) -> task<bool>
 {
-    if (sse_started_)
+    if (sse_state_ == sse_stream_state::open)
         co_return true;
+    if (sse_state_ != sse_stream_state::not_started)
+        co_return false;
     resp_.set_status(s);
     sse::prepare(resp_, sse::response_options{.status_code = s});
     auto h = resp_.serialize();
+    sse_state_ = sse_stream_state::committing;
     auto w =
         co_await async_write_all(ctx_, sock_, const_buffer{h.data(), h.size()});
     if (!w)
+    {
+        sse_state_ = sse_stream_state::failed;
         co_return false;
-    sse_started_ = true;
+    }
+    sse_state_ = sse_stream_state::open;
+    co_return true;
+}
+
+auto request_context::sse_started() const noexcept -> bool
+{
+    return sse_state_ != sse_stream_state::not_started;
+}
+
+auto request_context::sse_state() const noexcept -> sse_stream_state
+{
+    return sse_state_;
+}
+
+auto request_context::write_sse_frame(std::string frame) -> task<bool>
+{
+    if (!(co_await sse_begin()))
+        co_return false;
+    auto written = co_await async_write_all(ctx_, sock_,
+        const_buffer{frame.data(), frame.size()});
+    if (!written)
+    {
+        sse_state_ = sse_stream_state::failed;
+        co_return false;
+    }
     co_return true;
 }
 
 auto request_context::sse_send(std::string_view d, std::string_view e)
     -> task<bool>
 {
-    if (!(co_await sse_begin()))
-        co_return false;
-    auto f = sse::data(d, e);
-    auto w =
-        co_await async_write_all(ctx_, sock_, const_buffer{f.data(), f.size()});
-    co_return w.has_value();
+    co_return co_await write_sse_frame(sse::data(d, e));
 }
 
 auto request_context::sse_json(std::string_view j, std::string_view e)
@@ -436,14 +461,22 @@ auto request_context::sse_json(std::string_view j, std::string_view e)
     co_return co_await sse_send(j, e);
 }
 
+auto request_context::sse_comment(std::string_view value) -> task<bool>
+{
+    co_return co_await write_sse_frame(sse::comment(value));
+}
+
+auto request_context::sse_heartbeat() -> task<bool>
+{
+    co_return co_await write_sse_frame(sse::heartbeat());
+}
+
 auto request_context::sse_done() -> task<bool>
 {
-    if (!(co_await sse_begin()))
-        co_return false;
-    auto f = sse::done();
-    auto w =
-        co_await async_write_all(ctx_, sock_, const_buffer{f.data(), f.size()});
-    co_return w.has_value();
+    const auto written = co_await write_sse_frame(sse::done());
+    if (written)
+        sse_state_ = sse_stream_state::closed;
+    co_return written;
 }
 
 auto request_context::parse_form()

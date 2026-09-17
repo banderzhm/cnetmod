@@ -1698,6 +1698,116 @@ TEST(application_builder_composes_host_owned_service_factories_before_freeze)
     ASSERT_FALSE(rejected.has_value());
 }
 
+TEST(application_builder_executes_ordered_business_middleware)
+{
+    cnetmod::net_init network;
+    auto reservation = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(reservation.has_value());
+    ASSERT_TRUE(reservation->bind(
+                               {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    const auto endpoint = reservation->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    std::vector<std::string> events;
+    auto first = [&events](cnetmod::http::request_context&,
+                     cnetmod::http::next_fn next) -> cnetmod::task<void>
+    {
+        events.push_back("first-enter");
+        co_await next();
+        events.push_back("first-exit");
+    };
+    auto second = [&events](cnetmod::http::request_context&,
+                      cnetmod::http::next_fn next) -> cnetmod::task<void>
+    {
+        events.push_back("second-enter");
+        co_await next();
+        events.push_back("second-exit");
+    };
+
+    auto host = application::application_builder{"middleware-composition"}
+                    .configure([&endpoint](application::application_configuration& value)
+                        {
+                            value.http.address = "127.0.0.1";
+                            value.http.port = endpoint->port();
+                            value.http.access_logging = false;
+                            value.logging.manage_lifecycle = false;
+                            value.install_signal_handlers = false;
+                            value.management.enabled = false;
+                            value.observability.tracing = false;
+                            value.observability.metrics = false;
+                            value.observability.logs = false;
+                        })
+                    .routes([&events](cnetmod::http::router& routes)
+                        {
+                            routes.get("/middleware-order",
+                                [&events](cnetmod::http::request_context& request)
+                                    -> cnetmod::task<void>
+                                {
+                                    events.push_back("route");
+                                    request.text(cnetmod::http::status::ok, "ok");
+                                    co_return;
+                                });
+                        })
+                    .middleware(first)
+                    .middleware(second)
+                    .build();
+
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    reservation->close();
+    std::optional<std::expected<void, std::error_code>> completed;
+    std::jthread runner([&]
+        {
+            completed = host->run();
+        });
+    const auto startup_timeout = std::chrono::steady_clock::now() +
+        std::chrono::seconds{2};
+    while (host->state() == application::application_state::built ||
+        host->state() == application::application_state::starting)
+    {
+        if (std::chrono::steady_clock::now() >= startup_timeout)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+    bool response_ok = false;
+    if (host->state() == application::application_state::running)
+    {
+        auto io = cnetmod::make_io_context();
+        auto request = [&]() -> cnetmod::task<void>
+        {
+            cnetmod::http::client client{*io,
+                {.request_timeout = std::chrono::milliseconds{500},
+                    .keep_alive = false}};
+            auto response = co_await client.get(std::format(
+                "http://127.0.0.1:{}/middleware-order", endpoint->port()));
+            response_ok = response && response->status_code() == 200 &&
+                response->body() == "ok";
+            io->stop();
+        };
+        cnetmod::spawn(*io, request());
+        io->run();
+    }
+    host->request_stop();
+    runner.join();
+    ASSERT_TRUE(completed.has_value() && completed->has_value());
+    ASSERT_TRUE(response_ok);
+    ASSERT_TRUE(events == std::vector<std::string>({"first-enter", "second-enter", "route", "second-exit", "first-exit"}));
+
+    bool rejected = false;
+    try
+    {
+        application::application_builder{"empty-middleware"}
+            .middleware({});
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejected = true;
+    }
+    ASSERT_TRUE(rejected);
+}
+
 TEST(application_configuration_precedence_and_redaction)
 {
     const auto path = std::filesystem::temp_directory_path() /

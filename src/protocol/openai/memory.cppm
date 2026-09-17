@@ -9,6 +9,7 @@ export module cnetmod.protocol.openai:memory;
 import std;
 import cnetmod.coro.task;
 import cnetmod.coro.mutex;
+import :foundation;
 import :messages;
 
 namespace cnetmod::openai {
@@ -17,11 +18,39 @@ export using token_counter = std::function<std::size_t(const message&)>;
 
 export struct memory_options
 {
+    /**
+     * Maximum number of budgeted messages. Zero disables this limit.
+     */
     std::size_t max_messages = 64;
+
+    /**
+     * Maximum number of budgeted tokens. Zero disables this limit.
+     */
     std::size_t max_tokens = 0;
     bool preserve_system_messages = true;
     bool preserve_tool_exchanges = true;
     token_counter count_tokens;
+
+    /**
+     * Number of leading messages preserved and excluded from both budgets.
+     */
+    std::size_t pinned_prefix_messages = 0;
+
+    /**
+     * Number of trailing messages that trimming must never remove.
+     */
+    std::size_t preserved_tail_messages = 1;
+};
+
+/**
+ * Describes the observable effect of one message-window trim operation.
+ */
+export struct trim_result
+{
+    std::size_t removed_messages = 0;
+    std::size_t removed_tokens = 0;
+    std::size_t remaining_tokens = 0;
+    bool limit_satisfied = true;
 };
 
 /**
@@ -31,8 +60,8 @@ export struct memory_options
  * the supplied options. The function has no persistence side effects, so an
  * application can reuse the framework window policy with its own data store.
  */
-export void trim_messages(std::vector<message>& messages,
-    const memory_options& options);
+export auto trim_messages(std::vector<message>& messages,
+    const memory_options& options) -> trim_result;
 
 /**
  * Defines snapshot persistence for session-keyed conversation messages.
@@ -110,6 +139,86 @@ public:
 private:
     async_mutex mutex_;
     std::map<std::string, std::vector<message>, std::less<>> sessions_;
+};
+
+/**
+ * Keeps protocol content separate from application persistence metadata.
+ *
+ * Metadata is never serialized into an OpenAI request. A database adapter may
+ * use it for identifiers, model names, token accounting, timestamps, or other
+ * application-owned fields.
+ */
+export struct persisted_chat_message
+{
+    message value;
+    json metadata = json::object();
+};
+
+/**
+ * Defines append-only persistence that returns database-enriched records.
+ */
+export class append_only_chat_record_store
+{
+public:
+    virtual ~append_only_chat_record_store() = default;
+    virtual auto append(std::string session_id, persisted_chat_message value)
+        -> task<std::expected<persisted_chat_message, std::string>>;
+    virtual auto append_batch(std::string session_id,
+        std::vector<persisted_chat_message> values)
+        -> task<std::expected<std::vector<persisted_chat_message>,
+            std::string>> = 0;
+    virtual auto load_recent(std::string session_id, std::size_t limit)
+        -> task<std::expected<std::vector<persisted_chat_message>,
+            std::string>> = 0;
+    virtual auto erase(std::string session_id)
+        -> task<std::expected<void, std::string>> = 0;
+};
+
+/**
+ * Provides coroutine-safe process-local storage for enriched chat records.
+ */
+export class in_memory_append_only_chat_record_store final
+    : public append_only_chat_record_store
+{
+public:
+    auto append(std::string session_id, persisted_chat_message value)
+        -> task<std::expected<persisted_chat_message, std::string>> override;
+    auto append_batch(std::string session_id,
+        std::vector<persisted_chat_message> values)
+        -> task<std::expected<std::vector<persisted_chat_message>,
+            std::string>> override;
+    auto load_recent(std::string session_id, std::size_t limit)
+        -> task<std::expected<std::vector<persisted_chat_message>,
+            std::string>> override;
+    auto erase(std::string session_id)
+        -> task<std::expected<void, std::string>> override;
+
+private:
+    async_mutex mutex_;
+    std::map<std::string, std::vector<persisted_chat_message>, std::less<>>
+        sessions_;
+};
+
+/**
+ * Adapts enriched record persistence to the protocol-only memory contract.
+ */
+export class chat_record_memory_adapter final
+    : public append_only_chat_memory_store
+{
+public:
+    explicit chat_record_memory_adapter(append_only_chat_record_store& store);
+
+    auto append(std::string session_id, message value)
+        -> task<std::expected<void, std::string>> override;
+    auto append_batch(std::string session_id, std::vector<message> values)
+        -> task<std::expected<void, std::string>> override;
+    auto load_recent(std::string session_id, std::size_t limit)
+        -> task<std::expected<std::vector<message>, std::string>> override;
+    auto erase(std::string session_id)
+        -> task<std::expected<void, std::string>> override;
+
+private:
+    append_only_chat_record_store& store_;
 };
 
 /**

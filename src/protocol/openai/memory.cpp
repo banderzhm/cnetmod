@@ -29,42 +29,78 @@ namespace {
     }
 } // namespace
 
-void trim_messages(std::vector<message>& messages,
-    const memory_options& options)
+auto trim_messages(std::vector<message>& messages,
+    const memory_options& options) -> trim_result
 {
-    const auto total_tokens = [&messages, &options]
+    trim_result result;
+    const auto pinned_count = [&messages, &options]
+    {
+        return std::min(options.pinned_prefix_messages, messages.size());
+    };
+    const auto budgeted_message_count = [&messages, &pinned_count]
+    {
+        return messages.size() - pinned_count();
+    };
+    const auto total_tokens = [&messages, &options, &pinned_count]
     {
         std::size_t total = 0;
-        for (const auto& value : messages)
-            total += message_tokens(value, options);
+        for (std::size_t index = pinned_count(); index < messages.size(); ++index)
+            total += message_tokens(messages[index], options);
         return total;
     };
-    const auto over_limit = [&]
+    const auto over_limit = [&options, &budgeted_message_count, &total_tokens]
     {
         return (options.max_messages > 0 &&
-                   messages.size() > options.max_messages) ||
+                   budgeted_message_count() > options.max_messages) ||
             (options.max_tokens > 0 && total_tokens() > options.max_tokens);
+    };
+    const auto protected_index = [&messages, &options, &pinned_count](
+                                     std::size_t index)
+    {
+        if (index < pinned_count())
+            return true;
+        const auto tail = std::min(options.preserved_tail_messages,
+            messages.size());
+        if (index >= messages.size() - tail)
+            return true;
+        return options.preserve_system_messages &&
+            (messages[index].role == "system" ||
+                messages[index].role == "developer");
     };
 
     while (!messages.empty() && over_limit())
     {
-        auto removable = std::ranges::find_if(messages,
-            [&options](const message& item)
-            {
-                return !options.preserve_system_messages ||
-                    (item.role != "system" && item.role != "developer");
-            });
-        if (removable == messages.end())
-            removable = messages.begin();
-
-        if (options.preserve_tool_exchanges && !removable->tool_calls.empty())
+        std::optional<std::pair<std::size_t, std::size_t>> removable;
+        for (std::size_t index = 0; index < messages.size(); ++index)
         {
-            auto next = std::next(removable);
-            while (next != messages.end() && next->role == "tool")
-                next = messages.erase(next);
+            if (protected_index(index))
+                continue;
+            auto end = index + 1;
+            if (options.preserve_tool_exchanges &&
+                !messages[index].tool_calls.empty())
+            {
+                while (end < messages.size() && messages[end].role == "tool")
+                    ++end;
+                bool group_protected = false;
+                for (auto member = index; member < end; ++member)
+                    group_protected = group_protected || protected_index(member);
+                if (group_protected)
+                    continue;
+            }
+            removable = std::pair{index, end};
+            break;
         }
-        messages.erase(removable);
+        if (!removable)
+            break;
+        for (auto index = removable->first; index < removable->second; ++index)
+            result.removed_tokens += message_tokens(messages[index], options);
+        result.removed_messages += removable->second - removable->first;
+        messages.erase(messages.begin() + static_cast<std::ptrdiff_t>(removable->first),
+            messages.begin() + static_cast<std::ptrdiff_t>(removable->second));
     }
+    result.remaining_tokens = total_tokens();
+    result.limit_satisfied = !over_limit();
+    return result;
 }
 
 auto in_memory_chat_memory_store::load(std::string session_id)
@@ -176,6 +212,117 @@ auto in_memory_append_only_chat_memory_store::erase(std::string session_id)
     async_lock_guard guard(mutex_, std::adopt_lock);
     sessions_.erase(session_id);
     co_return std::expected<void, std::string>{};
+}
+
+auto append_only_chat_record_store::append(std::string session_id,
+    persisted_chat_message value)
+    -> task<std::expected<persisted_chat_message, std::string>>
+{
+    auto appended = co_await append_batch(std::move(session_id),
+        std::vector<persisted_chat_message>{std::move(value)});
+    if (!appended)
+        co_return std::unexpected(appended.error());
+    if (appended->size() != 1)
+        co_return std::unexpected(
+            "chat record store returned an invalid append result");
+    co_return std::move(appended->front());
+}
+
+auto in_memory_append_only_chat_record_store::append(std::string session_id,
+    persisted_chat_message value)
+    -> task<std::expected<persisted_chat_message, std::string>>
+{
+    auto appended = co_await append_batch(std::move(session_id),
+        std::vector<persisted_chat_message>{std::move(value)});
+    if (!appended)
+        co_return std::unexpected(appended.error());
+    co_return std::move(appended->front());
+}
+
+auto in_memory_append_only_chat_record_store::append_batch(
+    std::string session_id, std::vector<persisted_chat_message> values)
+    -> task<std::expected<std::vector<persisted_chat_message>, std::string>>
+{
+    co_await mutex_.lock();
+    async_lock_guard guard(mutex_, std::adopt_lock);
+    auto& destination = sessions_[std::move(session_id)];
+    destination.insert(destination.end(), values.begin(), values.end());
+    co_return values;
+}
+
+auto in_memory_append_only_chat_record_store::load_recent(
+    std::string session_id, std::size_t limit)
+    -> task<std::expected<std::vector<persisted_chat_message>, std::string>>
+{
+    co_await mutex_.lock();
+    async_lock_guard guard(mutex_, std::adopt_lock);
+    const auto found = sessions_.find(session_id);
+    if (found == sessions_.end())
+        co_return std::vector<persisted_chat_message>{};
+    const auto begin = limit == 0 || found->second.size() <= limit
+        ? found->second.begin()
+        : found->second.end() - static_cast<std::ptrdiff_t>(limit);
+    co_return std::vector<persisted_chat_message>{begin, found->second.end()};
+}
+
+auto in_memory_append_only_chat_record_store::erase(std::string session_id)
+    -> task<std::expected<void, std::string>>
+{
+    co_await mutex_.lock();
+    async_lock_guard guard(mutex_, std::adopt_lock);
+    sessions_.erase(session_id);
+    co_return std::expected<void, std::string>{};
+}
+
+chat_record_memory_adapter::chat_record_memory_adapter(
+    append_only_chat_record_store& store)
+    : store_(store)
+{
+}
+
+auto chat_record_memory_adapter::append(std::string session_id, message value)
+    -> task<std::expected<void, std::string>>
+{
+    auto appended = co_await store_.append(std::move(session_id),
+        {.value = std::move(value)});
+    if (!appended)
+        co_return std::unexpected(appended.error());
+    co_return std::expected<void, std::string>{};
+}
+
+auto chat_record_memory_adapter::append_batch(std::string session_id,
+    std::vector<message> values)
+    -> task<std::expected<void, std::string>>
+{
+    std::vector<persisted_chat_message> records;
+    records.reserve(values.size());
+    for (auto& value : values)
+        records.push_back({.value = std::move(value)});
+    auto appended = co_await store_.append_batch(std::move(session_id),
+        std::move(records));
+    if (!appended)
+        co_return std::unexpected(appended.error());
+    co_return std::expected<void, std::string>{};
+}
+
+auto chat_record_memory_adapter::load_recent(std::string session_id,
+    std::size_t limit)
+    -> task<std::expected<std::vector<message>, std::string>>
+{
+    auto loaded = co_await store_.load_recent(std::move(session_id), limit);
+    if (!loaded)
+        co_return std::unexpected(loaded.error());
+    std::vector<message> messages;
+    messages.reserve(loaded->size());
+    for (auto& record : *loaded)
+        messages.push_back(std::move(record.value));
+    co_return messages;
+}
+
+auto chat_record_memory_adapter::erase(std::string session_id)
+    -> task<std::expected<void, std::string>>
+{
+    co_return co_await store_.erase(std::move(session_id));
 }
 
 conversation_memory::conversation_memory(memory_options options)

@@ -281,11 +281,27 @@ auto handler = [](request_context& ctx) -> task<void> {
 #### `request_context::sse_begin`
 **签名**: `auto sse_begin(int status_code = status::ok) -> task<bool>`
 
+#### `request_context::sse_started` / `sse_state`
+**签名**:
+```cpp
+[[nodiscard]] auto sse_started() const noexcept -> bool;
+[[nodiscard]] auto sse_state() const noexcept -> sse_stream_state;
+```
+**说明**: `sse_started()` 在开始尝试写出 SSE 响应头时即返回 true，包括部分写入后失败的情况；此后不得回退为普通 JSON 响应。`sse_state()` 区分 `not_started`、`committing`、`open`、`failed` 与 `closed`。
+
 #### `request_context::sse_send`
 **签名**: `auto sse_send(std::string_view data, std::string_view event = {}) -> task<bool>`
 
 #### `request_context::sse_json`
 **签名**: `auto sse_json(std::string_view json_payload, std::string_view event = {}) -> task<bool>`
+
+#### `request_context::sse_comment` / `sse_heartbeat`
+**签名**:
+```cpp
+auto sse_comment(std::string_view comment) -> task<bool>;
+auto sse_heartbeat() -> task<bool>;
+```
+**说明**: 发送标准 SSE 注释帧。`sse_heartbeat()` 发送 `: keepalive\n\n`，不会被编码成 `data:` 事件。
 
 #### `request_context::sse_done`
 **签名**: `auto sse_done() -> task<bool>`
@@ -311,6 +327,7 @@ using namespace cnetmod::http;
 
 r.get("/events", [](request_context& ctx) -> task<void> {
     co_await ctx.sse_begin();
+    co_await ctx.sse_heartbeat();
     for (int i = 0; i < 5; ++i) {
         auto ok = co_await ctx.sse_send(
             std::format("message {}", i), "update");
@@ -464,7 +481,7 @@ r.get("/static/*filepath", serve_dir({
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
-| SSE 时先调 `sse_begin()` 再 `sse_send()` | 在 SSE 流中使用 `ctx.json()` |
+| SSE 时使用 `sse_begin()`、`sse_send()` 与 `sse_heartbeat()` | `sse_started()` 后回退使用 `ctx.json()` |
 | 使用 `co_return` 结束 handler | 忘记 `co_return` 导致未定义行为 |
 
 ## 多核服务器部署（生产级用法）

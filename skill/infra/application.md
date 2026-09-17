@@ -40,11 +40,12 @@ auto configure_routes(cnetmod::http::router& routes) -> void
 
 auto main() -> int
 {
-    auto host = cnetmod::application::application_builder{"order-service"}
-        .configuration_file("application.json")
-        .enable_auto_configuration()
-        .routes(configure_routes)
-        .build();
+auto host = cnetmod::application::application_builder{"order-service"}
+    .configuration_file("application.json")
+    .enable_auto_configuration()
+    .routes(configure_routes)
+    .middleware(cnetmod::cors())
+    .build();
     if (!host)
         return EXIT_FAILURE;
     return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -58,6 +59,11 @@ auto main() -> int
 `task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
 服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。框架不公开运行期
 `application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+
+业务 HTTP 中间件通过 `application_builder::middleware()` 按注册顺序装配，不影响独立的
+管理端点。执行顺序固定为：框架异常恢复、停机跟踪、请求 ID、追踪、指标和请求超时位于
+业务中间件外层，访问日志位于业务中间件内层。这样自定义认证、CORS、限流等逻辑仍受到
+框架取消、排空和遥测边界监管，同时不能绕过管理端点隔离。空中间件在构建配置阶段拒绝。
 
 host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 

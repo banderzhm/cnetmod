@@ -8388,11 +8388,27 @@ auto handler = [](request_context& ctx) -> task<void> {
 #### `request_context::sse_begin`
 **签名**: `auto sse_begin(int status_code = status::ok) -> task<bool>`
 
+#### `request_context::sse_started` / `sse_state`
+**签名**:
+```cpp
+[[nodiscard]] auto sse_started() const noexcept -> bool;
+[[nodiscard]] auto sse_state() const noexcept -> sse_stream_state;
+```
+**说明**: `sse_started()` 在开始尝试写出 SSE 响应头时即返回 true，包括部分写入后失败的情况；此后不得回退为普通 JSON 响应。`sse_state()` 区分 `not_started`、`committing`、`open`、`failed` 与 `closed`。
+
 #### `request_context::sse_send`
 **签名**: `auto sse_send(std::string_view data, std::string_view event = {}) -> task<bool>`
 
 #### `request_context::sse_json`
 **签名**: `auto sse_json(std::string_view json_payload, std::string_view event = {}) -> task<bool>`
+
+#### `request_context::sse_comment` / `sse_heartbeat`
+**签名**:
+```cpp
+auto sse_comment(std::string_view comment) -> task<bool>;
+auto sse_heartbeat() -> task<bool>;
+```
+**说明**: 发送标准 SSE 注释帧。`sse_heartbeat()` 发送 `: keepalive\n\n`，不会被编码成 `data:` 事件。
 
 #### `request_context::sse_done`
 **签名**: `auto sse_done() -> task<bool>`
@@ -8418,6 +8434,7 @@ using namespace cnetmod::http;
 
 r.get("/events", [](request_context& ctx) -> task<void> {
     co_await ctx.sse_begin();
+    co_await ctx.sse_heartbeat();
     for (int i = 0; i < 5; ++i) {
         auto ok = co_await ctx.sse_send(
             std::format("message {}", i), "update");
@@ -8571,7 +8588,7 @@ r.get("/static/*filepath", serve_dir({
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
-| SSE 时先调 `sse_begin()` 再 `sse_send()` | 在 SSE 流中使用 `ctx.json()` |
+| SSE 时使用 `sse_begin()`、`sse_send()` 与 `sse_heartbeat()` | `sse_started()` 后回退使用 `ctx.json()` |
 | 使用 `co_return` 结束 handler | 忘记 `co_return` 导致未定义行为 |
 
 ## 多核服务器部署（生产级用法）
@@ -9102,11 +9119,12 @@ auto configure_routes(cnetmod::http::router& routes) -> void
 
 auto main() -> int
 {
-    auto host = cnetmod::application::application_builder{"order-service"}
-        .configuration_file("application.json")
-        .enable_auto_configuration()
-        .routes(configure_routes)
-        .build();
+auto host = cnetmod::application::application_builder{"order-service"}
+    .configuration_file("application.json")
+    .enable_auto_configuration()
+    .routes(configure_routes)
+    .middleware(cnetmod::cors())
+    .build();
     if (!host)
         return EXIT_FAILURE;
     return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
@@ -9120,6 +9138,11 @@ auto main() -> int
 `task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
 服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。框架不公开运行期
 `application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+
+业务 HTTP 中间件通过 `application_builder::middleware()` 按注册顺序装配，不影响独立的
+管理端点。执行顺序固定为：框架异常恢复、停机跟踪、请求 ID、追踪、指标和请求超时位于
+业务中间件外层，访问日志位于业务中间件内层。这样自定义认证、CORS、限流等逻辑仍受到
+框架取消、排空和遥测边界监管，同时不能绕过管理端点隔离。空中间件在构建配置阶段拒绝。
 
 host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 
@@ -14336,6 +14359,8 @@ export struct tool { std::string type; std::string function_name; std::string fu
 | `agent_executor` | State：有界执行 model → tools → model 循环 |
 | `conversation_memory` | Repository：协程安全、有界的会话消息存储 |
 | `append_only_chat_memory_store` | Repository：面向消息表的原子追加与最近窗口读取，不重写历史快照 |
+| `append_only_chat_record_store` | Repository：协议消息与应用元数据分离，追加后返回数据库补全的记录 |
+| `chat_record_memory_adapter` | Adapter：将带 ID、模型、token、时间戳等元数据的记录仓库接入协议记忆 |
 | `file_chat_memory_store` | Repository：按会话分文件、容量受限并以原子替换持久化完整消息 |
 | `long_term_store` | Repository：跨会话 namespace/key JSON 记忆、TTL、过滤分页与可选语义检索 |
 | `checkpoint_store` | Repository：版本化执行状态、pending writes、分支、回滚与乐观并发 |
@@ -14408,9 +14433,9 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。`append_batch` 必须保证原子性，避免 Agent 的模型工具请求和工具结果只保存一半。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。`append_batch` 必须保证原子性，避免 Agent 的模型工具请求和工具结果只保存一半。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
 
-`prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行拥有局部变量作用域，局部值覆盖全局值；富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
+`prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行使用 `prompt_section`，拥有局部变量和可递归的子 section；变量及子 section 都按“当前行优先、根上下文兜底”解析。富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 
 `file_chat_memory_store` 提供开箱即用的持久化实现。每个 session 使用独立 JSON 文件，session ID 先稳定哈希为安全文件名并保存在文件信封中二次校验；写入使用同目录临时文件和原子替换。文件访问通过 executor bridge 执行，支持文本、多模态、模型工具调用和工具执行结果的完整往返恢复，并限制单会话文件大小。
 
@@ -14597,8 +14622,8 @@ cn::openai::prompt_template scoped{
 cn::openai::prompt_context values{
     .variables = {{"title", "Permissions"}},
     .sections = {{"scopes", {
-        {{"name", "read"}, {"value", "allowed"}},
-        {{"name", "write"}},
+        cn::openai::prompt_section{{{"name", "read"}, {"value", "allowed"}}},
+        cn::openai::prompt_section{{{"name", "write"}}},
     }}},
 };
 auto rendered = scoped.format_context(values);
@@ -14684,8 +14709,13 @@ co_await memory.append(cn::openai::message::user("Hello"));
 auto context_messages = co_await memory.snapshot();
 
 // 只复用框架窗口策略时，无需实现 Store。
-cn::openai::trim_messages(messages,
-    {.max_messages = 32, .max_tokens = 8'000});
+auto trimmed = cn::openai::trim_messages(messages,
+    {.max_messages = 32,
+     .max_tokens = 8'000,
+     .pinned_prefix_messages = 1,
+     .preserved_tail_messages = 1});
+if (!trimmed.limit_satisfied)
+    cn::logger::warn{"Protected prompt messages exceed the configured budget"};
 ```
 
 跨会话用户记忆使用独立的 Long-term Store：

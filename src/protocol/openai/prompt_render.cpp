@@ -38,8 +38,8 @@ namespace {
         {
             if (local)
             {
-                const auto found = local->find(name);
-                if (found != local->end())
+                const auto found = local->variables.find(name);
+                if (found != local->variables.end())
                     return &found->second;
             }
             const auto found = context_.variables.find(name);
@@ -50,8 +50,21 @@ namespace {
         {
             if (const auto* value = scalar(name, local))
                 return !value->empty();
-            const auto section = context_.sections.find(name);
-            return section != context_.sections.end() && !section->second.empty();
+            const auto* rows = section(name, local);
+            return rows && !rows->empty();
+        }
+
+        auto section(std::string_view name, const prompt_section* local) const
+            -> const std::vector<prompt_section>*
+        {
+            if (local)
+            {
+                const auto found = local->sections.find(name);
+                if (found != local->sections.end())
+                    return &found->second;
+            }
+            const auto found = context_.sections.find(name);
+            return found == context_.sections.end() ? nullptr : &found->second;
         }
 
         auto find_section_end(std::size_t body_begin, std::string_view name) const
@@ -161,10 +174,9 @@ namespace {
                     }
                     else
                     {
-                        const auto rows = context_.sections.find(name);
-                        if (rows != context_.sections.end())
+                        if (const auto* rows = section(name, local))
                         {
-                            for (const auto& row : rows->second)
+                            for (const auto& row : *rows)
                             {
                                 auto rendered = render_range(token_end + 1,
                                     range->body_end, &row);

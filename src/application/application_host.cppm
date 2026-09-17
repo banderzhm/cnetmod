@@ -115,6 +115,7 @@ private:
 };
 
 export using route_configurer = std::function<void(http::router&)>;
+export using application_middleware = http::middleware_fn;
 export using configuration_customizer =
     std::function<void(application_configuration&)>;
 
@@ -169,6 +170,16 @@ public:
     auto routes(route_configurer configurer) -> application_builder&;
 
     /**
+     * @brief Adds business-server middleware in registration order.
+     *
+     * Framework recovery, shutdown tracking, request identity, tracing,
+     * metrics, and timeout middleware run outside application middleware.
+     * Access logging runs inside application middleware. Management endpoints
+     * are intentionally unaffected.
+     */
+    auto middleware(application_middleware value) -> application_builder&;
+
+    /**
      * @brief Registers a custom managed service.
      */
     auto service(std::shared_ptr<managed_service> service)
@@ -201,6 +212,7 @@ private:
     std::optional<std::filesystem::path> configuration_file_;
     std::vector<configuration_customizer> customizers_;
     std::vector<route_configurer> route_configurers_;
+    std::vector<application_middleware> middlewares_;
     std::vector<std::shared_ptr<managed_service>> services_;
     std::vector<managed_service_factory> service_factories_;
     bool auto_configuration_ = false;

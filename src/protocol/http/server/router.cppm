@@ -30,6 +30,18 @@ export struct route_params
         -> std::string_view;
 };
 
+/**
+ * Describes the lifecycle of a Server-Sent Events response stream.
+ */
+export enum class sse_stream_state
+{
+    not_started,
+    committing,
+    open,
+    failed,
+    closed
+};
+
 export class request_context
 {
 public:
@@ -60,11 +72,25 @@ public:
     void html(int status_code, std::string_view html_body);
     void redirect(std::string_view location, int code = 302);
     void not_found();
+    /**
+     * Returns true after SSE header delivery has been attempted.
+     *
+     * A true result is conservative: callers must not fall back to a regular
+     * HTTP response because part of the streaming header may already be on the
+     * wire, including when the stream state is failed.
+     */
+    [[nodiscard]] auto sse_started() const noexcept -> bool;
+    /**
+     * Returns the current Server-Sent Events stream state.
+     */
+    [[nodiscard]] auto sse_state() const noexcept -> sse_stream_state;
     auto sse_begin(int status_code = status::ok) -> task<bool>;
     auto sse_send(std::string_view data, std::string_view event = {})
         -> task<bool>;
     auto sse_json(std::string_view json_payload, std::string_view event = {})
         -> task<bool>;
+    auto sse_comment(std::string_view comment) -> task<bool>;
+    auto sse_heartbeat() -> task<bool>;
     auto sse_done() -> task<bool>;
     [[nodiscard]] auto parse_form()
         -> std::expected<const form_data*, std::error_code>;
@@ -129,6 +155,7 @@ public:
     [[nodiscard]] auto client_address() const -> std::string;
 
 private:
+    auto write_sse_frame(std::string frame) -> task<bool>;
     void drain_available_body_chunks() const;
     void init_path_query(std::string_view uri);
     io_context& ctx_;
@@ -145,7 +172,7 @@ private:
     std::string_view query_;
     std::optional<form_data> form_cache_;
     mutable bool body_stream_drained_ = false;
-    bool sse_started_ = false;
+    sse_stream_state sse_state_ = sse_stream_state::not_started;
     cnetmod::deadline deadline_{};
     cnetmod::cancel_token cancellation_;
 
