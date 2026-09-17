@@ -350,7 +350,7 @@ TEST(redis_failed_authentication_closes_the_uncommitted_session)
     ASSERT_TRUE(peer_closed);
 }
 
-TEST(redis_reconnect_does_not_reuse_buffered_replies_from_the_previous_session)
+TEST(redis_cmd_invalidates_a_session_with_trailing_response_data)
 {
     for (const bool explicit_close : {false, true})
     {
@@ -409,11 +409,13 @@ TEST(redis_reconnect_does_not_reuse_buffered_replies_from_the_previous_session)
             }
             co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{10});
             auto old = co_await connection.cmd({"GET", "key"});
+            const bool invalidated = !old && !connection.is_open() &&
+                !connection.is_reusable();
             if (explicit_close)
                 connection.close();
             auto second = co_await connection.connect(options);
             auto fresh = co_await connection.cmd({"GET", "key"});
-            correct = old && second && fresh && first_value(*old) == "OLD" &&
+            correct = invalidated && second && fresh &&
                 first_value(*fresh) == "FRESH";
             connection.close();
             finish();
@@ -595,6 +597,108 @@ TEST(redis_pool_never_reissues_a_closed_returned_lease)
         ASSERT_TRUE(rejected);
         ASSERT_TRUE(recovered);
     }
+}
+
+TEST(redis_pool_never_reissues_an_open_connection_with_buffered_input)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+                                   cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    connection_pool pool{*io, {.host = "127.0.0.1", .port = endpoint->port(), .resp3 = false, .initial_size = 1, .max_size = 1, .ping_interval = std::chrono::hours{1}}};
+    bool discarded = false;
+    bool recovered = false;
+    bool run_finished = false;
+    bool peer_finished = false;
+
+    auto broker = [&]() -> cnetmod::task<void>
+    {
+        auto dirty_peer = co_await cnetmod::async_accept(*io, *listener);
+        if (dirty_peer)
+        {
+            constexpr std::string_view replies = "+FIRST\r\n+STALE\r\n";
+            (void)co_await cnetmod::async_write_all(*io, *dirty_peer,
+                cnetmod::const_buffer{replies.data(), replies.size()});
+            char byte{};
+            (void)co_await cnetmod::async_read(*io, *dirty_peer,
+                cnetmod::mutable_buffer{&byte, 1});
+        }
+
+        auto replacement = co_await cnetmod::async_accept(*io, *listener);
+        if (replacement)
+        {
+            constexpr std::string_view command = "*1\r\n$4\r\nPING\r\n";
+            std::array<char, command.size()> bytes{};
+            std::size_t offset = 0;
+            while (offset < bytes.size())
+            {
+                auto received = co_await cnetmod::async_read(*io, *replacement,
+                    cnetmod::mutable_buffer{bytes.data() + offset,
+                        bytes.size() - offset});
+                if (!received || *received == 0U)
+                    break;
+                offset += *received;
+            }
+            if (std::string_view{bytes.data(), offset} == command)
+            {
+                constexpr std::string_view reply = "+PONG\r\n";
+                (void)co_await cnetmod::async_write_all(*io, *replacement,
+                    cnetmod::const_buffer{reply.data(), reply.size()});
+            }
+        }
+        peer_finished = true;
+    };
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        run_finished = true;
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto lease = co_await pool.async_get_connection();
+        if (!lease)
+        {
+            io->stop();
+            co_return;
+        }
+        auto first = co_await lease->get().receive_push();
+        const bool dirty = first && first_value(*first) == "FIRST" &&
+            lease->get().is_open() && !lease->get().is_reusable();
+        *lease = pooled_connection{};
+        discarded = dirty && pool.idle_count() == 0U &&
+            !pool.try_get_connection();
+
+        auto replacement = co_await pool.async_get_connection(
+            cnetmod::deadline::after(std::chrono::seconds{1}));
+        if (replacement)
+        {
+            cnetmod::cancel_token token;
+            auto pong = co_await cnetmod::with_timeout(*io,
+                std::chrono::seconds{1}, replacement->get().ping(token), token);
+            recovered = pong.has_value();
+            replacement->get().close();
+            *replacement = pooled_connection{};
+        }
+        co_await pool.cancel();
+        while (!run_finished || !peer_finished)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, broker());
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, exercise());
+    io->run();
+    ASSERT_TRUE(discarded);
+    ASSERT_TRUE(recovered);
 }
 
 TEST(redis_health_ping_is_cancellable_and_invalidates_incomplete_exchanges)

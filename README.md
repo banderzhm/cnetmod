@@ -52,7 +52,7 @@ The [`skill/`](skill/) directory contains the project-specific instructions for 
 - **Kafka**: Async producer and consumer groups — metadata discovery, API-version negotiation, record batches, gzip/LZ4 compression, idempotent and transactional production, cooperative-sticky rebalancing, manual offset commits, SASL/TLS, retry and reconnect handling
 - **AMQP 0-9-1**: RabbitMQ-compatible async client — channels, durable exchanges/queues/bindings, publisher confirms, QoS/prefetch, ACK/NACK, transactions, heartbeats, automatic reconnection and topology recovery, SASL/TLS
 - **AMQP 1.0**: Artemis-compatible async client — SASL/TLS connections, sessions, sender/receiver links, credit-based flow control, unsettled delivery outcomes, explicit settlement, transactions, reconnect and link recovery
-- **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache)
+- **MySQL**: Async client with prepared statements, connection pool, pipeline, transaction management, and ORM (CRUD / migration / query builder / MyBatis-Plus style XML mappers / BaseMapper / pagination / soft delete / optimistic lock / multi-tenant / cache / opt-in database-table sharding / explicit scatter-gather / XA two-phase commit)
 - **PostgreSQL**: Async TLS client with SCRAM-SHA-256/MD5 authentication, prepared queries, cancellation, and seamless reuse of the MySQL ORM model/query/session API
 - **MongoDB**: Async BSON/OP_MSG client with TLS, SCRAM-SHA-256, capability negotiation, strict protocol limits, and correlated command execution
 - **Redis**: Async client with RESP protocol, connection pool

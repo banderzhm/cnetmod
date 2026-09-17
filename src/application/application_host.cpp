@@ -17,6 +17,9 @@ import cnetmod.observability.otlp;
 import cnetmod.observability.http_server;
 import cnetmod.protocol.http.middleware;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
+#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+import cnetmod.application.mysql;
+#endif
 
 namespace cnetmod::application {
 
@@ -51,6 +54,15 @@ public:
                 this->services, business_routes};
             preparation_error = auto_configurations.apply(this->configuration,
                 context);
+#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+            if (preparation_error)
+                preparation_error = auto_configure_mysql_sharding(
+                    this->configuration.orm.sharding, this->services);
+#else
+            if (preparation_error && this->configuration.orm.sharding.enabled)
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::not_supported));
+#endif
         }
         this->services.freeze();
         if (preparation_error)

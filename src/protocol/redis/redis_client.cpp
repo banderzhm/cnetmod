@@ -17,6 +17,38 @@ import cnetmod.core.ssl;
 import :client;
 
 namespace cnetmod::redis {
+
+namespace {
+
+    /**
+     * @brief Invalidates a command stream unless one complete exchange commits.
+     */
+    class command_exchange_guard
+    {
+    public:
+        explicit command_exchange_guard(client& owner) noexcept
+            : owner_(owner)
+        {
+        }
+
+        ~command_exchange_guard()
+        {
+            if (!committed_)
+                owner_.close();
+        }
+
+        void commit() noexcept
+        {
+            committed_ = true;
+        }
+
+    private:
+        client& owner_;
+        bool committed_ = false;
+    };
+
+} // namespace
+
 client::client(io_context& ctx) noexcept
     : ctx_(ctx) {}
 
@@ -116,6 +148,11 @@ auto client::is_open() const noexcept -> bool
     return sock_.is_open();
 }
 
+auto client::is_reusable() const noexcept -> bool
+{
+    return sock_.is_open() && rpos_ == rbuf_.size();
+}
+
 void client::close() noexcept
 {
 #ifdef CNETMOD_HAS_SSL
@@ -131,6 +168,12 @@ void client::close() noexcept
 auto client::exec(const request& request)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
+    if (!is_reusable())
+    {
+        close();
+        co_return std::unexpected("connection has pending response data");
+    }
+    command_exchange_guard guard{*this};
     auto payload = request.payload();
     auto written = co_await do_write({payload.data(), payload.size()});
     if (!written)
@@ -144,6 +187,9 @@ auto client::exec(const request& request)
         for (auto& node : *nodes)
             result.push_back(std::move(node));
     }
+    if (!is_reusable())
+        co_return std::unexpected("response contains unexpected trailing data");
+    guard.commit();
     co_return result;
 }
 
@@ -152,6 +198,12 @@ auto client::cmd(std::initializer_list<std::string_view> args)
 {
     if (args.size() == 0)
         co_return std::unexpected(std::string("empty command"));
+    if (!is_reusable())
+    {
+        close();
+        co_return std::unexpected("connection has pending response data");
+    }
+    command_exchange_guard guard{*this};
     std::string payload;
     detail::add_header(payload, resp3_type::array, args.size());
     for (auto arg : args)
@@ -159,7 +211,13 @@ auto client::cmd(std::initializer_list<std::string_view> args)
     auto written = co_await do_write({payload.data(), payload.size()});
     if (!written)
         co_return std::unexpected(written.error().message());
-    co_return co_await parse_one_response();
+    auto response = co_await parse_one_response();
+    if (!response)
+        co_return response;
+    if (!is_reusable())
+        co_return std::unexpected("response contains unexpected trailing data");
+    guard.commit();
+    co_return response;
 }
 
 auto client::cmd(std::span<const std::string> args)
@@ -167,6 +225,12 @@ auto client::cmd(std::span<const std::string> args)
 {
     if (args.empty())
         co_return std::unexpected(std::string("empty command"));
+    if (!is_reusable())
+    {
+        close();
+        co_return std::unexpected("connection has pending response data");
+    }
+    command_exchange_guard guard{*this};
     std::string payload;
     detail::add_header(payload, resp3_type::array, args.size());
     for (auto const& arg : args)
@@ -174,7 +238,13 @@ auto client::cmd(std::span<const std::string> args)
     auto written = co_await do_write({payload.data(), payload.size()});
     if (!written)
         co_return std::unexpected(written.error().message());
-    co_return co_await parse_one_response();
+    auto response = co_await parse_one_response();
+    if (!response)
+        co_return response;
+    if (!is_reusable())
+        co_return std::unexpected("response contains unexpected trailing data");
+    guard.commit();
+    co_return response;
 }
 
 namespace {
@@ -375,6 +445,12 @@ auto client::pipe(
     std::initializer_list<std::initializer_list<std::string_view>> commands)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
+    if (!is_reusable())
+    {
+        close();
+        co_return std::unexpected("connection has pending response data");
+    }
+    command_exchange_guard guard{*this};
     std::string batch;
     for (auto const& command : commands)
     {
@@ -394,12 +470,21 @@ auto client::pipe(
         for (auto& node : *nodes)
             result.push_back(std::move(node));
     }
+    if (!is_reusable())
+        co_return std::unexpected("response contains unexpected trailing data");
+    guard.commit();
     co_return result;
 }
 
 auto client::pipe(std::span<const std::vector<std::string>> commands)
     -> task<std::expected<std::vector<resp3_node>, std::string>>
 {
+    if (!is_reusable())
+    {
+        close();
+        co_return std::unexpected("connection has pending response data");
+    }
+    command_exchange_guard guard{*this};
     std::string batch;
     for (auto const& command : commands)
     {
@@ -421,6 +506,9 @@ auto client::pipe(std::span<const std::vector<std::string>> commands)
         for (auto& node : *nodes)
             result.push_back(std::move(node));
     }
+    if (!is_reusable())
+        co_return std::unexpected("response contains unexpected trailing data");
+    guard.commit();
     co_return result;
 }
 

@@ -91,6 +91,41 @@ export struct configured_service
 };
 
 /**
+ * @brief One logical table's database and physical-table shard topology.
+ */
+export struct orm_shard_topology_configuration
+{
+    std::string logical_table;
+    std::size_t table_count = 1;
+    std::vector<std::string> databases;
+    bool scatter_gather = true;
+    bool distributed_transactions = true;
+
+    auto operator==(const orm_shard_topology_configuration&) const -> bool = default;
+};
+
+/**
+ * @brief Opt-in ORM shard auto-configuration.
+ */
+export struct orm_sharding_configuration
+{
+    bool enabled = false;
+    std::map<std::string, orm_shard_topology_configuration, std::less<>> topologies;
+
+    auto operator==(const orm_sharding_configuration&) const -> bool = default;
+};
+
+/**
+ * @brief ORM runtime configuration.
+ */
+export struct orm_configuration
+{
+    orm_sharding_configuration sharding;
+
+    auto operator==(const orm_configuration&) const -> bool = default;
+};
+
+/**
  * @brief Complete immutable-at-runtime application configuration model.
  */
 export struct application_configuration
@@ -103,6 +138,7 @@ export struct application_configuration
     crash_dump_configuration crash_dump;
     lifecycle_policy lifecycle;
     health_policy health;
+    orm_configuration orm;
     bool install_signal_handlers = true;
     std::map<std::string, configured_service, std::less<>> services;
 };

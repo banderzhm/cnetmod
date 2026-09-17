@@ -61,6 +61,13 @@ public:
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto is_open() const noexcept -> bool;
     /**
+     * @brief Reports whether the transport has no buffered unread protocol data.
+     *
+     * Connection pools must use this stronger predicate before reissuing a
+     * command connection. An open socket alone does not prove RESP alignment.
+     */
+    [[nodiscard]] auto is_reusable() const noexcept -> bool;
+    /**
      * @brief Releases transport and resets buffered input and negotiated state.
      *
      * Requires exclusive ownership with no pending I/O. Reconnecting invokes

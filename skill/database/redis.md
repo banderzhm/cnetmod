@@ -170,6 +170,7 @@ class client {
     explicit client(io_context& ctx) noexcept;
     auto connect(connect_options opts = {}) -> task<std::expected<void, std::string>>;
     auto is_open() const noexcept -> bool;
+    auto is_reusable() const noexcept -> bool;
     void close() noexcept;
 
     /// 执行 request 构建器（支持 pipeline）
@@ -333,6 +334,11 @@ class cluster_client {
     auto slots() const noexcept -> const cluster_slot_cache&;
 };
 ```
+
+`is_open()` 只表示传输层 socket 尚未关闭；连接池使用更严格的
+`is_reusable()`，同时要求不存在未消费的 RESP 数据。`cmd`、`exec`、`pipe` 和
+`exchange` 在写入后发生解析错误、取消、EOF 或检测到多余应答时都会关闭连接，防止
+残留帧被下一位借用者误认为自己的响应。
 
 Cluster 只支持逻辑数据库 0，`connect_options::db != 0` 会在网络 I/O 前失败。客户端维护
 16384 槽缓存，处理 MOVED，并在 ASKING 成功后把原命令真正重发到迁移目标。跨节点

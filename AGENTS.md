@@ -3266,11 +3266,45 @@ auto result = co_await gateway->write<OrderId>(orm::shard_key{tenant_id},
 
 物理表名形如 `orders_00`～`orders_63`，所有 CRUD 和 wrapper SQL 都使用路由结果，
 值仍由参数绑定传输。`write()` 只向回调暴露已经固定到一个库和一张表的 session，并在
-同一连接上开启、提交或回滚事务，因此不会静默产生跨分片事务。跨分片查询、全局排序、
-分页聚合和分布式事务必须由业务层显式实现；框架不会把它们伪装成单库事务。
+同一连接上开启、提交或回滚事务，因此不会静默产生跨分片事务。
+
+跨分片能力必须显式调用：
+
+- `scatter_read<T>()` 访问全部物理分片并保留每个分片的成功或失败结果。
+- `scatter_gather<Item, Result>()` 在完整 scatter 结果上调用业务提供的合并器；排序、分页、
+  聚合及是否接受部分结果均由合并器决定。
+- `distributed_transaction<T>()` 在单数据库时使用普通事务，在多个 MySQL 实例时使用
+  XA 两阶段提交，并把固定到物理表的 `distributed_session_context` 交给回调。
+- 任一提交返回失败时会报告结果不确定；生产系统应配合 MySQL `XA RECOVER`、事务日志和
+  运维补偿处理进程崩溃或网络分区，不能把 XA 当作无故障的本地事务。
 
 Application 中先配置多个具名 `mysql_service`。工厂创建 gateway 时验证 catalog 引用的
 每个实例均已注册；连接池的启动、健康恢复和逆序停机仍由 Application 管理。
+
+调用 `enable_auto_configuration()` 后，也可以通过 `orm.sharding.enabled` 自动创建具名网关：
+
+```json
+{
+  "orm": {
+    "sharding": {
+      "enabled": true,
+      "topologies": {
+        "orders": {
+          "logical_table": "orders",
+          "table_count": 64,
+          "databases": ["orders-0", "orders-1"],
+          "scatter_gather": true,
+          "distributed_transactions": true
+        }
+      }
+    }
+  }
+}
+```
+
+通过 `host.services().require<application::mysql_sharded_session_gateway>("orders")`
+取得对应网关。`enabled` 默认是 `false`；关闭时仍使用普通 `database_session`，不会创建
+catalog、分片网关或改变原有 MySQL 服务。
 
 ## ORM JSON：纯 import、零实体样板
 
@@ -6228,6 +6262,7 @@ class client {
     explicit client(io_context& ctx) noexcept;
     auto connect(connect_options opts = {}) -> task<std::expected<void, std::string>>;
     auto is_open() const noexcept -> bool;
+    auto is_reusable() const noexcept -> bool;
     void close() noexcept;
 
     /// 执行 request 构建器（支持 pipeline）
@@ -6391,6 +6426,11 @@ class cluster_client {
     auto slots() const noexcept -> const cluster_slot_cache&;
 };
 ```
+
+`is_open()` 只表示传输层 socket 尚未关闭；连接池使用更严格的
+`is_reusable()`，同时要求不存在未消费的 RESP 数据。`cmd`、`exec`、`pipe` 和
+`exchange` 在写入后发生解析错误、取消、EOF 或检测到多余应答时都会关闭连接，防止
+残留帧被下一位借用者误认为自己的响应。
 
 Cluster 只支持逻辑数据库 0，`connect_options::db != 0` 会在网络 I/O 前失败。客户端维护
 16384 槽缓存，处理 MOVED，并在 ASKING 成功后把原命令真正重发到迁移目标。跨节点
@@ -9084,6 +9124,20 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
       "logs_endpoint": "http://127.0.0.1:4318/v1/logs"
     }
   },
+  "orm": {
+    "sharding": {
+      "enabled": false,
+      "topologies": {
+        "orders": {
+          "logical_table": "orders",
+          "table_count": 64,
+          "databases": ["orders-0", "orders-1"],
+          "scatter_gather": true,
+          "distributed_transactions": true
+        }
+      }
+    }
+  },
   "services": {
     "primary-cache": {
       "type": "redis",
@@ -9103,6 +9157,12 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   }
 }
 ```
+
+`orm.sharding.enabled` 默认关闭，因此普通 ORM 和现有单库配置不受影响。开启后，每个
+`topologies` 条目会注册一个同名 `mysql_sharded_session_gateway`；`databases` 必须引用
+已经启用的具名 MySQL 服务。启动前会验证表标识符、分表数量、重复数据库实例和服务引用。
+全分片读取只能通过显式 `scatter_read()` / `scatter_gather()` 发起；跨库写事务只能通过
+显式 `distributed_transaction()` 发起，多库路径使用 MySQL XA 两阶段提交。
 
 服务条目的对象键只是配置绑定名；`type + instance` 才是服务身份，因此同一接口可配置多个具名实例。未知框架字段、未知集成属性、非法端口、非法超时、重复服务身份和缺失的必要凭据都会使 `build()` 失败。
 

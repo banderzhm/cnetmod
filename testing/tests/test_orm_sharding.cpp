@@ -20,16 +20,19 @@ CNETMOD_MODEL(sharded_order, "orders",
 struct recording_database_client
 {
     std::string last_sql;
+    std::vector<std::string> statements;
 
     auto query(std::string_view sql) -> cnetmod::task<orm::query_result>
     {
         last_sql = sql;
+        statements.emplace_back(sql);
         co_return orm::query_result{};
     }
 
     auto execute(std::string_view sql) -> cnetmod::task<orm::query_result>
     {
         last_sql = sql;
+        statements.emplace_back(sql);
         co_return orm::query_result{};
     }
 
@@ -37,6 +40,7 @@ struct recording_database_client
         -> cnetmod::task<orm::query_result>
     {
         last_sql = statement.query;
+        statements.push_back(statement.query);
         co_return orm::query_result{};
     }
 };
@@ -105,6 +109,24 @@ TEST(orm_database_and_table_shards_are_independently_distributed)
             destinations.emplace(route->database_shard, route->table_shard);
     }
     ASSERT_EQ(destinations.size(), 8U);
+}
+
+TEST(orm_shard_catalog_enumerates_every_physical_destination)
+{
+    orm::shard_catalog catalog;
+    ASSERT_TRUE(catalog.add_database("orders-0").has_value());
+    ASSERT_TRUE(catalog.add_database("orders-1").has_value());
+    ASSERT_TRUE(catalog.freeze("orders", 3,
+                           std::make_shared<orm::hash_shard_strategy>())
+            .has_value());
+
+    const auto routes = catalog.routes();
+    ASSERT_TRUE(routes.has_value());
+    ASSERT_EQ(routes->size(), 6U);
+    ASSERT_EQ(routes->front().instance, "orders-0");
+    ASSERT_EQ(routes->front().physical_table, "orders_00");
+    ASSERT_EQ(routes->back().instance, "orders-1");
+    ASSERT_EQ(routes->back().physical_table, "orders_02");
 }
 
 TEST(orm_empty_text_shard_key_is_rejected)
@@ -211,6 +233,235 @@ TEST(orm_sharded_gateway_pins_named_instance_and_table)
         }));
     ASSERT_TRUE(write.has_value());
     ASSERT_EQ(client.last_sql, "COMMIT");
+}
+
+TEST(orm_scatter_gather_reports_every_shard_outcome)
+{
+    auto catalog = std::make_shared<orm::shard_catalog>();
+    ASSERT_TRUE(catalog->add_database("orders-primary").has_value());
+    ASSERT_TRUE(catalog->freeze("orders", 3,
+                           std::make_shared<orm::hash_shard_strategy>())
+            .has_value());
+    recording_database_client client;
+    orm::sharded_session_gateway<recording_database_client,
+        recording_database_lease>
+        gateway{
+            catalog, orm::sql_dialect::mysql,
+            [&](std::string_view)
+                -> cnetmod::task<std::expected<recording_database_lease, std::string>>
+            {
+                co_return recording_database_lease{&client};
+            },
+            [](recording_database_lease& lease) -> recording_database_client&
+            {
+                return *lease.client;
+            }};
+
+    auto result = cnetmod::sync_wait(gateway.scatter_read<std::string>(
+        [](const orm::shard_route& route, auto&)
+            -> cnetmod::task<std::expected<std::string, std::string>>
+        {
+            if (route.table_shard == 1)
+                co_return std::unexpected("shard unavailable");
+            co_return route.physical_table;
+        }));
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result->size(), 3U);
+    ASSERT_TRUE((*result)[0].result.has_value());
+    ASSERT_FALSE((*result)[1].result.has_value());
+    ASSERT_TRUE((*result)[2].result.has_value());
+
+    const auto merged = cnetmod::sync_wait(
+        gateway.scatter_gather<std::size_t, std::size_t>(
+            [](const orm::shard_route&, auto&)
+                -> cnetmod::task<std::expected<std::size_t, std::string>>
+            {
+                co_return 1U;
+            },
+            [](std::vector<orm::shard_read_result<std::size_t>> values)
+                -> std::expected<std::size_t, std::string>
+            {
+                std::size_t total{};
+                for (const auto& value : values)
+                {
+                    if (!value.result)
+                        return std::unexpected(value.result.error());
+                    total += *value.result;
+                }
+                return total;
+            }));
+    ASSERT_TRUE(merged.has_value());
+    ASSERT_EQ(*merged, 3U);
+}
+
+TEST(orm_distributed_transaction_uses_mysql_xa_two_phase_commit)
+{
+    auto catalog = std::make_shared<orm::shard_catalog>();
+    ASSERT_TRUE(catalog->add_database("orders-0").has_value());
+    ASSERT_TRUE(catalog->add_database("orders-1").has_value());
+    ASSERT_TRUE(catalog->freeze("orders", 2,
+                           std::make_shared<orm::hash_shard_strategy>())
+            .has_value());
+
+    std::array<recording_database_client, 2> clients;
+    orm::sharded_session_gateway<recording_database_client,
+        recording_database_lease>
+        gateway{
+            catalog, orm::sql_dialect::mysql,
+            [&](std::string_view instance)
+                -> cnetmod::task<std::expected<recording_database_lease, std::string>>
+            {
+                co_return recording_database_lease{
+                    &clients[instance == "orders-0" ? 0U : 1U]};
+            },
+            [](recording_database_lease& lease) -> recording_database_client&
+            {
+                return *lease.client;
+            }};
+
+    std::array<std::optional<orm::shard_key>, 2> selected;
+    for (std::uint64_t value = 1; value < 1000; ++value)
+    {
+        const auto route = catalog->route(orm::shard_key{value});
+        if (route && !selected[route->database_shard])
+            selected[route->database_shard] = orm::shard_key{value};
+    }
+    ASSERT_TRUE(selected[0].has_value());
+    ASSERT_TRUE(selected[1].has_value());
+    const std::array keys{*selected[0], *selected[1]};
+
+    const auto result = cnetmod::sync_wait(
+        gateway.distributed_transaction<int>(keys,
+            [](auto& sessions)
+                -> cnetmod::task<std::expected<int, std::string>>
+            {
+                ASSERT_EQ(sessions.entries().size(), 2U);
+                for (auto& entry : sessions.entries())
+                {
+                    sharded_order order{
+                        static_cast<std::int64_t>(entry.route.database_shard + 1),
+                        "xa"};
+                    const auto updated = co_await entry.session.update(order);
+                    if (updated.is_err())
+                        co_return std::unexpected(updated.error_msg);
+                }
+                co_return 2;
+            }));
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(*result, 2);
+    for (const auto& client : clients)
+    {
+        ASSERT_TRUE(std::ranges::any_of(client.statements,
+            [](const std::string& sql)
+            {
+                return sql.starts_with("XA START");
+            }));
+        ASSERT_TRUE(std::ranges::any_of(client.statements,
+            [](const std::string& sql)
+            {
+                return sql.starts_with("XA PREPARE");
+            }));
+        ASSERT_TRUE(std::ranges::any_of(client.statements,
+            [](const std::string& sql)
+            {
+                return sql.starts_with("XA COMMIT");
+            }));
+    }
+}
+
+TEST(orm_distributed_transaction_rolls_back_every_started_shard)
+{
+    auto catalog = std::make_shared<orm::shard_catalog>();
+    ASSERT_TRUE(catalog->add_database("orders-0").has_value());
+    ASSERT_TRUE(catalog->add_database("orders-1").has_value());
+    ASSERT_TRUE(catalog->freeze("orders", 1,
+                           std::make_shared<orm::hash_shard_strategy>())
+            .has_value());
+    std::array<recording_database_client, 2> clients;
+    orm::sharded_session_gateway<recording_database_client,
+        recording_database_lease>
+        gateway{
+            catalog, orm::sql_dialect::mysql,
+            [&](std::string_view instance)
+                -> cnetmod::task<std::expected<recording_database_lease, std::string>>
+            {
+                co_return recording_database_lease{
+                    &clients[instance == "orders-0" ? 0U : 1U]};
+            },
+            [](recording_database_lease& lease) -> recording_database_client&
+            {
+                return *lease.client;
+            }};
+    std::array<std::optional<orm::shard_key>, 2> selected;
+    for (std::uint64_t value = 1; value < 1000; ++value)
+    {
+        const auto route = catalog->route(orm::shard_key{value});
+        if (route && !selected[route->database_shard])
+            selected[route->database_shard] = orm::shard_key{value};
+    }
+    ASSERT_TRUE(selected[0].has_value());
+    ASSERT_TRUE(selected[1].has_value());
+    const std::array keys{*selected[0], *selected[1]};
+    const auto result = cnetmod::sync_wait(
+        gateway.distributed_transaction<int>(keys,
+            [](auto&) -> cnetmod::task<std::expected<int, std::string>>
+            {
+                co_return std::unexpected("business rule rejected write");
+            }));
+    ASSERT_FALSE(result.has_value());
+    for (const auto& client : clients)
+    {
+        ASSERT_TRUE(std::ranges::any_of(client.statements,
+            [](const std::string& sql)
+            {
+                return sql.starts_with("XA ROLLBACK");
+            }));
+        ASSERT_FALSE(std::ranges::any_of(client.statements,
+            [](const std::string& sql)
+            {
+                return sql.starts_with("XA COMMIT");
+            }));
+    }
+}
+
+TEST(orm_sharding_capabilities_can_be_disabled_independently)
+{
+    auto catalog = std::make_shared<orm::shard_catalog>();
+    ASSERT_TRUE(catalog->add_database("orders-primary").has_value());
+    ASSERT_TRUE(catalog->freeze("orders", 1,
+                           std::make_shared<orm::hash_shard_strategy>())
+            .has_value());
+    recording_database_client client;
+    orm::sharded_session_gateway<recording_database_client,
+        recording_database_lease>
+        gateway{
+            catalog, orm::sql_dialect::mysql,
+            [&](std::string_view)
+                -> cnetmod::task<std::expected<recording_database_lease, std::string>>
+            {
+                co_return recording_database_lease{&client};
+            },
+            [](recording_database_lease& lease) -> recording_database_client&
+            {
+                return *lease.client;
+            },
+            false, false};
+
+    const auto scattered = cnetmod::sync_wait(gateway.scatter_read<int>(
+        [](const orm::shard_route&, auto&)
+            -> cnetmod::task<std::expected<int, std::string>>
+        {
+            co_return 1;
+        }));
+    ASSERT_FALSE(scattered.has_value());
+    const std::array keys{orm::shard_key{1ULL}};
+    const auto transaction = cnetmod::sync_wait(
+        gateway.distributed_transaction<int>(keys,
+            [](auto&) -> cnetmod::task<std::expected<int, std::string>>
+            {
+                co_return 1;
+            }));
+    ASSERT_FALSE(transaction.has_value());
 }
 
 RUN_TESTS()

@@ -70,6 +70,14 @@ export using mysql_sharded_session_gateway =
 export [[nodiscard]] auto make_mysql_sharded_session_gateway(
     service_registry& services, std::shared_ptr<const orm::shard_catalog> catalog)
     -> std::expected<mysql_sharded_session_gateway, std::error_code>;
+
+/**
+ * @brief Builds and registers every enabled ORM shard topology.
+ */
+export [[nodiscard]] auto auto_configure_mysql_sharding(
+    const orm_sharding_configuration& configuration,
+    service_registry& services)
+    -> std::expected<void, std::error_code>;
     #endif
 
 } // namespace cnetmod::application

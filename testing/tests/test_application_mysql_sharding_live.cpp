@@ -5,6 +5,7 @@ import std;
 import cnetmod.application.mysql;
 import cnetmod.application.service_registry;
 import cnetmod.application.managed_service;
+import cnetmod.application.recovery_policy;
 import cnetmod.application.task_supervisor;
 import cnetmod.observability;
 import cnetmod.protocol.mysql;
@@ -133,6 +134,55 @@ TEST(mysql_live_named_pools_route_sharded_orm_transactions)
             if (read)
                 ASSERT_EQ(*read, description);
         }
+
+        const std::array transaction_keys{
+            cnetmod::orm::shard_key{*keys[0]},
+            cnetmod::orm::shard_key{*keys[1]},
+        };
+        auto distributed = co_await gateway->distributed_transaction<int>(
+            transaction_keys,
+            [&](auto& sessions)
+                -> cnetmod::task<std::expected<int, std::string>>
+            {
+                for (auto& entry : sessions.entries())
+                {
+                    const auto shard = entry.route.database_shard;
+                    sharded_order_live order{
+                        static_cast<std::int64_t>(*keys[shard]),
+                        std::format("xa-database-shard-{}", shard),
+                    };
+                    auto updated = co_await entry.session.update(order);
+                    if (updated.is_err())
+                        co_return std::unexpected(updated.error_msg);
+                }
+                co_return static_cast<int>(sessions.entries().size());
+            });
+        ASSERT_TRUE(distributed.has_value());
+        if (distributed)
+            ASSERT_EQ(*distributed, 2);
+
+        auto total = co_await gateway->scatter_gather<std::size_t, std::size_t>(
+            [](const cnetmod::orm::shard_route&, auto& session)
+                -> cnetmod::task<std::expected<std::size_t, std::string>>
+            {
+                co_return co_await session.template count<sharded_order_live>(
+                    cnetmod::orm::query_wrapper<sharded_order_live>{});
+            },
+            [](std::vector<cnetmod::orm::shard_read_result<std::size_t>> values)
+                -> std::expected<std::size_t, std::string>
+            {
+                std::size_t result{};
+                for (const auto& value : values)
+                {
+                    if (!value.result)
+                        return std::unexpected(value.result.error());
+                    result += *value.result;
+                }
+                return result;
+            });
+        ASSERT_TRUE(total.has_value());
+        if (total)
+            ASSERT_EQ(*total, 2U);
 
         supervisor.request_stop();
         ASSERT_TRUE((co_await supervisor.join()).has_value());

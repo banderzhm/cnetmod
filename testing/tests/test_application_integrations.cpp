@@ -1298,6 +1298,72 @@ TEST(application_auto_configuration_is_opt_in)
     ASSERT_TRUE(host->services().managed_size() == 0U);
 }
 
+#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+TEST(application_auto_configures_named_orm_shard_topology)
+{
+    auto host = application::application_builder{"orm-sharding-test"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            for (const auto* instance : {"orders-0", "orders-1"})
+                            {
+                                application::configured_service database{
+                                    .name = "mysql",
+                                    .instance = instance,
+                                    .enabled = true,
+                                };
+                                database.properties["username"] = "test";
+                                database.properties["database"] = "test";
+                                value.services.emplace(instance,
+                                    std::move(database));
+                            }
+                            value.orm.sharding.enabled = true;
+                            value.orm.sharding.topologies.emplace("orders",
+                                application::orm_shard_topology_configuration{
+                                    .logical_table = "orders",
+                                    .table_count = 16,
+                                    .databases = {"orders-0", "orders-1"},
+                                });
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    ASSERT_TRUE(host->services()
+                    .find<application::mysql_sharded_session_gateway>("orders") !=
+        nullptr);
+}
+
+TEST(application_orm_sharding_disabled_preserves_unsharded_mode)
+{
+    auto host = application::application_builder{"orm-unsharded-test"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service database{
+                                .name = "mysql",
+                                .instance = "default",
+                                .enabled = true,
+                            };
+                            database.properties["username"] = "test";
+                            database.properties["database"] = "test";
+                            value.services.emplace("mysql", std::move(database));
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    ASSERT_TRUE(host->services().find<application::mysql_service>() != nullptr);
+    ASSERT_TRUE(host->services()
+                    .find<application::mysql_sharded_session_gateway>("orders") ==
+        nullptr);
+}
+#endif
+
 #include "application_pool_configuration_cases.inc"
 #include "application_port_configuration_cases.inc"
 #include "application_scalar_configuration_cases.inc"

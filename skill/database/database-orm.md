@@ -167,11 +167,45 @@ auto result = co_await gateway->write<OrderId>(orm::shard_key{tenant_id},
 
 物理表名形如 `orders_00`～`orders_63`，所有 CRUD 和 wrapper SQL 都使用路由结果，
 值仍由参数绑定传输。`write()` 只向回调暴露已经固定到一个库和一张表的 session，并在
-同一连接上开启、提交或回滚事务，因此不会静默产生跨分片事务。跨分片查询、全局排序、
-分页聚合和分布式事务必须由业务层显式实现；框架不会把它们伪装成单库事务。
+同一连接上开启、提交或回滚事务，因此不会静默产生跨分片事务。
+
+跨分片能力必须显式调用：
+
+- `scatter_read<T>()` 访问全部物理分片并保留每个分片的成功或失败结果。
+- `scatter_gather<Item, Result>()` 在完整 scatter 结果上调用业务提供的合并器；排序、分页、
+  聚合及是否接受部分结果均由合并器决定。
+- `distributed_transaction<T>()` 在单数据库时使用普通事务，在多个 MySQL 实例时使用
+  XA 两阶段提交，并把固定到物理表的 `distributed_session_context` 交给回调。
+- 任一提交返回失败时会报告结果不确定；生产系统应配合 MySQL `XA RECOVER`、事务日志和
+  运维补偿处理进程崩溃或网络分区，不能把 XA 当作无故障的本地事务。
 
 Application 中先配置多个具名 `mysql_service`。工厂创建 gateway 时验证 catalog 引用的
 每个实例均已注册；连接池的启动、健康恢复和逆序停机仍由 Application 管理。
+
+调用 `enable_auto_configuration()` 后，也可以通过 `orm.sharding.enabled` 自动创建具名网关：
+
+```json
+{
+  "orm": {
+    "sharding": {
+      "enabled": true,
+      "topologies": {
+        "orders": {
+          "logical_table": "orders",
+          "table_count": 64,
+          "databases": ["orders-0", "orders-1"],
+          "scatter_gather": true,
+          "distributed_transactions": true
+        }
+      }
+    }
+  }
+}
+```
+
+通过 `host.services().require<application::mysql_sharded_session_gateway>("orders")`
+取得对应网关。`enabled` 默认是 `false`；关闭时仍使用普通 `database_session`，不会创建
+catalog、分片网关或改变原有 MySQL 服务。
 
 ## ORM JSON：纯 import、零实体样板
 

@@ -66,9 +66,20 @@ public:
      */
     [[nodiscard]] auto frozen() const noexcept -> bool;
 
-    /** @brief Returns the frozen named database instances in shard order. */
+    /**
+     * @brief Returns the frozen named database instances in shard order.
+     */
     [[nodiscard]] auto instances() const noexcept
         -> std::span<const std::string>;
+
+    /**
+     * @brief Enumerates every physical database and table destination.
+     *
+     * The returned order is stable: database shard first, then table shard.
+     * This is the authoritative input for explicit scatter-gather operations.
+     */
+    [[nodiscard]] auto routes() const
+        -> std::expected<std::vector<shard_route>, std::error_code>;
 
 private:
     std::vector<std::string> instances_;

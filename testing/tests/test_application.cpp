@@ -1700,6 +1700,57 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_FALSE(redacted.at("endpoint").get<std::string>().contains("password"));
 }
 
+TEST(application_configuration_parses_opt_in_orm_sharding)
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        "cnetmod-application-sharding-test.json";
+    {
+        std::ofstream output{path};
+        output << R"({"orm":{"sharding":{"enabled":true,"topologies":{"orders":{"logical_table":"order_records","table_count":32,"databases":["orders-0","orders-1"],"scatter_gather":true,"distributed_transactions":true}}}},"management":{"enabled":false},"logging":{"manage_lifecycle":false}})";
+    }
+    auto host = application::application_builder{"sharding-configuration-test"}
+                    .configuration_file(path)
+                    .build();
+    std::filesystem::remove(path);
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    const auto& sharding = host->configuration().orm.sharding;
+    ASSERT_TRUE(sharding.enabled);
+    ASSERT_EQ(sharding.topologies.size(), 1U);
+    const auto& orders = sharding.topologies.at("orders");
+    ASSERT_EQ(orders.logical_table, "order_records");
+    ASSERT_EQ(orders.table_count, 32U);
+    ASSERT_EQ(orders.databases.size(), 2U);
+    ASSERT_TRUE(orders.scatter_gather);
+    ASSERT_TRUE(orders.distributed_transactions);
+}
+
+TEST(application_configuration_rejects_invalid_orm_sharding)
+{
+    auto empty = application::application_builder{"invalid-sharding"}
+                     .configure([](application::application_configuration& value)
+                         {
+                             value.orm.sharding.enabled = true;
+                         })
+                     .build();
+    ASSERT_FALSE(empty.has_value());
+
+    auto duplicate = application::application_builder{"invalid-sharding"}
+                         .configure([](application::application_configuration& value)
+                             {
+                                 value.orm.sharding.enabled = true;
+                                 value.orm.sharding.topologies.emplace("orders",
+                                     application::orm_shard_topology_configuration{
+                                         .logical_table = "orders",
+                                         .table_count = 16,
+                                         .databases = {"orders-0", "orders-0"},
+                                     });
+                             })
+                         .build();
+    ASSERT_FALSE(duplicate.has_value());
+}
+
 TEST(application_yaml_configuration_uses_the_json_validation_pipeline)
 {
     const auto path = std::filesystem::temp_directory_path() /

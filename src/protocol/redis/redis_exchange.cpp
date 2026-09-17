@@ -99,6 +99,8 @@ auto client::exchange(const request& batch, cancel_token& cancellation,
         rpos_ += parser.consumed();
     }
     compact_buffer();
+    if (!is_reusable())
+        co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
     guard.committed = true;
     co_return result;
 }

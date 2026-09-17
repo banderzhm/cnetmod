@@ -116,6 +116,20 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
       "logs_endpoint": "http://127.0.0.1:4318/v1/logs"
     }
   },
+  "orm": {
+    "sharding": {
+      "enabled": false,
+      "topologies": {
+        "orders": {
+          "logical_table": "orders",
+          "table_count": 64,
+          "databases": ["orders-0", "orders-1"],
+          "scatter_gather": true,
+          "distributed_transactions": true
+        }
+      }
+    }
+  },
   "services": {
     "primary-cache": {
       "type": "redis",
@@ -135,6 +149,12 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   }
 }
 ```
+
+`orm.sharding.enabled` 默认关闭，因此普通 ORM 和现有单库配置不受影响。开启后，每个
+`topologies` 条目会注册一个同名 `mysql_sharded_session_gateway`；`databases` 必须引用
+已经启用的具名 MySQL 服务。启动前会验证表标识符、分表数量、重复数据库实例和服务引用。
+全分片读取只能通过显式 `scatter_read()` / `scatter_gather()` 发起；跨库写事务只能通过
+显式 `distributed_transaction()` 发起，多库路径使用 MySQL XA 两阶段提交。
 
 服务条目的对象键只是配置绑定名；`type + instance` 才是服务身份，因此同一接口可配置多个具名实例。未知框架字段、未知集成属性、非法端口、非法超时、重复服务身份和缺失的必要凭据都会使 `build()` 失败。
 

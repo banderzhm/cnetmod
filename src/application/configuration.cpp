@@ -227,7 +227,7 @@ namespace {
     auto apply_document(application_configuration& result,
         const nlohmann::json& root) -> bool
     {
-        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "services"}))
+        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "orm", "services"}))
             return false;
         try
         {
@@ -382,6 +382,57 @@ namespace {
                     result.health.failures_before_down);
                 assign(*item, "successes_before_up",
                     result.health.successes_before_up);
+            }
+            if (const auto item = root.find("orm"); item != root.end())
+            {
+                if (!keys_are_known(*item, {"sharding"}))
+                    return false;
+                if (const auto sharding = item->find("sharding");
+                    sharding != item->end())
+                {
+                    if (!keys_are_known(*sharding, {"enabled", "topologies"}))
+                        return false;
+                    assign(*sharding, "enabled", result.orm.sharding.enabled);
+                    if (const auto topologies = sharding->find("topologies");
+                        topologies != sharding->end())
+                    {
+                        if (!topologies->is_object())
+                            return false;
+                        for (auto topology = topologies->begin();
+                            topology != topologies->end(); ++topology)
+                        {
+                            if (!topology.value().is_object() ||
+                                !keys_are_known(topology.value(),
+                                    {"logical_table", "table_count", "databases",
+                                        "scatter_gather", "distributed_transactions"}))
+                                return false;
+                            orm_shard_topology_configuration configured;
+                            configured.logical_table = topology.key();
+                            assign(topology.value(), "logical_table",
+                                configured.logical_table);
+                            if (const auto count = topology.value().find("table_count");
+                                count != topology.value().end())
+                            {
+                                if (!count->is_number_unsigned() &&
+                                    !count->is_number_integer())
+                                    return false;
+                                const auto raw = count->get<std::int64_t>();
+                                if (raw <= 0 || static_cast<std::uint64_t>(raw) > std::numeric_limits<std::size_t>::max())
+                                    return false;
+                                configured.table_count =
+                                    static_cast<std::size_t>(raw);
+                            }
+                            assign(topology.value(), "databases",
+                                configured.databases);
+                            assign(topology.value(), "scatter_gather",
+                                configured.scatter_gather);
+                            assign(topology.value(), "distributed_transactions",
+                                configured.distributed_transactions);
+                            result.orm.sharding.topologies.insert_or_assign(
+                                topology.key(), std::move(configured));
+                        }
+                    }
+                }
             }
             if (const auto item = root.find("services"); item != root.end())
             {
@@ -587,6 +638,38 @@ auto validate_configuration(const application_configuration& value)
             return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
     }
+    if (value.orm.sharding.enabled && value.orm.sharding.topologies.empty())
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    const auto valid_identifier = [](std::string_view identifier)
+    {
+        if (identifier.empty() || identifier.size() > 63)
+            return false;
+        const auto first = static_cast<unsigned char>(identifier.front());
+        if (!(std::isalpha(first) || first == '_'))
+            return false;
+        return std::ranges::all_of(identifier, [](const char character)
+            {
+                const auto byte = static_cast<unsigned char>(character);
+                return std::isalnum(byte) || byte == '_';
+            });
+    };
+    for (const auto& [name, topology] : value.orm.sharding.topologies)
+    {
+        if (name.empty() || topology.logical_table.empty() ||
+            topology.table_count == 0 || topology.databases.empty())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        const auto suffix_width = std::max<std::size_t>(2,
+            std::to_string(topology.table_count - 1).size());
+        if (!valid_identifier(topology.logical_table) ||
+            topology.logical_table.size() + 1 + suffix_width > 63)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        std::unordered_set<std::string> databases;
+        for (const auto& database : topology.databases)
+        {
+            if (database.empty() || !databases.emplace(database).second)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        }
+    }
     std::unordered_set<service_key, service_key_hash> service_keys;
     for (const auto& [binding, service] : value.services)
     {
@@ -703,6 +786,7 @@ static auto prepare_configuration_reload(application_configuration& active,
         active.lifecycle.total_stop_timeout != candidate.lifecycle.total_stop_timeout ||
         active.lifecycle.http_drain_timeout != candidate.lifecycle.http_drain_timeout ||
         active.lifecycle.telemetry_flush_timeout != candidate.lifecycle.telemetry_flush_timeout ||
+        active.orm != candidate.orm ||
         active.services.size() != candidate.services.size();
     if (!result.restart_required)
     {

@@ -688,7 +688,7 @@ auto connection_pool::remove_waiter(pool_waiter* target) -> bool
 
 auto connection_pool::release_connection(conn_node& node) -> bool
 {
-    const auto next = node.conn->is_open() ? conn_state::idle : conn_state::dead;
+    const auto next = node.conn->is_reusable() ? conn_state::idle : conn_state::dead;
     auto expected = conn_state::in_use;
     if (!node.state.compare_exchange_strong(expected, next,
             std::memory_order_release, std::memory_order_relaxed))

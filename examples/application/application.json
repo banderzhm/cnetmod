@@ -63,7 +63,43 @@
     "failures_before_down": 3,
     "successes_before_up": 2
   },
+  "orm": {
+    "sharding": {
+      "enabled": false,
+      "topologies": {
+        "orders": {
+          "logical_table": "orders",
+          "table_count": 64,
+          "databases": ["orders-0", "orders-1"],
+          "scatter_gather": true,
+          "distributed_transactions": true
+        }
+      }
+    }
+  },
   "services": {
+    "orders-database-0": {
+      "type": "mysql",
+      "instance": "orders-0",
+      "enabled": false,
+      "required": true,
+      "host": "127.0.0.1",
+      "port": 3306,
+      "username": "application",
+      "password": "",
+      "database": "orders_0"
+    },
+    "orders-database-1": {
+      "type": "mysql",
+      "instance": "orders-1",
+      "enabled": false,
+      "required": true,
+      "host": "127.0.0.1",
+      "port": 3306,
+      "username": "application",
+      "password": "",
+      "database": "orders_1"
+    },
     "primary-cache": {
       "type": "redis",
       "instance": "primary",

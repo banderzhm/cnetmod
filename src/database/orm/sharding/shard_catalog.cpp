@@ -66,6 +66,9 @@ auto shard_catalog::route(const shard_key& key) const
 {
     if (!frozen_)
         return std::unexpected(make_error_code(sharding_errc::invalid_topology));
+    if (table_count_ > std::numeric_limits<std::size_t>::max() /
+            instances_.size())
+        return std::unexpected(std::make_error_code(std::errc::value_too_large));
     const auto selected = strategy_->select(key, instances_.size(), table_count_);
     if (!selected || selected->database >= instances_.size() ||
         selected->table >= table_count_)
@@ -109,6 +112,38 @@ auto shard_catalog::instances() const noexcept
     -> std::span<const std::string>
 {
     return instances_;
+}
+
+auto shard_catalog::routes() const
+    -> std::expected<std::vector<shard_route>, std::error_code>
+{
+    if (!frozen_)
+        return std::unexpected(make_error_code(sharding_errc::invalid_topology));
+    try
+    {
+        std::vector<shard_route> result;
+        result.reserve(instances_.size() * table_count_);
+        const auto suffix_width = std::max<std::size_t>(2,
+            std::to_string(table_count_ - 1).size());
+        for (std::size_t database = 0; database < instances_.size(); ++database)
+        {
+            for (std::size_t table = 0; table < table_count_; ++table)
+            {
+                result.push_back({
+                    .instance = instances_[database],
+                    .physical_table = std::format("{}_{:0{}}", logical_table_,
+                        table, suffix_width),
+                    .database_shard = database,
+                    .table_shard = table,
+                });
+            }
+        }
+        return result;
+    }
+    catch (const std::bad_alloc&)
+    {
+        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+    }
 }
 
 } // namespace cnetmod::orm
