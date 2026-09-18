@@ -52,6 +52,22 @@ public:
     auto get_param(std::string_view name) const -> param_value;
     void set(std::string name, expr_value val);
     void set(std::string name, param_value val);
+
+    /**
+     * Binds a native SQL value after converting it to the protocol-neutral
+     * parameter representation.
+     */
+    template <typename Value>
+    requires(!std::same_as<std::remove_cvref_t<Value>, expr_value>) &&
+        (!std::same_as<std::remove_cvref_t<Value>, param_value>) &&
+        requires(const Value& value) {
+            { to_query_parameter(value) } -> std::same_as<param_value>;
+        }
+    void set(std::string name, const Value& value)
+    {
+        set(std::move(name), to_query_parameter(value));
+    }
+
     void add_nested(std::string name, param_context nested);
     void add_collection(std::string name, std::vector<param_context> items);
     auto get_collection(std::string_view name) const

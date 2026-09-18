@@ -454,6 +454,22 @@ TEST(dynamic_sql_foreach_binds_iteration_index_as_a_parameter)
     ASSERT_EQ(built.params[3].int_val, 20);
 }
 
+TEST(expression_engine_sequences_binary_operator_parsing_portably)
+{
+    const auto parameters = orm::param_context::from_map({
+        {"name", orm::param_value::from_string("Ada")},
+        {"score", orm::param_value::from_int(7)},
+    });
+
+    ASSERT_TRUE(orm::eval_expr(
+        "name != null and name != '' and score > 0",
+        parameters)
+            .is_truthy());
+    ASSERT_EQ(orm::eval_expr("1 + 2 * 3", parameters).to_int(), 7);
+    ASSERT_TRUE(orm::eval_expr("score == 7 or score < 0", parameters)
+            .is_truthy());
+}
+
 TEST(dynamic_sql_binds_property_not_mybatis_placeholder_modifiers)
 {
     auto statement = orm::parse_xml(R"(

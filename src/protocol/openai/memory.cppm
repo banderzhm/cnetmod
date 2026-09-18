@@ -159,6 +159,28 @@ export struct persisted_chat_message
 {
     message value;
     json metadata = json::object();
+
+    /**
+     * @brief Stores a signed integer metadata value.
+     */
+    auto set_metadata(std::string key, std::int64_t value) -> void;
+
+    /**
+     * @brief Stores a text metadata value.
+     */
+    auto set_metadata(std::string key, std::string value) -> void;
+
+    /**
+     * @brief Reads an integer metadata value with numeric conversion.
+     */
+    [[nodiscard]] auto metadata_integer(std::string_view key,
+        std::int64_t fallback = 0) const noexcept -> std::int64_t;
+
+    /**
+     * @brief Reads a text metadata value.
+     */
+    [[nodiscard]] auto metadata_text(std::string_view key,
+        std::string fallback = {}) const -> std::string;
 };
 
 /**

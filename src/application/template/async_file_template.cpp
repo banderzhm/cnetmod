@@ -55,6 +55,12 @@ auto async_file_template::close(file& target)
     co_return co_await async_file_close(io_, target);
 }
 
+auto async_file_template::flush(file& target)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_flush(io_, target);
+}
+
 auto async_file_template::stat(std::filesystem::path path)
     -> task<std::expected<file_stat, std::error_code>>
 {

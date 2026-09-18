@@ -97,30 +97,44 @@ auto expr_value::make_string(std::string v) -> expr_value
 auto expr_value::from_param(const param_value& v) -> expr_value
 {
     using K = param_value::kind_t;
+    expr_value result;
     switch (v.kind)
     {
     case K::int64_kind:
-        return make_int(v.int_val);
+        result = make_int(v.int_val);
+        break;
     case K::uint64_kind:
-        return make_int(static_cast<std::int64_t>(v.uint_val));
+        result = make_int(static_cast<std::int64_t>(v.uint_val));
+        break;
     case K::double_kind:
-        return make_double(v.double_val);
+        result = make_double(v.double_val);
+        break;
     case K::string_kind:
     case K::blob_kind:
-        return make_string(std::string(v.str_val));
+        result = make_string(std::string(v.str_val));
+        break;
     case K::date_kind:
-        return make_string(v.date_val.to_string());
+        result = make_string(v.date_val.to_string());
+        break;
     case K::datetime_kind:
-        return make_string(v.datetime_val.to_string());
+        result = make_string(v.datetime_val.to_string());
+        break;
     case K::time_kind:
-        return make_string(v.time_val.to_string());
+        result = make_string(v.time_val.to_string());
+        break;
     default:
-        return make_null();
+        result = make_null();
+        break;
     }
+    result.source_param = v;
+    return result;
 }
 
 auto expr_value::to_param() const -> param_value
 {
+    if (source_param)
+        return *source_param;
+
     switch (type)
     {
     case type_t::bool_type:
@@ -337,7 +351,11 @@ auto expr_parser::parse_or() -> std::unique_ptr<ast_node>
 {
     auto n = parse_and();
     while (cur_.type == token_type::or_op)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_and());
+    {
+        const auto op = advance().type;
+        auto right = parse_and();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -345,7 +363,11 @@ auto expr_parser::parse_and() -> std::unique_ptr<ast_node>
 {
     auto n = parse_equality();
     while (cur_.type == token_type::and_op)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_equality());
+    {
+        const auto op = advance().type;
+        auto right = parse_equality();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -353,7 +375,11 @@ auto expr_parser::parse_equality() -> std::unique_ptr<ast_node>
 {
     auto n = parse_comparison();
     while (cur_.type == token_type::eq || cur_.type == token_type::ne)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_comparison());
+    {
+        const auto op = advance().type;
+        auto right = parse_comparison();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -362,7 +388,11 @@ auto expr_parser::parse_comparison() -> std::unique_ptr<ast_node>
     auto n = parse_additive();
     while (cur_.type == token_type::lt || cur_.type == token_type::gt ||
         cur_.type == token_type::le || cur_.type == token_type::ge)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_additive());
+    {
+        const auto op = advance().type;
+        auto right = parse_additive();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -370,8 +400,11 @@ auto expr_parser::parse_additive() -> std::unique_ptr<ast_node>
 {
     auto n = parse_multiplicative();
     while (cur_.type == token_type::plus || cur_.type == token_type::minus)
-        n = ast_node::make_binary(advance().type, std::move(n),
-            parse_multiplicative());
+    {
+        const auto op = advance().type;
+        auto right = parse_multiplicative();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -380,7 +413,11 @@ auto expr_parser::parse_multiplicative() -> std::unique_ptr<ast_node>
     auto n = parse_unary();
     while (cur_.type == token_type::star || cur_.type == token_type::slash ||
         cur_.type == token_type::percent)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_unary());
+    {
+        const auto op = advance().type;
+        auto right = parse_unary();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 

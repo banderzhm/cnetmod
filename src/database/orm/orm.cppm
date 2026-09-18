@@ -2,6 +2,7 @@ export module cnetmod.orm;
 
 export import cnetmod.orm.sql_query_data;
 export import cnetmod.orm.sql_parameters;
+export import cnetmod.database.datetime;
 export import cnetmod.orm.sql_statement_formatting;
 export import cnetmod.orm.database_session;
 export import cnetmod.orm.session_gateway;

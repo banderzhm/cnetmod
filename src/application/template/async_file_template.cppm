@@ -86,6 +86,12 @@ public:
         -> task<std::expected<void, std::error_code>>;
 
     /**
+     * @brief Flushes buffered file data to durable storage.
+     */
+    [[nodiscard]] auto flush(file& target)
+        -> task<std::expected<void, std::error_code>>;
+
+    /**
      * @brief Returns metadata for a path.
      */
     [[nodiscard]] auto stat(std::filesystem::path path)

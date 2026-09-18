@@ -20,6 +20,7 @@ struct expr_value
     std::int64_t int_val = 0;
     double double_val = 0.0;
     std::string str_val;
+    std::optional<param_value> source_param;
 
     [[nodiscard]] auto is_truthy() const noexcept -> bool;
     [[nodiscard]] auto is_null() const noexcept -> bool;

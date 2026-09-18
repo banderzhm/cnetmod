@@ -2385,6 +2385,18 @@ auto response = cnetmod::http::to_http_response(
 - `src/utils/converter.cppm` — 字节序、寄存器、CRC、Hex 工具
 - `src/utils/json.cppm` — JSON 安全读取辅助
 - `src/protocol/http/extension/application_result.cppm` — `utils::R` 到 HTTP 响应的无框架耦合适配
+
+## UTC Unix time
+
+`import cnetmod.core.time;` provides the framework clock used by application and
+database adapters:
+
+```cpp
+const auto seconds = cnetmod::unix_time_seconds();
+```
+
+The result is the signed number of whole seconds since the Unix epoch. Use this
+API instead of repeating `system_clock::now()` conversions in each adapter.
 <!-- END SOURCE: skill/core/utils-error.md -->
 
 <!-- BEGIN SOURCE: skill/coro/coroutine.md -->
@@ -4254,6 +4266,21 @@ for (auto* worker_io : sctx.worker_ios()) {
 | `pooled_connection` 用完自动归还，作用域控制在最小 | 不要长期持有 `pooled_connection` 不放 |
 | 合理设置 `max_size` 避免数据库连接耗尽 | 不要设置 `max_size` 超过数据库 `max_connections` |
 | 使用 `pool_timeout` 防止获取连接无限等待 | 不要忽略 `async_get_connection()` 的错误 |
+
+## UTC `DATETIME` conversion
+
+`cnetmod.database.datetime` converts between Unix seconds and the timezone-free
+`calendar_datetime` value used for UTC wall-clock database columns:
+
+```cpp
+auto value = cnetmod::database::datetime_from_unix_seconds(seconds);
+auto seconds = cnetmod::database::unix_seconds_from_datetime(value);
+```
+
+Both directions return `std::optional` so invalid calendar components and years
+outside the database representation are explicit. ORM parameter APIs accept
+`calendar_datetime` and `std::optional<calendar_datetime>` directly through
+`to_query_parameter`; do not add local `w_time`/`p_time` wrappers.
 <!-- END SOURCE: skill/database/database-orm.md -->
 
 <!-- BEGIN SOURCE: skill/database/mongodb.md -->

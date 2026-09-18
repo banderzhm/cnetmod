@@ -23,6 +23,11 @@ namespace {
     }
 } // namespace
 
+auto chat_request::set_extra_text(std::string key, std::string value) -> void
+{
+    extra_body[std::move(key)] = std::move(value);
+}
+
 auto chat_request::to_json() const -> std::string
 {
     json value;

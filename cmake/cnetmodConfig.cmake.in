@@ -15,7 +15,27 @@ endif()
 
 # Resolve exactly the dependencies retained by the configured static target.
 if(@CNETMOD_HAS_SSL@)
-    find_dependency(OpenSSL)
+    if(@BoringSSL_FOUND@)
+        if(NOT TARGET OpenSSL::Crypto)
+            add_library(OpenSSL::Crypto STATIC IMPORTED)
+            set_target_properties(OpenSSL::Crypto PROPERTIES
+                IMPORTED_LOCATION
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/boringssl/${CMAKE_STATIC_LIBRARY_PREFIX}crypto${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+        endif()
+        if(NOT TARGET OpenSSL::SSL)
+            add_library(OpenSSL::SSL STATIC IMPORTED)
+            set_target_properties(OpenSSL::SSL PROPERTIES
+                IMPORTED_LOCATION
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/boringssl/${CMAKE_STATIC_LIBRARY_PREFIX}ssl${CMAKE_STATIC_LIBRARY_SUFFIX}"
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+                INTERFACE_LINK_LIBRARIES OpenSSL::Crypto)
+        endif()
+    else()
+        find_dependency(OpenSSL)
+    endif()
 endif()
 if(@CNETMOD_HAS_ZLIB@)
     find_dependency(ZLIB)
@@ -80,6 +100,40 @@ if(@CNETMOD_HAS_LZ4@)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/cnetmodTargets.cmake")
+
+# libc++ owns the std/std.compat module fragments.  The installed std.cppm
+# interfaces keep those relative includes and therefore consume them directly
+# from the matching local Clang installation.
+if(UNIX)
+    get_filename_component(_cnetmod_compiler_bin "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    get_filename_component(_cnetmod_compiler_prefix "${_cnetmod_compiler_bin}" DIRECTORY)
+    find_path(_cnetmod_libcxx_module_dir
+        NAMES std/algorithm.inc std.compat/cassert.inc
+        PATHS
+            "${_cnetmod_compiler_prefix}/share/libc++/v1"
+            "@LIBCXX_MODULE_DIRS@"
+            /usr/lib/llvm-22/share/libc++/v1
+            /usr/local/lib/llvm-22/share/libc++/v1
+            /opt/homebrew/opt/llvm@22/share/libc++/v1
+            /opt/homebrew/opt/llvm@21/share/libc++/v1
+            /opt/homebrew/opt/llvm@20/share/libc++/v1
+            /usr/local/opt/llvm@22/share/libc++/v1
+            /usr/local/opt/llvm@21/share/libc++/v1
+            /usr/local/opt/llvm@20/share/libc++/v1
+            /opt/llvm/share/libc++/v1
+            /usr/share/libc++/v1
+    )
+    if(NOT _cnetmod_libcxx_module_dir)
+        message(FATAL_ERROR
+            "cnetmod requires the libc++ module directory matching the consumer compiler")
+    endif()
+    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+        INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_libcxx_module_dir}")
+    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+        INTERFACE_COMPILE_OPTIONS "-stdlib=libc++;-nostdinc++")
+    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+        INTERFACE_LINK_OPTIONS "-stdlib=libc++")
+endif()
 
 # MSBuild supplies `import std` itself, but Ninja has no equivalent implicit
 # provider.  Add the MSVC STL module units to the imported module graph when a
