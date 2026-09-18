@@ -1,8 +1,8 @@
+#include "test_framework.hpp"
+
 import std;
 import cnetmod.application.configuration;
 import nlohmann.json;
-
-#include "test_framework.hpp"
 
 TEST(configured_service_reads_nested_properties_without_exposing_json)
 {
