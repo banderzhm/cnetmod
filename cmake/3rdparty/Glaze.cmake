@@ -17,6 +17,15 @@ macro(cnetmod_configure_glaze)
         target_include_directories(cnetmod_glaze INTERFACE
             "$<BUILD_INTERFACE:${CNETMOD_GLAZE_SOURCE_DIR}/include>"
             "$<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>")
+        # Keep the compiler contract from Glaze's own interface target.  In
+        # particular, real MSVC needs the conforming preprocessor when Glaze is
+        # consumed from a named module; without it nested implementation
+        # namespaces can disappear while an exported codec template is
+        # instantiated by an importer.
+        target_compile_options(cnetmod_glaze INTERFACE
+            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:preprocessor>
+            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/permissive->
+            $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:lambda>)
     endif()
 endmacro()
 

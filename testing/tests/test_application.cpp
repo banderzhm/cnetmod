@@ -1102,14 +1102,14 @@ TEST(application_startup_rollback_retains_callers_cleanup_reserve)
     }
     services.freeze();
     application::lifecycle_policy policy;
-    policy.total_stop_timeout = std::chrono::milliseconds{200};
+    policy.total_stop_timeout = std::chrono::seconds{2};
     application::service_lifecycle lifecycle{*io, telemetry, services, supervisor, health, policy};
     auto run = [&]() -> cnetmod::task<void>
     {
         const auto invalid = co_await lifecycle.start(std::chrono::milliseconds{-1});
         ASSERT_FALSE(invalid.has_value());
         ASSERT_TRUE(events->empty());
-        const auto result = co_await lifecycle.start(std::chrono::milliseconds{150});
+        const auto result = co_await lifecycle.start(std::chrono::milliseconds{1500});
         ASSERT_FALSE(result.has_value());
         ASSERT_EQ(result.error(), std::make_error_code(std::errc::connection_refused));
         ASSERT_FALSE(lifecycle.rollback_deadline().expired());

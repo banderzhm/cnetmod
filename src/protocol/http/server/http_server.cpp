@@ -1258,6 +1258,16 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
     std::string response_wire;
     request_parser parser;
     std::array<std::byte, 8192> buf;
+    auto configure_stream_writer = [&ssl](request_context& context)
+    {
+        context.set_stream_writer(
+            [&ssl](std::string_view bytes, cancel_token& token)
+                -> task<std::expected<void, std::error_code>>
+            {
+                co_return co_await ssl.async_write_all(
+                    const_buffer{bytes.data(), bytes.size()}, token);
+            });
+    };
 
     while (keep_alive)
     {
@@ -1315,6 +1325,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 options.chunk_capacity, options.max_bytes);
             request_context rctx(io, client, parser.method(), parser.uri(),
                 parser.headers(), {}, resp, std::move(rp), body_stream);
+            configure_stream_writer(rctx);
             auto pump_body = [&]() -> task<void>
             {
                 for (;;)
@@ -1359,6 +1370,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 if (!(co_await receive_more()))
                     co_return;
             request_context rctx(io, client, parser, resp, std::move(rp));
+            configure_stream_writer(rctx);
             co_await execute_chain(rctx, handler);
         }
         // Check if chunked encoding is needed

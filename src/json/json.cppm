@@ -11,6 +11,19 @@ export module cnetmod.json;
 
 import std;
 
+#if defined(_MSC_VER)
+// MSVC 19.51 does not retain the nested namespace names referenced by
+// Glaze's exported writer templates when their declarations originate in the
+// global module fragment. Re-exporting the namespace names keeps those
+// otherwise reachable helper declarations available to importer-side template
+// instantiations without exposing or copying Glaze's implementation members.
+export namespace glz {
+namespace itoa_impl {}
+
+namespace itoa_40kb_impl {}
+} // namespace glz
+#endif
+
 export namespace cnetmod::json {
 
 /**
