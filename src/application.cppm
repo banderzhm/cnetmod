@@ -51,8 +51,13 @@ export import cnetmod.application.amqp091;
 #ifdef CNETMOD_HAS_PROTOCOL_AMQP10
 export import cnetmod.application.amqp10;
 #endif
+#ifdef CNETMOD_HAS_CHAT_MODEL
+export import cnetmod.ai;
+export import cnetmod.application.chat_model_pool;
+export import cnetmod.application.chat_model_service;
+export import cnetmod.application.chat_model_template;
+#endif
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
-export import cnetmod.application.openai_template;
 export import cnetmod.application.openai;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC

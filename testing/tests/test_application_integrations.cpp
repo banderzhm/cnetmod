@@ -77,7 +77,11 @@ import cnetmod.application.mysql;
 import cnetmod.protocol.mysql;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+import cnetmod.ai;
+import cnetmod.core;
 import cnetmod.coro;
+import cnetmod.executor.async_op;
+import cnetmod.io.io_context;
 import cnetmod.protocol.openai;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
@@ -1093,67 +1097,157 @@ TEST(application_database_start_rejects_cancelled_and_expired_context_before_war
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
 namespace {
 
-    class recording_chat_model final : public cnetmod::openai::chat_model
+class recording_chat_model final : public cnetmod::ai::chat_model
+{
+public:
+    auto invoke(cnetmod::ai::chat_request request,
+        const cnetmod::ai::run_config& configuration)
+        -> cnetmod::task<std::expected<cnetmod::ai::chat_response,
+            std::string>> override
     {
-    public:
-        auto invoke(cnetmod::openai::chat_request request,
-            const cnetmod::openai::run_config& configuration)
-            -> cnetmod::task<std::expected<cnetmod::openai::chat_response,
-                std::string>> override
-        {
-            last_request = std::move(request);
-            listener_count = configuration.listeners.size();
-            ++invocations;
-            co_return cnetmod::openai::chat_response{
-                .id = "response",
-                .model = last_request.model,
-                .choices = {{.index = 0,
-                    .msg = cnetmod::openai::message::model_output("ok"),
-                    .finish_reason = "stop"}}};
-        }
+        last_request = std::move(request);
+        listener_count = configuration.listeners.size();
+        ++invocations;
+        co_return cnetmod::ai::chat_response{
+            .id = "response",
+            .model = last_request.model,
+            .choices = {{.index = 0,
+                .msg = cnetmod::ai::message::model_output("ok"),
+                .finish_reason = "stop"}}};
+    }
 
-        cnetmod::openai::chat_request last_request;
-        std::size_t listener_count = 0;
-        std::size_t invocations = 0;
-    };
+    cnetmod::ai::chat_request last_request;
+    std::size_t listener_count = 0;
+    std::size_t invocations = 0;
+};
 
-    class passive_run_listener final : public cnetmod::openai::run_listener
-    {
-    public:
-        void on_event(const cnetmod::openai::run_event&) override {}
-    };
+class passive_run_listener final : public cnetmod::ai::run_listener
+{
+public:
+    void on_event(const cnetmod::ai::run_event&) override {}
+};
 
 } // namespace
 
-TEST(application_openai_template_applies_defaults_observation_and_cancellation)
+TEST(application_chat_model_template_applies_defaults_observation_and_cancellation)
 {
-    recording_chat_model model;
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto model = std::make_shared<recording_chat_model>();
     passive_run_listener listener;
-    cnetmod::application::openai_template model_api{model,
+    cnetmod::application::chat_model_pool pool{*io, {model}};
+    cnetmod::application::chat_model_template model_api{pool,
         {.request = {.model = "gpt-test",
-             .messages = {cnetmod::openai::message::developer("policy")}},
-            .system_prompt = "system"},
-        &listener};
+             .messages = {cnetmod::ai::message::developer("policy")}},
+            .system_prompt = "system"}};
 
-    auto response = cnetmod::sync_wait(model_api.invoke("hello"));
+    auto response = cnetmod::sync_wait(
+        model_api.invoke("hello", {.listeners = {&listener}}));
     ASSERT_TRUE(response.has_value());
-    ASSERT_EQ(model.invocations, 1U);
-    ASSERT_EQ(model.listener_count, 1U);
-    ASSERT_EQ(model.last_request.model, "gpt-test");
-    ASSERT_EQ(model.last_request.messages.size(), 3U);
-    ASSERT_EQ(model.last_request.messages[0].role, "system");
-    ASSERT_EQ(model.last_request.messages[1].role, "developer");
-    ASSERT_EQ(model.last_request.messages[2].role, "user");
+    ASSERT_EQ(model->invocations, 1U);
+    ASSERT_EQ(model->listener_count, 1U);
+    ASSERT_EQ(model->last_request.model, "gpt-test");
+    ASSERT_EQ(model->last_request.messages.size(), 3U);
+    ASSERT_EQ(model->last_request.messages[0].role, "system");
+    ASSERT_EQ(model->last_request.messages[1].role, "developer");
+    ASSERT_EQ(model->last_request.messages[2].role, "user");
 
     cnetmod::cancel_token cancellation;
     cancellation.cancel();
     auto cancelled = cnetmod::sync_wait(model_api.invoke("ignored",
         {.listeners = {&listener}, .cancellation = &cancellation}));
     ASSERT_FALSE(cancelled.has_value());
-    ASSERT_EQ(model.invocations, 1U);
+    ASSERT_EQ(model->invocations, 1U);
 }
 
-TEST(application_runtime_resolves_named_openai_template)
+TEST(application_chat_model_pool_uses_exclusive_reusable_leases)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto first_model = std::make_shared<recording_chat_model>();
+    auto second_model = std::make_shared<recording_chat_model>();
+    cnetmod::application::chat_model_pool pool{
+        *io, {first_model, second_model}};
+
+    {
+        auto first = cnetmod::sync_wait(pool.acquire());
+        auto second = cnetmod::sync_wait(pool.acquire());
+        ASSERT_TRUE(first.has_value());
+        ASSERT_TRUE(second.has_value());
+        ASSERT_TRUE(&first->get() != &second->get());
+    }
+
+    auto reused_first = cnetmod::sync_wait(pool.acquire());
+    auto reused_second = cnetmod::sync_wait(pool.acquire());
+    ASSERT_TRUE(reused_first.has_value());
+    ASSERT_TRUE(reused_second.has_value());
+}
+
+TEST(application_chat_model_pool_cancels_saturated_admission)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto model = std::make_shared<recording_chat_model>();
+    cnetmod::application::chat_model_pool pool{*io, {model}};
+    auto occupied = cnetmod::sync_wait(pool.acquire());
+    ASSERT_TRUE(occupied.has_value());
+
+    cnetmod::cancel_token cancellation;
+    bool cancelled = false;
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
+        auto acquire = [&]() -> cnetmod::task<void>
+        {
+            auto result = co_await pool.acquire(&cancellation);
+            cancelled = !result &&
+                result.error() ==
+                    std::make_error_code(std::errc::operation_canceled);
+        };
+        auto stop_wait = [&]() -> cnetmod::task<void>
+        {
+            (void)co_await cnetmod::async_timer_wait(
+                *io, std::chrono::milliseconds{5});
+            cancellation.cancel();
+        };
+        co_await cnetmod::when_all(acquire(), stop_wait());
+        io->stop();
+    };
+    cnetmod::spawn(*io, scenario());
+    io->run();
+    ASSERT_TRUE(cancelled);
+}
+
+TEST(application_chat_conversation_persists_complete_turns_and_history)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto model = std::make_shared<recording_chat_model>();
+    cnetmod::application::chat_model_pool pool{*io, {model}};
+    cnetmod::application::chat_model_template model_api{pool};
+    cnetmod::ai::in_memory_conversation_store store;
+    auto conversation = model_api.conversation("session-a", store);
+
+    auto first = cnetmod::sync_wait(conversation.invoke("first"));
+    auto second = cnetmod::sync_wait(conversation.invoke("second"));
+    ASSERT_TRUE(first.has_value());
+    ASSERT_TRUE(second.has_value());
+    ASSERT_EQ(model->last_request.messages.size(), 3U);
+    ASSERT_EQ(model->last_request.messages[0].content, "first");
+    ASSERT_EQ(model->last_request.messages[1].content, "ok");
+    ASSERT_EQ(model->last_request.messages[2].content, "second");
+
+    auto stored = cnetmod::sync_wait(store.load_recent("session-a", 0));
+    ASSERT_TRUE(stored.has_value());
+    ASSERT_EQ(stored->size(), 4U);
+
+    auto other = model_api.conversation("session-b", store);
+    auto isolated = cnetmod::sync_wait(other.invoke("isolated"));
+    ASSERT_TRUE(isolated.has_value());
+    ASSERT_EQ(model->last_request.messages.size(), 1U);
+    ASSERT_EQ(model->last_request.messages[0].content, "isolated");
+}
+
+TEST(application_runtime_resolves_named_chat_model_template)
 {
     auto host = application::application_builder{"openai-template"}
                     .enable_auto_configuration()
@@ -1173,13 +1267,36 @@ TEST(application_runtime_resolves_named_openai_template)
     if (!host)
         return;
 
-    auto model_api = host->runtime().openai("assistant");
+    auto model_api = host->runtime().chat_model("assistant");
     ASSERT_TRUE(model_api.has_value());
-    auto missing = host->runtime().openai("missing");
+    auto missing = host->runtime().chat_model("missing");
     ASSERT_FALSE(missing.has_value());
     if (!missing)
         ASSERT_EQ(missing.error(),
             std::make_error_code(std::errc::no_such_file_or_directory));
+}
+
+TEST(application_openai_rejects_invalid_pool_size)
+{
+    auto host = application::application_builder{"invalid-openai-pool"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& config)
+                        {
+                            config.logging.manage_lifecycle = false;
+                            config.management.enabled = false;
+                            application::configured_service service{
+                                .name = "openai",
+                                .enabled = true,
+                            };
+                            service.properties["api_key"] = "test";
+                            service.properties["pool_size"] = 0;
+                            config.services.emplace("model", std::move(service));
+                        })
+                    .build();
+    ASSERT_FALSE(host.has_value());
+    if (!host)
+        ASSERT_EQ(host.error(),
+            std::make_error_code(std::errc::invalid_argument));
 }
 
 TEST(application_openai_listener_is_optional_and_configuration_is_idempotent)

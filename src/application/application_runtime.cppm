@@ -22,8 +22,9 @@ import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.compress;
-#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
-import cnetmod.application.openai_template;
+#ifdef CNETMOD_HAS_CHAT_MODEL
+import cnetmod.application.chat_model_service;
+import cnetmod.application.chat_model_template;
 #endif
 
 namespace cnetmod::application {
@@ -123,16 +124,16 @@ public:
      */
     [[nodiscard]] auto json() noexcept -> json_template&;
 
-#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+#ifdef CNETMOD_HAS_CHAT_MODEL
     /**
-     * @brief Resolves a named managed OpenAI service as a model template.
+     * @brief Resolves a named managed provider as a chat model template.
      *
      * Resolve the template when handling a request or after build() completes,
      * because auto-configuration registers managed services during host build.
      */
-    [[nodiscard]] auto openai(std::string_view instance = "default",
-        openai_template_options options = {})
-        -> std::expected<openai_template, std::error_code>;
+    [[nodiscard]] auto chat_model(std::string_view instance = "default",
+        chat_model_template_options options = {})
+        -> std::expected<chat_model_template, std::error_code>;
 #endif
 
     /**

@@ -106,13 +106,20 @@ HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/
 `rest_request_options::headers` 注入单次请求头；名称按 HTTP 规则忽略大小写，单次值覆盖默认值。
 Template 的接口与实现统一位于 `src/application/template/`，不在 Application 根目录堆放实现。
 
-启用 OpenAI 自动装配后，`application_runtime::openai(instance, options)` 返回具名
-`openai_template`。模板复用 `openai_service` 生命周期拥有的连接和 `openai_chat_model`，
-不会创建第二个协议客户端；它统一合并 GenAI telemetry listener、保留 `run_config` 的
-取消/trace/metadata，并用共享协程锁串行化同一连接上的请求。文本重载复制
-`openai_template_options::request`，按 system、默认消息、当前 user 输入的顺序构造请求；
-显式 `chat_request` 重载不改写调用方消息。模板必须在 `build()` 完成后或 route handler
-执行时解析，因为自动装配服务是在 Host 构建期间注册的。
+启用任一 Chat Model provider 自动装配后，
+`application_runtime::chat_model(instance, options)` 返回具名
+`chat_model_template`。Application 只依赖 `cnetmod.ai` 与
+`chat_model_service`，不依赖 OpenAI 客户端类型；OpenAI-compatible、Claude、Gemini
+或本地推理后端通过同一 provider Strategy 接入。每个 managed provider 拥有固定容量
+连接池，一次 invoke/stream 独占一个 lease 到终态，避免 keep-alive 响应交错。
+文本重载复制 `chat_model_template_options::request`，按 system、默认消息、历史、当前
+user 输入的顺序构造请求；显式 `chat_request` 重载不改写调用方消息。模板必须在
+`build()` 完成后或 route handler 执行时解析，因为自动装配服务是在 Host 构建期间注册的。
+
+`chat_model_template::conversation(session_id, store)` 提供显式会话边界。
+同一 session 的调用通过共享协程门串行化，不同 session 可占用不同池连接并行运行；
+持久层仍是唯一真相。成功回合才用 `append_batch(user, assistant)` 原子追加，失败或取消
+不产生半回合。`history_limit` 控制每次读取的最近消息数，零表示读取全部。
 
 需要在 route handler 捕获 Runtime 时，使用双参数路由配置器：
 
@@ -141,7 +148,7 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
     });
     routes.post("/chat", [application](http::request_context& request)
         -> task<void> {
-        auto model = application->openai("assistant",
+        auto model = application->chat_model("assistant",
             {.request = {.model = "gpt-4o-mini"},
                 .system_prompt = "Answer concisely."});
         if (!model) {
@@ -415,7 +422,7 @@ auto& users = registry.require<user_repository>("primary");
 | 配置 `type` | 注册服务 | 说明 |
 |---|---|---|
 | `http_client` | `http_client_service` | 带 W3C Trace Context 的出站 HTTP 客户端 |
-| `openai` | `openai_service` | OpenAI 客户端、`openai_template` 和 GenAI telemetry listener |
+| `openai` | `openai_service` + `chat_model_service` | OpenAI adapter、模型连接池、`chat_model_template` 和 GenAI telemetry listener；`pool_size` 默认 4 |
 | `redis` | `redis_service` / `redis_cluster_service` | `mode=standalone` 连接池；`mode=cluster` 槽路由、seed failover 与健康检查 |
 | `mysql` | `mysql_service` | MySQL 连接池 |
 | `postgresql` | `postgresql_service` | PostgreSQL 连接池 |

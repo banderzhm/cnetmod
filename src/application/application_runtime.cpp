@@ -2,8 +2,8 @@ module cnetmod.application.runtime;
 
 import cnetmod.coro.cancel;
 import cnetmod.protocol.http.middleware.compress;
-#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
-import cnetmod.application.openai;
+#ifdef CNETMOD_HAS_CHAT_MODEL
+import cnetmod.application.chat_model_service;
 #endif
 
 namespace cnetmod::application {
@@ -42,12 +42,12 @@ auto application_runtime::json() noexcept -> json_template&
     return json_;
 }
 
-#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
-auto application_runtime::openai(std::string_view instance,
-    openai_template_options options)
-    -> std::expected<openai_template, std::error_code>
+#ifdef CNETMOD_HAS_CHAT_MODEL
+auto application_runtime::chat_model(std::string_view instance,
+    chat_model_template_options options)
+    -> std::expected<chat_model_template, std::error_code>
 {
-    auto service = services_.require<openai_service>(instance);
+    auto service = services_.require<chat_model_service>(instance);
     if (!service)
         return std::unexpected(service.error());
     return service->get().make_template(std::move(options));

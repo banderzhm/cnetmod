@@ -117,21 +117,22 @@ struct chat_response {
 | `create_image_variation` | `auto create_image_variation(image_variation_request) -> task<...>` | 图片变体 |
 | `moderate` | `auto moderate(moderation_request) -> task<std::expected<moderation_response, std::string>>` | 内容审核 |
 
-#### `openai_template` — Application 大模型门面
+#### `chat_model_template` — provider-neutral Application 大模型门面
 
 Application 项目启用 OpenAI 自动装配后，优先使用
-`application_runtime::openai(instance, options)`，不要在 route 中自行创建或连接
-`openai::client`。返回的 `openai_template` 复用 managed service 的连接、
-`openai_chat_model`、共享异步请求门和 telemetry listener：
+`application_runtime::chat_model(instance, options)`，不要在 route 中自行创建或连接
+`openai::client`。Application 仅依赖 `cnetmod.ai` 的 provider-neutral 合约；
+`openai_service` 作为 adapter 管理多个 client 和固定容量连接池，未来 Claude、Gemini
+与本地模型实现相同的 `chat_model_service` 即可复用模板、会话和路由代码：
 
 ```cpp
-auto model = runtime.openai("assistant",
+auto model = runtime.chat_model("assistant",
     {.request = {.model = "gpt-4o-mini", .temperature = 0.2},
         .system_prompt = "Answer with verified facts."});
 if (!model)
     co_return;
 
-openai::run_config run{
+ai::run_config run{
     .metadata = {{"tenant", "acme"}},
     .cancellation = &cancellation,
     .trace_parent = parent,
@@ -145,11 +146,13 @@ auto response = co_await model->invoke("Summarize the incident", run);
 | `invoke(string, run_config)` | 使用默认请求、system prompt 和当前 user 输入 |
 | `stream(chat_request, handler, run_config)` | 显式请求的异步流式输出与背压 |
 | `stream(string, handler, run_config)` | 使用模板默认值的异步流式输出 |
+| `conversation(session_id, store, options)` | 创建显式、append-only 的会话门面 |
 
-模板不会拥有 managed service，也不会隐藏取消或 trace context。每次调用会保留调用方
-listeners，并只追加一次 Application telemetry listener；同一具名服务的所有模板共享
-串行化边界，避免单条 keep-alive 连接上出现响应交错。直接构造模板时也可以传入任意
-`chat_model`，便于 fake 测试或接入其他模型 Strategy。
+模板不拥有 managed service，也不隐藏取消或 trace context。每次调用从 provider 池独占
+一个 model lease，流式调用直到终态才归还。OpenAI adapter 保留调用方 listeners，并只
+追加一次 Application telemetry listener。同 session 的会话跨模板共享协程门，不同
+session 不共享消息且可以并行。成功响应才原子追加 user/assistant 两条记录；store 始终是
+唯一真相，不维护内存影子快照。
 
 #### 多模态与 Function Calling 类型
 

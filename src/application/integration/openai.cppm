@@ -7,13 +7,16 @@ export module cnetmod.application.openai;
 
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
 import std;
+import cnetmod.ai;
 import cnetmod.application.auto_configuration;
+import cnetmod.application.chat_model_pool;
+import cnetmod.application.chat_model_service;
+import cnetmod.application.chat_model_template;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
-import cnetmod.application.openai_template;
 import cnetmod.application.recovery_policy;
-import cnetmod.coro.mutex;
 import cnetmod.coro.task;
+import cnetmod.coro.striped_mutex;
 import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.observability.openai;
@@ -21,14 +24,14 @@ import cnetmod.protocol.openai;
 
 namespace cnetmod::application {
 
-export class openai_service final : public managed_service
+export class openai_service final : public chat_model_service
 {
 public:
     openai_service(io_context& io,
         observability::telemetry_hub& telemetry,
         openai::connect_options options,
         std::string instance, service_requirement requirement,
-        recovery_policy recovery);
+        recovery_policy recovery, std::size_t pool_size = 4);
     [[nodiscard]] auto client() noexcept -> openai::client&;
     /**
      * @brief Returns the optional listener; null means observation is disabled.
@@ -45,8 +48,8 @@ public:
     /**
      * @brief Creates a model template bound to this managed connection.
      */
-    [[nodiscard]] auto make_template(openai_template_options options = {})
-        -> openai_template;
+    [[nodiscard]] auto make_template(
+        chat_model_template_options options = {}) -> chat_model_template override;
     [[nodiscard]] auto key() const -> service_key override;
     [[nodiscard]] auto requirement() const noexcept
         -> service_requirement override;
@@ -58,14 +61,17 @@ public:
     auto probe(service_context& context) -> task<health_report> override;
 
 private:
-    openai::client client_;
-    openai::openai_chat_model model_;
-    std::shared_ptr<async_mutex> request_gate_;
+    io_context& io_;
     std::optional<openai::telemetry_listener> telemetry_listener_;
+    std::vector<std::unique_ptr<openai::client>> clients_;
+    std::vector<std::shared_ptr<ai::chat_model>> models_;
+    chat_model_pool model_pool_;
     openai::connect_options options_;
     std::string instance_;
     service_requirement requirement_;
     recovery_policy recovery_;
+    std::size_t pool_size_;
+    std::shared_ptr<striped_async_mutex<std::string>> session_gates_;
 };
 
 export [[nodiscard]] auto auto_configure_openai(
