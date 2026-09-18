@@ -9324,6 +9324,14 @@ Template 的接口与实现统一位于 `src/application/template/`，不在 App
 user 输入的顺序构造请求；显式 `chat_request` 重载不改写调用方消息。模板必须在
 `build()` 完成后或 route handler 执行时解析，因为自动装配服务是在 Host 构建期间注册的。
 
+运行时端点、凭据或池容量变更通过
+`application_runtime::reconfigure_chat_model(instance, configuration, cancellation)`
+提交完整 provider 配置。具体 provider 先校验配置并建立整代新连接，全部成功后才原子发布；
+失败时旧代保持服务。已借出的 model lease 持有旧客户端所有权，会在请求结束后自然退休，
+新请求只进入新代。不要把 `chat_model_pool::reset()` 暴露给业务代码，否则会绕过 provider
+校验、连接建立、Telemetry 和生命周期边界。OpenAI 配置支持热更 `base_url`、`api_key`、
+`tls_verify`、`timeout_seconds` 与 `pool_size`，传入属性是完整替换而不是局部 patch。
+
 `chat_model_template::conversation(session_id, store)` 提供显式会话边界。
 同一 session 的调用通过共享协程门串行化，不同 session 可占用不同池连接并行运行；
 持久层仍是唯一真相。成功回合才用 `append_batch(user, assistant)` 原子追加，失败或取消
@@ -9369,6 +9377,19 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
             response ? std::string{response->content()} : response.error());
     });
 });
+```
+
+```cpp
+application::chat_model_reconfiguration next;
+next.properties = {
+    {"base_url", "https://new-gateway.example/v1"},
+    {"api_key", rotated_key},
+    {"tls_verify", true},
+    {"timeout_seconds", 30},
+    {"pool_size", 8},
+};
+auto reloaded = co_await runtime.reconfigure_chat_model(
+    "assistant", std::move(next), &cancellation);
 ```
 
 双参数配置器在 Host Runtime 构造完成后、`build()` 返回前执行。handler 可在 Host 生命周期
@@ -14667,6 +14688,13 @@ auto response = co_await model->invoke("Summarize the incident", run);
 追加一次 Application telemetry listener。同 session 的会话跨模板共享协程门，不同
 session 不共享消息且可以并行。成功响应才原子追加 user/assistant 两条记录；store 始终是
 唯一真相，不维护内存影子快照。
+
+`application_runtime::reconfigure_chat_model()` 是 provider-neutral 热重载入口。
+调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
+`base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
+建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时
+旧 generation 不变；成功发布后，在途请求继续持有旧客户端，新请求只获取新客户端。
+`chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型
 

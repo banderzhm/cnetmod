@@ -78,10 +78,13 @@ import cnetmod.protocol.mysql;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
 import cnetmod.ai;
+import cnetmod.application.managed_service;
+import cnetmod.application.task_supervisor;
 import cnetmod.core;
 import cnetmod.coro;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
+import cnetmod.observability;
 import cnetmod.protocol.openai;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
@@ -1183,6 +1186,32 @@ TEST(application_chat_model_pool_uses_exclusive_reusable_leases)
     ASSERT_TRUE(reused_second.has_value());
 }
 
+TEST(application_chat_model_pool_keeps_outstanding_generation_alive)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto previous = std::make_shared<recording_chat_model>();
+    auto replacement = std::make_shared<recording_chat_model>();
+    cnetmod::application::chat_model_pool pool{*io, {previous}};
+
+    auto outstanding = cnetmod::sync_wait(pool.acquire());
+    ASSERT_TRUE(outstanding.has_value());
+    auto reset = cnetmod::sync_wait(pool.reset({replacement}));
+    ASSERT_TRUE(reset.has_value());
+
+    auto old_response = cnetmod::sync_wait(outstanding->get().invoke(
+        {.model = "old"}, {}));
+    ASSERT_TRUE(old_response.has_value());
+    ASSERT_EQ(previous->invocations, 1U);
+
+    auto current = cnetmod::sync_wait(pool.acquire());
+    ASSERT_TRUE(current.has_value());
+    auto new_response = cnetmod::sync_wait(current->get().invoke(
+        {.model = "new"}, {}));
+    ASSERT_TRUE(new_response.has_value());
+    ASSERT_EQ(replacement->invocations, 1U);
+}
+
 TEST(application_chat_model_pool_cancels_saturated_admission)
 {
     cnetmod::net_init network;
@@ -1274,6 +1303,149 @@ TEST(application_runtime_resolves_named_chat_model_template)
     if (!missing)
         ASSERT_EQ(missing.error(),
             std::make_error_code(std::errc::no_such_file_or_directory));
+}
+
+TEST(application_runtime_rejects_invalid_chat_model_reconfiguration)
+{
+    auto host = application::application_builder{"openai-reconfigure"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& config)
+                        {
+                            config.logging.manage_lifecycle = false;
+                            config.management.enabled = false;
+                            application::configured_service service{
+                                .name = "openai",
+                                .instance = "assistant",
+                                .enabled = true};
+                            service.properties["api_key"] = "test";
+                            config.services.emplace("assistant", std::move(service));
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+
+    application::chat_model_reconfiguration invalid;
+    invalid.properties["api_key"] = "test";
+    invalid.properties["pool_size"] = 0;
+    auto rejected = cnetmod::sync_wait(
+        host->runtime().reconfigure_chat_model("assistant", std::move(invalid)));
+    ASSERT_FALSE(rejected.has_value());
+    if (!rejected)
+        ASSERT_EQ(rejected.error(),
+            std::make_error_code(std::errc::invalid_argument));
+
+    application::chat_model_reconfiguration missing;
+    missing.properties["api_key"] = "test";
+    auto absent = cnetmod::sync_wait(
+        host->runtime().reconfigure_chat_model("missing", std::move(missing)));
+    ASSERT_FALSE(absent.has_value());
+    if (!absent)
+        ASSERT_EQ(absent.error(),
+            std::make_error_code(std::errc::no_such_file_or_directory));
+}
+
+TEST(application_openai_reconfiguration_commits_only_connected_generation)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto first_listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    auto second_listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(first_listener.has_value());
+    ASSERT_TRUE(second_listener.has_value());
+    if (!first_listener || !second_listener)
+        return;
+    ASSERT_TRUE(first_listener->bind(cnetmod::endpoint{
+                                         cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(second_listener->bind(cnetmod::endpoint{
+                                          cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(first_listener->listen().has_value());
+    ASSERT_TRUE(second_listener->listen().has_value());
+    auto first_endpoint = first_listener->local_endpoint();
+    auto second_endpoint = second_listener->local_endpoint();
+    ASSERT_TRUE(first_endpoint.has_value());
+    ASSERT_TRUE(second_endpoint.has_value());
+    if (!first_endpoint || !second_endpoint)
+        return;
+
+    cnetmod::observability::telemetry_hub telemetry{*io,
+        {.export_traces = false,
+            .export_metrics = false,
+            .export_logs = false}};
+    application::task_supervisor supervisor{*io};
+    cnetmod::cancel_token cancellation;
+    application::service_context context{*io, telemetry, supervisor,
+        cancellation, cnetmod::deadline::after(std::chrono::seconds{2})};
+    cnetmod::openai::connect_options initial;
+    initial.api_base = std::format("http://127.0.0.1:{}/v1",
+        first_endpoint->port());
+    initial.api_key = "initial";
+    initial.timeout_seconds = 1;
+    application::openai_service service{*io, telemetry, std::move(initial),
+        "reload", application::service_requirement::required, {}, 1};
+
+    std::optional<cnetmod::socket> first_peer;
+    std::optional<cnetmod::socket> second_peer;
+    bool started = false;
+    bool reconfigured = false;
+    bool rejected = false;
+    bool stayed_up = false;
+    bool snapshot_connected = false;
+    auto accept_first = [&]() -> cnetmod::task<void>
+    {
+        auto accepted = co_await cnetmod::async_accept(*io, *first_listener);
+        if (accepted)
+            first_peer.emplace(std::move(*accepted));
+    };
+    auto accept_second = [&]() -> cnetmod::task<void>
+    {
+        auto accepted = co_await cnetmod::async_accept(*io, *second_listener);
+        if (accepted)
+            second_peer.emplace(std::move(*accepted));
+    };
+    auto scenario = [&]() -> cnetmod::task<void>
+    {
+        auto start = co_await service.start(context);
+        started = start.has_value();
+
+        application::chat_model_reconfiguration replacement;
+        replacement.properties["base_url"] = std::format(
+            "http://127.0.0.1:{}/v1", second_endpoint->port());
+        replacement.properties["api_key"] = "replacement";
+        replacement.properties["timeout_seconds"] = 1;
+        replacement.properties["pool_size"] = 1;
+        auto reload = co_await service.reconfigure(std::move(replacement));
+        reconfigured = reload.has_value();
+        auto snapshot = co_await service.current_client();
+        snapshot_connected = snapshot && snapshot->is_connected();
+
+        application::chat_model_reconfiguration unavailable;
+        unavailable.properties["base_url"] =
+            "http://127.0.0.1:1/v1";
+        unavailable.properties["api_key"] = "unavailable";
+        unavailable.properties["timeout_seconds"] = 1;
+        unavailable.properties["pool_size"] = 1;
+        auto failed = co_await service.reconfigure(std::move(unavailable));
+        rejected = !failed;
+        auto health = co_await service.probe(context);
+        stayed_up = health.status == application::service_health::up;
+        (void)co_await service.stop(context);
+        io->stop();
+    };
+    cnetmod::spawn(*io, accept_first());
+    cnetmod::spawn(*io, accept_second());
+    cnetmod::spawn(*io, scenario());
+    io->run();
+
+    ASSERT_TRUE(started);
+    ASSERT_TRUE(reconfigured);
+    ASSERT_TRUE(snapshot_connected);
+    ASSERT_TRUE(rejected);
+    ASSERT_TRUE(stayed_up);
 }
 
 TEST(application_openai_rejects_invalid_pool_size)

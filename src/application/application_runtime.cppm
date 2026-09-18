@@ -15,6 +15,7 @@ import cnetmod.application.recovery_policy;
 import cnetmod.application.service_registry;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.bridge;
+import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.executor.pool;
@@ -134,6 +135,17 @@ public:
     [[nodiscard]] auto chat_model(std::string_view instance = "default",
         chat_model_template_options options = {})
         -> std::expected<chat_model_template, std::error_code>;
+
+    /**
+     * @brief Atomically reloads one named chat model provider generation.
+     *
+     * Provider validation or connection failure leaves the active generation
+     * untouched. In-flight requests finish on their existing generation.
+     */
+    [[nodiscard]] auto reconfigure_chat_model(std::string_view instance,
+        chat_model_reconfiguration configuration,
+        cancel_token* cancellation = nullptr)
+        -> task<std::expected<void, std::error_code>>;
 #endif
 
     /**

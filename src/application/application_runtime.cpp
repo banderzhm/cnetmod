@@ -52,6 +52,21 @@ auto application_runtime::chat_model(std::string_view instance,
         return std::unexpected(service.error());
     return service->get().make_template(std::move(options));
 }
+
+auto application_runtime::reconfigure_chat_model(std::string_view instance,
+    chat_model_reconfiguration configuration, cancel_token* cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (stop_requested() ||
+        (cancellation && cancellation->is_cancelled()))
+        co_return std::unexpected(
+            std::make_error_code(std::errc::operation_canceled));
+    auto service = services_.require<chat_model_service>(instance);
+    if (!service)
+        co_return std::unexpected(service.error());
+    co_return co_await service->get().reconfigure(
+        std::move(configuration), cancellation);
+}
 #endif
 
 auto application_runtime::schedule_on_cpu() noexcept -> pool_post_awaitable

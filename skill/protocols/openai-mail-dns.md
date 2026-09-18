@@ -154,6 +154,13 @@ auto response = co_await model->invoke("Summarize the incident", run);
 session 不共享消息且可以并行。成功响应才原子追加 user/assistant 两条记录；store 始终是
 唯一真相，不维护内存影子快照。
 
+`application_runtime::reconfigure_chat_model()` 是 provider-neutral 热重载入口。
+调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
+`base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
+建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时
+旧 generation 不变；成功发布后，在途请求继续持有旧客户端，新请求只获取新客户端。
+`chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
+
 #### 多模态与 Function Calling 类型
 
 ```cpp

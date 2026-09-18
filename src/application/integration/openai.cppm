@@ -15,7 +15,10 @@ import cnetmod.application.chat_model_template;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
 import cnetmod.application.recovery_policy;
+import cnetmod.coro.cancel;
 import cnetmod.coro.task;
+import cnetmod.coro.task_group;
+import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
 import cnetmod.io.io_context;
 import cnetmod.observability;
@@ -23,6 +26,8 @@ import cnetmod.observability.openai;
 import cnetmod.protocol.openai;
 
 namespace cnetmod::application {
+
+class openai_model_generation;
 
 export class openai_service final : public chat_model_service
 {
@@ -32,7 +37,14 @@ public:
         openai::connect_options options,
         std::string instance, service_requirement requirement,
         recovery_policy recovery, std::size_t pool_size = 4);
-    [[nodiscard]] auto client() noexcept -> openai::client&;
+    /**
+     * @brief Returns a lifetime-safe snapshot of the current provider client.
+     *
+     * Provider-neutral application code should use make_template(). This escape
+     * hatch is asynchronous so it cannot race a generation publication.
+     */
+    [[nodiscard]] auto current_client()
+        -> task<std::shared_ptr<openai::client>>;
     /**
      * @brief Returns the optional listener; null means observation is disabled.
      */
@@ -50,6 +62,10 @@ public:
      */
     [[nodiscard]] auto make_template(
         chat_model_template_options options = {}) -> chat_model_template override;
+    [[nodiscard]] auto reconfigure(
+        chat_model_reconfiguration configuration,
+        cancel_token* cancellation = nullptr)
+        -> task<std::expected<void, std::error_code>> override;
     [[nodiscard]] auto key() const -> service_key override;
     [[nodiscard]] auto requirement() const noexcept
         -> service_requirement override;
@@ -63,14 +79,12 @@ public:
 private:
     io_context& io_;
     std::optional<openai::telemetry_listener> telemetry_listener_;
-    std::vector<std::unique_ptr<openai::client>> clients_;
-    std::vector<std::shared_ptr<ai::chat_model>> models_;
     chat_model_pool model_pool_;
-    openai::connect_options options_;
+    async_mutex generation_gate_;
+    std::shared_ptr<openai_model_generation> generation_;
     std::string instance_;
     service_requirement requirement_;
     recovery_policy recovery_;
-    std::size_t pool_size_;
     std::shared_ptr<striped_async_mutex<std::string>> session_gates_;
 };
 
