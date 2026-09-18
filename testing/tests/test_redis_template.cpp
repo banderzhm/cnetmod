@@ -13,6 +13,7 @@ import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.instrumentation.tracing;
 import cnetmod.io.io_context;
+import cnetmod.json;
 
 namespace {
 
@@ -453,8 +454,7 @@ TEST(redis_template_json_codec_round_trips_and_rejects_invalid_data)
     auto invalid = cnetmod::redis::json_codec::decode<std::vector<int>>("{");
     ASSERT_FALSE(invalid.has_value());
     if (!invalid)
-        ASSERT_EQ(invalid.error(),
-            std::make_error_code(std::errc::invalid_argument));
+        ASSERT_EQ(invalid.error(), cnetmod::json::make_error_code(cnetmod::json::errc::parse_failed));
 }
 
 RUN_TESTS()
