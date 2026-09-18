@@ -117,6 +117,40 @@ struct chat_response {
 | `create_image_variation` | `auto create_image_variation(image_variation_request) -> task<...>` | 图片变体 |
 | `moderate` | `auto moderate(moderation_request) -> task<std::expected<moderation_response, std::string>>` | 内容审核 |
 
+#### `openai_template` — Application 大模型门面
+
+Application 项目启用 OpenAI 自动装配后，优先使用
+`application_runtime::openai(instance, options)`，不要在 route 中自行创建或连接
+`openai::client`。返回的 `openai_template` 复用 managed service 的连接、
+`openai_chat_model`、共享异步请求门和 telemetry listener：
+
+```cpp
+auto model = runtime.openai("assistant",
+    {.request = {.model = "gpt-4o-mini", .temperature = 0.2},
+        .system_prompt = "Answer with verified facts."});
+if (!model)
+    co_return;
+
+openai::run_config run{
+    .metadata = {{"tenant", "acme"}},
+    .cancellation = &cancellation,
+    .trace_parent = parent,
+};
+auto response = co_await model->invoke("Summarize the incident", run);
+```
+
+| 方法 | 说明 |
+|------|------|
+| `invoke(chat_request, run_config)` | 执行完全显式的 Chat Completions 请求 |
+| `invoke(string, run_config)` | 使用默认请求、system prompt 和当前 user 输入 |
+| `stream(chat_request, handler, run_config)` | 显式请求的异步流式输出与背压 |
+| `stream(string, handler, run_config)` | 使用模板默认值的异步流式输出 |
+
+模板不会拥有 managed service，也不会隐藏取消或 trace context。每次调用会保留调用方
+listeners，并只追加一次 Application telemetry listener；同一具名服务的所有模板共享
+串行化边界，避免单条 keep-alive 连接上出现响应交错。直接构造模板时也可以传入任意
+`chat_model`，便于 fake 测试或接入其他模型 Strategy。
+
 #### 多模态与 Function Calling 类型
 
 ```cpp

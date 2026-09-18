@@ -9314,6 +9314,14 @@ HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/
 `rest_request_options::headers` 注入单次请求头；名称按 HTTP 规则忽略大小写，单次值覆盖默认值。
 Template 的接口与实现统一位于 `src/application/template/`，不在 Application 根目录堆放实现。
 
+启用 OpenAI 自动装配后，`application_runtime::openai(instance, options)` 返回具名
+`openai_template`。模板复用 `openai_service` 生命周期拥有的连接和 `openai_chat_model`，
+不会创建第二个协议客户端；它统一合并 GenAI telemetry listener、保留 `run_config` 的
+取消/trace/metadata，并用共享协程锁串行化同一连接上的请求。文本重载复制
+`openai_template_options::request`，按 system、默认消息、当前 user 输入的顺序构造请求；
+显式 `chat_request` 重载不改写调用方消息。模板必须在 `build()` 完成后或 route handler
+执行时解析，因为自动装配服务是在 Host 构建期间注册的。
+
 需要在 route handler 捕获 Runtime 时，使用双参数路由配置器：
 
 ```cpp
@@ -9338,6 +9346,20 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
                               : http::status::bad_gateway,
             response ? std::string{response->body()} : "upstream failed");
         co_return;
+    });
+    routes.post("/chat", [application](http::request_context& request)
+        -> task<void> {
+        auto model = application->openai("assistant",
+            {.request = {.model = "gpt-4o-mini"},
+                .system_prompt = "Answer concisely."});
+        if (!model) {
+            request.text(http::status::service_unavailable,
+                "model unavailable");
+            co_return;
+        }
+        auto response = co_await model->invoke(std::string{request.body()});
+        request.text(response ? http::status::ok : http::status::bad_gateway,
+            response ? std::string{response->content()} : response.error());
     });
 });
 ```
@@ -9601,7 +9623,7 @@ auto& users = registry.require<user_repository>("primary");
 | 配置 `type` | 注册服务 | 说明 |
 |---|---|---|
 | `http_client` | `http_client_service` | 带 W3C Trace Context 的出站 HTTP 客户端 |
-| `openai` | `openai_service` | OpenAI 客户端和 GenAI telemetry listener |
+| `openai` | `openai_service` | OpenAI 客户端、`openai_template` 和 GenAI telemetry listener |
 | `redis` | `redis_service` / `redis_cluster_service` | `mode=standalone` 连接池；`mode=cluster` 槽路由、seed failover 与健康检查 |
 | `mysql` | `mysql_service` | MySQL 连接池 |
 | `postgresql` | `postgresql_service` | PostgreSQL 连接池 |
@@ -9620,6 +9642,12 @@ Standalone Redis 服务通过 `redis_service::make_template(options, parent)` �
 仍由请求协程显式传入，框架不使用 thread-local 活动 span。返回的 `redis_template`
 不能超过 `redis_service` 生命周期。Cluster 服务继续使用 `cluster_client`，当前模板不
 隐式跨 slot 路由或拆分 multi-key 操作。
+
+OpenAI 服务通过 `openai_service::make_template(options)` 或
+`application_runtime::openai(instance, options)` 创建业务门面。模板借用服务拥有的模型、
+共享请求门和 telemetry listener，因此不能超过 Host 生命周期；同一服务创建的多个模板
+仍共享串行化边界。业务代码优先使用模板的 `invoke()` / `stream()`，不直接操作
+`openai::client`，只有协议扩展端点尚未进入模板时才使用底层客户端。
 
 AMQP 0-9-1 帧泵只监管单次连接会话，任务自身的重试预算为零，不单独触发 required
 恢复耗尽通知；错误保留在任务状态中。连接重建由服务生命周期的健康恢复任务发起，
@@ -14595,6 +14623,40 @@ struct chat_response {
 | `edit_image` | `auto edit_image(image_edit_request) -> task<std::expected<image_response, std::string>>` | 编辑图片 |
 | `create_image_variation` | `auto create_image_variation(image_variation_request) -> task<...>` | 图片变体 |
 | `moderate` | `auto moderate(moderation_request) -> task<std::expected<moderation_response, std::string>>` | 内容审核 |
+
+#### `openai_template` — Application 大模型门面
+
+Application 项目启用 OpenAI 自动装配后，优先使用
+`application_runtime::openai(instance, options)`，不要在 route 中自行创建或连接
+`openai::client`。返回的 `openai_template` 复用 managed service 的连接、
+`openai_chat_model`、共享异步请求门和 telemetry listener：
+
+```cpp
+auto model = runtime.openai("assistant",
+    {.request = {.model = "gpt-4o-mini", .temperature = 0.2},
+        .system_prompt = "Answer with verified facts."});
+if (!model)
+    co_return;
+
+openai::run_config run{
+    .metadata = {{"tenant", "acme"}},
+    .cancellation = &cancellation,
+    .trace_parent = parent,
+};
+auto response = co_await model->invoke("Summarize the incident", run);
+```
+
+| 方法 | 说明 |
+|------|------|
+| `invoke(chat_request, run_config)` | 执行完全显式的 Chat Completions 请求 |
+| `invoke(string, run_config)` | 使用默认请求、system prompt 和当前 user 输入 |
+| `stream(chat_request, handler, run_config)` | 显式请求的异步流式输出与背压 |
+| `stream(string, handler, run_config)` | 使用模板默认值的异步流式输出 |
+
+模板不会拥有 managed service，也不会隐藏取消或 trace context。每次调用会保留调用方
+listeners，并只追加一次 Application telemetry listener；同一具名服务的所有模板共享
+串行化边界，避免单条 keep-alive 连接上出现响应交错。直接构造模板时也可以传入任意
+`chat_model`，便于 fake 测试或接入其他模型 Strategy。
 
 #### 多模态与 Function Calling 类型
 

@@ -52,6 +52,7 @@ export import cnetmod.application.amqp091;
 export import cnetmod.application.amqp10;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+export import cnetmod.application.openai_template;
 export import cnetmod.application.openai;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC

@@ -1661,9 +1661,10 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     cnetmod::observability::telemetry_hub telemetry{*io,
         {.export_traces = false, .export_metrics = false, .export_logs = false}};
     application::task_supervisor supervisor{*io};
+    application::service_registry services;
     std::stop_source stopping;
     application::application_runtime runtime{*io, cpu_pool, supervisor,
-        telemetry, stopping.get_token()};
+        telemetry, services, stopping.get_token()};
     bool background_ran = false;
     auto accepted = runtime.spawn_managed("runtime-test",
         [&](cnetmod::cancel_token& token)

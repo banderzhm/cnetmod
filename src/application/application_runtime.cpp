@@ -2,13 +2,16 @@ module cnetmod.application.runtime;
 
 import cnetmod.coro.cancel;
 import cnetmod.protocol.http.middleware.compress;
+#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+import cnetmod.application.openai;
+#endif
 
 namespace cnetmod::application {
 
 application_runtime::application_runtime(io_context& io, thread_pool& cpu_pool,
     task_supervisor& supervisor, observability::telemetry_hub& telemetry,
-    std::stop_token cancellation) noexcept
-    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
+    service_registry& services, std::stop_token cancellation) noexcept
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), services_(services), cancellation_(cancellation), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
 {
 }
 
@@ -38,6 +41,18 @@ auto application_runtime::json() noexcept -> json_template&
 {
     return json_;
 }
+
+#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+auto application_runtime::openai(std::string_view instance,
+    openai_template_options options)
+    -> std::expected<openai_template, std::error_code>
+{
+    auto service = services_.require<openai_service>(instance);
+    if (!service)
+        return std::unexpected(service.error());
+    return service->get().make_template(std::move(options));
+}
+#endif
 
 auto application_runtime::schedule_on_cpu() noexcept -> pool_post_awaitable
 {

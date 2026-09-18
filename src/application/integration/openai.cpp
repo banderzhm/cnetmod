@@ -11,6 +11,8 @@ openai_service::openai_service(io_context& io,
     std::string instance, service_requirement requirement,
     recovery_policy recovery)
     : client_(io),
+      model_(client_),
+      request_gate_(std::make_shared<async_mutex>()),
       options_(std::move(options)),
       instance_(std::move(instance)),
       requirement_(requirement),
@@ -44,6 +46,13 @@ auto openai_service::run_configuration(openai::run_config configuration)
     if (listener && std::ranges::find(configuration.listeners, listener) == configuration.listeners.end())
         configuration.listeners.push_back(listener);
     return configuration;
+}
+
+auto openai_service::make_template(openai_template_options options)
+    -> openai_template
+{
+    return openai_template{model_, std::move(options), telemetry_listener(),
+        request_gate_};
 }
 
 auto openai_service::key() const -> service_key

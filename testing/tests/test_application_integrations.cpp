@@ -76,6 +76,10 @@ import cnetmod.coro.timer;
 import cnetmod.application.mysql;
 import cnetmod.protocol.mysql;
 #endif
+#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+import cnetmod.coro;
+import cnetmod.protocol.openai;
+#endif
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
 import cnetmod.application.redis;
 import cnetmod.protocol.redis;
@@ -1087,6 +1091,97 @@ TEST(application_database_start_rejects_cancelled_and_expired_context_before_war
 #endif
 
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+namespace {
+
+    class recording_chat_model final : public cnetmod::openai::chat_model
+    {
+    public:
+        auto invoke(cnetmod::openai::chat_request request,
+            const cnetmod::openai::run_config& configuration)
+            -> cnetmod::task<std::expected<cnetmod::openai::chat_response,
+                std::string>> override
+        {
+            last_request = std::move(request);
+            listener_count = configuration.listeners.size();
+            ++invocations;
+            co_return cnetmod::openai::chat_response{
+                .id = "response",
+                .model = last_request.model,
+                .choices = {{.index = 0,
+                    .msg = cnetmod::openai::message::model_output("ok"),
+                    .finish_reason = "stop"}}};
+        }
+
+        cnetmod::openai::chat_request last_request;
+        std::size_t listener_count = 0;
+        std::size_t invocations = 0;
+    };
+
+    class passive_run_listener final : public cnetmod::openai::run_listener
+    {
+    public:
+        void on_event(const cnetmod::openai::run_event&) override {}
+    };
+
+} // namespace
+
+TEST(application_openai_template_applies_defaults_observation_and_cancellation)
+{
+    recording_chat_model model;
+    passive_run_listener listener;
+    cnetmod::application::openai_template model_api{model,
+        {.request = {.model = "gpt-test",
+             .messages = {cnetmod::openai::message::developer("policy")}},
+            .system_prompt = "system"},
+        &listener};
+
+    auto response = cnetmod::sync_wait(model_api.invoke("hello"));
+    ASSERT_TRUE(response.has_value());
+    ASSERT_EQ(model.invocations, 1U);
+    ASSERT_EQ(model.listener_count, 1U);
+    ASSERT_EQ(model.last_request.model, "gpt-test");
+    ASSERT_EQ(model.last_request.messages.size(), 3U);
+    ASSERT_EQ(model.last_request.messages[0].role, "system");
+    ASSERT_EQ(model.last_request.messages[1].role, "developer");
+    ASSERT_EQ(model.last_request.messages[2].role, "user");
+
+    cnetmod::cancel_token cancellation;
+    cancellation.cancel();
+    auto cancelled = cnetmod::sync_wait(model_api.invoke("ignored",
+        {.listeners = {&listener}, .cancellation = &cancellation}));
+    ASSERT_FALSE(cancelled.has_value());
+    ASSERT_EQ(model.invocations, 1U);
+}
+
+TEST(application_runtime_resolves_named_openai_template)
+{
+    auto host = application::application_builder{"openai-template"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& config)
+                        {
+                            config.logging.manage_lifecycle = false;
+                            config.management.enabled = false;
+                            application::configured_service service{
+                                .name = "openai",
+                                .instance = "assistant",
+                                .enabled = true};
+                            service.properties["api_key"] = "test";
+                            config.services.emplace("assistant", std::move(service));
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+
+    auto model_api = host->runtime().openai("assistant");
+    ASSERT_TRUE(model_api.has_value());
+    auto missing = host->runtime().openai("missing");
+    ASSERT_FALSE(missing.has_value());
+    if (!missing)
+        ASSERT_EQ(missing.error(),
+            std::make_error_code(std::errc::no_such_file_or_directory));
+}
+
 TEST(application_openai_listener_is_optional_and_configuration_is_idempotent)
 {
     for (const bool enabled : {false, true})

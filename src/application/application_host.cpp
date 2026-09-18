@@ -50,7 +50,7 @@ public:
         std::vector<runtime_route_configurer> runtime_route_configurers,
         bool auto_configuration,
         std::optional<std::filesystem::path> configuration_file)
-        : configuration(std::move(configuration)), network(), io(make_io_context()), cpu_pool(this->configuration.execution.cpu_threads), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), runtime_facade(*io, cpu_pool, supervisor, telemetry, runtime_stop_source.get_token()), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
+        : configuration(std::move(configuration)), network(), io(make_io_context()), cpu_pool(this->configuration.execution.cpu_threads), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), runtime_facade(*io, cpu_pool, supervisor, telemetry, this->services, runtime_stop_source.get_token()), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
         for (auto& factory : runtime_middleware_factories)

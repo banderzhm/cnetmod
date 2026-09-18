@@ -10,7 +10,9 @@ import std;
 import cnetmod.application.auto_configuration;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
+import cnetmod.application.openai_template;
 import cnetmod.application.recovery_policy;
+import cnetmod.coro.mutex;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.observability;
@@ -40,6 +42,11 @@ public:
      */
     [[nodiscard]] auto run_configuration(openai::run_config configuration = {})
         -> openai::run_config;
+    /**
+     * @brief Creates a model template bound to this managed connection.
+     */
+    [[nodiscard]] auto make_template(openai_template_options options = {})
+        -> openai_template;
     [[nodiscard]] auto key() const -> service_key override;
     [[nodiscard]] auto requirement() const noexcept
         -> service_requirement override;
@@ -52,6 +59,8 @@ public:
 
 private:
     openai::client client_;
+    openai::openai_chat_model model_;
+    std::shared_ptr<async_mutex> request_gate_;
     std::optional<openai::telemetry_listener> telemetry_listener_;
     openai::connect_options options_;
     std::string instance_;

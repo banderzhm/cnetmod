@@ -1,3 +1,7 @@
+module;
+
+#include <cnetmod/config.hpp>
+
 /**
  * @brief Controlled access to application-owned execution and telemetry.
  */
@@ -8,6 +12,7 @@ import cnetmod.application.async_file_template;
 import cnetmod.application.rest_template;
 import cnetmod.application.json_template;
 import cnetmod.application.recovery_policy;
+import cnetmod.application.service_registry;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.bridge;
 import cnetmod.coro.task;
@@ -17,6 +22,9 @@ import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.compress;
+#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+import cnetmod.application.openai_template;
+#endif
 
 namespace cnetmod::application {
 
@@ -40,7 +48,7 @@ public:
     application_runtime(io_context& io, thread_pool& cpu_pool,
         task_supervisor& supervisor,
         observability::telemetry_hub& telemetry,
-        std::stop_token cancellation) noexcept;
+        service_registry& services, std::stop_token cancellation) noexcept;
 
     application_runtime(const application_runtime&) = delete;
     auto operator=(const application_runtime&) -> application_runtime& = delete;
@@ -115,6 +123,18 @@ public:
      */
     [[nodiscard]] auto json() noexcept -> json_template&;
 
+#ifdef CNETMOD_HAS_PROTOCOL_OPENAI
+    /**
+     * @brief Resolves a named managed OpenAI service as a model template.
+     *
+     * Resolve the template when handling a request or after build() completes,
+     * because auto-configuration registers managed services during host build.
+     */
+    [[nodiscard]] auto openai(std::string_view instance = "default",
+        openai_template_options options = {})
+        -> std::expected<openai_template, std::error_code>;
+#endif
+
     /**
      * @brief Creates response compression managed by the application CPU pool.
      *
@@ -155,6 +175,7 @@ private:
     thread_pool& cpu_pool_;
     task_supervisor& supervisor_;
     observability::telemetry_hub& telemetry_;
+    service_registry& services_;
     std::stop_token cancellation_;
     async_file_template files_;
     rest_template rest_;
