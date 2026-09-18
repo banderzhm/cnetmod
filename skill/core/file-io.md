@@ -106,6 +106,18 @@ export auto async_file_stat(io_context& ctx, const filesystem::path& path)
     -> task<expected<file_stat, error_code>>;
 ```
 
+#### `async_file_remove()`
+**签名**:
+```cpp
+export auto async_file_remove(io_context& ctx, const filesystem::path& path)
+    -> task<expected<void, error_code>>;
+export auto async_file_remove(io_context& ctx, const filesystem::path& path,
+    cancel_token& token) -> task<expected<void, error_code>>;
+```
+
+删除普通文件并恢复到传入的事件循环；目标不存在按幂等成功处理。取消只能阻止尚未提交的
+操作，不能撤销已经由平台工作线程完成的删除。
+
 #### `async_file_read()`
 **签名**:
 ```cpp
@@ -125,8 +137,13 @@ export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 ```cpp
 export auto async_file_read_all(io_context& ctx, const filesystem::path& path)
     -> task<expected<std::string, error_code>>;
+export auto async_file_read_all(io_context& ctx, const filesystem::path& path,
+    cancel_token& token) -> task<expected<std::string, error_code>>;
 export auto async_file_write_all(io_context& ctx,
     const filesystem::path& path, std::string_view content)
+    -> task<expected<void, error_code>>;
+export auto async_file_write_all(io_context& ctx,
+    const filesystem::path& path, std::string_view content, cancel_token& token)
     -> task<expected<void, error_code>>;
 ```
 

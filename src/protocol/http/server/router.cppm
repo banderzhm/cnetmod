@@ -22,16 +22,8 @@ import cnetmod.utils.flat_map;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::http {
-export struct route_params
-{
-    cnetmod::flat_map<std::string, std::string, std::less<>> named;
-    std::string wildcard;
-    [[nodiscard]] auto get(std::string_view key) const noexcept
-        -> std::string_view;
-};
-
 /**
- * Describes the lifecycle of a Server-Sent Events response stream.
+ * @brief Describes the lifecycle of a Server-Sent Events response stream.
  */
 export enum class sse_stream_state
 {
@@ -40,6 +32,23 @@ export enum class sse_stream_state
     open,
     failed,
     closed
+};
+
+/**
+ * @brief Bounds the lifetime and socket write latency of one SSE response.
+ */
+export struct sse_stream_options
+{
+    std::chrono::milliseconds max_duration{120000};
+    std::chrono::milliseconds write_timeout{5000};
+};
+
+export struct route_params
+{
+    cnetmod::flat_map<std::string, std::string, std::less<>> named;
+    std::string wildcard;
+    [[nodiscard]] auto get(std::string_view key) const noexcept
+        -> std::string_view;
 };
 
 export class request_context
@@ -155,6 +164,11 @@ public:
     [[nodiscard]] auto client_address() const -> std::string;
 
 private:
+    friend class sse_stream;
+    friend class router;
+    void configure_sse(sse_stream_options options) noexcept;
+    void expire_sse() noexcept;
+    auto write_sse_bytes(std::string_view bytes) -> task<bool>;
     auto write_sse_frame(std::string frame) -> task<bool>;
     void drain_available_body_chunks() const;
     void init_path_query(std::string_view uri);
@@ -173,6 +187,8 @@ private:
     std::optional<form_data> form_cache_;
     mutable bool body_stream_drained_ = false;
     sse_stream_state sse_state_ = sse_stream_state::not_started;
+    deadline sse_deadline_{};
+    std::chrono::milliseconds sse_write_timeout_{5000};
     cnetmod::deadline deadline_{};
     cnetmod::cancel_token cancellation_;
 
@@ -197,7 +213,81 @@ private:
     std::uint8_t trace_flags_{};
 };
 
+/**
+ * @brief Writes one Server-Sent Events response through a request context.
+ *
+ * The stream does not own the request context. It centralizes the conservative
+ * commit state, lazy stream start, named event delivery, heartbeat frames, and
+ * terminal frame. Payload serialization remains an application concern.
+ */
+export class sse_stream
+{
+public:
+    /**
+     * @brief Binds the stream to a request context for the handler lifetime.
+     */
+    explicit sse_stream(request_context& context,
+        sse_stream_options options = {}) noexcept;
+
+    sse_stream(const sse_stream&) = delete;
+    auto operator=(const sse_stream&) -> sse_stream& = delete;
+
+    /**
+     * @brief Reports whether SSE header delivery has been attempted.
+     *
+     * Once true, callers must not fall back to a regular HTTP response, even
+     * when the header or first frame failed to reach the peer.
+     */
+    [[nodiscard]] auto started() const noexcept -> bool;
+
+    /**
+     * @brief Returns the current response stream state.
+     */
+    [[nodiscard]] auto state() const noexcept -> sse_stream_state;
+
+    /**
+     * @brief Commits the SSE response headers if the stream has not started.
+     */
+    auto begin(int status_code = status::ok) -> task<bool>;
+
+    /**
+     * @brief Sends one data frame, optionally with a named event.
+     */
+    auto send(std::string_view payload, std::string_view event = {})
+        -> task<bool>;
+
+    /**
+     * @brief Sends one SSE comment frame.
+     */
+    auto comment(std::string_view value) -> task<bool>;
+
+    /**
+     * @brief Sends the standard heartbeat comment frame.
+     */
+    auto heartbeat() -> task<bool>;
+
+    /**
+     * @brief Sends the terminal frame and closes this logical stream.
+     */
+    auto finish() -> task<bool>;
+
+    /**
+     * @brief Creates a callback suitable for incremental producer output.
+     *
+     * The callback is request-scoped and must not outlive this stream or its
+     * route handler. Use the Application task supervisor for longer-lived
+     * producers and stop them before the request completes.
+     */
+    [[nodiscard]] auto callback(std::string event = {})
+        -> std::function<task<bool>(std::string_view)>;
+
+private:
+    request_context* context_;
+};
+
 export using handler_fn = std::function<task<void>(request_context&)>;
+export using sse_handler_fn =
+    std::function<task<void>(request_context&, sse_stream&)>;
 export using next_fn = std::function<task<void>()>;
 export using middleware_fn =
     std::function<task<void>(request_context&, next_fn)>;
@@ -243,6 +333,23 @@ public:
     auto del(std::string_view pattern, handler_fn fn) -> router&;
     auto patch(std::string_view pattern, handler_fn fn) -> router&;
     auto any(std::string_view pattern, handler_fn fn) -> router&;
+
+    /**
+     * @brief Registers a GET endpoint with a request-bound SSE stream.
+     */
+    auto sse_get(std::string_view pattern, sse_handler_fn fn,
+        std::optional<sse_stream_options> options = std::nullopt) -> router&;
+
+    /**
+     * @brief Registers a POST endpoint with a request-bound SSE stream.
+     */
+    auto sse_post(std::string_view pattern, sse_handler_fn fn,
+        std::optional<sse_stream_options> options = std::nullopt) -> router&;
+
+    /**
+     * @brief Sets the options inherited by subsequently registered SSE routes.
+     */
+    auto sse_defaults(sse_stream_options options) -> router&;
     [[nodiscard]] auto match(http_method method, std::string_view path) const
         -> std::optional<match_result>;
     [[nodiscard]] auto match(std::string_view method, std::string_view path) const
@@ -261,6 +368,8 @@ private:
 
     auto add(http_method method, std::string_view pattern, handler_fn fn)
         -> router&;
+    auto add_sse(http_method method, std::string_view pattern,
+        sse_handler_fn fn, std::optional<sse_stream_options> options) -> router&;
     auto add_route(std::optional<http_method> method, std::string_view pattern,
         handler_fn fn) -> router&;
     [[nodiscard]] auto find_exact(http_method method,
@@ -270,6 +379,7 @@ private:
         const std::vector<std::string_view>& parts,
         route_params& out) -> bool;
     std::vector<route_entry> entries_;
+    sse_stream_options sse_defaults_{};
     std::vector<std::size_t> static_exact_indices_;
     std::unordered_map<std::string, std::vector<std::size_t>> exact_index_;
     std::unordered_map<std::string, std::vector<std::size_t>>

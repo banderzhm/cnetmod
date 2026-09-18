@@ -1612,6 +1612,35 @@ auto async_file_stat(io_context& ctx,
     co_return result;
 }
 
+auto async_file_remove(io_context& ctx, const std::filesystem::path& path)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_await pool_post_awaitable{file_pool()};
+    std::error_code error;
+    const auto status = std::filesystem::symlink_status(path, error);
+    if (!error && std::filesystem::is_directory(status))
+        error = std::make_error_code(std::errc::is_a_directory);
+    if (!error)
+        (void)std::filesystem::remove(path, error);
+    co_await post_awaitable{ctx};
+    if (error == std::errc::no_such_file_or_directory)
+        error.clear();
+    if (error)
+        co_return std::unexpected(error);
+    co_return std::expected<void, std::error_code>{};
+}
+
+auto async_file_remove(io_context& ctx, const std::filesystem::path& path,
+    cancel_token& token) -> task<std::expected<void, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    auto result = co_await async_file_remove(ctx, path);
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    co_return result;
+}
+
 auto async_file_close(io_context& ctx, file& f)
     -> task<std::expected<void, std::error_code>>
 {

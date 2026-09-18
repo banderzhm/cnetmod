@@ -12,6 +12,8 @@ export import cnetmod.application.managed_service;
 export import cnetmod.application.recovery_policy;
 export import cnetmod.application.service_registry;
 export import cnetmod.application.task_supervisor;
+export import cnetmod.application.async_file_template;
+export import cnetmod.application.rest_template;
 export import cnetmod.application.runtime;
 export import cnetmod.application.json;
 export import cnetmod.application.health_registry;

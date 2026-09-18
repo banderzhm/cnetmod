@@ -434,6 +434,26 @@ export auto async_file_stat(io_context& ctx,
     cancel_token& token)
     -> task<std::expected<file_stat, std::error_code>>;
 
+/**
+ * @brief Removes a file without blocking the calling event loop.
+ *
+ * Removing a path that does not exist succeeds. Directory removal is not part
+ * of this API. Platform backends resume the coroutine on the supplied context.
+ */
+export auto async_file_remove(io_context& ctx,
+    const std::filesystem::path& path)
+    -> task<std::expected<void, std::error_code>>;
+
+/**
+ * @brief Removes a file with best-effort cancellation.
+ *
+ * Cancellation can prevent work before submission but cannot undo a removal
+ * that has already completed in a platform worker.
+ */
+export auto async_file_remove(io_context& ctx,
+    const std::filesystem::path& path, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>;
+
 /// Async file close (best-effort, underlying close has no error reporting)
 /// Usage: co_await async_file_close(ctx, f);
 export auto async_file_close(io_context& ctx, file& f)
@@ -460,6 +480,13 @@ export auto async_file_read_all(io_context& ctx,
     const std::filesystem::path& path)
     -> task<std::expected<std::string, std::error_code>>;
 
+/**
+ * @brief Reads an entire file with cancellation between every operation.
+ */
+export auto async_file_read_all(io_context& ctx,
+    const std::filesystem::path& path, cancel_token& token)
+    -> task<std::expected<std::string, std::error_code>>;
+
 /// Async file write
 /// Usage: auto n = co_await async_file_write(ctx, f, buf, offset);
 export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
@@ -475,6 +502,14 @@ export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 /// Usage: co_await async_file_write_all(ctx, "out.txt", content);
 export auto async_file_write_all(io_context& ctx,
     const std::filesystem::path& path, std::string_view content)
+    -> task<std::expected<void, std::error_code>>;
+
+/**
+ * @brief Writes an entire string with cancellation between every operation.
+ */
+export auto async_file_write_all(io_context& ctx,
+    const std::filesystem::path& path, std::string_view content,
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
 export using file_io_result =

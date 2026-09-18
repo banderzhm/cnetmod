@@ -43,7 +43,7 @@ export inline auto request_timeout(std::chrono::steady_clock::duration max_time)
         co_await next();
 
         auto elapsed = std::chrono::steady_clock::now() - start;
-        if (elapsed > max_time)
+        if (elapsed > max_time && !ctx.sse_started())
         {
             auto ms = std::chrono::duration<double, std::milli>(elapsed).count();
             auto limit_ms = std::chrono::duration<double, std::milli>(max_time).count();

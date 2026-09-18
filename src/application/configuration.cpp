@@ -270,7 +270,7 @@ namespace {
             }
             if (const auto item = root.find("http"); item != root.end())
             {
-                if (!keys_are_known(*item, {"address", "port", "max_connections", "request_timeout_ms", "request_ids", "access_logging", "recover_exceptions"}))
+                if (!keys_are_known(*item, {"address", "port", "max_connections", "request_timeout_ms", "sse", "request_ids", "access_logging", "recover_exceptions"}))
                     return false;
                 assign(*item, "address", result.http.address);
                 assign(*item, "port", result.http.port);
@@ -279,6 +279,16 @@ namespace {
                     timeout != item->end())
                     result.http.request_timeout = std::chrono::milliseconds{
                         timeout->get<std::int64_t>()};
+                if (const auto sse = item->find("sse"); sse != item->end())
+                {
+                    if (!keys_are_known(*sse,
+                            {"max_duration_ms", "write_timeout_ms"}))
+                        return false;
+                    assign_duration(*sse, "max_duration_ms",
+                        result.http.sse_max_duration);
+                    assign_duration(*sse, "write_timeout_ms",
+                        result.http.sse_write_timeout);
+                }
                 assign(*item, "request_ids", result.http.request_ids);
                 assign(*item, "access_logging", result.http.access_logging);
                 assign(*item, "recover_exceptions",
@@ -618,6 +628,8 @@ auto validate_configuration(const application_configuration& value)
         value.http.address.empty() ||
         value.http.port == 0U ||
         (value.http.request_timeout && !positive(*value.http.request_timeout)) ||
+        !positive(value.http.sse_max_duration) ||
+        !positive(value.http.sse_write_timeout) ||
         !std::isfinite(value.observability.sampling_ratio) || value.observability.sampling_ratio < 0.0 ||
         value.observability.sampling_ratio > 1.0 ||
         !positive(value.lifecycle.service_start_timeout) ||
@@ -781,6 +793,8 @@ static auto prepare_configuration_reload(application_configuration& active,
         active.http.port != candidate.http.port ||
         active.http.max_connections != candidate.http.max_connections ||
         active.http.request_timeout != candidate.http.request_timeout ||
+        active.http.sse_max_duration != candidate.http.sse_max_duration ||
+        active.http.sse_write_timeout != candidate.http.sse_write_timeout ||
         active.http.request_ids != candidate.http.request_ids ||
         active.http.access_logging != candidate.http.access_logging ||
         active.http.recover_exceptions != candidate.http.recover_exceptions ||

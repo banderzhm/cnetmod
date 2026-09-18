@@ -4,6 +4,8 @@
 export module cnetmod.application.runtime;
 
 import std;
+import cnetmod.application.async_file_template;
+import cnetmod.application.rest_template;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.bridge;
@@ -79,6 +81,16 @@ public:
     }
 
     /**
+     * @brief Returns application-managed asynchronous file operations.
+     */
+    [[nodiscard]] auto files() noexcept -> async_file_template&;
+
+    /**
+     * @brief Returns pooled and observable outbound HTTP operations.
+     */
+    [[nodiscard]] auto rest() noexcept -> rest_template&;
+
+    /**
      * @brief Reports whether application shutdown has been requested.
      */
     [[nodiscard]] auto stop_requested() const noexcept -> bool;
@@ -108,6 +120,8 @@ private:
     task_supervisor& supervisor_;
     observability::telemetry_hub& telemetry_;
     std::stop_token cancellation_;
+    async_file_template files_;
+    rest_template rest_;
 };
 
 } // namespace cnetmod::application

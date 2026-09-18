@@ -94,9 +94,30 @@ namespace {
         return std::to_string(sequence.fetch_add(1, std::memory_order_relaxed) + 1);
     }
 
+    /**
+     * @brief Terminates an already committed SSE response without HTTP fallback.
+     */
+    auto recover_sse_request(http::request_context& context,
+        std::string_view error_id) -> task<void>
+    {
+        try
+        {
+            const auto payload = std::format(
+                R"({{"error":"internal server error","error_id":"{}"}})",
+                error_id);
+            if (co_await context.sse_send(payload, "error"))
+                (void)co_await context.sse_done();
+        }
+        catch (...)
+        {
+            // Recovery must not replace the original handler failure.
+        }
+    }
+
     auto recover_request(const recover_options& opts, http::request_context& ctx,
         http::next_fn next) -> task<void>
     {
+        std::string sse_error_id;
         try
         {
             co_await next();
@@ -120,11 +141,16 @@ namespace {
                     ctx.query_string(), content_type, content_length,
                     ctx.body().size(), params, exception_type_name(exception),
                     exception.what());
-            ctx.resp().set_header("X-Error-Id", error_id);
-            ctx.json(
-                http::status::internal_server_error,
-                std::format(R"({{"error":"internal server error","error_id":"{}"}})",
-                    error_id));
+            if (ctx.sse_started())
+                sse_error_id = error_id;
+            else
+            {
+                ctx.resp().set_header("X-Error-Id", error_id);
+                ctx.json(
+                    http::status::internal_server_error,
+                    std::format(R"({{"error":"internal server error","error_id":"{}"}})",
+                        error_id));
+            }
         }
         catch (...)
         {
@@ -134,12 +160,19 @@ namespace {
                 ctx.query_string(), ctx.get_header("Content-Type"),
                 ctx.get_header("Content-Length"), ctx.body().size(),
                 params_to_string(ctx.params()));
-            ctx.resp().set_header("X-Error-Id", error_id);
-            ctx.json(
-                http::status::internal_server_error,
-                std::format(R"({{"error":"internal server error","error_id":"{}"}})",
-                    error_id));
+            if (ctx.sse_started())
+                sse_error_id = error_id;
+            else
+            {
+                ctx.resp().set_header("X-Error-Id", error_id);
+                ctx.json(
+                    http::status::internal_server_error,
+                    std::format(R"({{"error":"internal server error","error_id":"{}"}})",
+                        error_id));
+            }
         }
+        if (!sse_error_id.empty())
+            co_await recover_sse_request(ctx, sse_error_id);
     }
 } // namespace
 

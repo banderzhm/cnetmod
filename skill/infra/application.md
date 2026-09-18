@@ -65,6 +65,81 @@ auto host = cnetmod::application::application_builder{"order-service"}
 JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
 `std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
 
+`application_runtime::files()` 返回 `async_file_template`，其
+`open/read/write/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
+领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
+重载；`remove()` 对不存在的目标幂等成功。
+
+`application_runtime::rest()` 返回 `rest_template`，用于业务出站 HTTP 调用。它组合既有
+HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/put/patch/remove`；
+成功请求的 client 才会归还复用池，传输失败或取消的 client 会关闭并丢弃。业务代码不得为
+普通 HTTP 调用自行创建 `http::client`，也不得为了完成一次请求手工停止事件循环。需要请求头
+或其他高级选项时构造 `http::request` 后调用 `exchange()`；需要操作级取消时使用接收
+`cancel_token&` 的重载。`rest_template_options::default_headers` 注入模板级请求头，
+`rest_request_options::headers` 注入单次请求头；名称按 HTTP 规则忽略大小写，单次值覆盖默认值。
+Template 的接口与实现统一位于 `src/application/template/`，不在 Application 根目录堆放实现。
+
+需要在 route handler 捕获 Runtime 时，使用双参数路由配置器：
+
+```cpp
+builder.routes([](http::router& routes, application_runtime& runtime) {
+    auto* application = &runtime;
+    routes.post("/archive", [application](http::request_context& request)
+        -> task<void> {
+        auto saved = co_await request.with_deadline(
+            [application](cancel_token& token) {
+                return application->files().write_all("archive.json", "{}", token);
+            });
+        request.text(saved ? http::status::ok : http::status::internal_server_error,
+            saved ? "saved" : "failed");
+        co_return;
+    });
+    routes.get("/upstream", [application](http::request_context& request)
+        -> task<void> {
+        auto response = co_await application->rest().get(
+            "https://service.internal/health",
+            {.headers = {{"Authorization", "Bearer runtime-token"}}});
+        request.text(response ? http::status::ok
+                              : http::status::bad_gateway,
+            response ? std::string{response->body()} : "upstream failed");
+        co_return;
+    });
+});
+```
+
+双参数配置器在 Host Runtime 构造完成后、`build()` 返回前执行。handler 可在 Host 生命周期
+内安全捕获 Runtime 引用。HTTP 底层不反向依赖 Application，也不提供线程局部的
+`current_io_context()`。
+
+Application 的 SSE 接口直接在同一个 routes 配置器中使用 `router::sse_get()` 或
+`router::sse_post()` 声明。框架按请求注入 `sse_stream&`，业务只序列化事件 payload；
+SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责：
+
+```cpp
+builder.routes([](http::router& routes) {
+    routes.sse_post("/chat", [](http::request_context& request,
+                                http::sse_stream& stream) -> task<void> {
+        if (!co_await stream.send(R"({"text":"hello"})", "delta"))
+            co_return;
+        co_await stream.send(R"({"tokens":1})", "done");
+        co_await stream.finish();
+    }, http::sse_stream_options{
+        .max_duration = std::chrono::seconds{60},
+        .write_timeout = std::chrono::seconds{3},
+    });
+});
+```
+
+`stream.started()` 为 false 时，业务仍可返回普通 HTTP 错误；一旦为 true，只能继续写 SSE
+错误/结束帧或结束连接。Application recover 中间件对未捕获异常遵守该边界，不会在 SSE
+已经提交后错误地回退 JSON 响应。
+
+Application 默认从 `http.sse` 为所有 SSE 路由注入超时：整条流最长 120 秒，单次响应头或
+事件帧写出最长 5 秒。路由尾部的 `sse_stream_options` 可按接口缩短或延长，但两个值都必须
+为正数。达到总时限或写超时后，当前写操作会被取消、流进入 `failed`、socket 被关闭；不会
+继续占用连接或回退普通 HTTP。调用 OpenAI、数据库等下游操作时应通过
+`request.with_deadline()` 继承同一个总预算，避免业务生产者在连接结束后继续运行。
+
 自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。该 API 是
 协议适配器的基础设施扩展点，不是业务执行入口；普通业务只能从 Host 获得 Runtime 门面。
 工厂通过
@@ -124,7 +199,11 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   "http": {
     "address": "0.0.0.0",
     "port": 8080,
-    "request_timeout_ms": 30000
+    "request_timeout_ms": 30000,
+    "sse": {
+      "max_duration_ms": 120000,
+      "write_timeout_ms": 5000
+    }
   },
   "management": {
     "enabled": true,

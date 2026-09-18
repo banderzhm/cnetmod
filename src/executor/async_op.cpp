@@ -340,24 +340,67 @@ auto async_file_read_all(io_context& ctx, const std::filesystem::path& path)
     auto st = co_await async_file_stat(ctx, path);
     if (!st)
     {
-        co_await async_file_close(ctx, *handle);
+        (void)co_await async_file_close(ctx, *handle);
         co_return std::unexpected(st.error());
     }
 
     std::string content(static_cast<std::size_t>(st->size), '\0');
-    if (st->size > 0)
+    std::size_t read = 0;
+    while (read < content.size())
     {
-        auto n = co_await async_file_read(ctx, *handle,
-            mutable_buffer{content.data(), content.size()}, 0);
-        if (!n)
+        auto result = co_await async_file_read(ctx, *handle,
+            mutable_buffer{content.data() + read, content.size() - read}, read);
+        if (!result)
         {
-            co_await async_file_close(ctx, *handle);
-            co_return std::unexpected(n.error());
+            (void)co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(result.error());
         }
-        content.resize(*n);
+        if (*result == 0)
+            break;
+        read += *result;
+    }
+    content.resize(read);
+    auto closed = co_await async_file_close(ctx, *handle);
+    if (!closed)
+        co_return std::unexpected(closed.error());
+    co_return content;
+}
+
+auto async_file_read_all(io_context& ctx, const std::filesystem::path& path,
+    cancel_token& token)
+    -> task<std::expected<std::string, std::error_code>>
+{
+    auto handle = co_await async_file_open(ctx, path, open_mode::read, token);
+    if (!handle)
+        co_return std::unexpected(handle.error());
+
+    auto st = co_await async_file_stat(ctx, path, token);
+    if (!st)
+    {
+        (void)co_await async_file_close(ctx, *handle);
+        co_return std::unexpected(st.error());
     }
 
-    co_await async_file_close(ctx, *handle);
+    std::string content(static_cast<std::size_t>(st->size), '\0');
+    std::size_t read = 0;
+    while (read < content.size())
+    {
+        auto result = co_await async_file_read(ctx, *handle,
+            mutable_buffer{content.data() + read, content.size() - read}, read,
+            token);
+        if (!result)
+        {
+            (void)co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(result.error());
+        }
+        if (*result == 0)
+            break;
+        read += *result;
+    }
+    content.resize(read);
+    auto closed = co_await async_file_close(ctx, *handle);
+    if (!closed)
+        co_return std::unexpected(closed.error());
     co_return content;
 }
 
@@ -380,14 +423,56 @@ auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
                 written);
             if (!n)
             {
-                co_await async_file_close(ctx, *handle);
+                (void)co_await async_file_close(ctx, *handle);
                 co_return std::unexpected(n.error());
+            }
+            if (*n == 0)
+            {
+                (void)co_await async_file_close(ctx, *handle);
+                co_return std::unexpected(
+                    std::make_error_code(std::errc::io_error));
             }
             written += *n;
         }
     }
 
-    co_await async_file_close(ctx, *handle);
+    auto closed = co_await async_file_close(ctx, *handle);
+    if (!closed)
+        co_return std::unexpected(closed.error());
+    co_return {};
+}
+
+auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
+    std::string_view content, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    auto handle = co_await async_file_open(ctx, path,
+        open_mode::write | open_mode::create | open_mode::truncate, token);
+    if (!handle)
+        co_return std::unexpected(handle.error());
+
+    std::size_t written = 0;
+    while (written < content.size())
+    {
+        auto result = co_await async_file_write(ctx, *handle,
+            const_buffer{content.data() + written, content.size() - written},
+            written, token);
+        if (!result)
+        {
+            (void)co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(result.error());
+        }
+        if (*result == 0)
+        {
+            (void)co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(
+                std::make_error_code(std::errc::io_error));
+        }
+        written += *result;
+    }
+    auto closed = co_await async_file_close(ctx, *handle);
+    if (!closed)
+        co_return std::unexpected(closed.error());
     co_return {};
 }
 

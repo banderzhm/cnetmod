@@ -1675,12 +1675,34 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
 
     std::optional<std::expected<nlohmann::json, std::error_code>> parsed;
     std::optional<std::expected<std::string, std::error_code>> dumped;
+    std::optional<std::expected<void, std::error_code>> file_written;
+    std::optional<std::expected<std::string, std::error_code>> file_read;
+    std::optional<std::expected<void, std::error_code>> file_removed;
+    std::optional<std::expected<void, std::error_code>> directory_rejected;
+    const auto file_path = std::filesystem::temp_directory_path() /
+        ("cnetmod-runtime-" +
+            std::to_string(std::chrono::steady_clock::now()
+                    .time_since_epoch()
+                    .count()) +
+            ".json");
+    const auto directory_path = file_path.string() + ".directory";
+    ASSERT_TRUE(std::filesystem::create_directory(directory_path));
     auto run = [&]() -> cnetmod::task<void>
     {
+        cnetmod::cancel_token file_cancellation;
         parsed = co_await application::parse_offloaded(runtime,
             R"({"value":42})");
         if (parsed)
             dumped = co_await application::dump_offloaded(runtime, **parsed);
+        file_written = co_await runtime.files().write_all(
+            file_path, "payload", file_cancellation);
+        file_read = co_await runtime.files().read_all(
+            file_path, file_cancellation);
+        file_removed = co_await runtime.files().remove(
+            file_path, file_cancellation);
+        auto removed_again = co_await runtime.files().remove(file_path);
+        ASSERT_TRUE(removed_again.has_value());
+        directory_rejected = co_await runtime.files().remove(directory_path);
         supervisor.request_stop();
         (void)co_await supervisor.join();
         io->stop();
@@ -1698,6 +1720,17 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_TRUE(dumped.has_value());
     ASSERT_TRUE(dumped->has_value());
     ASSERT_TRUE(dumped->value().contains("42"));
+    ASSERT_TRUE(file_written.has_value());
+    ASSERT_TRUE(file_written->has_value());
+    ASSERT_TRUE(file_read.has_value());
+    ASSERT_TRUE(file_read->has_value());
+    ASSERT_EQ(file_read->value(), std::string{"payload"});
+    ASSERT_TRUE(file_removed.has_value());
+    ASSERT_TRUE(file_removed->has_value());
+    ASSERT_TRUE(directory_rejected.has_value());
+    ASSERT_FALSE(directory_rejected->has_value());
+    ASSERT_TRUE(std::filesystem::is_directory(directory_path));
+    ASSERT_TRUE(std::filesystem::remove(directory_path));
 
     stopping.request_stop();
     ASSERT_TRUE(runtime.stop_requested());
@@ -1711,6 +1744,28 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_FALSE(rejected.has_value());
     ASSERT_EQ(rejected.error(),
         std::make_error_code(std::errc::operation_canceled));
+}
+
+TEST(application_builder_runtime_routes_receive_host_runtime)
+{
+    application::application_runtime* observed = nullptr;
+    auto host = application::application_builder{"runtime-routes"}
+                    .routes(application::runtime_route_configurer{
+                        [&observed](cnetmod::http::router& routes,
+                            application::application_runtime& runtime)
+                        {
+                            observed = &runtime;
+                            routes.get("/runtime",
+                                [](cnetmod::http::request_context& context)
+                                    -> cnetmod::task<void>
+                                {
+                                    context.text(cnetmod::http::status::ok, "ok");
+                                    co_return;
+                                });
+                        }})
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    ASSERT_EQ(observed, &host->runtime());
 }
 
 TEST(application_builder_composes_host_owned_service_factories_before_freeze)
@@ -1807,7 +1862,14 @@ TEST(application_builder_executes_ordered_business_middleware)
                                     -> cnetmod::task<void>
                                 {
                                     events.push_back("route");
-                                    request.text(cnetmod::http::status::ok, "ok");
+                                    const auto headers_ok =
+                                        request.get_header("X-Template") == "request" &&
+                                        request.get_header("X-Default") == "present" &&
+                                        request.get_header("X-Request") == "present";
+                                    request.text(headers_ok
+                                            ? cnetmod::http::status::ok
+                                            : cnetmod::http::status::bad_request,
+                                        headers_ok ? "ok" : "missing headers");
                                     co_return;
                                 });
                         })
@@ -1834,18 +1896,34 @@ TEST(application_builder_executes_ordered_business_middleware)
         std::this_thread::sleep_for(std::chrono::milliseconds{5});
     }
     bool response_ok = false;
+    bool failed_client_discarded = false;
     if (host->state() == application::application_state::running)
     {
         auto io = cnetmod::make_io_context();
         auto request = [&]() -> cnetmod::task<void>
         {
-            cnetmod::http::client client{*io,
-                {.request_timeout = std::chrono::milliseconds{500},
-                    .keep_alive = false}};
-            auto response = co_await client.get(std::format(
-                "http://127.0.0.1:{}/middleware-order", endpoint->port()));
+            cnetmod::observability::otlp_http_options telemetry_options;
+            telemetry_options.export_traces = false;
+            telemetry_options.export_metrics = false;
+            telemetry_options.export_logs = false;
+            cnetmod::observability::telemetry_hub telemetry{
+                *io, std::move(telemetry_options)};
+            application::rest_template rest{*io, telemetry,
+                application::rest_template_options{
+                    .client = {.request_timeout =
+                                   std::chrono::milliseconds{500},
+                        .keep_alive = false},
+                    .default_headers = {{"X-Template", "default"},
+                        {"X-Default", "present"}}}};
+            auto response = co_await rest.get(std::format(
+                                                  "http://127.0.0.1:{}/middleware-order",
+                                                  endpoint->port()),
+                {.headers = {{"X-Template", "request"},
+                     {"X-Request", "present"}}});
             response_ok = response && response->status_code() == 200 &&
                 response->body() == "ok";
+            const auto failed = co_await rest.get("not-a-valid-http-url");
+            failed_client_discarded = !failed && rest.idle_count() == 0;
             io->stop();
         };
         cnetmod::spawn(*io, request());
@@ -1855,6 +1933,7 @@ TEST(application_builder_executes_ordered_business_middleware)
     runner.join();
     ASSERT_TRUE(completed.has_value() && completed->has_value());
     ASSERT_TRUE(response_ok);
+    ASSERT_TRUE(failed_client_discarded);
     ASSERT_TRUE(events == std::vector<std::string>({"first-enter", "second-enter", "route", "second-exit", "first-exit"}));
 
     bool rejected = false;
@@ -1876,7 +1955,7 @@ TEST(application_configuration_precedence_and_redaction)
         "cnetmod-application-test.json";
     {
         std::ofstream output{path};
-        output << R"({"application":{"name":"json-name","cpu_threads":3},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
+        output << R"({"application":{"name":"json-name","cpu_threads":3},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080,"sse":{"max_duration_ms":45000,"write_timeout_ms":2500}},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
     }
 #ifdef _WIN32
     _putenv_s("CNETMOD_HTTP_PORT", "18081");
@@ -1911,6 +1990,10 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_TRUE(host.has_value());
     ASSERT_EQ(host->configuration().name, "builder-name");
     ASSERT_EQ(host->configuration().http.port, std::uint16_t{18082});
+    ASSERT_EQ(host->configuration().http.sse_max_duration,
+        std::chrono::milliseconds{45000});
+    ASSERT_EQ(host->configuration().http.sse_write_timeout,
+        std::chrono::milliseconds{2500});
     ASSERT_EQ(host->configuration().execution.cpu_threads, 5U);
     ASSERT_EQ(host->configuration().crash_dump.directory,
         std::filesystem::path{"application-crashes"});
@@ -2671,26 +2754,32 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
         auto io = cnetmod::make_io_context();
         auto inspect = [&]() -> cnetmod::task<void>
         {
-            cnetmod::http::client client{*io,
+            cnetmod::observability::otlp_http_options telemetry_options;
+            telemetry_options.export_traces = false;
+            telemetry_options.export_metrics = false;
+            telemetry_options.export_logs = false;
+            cnetmod::observability::telemetry_hub telemetry{
+                *io, std::move(telemetry_options)};
+            application::rest_template rest{*io, telemetry,
                 {.request_timeout = std::chrono::milliseconds{300},
                     .keep_alive = false}};
             const auto url = std::format("http://127.0.0.1:{}", management_endpoint->port());
             for (unsigned attempt = 0; attempt < 20; ++attempt)
             {
-                const auto response = co_await client.get(url + "/actuator/prometheus");
+                const auto response = co_await rest.get(url + "/actuator/prometheus");
                 scraped = response && (metrics_enabled ? response->status_code() == 200 && response->body().contains("otel_exporter_invalid_responses_total 1\n") && response->body().contains("otel_exporter_failed_batches_total 1\n") && response->body().contains("otel_exporter_accepted_logs_total 1\n") && response->body().contains("otel_exporter_exported_records_total 0\n") && response->body().contains("otel_exporter_retries_total 0\n") && !response->body().contains("private-invalid-acknowledgement") && !response->body().contains("test-only-log-body") : response->status_code() == 404);
                 if (scraped)
                     break;
                 (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
             }
-            const auto readiness = co_await client.get(url + "/actuator/ready");
+            const auto readiness = co_await rest.get(url + "/actuator/ready");
             ready = readiness && readiness->status_code() == 200;
             if (metrics_enabled && scraped)
             {
                 const bool queued = host.telemetry().submit_log({.body = "recovery-test-log"});
                 for (unsigned attempt = 0; queued && attempt < 20; ++attempt)
                 {
-                    const auto response = co_await client.get(url + "/actuator/prometheus");
+                    const auto response = co_await rest.get(url + "/actuator/prometheus");
                     recovered = response && response->status_code() == 200 &&
                         response->body().contains("otel_exporter_exported_records_total 1\n") &&
                         response->body().contains("otel_exporter_accepted_logs_total 2\n") &&
@@ -2701,10 +2790,10 @@ TEST(application_management_scrape_exposes_exporter_statistics_only_when_enabled
                     (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
                 }
             }
-            const auto business = co_await client.get(std::format(
+            const auto business = co_await rest.get(std::format(
                 "http://127.0.0.1:{}/actuator/prometheus", business_endpoint->port()));
             isolated = business && business->status_code() == 404;
-            client.close();
+            rest.clear();
             io->stop();
         };
         if (started)

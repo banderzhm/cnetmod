@@ -14,6 +14,7 @@ import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+import cnetmod.coro.timer;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.executor.async_op;
 
@@ -414,9 +415,7 @@ auto request_context::sse_begin(int s) -> task<bool>
     sse::prepare(resp_, sse::response_options{.status_code = s});
     auto h = resp_.serialize();
     sse_state_ = sse_stream_state::committing;
-    auto w =
-        co_await async_write_all(ctx_, sock_, const_buffer{h.data(), h.size()});
-    if (!w)
+    if (!(co_await write_sse_bytes(h)))
     {
         sse_state_ = sse_stream_state::failed;
         co_return false;
@@ -435,18 +434,49 @@ auto request_context::sse_state() const noexcept -> sse_stream_state
     return sse_state_;
 }
 
+void request_context::configure_sse(sse_stream_options options) noexcept
+{
+    sse_deadline_ = deadline::after(options.max_duration);
+    sse_write_timeout_ = options.write_timeout;
+    deadline_ = sse_deadline_;
+}
+
+void request_context::expire_sse() noexcept
+{
+    if (sse_state_ != sse_stream_state::closed)
+        sse_state_ = sse_stream_state::failed;
+    cancel_pending_operations();
+    sock_.close();
+}
+
+auto request_context::write_sse_bytes(std::string_view bytes) -> task<bool>
+{
+    if (sse_deadline_.expired())
+    {
+        expire_sse();
+        co_return false;
+    }
+    cancel_token write_cancellation;
+    operation_registration registration{*this, write_cancellation};
+    const auto write_deadline = sse_deadline_.constrain(
+        deadline::after(sse_write_timeout_));
+    auto written = co_await cnetmod::with_deadline(ctx_, write_deadline,
+        async_write_all(ctx_, sock_,
+            const_buffer{bytes.data(), bytes.size()}, write_cancellation),
+        write_cancellation);
+    if (!written)
+    {
+        expire_sse();
+        co_return false;
+    }
+    co_return true;
+}
+
 auto request_context::write_sse_frame(std::string frame) -> task<bool>
 {
     if (!(co_await sse_begin()))
         co_return false;
-    auto written = co_await async_write_all(ctx_, sock_,
-        const_buffer{frame.data(), frame.size()});
-    if (!written)
-    {
-        sse_state_ = sse_stream_state::failed;
-        co_return false;
-    }
-    co_return true;
+    co_return co_await write_sse_bytes(frame);
 }
 
 auto request_context::sse_send(std::string_view d, std::string_view e)
@@ -559,9 +589,68 @@ auto router::any(std::string_view p, handler_fn f) -> router&
     return add_route({}, p, std::move(f));
 }
 
+auto router::sse_get(std::string_view p, sse_handler_fn f,
+    std::optional<sse_stream_options> options) -> router&
+{
+    return add_sse(http_method::GET, p, std::move(f), options);
+}
+
+auto router::sse_post(std::string_view p, sse_handler_fn f,
+    std::optional<sse_stream_options> options) -> router&
+{
+    return add_sse(http_method::POST, p, std::move(f), options);
+}
+
+auto router::sse_defaults(sse_stream_options options) -> router&
+{
+    if (options.max_duration <= std::chrono::milliseconds::zero() ||
+        options.write_timeout <= std::chrono::milliseconds::zero())
+        throw std::invalid_argument("SSE timeouts must be positive");
+    sse_defaults_ = options;
+    return *this;
+}
+
 auto router::add(http_method m, std::string_view p, handler_fn f) -> router&
 {
     return add_route(m, p, std::move(f));
+}
+
+auto router::add_sse(http_method m, std::string_view p, sse_handler_fn f,
+    std::optional<sse_stream_options> options) -> router&
+{
+    if (!f)
+        throw std::invalid_argument("SSE route handler must not be empty");
+    const auto selected = options.value_or(sse_defaults_);
+    if (selected.max_duration <= std::chrono::milliseconds::zero() ||
+        selected.write_timeout <= std::chrono::milliseconds::zero())
+        throw std::invalid_argument("SSE timeouts must be positive");
+    return add(m, p,
+        [handler = std::move(f), selected](request_context& request) -> task<void>
+        {
+            sse_stream stream{request, selected};
+            cancel_token watchdog_cancellation;
+            auto invoke_handler = [&]() -> task<void>
+            {
+                try
+                {
+                    co_await handler(request, stream);
+                }
+                catch (...)
+                {
+                    watchdog_cancellation.cancel();
+                    throw;
+                }
+                watchdog_cancellation.cancel();
+            };
+            auto watchdog = [&]() -> task<void>
+            {
+                const auto waited = co_await async_timer_wait(request.io_ctx(),
+                    selected.max_duration, watchdog_cancellation);
+                if (waited)
+                    request.expire_sse();
+            };
+            co_await when_all(invoke_handler(), watchdog());
+        });
 }
 
 auto router::add_route(std::optional<http_method> m, std::string_view p,

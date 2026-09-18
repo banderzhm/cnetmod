@@ -46,11 +46,31 @@ public:
         http::router routes, service_registry services,
         std::vector<application_middleware> middlewares,
         std::vector<managed_service_factory> service_factories,
+        std::vector<runtime_route_configurer> runtime_route_configurers,
         bool auto_configuration,
         std::optional<std::filesystem::path> configuration_file)
         : configuration(std::move(configuration)), network(), io(make_io_context()), cpu_pool(this->configuration.execution.cpu_threads), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), runtime_facade(*io, cpu_pool, supervisor, telemetry, runtime_stop_source.get_token()), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
+        for (auto& configure_routes : runtime_route_configurers)
+        {
+            if (!preparation_error)
+                break;
+            try
+            {
+                configure_routes(business_routes, runtime_facade);
+            }
+            catch (const std::bad_alloc&)
+            {
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::not_enough_memory));
+            }
+            catch (...)
+            {
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+            }
+        }
         application_service_context factory_context{*io, telemetry, supervisor,
             this->configuration, runtime_facade};
         for (auto& factory : service_factories)
@@ -959,6 +979,15 @@ auto application_builder::routes(route_configurer configurer)
     return *this;
 }
 
+auto application_builder::routes(runtime_route_configurer configurer)
+    -> application_builder&
+{
+    if (!configurer)
+        throw std::invalid_argument("route configurer must not be empty");
+    runtime_route_configurers_.push_back(std::move(configurer));
+    return *this;
+}
+
 auto application_builder::middleware(application_middleware value)
     -> application_builder&
 {
@@ -1022,6 +1051,10 @@ auto application_builder::build()
             return std::unexpected(added.error());
     }
     http::router routes;
+    routes.sse_defaults({
+        .max_duration = loaded->http.sse_max_duration,
+        .write_timeout = loaded->http.sse_write_timeout,
+    });
     try
     {
         for (const auto& configure_routes : route_configurers_)
@@ -1037,7 +1070,8 @@ auto application_builder::build()
         application_host host{std::make_unique<application_host::implementation>(
             std::move(*loaded), std::move(routes), std::move(registry),
             std::move(middlewares_),
-            std::move(service_factories_), auto_configuration_,
+            std::move(service_factories_),
+            std::move(runtime_route_configurers_), auto_configuration_,
             configuration_file_)};
         if (!host.implementation_->preparation_error)
             return std::unexpected(

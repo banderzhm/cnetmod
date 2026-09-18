@@ -5,7 +5,7 @@ namespace cnetmod::application {
 application_runtime::application_runtime(io_context& io, thread_pool& cpu_pool,
     task_supervisor& supervisor, observability::telemetry_hub& telemetry,
     std::stop_token cancellation) noexcept
-    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation)
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), files_(io), rest_(io, telemetry)
 {
 }
 
@@ -19,6 +19,16 @@ auto application_runtime::spawn_managed(std::string name,
             std::make_error_code(std::errc::operation_canceled));
     return supervisor_.supervise(std::move(name), std::move(operation),
         recovery, required, std::move(stop_request), recovery_deadline);
+}
+
+auto application_runtime::files() noexcept -> async_file_template&
+{
+    return files_;
+}
+
+auto application_runtime::rest() noexcept -> rest_template&
+{
+    return rest_;
 }
 
 auto application_runtime::stop_requested() const noexcept -> bool

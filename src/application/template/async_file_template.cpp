@@ -1,0 +1,103 @@
+module cnetmod.application.async_file_template;
+
+import cnetmod.executor.async_op;
+
+namespace cnetmod::application {
+
+async_file_template::async_file_template(io_context& io) noexcept : io_(io) {}
+
+auto async_file_template::open(std::filesystem::path path, open_mode mode)
+    -> task<std::expected<file, std::error_code>>
+{
+    co_return co_await async_file_open(io_, path, mode);
+}
+
+auto async_file_template::open(std::filesystem::path path, open_mode mode,
+    cancel_token& cancellation)
+    -> task<std::expected<file, std::error_code>>
+{
+    co_return co_await async_file_open(io_, path, mode, cancellation);
+}
+
+auto async_file_template::read(file& source, mutable_buffer destination,
+    std::uint64_t offset)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    co_return co_await async_file_read(io_, source, destination, offset);
+}
+
+auto async_file_template::read(file& source, mutable_buffer destination,
+    std::uint64_t offset, cancel_token& cancellation)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    co_return co_await async_file_read(
+        io_, source, destination, offset, cancellation);
+}
+
+auto async_file_template::write(file& destination, const_buffer source,
+    std::uint64_t offset)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    co_return co_await async_file_write(io_, destination, source, offset);
+}
+
+auto async_file_template::write(file& destination, const_buffer source,
+    std::uint64_t offset, cancel_token& cancellation)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    co_return co_await async_file_write(
+        io_, destination, source, offset, cancellation);
+}
+
+auto async_file_template::close(file& target)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_close(io_, target);
+}
+
+auto async_file_template::stat(std::filesystem::path path)
+    -> task<std::expected<file_stat, std::error_code>>
+{
+    co_return co_await async_file_stat(io_, path);
+}
+
+auto async_file_template::read_all(std::filesystem::path path)
+    -> task<std::expected<std::string, std::error_code>>
+{
+    co_return co_await async_file_read_all(io_, path);
+}
+
+auto async_file_template::read_all(std::filesystem::path path,
+    cancel_token& cancellation)
+    -> task<std::expected<std::string, std::error_code>>
+{
+    co_return co_await async_file_read_all(io_, path, cancellation);
+}
+
+auto async_file_template::write_all(std::filesystem::path path, std::string content)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_write_all(io_, path, content);
+}
+
+auto async_file_template::write_all(std::filesystem::path path, std::string content,
+    cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_write_all(io_, path, content, cancellation);
+}
+
+auto async_file_template::remove(std::filesystem::path path)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_remove(io_, path);
+}
+
+auto async_file_template::remove(std::filesystem::path path,
+    cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_remove(io_, path, cancellation);
+}
+
+} // namespace cnetmod::application

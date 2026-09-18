@@ -306,6 +306,41 @@ auto sse_heartbeat() -> task<bool>;
 #### `request_context::sse_done`
 **签名**: `auto sse_done() -> task<bool>`
 
+#### `sse_stream`
+
+`sse_stream` 是绑定 `request_context` 的高层流对象，统一管理保守的开始状态、惰性
+响应头写出、具名事件、注释、心跳和终止帧。应用负责序列化 payload，框架负责 SSE
+帧编码和 socket 写出。
+
+```cpp
+routes.sse_post("/chat", [](http::request_context& request,
+                            http::sse_stream& stream) -> task<void> {
+    auto deltas = stream.callback("delta");
+    if (!co_await stream.begin())
+        co_return;
+    if (!co_await deltas(R"({"text":"first"})"))
+        co_return;
+    co_await stream.send(R"({"result":"complete"})", "done");
+    co_await stream.finish();
+}, http::sse_stream_options{
+    .max_duration = std::chrono::seconds{60},
+    .write_timeout = std::chrono::seconds{3},
+});
+```
+
+`started()` 在响应头开始提交时即返回 true，包括提交失败；一旦为 true，不得回退普通
+HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`sse_stream` 或请求
+上下文的生命周期。`router::sse_get()` 和 `router::sse_post()` 会为每个请求创建独立流对象，
+因此可直接用于 `application_builder::routes()`。Application 的 recover 中间件发现 SSE 已
+提交后不会再尝试普通 JSON 响应，而是尽力写出具名 `error` 帧和终止帧；业务可在异常前
+自行写出更具体的错误契约。
+
+`sse_stream_options::max_duration` 限制整条流的绝对生命周期，默认 120 秒；
+`write_timeout` 限制每次响应头或事件帧的写出时间，默认 5 秒。二者必须为正数。超时会取消
+当前 socket 操作、关闭连接并将状态置为 `failed`。普通 `request_timeout` 中间件检测到 SSE
+已提交后不会写入 504；SSE 使用自己的总时限。生产者访问下游时应使用
+`request_context::with_deadline()`，让下游操作同样受总时限和请求取消约束。
+
 #### `sse::event`
 ```cpp
 struct event {

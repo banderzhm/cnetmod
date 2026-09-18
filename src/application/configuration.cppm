@@ -33,6 +33,8 @@ export struct http_configuration
     std::uint16_t port = 8080;
     std::size_t max_connections = 0;
     std::optional<std::chrono::milliseconds> request_timeout;
+    std::chrono::milliseconds sse_max_duration{120000};
+    std::chrono::milliseconds sse_write_timeout{5000};
     bool request_ids = true;
     bool access_logging = true;
     bool recover_exceptions = true;

@@ -16,6 +16,10 @@
     "port": 8080,
     "max_connections": 0,
     "request_timeout_ms": 30000,
+    "sse": {
+      "max_duration_ms": 120000,
+      "write_timeout_ms": 5000
+    },
     "request_ids": true,
     "access_logging": true,
     "recover_exceptions": true
