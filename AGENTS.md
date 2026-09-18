@@ -3858,8 +3858,15 @@ Nullable datetime markers use an explicit mode. Active rows are selected with
 logical_delete_config config;
 config.field_name = "deleted_at";
 config.mode = logical_delete_mode::nullable_datetime;
+config.touch_fields = {{"updated_at",
+    logical_delete_touch_value::current_timestamp}};
 logical_delete_interceptor interceptor{std::move(config)};
 ```
+
+`touch_fields` 与逻辑删除标记在同一条 `UPDATE` 中更新，保持单语句原子性。字段名只能是
+安全 SQL 标识符，赋值只能从 `current_timestamp`、`current_date`、`current_time`
+枚举选择；不接受任意 SQL 表达式。重复字段、非法标识符或与删除标记重复会在配置
+拦截器时抛出 `std::invalid_argument`。
 
 ### 多租户
 `CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)` — `tenant_context::set_tenant_id(id)` 设置线程级租户；`tenant_guard guard(id)` RAII 守卫；`multi_tenant_interceptor` 自动注入条件。`global_multi_tenant_interceptor()`。
@@ -9154,13 +9161,27 @@ auto host = cnetmod::application::application_builder{"order-service"}
 }
 ```
 
-`application_host` 自己创建 `net_init`、`io_context`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。
+`application_host` 自己创建 `net_init`、`io_context`、CPU `thread_pool`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。CPU 线程数通过 `application.cpu_threads` 配置，默认取硬件并发数且至少为 1；也可由 `CNETMOD_CPU_THREADS` 覆盖。该值运行时变更需要重启。
 
-自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。工厂通过
+`application_host::runtime()` 返回受控的 `application_runtime` 门面，而不是公开原始
+`io_context`。业务用 `spawn_managed()` 注册可取消、可等待、可恢复的后台任务；回调得到
+独立 `cancel_token`。短时 CPU 工作使用 `offload()`，完成后自动回到 Application 事件
+循环。`cancellation()` 返回可复制、可注册回调的 `std::stop_token`，
+`stop_requested()` 提供轻量查询；`tasks()` 与 `telemetry()` 分别提供既有任务监管和观测
+组合根。停机先排空请求、广播取消、等待监管任务、逆序关闭服务，最后停止 CPU 池。
+
+`parse_offloaded(runtime, text)` 与 `dump_offloaded(runtime, value)` 在 Host CPU 池执行
+JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
+`std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
+
+自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。该 API 是
+协议适配器的基础设施扩展点，不是业务执行入口；普通业务只能从 Host 获得 Runtime 门面。
+工厂通过
 `application_service_context` 获得 host 所有的 `io_context`、Telemetry Hub、
 `task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
-服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。框架不公开运行期
-`application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。工厂还可以保存
+`application_service_context::runtime` 的非拥有引用，但不得超过 Host 生命周期。框架不
+公开运行期 `application_host::io()`，避免下游在生命周期监管之外派发关键协程。
 
 业务 HTTP 中间件通过 `application_builder::middleware()` 按注册顺序装配，不影响独立的
 管理端点。执行顺序固定为：框架异常恢复、停机跟踪、请求 ID、追踪、指标和请求超时位于
@@ -9199,7 +9220,8 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 {
   "application": {
     "name": "order-service",
-    "install_signal_handlers": true
+    "install_signal_handlers": true,
+    "cpu_threads": 4
   },
   "crash_dump": {
     "directory": "crash"
@@ -14476,7 +14498,7 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 对已存在会话返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。record store 的分页、计数、最近读取和删除在会话不存在时返回 `session_not_found`；memory adapter 将读取映射为空历史、将删除映射为幂等成功。无外部会话目录的存储可在首次 append 时创建会话；受外键约束的实现应返回 `session_not_found`。空批次是无副作用成功，不创建会话。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
 
 `prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行使用 `prompt_section`，拥有局部变量和可递归的子 section；变量及子 section 都按“当前行优先、根上下文兜底”解析。富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 

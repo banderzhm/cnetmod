@@ -26,6 +26,29 @@ export enum class logical_delete_mode : std::uint8_t
 };
 
 /**
+ * @brief Selects a safe database-generated value for a touched column.
+ */
+export enum class logical_delete_touch_value : std::uint8_t
+{
+    current_timestamp,
+    current_date,
+    current_time,
+};
+
+/**
+ * @brief Describes one additional assignment made by logical deletion.
+ *
+ * Field names are validated as SQL identifiers. Values are selected from a
+ * closed enumeration, so callers cannot inject arbitrary SQL expressions.
+ */
+export struct logical_delete_touch_field
+{
+    std::string field_name;
+    logical_delete_touch_value value =
+        logical_delete_touch_value::current_timestamp;
+};
+
+/**
  * @brief Configures logical-delete predicates and update assignments.
  *
  * `nullable_datetime` treats a null marker as active and writes the database
@@ -38,6 +61,7 @@ export struct logical_delete_config
     param_value not_deleted_value =
         param_value::from_int(0); // Value when not deleted
     logical_delete_mode mode = logical_delete_mode::value;
+    std::vector<logical_delete_touch_field> touch_fields;
     bool enabled = true; // Enable/disable logical delete globally
 };
 
@@ -110,7 +134,8 @@ public:
 
         auto& meta = model_traits<T>::meta();
         return transform_delete_to_update_impl(std::move(sql), meta.table_name,
-            *field, config_.deleted_value, config_.mode);
+            *field, config_.deleted_value, config_.mode,
+            config_.touch_fields);
     }
 
     /// Get configuration
@@ -132,7 +157,8 @@ private:
         std::string_view table_name,
         std::string_view field,
         const param_value& deleted_value,
-        logical_delete_mode mode)
+        logical_delete_mode mode,
+        std::span<const logical_delete_touch_field> touch_fields)
         -> std::string;
     logical_delete_config config_;
 };

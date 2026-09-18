@@ -9,6 +9,7 @@ import cnetmod.core.error;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
+import cnetmod.executor.pool;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.graceful_shutdown;
 import cnetmod.coro.cancel;
@@ -1651,6 +1652,67 @@ TEST(application_builder_validates_before_creating_host)
     ASSERT_FALSE(host.has_value());
 }
 
+TEST(application_runtime_supervises_tasks_and_offloads_json)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::thread_pool cpu_pool{2};
+    cnetmod::observability::telemetry_hub telemetry{*io,
+        {.export_traces = false, .export_metrics = false, .export_logs = false}};
+    application::task_supervisor supervisor{*io};
+    std::stop_source stopping;
+    application::application_runtime runtime{*io, cpu_pool, supervisor,
+        telemetry, stopping.get_token()};
+    bool background_ran = false;
+    auto accepted = runtime.spawn_managed("runtime-test",
+        [&](cnetmod::cancel_token& token)
+            -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            background_ran = !token.is_cancelled();
+            co_return std::expected<void, std::error_code>{};
+        });
+    ASSERT_TRUE(accepted.has_value());
+
+    std::optional<std::expected<nlohmann::json, std::error_code>> parsed;
+    std::optional<std::expected<std::string, std::error_code>> dumped;
+    auto run = [&]() -> cnetmod::task<void>
+    {
+        parsed = co_await application::parse_offloaded(runtime,
+            R"({"value":42})");
+        if (parsed)
+            dumped = co_await application::dump_offloaded(runtime, **parsed);
+        supervisor.request_stop();
+        (void)co_await supervisor.join();
+        io->stop();
+    };
+    auto operation = run();
+    operation.handle().resume();
+    io->run();
+    operation.handle().promise().result();
+    cpu_pool.request_stop();
+
+    ASSERT_TRUE(background_ran);
+    ASSERT_TRUE(parsed.has_value());
+    ASSERT_TRUE(parsed->has_value());
+    ASSERT_EQ(parsed->value().at("value").get<int>(), 42);
+    ASSERT_TRUE(dumped.has_value());
+    ASSERT_TRUE(dumped->has_value());
+    ASSERT_TRUE(dumped->value().contains("42"));
+
+    stopping.request_stop();
+    ASSERT_TRUE(runtime.stop_requested());
+    ASSERT_TRUE(runtime.cancellation().stop_requested());
+    auto rejected = runtime.spawn_managed("too-late",
+        [](cnetmod::cancel_token&)
+            -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            co_return std::expected<void, std::error_code>{};
+        });
+    ASSERT_FALSE(rejected.has_value());
+    ASSERT_EQ(rejected.error(),
+        std::make_error_code(std::errc::operation_canceled));
+}
+
 TEST(application_builder_composes_host_owned_service_factories_before_freeze)
 {
     auto events = std::make_shared<std::vector<std::string>>();
@@ -1814,14 +1876,16 @@ TEST(application_configuration_precedence_and_redaction)
         "cnetmod-application-test.json";
     {
         std::ofstream output{path};
-        output << R"({"application":{"name":"json-name"},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
+        output << R"({"application":{"name":"json-name","cpu_threads":3},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
     }
 #ifdef _WIN32
     _putenv_s("CNETMOD_HTTP_PORT", "18081");
     _putenv_s("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS", "false");
+    _putenv_s("CNETMOD_CPU_THREADS", "4");
 #else
     setenv("CNETMOD_HTTP_PORT", "18081", 1);
     setenv("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS", "false", 1);
+    setenv("CNETMOD_CPU_THREADS", "4", 1);
 #endif
     auto host = application::application_builder{"builder-name"}
                     .configuration_file(path)
@@ -1830,20 +1894,24 @@ TEST(application_configuration_precedence_and_redaction)
                             value.http.port = 18082;
                             value.logging.manage_lifecycle = false;
                             value.management.enabled = false;
+                            value.execution.cpu_threads = 5;
                             value.observability.otlp.capture_framework_logs = true;
                         })
                     .build();
 #ifdef _WIN32
     _putenv_s("CNETMOD_HTTP_PORT", "");
     _putenv_s("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS", "");
+    _putenv_s("CNETMOD_CPU_THREADS", "");
 #else
     unsetenv("CNETMOD_HTTP_PORT");
     unsetenv("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS");
+    unsetenv("CNETMOD_CPU_THREADS");
 #endif
     std::filesystem::remove(path);
     ASSERT_TRUE(host.has_value());
     ASSERT_EQ(host->configuration().name, "builder-name");
     ASSERT_EQ(host->configuration().http.port, std::uint16_t{18082});
+    ASSERT_EQ(host->configuration().execution.cpu_threads, 5U);
     ASSERT_EQ(host->configuration().crash_dump.directory,
         std::filesystem::path{"application-crashes"});
     ASSERT_TRUE(host->configuration().observability.otlp.capture_framework_logs);

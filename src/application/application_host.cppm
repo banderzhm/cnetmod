@@ -10,6 +10,7 @@ import cnetmod.application.managed_service;
 import cnetmod.application.service_registry;
 import cnetmod.application.service_lifecycle;
 import cnetmod.application.task_supervisor;
+import cnetmod.application.runtime;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.observability;
@@ -106,6 +107,11 @@ public:
      */
     [[nodiscard]] auto telemetry() noexcept -> observability::telemetry_hub&;
 
+    /**
+     * @brief Returns controlled application execution and telemetry services.
+     */
+    [[nodiscard]] auto runtime() noexcept -> application_runtime&;
+
 private:
     class implementation;
     explicit application_host(std::unique_ptr<implementation> implementation);
@@ -133,6 +139,7 @@ export struct application_service_context
     observability::telemetry_hub& telemetry;
     task_supervisor& supervisor;
     const application_configuration& configuration;
+    application_runtime& runtime;
 };
 
 export using managed_service_factory = std::function<std::expected<

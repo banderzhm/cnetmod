@@ -5,6 +5,7 @@ import cnetmod.application.auto_configuration;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.service_lifecycle;
 import cnetmod.application.task_supervisor;
+import cnetmod.application.runtime;
 import cnetmod.core.crash_dump;
 import cnetmod.core.log;
 import cnetmod.core.net_init;
@@ -12,6 +13,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
+import cnetmod.executor.pool;
 import cnetmod.io.io_context;
 import cnetmod.observability.otlp;
 import cnetmod.observability.http_server;
@@ -46,11 +48,11 @@ public:
         std::vector<managed_service_factory> service_factories,
         bool auto_configuration,
         std::optional<std::filesystem::path> configuration_file)
-        : configuration(std::move(configuration)), network(), io(make_io_context()), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
+        : configuration(std::move(configuration)), network(), io(make_io_context()), cpu_pool(this->configuration.execution.cpu_threads), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), runtime_facade(*io, cpu_pool, supervisor, telemetry, runtime_stop_source.get_token()), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
         application_service_context factory_context{*io, telemetry, supervisor,
-            this->configuration};
+            this->configuration, runtime_facade};
         for (auto& factory : service_factories)
         {
             if (!preparation_error)
@@ -412,6 +414,7 @@ public:
         const auto stop_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
         shutdown_deadline = stop_deadline;
         const auto cleanup_deadline = shutdown_cleanup_deadline();
+        runtime_stop_source.request_stop();
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
         business_server.stop();
@@ -486,6 +489,7 @@ public:
      */
     auto finish() -> task<void>
     {
+        runtime_stop_source.request_stop();
         if (shutdown.in_flight() != 0)
             co_await settle_requests();
         supervisor.request_stop();
@@ -637,7 +641,10 @@ public:
         const auto current = state.load(std::memory_order_acquire);
         if (current == application_state::starting ||
             current == application_state::running)
+        {
+            runtime_stop_source.request_stop();
             shutdown.request_stop();
+        }
     }
 
     /**
@@ -671,6 +678,8 @@ public:
         shutdown.uninstall();
         const bool retained = !telemetry.try_settle_shutdown() || lifecycle.active_service_count() != 0 ||
             business_server.active_connections() != 0 || management_server.active_connections() != 0;
+        if (!retained)
+            cpu_pool.request_stop();
         if (retained && !run_error)
             run_error = std::make_error_code(std::errc::timed_out);
         state.store(retained ? application_state::cleanup_failed : application_state::stopped,
@@ -681,12 +690,15 @@ public:
     application_configuration configuration;
     net_init network;
     std::unique_ptr<io_context> io;
+    thread_pool cpu_pool;
     observability::telemetry_hub telemetry;
     http::server business_server;
     http::server management_server;
     service_registry services;
     health_registry health;
     task_supervisor supervisor;
+    std::stop_source runtime_stop_source;
+    application_runtime runtime_facade;
     service_lifecycle lifecycle;
     http::router business_routes;
     std::vector<application_middleware> business_middlewares;
@@ -908,6 +920,11 @@ auto application_host::telemetry() noexcept
     -> observability::telemetry_hub&
 {
     return implementation_->telemetry;
+}
+
+auto application_host::runtime() noexcept -> application_runtime&
+{
+    return implementation_->runtime_facade;
 }
 
 application_builder::application_builder(std::string name)

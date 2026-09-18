@@ -437,7 +437,7 @@ set_property(TARGET cnetmod_core PROPERTY
 # static by default: the C++ module core owns process-level initialization and
 # is safely embedded in the extension/application that owns its event loop.
 option(CNETMOD_BUILD_C_API "Build the stable C ABI library" ON)
-if(CNETMOD_BUILD_C_API)
+if(CNETMOD_BUILD_C_API AND CNETMOD_ENABLE_HTTP)
     set_target_properties(cnetmod_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
     add_library(cnetmod_c STATIC
         "${CMAKE_CURRENT_SOURCE_DIR}/bindings/c_api/cnetmod_c_api.cpp")
@@ -453,12 +453,15 @@ if(CNETMOD_BUILD_C_API)
     set_property(TARGET cnetmod_c PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE")
 endif()
+if(CNETMOD_BUILD_C_API AND NOT CNETMOD_ENABLE_HTTP)
+    message(STATUS "C API requires HTTP; skipping cnetmod_c because CNETMOD_ENABLE_HTTP=OFF")
+endif()
 
 # CPython extension built on the stable C ABI. It deliberately links the
 # static cnetmod_c target into the extension, so Python imports no C++ module
 # DLL and owns the same event-loop lifetime as the binding.
 option(CNETMOD_BUILD_PYTHON_BINDINGS "Build the CPython native extension" ON)
-if(CNETMOD_BUILD_C_API AND CNETMOD_BUILD_PYTHON_BINDINGS)
+if(TARGET cnetmod_c AND CNETMOD_BUILD_PYTHON_BINDINGS)
     find_package(Python3 COMPONENTS Interpreter Development.SABIModule QUIET)
     if(Python3_Development.SABIModule_FOUND)
         Python3_add_library(cnetmod_python MODULE USE_SABI 3.11 WITH_SOABI
@@ -510,7 +513,7 @@ install(TARGETS cnetmod_core
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     FILE_SET cxx_modules DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules"
 )
-if(CNETMOD_BUILD_C_API)
+if(TARGET cnetmod_c)
     install(TARGETS cnetmod_c
         EXPORT cnetmodTargets
         ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
@@ -611,7 +614,7 @@ set(CNETMOD_ALL_TARGETS
     ${CNETMOD_BENCH_TARGETS}
     ${CNETMOD_EXAMPLE_TARGETS}
 )
-if(CNETMOD_BUILD_C_API)
+if(TARGET cnetmod_c)
     list(APPEND CNETMOD_ALL_TARGETS cnetmod_c)
 endif()
 if(TARGET cnetmod_python)

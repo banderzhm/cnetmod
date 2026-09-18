@@ -234,11 +234,12 @@ namespace {
             if (const auto item = root.find("application"); item != root.end())
             {
                 if (!keys_are_known(*item,
-                        {"name", "install_signal_handlers"}))
+                        {"name", "install_signal_handlers", "cpu_threads"}))
                     return false;
                 assign(*item, "name", result.name);
                 assign(*item, "install_signal_handlers",
                     result.install_signal_handlers);
+                assign(*item, "cpu_threads", result.execution.cpu_threads);
             }
             if (const auto item = root.find("logging"); item != root.end())
             {
@@ -496,6 +497,18 @@ namespace {
     {
         if (auto value = environment("CNETMOD_APPLICATION_NAME"))
             result.name = std::move(*value);
+        if (auto value = environment("CNETMOD_CPU_THREADS"))
+        {
+            unsigned int parsed{};
+            const auto [end, error] = std::from_chars(value->data(),
+                value->data() + value->size(), parsed);
+            if (error == std::errc{} && end == value->data() + value->size() &&
+                parsed > 0U && parsed <= 1024U)
+                result.execution.cpu_threads = parsed;
+            else
+                return std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+        }
         if (auto value = environment("CNETMOD_HTTP_ADDRESS"))
             result.http.address = std::move(*value);
         if (auto value = environment("CNETMOD_HTTP_PORT"))
@@ -600,7 +613,9 @@ auto validate_configuration(const application_configuration& value)
             std::chrono::steady_clock::duration::max() / 2);
         return duration.count() > 0 && duration <= horizon;
     };
-    if (value.name.empty() || value.crash_dump.directory.empty() || value.http.address.empty() ||
+    if (value.name.empty() || value.crash_dump.directory.empty() ||
+        value.execution.cpu_threads == 0U || value.execution.cpu_threads > 1024U ||
+        value.http.address.empty() ||
         value.http.port == 0U ||
         (value.http.request_timeout && !positive(*value.http.request_timeout)) ||
         !std::isfinite(value.observability.sampling_ratio) || value.observability.sampling_ratio < 0.0 ||
@@ -757,6 +772,7 @@ static auto prepare_configuration_reload(application_configuration& active,
     }
     result.applied = !result.changed.empty();
     result.restart_required = active.name != candidate.name ||
+        active.execution != candidate.execution ||
         active.install_signal_handlers != candidate.install_signal_handlers ||
         active.crash_dump.directory != candidate.crash_dump.directory ||
         active.logging.manage_lifecycle != candidate.logging.manage_lifecycle ||

@@ -196,15 +196,31 @@ export class append_only_chat_record_store
 {
 public:
     virtual ~append_only_chat_record_store() = default;
+
+    /**
+     * @brief Appends one record and returns storage-enriched metadata.
+     *
+     * Stores without a separate session catalogue create the session on first
+     * append. Stores that enforce an external session foreign key return
+     * session_not_found when that parent session does not exist.
+     */
     virtual auto append(std::string session_id, persisted_chat_message value)
         -> task<std::expected<persisted_chat_message, std::error_code>>;
+
+    /**
+     * @brief Atomically appends a batch in insertion order.
+     *
+     * Session creation and session_not_found follow append(). An empty batch is
+     * a successful no-op and must not create a session as a side effect.
+     */
     virtual auto append_batch(std::string session_id,
         std::vector<persisted_chat_message> values)
         -> task<std::expected<std::vector<persisted_chat_message>,
             std::error_code>> = 0;
 
     /**
-     * Loads an insertion-ordered page. A zero limit returns an empty page.
+     * Loads an insertion-ordered page. A zero limit returns an empty page for
+     * an existing session. A missing session returns session_not_found.
      */
     virtual auto load_page(std::string session_id, std::size_t offset,
         std::size_t limit)
@@ -212,17 +228,25 @@ public:
             std::error_code>> = 0;
 
     /**
-     * Counts all records in a session without loading message bodies.
+     * Counts all records in a session without loading message bodies. A missing
+     * session returns session_not_found rather than zero.
      */
     virtual auto count(std::string session_id)
         -> task<std::expected<std::size_t, std::error_code>> = 0;
 
     /**
-     * Loads the newest records in chronological order; zero requests all.
+     * Loads the newest records in chronological order; zero requests all. A
+     * missing session returns session_not_found.
      */
     virtual auto load_recent(std::string session_id, std::size_t limit)
         -> task<std::expected<std::vector<persisted_chat_message>,
             std::error_code>>;
+    /**
+     * @brief Erases all records for a session.
+     *
+     * A missing session returns session_not_found. The higher-level memory
+     * adapter intentionally converts that result to idempotent success.
+     */
     virtual auto erase(std::string session_id)
         -> task<std::expected<void, std::error_code>> = 0;
 };

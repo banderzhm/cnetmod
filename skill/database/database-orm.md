@@ -747,8 +747,15 @@ Nullable datetime markers use an explicit mode. Active rows are selected with
 logical_delete_config config;
 config.field_name = "deleted_at";
 config.mode = logical_delete_mode::nullable_datetime;
+config.touch_fields = {{"updated_at",
+    logical_delete_touch_value::current_timestamp}};
 logical_delete_interceptor interceptor{std::move(config)};
 ```
+
+`touch_fields` 与逻辑删除标记在同一条 `UPDATE` 中更新，保持单语句原子性。字段名只能是
+安全 SQL 标识符，赋值只能从 `current_timestamp`、`current_date`、`current_time`
+枚举选择；不接受任意 SQL 表达式。重复字段、非法标识符或与删除标记重复会在配置
+拦截器时抛出 `std::invalid_argument`。
 
 ### 多租户
 `CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)` — `tenant_context::set_tenant_id(id)` 设置线程级租户；`tenant_guard guard(id)` RAII 守卫；`multi_tenant_interceptor` 自动注入条件。`global_multi_tenant_interceptor()`。

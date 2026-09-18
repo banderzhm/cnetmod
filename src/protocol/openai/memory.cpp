@@ -312,6 +312,8 @@ auto in_memory_append_only_chat_record_store::append_batch(
     if (session_id.empty())
         co_return std::unexpected(make_error_code(
             chat_record_store_errc::invalid_argument));
+    if (values.empty())
+        co_return std::vector<persisted_chat_message>{};
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
     try

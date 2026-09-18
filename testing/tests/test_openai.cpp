@@ -2231,6 +2231,10 @@ TEST(openai_chat_record_store_supports_paging_count_and_classified_errors)
     const auto beyond = cnetmod::sync_wait(
         records.load_page("paged-session", 100, 10));
     const auto missing = cnetmod::sync_wait(records.count("missing-session"));
+    const auto empty_append = cnetmod::sync_wait(records.append_batch(
+        "empty-session", {}));
+    const auto empty_session = cnetmod::sync_wait(
+        records.count("empty-session"));
 
     ASSERT_TRUE(appended.has_value());
     ASSERT_TRUE(total.has_value());
@@ -2245,6 +2249,12 @@ TEST(openai_chat_record_store_supports_paging_count_and_classified_errors)
     ASSERT_TRUE(beyond->empty());
     ASSERT_FALSE(missing.has_value());
     ASSERT_EQ(missing.error(), openai::make_error_code(openai::chat_record_store_errc::session_not_found));
+    ASSERT_TRUE(empty_append.has_value());
+    ASSERT_TRUE(empty_append->empty());
+    ASSERT_FALSE(empty_session.has_value());
+    ASSERT_EQ(empty_session.error(),
+        openai::make_error_code(
+            openai::chat_record_store_errc::session_not_found));
 
     openai::chat_record_memory_adapter adapter{records};
     const auto absent = cnetmod::sync_wait(

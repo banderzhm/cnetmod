@@ -586,6 +586,9 @@ TEST(orm_logical_delete_supports_nullable_datetime_markers)
     orm::logical_delete_config config;
     config.field_name = "deleted_at";
     config.mode = orm::logical_delete_mode::nullable_datetime;
+    config.touch_fields = {
+        {"updated_at", orm::logical_delete_touch_value::current_timestamp},
+        {"archive_date", orm::logical_delete_touch_value::current_date}};
     orm::logical_delete_interceptor interceptor{std::move(config)};
 
     const auto selected = interceptor.inject_select_condition<orm_soft_deleted_record>(
@@ -596,7 +599,19 @@ TEST(orm_logical_delete_supports_nullable_datetime_markers)
     const auto removed = interceptor.transform_delete_to_update<orm_soft_deleted_record>(
         "DELETE FROM `soft_deleted_records` WHERE `id` = 7");
     ASSERT_EQ(removed,
-        "UPDATE `soft_deleted_records` SET `deleted_at` = CURRENT_TIMESTAMP WHERE `id` = 7");
+        "UPDATE `soft_deleted_records` SET `deleted_at` = CURRENT_TIMESTAMP, `updated_at` = CURRENT_TIMESTAMP, `archive_date` = CURRENT_DATE WHERE `id` = 7");
+
+    config.field_name = "deleted_at` = NULL WHERE 1=1 --";
+    bool rejected = false;
+    try
+    {
+        orm::logical_delete_interceptor invalid{std::move(config)};
+    }
+    catch (const std::invalid_argument&)
+    {
+        rejected = true;
+    }
+    ASSERT_TRUE(rejected);
 }
 
 TEST(orm_error_spans_report_only_valid_database_codes)

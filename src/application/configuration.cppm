@@ -78,6 +78,16 @@ export struct crash_dump_configuration
 };
 
 /**
+ * @brief Host-owned execution resources used by application workloads.
+ */
+export struct execution_configuration
+{
+    unsigned cpu_threads = std::max(1U, std::thread::hardware_concurrency());
+
+    auto operator==(const execution_configuration&) const -> bool = default;
+};
+
+/**
  * @brief One named, explicitly enabled external service definition.
  */
 export struct configured_service
@@ -136,6 +146,7 @@ export struct application_configuration
     management_configuration management;
     observability_configuration observability;
     crash_dump_configuration crash_dump;
+    execution_configuration execution;
     lifecycle_policy lifecycle;
     health_policy health;
     orm_configuration orm;
