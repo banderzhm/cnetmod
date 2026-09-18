@@ -1,10 +1,10 @@
+#include "test_framework.hpp"
+
 import std;
 import cnetmod.core.time;
 import cnetmod.database.datetime;
 import cnetmod.database.sql_query_data;
 import cnetmod.orm;
-
-#include "test_framework.hpp"
 
 TEST(unix_epoch_round_trips_through_database_datetime)
 {
