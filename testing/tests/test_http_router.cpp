@@ -9,8 +9,10 @@ import cnetmod.protocol.http;
 using namespace cnetmod::http;
 
 // Helper: create a dummy handler that sets a marker
-static auto make_handler(std::string marker) -> handler_fn {
-    return [m = std::move(marker)](request_context&) -> cnetmod::task<void> {
+static auto make_handler(std::string marker) -> handler_fn
+{
+    return [m = std::move(marker)](request_context&) -> cnetmod::task<void>
+    {
         (void)m;
         co_return;
     };
@@ -20,7 +22,8 @@ static auto make_handler(std::string marker) -> handler_fn {
 // Exact match
 // =============================================================================
 
-TEST(router_exact_match) {
+TEST(router_exact_match)
+{
     router r;
     r.get("/", make_handler("root"));
     r.get("/api/users", make_handler("users"));
@@ -32,7 +35,8 @@ TEST(router_exact_match) {
     ASSERT_TRUE(m2.has_value());
 }
 
-TEST(router_no_match) {
+TEST(router_no_match)
+{
     router r;
     r.get("/api/users", make_handler("users"));
 
@@ -44,7 +48,8 @@ TEST(router_no_match) {
 // Method filtering
 // =============================================================================
 
-TEST(router_method_filter) {
+TEST(router_method_filter)
+{
     router r;
     r.get("/data", make_handler("get"));
     r.post("/data", make_handler("post"));
@@ -59,7 +64,8 @@ TEST(router_method_filter) {
     ASSERT_FALSE(m_put.has_value());
 }
 
-TEST(router_any_method) {
+TEST(router_any_method)
+{
     router r;
     r.any("/health", make_handler("health"));
 
@@ -72,7 +78,8 @@ TEST(router_any_method) {
 // Param match (:id)
 // =============================================================================
 
-TEST(router_param_match) {
+TEST(router_param_match)
+{
     router r;
     r.get("/api/users/:id", make_handler("user"));
 
@@ -81,7 +88,8 @@ TEST(router_param_match) {
     ASSERT_EQ(m->params.get("id"), std::string_view("42"));
 }
 
-TEST(router_param_multiple) {
+TEST(router_param_multiple)
+{
     router r;
     r.get("/api/users/:uid/posts/:pid", make_handler("post"));
 
@@ -91,7 +99,8 @@ TEST(router_param_multiple) {
     ASSERT_EQ(m->params.get("pid"), std::string_view("99"));
 }
 
-TEST(router_param_no_match_extra_segment) {
+TEST(router_param_no_match_extra_segment)
+{
     router r;
     r.get("/api/users/:id", make_handler("user"));
 
@@ -100,7 +109,8 @@ TEST(router_param_no_match_extra_segment) {
     ASSERT_FALSE(m.has_value());
 }
 
-TEST(router_param_no_match_missing_segment) {
+TEST(router_param_no_match_missing_segment)
+{
     router r;
     r.get("/api/users/:id", make_handler("user"));
 
@@ -112,7 +122,8 @@ TEST(router_param_no_match_missing_segment) {
 // Wildcard match (*filepath)
 // =============================================================================
 
-TEST(router_wildcard_match) {
+TEST(router_wildcard_match)
+{
     router r;
     r.get("/static/*filepath", make_handler("static"));
 
@@ -121,7 +132,8 @@ TEST(router_wildcard_match) {
     ASSERT_EQ(m->params.wildcard, std::string("css/style.css"));
 }
 
-TEST(router_wildcard_single_segment) {
+TEST(router_wildcard_single_segment)
+{
     router r;
     r.get("/files/*path", make_handler("files"));
 
@@ -130,7 +142,8 @@ TEST(router_wildcard_single_segment) {
     ASSERT_EQ(m->params.wildcard, std::string("readme.txt"));
 }
 
-TEST(router_wildcard_empty) {
+TEST(router_wildcard_empty)
+{
     router r;
     r.get("/files/*path", make_handler("files"));
 
@@ -143,7 +156,8 @@ TEST(router_wildcard_empty) {
 // Priority: exact > param > wildcard
 // =============================================================================
 
-TEST(router_priority_exact_over_param) {
+TEST(router_priority_exact_over_param)
+{
     router r;
     r.get("/api/users/me", make_handler("me"));
     r.get("/api/users/:id", make_handler("user"));
@@ -154,7 +168,8 @@ TEST(router_priority_exact_over_param) {
     ASSERT_TRUE(m->params.get("id").empty());
 }
 
-TEST(router_priority_param_over_wildcard) {
+TEST(router_priority_param_over_wildcard)
+{
     router r;
     r.get("/api/:resource", make_handler("resource"));
     r.get("/api/*rest", make_handler("catch-all"));
@@ -166,7 +181,8 @@ TEST(router_priority_param_over_wildcard) {
     ASSERT_TRUE(m->params.wildcard.empty());
 }
 
-TEST(router_priority_method_specific_over_any) {
+TEST(router_priority_method_specific_over_any)
+{
     router r;
     r.any("/items/:id", make_handler("any"));
     r.get("/items/:name", make_handler("get"));
@@ -177,7 +193,8 @@ TEST(router_priority_method_specific_over_any) {
     ASSERT_EQ(m->params.get("name"), std::string_view("42"));
 }
 
-TEST(router_indexed_exact_over_dynamic_registered_late) {
+TEST(router_indexed_exact_over_dynamic_registered_late)
+{
     router r;
     r.any("/*path", make_handler("grpc-catch-all"));
     r.get("/:tenant/users", make_handler("tenant-users"));
@@ -189,7 +206,8 @@ TEST(router_indexed_exact_over_dynamic_registered_late) {
     ASSERT_TRUE(m->params.get("tenant").empty());
 }
 
-TEST(router_generic_first_segment_routes_still_match) {
+TEST(router_generic_first_segment_routes_still_match)
+{
     router r;
     r.get("/api/users/:id", make_handler("api-user"));
     r.get("/:service/:method", make_handler("generic-rpc"));
@@ -205,7 +223,8 @@ TEST(router_generic_first_segment_routes_still_match) {
     ASSERT_TRUE(api->params.get("service").empty());
 }
 
-TEST(request_body_stream_receives_chunks_in_order) {
+TEST(request_body_stream_receives_chunks_in_order)
+{
     request_body_stream stream;
 
     request_body_chunk a(2);
@@ -218,9 +237,11 @@ TEST(request_body_stream_receives_chunks_in_order) {
     ASSERT_TRUE(stream.push(std::move(b)));
     stream.close();
 
-    auto read_all = [&stream]() -> cnetmod::task<std::string> {
+    auto read_all = [&stream]() -> cnetmod::task<std::string>
+    {
         std::string out;
-        while (auto chunk = co_await stream.receive()) {
+        while (auto chunk = co_await stream.receive())
+        {
             out.append(reinterpret_cast<const char*>(chunk->data()), chunk->size());
         }
         co_return out;
@@ -230,11 +251,35 @@ TEST(request_body_stream_receives_chunks_in_order) {
     ASSERT_EQ(body, std::string("hi!"));
 }
 
+TEST(request_body_stream_enforces_cumulative_limit)
+{
+    request_body_stream stream(2, 3);
+    ASSERT_TRUE(stream.push(request_body_chunk(2)));
+    ASSERT_FALSE(stream.push(request_body_chunk(2)));
+    ASSERT_TRUE(stream.is_closed());
+    ASSERT_EQ(stream.received_bytes(), std::size_t{2});
+    ASSERT_EQ(stream.error(), std::make_error_code(std::errc::message_size));
+}
+
+TEST(router_stream_route_preserves_transport_options)
+{
+    router r;
+    r.stream_post("/upload", make_handler("upload"),
+        {.max_bytes = 4096, .chunk_capacity = 4});
+
+    auto match = r.match(http_method::POST, "/upload");
+    ASSERT_TRUE(match.has_value());
+    ASSERT_TRUE(match->request_stream.has_value());
+    ASSERT_EQ(match->request_stream->max_bytes, std::size_t{4096});
+    ASSERT_EQ(match->request_stream->chunk_capacity, std::size_t{4});
+}
+
 // =============================================================================
 // String method overload
 // =============================================================================
 
-TEST(router_string_method_match) {
+TEST(router_string_method_match)
+{
     router r;
     r.get("/test", make_handler("test"));
 
@@ -242,7 +287,8 @@ TEST(router_string_method_match) {
     ASSERT_TRUE(m.has_value());
 }
 
-TEST(router_string_method_invalid) {
+TEST(router_string_method_invalid)
+{
     router r;
     r.get("/test", make_handler("test"));
 
@@ -254,7 +300,8 @@ TEST(router_string_method_invalid) {
 // All HTTP methods
 // =============================================================================
 
-TEST(router_put_del_patch) {
+TEST(router_put_del_patch)
+{
     router r;
     r.put("/item", make_handler("put"));
     r.del("/item", make_handler("del"));

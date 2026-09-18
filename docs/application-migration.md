@@ -18,7 +18,7 @@ auto result = cnetmod::application::run_application(options,
 
 ```cpp
 auto host = cnetmod::application::application_builder{"orders"}
-    .configuration_file("application.json")
+    .configuration_file("application.yaml")
     .enable_auto_configuration()
     .routes([](cnetmod::http::router& routes)
     {
@@ -39,7 +39,7 @@ return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
 
 ## 集成迁移
 
-旧 `install_redis(app, options)` 等安装函数改为 JSON 服务条目。只有同时满足以下条件才会装配：
+旧 `install_redis(app, options)` 等安装函数改为 YAML/JSON 服务条目；新项目推荐 YAML。只有同时满足以下条件才会装配：
 
 1. 程序调用 `enable_auto_configuration()`；
 2. 服务条目设置 `enabled: true`；

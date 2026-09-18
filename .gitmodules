@@ -30,3 +30,6 @@
 [submodule "3rdparty/yaml-cpp"]
 	path = 3rdparty/yaml-cpp
 	url = https://github.com/jbeder/yaml-cpp.git
+[submodule "3rdparty/glaze"]
+	path = 3rdparty/glaze
+	url = https://github.com/stephenberry/glaze.git

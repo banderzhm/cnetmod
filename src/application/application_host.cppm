@@ -124,6 +124,8 @@ export using route_configurer = std::function<void(http::router&)>;
 export using runtime_route_configurer =
     std::function<void(http::router&, application_runtime&)>;
 export using application_middleware = http::middleware_fn;
+export using runtime_middleware_factory =
+    std::function<application_middleware(application_runtime&)>;
 export using configuration_customizer =
     std::function<void(application_configuration&)>;
 
@@ -198,6 +200,15 @@ public:
     auto middleware(application_middleware value) -> application_builder&;
 
     /**
+     * @brief Adds middleware composed from the host-owned runtime.
+     *
+     * The factory runs during build after runtime construction and before any
+     * listener starts. Returning an empty middleware fails the build.
+     */
+    auto runtime_middleware(runtime_middleware_factory factory)
+        -> application_builder&;
+
+    /**
      * @brief Registers a custom managed service.
      */
     auto service(std::shared_ptr<managed_service> service)
@@ -232,6 +243,7 @@ private:
     std::vector<route_configurer> route_configurers_;
     std::vector<runtime_route_configurer> runtime_route_configurers_;
     std::vector<application_middleware> middlewares_;
+    std::vector<runtime_middleware_factory> runtime_middleware_factories_;
     std::vector<std::shared_ptr<managed_service>> services_;
     std::vector<managed_service_factory> service_factories_;
     bool auto_configuration_ = false;

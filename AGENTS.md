@@ -2264,9 +2264,18 @@ export auto from_chars_double(std::string_view sv, double& value) -> std::errc;
 export auto from_chars_float(std::string_view sv, float& value) -> std::errc;
 export template <std::integral T>
 auto from_chars_int(std::string_view sv, T& value, int base = 10) -> std::errc;
+export auto to_chars_double(char* first, char* last, double value,
+    int precision = std::numeric_limits<double>::max_digits10)
+    -> std::to_chars_result;
+export auto to_chars_float(char* first, char* last, float value,
+    int precision = std::numeric_limits<float>::max_digits10)
+    -> std::to_chars_result;
 ```
 
-跨平台 `std::from_chars` 封装，macOS 浮点支持回退到 `std::stod`。
+跨平台浮点字符转换封装。macOS 的标准库缺少浮点 `std::to_chars` 时，格式化在
+封装内部回退到 `std::format_to_n`；调用方仍使用同一组无分配缓冲区接口。解析在
+macOS 回退到 `std::stod`/`std::stof`。协议、OTLP 和业务代码不得自行用平台宏复制
+这套兼容逻辑。
 
 ---
 
@@ -8460,6 +8469,42 @@ auto sse_heartbeat() -> task<bool>;
 #### `request_context::sse_done`
 **签名**: `auto sse_done() -> task<bool>`
 
+#### `request_context::with_sse`
+
+**签名**:
+```cpp
+auto with_sse(sse_handler_fn handler,
+    sse_stream_options options = {}) -> task<void>;
+```
+
+当是否启用 SSE 必须在请求期间决定时，先完成鉴权、参数解析和资源存在性检查；只有确认
+进入流式响应后才调用 `with_sse()`。在调用前仍可返回普通 HTTP 4xx/5xx；调用后由框架以
+结构化并发同时运行 stream handler 和总时限看门狗，并在 handler 结束时取消、等待看门狗，
+不会留下失管协程。
+
+```cpp
+routes.post("/chat", [](http::request_context& request) -> task<void> {
+    auto session = co_await find_session(request.param("id"));
+    if (!session) {
+        request.not_found();
+        co_return;
+    }
+    if (request.query_string() != "stream=true") {
+        request.json(http::status::ok, render_response(*session));
+        co_return;
+    }
+
+    co_await request.with_sse(
+        [session = std::move(*session)](http::request_context&,
+            http::sse_stream& stream) mutable -> task<void> {
+            co_await stream.send(render_delta(session), "delta");
+            co_await stream.finish();
+        },
+        {.max_duration = std::chrono::seconds{60},
+            .write_timeout = std::chrono::seconds{3}});
+});
+```
+
 #### `sse_stream`
 
 `sse_stream` 是绑定 `request_context` 的高层流对象，统一管理保守的开始状态、惰性
@@ -8485,7 +8530,9 @@ routes.sse_post("/chat", [](http::request_context& request,
 `started()` 在响应头开始提交时即返回 true，包括提交失败；一旦为 true，不得回退普通
 HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`sse_stream` 或请求
 上下文的生命周期。`router::sse_get()` 和 `router::sse_post()` 会为每个请求创建独立流对象，
-因此可直接用于 `application_builder::routes()`。Application 的 recover 中间件发现 SSE 已
+并在内部复用 `request_context::with_sse()`；它们适用于注册时即可确定为 SSE 的独立端点。
+运行时才决定是否流式的同路径接口必须使用 `with_sse()`，不要只构造 `sse_stream`，否则
+没有结构化的总时限看门狗。Application 的 recover 中间件发现 SSE 已
 提交后不会再尝试普通 JSON 响应，而是尽力写出具名 `error` 帧和终止帧；业务可在异常前
 自行写出更具体的错误契约。
 
@@ -9202,7 +9249,7 @@ auto configure_routes(cnetmod::http::router& routes) -> void
 auto main() -> int
 {
 auto host = cnetmod::application::application_builder{"order-service"}
-    .configuration_file("application.json")
+    .configuration_file("application.yaml")
     .enable_auto_configuration()
     .routes(configure_routes)
     .middleware(cnetmod::cors())
@@ -9221,6 +9268,33 @@ auto host = cnetmod::application::application_builder{"order-service"}
 循环。`cancellation()` 返回可复制、可注册回调的 `std::stop_token`，
 `stop_requested()` 提供轻量查询；`tasks()` 与 `telemetry()` 分别提供既有任务监管和观测
 组合根。停机先排空请求、广播取消、等待监管任务、逆序关闭服务，最后停止 CPU 池。
+
+Route 中优先使用 `offload()` 包装一段纯 CPU callable：它会在 Application CPU 池运行，
+无论正常返回还是抛异常，等待方都会恢复到当前 Application 事件循环。只有算法必须跨
+多个异步步骤持续驻留 CPU 池时才成对使用 `schedule_on_cpu()` 与
+`resume_to_event_loop()`；切回事件循环前不得读写 `request_context`。两种方式都不需要
+业务保存或传递裸 `io_context&`：
+
+```cpp
+builder.routes([](http::router& routes, application_runtime& runtime) {
+    routes.post("/score", [&runtime](http::request_context& request)
+        -> task<void> {
+        auto input = std::string{request.body()};
+        auto score = co_await runtime.offload(
+            [input = std::move(input)] { return calculate_score(input); });
+        request.text(http::status::ok, std::to_string(score));
+    });
+
+    routes.post("/pipeline", [&runtime](http::request_context& request)
+        -> task<void> {
+        auto input = std::string{request.body()};
+        co_await runtime.schedule_on_cpu();
+        auto result = run_cpu_pipeline(input);
+        co_await runtime.resume_to_event_loop();
+        request.text(http::status::ok, std::move(result));
+    });
+});
+```
 
 `parse_offloaded(runtime, text)` 与 `dump_offloaded(runtime, value)` 在 Host CPU 池执行
 JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
@@ -9329,7 +9403,10 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 
 ## 配置
 
-优先级固定为：框架默认值 < JSON/YAML < 环境变量 < builder `configure()` 显式覆盖。
+优先级固定为：框架默认值 < YAML/JSON < 环境变量 < builder `configure()` 显式覆盖。
+
+新项目推荐使用 YAML（`.yaml` 或 `.yml`）作为 Application 配置格式；JSON 继续作为
+兼容输入格式，并仍用于 HTTP/消息负载的类型化编解码，两者不是同一层职责。
 
 `application_builder::configuration_file()` 根据 `.json`、`.yaml` 或 `.yml`
 扩展名选择解析器。YAML 由独立的 `yaml_cpp` C++23 Modules 门面和
@@ -9342,6 +9419,9 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 `git submodule update --init --recursive`。开发时可分别用
 `CNETMOD_YAML_CPP_SOURCE_DIR` 和 `CNETMOD_YAML_CPP_MODULES_SOURCE_DIR`
 指向本地版本。
+
+下面的 JSON 仅用于展示与 YAML 等价的完整兼容字段；可直接使用仓库中的
+`examples/application/application.yaml` 作为推荐配置模板。
 
 ```json
 {

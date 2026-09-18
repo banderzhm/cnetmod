@@ -306,6 +306,42 @@ auto sse_heartbeat() -> task<bool>;
 #### `request_context::sse_done`
 **签名**: `auto sse_done() -> task<bool>`
 
+#### `request_context::with_sse`
+
+**签名**:
+```cpp
+auto with_sse(sse_handler_fn handler,
+    sse_stream_options options = {}) -> task<void>;
+```
+
+当是否启用 SSE 必须在请求期间决定时，先完成鉴权、参数解析和资源存在性检查；只有确认
+进入流式响应后才调用 `with_sse()`。在调用前仍可返回普通 HTTP 4xx/5xx；调用后由框架以
+结构化并发同时运行 stream handler 和总时限看门狗，并在 handler 结束时取消、等待看门狗，
+不会留下失管协程。
+
+```cpp
+routes.post("/chat", [](http::request_context& request) -> task<void> {
+    auto session = co_await find_session(request.param("id"));
+    if (!session) {
+        request.not_found();
+        co_return;
+    }
+    if (request.query_string() != "stream=true") {
+        request.json(http::status::ok, render_response(*session));
+        co_return;
+    }
+
+    co_await request.with_sse(
+        [session = std::move(*session)](http::request_context&,
+            http::sse_stream& stream) mutable -> task<void> {
+            co_await stream.send(render_delta(session), "delta");
+            co_await stream.finish();
+        },
+        {.max_duration = std::chrono::seconds{60},
+            .write_timeout = std::chrono::seconds{3}});
+});
+```
+
 #### `sse_stream`
 
 `sse_stream` 是绑定 `request_context` 的高层流对象，统一管理保守的开始状态、惰性
@@ -331,7 +367,9 @@ routes.sse_post("/chat", [](http::request_context& request,
 `started()` 在响应头开始提交时即返回 true，包括提交失败；一旦为 true，不得回退普通
 HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`sse_stream` 或请求
 上下文的生命周期。`router::sse_get()` 和 `router::sse_post()` 会为每个请求创建独立流对象，
-因此可直接用于 `application_builder::routes()`。Application 的 recover 中间件发现 SSE 已
+并在内部复用 `request_context::with_sse()`；它们适用于注册时即可确定为 SSE 的独立端点。
+运行时才决定是否流式的同路径接口必须使用 `with_sse()`，不要只构造 `sse_stream`，否则
+没有结构化的总时限看门狗。Application 的 recover 中间件发现 SSE 已
 提交后不会再尝试普通 JSON 响应，而是尽力写出具名 `error` 帧和终止帧；业务可在异常前
 自行写出更具体的错误契约。
 

@@ -11,6 +11,7 @@ import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.middleware.compress;
 import cnetmod.protocol.http.middleware.graceful_shutdown;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
@@ -1679,6 +1680,9 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     std::optional<std::expected<std::string, std::error_code>> file_read;
     std::optional<std::expected<void, std::error_code>> file_removed;
     std::optional<std::expected<void, std::error_code>> directory_rejected;
+    std::thread::id event_loop_thread;
+    std::thread::id cpu_thread;
+    std::thread::id restored_thread;
     const auto file_path = std::filesystem::temp_directory_path() /
         ("cnetmod-runtime-" +
             std::to_string(std::chrono::steady_clock::now()
@@ -1689,6 +1693,11 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_TRUE(std::filesystem::create_directory(directory_path));
     auto run = [&]() -> cnetmod::task<void>
     {
+        event_loop_thread = std::this_thread::get_id();
+        co_await runtime.schedule_on_cpu();
+        cpu_thread = std::this_thread::get_id();
+        co_await runtime.resume_to_event_loop();
+        restored_thread = std::this_thread::get_id();
         cnetmod::cancel_token file_cancellation;
         parsed = co_await application::parse_offloaded(runtime,
             R"({"value":42})");
@@ -1714,6 +1723,8 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     cpu_pool.request_stop();
 
     ASSERT_TRUE(background_ran);
+    ASSERT_TRUE(cpu_thread != event_loop_thread);
+    ASSERT_EQ(restored_thread, event_loop_thread);
     ASSERT_TRUE(parsed.has_value());
     ASSERT_TRUE(parsed->has_value());
     ASSERT_EQ(parsed->value().at("value").get<int>(), 42);
@@ -1766,6 +1777,45 @@ TEST(application_builder_runtime_routes_receive_host_runtime)
                     .build();
     ASSERT_TRUE(host.has_value());
     ASSERT_EQ(observed, &host->runtime());
+}
+
+TEST(application_builder_runtime_middleware_uses_host_runtime)
+{
+    application::application_runtime* observed = nullptr;
+    auto host = application::application_builder{"runtime-middleware"}
+                    .runtime_middleware(application::runtime_middleware_factory{
+                        [&observed](application::application_runtime& runtime)
+                        {
+                            observed = &runtime;
+                            return runtime.compression({
+                                .min_size = 128,
+                                .max_concurrency = 2,
+                            });
+                        }})
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    ASSERT_EQ(observed, &host->runtime());
+
+    auto rejected = application::application_builder{"invalid-runtime-middleware"}
+                        .runtime_middleware(application::runtime_middleware_factory{
+                            [](application::application_runtime&)
+                            {
+                                return application::application_middleware{};
+                            }})
+                        .build();
+    ASSERT_FALSE(rejected.has_value());
+
+    bool empty_rejected = false;
+    try
+    {
+        application::application_builder{"empty-runtime-middleware"}
+            .runtime_middleware(application::runtime_middleware_factory{});
+    }
+    catch (const std::invalid_argument&)
+    {
+        empty_rejected = true;
+    }
+    ASSERT_TRUE(empty_rejected);
 }
 
 TEST(application_builder_composes_host_owned_service_factories_before_freeze)
@@ -1940,7 +1990,7 @@ TEST(application_builder_executes_ordered_business_middleware)
     try
     {
         application::application_builder{"empty-middleware"}
-            .middleware({});
+            .middleware(application::application_middleware{});
     }
     catch (const std::invalid_argument&)
     {

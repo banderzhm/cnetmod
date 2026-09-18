@@ -9,27 +9,44 @@ import cnetmod.coro.task;
 
 namespace cnetmod::http {
 
-request_body_stream::request_body_stream(std::size_t capacity)
-    : chunks_(capacity) {}
+request_body_stream::request_body_stream(std::size_t capacity,
+    std::size_t max_bytes)
+    : chunks_(capacity), max_bytes_(max_bytes) {}
 
 auto request_body_stream::receive() -> task<std::optional<request_body_chunk>>
 {
-    co_return co_await chunks_.receive();
+    auto chunk = co_await chunks_.receive();
+    if (chunk && consumption_observer_)
+        consumption_observer_(chunk->size());
+    co_return chunk;
 }
 
 auto request_body_stream::send(request_body_chunk chunk) -> task<bool>
 {
-    co_return co_await chunks_.send(std::move(chunk));
+    const auto bytes = chunk.size();
+    if (!can_accept(bytes))
+        co_return false;
+    if (!(co_await chunks_.send(std::move(chunk))))
+        co_return false;
+    received_bytes_ += bytes;
+    co_return true;
 }
 
 auto request_body_stream::try_receive() -> std::optional<request_body_chunk>
 {
-    return chunks_.try_receive();
+    auto chunk = chunks_.try_receive();
+    if (chunk && consumption_observer_)
+        consumption_observer_(chunk->size());
+    return chunk;
 }
 
 auto request_body_stream::push(request_body_chunk chunk) -> bool
 {
-    return chunks_.try_send(std::move(chunk));
+    const auto bytes = chunk.size();
+    if (!can_accept(bytes) || !chunks_.try_send(std::move(chunk)))
+        return false;
+    received_bytes_ += bytes;
+    return true;
 }
 
 void request_body_stream::close() noexcept
@@ -37,9 +54,50 @@ void request_body_stream::close() noexcept
     chunks_.close();
 }
 
+void request_body_stream::fail(std::error_code error) noexcept
+{
+    if (!error_)
+        error_ = error;
+    chunks_.close();
+}
+
 auto request_body_stream::is_closed() const noexcept -> bool
 {
     return chunks_.is_closed();
+}
+
+auto request_body_stream::received_bytes() const noexcept -> std::size_t
+{
+    return received_bytes_;
+}
+
+auto request_body_stream::error() const noexcept -> std::error_code
+{
+    return error_;
+}
+
+void request_body_stream::observe_consumption(consumption_observer observer)
+{
+    consumption_observer_ = std::move(observer);
+}
+
+void request_body_stream::constrain_limit(std::size_t max_bytes) noexcept
+{
+    max_bytes_ = std::min(max_bytes_, max_bytes);
+    if (received_bytes_ > max_bytes_)
+        fail(std::make_error_code(std::errc::message_size));
+}
+
+auto request_body_stream::can_accept(std::size_t bytes) noexcept -> bool
+{
+    if (chunks_.is_closed())
+        return false;
+    if (bytes > max_bytes_ - std::min(max_bytes_, received_bytes_))
+    {
+        fail(std::make_error_code(std::errc::message_size));
+        return false;
+    }
+    return true;
 }
 
 auto case_insensitive_less::operator()(std::string_view left,

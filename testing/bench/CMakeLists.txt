@@ -23,7 +23,8 @@ set(BENCH_TARGETS
 )
 
 if(CNETMOD_ENABLE_HTTP)
-    list(APPEND BENCH_TARGETS bench_http_observation bench_http_baseline bench_http_disabled)
+    list(APPEND BENCH_TARGETS bench_http_observation bench_http_baseline bench_http_disabled
+        bench_http_parser)
     set(bench_http_baseline_SOURCE bench_http_observation.cpp)
     set(bench_http_disabled_SOURCE bench_http_observation.cpp)
 endif()
@@ -90,6 +91,15 @@ foreach(bench_name ${BENCH_TARGETS})
         target_compile_options(${bench_name} PRIVATE -O3)
     endif()
 endforeach()
+
+if(TARGET bench_http_parser)
+    if(MSVC AND (CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64"))
+        target_compile_options(bench_http_parser PRIVATE /arch:AVX2)
+    elseif((CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU") AND
+           (CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64"))
+        target_compile_options(bench_http_parser PRIVATE -mavx2)
+    endif()
+endif()
 
 # HTTP/3 measurements require a separately started peer and pinned machine
 # configuration.  They are intentionally not CTest tests: a benchmark that

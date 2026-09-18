@@ -26,6 +26,18 @@ auto stream::body() const noexcept -> std::span<const std::byte>
     return body_;
 }
 
+void stream::attach_body_stream(
+    std::shared_ptr<cnetmod::http::request_body_stream> body_stream)
+{
+    body_stream_ = std::move(body_stream);
+}
+
+auto stream::body_stream() const noexcept
+    -> const std::shared_ptr<cnetmod::http::request_body_stream>&
+{
+    return body_stream_;
+}
+
 auto stream::receive_window() noexcept -> flow_window&
 {
     return receive_window_;
@@ -52,9 +64,20 @@ auto stream::receive_data(std::span<const std::byte> data, bool end_stream)
     if (state_ != stream_state::open ||
         !receive_window_.consume(static_cast<std::uint32_t>(data.size())))
         return false;
-    body_.insert(body_.end(), data.begin(), data.end());
+    if (body_stream_)
+    {
+        cnetmod::http::request_body_chunk chunk{data.begin(), data.end()};
+        if (!body_stream_->push(std::move(chunk)))
+            return false;
+    }
+    else
+        body_.insert(body_.end(), data.begin(), data.end());
     if (end_stream)
+    {
         state_ = stream_state::half_closed_remote;
+        if (body_stream_)
+            body_stream_->close();
+    }
     return true;
 }
 } // namespace cnetmod::http::v2

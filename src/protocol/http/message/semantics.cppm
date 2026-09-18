@@ -19,10 +19,24 @@ namespace cnetmod::http {
 
 export using request_body_chunk = byte_buffer;
 
+/**
+ * @brief Defines the protocol-independent bounds of a request body stream.
+ *
+ * Every HTTP transport applies the same cumulative byte limit and bounded
+ * channel capacity so handlers observe identical back-pressure semantics.
+ */
+export struct request_body_stream_options
+{
+    std::size_t max_bytes = 32U * 1024U * 1024U;
+    std::size_t chunk_capacity = 16;
+};
+
 export class request_body_stream
 {
 public:
-    explicit request_body_stream(std::size_t chunk_capacity = 1024);
+    using consumption_observer = std::function<void(std::size_t)>;
+    explicit request_body_stream(std::size_t chunk_capacity = 1024,
+        std::size_t max_bytes = std::numeric_limits<std::size_t>::max());
 
     [[nodiscard]] auto receive() -> task<std::optional<request_body_chunk>>;
 
@@ -36,10 +50,43 @@ public:
 
     void close() noexcept;
 
+    /**
+     * @brief Closes the stream and preserves the transport failure category.
+     */
+    void fail(std::error_code error) noexcept;
+
     [[nodiscard]] auto is_closed() const noexcept -> bool;
 
+    /**
+     * @brief Returns the cumulative number of accepted payload bytes.
+     */
+    [[nodiscard]] auto received_bytes() const noexcept -> std::size_t;
+
+    /**
+     * @brief Returns the terminal stream error, if one occurred.
+     */
+    [[nodiscard]] auto error() const noexcept -> std::error_code;
+
+    /**
+     * @brief Observes bytes after the consumer removes them from the stream.
+     *
+     * HTTP/2 uses this signal to return flow-control credit only for data the
+     * application actually consumed.
+     */
+    void observe_consumption(consumption_observer observer);
+
+    /**
+     * @brief Narrows the cumulative limit before route body consumption.
+     */
+    void constrain_limit(std::size_t max_bytes) noexcept;
+
 private:
+    [[nodiscard]] auto can_accept(std::size_t bytes) noexcept -> bool;
     cnetmod::channel<request_body_chunk> chunks_;
+    std::size_t max_bytes_;
+    std::size_t received_bytes_{};
+    std::error_code error_{};
+    consumption_observer consumption_observer_;
 };
 
 /// Pull-based client request body producer.

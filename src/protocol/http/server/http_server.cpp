@@ -854,17 +854,11 @@ auto server::handle_connection(socket client, io_context& io, conn_count_guard o
         registration.cancellation);
 }
 
-auto server::make_h2_handler(io_context& io, socket& client)
-    -> v2::server_handler
+auto server::make_h2_streaming_handler(io_context& io, socket& client)
+    -> v2::streaming_server_handler
 {
-    // session::dispatch_ready awaits each server_handler invocation before it
-    // starts the next one. Keep one builder per H2 connection just like the
-    // HTTP/1 keep-alive path does, so normal response headers do not allocate
-    // a new flat-map backing store for every stream.
-    auto output = std::make_shared<response>(status::ok, http_version::http_2);
-    return [this, &io, &client,
-               output = std::move(output)](v2::server_request request)
-               -> task<v2::server_response>
+    return [this, &io, &client](v2::server_request request,
+               cancel_token& cancellation) -> task<v2::server_response>
     {
         std::string method = "GET";
         std::string uri = "/";
@@ -884,11 +878,11 @@ auto server::make_h2_handler(io_context& io, socket& client)
             ? std::string_view(uri)
             : std::string_view(uri).substr(0, query);
         auto match = router_.match(method, path);
-        output->reset(status::ok, http_version::http_2);
+        response output(status::ok, http_version::http_2);
         if (response_headers_.emit_server)
-            output->set_header("Server", "cnetmod");
+            output.set_header("Server", "cnetmod");
         if (response_headers_.emit_date)
-            output->set_cached_date_header(date_cache_.get());
+            output.set_cached_date_header(date_cache_.get());
         route_params params;
         handler_fn route;
         if (match)
@@ -903,23 +897,38 @@ auto server::make_h2_handler(io_context& io, socket& client)
                 return detail::not_found_handler(context);
             };
         }
-        const auto body = std::string_view{
-            reinterpret_cast<const char*>(request.body.data()), request.body.size()};
-        request_context context(io, client, method, uri, headers, body, *output,
-            std::move(params));
+        std::string buffered_body;
+        if (request.body_stream && (!match || !match->request_stream))
+        {
+            while (auto chunk = co_await request.body_stream->receive())
+                buffered_body.append(
+                    reinterpret_cast<const char*>(chunk->data()), chunk->size());
+        }
+        if (request.body_stream && match && match->request_stream)
+            request.body_stream->constrain_limit(match->request_stream->max_bytes);
+        const auto body = request.body.empty()
+            ? std::string_view{buffered_body}
+            : std::string_view{reinterpret_cast<const char*>(request.body.data()),
+                  request.body.size()};
+        request_context context(io, client, method, uri, headers, body, output,
+            std::move(params), match && match->request_stream ? request.body_stream : std::shared_ptr<request_body_stream>{});
+        if (cancellation.is_cancelled())
+            context.cancel_pending_operations();
         co_await execute_chain(context, route);
         v2::server_response result;
-        result.status = static_cast<std::uint32_t>(output->status_code());
+        if (request.body_stream && request.body_stream->error() == std::make_error_code(std::errc::message_size))
+            output.set_status(status::payload_too_large);
+        result.status = static_cast<std::uint32_t>(output.status_code());
         result.body.assign(
-            reinterpret_cast<const std::byte*>(output->body().data()),
-            reinterpret_cast<const std::byte*>(output->body().data()) +
-                output->body().size());
+            reinterpret_cast<const std::byte*>(output.body().data()),
+            reinterpret_cast<const std::byte*>(output.body().data()) +
+                output.body().size());
         // HTTP/2 owns this response until HPACK has encoded it, so reserve the
         // exact number of application headers before copying them.  The usual
         // response has Date, Server and Content-Length; growing from an empty
         // vector otherwise allocates repeatedly on every request.
-        result.headers.reserve(output->headers().size());
-        for (const auto& [name, value] : output->headers())
+        result.headers.reserve(output.headers().size());
+        for (const auto& [name, value] : output.headers())
         {
             std::string lowercase;
             lowercase.reserve(name.size());
@@ -928,10 +937,10 @@ auto server::make_h2_handler(io_context& io, socket& client)
                     std::tolower(static_cast<unsigned char>(character))));
             result.headers.push_back({std::move(lowercase), value});
         }
-        if (const auto date = output->cached_date_header(); !date.empty())
+        if (const auto date = output.cached_date_header(); !date.empty())
             result.headers.push_back({"date", std::string{date}});
-        result.trailers.reserve(output->trailers().size());
-        for (const auto& [name, value] : output->trailers())
+        result.trailers.reserve(output.trailers().size());
+        for (const auto& [name, value] : output.trailers())
         {
             std::string lowercase;
             lowercase.reserve(name.size());
@@ -957,7 +966,7 @@ auto server::handle_h2(socket& client, io_context& io,
     {
         co_return co_await async_write_all(io, client, buffer, cancellation);
     };
-    v2::session session(io, client, make_h2_handler(io, client),
+    v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer));
     co_await session.run(initial);
 }
@@ -1026,7 +1035,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             initial_len = 0;
         }
 
-        while (!parser.ready())
+        auto receive_more = [&]() -> task<bool>
         {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
@@ -1037,7 +1046,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 if (!rd || rd->size() == 0)
                 {
                     co_await stop_recv();
-                    co_return;
+                    co_return false;
                 }
                 auto data = rd->data();
                 auto consumed =
@@ -1046,9 +1055,9 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 if (!consumed)
                 {
                     co_await stop_recv();
-                    co_return;
+                    co_return false;
                 }
-                continue;
+                co_return true;
             }
 #endif
             auto rd = co_await async_read(io, client,
@@ -1060,7 +1069,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
     defined(IORING_RECV_MULTISHOT)
                 co_await stop_recv();
 #endif
-                co_return;
+                co_return false;
             }
 
             auto consumed =
@@ -1072,9 +1081,14 @@ auto server::handle_h1_clear(socket& client, io_context& io,
     defined(IORING_RECV_MULTISHOT)
                 co_await stop_recv();
 #endif
-                co_return;
+                co_return false;
             }
-        }
+            co_return true;
+        };
+
+        while (!parser.headers_ready())
+            if (!(co_await receive_more()))
+                co_return;
 
         // Route matching
         auto uri = parser.uri();
@@ -1104,8 +1118,59 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             };
         }
 
-        request_context rctx(io, client, parser, resp, std::move(rp));
-        co_await execute_chain(rctx, handler);
+        if (mr && mr->request_stream)
+        {
+            const auto options = *mr->request_stream;
+            auto body_stream = std::make_shared<request_body_stream>(
+                options.chunk_capacity, options.max_bytes);
+            request_context rctx(io, client, parser.method(), parser.uri(),
+                parser.headers(), {}, resp, std::move(rp), body_stream);
+            auto pump_body = [&]() -> task<void>
+            {
+                for (;;)
+                {
+                    auto data = parser.take_body_chunk();
+                    if (!data.empty() && !body_stream->is_closed())
+                    {
+                        request_body_chunk chunk(
+                            reinterpret_cast<const std::byte*>(data.data()),
+                            reinterpret_cast<const std::byte*>(data.data()) +
+                                data.size());
+                        (void)co_await body_stream->send(std::move(chunk));
+                    }
+                    if (parser.ready())
+                    {
+                        body_stream->close();
+                        co_return;
+                    }
+                    if (!(co_await receive_more()))
+                    {
+                        body_stream->fail(
+                            std::make_error_code(std::errc::connection_aborted));
+                        co_return;
+                    }
+                }
+            };
+            auto invoke_handler = [&]() -> task<void>
+            {
+                co_await execute_chain(rctx, handler);
+                body_stream->close();
+            };
+            co_await when_all(invoke_handler(), pump_body());
+            if (body_stream->error() ==
+                    std::make_error_code(std::errc::message_size) &&
+                resp.get_header("X-Streamed") != "1")
+                rctx.text(status::payload_too_large,
+                    "Request body exceeds the route limit");
+        }
+        else
+        {
+            while (!parser.ready())
+                if (!(co_await receive_more()))
+                    co_return;
+            request_context rctx(io, client, parser, resp, std::move(rp));
+            co_await execute_chain(rctx, handler);
+        }
         // Check if chunked encoding is needed
         bool use_chunked = false;
         if (resp.get_header("X-Streamed") != "1")
@@ -1180,7 +1245,7 @@ auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
     {
         co_return co_await ssl.async_write_all(buffer, cancellation);
     };
-    v2::session session(io, client, make_h2_handler(io, client),
+    v2::session session(io, client, make_h2_streaming_handler(io, client), {},
         std::move(reader), std::move(writer));
     co_await session.run();
 }
@@ -1198,18 +1263,23 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
     {
         parser.reset();
 
-        while (!parser.ready())
+        auto receive_more = [&]() -> task<bool>
         {
             auto rd = co_await ssl.async_read(
                 mutable_buffer{buf.data(), buf.size()}, cancellation);
             if (!rd || *rd == 0)
-                co_return;
+                co_return false;
 
             auto consumed =
                 parser.consume(reinterpret_cast<const char*>(buf.data()), *rd);
             if (!consumed)
+                co_return false;
+            co_return true;
+        };
+
+        while (!parser.headers_ready())
+            if (!(co_await receive_more()))
                 co_return;
-        }
 
         auto uri = parser.uri();
         auto qpos = uri.find('?');
@@ -1238,8 +1308,59 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             };
         }
 
-        request_context rctx(io, client, parser, resp, std::move(rp));
-        co_await execute_chain(rctx, handler);
+        if (mr && mr->request_stream)
+        {
+            const auto options = *mr->request_stream;
+            auto body_stream = std::make_shared<request_body_stream>(
+                options.chunk_capacity, options.max_bytes);
+            request_context rctx(io, client, parser.method(), parser.uri(),
+                parser.headers(), {}, resp, std::move(rp), body_stream);
+            auto pump_body = [&]() -> task<void>
+            {
+                for (;;)
+                {
+                    auto data = parser.take_body_chunk();
+                    if (!data.empty() && !body_stream->is_closed())
+                    {
+                        request_body_chunk chunk(
+                            reinterpret_cast<const std::byte*>(data.data()),
+                            reinterpret_cast<const std::byte*>(data.data()) +
+                                data.size());
+                        (void)co_await body_stream->send(std::move(chunk));
+                    }
+                    if (parser.ready())
+                    {
+                        body_stream->close();
+                        co_return;
+                    }
+                    if (!(co_await receive_more()))
+                    {
+                        body_stream->fail(
+                            std::make_error_code(std::errc::connection_aborted));
+                        co_return;
+                    }
+                }
+            };
+            auto invoke_handler = [&]() -> task<void>
+            {
+                co_await execute_chain(rctx, handler);
+                body_stream->close();
+            };
+            co_await when_all(invoke_handler(), pump_body());
+            if (body_stream->error() ==
+                    std::make_error_code(std::errc::message_size) &&
+                resp.get_header("X-Streamed") != "1")
+                rctx.text(status::payload_too_large,
+                    "Request body exceeds the route limit");
+        }
+        else
+        {
+            while (!parser.ready())
+                if (!(co_await receive_more()))
+                    co_return;
+            request_context rctx(io, client, parser, resp, std::move(rp));
+            co_await execute_chain(rctx, handler);
+        }
         // Check if chunked encoding is needed
         bool use_chunked = false;
         if (resp.get_header("X-Streamed") != "1")

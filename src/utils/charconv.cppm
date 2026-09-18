@@ -33,6 +33,24 @@ export auto from_chars_double(std::string_view sv, double& value) -> std::errc;
 export auto from_chars_float(std::string_view sv, float& value) -> std::errc;
 
 /**
+ * @brief Formats a double with cross-platform floating-point support.
+ *
+ * The output range follows std::to_chars semantics. On Apple platforms the
+ * implementation uses the standard formatting library because older libc++
+ * releases do not provide floating-point std::to_chars.
+ */
+export auto to_chars_double(char* first, char* last, double value,
+    int precision = std::numeric_limits<double>::max_digits10)
+    -> std::to_chars_result;
+
+/**
+ * @brief Formats a float with cross-platform floating-point support.
+ */
+export auto to_chars_float(char* first, char* last, float value,
+    int precision = std::numeric_limits<float>::max_digits10)
+    -> std::to_chars_result;
+
+/**
  * @brief Parse an integer from string view (always uses std::from_chars)
  *
  * Integer support in from_chars is widely available

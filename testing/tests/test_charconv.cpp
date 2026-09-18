@@ -35,4 +35,25 @@ TEST(character_conversion_reports_invalid_and_out_of_range_values)
         static_cast<int>(std::errc::result_out_of_range));
 }
 
+TEST(character_conversion_formats_floating_point_portably)
+{
+    std::array<char, 64> buffer{};
+    auto double_result = cnetmod::to_chars_double(
+        buffer.data(), buffer.data() + buffer.size(), 12.5);
+    ASSERT_EQ(static_cast<int>(double_result.ec), static_cast<int>(std::errc{}));
+    ASSERT_EQ(std::string_view(buffer.data(), double_result.ptr),
+        std::string_view{"12.5"});
+
+    auto float_result = cnetmod::to_chars_float(
+        buffer.data(), buffer.data() + buffer.size(), 3.25F);
+    ASSERT_EQ(static_cast<int>(float_result.ec), static_cast<int>(std::errc{}));
+    ASSERT_EQ(std::string_view(buffer.data(), float_result.ptr),
+        std::string_view{"3.25"});
+
+    auto too_small = cnetmod::to_chars_double(
+        buffer.data(), buffer.data() + 1, 12345.0);
+    ASSERT_EQ(static_cast<int>(too_small.ec),
+        static_cast<int>(std::errc::value_too_large));
+}
+
 RUN_TESTS()

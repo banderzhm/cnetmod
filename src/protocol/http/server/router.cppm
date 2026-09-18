@@ -43,6 +43,11 @@ export struct sse_stream_options
     std::chrono::milliseconds write_timeout{5000};
 };
 
+export class request_context;
+export class sse_stream;
+export using sse_handler_fn =
+    std::function<task<void>(request_context&, sse_stream&)>;
+
 export struct route_params
 {
     cnetmod::flat_map<std::string, std::string, std::less<>> named;
@@ -71,6 +76,8 @@ public:
     [[nodiscard]] auto receive_body_chunk()
         -> task<std::optional<request_body_chunk>>;
     [[nodiscard]] auto read_full_body() -> task<std::string_view>;
+    [[nodiscard]] auto body_stream_error() const noexcept -> std::error_code;
+    [[nodiscard]] auto received_body_bytes() const noexcept -> std::size_t;
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view;
     [[nodiscard]] auto param(std::string_view name) const noexcept
         -> std::string_view;
@@ -101,6 +108,18 @@ public:
     auto sse_comment(std::string_view comment) -> task<bool>;
     auto sse_heartbeat() -> task<bool>;
     auto sse_done() -> task<bool>;
+
+    /**
+     * @brief Runs a dynamically selected SSE response with bounded lifetime.
+     *
+     * Call this only after authentication, parameter validation, and resource
+     * lookup have selected streaming for the current request. Before this call,
+     * the handler may still produce an ordinary HTTP error response. During the
+     * call, the stream handler and total-duration watchdog are joined through
+     * structured concurrency; no background watchdog outlives the request.
+     */
+    auto with_sse(sse_handler_fn handler,
+        sse_stream_options options = {}) -> task<void>;
     [[nodiscard]] auto parse_form()
         -> std::expected<const form_data*, std::error_code>;
     [[nodiscard]] auto resp() noexcept -> response&;
@@ -218,7 +237,9 @@ private:
  *
  * The stream does not own the request context. It centralizes the conservative
  * commit state, lazy stream start, named event delivery, heartbeat frames, and
- * terminal frame. Payload serialization remains an application concern.
+ * terminal frame. Payload serialization remains an application concern. Use
+ * request_context::with_sse() when SSE is selected dynamically so the stream
+ * also receives a structured total-duration watchdog.
  */
 export class sse_stream
 {
@@ -286,8 +307,6 @@ private:
 };
 
 export using handler_fn = std::function<task<void>(request_context&)>;
-export using sse_handler_fn =
-    std::function<task<void>(request_context&, sse_stream&)>;
 export using next_fn = std::function<task<void>()>;
 export using middleware_fn =
     std::function<task<void>(request_context&, next_fn)>;
@@ -321,6 +340,7 @@ export struct match_result
 {
     handler_fn handler;
     route_params params;
+    std::optional<request_body_stream_options> request_stream;
 };
 
 export class router
@@ -333,6 +353,24 @@ public:
     auto del(std::string_view pattern, handler_fn fn) -> router&;
     auto patch(std::string_view pattern, handler_fn fn) -> router&;
     auto any(std::string_view pattern, handler_fn fn) -> router&;
+
+    /**
+     * @brief Registers a POST route whose body is delivered incrementally.
+     */
+    auto stream_post(std::string_view pattern, handler_fn fn,
+        request_body_stream_options options = {}) -> router&;
+
+    /**
+     * @brief Registers a PUT route whose body is delivered incrementally.
+     */
+    auto stream_put(std::string_view pattern, handler_fn fn,
+        request_body_stream_options options = {}) -> router&;
+
+    /**
+     * @brief Registers a PATCH route whose body is delivered incrementally.
+     */
+    auto stream_patch(std::string_view pattern, handler_fn fn,
+        request_body_stream_options options = {}) -> router&;
 
     /**
      * @brief Registers a GET endpoint with a request-bound SSE stream.
@@ -362,6 +400,7 @@ private:
         std::vector<detail::segment> segments;
         std::string canonical_path;
         handler_fn handler;
+        std::optional<request_body_stream_options> request_stream;
         detail::route_score score;
         std::uint64_t order = 0;
     };
@@ -371,7 +410,8 @@ private:
     auto add_sse(http_method method, std::string_view pattern,
         sse_handler_fn fn, std::optional<sse_stream_options> options) -> router&;
     auto add_route(std::optional<http_method> method, std::string_view pattern,
-        handler_fn fn) -> router&;
+        handler_fn fn,
+        std::optional<request_body_stream_options> request_stream = {}) -> router&;
     [[nodiscard]] auto find_exact(http_method method,
         std::string_view canonical_path) const
         -> const route_entry*;

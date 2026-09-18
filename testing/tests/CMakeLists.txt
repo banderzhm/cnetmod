@@ -11,6 +11,7 @@ set(TEST_SOURCES
     test_charconv.cpp
     test_concurrent_containers.cpp
     test_application_result.cpp
+    test_json_template.cpp
     test_application.cpp
     test_application_integrations.cpp
     test_deadline.cpp
@@ -34,6 +35,7 @@ set(TEST_SOURCES
     test_c_api.cpp
     test_http_request.cpp
     test_http_response.cpp
+    test_http_compress.cpp
     test_http_parser.cpp
     test_http_router.cpp
     test_http_sse.cpp
@@ -42,6 +44,7 @@ set(TEST_SOURCES
     http_client_test.cpp
     test_http_ip_filter.cpp
     test_http2_hpack.cpp
+    test_http2_stream.cpp
     test_dns.cpp
     test_udp_batch.cpp
     test_coap.cpp

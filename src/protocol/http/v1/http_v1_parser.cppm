@@ -17,12 +17,14 @@ public:
     [[nodiscard]] auto consume(const char*, std::size_t)
         -> std::expected<std::size_t, std::error_code>;
     [[nodiscard]] auto ready() const noexcept -> bool;
+    [[nodiscard]] auto headers_ready() const noexcept -> bool;
     [[nodiscard]] auto method() const noexcept -> std::string_view;
     [[nodiscard]] auto method_enum() const noexcept -> std::optional<http_method>;
     [[nodiscard]] auto uri() const noexcept -> std::string_view;
     [[nodiscard]] auto version() const noexcept -> http_version;
     [[nodiscard]] auto headers() const noexcept -> const header_map&;
     [[nodiscard]] auto body() const noexcept -> std::string_view;
+    [[nodiscard]] auto take_body_chunk() -> std::string;
     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;
     void reset() noexcept;
 
@@ -40,12 +42,15 @@ private:
         -> std::expected<void, std::error_code>;
     auto prepare_body() -> bool;
     auto process_chunked_body() -> std::expected<bool, std::error_code>;
+    [[nodiscard]] auto readable_buffer() const noexcept -> std::string_view;
+    void compact_buffer();
     std::string buf_, method_, uri_, body_;
     http_version version_ = http_version::http_1_1;
     header_map headers_;
     state state_ = state::request_line;
-    std::size_t header_bytes_ = 0, body_bytes_remaining_ = 0;
-    bool chunked_ = false, ready_ = false;
+    std::size_t read_pos_ = 0, header_bytes_ = 0, body_bytes_remaining_ = 0,
+                body_bytes_received_ = 0;
+    bool chunked_ = false, headers_ready_ = false, ready_ = false;
 };
 
 export class response_parser
@@ -77,12 +82,14 @@ private:
         -> std::expected<void, std::error_code>;
     auto prepare_body() -> bool;
     auto process_chunked_body() -> std::expected<bool, std::error_code>;
+    [[nodiscard]] auto readable_buffer() const noexcept -> std::string_view;
+    void compact_buffer();
     std::string buf_, status_msg_, body_;
     http_version version_ = http_version::http_1_1;
     int status_code_ = 0;
     header_map headers_;
     state state_ = state::status_line;
-    std::size_t header_bytes_ = 0, body_bytes_remaining_ = 0;
+    std::size_t read_pos_ = 0, header_bytes_ = 0, body_bytes_remaining_ = 0;
     bool chunked_ = false, ready_ = false;
 };
 } // namespace cnetmod::http

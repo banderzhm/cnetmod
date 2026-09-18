@@ -12,6 +12,7 @@ import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http;
 import cnetmod.utils.concurrent_containers.queue;
+import cnetmod.utils.charconv;
 
 namespace cnetmod::observability {
 namespace {
@@ -65,8 +66,13 @@ namespace {
                 break;
             default:
                 if (static_cast<unsigned char>(character) < 0x20U)
-                    out += std::format("\\u{:04x}",
-                        static_cast<unsigned char>(character));
+                {
+                    constexpr std::string_view digits = "0123456789abcdef";
+                    const auto byte = static_cast<unsigned char>(character);
+                    out += "\\u00";
+                    out.push_back(digits[byte >> 4U]);
+                    out.push_back(digits[byte & 0x0fU]);
+                }
                 else
                     out.push_back(character);
             }
@@ -74,14 +80,34 @@ namespace {
         out.push_back('"');
     }
 
-    template <class Duration>
-    auto unix_nanoseconds(
-        std::chrono::time_point<std::chrono::system_clock, Duration> value)
-        -> std::string
+    template <std::integral Value>
+    void append_integer(std::string& out, Value value)
     {
-        return std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(
-            value.time_since_epoch())
+        std::array<char, 32> buffer{};
+        const auto converted = std::to_chars(
+            buffer.data(), buffer.data() + buffer.size(), value);
+        out.append(buffer.data(), converted.ptr);
+    }
+
+    void append_floating_point(std::string& out, double value)
+    {
+        std::array<char, 64> buffer{};
+        const auto converted = cnetmod::to_chars_double(
+            buffer.data(), buffer.data() + buffer.size(), value);
+        if (converted.ec == std::errc{})
+            out.append(buffer.data(), converted.ptr);
+    }
+
+    template <class Duration>
+    void append_unix_nanoseconds(std::string& out,
+        std::chrono::time_point<std::chrono::system_clock, Duration> value)
+    {
+        out.push_back('"');
+        append_integer(out,
+            std::chrono::duration_cast<std::chrono::nanoseconds>(
+                value.time_since_epoch())
                 .count());
+        out.push_back('"');
     }
 
     auto span_kind_name(http::tracing::span_kind kind) -> std::string_view
@@ -121,7 +147,9 @@ namespace {
     auto encode_batch(const otlp_http_options& options,
         const std::vector<http::tracing::completed_span>& spans) -> std::string
     {
-        std::string result{"{\"resourceSpans\":[{\"resource\":{\"attributes\":["};
+        std::string result;
+        result.reserve(512U + spans.size() * 768U);
+        result = "{\"resourceSpans\":[{\"resource\":{\"attributes\":[";
         bool first_resource = true;
         append_string_attribute(result, first_resource, "service.name",
             options.service_name);
@@ -176,9 +204,9 @@ namespace {
                 : span.kind;
             result += span_kind_name(kind);
             result += "\",\"startTimeUnixNano\":";
-            append_json_string(result, unix_nanoseconds(started));
+            append_unix_nanoseconds(result, started);
             result += ",\"endTimeUnixNano\":";
-            append_json_string(result, unix_nanoseconds(ended));
+            append_unix_nanoseconds(result, ended);
             result += ",\"attributes\":[";
             bool first_attribute = true;
             const auto append_attribute = [&](std::string_view key, std::string_view value)
@@ -194,8 +222,9 @@ namespace {
                     if (!first_attribute)
                         result.push_back(',');
                     first_attribute = false;
-                    result += "{\"key\":\"http.response.status_code\",\"value\":{\"intValue\":" +
-                        std::to_string(span.status_code) + "}}";
+                    result += "{\"key\":\"http.response.status_code\",\"value\":{\"intValue\":";
+                    append_integer(result, span.status_code);
+                    result += "}}";
                 }
             }
             for (const auto& [key, value] : span.attributes)
@@ -215,7 +244,8 @@ namespace {
                 outcome == instrumentation::operation_status::timeout ||
                 outcome == instrumentation::operation_status::abandoned)
                 result += ",\"status\":{\"code\":\"STATUS_CODE_ERROR\"}";
-            result += ",\"flags\":" + std::to_string(span.context.flags);
+            result += ",\"flags\":";
+            append_integer(result, span.context.flags);
             result.push_back('}');
         }
         result += "]}]}]}";
@@ -256,7 +286,9 @@ namespace {
     auto encode_logs(const otlp_http_options& options,
         const std::vector<otel_log_record>& records) -> std::string
     {
-        std::string result{"{\"resourceLogs\":[{\"resource\":{\"attributes\":["};
+        std::string result;
+        result.reserve(384U + records.size() * 384U);
+        result = "{\"resourceLogs\":[{\"resource\":{\"attributes\":[";
         append_resource(result, options);
         result += "]},\"scopeLogs\":[{\"scope\":{\"name\":\"cnetmod\",\"version\":\"1\"},\"logRecords\":[";
         for (std::size_t index{}; index < records.size(); ++index)
@@ -265,7 +297,7 @@ namespace {
                 result.push_back(',');
             const auto& record = records[index];
             result += "{\"timeUnixNano\":";
-            append_json_string(result, unix_nanoseconds(record.observed_at));
+            append_unix_nanoseconds(result, record.observed_at);
             result += ",\"severityText\":";
             append_json_string(result, record.severity);
             result += ",\"body\":{\"stringValue\":";
@@ -293,24 +325,33 @@ namespace {
         const std::vector<double>& bounds)
     {
         result += ",\"count\":";
-        append_json_string(result, std::to_string(point.count));
+        result.push_back('"');
+        append_integer(result, point.count);
+        result.push_back('"');
         if (!point.has_negative)
-            result += ",\"sum\":" + std::format("{:.{}g}", point.value, std::numeric_limits<double>::max_digits10);
-        result += ",\"min\":" + std::format("{:.{}g}", point.minimum, std::numeric_limits<double>::max_digits10);
-        result += ",\"max\":" + std::format("{:.{}g}", point.maximum, std::numeric_limits<double>::max_digits10);
+        {
+            result += ",\"sum\":";
+            append_floating_point(result, point.value);
+        }
+        result += ",\"min\":";
+        append_floating_point(result, point.minimum);
+        result += ",\"max\":";
+        append_floating_point(result, point.maximum);
         result += ",\"explicitBounds\":[";
         for (std::size_t index{}; index < bounds.size(); ++index)
         {
             if (index != 0U)
                 result.push_back(',');
-            result += std::format("{:.{}g}", bounds[index], std::numeric_limits<double>::max_digits10);
+            append_floating_point(result, bounds[index]);
         }
         result += "],\"bucketCounts\":[";
         for (std::size_t index{}; index < point.bucket_counts.size(); ++index)
         {
             if (index != 0U)
                 result.push_back(',');
-            append_json_string(result, std::to_string(point.bucket_counts[index]));
+            result.push_back('"');
+            append_integer(result, point.bucket_counts[index]);
+            result.push_back('"');
         }
         result.push_back(']');
     }
@@ -318,7 +359,9 @@ namespace {
     auto encode_metrics(const otlp_http_options& options,
         const std::vector<instrumentation::metric_series>& records) -> std::string
     {
-        std::string result{"{\"resourceMetrics\":[{\"resource\":{\"attributes\":["};
+        std::string result;
+        result.reserve(512U + records.size() * 512U);
+        result = "{\"resourceMetrics\":[{\"resource\":{\"attributes\":[";
         append_resource(result, options);
         result += "]},\"scopeMetrics\":[{\"scope\":{\"name\":\"cnetmod\",\"version\":\"1\"},\"metrics\":[";
         for (std::size_t index{}; index < records.size(); ++index)
@@ -344,16 +387,19 @@ namespace {
                     result.push_back(',');
                 const auto& point = record.points[point_index];
                 result += "{\"timeUnixNano\":";
-                append_json_string(result, unix_nanoseconds(point.observed_at));
+                append_unix_nanoseconds(result, point.observed_at);
                 if (record.kind != otel_metric_kind::gauge)
                 {
                     result += ",\"startTimeUnixNano\":";
-                    append_json_string(result, unix_nanoseconds(point.started_at));
+                    append_unix_nanoseconds(result, point.started_at);
                 }
                 if (record.kind == otel_metric_kind::histogram)
                     append_histogram(result, point, record.explicit_bounds);
                 else
-                    result += ",\"asDouble\":" + std::format("{:.{}g}", point.value, std::numeric_limits<double>::max_digits10);
+                {
+                    result += ",\"asDouble\":";
+                    append_floating_point(result, point.value);
+                }
                 result += ",\"attributes\":[";
                 if (point.overflow)
                     result += "{\"key\":\"otel.metric.overflow\",\"value\":{\"boolValue\":true}}";

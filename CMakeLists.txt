@@ -513,6 +513,29 @@ install(TARGETS cnetmod_core
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     FILE_SET cxx_modules DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules"
 )
+if(UNIX AND STDLIB_MODULE_DIRS)
+    # libc++'s std module units include generated declaration fragments from
+    # adjacent std/ and std.compat/ directories.  CMake installs only files
+    # listed in the module file set, so preserve those required companions for
+    # consumers that rebuild the installed module graph.
+    install(DIRECTORY
+        "${STDLIB_MODULE_DIRS}/std"
+        "${STDLIB_MODULE_DIRS}/std.compat"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules")
+endif()
+# Public module interfaces may include template implementation fragments that
+# are intentionally not standalone module units. Preserve their source-relative
+# paths so installed consumers can rebuild the exported module graph.
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/"
+    DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules/src"
+    FILES_MATCHING
+        PATTERN "*.inc"
+        PATTERN "*.inl"
+        PATTERN "*.ipp"
+        PATTERN "*.tpp")
+install(TARGETS cnetmod_glaze EXPORT cnetmodTargets)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/glaze/include/glaze"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 if(TARGET cnetmod_c)
     install(TARGETS cnetmod_c
         EXPORT cnetmodTargets

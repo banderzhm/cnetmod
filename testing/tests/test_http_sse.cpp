@@ -14,6 +14,72 @@ import cnetmod.protocol.http.middleware.timeout;
 
 using namespace cnetmod::http;
 
+TEST(http1_stream_route_delivers_body_before_peer_finishes_request)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    server http_server{*io};
+    router routes;
+    bool first_chunk_seen = false;
+    routes.stream_post("/upload",
+        [&first_chunk_seen](request_context& request) -> cnetmod::task<void>
+        {
+            std::string body;
+            while (auto chunk = co_await request.receive_body_chunk())
+            {
+                first_chunk_seen = true;
+                body.append(reinterpret_cast<const char*>(chunk->data()),
+                    chunk->size());
+            }
+            request.text(status::ok, body);
+        },
+        {.max_bytes = 64, .chunk_capacity = 1});
+    http_server.set_router(std::move(routes));
+    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = http_server.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    auto listener = http_server.run();
+    listener.handle().resume();
+
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
+                .has_value());
+        const std::string first = "POST /upload HTTP/1.1\r\nHost: localhost\r\n" "Content-Length: 6\r\nConnection: close\r\n\r\nabc";
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                         cnetmod::const_buffer{first.data(), first.size()}))
+                .has_value());
+        for (int attempt = 0; attempt < 50 && !first_chunk_seen; ++attempt)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        ASSERT_TRUE(first_chunk_seen);
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                         cnetmod::const_buffer{"def", 3}))
+                .has_value());
+
+        std::array<char, 4096> bytes{};
+        auto read = co_await cnetmod::async_read(*io, *peer,
+            cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+        ASSERT_TRUE(read.has_value() && *read > 0);
+        ASSERT_TRUE((std::string_view{bytes.data(), *read}.contains("abcdef")));
+        peer->close();
+        http_server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        listener.handle().promise().result();
+        while (http_server.active_connections() != 0)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+}
+
 TEST(sse_encodes_named_multiline_event)
 {
     auto frame = sse::encode(sse::event{
@@ -147,6 +213,59 @@ TEST(sse_router_registers_get_and_post_endpoints)
     ASSERT_FALSE(routes.match(http_method::POST, "/events").has_value());
     ASSERT_TRUE(routes.match(http_method::POST, "/chat").has_value());
     ASSERT_FALSE(routes.match(http_method::GET, "/chat").has_value());
+}
+
+TEST(sse_request_lifecycle_allows_validation_before_dynamic_activation)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket peer;
+    header_map headers;
+    bool expired = false;
+
+    router routes;
+    routes.get("/events",
+        [&expired](request_context& request) -> cnetmod::task<void>
+        {
+            if (request.query_string() != "stream=true")
+            {
+                request.text(status::bad_request, "streaming not requested");
+                co_return;
+            }
+            co_await request.with_sse(
+                [&expired](request_context& context,
+                    sse_stream& stream) -> cnetmod::task<void>
+                {
+                    co_await cnetmod::async_sleep(context.io_ctx(),
+                        std::chrono::milliseconds{5});
+                    expired = !(co_await stream.send("late")) &&
+                        stream.state() == sse_stream_state::failed &&
+                        context.request_deadline().expired();
+                },
+                {.max_duration = std::chrono::milliseconds{1},
+                    .write_timeout = std::chrono::milliseconds{1}});
+        });
+    const auto route = routes.match(http_method::GET, "/events");
+    ASSERT_TRUE(route.has_value());
+
+    auto run = [&]() -> cnetmod::task<void>
+    {
+        response rejected_response;
+        request_context rejected{*io, peer, "GET",
+            "/events?stream=false", headers, {}, rejected_response, {}};
+        co_await route->handler(rejected);
+        ASSERT_EQ(rejected_response.status_code(), status::bad_request);
+        ASSERT_FALSE(rejected.sse_started());
+
+        response streaming_response;
+        request_context streaming{*io, peer, "GET",
+            "/events?stream=true", headers, {}, streaming_response, {}};
+        co_await route->handler(streaming);
+        io->stop();
+    };
+    cnetmod::spawn(*io, run());
+    io->run();
+    ASSERT_TRUE(expired);
 }
 
 TEST(sse_route_enforces_maximum_duration_before_writing)

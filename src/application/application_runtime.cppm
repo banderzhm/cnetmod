@@ -6,6 +6,7 @@ export module cnetmod.application.runtime;
 import std;
 import cnetmod.application.async_file_template;
 import cnetmod.application.rest_template;
+import cnetmod.application.json_template;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.bridge;
@@ -14,6 +15,8 @@ import cnetmod.coro.timer;
 import cnetmod.executor.pool;
 import cnetmod.io.io_context;
 import cnetmod.observability;
+import cnetmod.protocol.http;
+import cnetmod.protocol.http.middleware.compress;
 
 namespace cnetmod::application {
 
@@ -81,6 +84,23 @@ public:
     }
 
     /**
+     * @brief Schedules the awaiting route coroutine on the managed CPU pool.
+     *
+     * Pair this operation with resume_to_event_loop() before accessing HTTP
+     * request or response state. Prefer offload() when the CPU operation can
+     * be expressed as a callable because it restores the event loop even when
+     * the callable throws.
+     */
+    [[nodiscard]] auto schedule_on_cpu() noexcept -> pool_post_awaitable;
+
+    /**
+     * @brief Resumes the awaiting coroutine on the application event loop.
+     *
+     * This removes the need for route code to retain or pass a raw io_context.
+     */
+    [[nodiscard]] auto resume_to_event_loop() noexcept -> post_awaitable;
+
+    /**
      * @brief Returns application-managed asynchronous file operations.
      */
     [[nodiscard]] auto files() noexcept -> async_file_template&;
@@ -89,6 +109,22 @@ public:
      * @brief Returns pooled and observable outbound HTTP operations.
      */
     [[nodiscard]] auto rest() noexcept -> rest_template&;
+
+    /**
+     * @brief Returns typed JSON operations offloaded to the application CPU pool.
+     */
+    [[nodiscard]] auto json() noexcept -> json_template&;
+
+    /**
+     * @brief Creates response compression managed by the application CPU pool.
+     *
+     * The returned middleware uses bounded concurrency, request cancellation,
+     * and the application measurement sink. A compression call already running
+     * inside a native codec cannot be preempted; its result is discarded after
+     * cancellation and the bounded operation is allowed to finish.
+     */
+    [[nodiscard]] auto compression(compress_options options = {})
+        -> http::middleware_fn;
 
     /**
      * @brief Reports whether application shutdown has been requested.
@@ -122,6 +158,7 @@ private:
     std::stop_token cancellation_;
     async_file_template files_;
     rest_template rest_;
+    json_template json_;
 };
 
 } // namespace cnetmod::application

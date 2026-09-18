@@ -20,7 +20,7 @@ auto configure_routes(http::router& routes) -> void
 auto main() -> int
 {
     auto host = application::application_builder{"order-service"}
-                    .configuration_file("application.json")
+                    .configuration_file("application.yaml")
                     .enable_auto_configuration()
                     .routes(configure_routes)
                     .build();

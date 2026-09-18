@@ -272,6 +272,14 @@ public:
     /// deployments keep the zero-risk static-table default.
     auto configure_local_settings(http3_settings settings) noexcept -> void;
     /**
+     * @brief Applies the shared request-body bounds to streaming HTTP/3 requests.
+     *
+     * The cumulative limit is checked before a DATA chunk is made visible to
+     * the handler. A full bounded channel naturally stops QUIC stream reads.
+     */
+    auto configure_request_body_stream(
+        request_body_stream_options options) -> void;
+    /**
      * Installs an optional observer for validated peer CANCEL_PUSH frames.
      * This is intended for metrics and diagnostics; protocol behavior does
      * not depend on the observer.
@@ -311,6 +319,7 @@ private:
     server_request_handler handler_;
     async_server_request_handler async_handler_;
     streaming_server_request_handler streaming_handler_;
+    request_body_stream_options request_body_options_{};
     async_webtransport_handler webtransport_handler_;
     qpack_encoder encoder_;
     qpack_decoder decoder_;

@@ -186,7 +186,8 @@ private:
         std::span<const std::byte> initial,
         cancel_token& cancellation) -> task<void>;
 
-    auto make_h2_handler(io_context& io, socket& client) -> v2::server_handler;
+    auto make_h2_streaming_handler(io_context& io, socket& client)
+        -> v2::streaming_server_handler;
 
 #ifdef CNETMOD_HAS_SSL
     auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,

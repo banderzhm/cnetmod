@@ -203,9 +203,18 @@ export auto from_chars_double(std::string_view sv, double& value) -> std::errc;
 export auto from_chars_float(std::string_view sv, float& value) -> std::errc;
 export template <std::integral T>
 auto from_chars_int(std::string_view sv, T& value, int base = 10) -> std::errc;
+export auto to_chars_double(char* first, char* last, double value,
+    int precision = std::numeric_limits<double>::max_digits10)
+    -> std::to_chars_result;
+export auto to_chars_float(char* first, char* last, float value,
+    int precision = std::numeric_limits<float>::max_digits10)
+    -> std::to_chars_result;
 ```
 
-跨平台 `std::from_chars` 封装，macOS 浮点支持回退到 `std::stod`。
+跨平台浮点字符转换封装。macOS 的标准库缺少浮点 `std::to_chars` 时，格式化在
+封装内部回退到 `std::format_to_n`；调用方仍使用同一组无分配缓冲区接口。解析在
+macOS 回退到 `std::stod`/`std::stof`。协议、OTLP 和业务代码不得自行用平台宏复制
+这套兼容逻辑。
 
 ---
 

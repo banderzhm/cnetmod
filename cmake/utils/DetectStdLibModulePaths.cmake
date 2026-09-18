@@ -210,6 +210,17 @@ endfunction()
 ]]
 function(cnetmod_link_selected_stdlib TARGET_NAME)
     if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
+        # These options are part of the module ABI and must reach installed
+        # consumers. Directory-level add_compile_options() only affects this
+        # build tree and otherwise lets Clang mix libstdc++ wrapper headers
+        # with the exported libc++ std module.
+        target_compile_options(${TARGET_NAME} PUBLIC
+            "$<INSTALL_INTERFACE:-stdlib=libc++>"
+            "$<INSTALL_INTERFACE:-nostdinc++>"
+            "$<INSTALL_INTERFACE:-isystem>"
+            "$<INSTALL_INTERFACE:${STDLIB_INCLUDE_DIRS}>")
+        target_link_options(${TARGET_NAME} PUBLIC
+            "$<INSTALL_INTERFACE:-stdlib=libc++>")
         if(APPLE)
             # A Homebrew libc++ must use the matching Homebrew libunwind.
             # Linking libc++abi directly on Darwin can mix it with the ABI

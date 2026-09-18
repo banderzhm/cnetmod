@@ -3,6 +3,7 @@ export module cnetmod.protocol.http.v2.stream;
 import std;
 import cnetmod.protocol.http.v2.flow_control;
 import cnetmod.protocol.http.v2.header_compression;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod::http::v2 {
 enum class stream_state
@@ -28,6 +29,10 @@ public:
     [[nodiscard]] auto headers() const noexcept
         -> const std::vector<header_field>&;
     [[nodiscard]] auto body() const noexcept -> std::span<const std::byte>;
+    void attach_body_stream(
+        std::shared_ptr<cnetmod::http::request_body_stream> body_stream);
+    [[nodiscard]] auto body_stream() const noexcept
+        -> const std::shared_ptr<cnetmod::http::request_body_stream>&;
     [[nodiscard]] auto receive_window() noexcept -> flow_window&;
     [[nodiscard]] auto send_window() noexcept -> flow_window&;
 
@@ -38,5 +43,6 @@ private:
     flow_window send_window_;
     std::vector<header_field> headers_;
     std::vector<std::byte> body_;
+    std::shared_ptr<cnetmod::http::request_body_stream> body_stream_;
 };
 } // namespace cnetmod::http::v2

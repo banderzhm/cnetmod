@@ -92,6 +92,25 @@ TEST(request_parser_chunked)
     ASSERT_EQ(p.body(), std::string_view("Hello, World"));
 }
 
+TEST(request_parser_fragmented_chunked_body_survives_cursor_compaction)
+{
+    request_parser parser;
+    std::string payload(12 * 1024, 'x');
+    std::string request = "POST /upload HTTP/1.1\r\n" "Host: localhost\r\n" "Transfer-Encoding: chunked\r\n\r\n";
+    request += std::format("{:x}\r\n", payload.size());
+    request += payload;
+    request += "\r\n0\r\n\r\n";
+
+    for (char byte : request)
+    {
+        auto consumed = parser.consume(&byte, 1);
+        ASSERT_TRUE(consumed.has_value());
+    }
+
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.body(), std::string_view(payload));
+}
+
 // =============================================================================
 // request_parser — URI with query string
 // =============================================================================
@@ -218,6 +237,30 @@ TEST(response_parser_chunked)
     ASSERT_TRUE(r.has_value());
     ASSERT_TRUE(p.ready());
     ASSERT_EQ(p.body(), std::string_view("Hello, World!"));
+}
+
+TEST(response_parser_fragmented_headers_survive_cursor_compaction)
+{
+    response_parser parser;
+    std::string response = "HTTP/1.1 200 OK\r\n";
+    for (int index = 0; index < 160; ++index)
+        response += std::format("X-Long-Header-{}: {}\r\n", index,
+            std::string(48, static_cast<char>('a' + index % 26)));
+    response += "Content-Length: 2\r\n\r\nOK";
+
+    constexpr std::size_t fragment_size = 31;
+    for (std::size_t offset = 0; offset < response.size();
+        offset += fragment_size)
+    {
+        const auto size = std::min(fragment_size, response.size() - offset);
+        auto consumed = parser.consume(response.data() + offset, size);
+        ASSERT_TRUE(consumed.has_value());
+    }
+
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.get_header("X-Long-Header-159"),
+        std::string_view(std::string(48, 'd')));
+    ASSERT_EQ(parser.body(), std::string_view("OK"));
 }
 
 // =============================================================================

@@ -1129,6 +1129,15 @@ http3_server_session::http3_server_session(quic_connection& connection,
     local_settings_.webtransport_max_sessions = 0U;
 }
 
+auto http3_server_session::configure_request_body_stream(
+    request_body_stream_options options) -> void
+{
+    if (options.max_bytes == 0 || options.chunk_capacity == 0)
+        throw std::invalid_argument(
+            "request body stream limits must be positive");
+    request_body_options_ = options;
+}
+
 http3_server_session::http3_server_session(quic_connection& connection,
     async_webtransport_handler handler)
     : conn_(connection), webtransport_handler_(std::move(handler)), encoder_(0), decoder_(0)
@@ -1370,8 +1379,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                             if (!decoder_flush)
                                 parsed = std::unexpected(decoder_flush.error());
                         }
-                        if (!parsed && parsed.error() ==
-                                std::make_error_code(std::errc::resource_unavailable_try_again))
+                        if (!parsed && parsed.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
                             qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
                         else
                             qpack_waiters_.erase(id);
@@ -1397,7 +1405,9 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                         co_return;
                     }
                 }
-                parsed->body_stream = std::make_shared<request_body_stream>();
+                parsed->body_stream = std::make_shared<request_body_stream>(
+                    request_body_options_.chunk_capacity,
+                    request_body_options_.max_bytes);
                 streaming_request = std::move(*parsed);
                 wire.consume(first->second);
                 break;
@@ -1546,8 +1556,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     if (!decoder_flush)
                         parsed_request = std::unexpected(decoder_flush.error());
                 }
-                if (!parsed_request && parsed_request.error() ==
-                        std::make_error_code(std::errc::resource_unavailable_try_again))
+                if (!parsed_request && parsed_request.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
                     qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
                 else
                     qpack_waiters_.erase(id);
@@ -1652,8 +1661,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                                 if (!decoder_flush)
                                     fields = std::unexpected(decoder_flush.error());
                             }
-                            if (!fields && fields.error() ==
-                                    std::make_error_code(std::errc::resource_unavailable_try_again))
+                            if (!fields && fields.error() == std::make_error_code(std::errc::resource_unavailable_try_again))
                                 qpack_waiter = qpack_waiter_for(qpack_waiters_, id);
                             else
                                 qpack_waiters_.erase(id);
@@ -1747,7 +1755,10 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 
         if (!handled || !body_result)
         {
-            if (!request_token.is_cancelled())
+            if (body_stream->error() ==
+                std::make_error_code(std::errc::message_size))
+                response.status = status::payload_too_large;
+            else if (!request_token.is_cancelled())
                 response.status = status::internal_server_error;
             response.body.clear();
         }

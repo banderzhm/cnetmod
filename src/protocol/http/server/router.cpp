@@ -509,6 +509,40 @@ auto request_context::sse_done() -> task<bool>
     co_return written;
 }
 
+auto request_context::with_sse(sse_handler_fn handler,
+    sse_stream_options options) -> task<void>
+{
+    if (!handler)
+        throw std::invalid_argument("SSE handler must not be empty");
+    if (options.max_duration <= std::chrono::milliseconds::zero() ||
+        options.write_timeout <= std::chrono::milliseconds::zero())
+        throw std::invalid_argument("SSE timeouts must be positive");
+
+    sse_stream stream{*this, options};
+    cancel_token watchdog_cancellation;
+    auto invoke_handler = [&]() -> task<void>
+    {
+        try
+        {
+            co_await handler(*this, stream);
+        }
+        catch (...)
+        {
+            watchdog_cancellation.cancel();
+            throw;
+        }
+        watchdog_cancellation.cancel();
+    };
+    auto watchdog = [&]() -> task<void>
+    {
+        const auto waited = co_await async_timer_wait(ctx_,
+            options.max_duration, watchdog_cancellation);
+        if (waited)
+            expire_sse();
+    };
+    co_await when_all(invoke_handler(), watchdog());
+}
+
 auto request_context::parse_form()
     -> std::expected<const form_data*, std::error_code>
 {
@@ -589,6 +623,34 @@ auto router::any(std::string_view p, handler_fn f) -> router&
     return add_route({}, p, std::move(f));
 }
 
+auto request_context::body_stream_error() const noexcept -> std::error_code
+{
+    return body_stream_ ? body_stream_->error() : std::error_code{};
+}
+
+auto request_context::received_body_bytes() const noexcept -> std::size_t
+{
+    return body_stream_ ? body_stream_->received_bytes() : body_.size();
+}
+
+auto router::stream_post(std::string_view p, handler_fn f,
+    request_body_stream_options options) -> router&
+{
+    return add_route(http_method::POST, p, std::move(f), options);
+}
+
+auto router::stream_put(std::string_view p, handler_fn f,
+    request_body_stream_options options) -> router&
+{
+    return add_route(http_method::PUT, p, std::move(f), options);
+}
+
+auto router::stream_patch(std::string_view p, handler_fn f,
+    request_body_stream_options options) -> router&
+{
+    return add_route(http_method::PATCH, p, std::move(f), options);
+}
+
 auto router::sse_get(std::string_view p, sse_handler_fn f,
     std::optional<sse_stream_options> options) -> router&
 {
@@ -627,35 +689,20 @@ auto router::add_sse(http_method m, std::string_view p, sse_handler_fn f,
     return add(m, p,
         [handler = std::move(f), selected](request_context& request) -> task<void>
         {
-            sse_stream stream{request, selected};
-            cancel_token watchdog_cancellation;
-            auto invoke_handler = [&]() -> task<void>
-            {
-                try
-                {
-                    co_await handler(request, stream);
-                }
-                catch (...)
-                {
-                    watchdog_cancellation.cancel();
-                    throw;
-                }
-                watchdog_cancellation.cancel();
-            };
-            auto watchdog = [&]() -> task<void>
-            {
-                const auto waited = co_await async_timer_wait(request.io_ctx(),
-                    selected.max_duration, watchdog_cancellation);
-                if (waited)
-                    request.expire_sse();
-            };
-            co_await when_all(invoke_handler(), watchdog());
+            co_await request.with_sse(handler, selected);
         });
 }
 
 auto router::add_route(std::optional<http_method> m, std::string_view p,
-    handler_fn f) -> router&
+    handler_fn f,
+    std::optional<request_body_stream_options> request_stream) -> router&
 {
+    if (!f)
+        throw std::invalid_argument("route handler must not be empty");
+    if (request_stream &&
+        (request_stream->max_bytes == 0 || request_stream->chunk_capacity == 0))
+        throw std::invalid_argument(
+            "request body stream limits must be positive");
     auto segs = detail::parse_pattern(p);
     auto order = next_order_++;
     auto idx = entries_.size();
@@ -663,7 +710,7 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     auto first = detail::first_literal_segment(segs);
     auto canonical = detail::canonical_from_segments(segs);
     entries_.push_back(
-        {m, std::move(segs), canonical, std::move(f), {}, order});
+        {m, std::move(segs), canonical, std::move(f), request_stream, {}, order});
     auto& e = entries_.back();
     e.score = detail::route_specificity(e.segments, !m, order);
     if (stat)
@@ -752,11 +799,11 @@ auto router::match(http_method m, std::string_view p) const
     -> std::optional<match_result>
 {
     if (auto x = find_exact(m, p))
-        return match_result{x->handler, {}};
+        return match_result{x->handler, {}, x->request_stream};
     auto parts = detail::split_path(p);
     auto canonical = detail::canonical_from_parts(parts);
     if (auto x = find_exact(m, canonical))
-        return match_result{x->handler, {}};
+        return match_result{x->handler, {}, x->request_stream};
     const route_entry* best = nullptr;
     route_params bp;
     auto consider = [&](std::size_t i)
@@ -789,7 +836,7 @@ auto router::match(http_method m, std::string_view p) const
             consider(i);
     }
     if (best)
-        return match_result{best->handler, std::move(bp)};
+        return match_result{best->handler, std::move(bp), best->request_stream};
     return {};
 }
 

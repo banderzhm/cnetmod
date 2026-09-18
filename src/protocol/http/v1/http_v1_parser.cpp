@@ -29,6 +29,11 @@ auto request_parser::ready() const noexcept -> bool
     return ready_;
 }
 
+auto request_parser::headers_ready() const noexcept -> bool
+{
+    return headers_ready_;
+}
+
 auto request_parser::method() const noexcept -> std::string_view
 {
     return method_;
@@ -59,6 +64,13 @@ auto request_parser::body() const noexcept -> std::string_view
     return body_;
 }
 
+auto request_parser::take_body_chunk() -> std::string
+{
+    auto chunk = std::move(body_);
+    body_.clear();
+    return chunk;
+}
+
 auto request_parser::get_header(std::string_view k) const -> std::string_view
 {
     const auto it = headers_.find(k);
@@ -68,14 +80,33 @@ auto request_parser::get_header(std::string_view k) const -> std::string_view
 void request_parser::reset() noexcept
 {
     buf_.clear();
+    read_pos_ = 0;
     method_.clear();
     uri_.clear();
     version_ = http_version::http_1_1;
     headers_.clear();
     body_.clear();
     state_ = state::request_line;
-    header_bytes_ = body_bytes_remaining_ = 0;
-    chunked_ = ready_ = false;
+    header_bytes_ = body_bytes_remaining_ = body_bytes_received_ = 0;
+    chunked_ = headers_ready_ = ready_ = false;
+}
+
+auto request_parser::readable_buffer() const noexcept -> std::string_view
+{
+    return {buf_.data() + read_pos_, buf_.size() - read_pos_};
+}
+
+void request_parser::compact_buffer()
+{
+    if (read_pos_ == 0)
+        return;
+    if (read_pos_ == buf_.size())
+        buf_.clear();
+    else if (read_pos_ >= 8192U)
+        buf_.erase(0, read_pos_);
+    else
+        return;
+    read_pos_ = 0;
 }
 
 auto request_parser::parse_request_line(std::string_view l) -> std::expected<void, std::error_code>
@@ -142,26 +173,29 @@ auto request_parser::process_chunked_body() -> std::expected<bool, std::error_co
 {
     for (;;)
     {
-        auto p = detail::find_crlf(buf_.data(), buf_.size());
+        const auto readable = readable_buffer();
+        auto p = detail::find_crlf(readable.data(), readable.size());
         if (p == std::string_view::npos)
             return false;
         std::size_t n{};
-        auto [q, e] = std::from_chars(buf_.data(), buf_.data() + p, n, 16);
+        auto [q, e] = std::from_chars(
+            readable.data(), readable.data() + p, n, 16);
         if (e != std::errc{})
             return std::unexpected(make_error_code(http_errc::invalid_chunk));
         if (!n)
         {
-            buf_.erase(0, p + 2);
-            if (buf_.starts_with("\r\n"))
-                buf_.erase(0, 2);
+            read_pos_ += p + 2;
+            if (readable_buffer().starts_with("\r\n"))
+                read_pos_ += 2;
             return true;
         }
         auto start = p + 2;
-        if (buf_.size() < start + n + 2)
+        if (readable.size() < start + n + 2)
             return false;
-        body_.append(buf_.data() + start, n);
-        buf_.erase(0, start + n + 2);
-        if (body_.size() > max_body_size)
+        body_.append(readable.data() + start, n);
+        body_bytes_received_ += n;
+        read_pos_ += start + n + 2;
+        if (body_bytes_received_ > max_body_size)
             return std::unexpected(make_error_code(http_errc::body_too_large));
     }
 }
@@ -171,6 +205,7 @@ auto request_parser::consume(const char* data, std::size_t len)
 {
     if (ready_)
         return std::size_t{0};
+    compact_buffer();
     buf_.append(data, len);
     const std::size_t total_consumed = len;
     while (!ready_)
@@ -179,45 +214,48 @@ auto request_parser::consume(const char* data, std::size_t len)
         {
         case state::request_line:
         {
-            const auto pos = detail::find_crlf(buf_.data(), buf_.size());
+            const auto readable = readable_buffer();
+            const auto pos = detail::find_crlf(readable.data(), readable.size());
             if (pos == std::string_view::npos)
             {
-                if (buf_.size() > max_header_size)
+                if (readable.size() > max_header_size)
                     return std::unexpected(make_error_code(http_errc::header_too_large));
                 return total_consumed;
             }
-            auto parsed = parse_request_line({buf_.data(), pos});
+            auto parsed = parse_request_line(readable.substr(0, pos));
             if (!parsed)
                 return std::unexpected(parsed.error());
             header_bytes_ += pos + 2;
-            buf_.erase(0, pos + 2);
+            read_pos_ += pos + 2;
             state_ = state::headers;
             break;
         }
         case state::headers:
         {
-            const auto pos = detail::find_crlf(buf_.data(), buf_.size());
+            const auto readable = readable_buffer();
+            const auto pos = detail::find_crlf(readable.data(), readable.size());
             if (pos == std::string_view::npos)
             {
-                if (header_bytes_ + buf_.size() > max_header_size)
+                if (header_bytes_ + readable.size() > max_header_size)
                     return std::unexpected(make_error_code(http_errc::header_too_large));
                 return total_consumed;
             }
             if (pos == 0)
             {
-                buf_.erase(0, 2);
+                read_pos_ += 2;
                 header_bytes_ += 2;
+                headers_ready_ = true;
                 if (!prepare_body())
                     ready_ = true;
                 else
                     state_ = state::body;
                 break;
             }
-            auto parsed = parse_header_line({buf_.data(), pos});
+            auto parsed = parse_header_line(readable.substr(0, pos));
             if (!parsed)
                 return std::unexpected(parsed.error());
             header_bytes_ += pos + 2;
-            buf_.erase(0, pos + 2);
+            read_pos_ += pos + 2;
             break;
         }
         case state::body:
@@ -232,9 +270,12 @@ auto request_parser::consume(const char* data, std::size_t len)
             }
             else
             {
-                const auto take = std::min(buf_.size(), body_bytes_remaining_);
-                body_.append(buf_.data(), take);
-                buf_.erase(0, take);
+                const auto readable = readable_buffer();
+                const auto take =
+                    std::min(readable.size(), body_bytes_remaining_);
+                body_.append(readable.data(), take);
+                body_bytes_received_ += take;
+                read_pos_ += take;
                 body_bytes_remaining_ -= take;
                 if (body_bytes_remaining_ != 0)
                     return total_consumed;
@@ -252,6 +293,7 @@ auto response_parser::consume(const char* data, std::size_t len)
 {
     if (ready_)
         return std::size_t{0};
+    compact_buffer();
     buf_.append(data, len);
     const std::size_t total_consumed = len;
     while (!ready_)
@@ -260,33 +302,35 @@ auto response_parser::consume(const char* data, std::size_t len)
         {
         case state::status_line:
         {
-            const auto pos = detail::find_crlf(buf_.data(), buf_.size());
+            const auto readable = readable_buffer();
+            const auto pos = detail::find_crlf(readable.data(), readable.size());
             if (pos == std::string_view::npos)
             {
-                if (buf_.size() > max_header_size)
+                if (readable.size() > max_header_size)
                     return std::unexpected(make_error_code(http_errc::header_too_large));
                 return total_consumed;
             }
-            auto parsed = parse_status_line({buf_.data(), pos});
+            auto parsed = parse_status_line(readable.substr(0, pos));
             if (!parsed)
                 return std::unexpected(parsed.error());
             header_bytes_ += pos + 2;
-            buf_.erase(0, pos + 2);
+            read_pos_ += pos + 2;
             state_ = state::headers;
             break;
         }
         case state::headers:
         {
-            const auto pos = detail::find_crlf(buf_.data(), buf_.size());
+            const auto readable = readable_buffer();
+            const auto pos = detail::find_crlf(readable.data(), readable.size());
             if (pos == std::string_view::npos)
             {
-                if (header_bytes_ + buf_.size() > max_header_size)
+                if (header_bytes_ + readable.size() > max_header_size)
                     return std::unexpected(make_error_code(http_errc::header_too_large));
                 return total_consumed;
             }
             if (pos == 0)
             {
-                buf_.erase(0, 2);
+                read_pos_ += 2;
                 header_bytes_ += 2;
                 if (!prepare_body())
                     ready_ = true;
@@ -294,11 +338,11 @@ auto response_parser::consume(const char* data, std::size_t len)
                     state_ = state::body;
                 break;
             }
-            auto parsed = parse_header_line({buf_.data(), pos});
+            auto parsed = parse_header_line(readable.substr(0, pos));
             if (!parsed)
                 return std::unexpected(parsed.error());
             header_bytes_ += pos + 2;
-            buf_.erase(0, pos + 2);
+            read_pos_ += pos + 2;
             break;
         }
         case state::body:
@@ -313,9 +357,11 @@ auto response_parser::consume(const char* data, std::size_t len)
             }
             else
             {
-                const auto take = std::min(buf_.size(), body_bytes_remaining_);
-                body_.append(buf_.data(), take);
-                buf_.erase(0, take);
+                const auto readable = readable_buffer();
+                const auto take =
+                    std::min(readable.size(), body_bytes_remaining_);
+                body_.append(readable.data(), take);
+                read_pos_ += take;
                 body_bytes_remaining_ -= take;
                 if (body_bytes_remaining_ != 0)
                     return total_consumed;
@@ -367,6 +413,7 @@ auto response_parser::get_header(std::string_view k) const -> std::string_view
 void response_parser::reset() noexcept
 {
     buf_.clear();
+    read_pos_ = 0;
     version_ = http_version::http_1_1;
     status_code_ = 0;
     status_msg_.clear();
@@ -375,6 +422,24 @@ void response_parser::reset() noexcept
     state_ = state::status_line;
     header_bytes_ = body_bytes_remaining_ = 0;
     chunked_ = ready_ = false;
+}
+
+auto response_parser::readable_buffer() const noexcept -> std::string_view
+{
+    return {buf_.data() + read_pos_, buf_.size() - read_pos_};
+}
+
+void response_parser::compact_buffer()
+{
+    if (read_pos_ == 0)
+        return;
+    if (read_pos_ == buf_.size())
+        buf_.clear();
+    else if (read_pos_ >= 8192U)
+        buf_.erase(0, read_pos_);
+    else
+        return;
+    read_pos_ = 0;
 }
 
 auto response_parser::parse_status_line(std::string_view l) -> std::expected<void, std::error_code>
@@ -443,25 +508,27 @@ auto response_parser::process_chunked_body() -> std::expected<bool, std::error_c
 {
     for (;;)
     {
-        auto p = detail::find_crlf(buf_.data(), buf_.size());
+        const auto readable = readable_buffer();
+        auto p = detail::find_crlf(readable.data(), readable.size());
         if (p == std::string_view::npos)
             return false;
         std::size_t n{};
-        auto [q, e] = std::from_chars(buf_.data(), buf_.data() + p, n, 16);
+        auto [q, e] = std::from_chars(
+            readable.data(), readable.data() + p, n, 16);
         if (e != std::errc{})
             return std::unexpected(make_error_code(http_errc::invalid_chunk));
         if (!n)
         {
-            buf_.erase(0, p + 2);
-            if (buf_.starts_with("\r\n"))
-                buf_.erase(0, 2);
+            read_pos_ += p + 2;
+            if (readable_buffer().starts_with("\r\n"))
+                read_pos_ += 2;
             return true;
         }
         auto start = p + 2;
-        if (buf_.size() < start + n + 2)
+        if (readable.size() < start + n + 2)
             return false;
-        body_.append(buf_.data() + start, n);
-        buf_.erase(0, start + n + 2);
+        body_.append(readable.data() + start, n);
+        read_pos_ += start + n + 2;
         if (body_.size() > max_body_size)
             return std::unexpected(make_error_code(http_errc::body_too_large));
     }
