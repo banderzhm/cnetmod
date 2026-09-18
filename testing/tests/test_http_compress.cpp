@@ -86,6 +86,24 @@ TEST(compression_accepts_case_insensitive_gzip_with_quality)
 #endif
 }
 
+TEST(compression_accepts_minimum_positive_quality)
+{
+    const auto observation = run_compression("gzip;q=0.001");
+#ifdef CNETMOD_HAS_ZLIB
+    ASSERT_TRUE(observation.dispatched);
+#else
+    ASSERT_FALSE(observation.dispatched);
+#endif
+}
+
+TEST(compression_rejects_invalid_quality_syntax)
+{
+    ASSERT_FALSE(run_compression("gzip;q=.5").dispatched);
+    ASSERT_FALSE(run_compression("gzip;q=0.0001").dispatched);
+    ASSERT_FALSE(run_compression("gzip;q=1.1").dispatched);
+    ASSERT_FALSE(run_compression("gzip;q=2").dispatched);
+}
+
 TEST(compression_uses_wildcard_when_gzip_is_not_explicit)
 {
     const auto observation = run_compression("br;q=0, *;q=0.5");
