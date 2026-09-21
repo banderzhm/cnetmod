@@ -1361,6 +1361,11 @@ TEST(otlp_response_budget_rejects_excess_and_accepts_exact_boundary)
             }
             statistics = exporter.statistics();
             exporter.close();
+            // A localhost connection may resolve only to an address family
+            // that the IPv4 fixture does not serve. Closing the listener makes
+            // a still-pending accept observable instead of leaving io.run()
+            // alive until the outer CTest timeout.
+            listener->close();
             finish();
         };
         cnetmod::spawn(*io, collector());
