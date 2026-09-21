@@ -208,6 +208,21 @@ namespace {
         }
         return key;
     }
+
+    auto has_mapped_identity(const result_map_def& result_map,
+        const std::unordered_map<std::string, param_value>& values) -> bool
+    {
+        const auto mappings = result_map.id_mappings.empty()
+            ? result_map.all_mappings()
+            : result_map.id_mappings;
+        return std::ranges::any_of(mappings,
+            [&](const result_mapping& mapping)
+            {
+                const auto value = values.find(mapping.property);
+                return value != values.end() &&
+                    value->second.kind != param_value::kind_t::null_kind;
+            });
+    }
 } // namespace
 
 auto result_map_applier::apply_to_row(
@@ -272,8 +287,12 @@ auto result_map_applier::materialize_joined(const result_map_def& result_map,
                 root.associations.contains(relation.property))
                 continue;
             if (const auto* nested_map = registry.find(relation.result_map))
-                root.associations.emplace(relation.property,
-                    mapped_object{.values = apply_to_row(*nested_map, row, names)});
+            {
+                auto child_values = apply_to_row(*nested_map, row, names);
+                if (has_mapped_identity(*nested_map, child_values))
+                    root.associations.emplace(relation.property,
+                        mapped_object{.values = std::move(child_values)});
+            }
         }
         for (const auto& relation : result_map.collections)
         {
@@ -283,6 +302,8 @@ auto result_map_applier::materialize_joined(const result_map_def& result_map,
             if (!nested_map)
                 continue;
             auto child_values = apply_to_row(*nested_map, row, names);
+            if (!has_mapped_identity(*nested_map, child_values))
+                continue;
             const auto child_key = mapped_identity(*nested_map, child_values, row_index);
             auto& children = root.collections[relation.property];
             const auto duplicate = std::ranges::any_of(children,

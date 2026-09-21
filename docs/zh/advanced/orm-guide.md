@@ -66,6 +66,30 @@ Repository 还提供投影、流式读取、批量写入、原生 Upsert 以及�
 
 ## XML 语句
 
+XML Mapper 不是另一套持久层。它只负责定义 SQL，执行仍沿用
+`application_repository<T> -> repository<T> -> mapper<T> -> database_session`
+主链，因此连接租约、事务、拦截器、错误诊断和遥测与类型化 CRUD 一致。
+
+### 支持范围
+
+| 类别 | 已支持 |
+|---|---|
+| 装载 | `load_xml`、`load_file`、`load_directory`（仅目录直属 `.xml` 文件） |
+| 顶层节点 | `<select>`、`<insert>`、`<update>`、`<delete>`、`<sql>`、`<resultMap>` |
+| 动态 SQL | `<if>`、`<where>`、`<set>`、`<trim>`、`<foreach>`、`<choose>/<when>/<otherwise>`、`<include>`、`<bind>` |
+| 参数 | `#{name}` 安全绑定、嵌套属性、集合、foreach 的 item/index，以及 `${name}` 原样替换 |
+| 表达式 | null/布尔/数字/字符串、点路径、括号、比较、逻辑、算术和一元运算 |
+| 结果 | `CNETMOD_MODEL` 直接映射，或自动执行 `resultMap` 的 `<id>`、`<result>`、关联与集合映射 |
+| Provider | MySQL 与 PostgreSQL；PostgreSQL 自动转换为 `$1...$n` 占位符 |
+
+`${name}` 会直接进入 SQL，只能传入应用白名单选出的列名或排序方向，不能传入请求原文。
+`jdbcType/javaType/typeHandler/mode/numericScale` 元数据可以解析和保留，但当前只绑定参数值，
+不会执行 Java type handler 或存储过程 OUT 参数。
+
+`resultMap` 的关联/集合支持基于 JOIN 结果的对象图和按 `<id>` 去重。C++ 模型需要通过
+`xml_object_graph_binder<T>` 显式绑定成员。`association/collection` 的 `select="..."`
+只作为元数据保存，不会隐式执行嵌套查询；需要显式协程查询或 `lazy_relation<T>`，从而避免隐藏 I/O 和 N+1。
+
 ```cpp
 cnetmod::orm::mapper_registry registry;
 auto loaded = registry.load_directory("mapper");
@@ -78,6 +102,9 @@ auto result = co_await accounts->get_one_xml(
 ```
 
 XML 查询和写入与类型化 CRUD 经过同一条 Mapper/Repository 主链，共享连接租约、事务、自动策略、结果映射、方言归一化和遥测，不存在第二套 XML Repository。
+
+完整标签语义、结果映射规则、参数类型、限制及组合示例见
+[`skill/database/database-orm.md` 的 XML mappers](../../../skill/database/database-orm.md#xml-mappers)。
 
 ## 跨模型事务
 

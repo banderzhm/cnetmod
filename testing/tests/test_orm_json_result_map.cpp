@@ -399,6 +399,100 @@ TEST(xml_mapper_registry_loads_namespaced_result_map)
     ASSERT_FALSE(graph.front().collections.contains("orders"));
 }
 
+TEST(xml_mapper_select_applies_declared_result_map_automatically)
+{
+    orm::mapper_registry registry;
+    const auto loaded = registry.load_xml(R"(
+        <mapper namespace="UserMapper">
+          <resultMap id="UserMap" type="User" autoMapping="false">
+            <id property="id" column="user_id"/>
+            <result property="name" column="display_name"/>
+            <result property="status" column="account_status"/>
+          </resultMap>
+          <select id="findById" resultMap="UserMap">
+            SELECT user_id, display_name, account_status FROM users
+            WHERE user_id = #{id}
+          </select>
+        </mapper>)");
+    ASSERT_TRUE(loaded.has_value());
+
+    diagnostic_database_client client;
+    client.response.columns = {{.name = "user_id"},
+        {.name = "display_name"}, {.name = "account_status"}};
+    client.response.rows = {{orm::field_value::from_int64(42),
+        orm::field_value::from_string("Ada"),
+        orm::field_value::from_int64(3)}};
+
+    orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<orm_json_user, decltype(session)> users{session};
+    orm::param_context parameters;
+    parameters.set("id", std::int64_t{42});
+
+    const auto result = cnetmod::sync_wait(
+        users.select_xml(registry, "UserMapper.findById", parameters));
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.data.size(), 1U);
+    ASSERT_EQ(result.data.front().id, 42);
+    ASSERT_EQ(result.data.front().name, "Ada");
+    ASSERT_EQ(result.data.front().status, 3);
+}
+
+TEST(xml_mapper_select_materializes_joined_relations_without_null_children)
+{
+    orm::mapper_registry registry;
+    const auto loaded = registry.load_xml(R"(
+        <mapper namespace="UserMapper">
+          <resultMap id="UserGraph" type="User">
+            <id property="id" column="user_id"/>
+            <result property="name" column="display_name"/>
+            <association property="team" resultMap="TeamMap"/>
+            <collection property="roles" resultMap="RoleMap"/>
+          </resultMap>
+          <resultMap id="TeamMap" type="Team">
+            <id property="id" column="team_id"/>
+            <result property="name" column="team_name"/>
+          </resultMap>
+          <resultMap id="RoleMap" type="Role">
+            <id property="id" column="role_id"/>
+            <result property="name" column="role_name"/>
+          </resultMap>
+          <select id="find" resultMap="UserGraph">SELECT 1</select>
+        </mapper>)");
+    ASSERT_TRUE(loaded.has_value());
+
+    diagnostic_database_client client;
+    client.response.columns = {{.name = "user_id"},
+        {.name = "display_name"}, {.name = "team_id"},
+        {.name = "team_name"}, {.name = "role_id"},
+        {.name = "role_name"}};
+    client.response.rows = {
+        {orm::field_value::from_int64(7), orm::field_value::from_string("Ada"),
+            orm::field_value::from_int64(3),
+            orm::field_value::from_string("Core"),
+            orm::field_value::from_int64(1),
+            orm::field_value::from_string("admin")},
+        {orm::field_value::from_int64(7), orm::field_value::from_string("Ada"),
+            orm::field_value::from_int64(3),
+            orm::field_value::from_string("Core"),
+            orm::field_value::from_int64(2),
+            orm::field_value::from_string("editor")},
+        {orm::field_value::from_int64(8), orm::field_value::from_string("Lin"),
+            orm::field_value::null(), orm::field_value::null(),
+            orm::field_value::null(), orm::field_value::null()},
+    };
+
+    orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<orm_json_user_graph, decltype(session)> users{session};
+    const auto result = cnetmod::sync_wait(users.select_xml(
+        registry, "UserMapper.find", orm::param_context{}));
+    ASSERT_TRUE(result.ok());
+    ASSERT_EQ(result.data.size(), 2U);
+    ASSERT_TRUE(result.data.front().team.has_value());
+    ASSERT_EQ(result.data.front().roles.size(), 2U);
+    ASSERT_FALSE(result.data.back().team.has_value());
+    ASSERT_TRUE(result.data.back().roles.empty());
+}
+
 TEST(xml_mapper_registry_exposes_standard_statement_type_metadata)
 {
     orm::mapper_registry registry;

@@ -3380,6 +3380,112 @@ The gateway commits only a successful `expected` result. Errors and exceptions r
 
 ## XML mappers
 
+XML is a statement-definition layer on the normal Mapper/Repository pipeline. It
+does not create a second repository type and it does not own a connection. Load
+mapper files once during application composition, keep the registry alive, and
+execute statements through `application_repository<T>` or a transaction Mapper.
+
+### Registry and statement lookup
+
+`mapper_registry` supports the following sources and lookups:
+
+| API | Supported behavior |
+|---|---|
+| `load_xml(text)` | Load one `<mapper>` document from memory. |
+| `load_file(path)` | Load one mapper file. |
+| `load_directory(path)` | Load every direct child whose extension is `.xml`; it is not recursive. |
+| `find_statement(id)` | Resolve a statement ID. Use `namespace.id` in application code to avoid collisions. |
+| `statement_type(id)` | Return `select`, `insert`, `update` or `delete`. |
+| `statement_parameter_type(id)` | Return the declared metadata string. |
+| `statement_result_type(id)` | Return the declared metadata string. |
+| `statement_result_map(id)` | Return the declared `resultMap` reference. |
+
+The root must be `<mapper namespace="...">`. Recognized top-level elements are
+`<select>`, `<insert>`, `<update>`, `<delete>`, `<sql>` and `<resultMap>`. Every
+recognized element needs an `id`. A `<select>` cannot declare both `resultType`
+and `resultMap`. `parameterType` and `resultType` are descriptive metadata; C++
+parameter and result types remain determined by `param_context` and `mapper<T>`.
+
+### Repository and Mapper execution APIs
+
+| Layer | Select many | Select zero/one | Write |
+|---|---|---|---|
+| `application_repository<T>` / `repository<T>` | `select_xml` | `get_one_xml` | `execute_xml` |
+| transaction `mapper<T>` | `select_xml` | `select_one_xml` | `execute_xml` |
+
+`get_one_xml` and `select_one_xml` default to
+`single_result_policy::require_unique`: zero rows succeed with empty data, one
+row succeeds, and multiple rows report `std::errc::result_out_of_range`. Pass
+`single_result_policy::first` only when taking the first row is intentional.
+
+Repository writes execute in the same managed transaction path as typed writes.
+Inside `repository.transaction()`, XML and typed operations share the same
+leased connection and transaction. Do not retain the transaction Mapper after
+the callback.
+
+### Parameters and placeholders
+
+Build parameters with `param_context::set()`, `from_map()`, `from_model()`,
+`add_nested()` and `add_collection()`.
+
+| XML form | Behavior |
+|---|---|
+| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. |
+| `#{name,jdbcType=...,javaType=...,typeHandler=...,mode=...,numericScale=...}` | Parses and preserves mapping metadata. The current protocol execution binds the value; custom `typeHandler` execution and OUT parameters are not implemented. |
+| `#{request.id}` | Reads a dotted property from a nested `param_context`. |
+| `${name}` | Inserts raw text. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
+
+`param_context::set()` accepts values supported by `to_query_parameter`,
+including null, signed/unsigned integers, floating point, strings, blobs,
+calendar date/time values and optional values. A missing property resolves to
+null. Model overloads use `CNETMOD_MODEL` metadata to expose model fields.
+
+### Dynamic SQL elements
+
+| Element | Supported semantics |
+|---|---|
+| `<if test="...">` | Render children when the expression is truthy. |
+| `<where>` | Render `WHERE` only for non-empty content and remove one leading `AND` or `OR`. |
+| `<set>` | Render `SET` only for non-empty content and remove trailing commas. |
+| `<trim prefix="" suffix="" prefixOverrides="" suffixOverrides="">` | Add prefix/suffix and remove pipe-delimited boundary tokens. |
+| `<foreach collection="" item="" index="" open="" close="" separator="">` | Iterate a `param_context` collection; supports nested item properties and a zero-based index. Empty collections render nothing. |
+| `<choose>` / `<when test="...">` / `<otherwise>` | Render the first matching branch, otherwise the fallback. |
+| `<sql id="...">` / `<include refid="...">` | Reuse a fragment from the same mapper namespace. |
+| `<bind name="..." value="...">` | Evaluate an expression and expose its result to following nodes in the statement. |
+
+Expression tests support `null`, booleans, integer/double/string literals,
+dotted properties, parentheses, unary `not`/`!`/minus, comparisons
+`== != < > <= >=`, logical `and`/`or` (and `&&`/`||`), and arithmetic
+`+ - * / %`. They do not execute arbitrary C++ functions or methods.
+
+### Result mapping
+
+There are two supported result paths:
+
+1. With no `resultMap`, `select_xml()` maps result columns directly into `T`
+   using `CNETMOD_MODEL`. SQL aliases must match a declared field or column name.
+2. With `resultMap="MapId"`, execution automatically applies `<id>`, `<result>`,
+   nested `<association resultMap="...">` and
+   `<collection resultMap="...">`, then projects the object graph into `T`.
+
+Scalar properties are assigned through normal model setters. For associations
+and collections, specialize `xml_object_graph_binder<T>` and use
+`mapped_association_as<U>()` / `mapped_collection_as<U>()`; this is explicit
+because XML property strings cannot safely identify C++ member offsets.
+Joined-row object graphs are de-duplicated by `<id>` mappings. Nullable joined
+associations become `std::optional`. `autoMapping="true"` maps otherwise
+unmapped columns by snake_case-to-camelCase property name.
+
+Nested-query metadata such as `<association select="...">` and
+`<collection select="...">` is parsed, but it is not executed automatically.
+Use an explicit coroutine `lazy_relation<T>` loader or issue the secondary XML
+statement in application code. This avoids hidden I/O and N+1 queries during
+property access. Constructor mappings, discriminators, cache declarations,
+stored-procedure OUT parameters and Java `typeHandler` execution are not part
+of the current XML runtime.
+
+### Complete example
+
 Load XML into `mapper_registry`, then call XML statements through the same repository:
 
 ```cpp
@@ -3399,19 +3505,54 @@ Example XML:
 
 ```xml
 <mapper namespace="UserMapper">
-  <select id="findById" resultType="user_record">
-    SELECT id, name, deleted_at
-    FROM users
-    WHERE id = #{id}
+  <sql id="userColumns">
+    u.id AS user_id, u.name AS display_name, r.id AS role_id, r.name AS role_name
+  </sql>
+
+  <resultMap id="UserMap" type="user_record" autoMapping="false">
+    <id property="id" column="user_id"/>
+    <result property="name" column="display_name"/>
+    <collection property="roles" resultMap="RoleMap"/>
+  </resultMap>
+
+  <resultMap id="RoleMap" type="role_record" autoMapping="false">
+    <id property="id" column="role_id"/>
+    <result property="name" column="role_name"/>
+  </resultMap>
+
+  <select id="find" parameterType="map" resultMap="UserMap">
+    SELECT <include refid="userColumns"/>
+    FROM users u
+    LEFT JOIN user_roles ur ON ur.user_id = u.id
+    LEFT JOIN roles r ON r.id = ur.role_id
+    <where>
+      <if test="id != null">AND u.id = #{id,jdbcType=BIGINT}</if>
+      <if test="name != null and name != ''">AND u.name = #{name}</if>
+      <if test="statuses != null">
+        AND u.status IN
+        <foreach collection="statuses" item="status"
+                 open="(" close=")" separator=",">
+          #{status.value}
+        </foreach>
+      </if>
+    </where>
   </select>
 
   <update id="rename" parameterType="map">
-    UPDATE users SET name = #{name} WHERE id = #{id}
+    UPDATE users
+    <set>
+      <if test="name != null">name = #{name},</if>
+      updated_at = #{updatedAt}
+    </set>
+    WHERE id = #{id}
   </update>
 </mapper>
 ```
 
-`select_xml`, `get_one_xml` and `execute_xml` reuse the same leased connection, transaction, SQL dialect, placeholder normalization, model mapping, diagnostics, automatic policies and instrumentation.
+`select_xml`, `get_one_xml` and `execute_xml` reuse the same leased connection,
+transaction, SQL dialect, placeholder normalization, model mapping,
+diagnostics, automatic policies and instrumentation. MySQL uses its parameter
+adapter; PostgreSQL placeholders are normalized to `$1`, `$2`, and so on.
 
 Inside `transaction`, obtain a normal Mapper and call `select_xml`, `select_one_xml` or `execute_xml` on it. There is no separate XML unit-of-work object.
 

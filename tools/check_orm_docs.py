@@ -11,6 +11,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 API_SOURCE = ROOT / "src/application/orm_repository.cppm"
 MAPPER_SOURCE = ROOT / "src/database/orm/mapper.cppm"
+DYNAMIC_SQL_SOURCE = ROOT / "src/database/orm/dynamic_sql.cpp"
+XML_REGISTRY_SOURCE = ROOT / "src/database/orm/xml_mapper_registry.cpp"
 API_DOCUMENT = ROOT / "skill/database/database-orm.md"
 SCAN_ROOTS = (ROOT / "skill", ROOT / "docs", ROOT / "README.md")
 
@@ -67,6 +69,10 @@ def markdown_files() -> list[pathlib.Path]:
     return files
 
 
+def quoted_tags(source: str, pattern: str) -> set[str]:
+    return set(re.findall(pattern, source))
+
+
 def main() -> int:
     errors: list[str] = []
     document = API_DOCUMENT.read_text(encoding="utf-8")
@@ -93,6 +99,33 @@ def main() -> int:
                 + ", ".join(stale)
             )
 
+    dynamic_tags = quoted_tags(
+        DYNAMIC_SQL_SOURCE.read_text(encoding="utf-8"),
+        r'tag == "([a-z]+)"',
+    )
+    registry_tags = quoted_tags(
+        XML_REGISTRY_SOURCE.read_text(encoding="utf-8"),
+        r'tag == "([A-Za-z]+)"',
+    )
+    xml_tags = dynamic_tags | registry_tags
+    undocumented_tags = sorted(
+        tag for tag in xml_tags if f"`<{tag}" not in document
+    )
+    if undocumented_tags:
+        errors.append(
+            "undocumented XML mapper elements: " + ", ".join(undocumented_tags)
+        )
+
+    for required_statement in (
+        "custom `typeHandler` execution and OUT parameters are not implemented",
+        "is parsed, but it is not executed automatically",
+        "never pass request text directly",
+    ):
+        if required_statement not in document:
+            errors.append(
+                "missing XML mapper limitation: " + required_statement
+            )
+
     for path in markdown_files():
         text = path.read_text(encoding="utf-8")
         for identifier in LEGACY_IDENTIFIERS:
@@ -113,7 +146,8 @@ def main() -> int:
 
     print(
         "ORM documentation matches application_repository and mapper APIs "
-        f"({checked_methods} methods); no legacy identifiers found."
+        f"({checked_methods} methods), documents {len(xml_tags)} XML elements; "
+        "no legacy identifiers found."
     )
     return 0
 

@@ -10,6 +10,7 @@ import cnetmod.orm.model_metadata;
 import cnetmod.orm.model_reflection;
 import cnetmod.orm.repository_contract;
 import cnetmod.orm.result_mapper;
+import cnetmod.orm.result_map;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.sql_dialect;
 import cnetmod.orm.xml_mapper_registry;
@@ -78,7 +79,7 @@ private:
         if (!statement)
             co_return failure(statement.error());
         auto result = co_await session->execute(std::move(*statement));
-        co_return map(std::move(result));
+        co_return map_select(*registry, statement_id, std::move(result));
     }
 
     static auto select_one_impl(Session* session,
@@ -171,6 +172,37 @@ private:
         result.error_code = source.error_code;
         if (include_rows && result.error_msg.empty())
             result.data = from_result_set<T>(source);
+        return result;
+    }
+
+    static auto map_select(const mapper_registry& registry,
+        std::string_view statement_id, query_result source) -> model_result<T>
+    {
+        const auto result_map_id = registry.statement_result_map(statement_id);
+        if (result_map_id.empty() || source.is_err())
+            return map(std::move(source));
+
+        const auto name_space = registry.get_namespace(statement_id);
+        std::string qualified_result_map;
+        if (result_map_id.contains('.'))
+            qualified_result_map = result_map_id;
+        else
+            qualified_result_map = std::format("{}.{}", name_space,
+                result_map_id);
+
+        const auto* definition = registry.find_result_map(qualified_result_map);
+        const auto* definitions = registry.result_maps(name_space);
+        if (!definition || !definitions)
+            return failure("XML resultMap not found: " + qualified_result_map);
+
+        model_result<T> result;
+        result.affected_rows = source.affected_rows;
+        result.last_insert_id = source.last_insert_id;
+        result.sql_state = std::move(source.sql_state);
+        result.error_code = source.error_code;
+        result.data = from_mapped_objects<T>(
+            result_map_applier::materialize_joined(
+                *definition, source, *definitions));
         return result;
     }
 

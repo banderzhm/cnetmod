@@ -66,6 +66,37 @@ The repository also provides projections, streaming, batch writes, native upsert
 
 ## XML statements
 
+An XML mapper is not a second persistence stack. It defines SQL while execution
+continues through
+`application_repository<T> -> repository<T> -> mapper<T> -> database_session`,
+so typed CRUD and XML share leases, transactions, interceptors, diagnostics and
+telemetry.
+
+### Supported surface
+
+| Category | Supported behavior |
+|---|---|
+| Loading | `load_xml`, `load_file`, and non-recursive `load_directory` for direct `.xml` children |
+| Top-level elements | `<select>`, `<insert>`, `<update>`, `<delete>`, `<sql>`, `<resultMap>` |
+| Dynamic SQL | `<if>`, `<where>`, `<set>`, `<trim>`, `<foreach>`, `<choose>/<when>/<otherwise>`, `<include>`, `<bind>` |
+| Parameters | Bound `#{name}`, dotted properties, collections, foreach item/index, and raw `${name}` substitution |
+| Expressions | Null/boolean/number/string literals, dotted paths, parentheses, comparison, logical, arithmetic and unary operators |
+| Results | Direct `CNETMOD_MODEL` mapping or automatic `resultMap` handling for `<id>`, `<result>`, associations and collections |
+| Providers | MySQL and PostgreSQL; PostgreSQL placeholders become `$1...$n` |
+
+`${name}` inserts text directly and must only receive application allow-listed
+identifiers such as known sort columns. Never forward request text into it.
+`jdbcType/javaType/typeHandler/mode/numericScale` metadata is parsed and
+preserved, but the current runtime binds the value only; Java type handlers and
+stored-procedure OUT parameters are not executed.
+
+`resultMap` associations and collections support joined object graphs and
+`<id>`-based de-duplication. A C++ model explicitly binds those members through
+`xml_object_graph_binder<T>`. An `association` or `collection` with
+`select="..."` stores nested-select metadata but does not issue hidden queries;
+use an explicit coroutine query or `lazy_relation<T>` to avoid implicit I/O and
+N+1 behavior.
+
 ```cpp
 cnetmod::orm::mapper_registry registry;
 auto loaded = registry.load_directory("mapper");
@@ -78,6 +109,10 @@ auto result = co_await accounts->get_one_xml(
 ```
 
 XML selects and writes run through the same Mapper/Repository path as typed CRUD. They share the leased connection, transaction, policies, result mapping, dialect normalization and telemetry. There is no parallel XML repository.
+
+See [the canonical XML mapper reference](../../../skill/database/database-orm.md#xml-mappers)
+for exact tag semantics, result mapping rules, parameter types, limitations and
+a composed example.
 
 ## Cross-model transaction
 
