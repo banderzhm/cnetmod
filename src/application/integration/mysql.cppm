@@ -10,13 +10,15 @@ import std;
 import cnetmod.application.auto_configuration;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
+import cnetmod.application.orm_repository;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.service_registry;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.protocol.mysql;
     #ifdef CNETMOD_HAS_ORM
-import cnetmod.orm.service;
+import cnetmod.orm.repository;
+import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.session_gateway;
 import cnetmod.orm.sharding.shard_catalog;
 import cnetmod.orm.sharding.session_gateway;
@@ -73,14 +75,29 @@ export using mysql_session_gateway = orm::session_gateway<mysql::client,
  * @brief ORM service using automatic policies and the MySQL wire cursor.
  */
 export template <orm::Model T>
-using mysql_orm_service = orm::service<T, mysql_session_gateway,
+using mysql_repository = orm::repository<T, mysql_session_gateway,
     orm::mysql_stream_strategy>;
+
+/**
+ * @brief Application repository handle specialized for MySQL's gateway.
+ */
+export template <orm::Model T>
+using mysql_repository_handle = orm_repository_handle<T,
+    mysql_session_gateway, orm::mysql_stream_strategy>;
 
 /**
  * @brief Binds an ORM session gateway to a managed MySQL service.
  */
 export [[nodiscard]] auto make_mysql_session_gateway(mysql_service& service)
     -> mysql_session_gateway;
+
+/**
+ * @brief Creates a repository bound to one managed MySQL pool instance.
+ */
+export template <orm::Model T>
+[[nodiscard]] auto make_mysql_repository_handle(mysql_service& service,
+    orm::automatic_interceptor_options interceptors = {})
+    -> std::expected<mysql_repository_handle<T>, std::error_code>;
 
 /**
  * @brief Binds a frozen shard catalog to named managed MySQL pools.
@@ -99,6 +116,8 @@ export [[nodiscard]] auto auto_configure_mysql_sharding(
     const orm_sharding_configuration& configuration,
     service_registry& services)
     -> std::expected<void, std::error_code>;
+
+#include "mysql_repository.inl"
     #endif
 
 } // namespace cnetmod::application

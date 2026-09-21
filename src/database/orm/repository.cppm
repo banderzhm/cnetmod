@@ -5,28 +5,27 @@ import cnetmod.orm.database_session;
 import cnetmod.orm.query_wrapper;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.sql_parameters;
+import cnetmod.orm.repository_impl;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 
 namespace cnetmod::orm {
 
 /**
- * @brief Application-facing CRUD facade over a database session.
+ * @brief Low-level migration facade for code that already owns a session.
  *
- * The repository deliberately delegates SQL generation, transactions and
- * diagnostics to `database_session`; it does not maintain a second mapper
- * implementation or hide the model_result error contract.
- */
-/**
- * @brief Repository facade for a concrete database_session type.
+ * This type is intentionally not an application entry point. New application
+ * code uses the gateway-backed `repository<T, Gateway>`, which acquires a
+ * lease, applies interceptors and owns the transaction boundary. Keep this
+ * facade only for protocol adapters and incremental migrations.
  */
 export template <Model T, typename Session>
-class repository
+class session_repository
 {
 public:
     using session_type = Session;
 
-    explicit repository(session_type& session) noexcept
+    explicit session_repository(session_type& session) noexcept
         : session_(&session)
     {
     }
@@ -213,5 +212,15 @@ private:
 
     session_type* session_;
 };
+
+/**
+ * @brief Gateway-backed persistence facade for application code.
+ *
+ * This is the cnetmod equivalent of MyBatis-Plus IService/ServiceImpl. It
+ * owns no SQL and delegates model work through the session gateway.
+ */
+export template <Model T, typename Gateway,
+    typename StreamStrategy = session_stream_strategy>
+using repository = repository_impl<T, Gateway, StreamStrategy>;
 
 } // namespace cnetmod::orm

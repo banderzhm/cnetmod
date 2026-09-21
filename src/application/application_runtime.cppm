@@ -27,6 +27,16 @@ import cnetmod.protocol.http.middleware.compress;
 import cnetmod.application.chat_model_service;
 import cnetmod.application.chat_model_template;
 #endif
+#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+import cnetmod.application.mysql;
+import cnetmod.orm.automatic_interceptors;
+import cnetmod.orm.model_metadata;
+#endif
+#if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) && defined(CNETMOD_HAS_ORM)
+import cnetmod.application.postgresql;
+import cnetmod.orm.automatic_interceptors;
+import cnetmod.orm.model_metadata;
+#endif
 
 namespace cnetmod::application {
 
@@ -146,6 +156,46 @@ public:
         chat_model_reconfiguration configuration,
         cancel_token* cancellation = nullptr)
         -> task<std::expected<void, std::error_code>>;
+#endif
+
+#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+    /**
+     * @brief Resolves a model repository from an application-managed pool.
+     *
+     * The returned handle owns its gateway and therefore remains valid after
+     * this call without exposing the application's I/O context or pool.
+     */
+    template <orm::Model T>
+    [[nodiscard]] auto repository(std::string_view instance = "default",
+        orm::automatic_interceptor_options interceptors = {})
+        -> std::expected<mysql_repository_handle<T>, std::error_code>
+    {
+        auto service = services_.require<mysql_service>(instance);
+        if (!service)
+            return std::unexpected(service.error());
+        return make_mysql_repository_handle<T>(service->get(), interceptors);
+    }
+#endif
+
+#if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) && defined(CNETMOD_HAS_ORM)
+    /**
+     * @brief Resolves a model repository from an application-managed pool.
+     *
+     * PostgreSQL uses the same provider-neutral Mapper/Repository contract as
+     * MySQL; only the session gateway and SQL dialect differ.
+     */
+    template <orm::Model T>
+    [[nodiscard]] auto postgresql_repository(
+        std::string_view instance = "default",
+        orm::automatic_interceptor_options interceptors = {})
+        -> std::expected<postgresql_repository_handle<T>, std::error_code>
+    {
+        auto service = services_.require<postgresql_service>(instance);
+        if (!service)
+            return std::unexpected(service.error());
+        return make_postgresql_repository_handle<T>(service->get(),
+            interceptors);
+    }
 #endif
 
     /**

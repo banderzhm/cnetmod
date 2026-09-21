@@ -182,7 +182,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     recording_session_client& client) -> cnetmod::task<void>
 {
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::repository<routed_order, decltype(session)> orders{session};
+    orm::session_repository<routed_order, decltype(session)> orders{session};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
     query.select("id", "description");
@@ -216,7 +216,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
         {
             return client;
         }};
-    orm::service<routed_order, gateway_type> orders{gateway};
+    orm::repository<routed_order, gateway_type> orders{gateway};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
     query.select("id", "description");
@@ -632,7 +632,7 @@ TEST(orm_repository_delegates_to_database_session_contract)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::repository<routed_order, decltype(session)> orders{session};
+    orm::session_repository<routed_order, decltype(session)> orders{session};
 
     client.responses.push_back(routed_order_result({{7, "stored"}}));
     auto loaded = cnetmod::sync_wait(
@@ -651,7 +651,7 @@ TEST(orm_repository_batches_are_transactional_and_bounded)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::repository<routed_order, decltype(session)> orders{session};
+    orm::session_repository<routed_order, decltype(session)> orders{session};
     client.responses.push_back({});
     client.responses.push_back({.affected_rows = 1});
     client.responses.push_back({.affected_rows = 1});
@@ -676,7 +676,7 @@ TEST(orm_repository_batch_failure_preserves_exact_location)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::repository<routed_order, decltype(session)> orders{session};
+    orm::session_repository<routed_order, decltype(session)> orders{session};
     orm::query_result failure;
     failure.error_msg = "duplicate key";
     failure.sql_state = "23000";
@@ -723,7 +723,7 @@ TEST(orm_service_owns_leases_transactions_and_automatic_model_policies)
         }};
 
     orm::tenant_guard tenant{73};
-    orm::service<policy_order, gateway_type> orders{gateway};
+    orm::repository<policy_order, gateway_type> orders{gateway};
     auto listed = cnetmod::sync_wait(orders.list());
     ASSERT_TRUE(listed.ok());
     ASSERT_TRUE(client.last_sql.contains("tenant_id"));
@@ -993,7 +993,7 @@ TEST(mysql_orm_cursor_honors_deadline_before_protocol_submission)
     ASSERT_TRUE(client.open);
 }
 
-TEST(mysql_orm_service_streams_through_one_managed_lease)
+TEST(mysql_repository_streams_through_one_managed_lease)
 {
     streaming_session_client client;
     client.stream_batches.push_back({mysql_order_row(1, "one")});
@@ -1015,7 +1015,7 @@ TEST(mysql_orm_service_streams_through_one_managed_lease)
         {
             return client;
         }};
-    orm::service<routed_order, gateway_type, orm::mysql_stream_strategy>
+    orm::repository<routed_order, gateway_type, orm::mysql_stream_strategy>
         orders{gateway};
     std::vector<std::int64_t> seen;
     auto result = cnetmod::sync_wait(orders.for_each({},

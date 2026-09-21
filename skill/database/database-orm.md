@@ -167,13 +167,27 @@ orm::database_session db{client, orm::sql_dialect::mysql, interceptors};
 保持占位符与参数数量一致。建议在 Application 构建阶段完成注册和冻结，并把冻结后的
 `std::shared_ptr<const interceptor_chain>` 注入所有 Session。
 
+## Mapper 与 Repository 分层
+
+`orm::mapper<T, Session>` 是类型化 Model 映射层，对应 MyBatis-Plus 的
+`BaseMapper<T>`。它负责字段映射、Wrapper 转 SQL、结果映射和数据库错误传递，
+但不获取连接池租约，也不负责应用生命周期。
+
+`orm::repository<T, Gateway>` 是应用持久化门面，对应 MyBatis-Plus 的
+`IService<T>/ServiceImpl<T>`。它通过 Gateway 获取 Session，再委托 Mapper 完成
+查询、写入、批量、分页和流式操作。业务 Service 只编排多个 Repository，不写 SQL。
+
+`database_session` 和 `session_repository<T, Session>` 只属于底层迁移和协议适配代码；
+Application 代码不应直接持有它们。
+
 ## Repository 门面
 
-`repository<T, Session>` 是应用层的轻量 CRUD 门面，复用注入的
-`database_session`，不会复制 SQL 生成或错误处理逻辑：
+`session_repository<T, Session>` 仅是低层迁移门面，供已经持有一个
+`database_session` 的基础设施代码使用。Application 业务代码应使用由
+`session_gateway` 支持的 `repository<T, Gateway>`：
 
 ```cpp
-orm::repository<User, decltype(session)> users{session};
+orm::repository<User, decltype(gateway)> users{gateway};
 auto user = co_await users.get_by_id(orm::param_value::from_int(id));
 auto page = co_await users.page(1, 20, query);
 auto saved = co_await users.save_or_update(entity);
@@ -193,9 +207,11 @@ auto saved = co_await users.save_or_update(entity);
 `ON DUPLICATE KEY UPDATE`，PostgreSQL 生成 `ON CONFLICT (...) DO UPDATE`。它们与
 `save_or_update()` 的“先查后写”语义不同，适合高并发写入和唯一键冲突场景。
 
-`orm::service<T, Gateway>` 是连接池/应用层门面。它通过 `session_gateway` 为每次操作
-持有租约，自动安装多租户、逻辑删除、字段填充和 SQL 安全策略，并管理写事务。失败的
-写操作先回滚，再原样返回 `model_result<T>` 中的 SQLSTATE、原生错误号和批次位置。
+Repository 通过 `session_gateway` 为每次操作持有租约，自动安装多租户、逻辑删除、字段
+填充和 SQL 安全策略，并管理模型级写事务。Gateway 只负责连接租约和 session 生命周期，
+Repository 负责模型事务，因此失败的写操作先回滚，再原样返回 `model_result<T>`
+中的 SQLSTATE、原生错误号和批次位置。框架不再导出重复的通用 CRUD Service 门面；
+业务 Service 只负责业务编排，不负责 SQL。
 
 `automatic_interceptor_options` 统一控制 SQL 阶段的多租户、逻辑删除和安全检查，以及
 模型阶段的字段填充和乐观锁。五项策略默认启用；显式关闭 `field_fill` 后 Session 不再
@@ -203,22 +219,27 @@ auto saved = co_await users.save_or_update(entity);
 自动递增或把零影响行分类为冲突。直接构造且未安装自动流水线的低层 Session 保留历史
 默认行为。
 
-Application 的 MySQL 集成可直接创建完整门面：
+Application 的 MySQL 集成可直接创建完整门面；PostgreSQL 使用同一套
+`Mapper/Repository` 契约，只替换 dialect、client 和 pool gateway：
 
 ```cpp
-auto gateway = application::make_mysql_session_gateway(mysql_service);
-application::mysql_orm_service<User> users{gateway};
+auto users = runtime.repository<User>("primary");
 
 auto page = co_await users.page(1, 20, query);
 auto saved = co_await users.upsert(user);
 ```
 
-`mysql_orm_service` 的 `for_each()` 使用 MySQL 多函数执行协议：查询只提交一次，
+```cpp
+auto users = runtime.postgresql_repository<User>("primary");
+auto page = co_await users->page(1, 20, query);
+```
+
+MySQL Repository 的 `for_each()` 使用 MySQL 多函数执行协议：查询只提交一次，
 `read_some_rows()` 在 handler 完成后才读取下一批。取消、deadline、handler 失败或
 提前销毁会关闭未读完的连接；连接池不会复用带残留结果包的连接。
 
-Service 门面还公开同样的 `list_by_ids`、`exists`、投影查询/分页和
-`for_each_map` 能力；这些方法仍复用同一个 Session、租约和自动拦截器配置。
+Repository 还公开同样的 `list_by_ids`、`exists`、投影查询/分页和 `for_each_map` 能力；
+这些方法仍复用同一个 Session、租约和自动拦截器配置。
 
 MyBatis-Plus `base_mapper` 的现代公开方法全部返回 `model_result` 或
 `page_result`，包括单条查询、批量写入、Map/投影和原生 Upsert；数据库错误不会再被
