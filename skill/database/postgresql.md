@@ -300,7 +300,7 @@ Application 的 PostgreSQL 健康探测使用同一个 deadline 获取连接并�
 
 PostgreSQL 只提供协议客户端、连接池、方言和结果适配器。Application
 通过统一的 `repository<T>` 绑定 PostgreSQL `session_gateway`，因此业务
-代码不依赖 `postgresql_session` 或 PostgreSQL 专属结果类型。
+代码不依赖任何 PostgreSQL 专属的模型 Session 或结果类型。
 
 ```cpp
 auto users = runtime.repository<User>(

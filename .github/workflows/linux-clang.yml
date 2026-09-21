@@ -124,6 +124,9 @@ jobs:
         python -m unittest discover -s tools -p test_observability_dependencies.py
         python tools/check_observability_dependencies.py
 
+    - name: Verify ORM documentation API
+      run: python tools/check_orm_docs.py
+
     - name: Verify integration test execution gates
       run: |
         python -m unittest discover -s testing/database -p test_required_runner.py

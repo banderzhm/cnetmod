@@ -246,20 +246,21 @@ Async client with ORM:
 // Raw queries
 auto result = co_await client.query("SELECT * FROM users");
 
-// ORM
+// Application-managed ORM
 struct User { int64_t id; string name; };
 CNETMOD_MODEL(User, "users", ...)
 
-auto users = co_await db.find_all<User>();
-co_await db.insert(user);
-co_await db.update(user);
+auto users = host->runtime().repository<User>("primary");
+auto listed = co_await users->list();
+co_await users->save(user);
+co_await users->update_by_id(user);
 ```
 
 **Features**:
 - Prepared statements
 - Connection pooling
 - Pipeline (batch queries)
-- ORM with auto-migration
+- Provider-neutral Repository/Mapper ORM and semantic migrations
 - UUID and Snowflake ID generation
 
 #### Raft

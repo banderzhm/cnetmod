@@ -1,326 +1,40 @@
 # MySQL
 
-ORM 模型和数据库无关值统一位于 `cnetmod::orm`。MySQL 适配 API 也位于
-该命名空间，并使用明确的 `mysql_` 前缀，例如 `mysql_session`、
-`mysql_base_mapper<T>`、`mysql_mapper_session`、`mysql_select<T>()`、
-`mysql_synchronize_schema<T>()`、`mysql_pageable_mapper<T>` 和
-`mysql_code_generator`。MySQL 协议对象仍位于 `cnetmod::mysql`，协议下不再
-提供第二套 ORM 命名空间。
+cnetmod 提供协程原生的 MySQL 协议客户端、预处理语句、连接池、TLS、健康检查和由 Application 托管的 ORM 适配器。
 
-异步 MySQL 客户端，支持 ORM、连接池和预处理语句。
-
-## 基础用法
+## 模块
 
 ```cpp
-import cnetmod;
-import cnetmod.protocol.mysql;
-using namespace cnetmod;
-
-task<void> mysql_example(io_context& ctx) {
-    mysql::client client(ctx);
-    
-    // Connect
-    co_await client.connect({
-        .host = "127.0.0.1",
-        .port = 3306,
-        .user = "root",
-        .password = "password",
-        .database = "test"
-    });
-    
-    // Execute query
-    auto result = co_await client.query("SELECT * FROM users");
-    
-    for (const auto& row : result.rows()) {
-        std::println("ID: {}, Name: {}",
-            row["id"].as_int(),
-            row["name"].as_string());
-    }
-    
-    co_await client.close();
-}
+import std;
+import cnetmod.protocol.mysql; // 协议客户端与连接池
+import cnetmod.application;    // 托管服务与 Repository
+import cnetmod.orm;            // 模型、条件构造器与结果契约
 ```
 
-## 预处理语句
+协议代码使用 `cnetmod::mysql`。与数据库厂商无关的持久化代码使用 `cnetmod::orm`；不存在 MySQL 专属的业务 Mapper 或 Repository API。
+
+## Application ORM
 
 ```cpp
-// Prepare statement
-auto stmt = co_await client.prepare(
-    "INSERT INTO users (name, email) VALUES (?, ?)"
-);
-
-// Execute with parameters
-co_await stmt.execute({
-    param_value::from_string("Alice"),
-    param_value::from_string("alice@example.com")
-});
-
-// Reuse statement
-co_await stmt.execute({
-    param_value::from_string("Bob"),
-    param_value::from_string("bob@example.com")
-});
-```
-
-## 连接池
-
-```cpp
-mysql::pool pool(ctx, {
-    .host = "127.0.0.1",
-    .user = "root",
-    .password = "password",
-    .database = "test",
-    .pool_size = 10
-});
-
-task<void> use_pool() {
-    // Acquire connection
-    auto conn = co_await pool.acquire();
-    
-    // Use connection
-    auto result = co_await conn->query("SELECT * FROM users");
-    
-    // Automatically returned to pool when conn destroyed
-}
-```
-
-## ORM
-
-### 定义模型
-
-```cpp
-#include <cnetmod/orm.hpp>
-
-struct User {
-    std::int64_t id = 0;
-    std::string name;
-    std::optional<std::string> email;
-    std::time_t created_at = 0;
-};
-
-CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
-    CNETMOD_FIELD(name, "name", varchar),
-    CNETMOD_FIELD(email, "email", varchar, NULLABLE),
-    CNETMOD_FIELD(created_at, "created_at", timestamp)
-)
-```
-
-### CRUD 操作
-
-```cpp
-task<void> orm_example(mysql::client& client) {
-    cnetmod::orm::mysql_session db(client);
-    
-    // CREATE TABLE
-    co_await db.create_table<User>();
-    
-    // INSERT
-    User user;
-    user.name = "Alice";
-    user.email = "alice@example.com";
-    co_await db.insert(user);
-    std::println("Inserted user with ID: {}", user.id);
-    
-    // SELECT ALL
-    auto users = co_await db.find_all<User>();
-    for (const auto& u : users) {
-        std::println("User: {} ({})", u.name, u.email.value_or("no email"));
-    }
-    
-    // SELECT BY ID
-    auto found = co_await db.find_by_id<User>(param_value::from_int(1));
-    if (found) {
-        std::println("Found: {}", found->name);
-    }
-    
-    // UPDATE
-    user.name = "Alice Smith";
-    co_await db.update(user);
-    
-    // DELETE
-    co_await db.remove(user);
-}
-```
-
-### 查询构建器
-
-```cpp
-// SELECT with WHERE
-auto results = co_await db.find(
-    orm::mysql_select<User>()
-        .where("`name` = {}", {param_value::from_string("Alice")})
-);
-
-// SELECT with ORDER BY and LIMIT
-auto top_users = co_await db.find(
-    orm::mysql_select<User>()
-        .where("`email` IS NOT NULL")
-        .order_by("`created_at` DESC")
-        .limit(10)
-        .offset(0)
-);
-
-// COUNT
-auto count = co_await db.count<User>(
-    orm::mysql_select<User>()
-        .where("`email` IS NOT NULL")
-);
-```
-
-### 批量操作
-
-```cpp
-// Batch insert
-std::vector<User> users = {
-    {.name = "Alice", .email = "alice@example.com"},
-    {.name = "Bob", .email = "bob@example.com"},
-    {.name = "Charlie", .email = "charlie@example.com"}
-};
-
-co_await db.insert_many(users);
-
-// Batch delete
-co_await db.remove(
-    orm::mysql_delete<User>()
-        .where("`created_at` < {}", {param_value::from_int(old_timestamp)})
-);
-```
-
-### 自动迁移
-
-```cpp
-// Detect schema changes and apply ALTER TABLE
-co_await orm::mysql_synchronize_schema<User>(client);
-
-// Example: Add new field to struct
-struct User {
-    std::int64_t id = 0;
-    std::string name;
-    std::optional<std::string> email;
-    std::string phone;  // NEW FIELD
-};
-
-// sync_schema will execute: ALTER TABLE users ADD COLUMN phone VARCHAR(255)
-co_await orm::mysql_synchronize_schema<User>(client);
-```
-
-### UUID 主键
-
-```cpp
-struct Tag {
-    orm::uuid id;
-    std::string name;
-};
-
-CNETMOD_MODEL(Tag, "tags",
-    CNETMOD_FIELD(id, "id", char_, UUID_PK_FLAGS, UUID_PK_STRATEGY),
-    CNETMOD_FIELD(name, "name", varchar)
-)
-
-// Usage
-Tag tag;
-tag.name = "important";
-co_await db.insert(tag);
-// tag.id automatically generated (e.g., "550e8400-e29b-41d4-a716-446655440000")
-```
-
-### Snowflake ID
-
-```cpp
-struct Event {
-    std::int64_t id = 0;
-    std::string title;
-};
-
-CNETMOD_MODEL(Event, "events",
-    CNETMOD_FIELD(id, "id", bigint, SNOWFLAKE_PK_FLAGS, SNOWFLAKE_PK_STRATEGY),
-    CNETMOD_FIELD(title, "title", varchar)
-)
-
-// Setup
-orm::snowflake_generator sf(/*machine_id=*/1);
-cnetmod::orm::mysql_session db(client, sf);
-
-// Usage
-Event event;
-event.title = "Conference";
-co_await db.insert(event);
-// event.id automatically generated (e.g., 1234567890123456789)
-```
-
-## 事务
-
-```cpp
-task<mysql::result_set> transaction_example(mysql::client& client) {
-    auto begin = co_await client.query("START TRANSACTION");
-    if (!begin.ok())
-        co_return begin;
-
-    auto debit = co_await client.query(
-        "UPDATE accounts SET balance = balance - 100 WHERE id = 1");
-    if (!debit.ok()) {
-        (void)co_await client.query("ROLLBACK");
-        co_return debit;
-    }
-
-    auto credit = co_await client.query(
-        "UPDATE accounts SET balance = balance + 100 WHERE id = 2");
-    if (!credit.ok()) {
-        (void)co_await client.query("ROLLBACK");
-        co_return credit;
-    }
-
-    co_return co_await client.query("COMMIT");
-}
-```
-
-## 管道（批量查询）
-
-```cpp
-mysql::pipeline pipe(client);
-
-// Queue multiple queries
-pipe.add("SELECT * FROM users WHERE id = 1");
-pipe.add("SELECT * FROM posts WHERE user_id = 1");
-pipe.add("SELECT * FROM comments WHERE user_id = 1");
-
-// Execute all at once
-auto results = co_await pipe.execute();
-
-// Process results
-for (const auto& result : results) {
-    for (const auto& row : result.rows()) {
-        // Process row...
-    }
-}
-```
-
-## 错误处理
-
-```cpp
-auto rs = co_await client.query("SELECT * FROM non_existent_table");
-if (!rs.ok()) {
-    std::println("MySQL error {} (SQLSTATE {}): {}",
-                 rs.error_code, rs.sql_state, rs.error_msg);
+auto users = host->runtime().repository<user_record>("primary", {},
+    cnetmod::application::database_provider::mysql);
+if (!users)
     co_return;
-}
+
+auto result = co_await users->get_by_id(
+    cnetmod::orm::param_value::from_int(42));
 ```
 
-底层 `mysql::client` 原始接口通过 `result_set::ok()`、`error_msg`、`error_code` 和 `sql_state` 返回执行错误，而不是抛出类型化异常。
+MySQL 托管适配层提供 Gateway、结果适配器、协议游标策略和原生 Upsert 语法；类型化 CRUD 与 XML 仍经过统一的 `repository<T> -> mapper<T>` 主链。
 
-## 性能提示
+## 运行规则
 
-1. **使用连接池**处理并发请求
-2. **使用预处理语句**处理重复查询
-3. **使用 `insert_many()` 批量插入**
-4. **使用管道**处理多个独立查询
-5. **索引频繁查询的列**
-6. **对大结果集使用 `LIMIT`**
-7. **在 MySQL 配置中启用查询缓存**
+- 从连接池租用客户端，不在单个协议客户端上并发复用操作。
+- 使用预处理/绑定参数，禁止字符串插值 SQL。
+- 一个事务从开始到提交或回滚必须持有同一租约。
+- 协议响应未完整交付或传输失败后淘汰连接。
+- 限制连接、池等待、查询和停机时间。
+- 生产环境校验 TLS 并使用最小权限账号。
+- 遥测中不记录 SQL 参数和凭据。
 
-## 下一步
-
-- **[HTTP 服务器](http.md)** - 使用 MySQL 构建 REST API
-- **[Redis](redis.md)** - 缓存 MySQL 查询
-- **[ORM 指南](../advanced/orm-guide.md)** - 高级 ORM 特性
+参见当前的 [ORM 指南](../advanced/orm-guide.md) 与 [事务指南](../mysql_transaction.md)。

@@ -1,326 +1,40 @@
 # MySQL
 
-Async MySQL client with ORM, connection pooling, and prepared statements.
+cnetmod provides a coroutine-native MySQL wire client, prepared statements, connection pooling, TLS, health checking and an Application-managed ORM adapter.
 
-ORM models and database-independent values live in `cnetmod::orm`. The MySQL
-adapter API also lives there and uses explicit `mysql_` names, including
-`mysql_session`, `mysql_base_mapper<T>`, `mysql_mapper_session`,
-`mysql_select<T>()`, `mysql_synchronize_schema<T>()`,
-`mysql_pageable_mapper<T>`, and `mysql_code_generator`. MySQL protocol objects
-remain in `cnetmod::mysql`; there is no second ORM namespace under that protocol.
-
-## Basic Usage
+## Modules
 
 ```cpp
-import cnetmod;
-import cnetmod.protocol.mysql;
-using namespace cnetmod;
-
-task<void> mysql_example(io_context& ctx) {
-    mysql::client client(ctx);
-    
-    // Connect
-    co_await client.connect({
-        .host = "127.0.0.1",
-        .port = 3306,
-        .user = "root",
-        .password = "password",
-        .database = "test"
-    });
-    
-    // Execute query
-    auto result = co_await client.query("SELECT * FROM users");
-    
-    for (const auto& row : result.rows()) {
-        std::println("ID: {}, Name: {}",
-            row["id"].as_int(),
-            row["name"].as_string());
-    }
-    
-    co_await client.close();
-}
+import std;
+import cnetmod.protocol.mysql; // protocol client and pool
+import cnetmod.application;    // managed service and repository
+import cnetmod.orm;            // model, wrappers and result contracts
 ```
 
-## Prepared Statements
+Protocol code uses `cnetmod::mysql`. Provider-neutral persistence code uses `cnetmod::orm`; there is no MySQL-specific business Mapper or Repository API.
+
+## Application ORM
 
 ```cpp
-// Prepare statement
-auto stmt = co_await client.prepare(
-    "INSERT INTO users (name, email) VALUES (?, ?)"
-);
-
-// Execute with parameters
-co_await stmt.execute({
-    param_value::from_string("Alice"),
-    param_value::from_string("alice@example.com")
-});
-
-// Reuse statement
-co_await stmt.execute({
-    param_value::from_string("Bob"),
-    param_value::from_string("bob@example.com")
-});
-```
-
-## Connection Pool
-
-```cpp
-mysql::pool pool(ctx, {
-    .host = "127.0.0.1",
-    .user = "root",
-    .password = "password",
-    .database = "test",
-    .pool_size = 10
-});
-
-task<void> use_pool() {
-    // Acquire connection
-    auto conn = co_await pool.acquire();
-    
-    // Use connection
-    auto result = co_await conn->query("SELECT * FROM users");
-    
-    // Automatically returned to pool when conn destroyed
-}
-```
-
-## ORM
-
-### Define Model
-
-```cpp
-#include <cnetmod/orm.hpp>
-
-struct User {
-    std::int64_t id = 0;
-    std::string name;
-    std::optional<std::string> email;
-    std::time_t created_at = 0;
-};
-
-CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
-    CNETMOD_FIELD(name, "name", varchar),
-    CNETMOD_FIELD(email, "email", varchar, NULLABLE),
-    CNETMOD_FIELD(created_at, "created_at", timestamp)
-)
-```
-
-### CRUD Operations
-
-```cpp
-task<void> orm_example(mysql::client& client) {
-    cnetmod::orm::mysql_session db(client);
-    
-    // CREATE TABLE
-    co_await db.create_table<User>();
-    
-    // INSERT
-    User user;
-    user.name = "Alice";
-    user.email = "alice@example.com";
-    co_await db.insert(user);
-    std::println("Inserted user with ID: {}", user.id);
-    
-    // SELECT ALL
-    auto users = co_await db.find_all<User>();
-    for (const auto& u : users) {
-        std::println("User: {} ({})", u.name, u.email.value_or("no email"));
-    }
-    
-    // SELECT BY ID
-    auto found = co_await db.find_by_id<User>(param_value::from_int(1));
-    if (found) {
-        std::println("Found: {}", found->name);
-    }
-    
-    // UPDATE
-    user.name = "Alice Smith";
-    co_await db.update(user);
-    
-    // DELETE
-    co_await db.remove(user);
-}
-```
-
-### Query Builder
-
-```cpp
-// SELECT with WHERE
-auto results = co_await db.find(
-    orm::mysql_select<User>()
-        .where("`name` = {}", {param_value::from_string("Alice")})
-);
-
-// SELECT with ORDER BY and LIMIT
-auto top_users = co_await db.find(
-    orm::mysql_select<User>()
-        .where("`email` IS NOT NULL")
-        .order_by("`created_at` DESC")
-        .limit(10)
-        .offset(0)
-);
-
-// COUNT
-auto count = co_await db.count<User>(
-    orm::mysql_select<User>()
-        .where("`email` IS NOT NULL")
-);
-```
-
-### Batch Operations
-
-```cpp
-// Batch insert
-std::vector<User> users = {
-    {.name = "Alice", .email = "alice@example.com"},
-    {.name = "Bob", .email = "bob@example.com"},
-    {.name = "Charlie", .email = "charlie@example.com"}
-};
-
-co_await db.insert_many(users);
-
-// Batch delete
-co_await db.remove(
-    orm::mysql_delete<User>()
-        .where("`created_at` < {}", {param_value::from_int(old_timestamp)})
-);
-```
-
-### Auto-Migration
-
-```cpp
-// Detect schema changes and apply ALTER TABLE
-co_await orm::mysql_synchronize_schema<User>(client);
-
-// Example: Add new field to struct
-struct User {
-    std::int64_t id = 0;
-    std::string name;
-    std::optional<std::string> email;
-    std::string phone;  // NEW FIELD
-};
-
-// sync_schema will execute: ALTER TABLE users ADD COLUMN phone VARCHAR(255)
-co_await orm::mysql_synchronize_schema<User>(client);
-```
-
-### UUID Primary Key
-
-```cpp
-struct Tag {
-    orm::uuid id;
-    std::string name;
-};
-
-CNETMOD_MODEL(Tag, "tags",
-    CNETMOD_FIELD(id, "id", char_, UUID_PK_FLAGS, UUID_PK_STRATEGY),
-    CNETMOD_FIELD(name, "name", varchar)
-)
-
-// Usage
-Tag tag;
-tag.name = "important";
-co_await db.insert(tag);
-// tag.id automatically generated (e.g., "550e8400-e29b-41d4-a716-446655440000")
-```
-
-### Snowflake ID
-
-```cpp
-struct Event {
-    std::int64_t id = 0;
-    std::string title;
-};
-
-CNETMOD_MODEL(Event, "events",
-    CNETMOD_FIELD(id, "id", bigint, SNOWFLAKE_PK_FLAGS, SNOWFLAKE_PK_STRATEGY),
-    CNETMOD_FIELD(title, "title", varchar)
-)
-
-// Setup
-orm::snowflake_generator sf(/*machine_id=*/1);
-cnetmod::orm::mysql_session db(client, sf);
-
-// Usage
-Event event;
-event.title = "Conference";
-co_await db.insert(event);
-// event.id automatically generated (e.g., 1234567890123456789)
-```
-
-## Transactions
-
-```cpp
-task<mysql::result_set> transaction_example(mysql::client& client) {
-    auto begin = co_await client.query("START TRANSACTION");
-    if (!begin.ok())
-        co_return begin;
-
-    auto debit = co_await client.query(
-        "UPDATE accounts SET balance = balance - 100 WHERE id = 1");
-    if (!debit.ok()) {
-        (void)co_await client.query("ROLLBACK");
-        co_return debit;
-    }
-
-    auto credit = co_await client.query(
-        "UPDATE accounts SET balance = balance + 100 WHERE id = 2");
-    if (!credit.ok()) {
-        (void)co_await client.query("ROLLBACK");
-        co_return credit;
-    }
-
-    co_return co_await client.query("COMMIT");
-}
-```
-
-## Pipeline (Batch Queries)
-
-```cpp
-mysql::pipeline pipe(client);
-
-// Queue multiple queries
-pipe.add("SELECT * FROM users WHERE id = 1");
-pipe.add("SELECT * FROM posts WHERE user_id = 1");
-pipe.add("SELECT * FROM comments WHERE user_id = 1");
-
-// Execute all at once
-auto results = co_await pipe.execute();
-
-// Process results
-for (const auto& result : results) {
-    for (const auto& row : result.rows()) {
-        // Process row...
-    }
-}
-```
-
-## Error Handling
-
-```cpp
-auto rs = co_await client.query("SELECT * FROM non_existent_table");
-if (!rs.ok()) {
-    std::println("MySQL error {} (SQLSTATE {}): {}",
-                 rs.error_code, rs.sql_state, rs.error_msg);
+auto users = host->runtime().repository<user_record>("primary", {},
+    cnetmod::application::database_provider::mysql);
+if (!users)
     co_return;
-}
+
+auto result = co_await users->get_by_id(
+    cnetmod::orm::param_value::from_int(42));
 ```
 
-The raw `mysql::client` API reports execution failures through `result_set::ok()`, `error_msg`, `error_code`, and `sql_state` rather than typed exceptions.
+The managed MySQL adapter supplies the gateway, result adapter, wire cursor strategy and native upsert syntax. Typed CRUD and XML statements still execute through the common `repository<T> -> mapper<T>` path.
 
-## Performance Tips
+## Operational rules
 
-1. **Use connection pooling** for concurrent requests
-2. **Use prepared statements** for repeated queries
-3. **Batch inserts** with `insert_many()`
-4. **Use pipeline** for multiple independent queries
-5. **Index frequently queried columns**
-6. **Use `LIMIT`** for large result sets
-7. **Enable query cache** in MySQL config
+- Lease a client from the pool; do not multiplex concurrent operations on one protocol client.
+- Use prepared/bound parameters instead of string interpolation.
+- Keep a transaction on one lease until commit or rollback.
+- Discard a connection after incomplete protocol exchange or transport failure.
+- Bound connect, checkout, query and shutdown time.
+- Use TLS verification and least-privilege credentials in production.
+- Do not record SQL parameters or credentials in telemetry.
 
-## Next Steps
-
-- **[HTTP Server](http.md)** - Build REST API with MySQL
-- **[Redis](redis.md)** - Cache MySQL queries
-- **[ORM Guide](../advanced/orm.md)** - Advanced ORM features
+See the current [ORM guide](../advanced/orm-guide.md) and [transaction guide](../mysql_transaction.md).

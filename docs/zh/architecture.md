@@ -246,20 +246,21 @@ class http::server {
 // 原始查询
 auto result = co_await client.query("SELECT * FROM users");
 
-// ORM
+// Application 托管 ORM
 struct User { int64_t id; string name; };
 CNETMOD_MODEL(User, "users", ...)
 
-auto users = co_await db.find_all<User>();
-co_await db.insert(user);
-co_await db.update(user);
+auto users = host->runtime().repository<User>("primary");
+auto listed = co_await users->list();
+co_await users->save(user);
+co_await users->update_by_id(user);
 ```
 
 **特性**：
 - 预处理语句
 - 连接池
 - 管道（批量查询）
-- ORM 带自动迁移
+- 与数据库厂商无关的 Repository/Mapper ORM 与语义迁移
 - UUID 和雪花 ID 生成
 
 #### Raft

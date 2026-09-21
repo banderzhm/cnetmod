@@ -287,11 +287,13 @@ co_await stmt.execute({param_value::from_string("Alice")});
 ./build/examples/mysql_crud
 ```
 
-### MySQL ORM (`mysql_orm.cpp`)
+### Managed ORM
 
-**What it demonstrates**: Object-relational mapping
+**What it demonstrates**: provider-neutral Repository/Mapper persistence
 
 ```cpp
+#include <cnetmod/orm.hpp>
+
 struct User {
     int64_t id = 0;
     string name;
@@ -304,28 +306,24 @@ CNETMOD_MODEL(User, "users",
     CNETMOD_FIELD(email, "email", varchar, NULLABLE)
 )
 
-cnetmod::orm::mysql_session db(cli);
+auto users = host->runtime().repository<User>("primary");
+if (!users)
+    co_return;
 
-// CRUD operations
-co_await db.insert(user);
-auto users = co_await db.find_all<User>();
-co_await db.update(user);
-co_await db.remove(user);
+co_await users->save(user);
 
-// Query builder
-auto results = co_await db.find(
-    orm::mysql_select<User>()
-        .where("`name` = {}", {param_value::from_string("Alice")})
-        .order_by("`id` DESC")
-        .limit(10)
-);
+cnetmod::orm::query_wrapper<User> query;
+query.eq(&User::name, "Alice")
+    .order_by_desc(&User::id)
+    .limit(10);
+auto results = co_await users->list(query);
 ```
 
 **Key concepts**:
 - Model definition with macros
-- Auto-migration (`sync_schema`)
-- CRUD operations
-- Query builder
+- Application-managed connection lifetime
+- Repository CRUD operations
+- Type-safe query wrapper
 - UUID and Snowflake ID generation
 
 **Run**:

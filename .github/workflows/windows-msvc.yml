@@ -89,6 +89,10 @@ jobs:
           python tools/check_observability_dependencies.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Verify ORM documentation API
+        shell: pwsh
+        run: python tools/check_orm_docs.py
+
       - name: Verify integration test execution gates
         shell: pwsh
         run: |

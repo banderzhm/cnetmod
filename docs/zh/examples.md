@@ -287,11 +287,13 @@ co_await stmt.execute({param_value::from_string("Alice")});
 ./build/examples/mysql_crud
 ```
 
-### MySQL ORM (`mysql_orm.cpp`)
+### 托管 ORM
 
-**演示内容**：对象关系映射
+**演示内容**：与数据库厂商无关的 Repository/Mapper 持久化
 
 ```cpp
+#include <cnetmod/orm.hpp>
+
 struct User {
     int64_t id = 0;
     string name;
@@ -304,28 +306,24 @@ CNETMOD_MODEL(User, "users",
     CNETMOD_FIELD(email, "email", varchar, NULLABLE)
 )
 
-cnetmod::orm::mysql_session db(cli);
+auto users = host->runtime().repository<User>("primary");
+if (!users)
+    co_return;
 
-// CRUD 操作
-co_await db.insert(user);
-auto users = co_await db.find_all<User>();
-co_await db.update(user);
-co_await db.remove(user);
+co_await users->save(user);
 
-// 查询构建器
-auto results = co_await db.find(
-    orm::mysql_select<User>()
-        .where("`name` = {}", {param_value::from_string("Alice")})
-        .order_by("`id` DESC")
-        .limit(10)
-);
+cnetmod::orm::query_wrapper<User> query;
+query.eq(&User::name, "Alice")
+    .order_by_desc(&User::id)
+    .limit(10);
+auto results = co_await users->list(query);
 ```
 
 **关键概念**：
 - 使用宏定义模型
-- 自动迁移（`sync_schema`）
-- CRUD 操作
-- 查询构建器
+- Application 托管连接生命周期
+- Repository CRUD 操作
+- 类型安全条件构造器
 - UUID 和雪花 ID 生成
 
 **运行**：
