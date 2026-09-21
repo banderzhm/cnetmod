@@ -6,7 +6,11 @@ endif()
 
 # Keep protocol suites separate: each test imports only its own reference client
 # and is registered only when the corresponding production example can exist.
-if(CNETMOD_ENABLE_POSTGRESQL AND CNETMOD_ENABLE_HTTP AND CNETMOD_ENABLE_ORM)
+# Register an end-to-end test only when the corresponding example target is
+# part of this build. Feature switches alone do not guarantee that an optional
+# example is enabled; keeping the target check here prevents a dangling
+# TARGET_FILE generator expression during CMake generation.
+if(TARGET example_postgresql_production_service)
     add_test(
         NAME python_postgresql_production_example_e2e
         COMMAND Python3::Interpreter
