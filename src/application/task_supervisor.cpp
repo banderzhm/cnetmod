@@ -202,8 +202,13 @@ public:
                 co_return;
             }
 
-            const auto delay = std::min<std::chrono::steady_clock::duration>(
-                retry_delay(item->recovery, attempt++), remaining);
+            const auto requested_delay = retry_delay(item->recovery, attempt++);
+            if (requested_delay >= remaining)
+            {
+                report_exhausted(item);
+                co_return;
+            }
+            const auto delay = requested_delay;
             try
             {
                 logger::warn("supervised task {} failed; retrying in {} ms",
