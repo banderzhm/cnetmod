@@ -42,6 +42,12 @@ struct priority_fixture
     std::atomic<bool> data_released{};
 };
 
+struct batch_fixture
+{
+    static constexpr std::size_t request_count = 3U;
+    std::atomic<std::size_t> arrivals{};
+};
+
 constexpr std::array ticket_magic{
     std::byte{'c'}, std::byte{'n'}, std::byte{'e'}, std::byte{'t'},
     std::byte{'m'}, std::byte{'o'}, std::byte{'d'}, std::byte{'-'},
@@ -112,9 +118,11 @@ auto main(int argc, char** argv) -> int
     auto* context_ptr = context.get();
     auto early_data_cache = std::make_shared<cnetmod::quic::early_data_replay_cache>();
     auto priority = std::make_shared<priority_fixture>();
+    auto batch = std::make_shared<batch_fixture>();
     auto cancelled_push_frames = std::make_shared<std::atomic<std::size_t>>();
     cnetmod::http::v3::streaming_server_request_handler handler =
-        [context_ptr, early_data_cache, priority, cancelled_push_frames](cnetmod::http::v3::http3_request& request,
+        [context_ptr, early_data_cache, priority, batch,
+            cancelled_push_frames](cnetmod::http::v3::http3_request& request,
             cnetmod::http::v3::http3_response& response,
             cnetmod::http::request_body_stream& body_stream,
             cnetmod::cancel_token& token) -> cnetmod::task<std::expected<void, std::error_code>>
@@ -441,10 +449,25 @@ auto main(int argc, char** argv) -> int
         }
         if (request.path.starts_with("/batch/"))
         {
-            const auto waited = co_await cnetmod::async_timer_wait(
-                *context_ptr, std::chrono::milliseconds{100}, token);
-            if (!waited)
-                co_return std::unexpected(waited.error());
+            batch->arrivals.fetch_add(1U, std::memory_order_acq_rel);
+            const auto deadline = std::chrono::steady_clock::now() +
+                std::chrono::seconds{1};
+            while (batch->arrivals.load(std::memory_order_acquire) <
+                    batch_fixture::request_count &&
+                std::chrono::steady_clock::now() < deadline)
+            {
+                const auto waited = co_await cnetmod::async_timer_wait(
+                    *context_ptr, std::chrono::milliseconds{1}, token);
+                if (!waited)
+                    co_return std::unexpected(waited.error());
+            }
+            if (batch->arrivals.load(std::memory_order_acquire) <
+                batch_fixture::request_count)
+            {
+                response.status = 503;
+                response.body = "batch-not-concurrent";
+                co_return {};
+            }
             response.status = 200;
             response.body = request.path;
             co_return {};

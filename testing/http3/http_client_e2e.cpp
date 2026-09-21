@@ -440,11 +440,7 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
         cnetmod::http::request{cnetmod::http::http_method::GET, url("/batch/1")},
         cnetmod::http::request{cnetmod::http::http_method::GET, url("/batch/2")},
     };
-    const auto batch_started = std::chrono::steady_clock::now();
     auto batch_results = co_await client.send_batch(batch);
-    const auto batch_elapsed = std::chrono::steady_clock::now() - batch_started;
-    if (batch_elapsed > std::chrono::milliseconds{260})
-        state.fail("HTTP/3 batch responses were serialized");
     if (batch_results.size() != batch.size())
     {
         state.fail("HTTP/3 batch returned the wrong result count");
