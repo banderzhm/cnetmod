@@ -3,6 +3,8 @@
 
 import std;
 import cnetmod.orm;
+import cnetmod.orm.database_session;
+import cnetmod.orm.session_gateway;
 import cnetmod.protocol.mysql;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
@@ -106,8 +108,7 @@ struct streaming_session_client : recording_session_client
         ++stream_starts;
         last_sql = std::move(statement.query);
         statements.push_back(last_sql);
-        state.set_columns({
-            mysql::column_meta{.name = "id", .type = mysql::field_type::longlong},
+        state.set_columns({mysql::column_meta{.name = "id", .type = mysql::field_type::longlong},
             mysql::column_meta{.name = "description",
                 .type = mysql::field_type::var_string}});
         state.set_state(mysql::execution_state::state_t::reading_rows);
@@ -158,7 +159,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
         mysql::field_value::from_string(std::move(description))};
 }
 
-[[maybe_unused]] auto base_mapper_complete_surface_compile_probe(
+[[maybe_unused]] auto mapper_complete_surface_compile_probe(
     mysql::client& client) -> cnetmod::task<void>
 {
     orm::mysql_database_session session{client};
@@ -199,7 +200,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     (void)co_await orders.insert_batch(std::span<routed_order>{models}, 1);
 }
 
-[[maybe_unused]] auto service_complete_surface_compile_probe(
+[[maybe_unused]] auto repository_facade_complete_surface_compile_probe(
     recording_session_client& client) -> cnetmod::task<void>
 {
     using gateway_type = orm::session_gateway<recording_session_client,
@@ -222,14 +223,24 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
     query.select("id", "description");
+    std::array filters{std::pair<std::string, orm::param_value>{
+        "id", orm::param_value::from_int(1)}};
     (void)co_await orders.list_by_ids(std::span<const std::int64_t>{ids});
+    (void)co_await orders.list_by_map(filters);
     (void)co_await orders.exists(query);
+    (void)co_await orders.count(query);
     (void)co_await orders.select_maps(query);
     (void)co_await orders.select_objects(query);
     (void)co_await orders.page_maps(1, 20, query);
+    orm::update_wrapper<routed_order> update;
+    update.set("description", "updated").eq("id", 1);
+    (void)co_await orders.update(update);
+    (void)co_await orders.remove(query);
+    (void)co_await orders.remove_by_ids(std::span<const std::int64_t>{ids});
+    (void)co_await orders.remove_by_map(filters);
     (void)co_await orders.for_each_map(query,
         [](const orm::projection_row&) -> cnetmod::task<
-            std::expected<void, std::string>>
+                                           std::expected<void, std::string>>
         {
             co_return std::expected<void, std::string>{};
         });
@@ -247,26 +258,27 @@ TEST(orm_routed_session_uses_physical_table_for_every_typed_operation)
     recording_session_client client;
     orm::database_session session{client, std::string{"orders_07"},
         orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
 
     orm::query_wrapper<routed_order> query;
     query.eq("id", 42);
-    (void)cnetmod::sync_wait(session.find(query));
+    (void)cnetmod::sync_wait(orders.select_list(query));
     ASSERT_TRUE(client.last_sql.starts_with("SELECT * FROM `orders_07`"));
 
-    (void)cnetmod::sync_wait(session.count(query));
+    (void)cnetmod::sync_wait(orders.count(query));
     ASSERT_TRUE(client.last_sql.starts_with("SELECT COUNT(*) FROM `orders_07`"));
 
     routed_order order{42, "routed"};
-    (void)cnetmod::sync_wait(session.insert(order));
+    (void)cnetmod::sync_wait(orders.insert(order));
     ASSERT_TRUE(client.last_sql.starts_with("INSERT INTO `orders_07`"));
-    (void)cnetmod::sync_wait(session.update(order));
+    (void)cnetmod::sync_wait(orders.update_by_id(order));
     ASSERT_TRUE(client.last_sql.starts_with("UPDATE `orders_07`"));
-    (void)cnetmod::sync_wait(session.remove(query));
+    (void)cnetmod::sync_wait(orders.remove(query));
     ASSERT_TRUE(client.last_sql.starts_with("DELETE FROM `orders_07`"));
 
     orm::update_wrapper<routed_order> update;
     update.set("description", "updated").eq("id", 42);
-    (void)cnetmod::sync_wait(session.update(update));
+    (void)cnetmod::sync_wait(orders.update(update));
     ASSERT_TRUE(client.last_sql.starts_with("UPDATE `orders_07`"));
 }
 
@@ -288,10 +300,11 @@ TEST(orm_find_one_enforces_unique_cardinality_without_losing_diagnostics)
     recording_session_client client;
     client.response = routed_order_result({{1, "first"}, {2, "second"}});
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_wrapper<routed_order> query;
     query.eq("description", "duplicate");
 
-    auto strict = cnetmod::sync_wait(session.find_one(query));
+    auto strict = cnetmod::sync_wait(orders.select_one(query));
     ASSERT_TRUE(strict.is_err());
     ASSERT_EQ(strict.framework_error,
         std::make_error_code(std::errc::result_out_of_range));
@@ -301,7 +314,7 @@ TEST(orm_find_one_enforces_unique_cardinality_without_losing_diagnostics)
     client.response.error_msg = "database unavailable";
     client.response.sql_state = "08006";
     client.response.error_code = 2013;
-    auto failed = cnetmod::sync_wait(session.find_one(query));
+    auto failed = cnetmod::sync_wait(orders.select_one(query));
     ASSERT_TRUE(failed.is_err());
     ASSERT_EQ(failed.error_msg, "database unavailable");
     ASSERT_EQ(failed.sql_state, "08006");
@@ -314,15 +327,16 @@ TEST(orm_find_first_exists_and_find_by_ids_are_explicit_and_bounded)
     recording_session_client client;
     client.response = routed_order_result({{7, "selected"}});
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_wrapper<routed_order> query;
     query.eq("description", "selected");
 
-    auto first = cnetmod::sync_wait(session.find_first(query));
+    auto first = cnetmod::sync_wait(orders.select_first(query));
     ASSERT_TRUE(first.ok());
     ASSERT_EQ(first.data.size(), 1U);
     ASSERT_TRUE(client.last_sql.contains("LIMIT 1"));
 
-    auto exists = cnetmod::sync_wait(session.exists(query));
+    auto exists = cnetmod::sync_wait(orders.exists(query));
     ASSERT_TRUE(exists.ok());
     ASSERT_EQ(exists.data.size(), 1U);
     ASSERT_TRUE(exists.data.front());
@@ -330,14 +344,14 @@ TEST(orm_find_first_exists_and_find_by_ids_are_explicit_and_bounded)
     ASSERT_TRUE(client.last_sql.contains("LIMIT 1"));
 
     client.response = {};
-    exists = cnetmod::sync_wait(session.exists(query));
+    exists = cnetmod::sync_wait(orders.exists(query));
     ASSERT_TRUE(exists.ok());
     ASSERT_FALSE(exists.data.front());
 
     client.response.error_msg = "connection lost";
     client.response.sql_state = "08006";
     client.response.error_code = 2013;
-    exists = cnetmod::sync_wait(session.exists(query));
+    exists = cnetmod::sync_wait(orders.exists(query));
     ASSERT_TRUE(exists.is_err());
     ASSERT_TRUE(exists.data.empty());
     ASSERT_EQ(exists.sql_state, "08006");
@@ -346,12 +360,12 @@ TEST(orm_find_first_exists_and_find_by_ids_are_explicit_and_bounded)
     client.response = routed_order_result({{7, "selected"}});
     const std::array ids{1LL, 7LL, 9LL};
     auto selected = cnetmod::sync_wait(
-        session.find_by_ids<routed_order>(std::span<const long long>{ids}));
+        orders.select_by_ids(std::span<const long long>{ids}));
     ASSERT_TRUE(selected.ok());
     ASSERT_TRUE(client.last_sql.contains(" IN ("));
 
     const std::span<const long long> empty;
-    selected = cnetmod::sync_wait(session.find_by_ids<routed_order>(empty));
+    selected = cnetmod::sync_wait(orders.select_by_ids(empty));
     ASSERT_TRUE(selected.ok());
     ASSERT_TRUE(selected.data.empty());
 }
@@ -360,20 +374,21 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
 
     const std::vector<std::pair<std::string, orm::param_value>> filters{
         {"description", orm::param_value::from_string("selected")},
         {"id", orm::param_value::null()}};
     client.response = routed_order_result({{7, "selected"}});
     auto found = cnetmod::sync_wait(
-        session.find_by_map<routed_order>(filters));
+        orders.select_by_map(filters));
     ASSERT_TRUE(found.ok());
     ASSERT_TRUE(client.last_sql.contains("`description` = {}"));
     ASSERT_TRUE(client.last_sql.contains("`id` IS NULL"));
 
     const std::vector<std::pair<std::string, orm::param_value>> invalid{
         {"not_a_column", orm::param_value::from_int(1)}};
-    found = cnetmod::sync_wait(session.find_by_map<routed_order>(invalid));
+    found = cnetmod::sync_wait(orders.select_by_map(invalid));
     ASSERT_TRUE(found.is_err());
     ASSERT_EQ(found.framework_error,
         std::make_error_code(std::errc::invalid_argument));
@@ -381,7 +396,7 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
     orm::query_wrapper<routed_order> projection;
     projection.select("id", "description").order_by_asc("id");
     client.response = routed_order_result({{7, "selected"}, {9, "next"}});
-    auto maps = cnetmod::sync_wait(session.select_maps(projection));
+    auto maps = cnetmod::sync_wait(orders.select_maps(projection));
     ASSERT_TRUE(maps.ok());
     ASSERT_EQ(maps.data.size(), 2U);
     ASSERT_EQ(maps.data[0].at("id").get_int64(), 7);
@@ -389,7 +404,7 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
 
     orm::query_wrapper<routed_order> ids;
     ids.select("id").order_by_asc("id");
-    auto objects = cnetmod::sync_wait(session.select_objects(ids));
+    auto objects = cnetmod::sync_wait(orders.select_objects(ids));
     ASSERT_TRUE(objects.ok());
     ASSERT_EQ(objects.data.size(), 2U);
     ASSERT_EQ(objects.data[0].get_int64(), 7);
@@ -399,6 +414,7 @@ TEST(orm_projection_page_keeps_count_and_page_query_diagnostics)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_result count;
     count.columns = {{.name = "count"}};
     count.rows = {{orm::field_value::from_int64(3)}};
@@ -409,7 +425,7 @@ TEST(orm_projection_page_keeps_count_and_page_query_diagnostics)
     orm::query_wrapper<routed_order> query;
     query.select("id", "description").order_by_asc("id");
     auto page = cnetmod::sync_wait(
-        session.page_maps<routed_order>(2, 2, query));
+        orders.select_maps_page(2, 2, query));
     ASSERT_TRUE(page.ok());
     ASSERT_EQ(page.total, 3U);
     ASSERT_EQ(page.total_pages, 2U);
@@ -422,8 +438,7 @@ TEST(orm_projection_page_keeps_count_and_page_query_diagnostics)
     client.responses.back().rows = {{orm::field_value::from_int64(3)}};
     client.responses.back().columns = {{.name = "count"}};
     client.responses.push_back(routed_order_result({{3, "third"}}));
-    auto models = cnetmod::sync_wait(
-        session.page<routed_order>(2, 2));
+    auto models = cnetmod::sync_wait(orders.select_page(2, 2));
     ASSERT_TRUE(models.ok());
     ASSERT_EQ(models.total, 3U);
     ASSERT_EQ(models.records.data.size(), 1U);
@@ -434,6 +449,7 @@ TEST(orm_batch_mutations_are_transactional_and_full_delete_is_explicit)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> models{session};
     orm::query_result updated;
     updated.affected_rows = 1;
     client.responses.push_back({});
@@ -444,7 +460,7 @@ TEST(orm_batch_mutations_are_transactional_and_full_delete_is_explicit)
     const std::array orders{
         routed_order{1, "first"}, routed_order{2, "second"}};
     auto batch = cnetmod::sync_wait(
-        session.update_batch_by_id<routed_order>(orders, 1));
+        models.update_batch(std::span<const routed_order>{orders}, 1));
     ASSERT_TRUE(batch.ok());
     ASSERT_EQ(batch.affected_rows, 2U);
     ASSERT_EQ(client.statements.front(), "START TRANSACTION");
@@ -452,7 +468,7 @@ TEST(orm_batch_mutations_are_transactional_and_full_delete_is_explicit)
 
     client.statements.clear();
     orm::query_wrapper<routed_order> empty;
-    auto rejected = cnetmod::sync_wait(session.remove(empty));
+    auto rejected = cnetmod::sync_wait(models.remove(empty));
     ASSERT_TRUE(rejected.is_err());
     ASSERT_EQ(rejected.framework_error,
         std::make_error_code(std::errc::operation_not_permitted));
@@ -460,21 +476,21 @@ TEST(orm_batch_mutations_are_transactional_and_full_delete_is_explicit)
 
     client.response = {};
     auto allowed = cnetmod::sync_wait(
-        session.remove(empty, orm::allow_full_table));
+        models.remove(empty, orm::allow_full_table));
     ASSERT_TRUE(allowed.ok());
     ASSERT_EQ(client.last_sql, "DELETE FROM `orders`");
 
     client.statements.clear();
     orm::update_wrapper<routed_order> full_update;
     full_update.set("description", "rewritten");
-    auto update_rejected = cnetmod::sync_wait(session.update(full_update));
+    auto update_rejected = cnetmod::sync_wait(models.update(full_update));
     ASSERT_TRUE(update_rejected.is_err());
     ASSERT_EQ(update_rejected.framework_error,
         std::make_error_code(std::errc::operation_not_permitted));
     ASSERT_TRUE(client.statements.empty());
 
     auto update_allowed = cnetmod::sync_wait(
-        session.update(full_update, orm::allow_full_table));
+        models.update(full_update, orm::allow_full_table));
     ASSERT_TRUE(update_allowed.ok());
     ASSERT_TRUE(client.last_sql.starts_with("UPDATE `orders` SET"));
 }
@@ -483,29 +499,30 @@ TEST(orm_bulk_delete_helpers_validate_input_and_preserve_empty_id_semantics)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     const std::array ids{1LL, 2LL};
     auto removed = cnetmod::sync_wait(
-        session.remove_by_ids<routed_order>(std::span<const long long>{ids}));
+        orders.remove_by_ids(std::span<const long long>{ids}));
     ASSERT_TRUE(removed.ok());
     ASSERT_TRUE(client.last_sql.contains("`id` IN ("));
 
     client.statements.clear();
     const std::span<const long long> empty_ids;
     removed = cnetmod::sync_wait(
-        session.remove_by_ids<routed_order>(empty_ids));
+        orders.remove_by_ids(empty_ids));
     ASSERT_TRUE(removed.ok());
     ASSERT_TRUE(client.statements.empty());
 
     const std::vector<std::pair<std::string, orm::param_value>> filters{
         {"description", orm::param_value::from_string("obsolete")}};
     removed = cnetmod::sync_wait(
-        session.remove_by_map<routed_order>(filters));
+        orders.remove_by_map(filters));
     ASSERT_TRUE(removed.ok());
     ASSERT_TRUE(client.last_sql.contains("`description` = {}"));
 
     const std::vector<std::pair<std::string, orm::param_value>> no_filters;
     removed = cnetmod::sync_wait(
-        session.remove_by_map<routed_order>(no_filters));
+        orders.remove_by_map(no_filters));
     ASSERT_TRUE(removed.is_err());
     ASSERT_EQ(removed.framework_error,
         std::make_error_code(std::errc::operation_not_permitted));
@@ -515,6 +532,7 @@ TEST(orm_save_or_update_batch_rolls_back_and_preserves_the_primary_failure)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> models{session};
     orm::query_result updated;
     updated.affected_rows = 1;
     orm::query_result failed;
@@ -532,7 +550,7 @@ TEST(orm_save_or_update_batch_rolls_back_and_preserves_the_primary_failure)
     std::array orders{
         routed_order{1, "first"}, routed_order{2, "second"}};
     auto result = cnetmod::sync_wait(
-        session.save_or_update_batch<routed_order>(orders, 1));
+        models.save_or_update_batch(orders, 1));
     ASSERT_TRUE(result.is_err());
     ASSERT_EQ(result.error_msg, "write failed");
     ASSERT_EQ(result.sql_state, "40001");
@@ -606,10 +624,11 @@ TEST(orm_interceptor_chain_rewrites_typed_sql_before_protocol_client)
         }));
     ASSERT_TRUE(chain->freeze());
     orm::database_session session{client, orm::sql_dialect::mysql, chain};
+    orm::mapper<routed_order, decltype(session)> orders{session};
 
     orm::query_wrapper<routed_order> query;
     query.eq("id", 42);
-    auto result = cnetmod::sync_wait(session.find(query));
+    auto result = cnetmod::sync_wait(orders.select_list(query));
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(client.last_sql,
         "SELECT * FROM `tenant_orders` WHERE `id` = {}");
@@ -628,16 +647,17 @@ TEST(orm_interceptor_chain_rejection_short_circuits_protocol_client)
         }));
     ASSERT_TRUE(chain->freeze());
     orm::database_session session{client, orm::sql_dialect::mysql, chain};
+    orm::mapper<routed_order, decltype(session)> orders{session};
 
     orm::query_wrapper<routed_order> query;
     query.eq("id", 42);
-    auto result = cnetmod::sync_wait(session.find(query));
+    auto result = cnetmod::sync_wait(orders.select_list(query));
     ASSERT_TRUE(result.is_err());
     ASSERT_TRUE(result.error_msg.contains("deny"));
     ASSERT_TRUE(client.statements.empty());
 }
 
-TEST(orm_repository_delegates_to_database_session_contract)
+TEST(orm_mapper_owns_the_public_typed_session_contract)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
@@ -711,7 +731,7 @@ TEST(orm_repository_batch_failure_preserves_exact_location)
     ASSERT_EQ(client.statements.back(), "ROLLBACK");
 }
 
-TEST(orm_service_owns_leases_transactions_and_automatic_model_policies)
+TEST(orm_repository_owns_leases_transactions_and_automatic_model_policies)
 {
     recording_session_client client;
     using gateway_type = orm::session_gateway<recording_session_client,
@@ -800,13 +820,115 @@ TEST(orm_repository_transaction_shares_one_session_across_mappers)
     ASSERT_EQ(client.statements.size(), 4U);
 }
 
+TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
+{
+    recording_session_client client;
+    using gateway_type = orm::session_gateway<recording_session_client,
+        std::monostate>;
+    gateway_type gateway{
+        orm::sql_dialect::mysql,
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        },
+        []() -> cnetmod::task<std::expected<std::monostate, std::string>>
+        {
+            co_return std::monostate{};
+        },
+        [&client](std::monostate&) -> recording_session_client&
+        {
+            return client;
+        }};
+
+    orm::mapper_registry registry;
+    auto loaded = registry.load_xml(R"(
+        <mapper namespace="OrderMapper">
+          <select id="findById" resultType="routed_order">
+            SELECT id, description FROM orders WHERE id = #{id}
+          </select>
+          <update id="rename" parameterType="routed_order">
+            UPDATE orders SET description = #{description} WHERE id = #{id}
+          </update>
+        </mapper>)");
+    ASSERT_TRUE(loaded.has_value());
+
+    client.responses.push_back(routed_order_result({{7, "xml"}}));
+    orm::repository<routed_order, gateway_type> orders{gateway};
+    orm::param_context parameters;
+    parameters.set("id", std::int64_t{7});
+    auto selected = cnetmod::sync_wait(
+        orders.select_xml(registry, "OrderMapper.findById", parameters));
+    ASSERT_TRUE(selected.ok());
+    ASSERT_EQ(selected.data.size(), 1U);
+    ASSERT_EQ(selected.data.front().description, "xml");
+    ASSERT_TRUE(client.last_sql.contains("WHERE id = {}"));
+
+    client.responses.push_back({});
+    client.responses.push_back(orm::query_result{.affected_rows = 1});
+    client.responses.push_back({});
+    orm::param_context rename;
+    rename.set("id", std::int64_t{7});
+    rename.set("description", std::string{"renamed"});
+    auto updated = cnetmod::sync_wait(
+        orders.execute_xml(registry, "OrderMapper.rename", rename));
+    ASSERT_TRUE(updated.ok());
+    ASSERT_EQ(updated.affected_rows, 1U);
+    ASSERT_EQ(client.statements.at(client.statements.size() - 3),
+        "START TRANSACTION");
+    ASSERT_EQ(client.statements.back(), "COMMIT");
+
+    client.responses.push_back({});
+    client.responses.push_back(routed_order_result({{7, "shared"}}));
+    client.responses.push_back(orm::query_result{.affected_rows = 1});
+    client.responses.push_back({});
+    auto shared = cnetmod::sync_wait(orders.transaction<int>(
+        [&registry, &parameters](auto& unit)
+            -> cnetmod::task<std::expected<int, std::string>>
+        {
+            auto xml_orders = unit.template xml<routed_order>(registry);
+            auto selected_in_transaction = co_await xml_orders.select(
+                "OrderMapper.findById", parameters);
+            if (selected_in_transaction.is_err())
+                co_return std::unexpected(
+                    selected_in_transaction.error_msg);
+
+            routed_order created{8, "typed"};
+            auto typed_orders = unit.template mapper<routed_order>();
+            auto inserted = co_await typed_orders.insert(created);
+            if (inserted.is_err())
+                co_return std::unexpected(inserted.error_msg);
+            co_return 2;
+        }));
+    ASSERT_TRUE(shared.has_value());
+    ASSERT_EQ(*shared, 2);
+    ASSERT_EQ(client.statements.at(client.statements.size() - 4),
+        "START TRANSACTION");
+    ASSERT_TRUE(client.statements.at(client.statements.size() - 3)
+            .contains("WHERE id = {}"));
+    ASSERT_TRUE(client.statements.at(client.statements.size() - 2)
+            .contains("INSERT INTO `orders`"));
+    ASSERT_EQ(client.statements.back(), "COMMIT");
+
+    recording_session_client postgresql_client;
+    postgresql_client.responses.push_back(routed_order_result({{7, "pg"}}));
+    orm::database_session postgresql_session{
+        postgresql_client, orm::sql_dialect::postgresql};
+    orm::xml_mapper<routed_order, decltype(postgresql_session)> xml{
+        postgresql_session, registry};
+    auto postgresql = cnetmod::sync_wait(
+        xml.select("OrderMapper.findById", parameters));
+    ASSERT_TRUE(postgresql.ok());
+    ASSERT_TRUE(postgresql_client.last_sql.contains("WHERE id = $1"));
+}
+
 TEST(orm_update_wrapper_supports_parameterized_increment_and_decrement)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     orm::update_wrapper<routed_order> update;
     update.set_increment("id", 2).set_decrement("id", 1).eq("id", 7);
-    auto result = cnetmod::sync_wait(session.update(update));
+    auto result = cnetmod::sync_wait(orders.update(update));
     ASSERT_TRUE(result.ok());
     ASSERT_TRUE(client.last_sql.contains("`id` = `id` - {}"));
 }
@@ -816,7 +938,8 @@ TEST(orm_upsert_uses_native_mysql_and_postgresql_conflict_forms)
     routed_order mysql_value{9, "mysql"};
     recording_session_client mysql_client;
     orm::database_session mysql_session{mysql_client, orm::sql_dialect::mysql};
-    auto mysql_result = cnetmod::sync_wait(mysql_session.upsert(mysql_value));
+    orm::mapper<routed_order, decltype(mysql_session)> mysql_orders{mysql_session};
+    auto mysql_result = cnetmod::sync_wait(mysql_orders.upsert(mysql_value));
     ASSERT_TRUE(mysql_result.ok());
     ASSERT_TRUE(mysql_client.last_sql.contains("ON DUPLICATE KEY UPDATE"));
     ASSERT_TRUE(mysql_client.last_sql.contains("VALUES(`description`)") ||
@@ -826,8 +949,10 @@ TEST(orm_upsert_uses_native_mysql_and_postgresql_conflict_forms)
     recording_session_client postgres_client;
     orm::database_session postgres_session{
         postgres_client, orm::sql_dialect::postgresql};
+    orm::mapper<routed_order, decltype(postgres_session)> postgres_orders{
+        postgres_session};
     auto postgres_result = cnetmod::sync_wait(
-        postgres_session.upsert(postgres_value));
+        postgres_orders.upsert(postgres_value));
     ASSERT_TRUE(postgres_result.ok());
     ASSERT_TRUE(postgres_client.last_sql.contains("ON CONFLICT (\"id\") DO UPDATE SET"));
     ASSERT_TRUE(postgres_client.last_sql.contains("EXCLUDED.\"description\""));
@@ -837,6 +962,7 @@ TEST(orm_for_each_streams_bounded_pages_and_honors_cancellation)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     client.responses.push_back(routed_order_result({{1, "one"}, {2, "two"}}));
     client.responses.push_back(routed_order_result({}));
     std::size_t seen = 0;
@@ -846,14 +972,14 @@ TEST(orm_for_each_streams_bounded_pages_and_honors_cancellation)
         ++seen;
         co_return std::expected<void, std::string>{};
     };
-    auto streamed = cnetmod::sync_wait(session.for_each<routed_order>({}, handler,
+    auto streamed = cnetmod::sync_wait(orders.for_each({}, handler,
         orm::stream_options{.batch_size = 2, .max_rows = 10}));
     ASSERT_TRUE(streamed.has_value());
     ASSERT_EQ(seen, 2U);
 
     cnetmod::cancel_token cancellation;
     cancellation.cancel();
-    auto cancelled = cnetmod::sync_wait(session.for_each<routed_order>({}, handler,
+    auto cancelled = cnetmod::sync_wait(orders.for_each({}, handler,
         orm::stream_options{}, cancellation));
     ASSERT_FALSE(cancelled.has_value());
 }
@@ -869,9 +995,10 @@ TEST(orm_batch_failure_reports_batch_and_item_location)
     client.responses.push_back(failure);
 
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     std::array values{routed_order{1, "one"}, routed_order{2, "two"}};
     auto result = cnetmod::sync_wait(
-        session.upsert_batch<routed_order>(std::span<routed_order>{values}, 1));
+        orders.upsert_batch(std::span<routed_order>{values}, 1));
     ASSERT_TRUE(result.is_err());
     ASSERT_TRUE(result.batch_index.has_value());
     ASSERT_TRUE(result.item_index.has_value());
@@ -886,6 +1013,7 @@ TEST(orm_bounded_stream_honors_deadline_before_submitting_io)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     std::size_t seen = 0;
     auto handler = [&seen](const routed_order&) -> cnetmod::task<
                                                     std::expected<void, std::string>>
@@ -898,7 +1026,7 @@ TEST(orm_bounded_stream_honors_deadline_before_submitting_io)
         .max_rows = 10,
         .deadline = std::chrono::steady_clock::now() - std::chrono::seconds{1}};
     auto result = cnetmod::sync_wait(
-        session.for_each<routed_order>({}, handler, options));
+        orders.for_each({}, handler, options));
     ASSERT_FALSE(result.has_value());
     ASSERT_EQ(seen, 0U);
     ASSERT_TRUE(client.statements.empty());
@@ -910,13 +1038,12 @@ TEST(orm_projection_stream_honors_backpressure_cancellation_and_deadline)
     client.responses.push_back(routed_order_result(
         {{1, "one"}, {2, "two"}}));
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_wrapper<routed_order> query;
     query.select("id", "description").order_by_asc("id");
     cnetmod::cancel_token cancellation;
     std::size_t seen{};
-    auto result = cnetmod::sync_wait(session.for_each_map<routed_order>(query,
-        [&seen, &cancellation](const orm::projection_row&)
-            -> cnetmod::task<std::expected<void, std::string>>
+    auto result = cnetmod::sync_wait(orders.for_each_map(query, [&seen, &cancellation](const orm::projection_row&) -> cnetmod::task<std::expected<void, std::string>>
         {
             ++seen;
             cancellation.cancel();
@@ -930,18 +1057,14 @@ TEST(orm_projection_stream_honors_backpressure_cancellation_and_deadline)
     recording_session_client deadline_client;
     orm::database_session deadline_session{
         deadline_client, orm::sql_dialect::mysql};
+    orm::mapper<routed_order, decltype(deadline_session)> deadline_orders{
+        deadline_session};
     auto expired = cnetmod::sync_wait(
-        deadline_session.for_each_map<routed_order>(query,
-            [](const orm::projection_row&)
-                -> cnetmod::task<std::expected<void, std::string>>
+        deadline_orders.for_each_map(query, [](const orm::projection_row&) -> cnetmod::task<std::expected<void, std::string>>
             {
                 co_return std::expected<void, std::string>{};
             },
-            orm::stream_options{
-                .batch_size = 2,
-                .max_rows = 10,
-                .deadline = std::chrono::steady_clock::now() -
-                    std::chrono::milliseconds{1}}));
+            orm::stream_options{.batch_size = 2, .max_rows = 10, .deadline = std::chrono::steady_clock::now() - std::chrono::milliseconds{1}}));
     ASSERT_FALSE(expired.has_value());
     ASSERT_TRUE(deadline_client.statements.empty());
 }
@@ -952,7 +1075,8 @@ TEST(orm_cursor_is_stateful_bounded_and_cancellable)
     client.responses.push_back(routed_order_result({{1, "one"}}));
     client.responses.push_back(routed_order_result({}));
     orm::database_session session{client, orm::sql_dialect::mysql};
-    auto cursor = session.open_cursor<routed_order>({},
+    orm::mapper<routed_order, decltype(session)> orders{session};
+    auto cursor = orders.open_cursor({},
         orm::cursor_options{.batch_size = 1, .max_rows = 3});
     auto first = cnetmod::sync_wait(cursor.next());
     ASSERT_TRUE(first.ok());
@@ -1072,9 +1196,7 @@ TEST(mysql_repository_streams_through_one_managed_lease)
     orm::repository<routed_order, gateway_type, orm::mysql_stream_strategy>
         orders{gateway};
     std::vector<std::int64_t> seen;
-    auto result = cnetmod::sync_wait(orders.for_each({},
-        [&seen](const routed_order& value)
-            -> cnetmod::task<std::expected<void, std::string>>
+    auto result = cnetmod::sync_wait(orders.for_each({}, [&seen](const routed_order& value) -> cnetmod::task<std::expected<void, std::string>>
         {
             seen.push_back(value.id);
             co_return std::expected<void, std::string>{};
@@ -1105,12 +1227,8 @@ TEST(orm_wrapper_rebases_postgresql_subquery_parameters)
 {
     orm::query_wrapper<routed_order> query;
     query.eq("description", "active");
-    query.in_subquery("id", orm::subquery{
-        "SELECT order_id FROM members WHERE member_id = {}",
-        {orm::param_value::from_int(7)}});
-    query.gt_subquery("id", orm::subquery{
-        "SELECT MIN(order_id) FROM archived WHERE tenant_id = {}",
-        {orm::param_value::from_int(9)}});
+    query.in_subquery("id", orm::subquery{"SELECT order_id FROM members WHERE member_id = {}", {orm::param_value::from_int(7)}});
+    query.gt_subquery("id", orm::subquery{"SELECT MIN(order_id) FROM archived WHERE tenant_id = {}", {orm::param_value::from_int(9)}});
     query.ne("id", 11);
     auto [sql, params] = query.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(sql.contains("member_id = $2"));
@@ -1144,7 +1262,8 @@ TEST(orm_session_can_install_automatic_interceptors_for_all_paths)
     recording_session_client client;
     orm::tenant_guard tenant{7};
     orm::database_session session{client, orm::sql_dialect::mysql};
-    auto enabled = session.enable_automatic_interceptors<policy_order>();
+    orm::mapper<policy_order, decltype(session)> policies{session};
+    auto enabled = policies.configure();
     ASSERT_TRUE(enabled.has_value());
 
     auto rejected = cnetmod::sync_wait(session.execute(
@@ -1154,9 +1273,13 @@ TEST(orm_session_can_install_automatic_interceptors_for_all_paths)
     ASSERT_TRUE(client.last_sql.contains("WHERE"));
 
     orm::database_session unsafe_session{client, orm::sql_dialect::mysql};
-    auto safety_only = unsafe_session.enable_automatic_interceptors<policy_order>(
+    orm::mapper<policy_order, decltype(unsafe_session)> unsafe_policies{
+        unsafe_session};
+    auto safety_only = unsafe_policies.configure(
         orm::automatic_interceptor_options{
-            .logical_delete = false, .multi_tenant = false, .sql_safety = true});
+            .logical_delete = false,
+            .multi_tenant = false,
+            .sql_safety = true});
     ASSERT_TRUE(safety_only.has_value());
     auto unsafe = cnetmod::sync_wait(unsafe_session.execute(
         "UPDATE `policy_orders` SET `deleted` = 1"));
@@ -1166,7 +1289,7 @@ TEST(orm_session_can_install_automatic_interceptors_for_all_paths)
     client.response = routed_order_result({{1, "ok"}});
     orm::query_wrapper<policy_order> query;
     query.eq("id", 1);
-    auto selected = cnetmod::sync_wait(session.find(query));
+    auto selected = cnetmod::sync_wait(policies.select_list(query));
     ASSERT_TRUE(selected.ok());
     ASSERT_TRUE(client.last_sql.contains("tenant_id"));
     ASSERT_TRUE(client.last_sql.contains("deleted"));
@@ -1177,15 +1300,16 @@ TEST(orm_update_applies_optimistic_version_predicate_and_increment)
     recording_session_client client;
     client.response.affected_rows = 1;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<versioned_order, decltype(session)> orders{session};
     versioned_order model{7, 3, "changed"};
-    auto result = cnetmod::sync_wait(session.update(model));
+    auto result = cnetmod::sync_wait(orders.update_by_id(model));
     ASSERT_TRUE(result.ok());
     ASSERT_TRUE(client.last_sql.contains("`version` = `version` + 1"));
     ASSERT_TRUE(client.last_sql.contains("AND `version` ="));
     ASSERT_EQ(model.version, 4);
 
     client.response = {};
-    auto conflict = cnetmod::sync_wait(session.update(model));
+    auto conflict = cnetmod::sync_wait(orders.update_by_id(model));
     ASSERT_TRUE(conflict.is_err());
     ASSERT_EQ(conflict.framework_error,
         std::make_error_code(std::errc::state_not_recoverable));
@@ -1197,7 +1321,8 @@ TEST(orm_automatic_pipeline_controls_model_stage_policies)
     client.response.affected_rows = 1;
 
     orm::database_session disabled{client, orm::sql_dialect::mysql};
-    auto disabled_result = disabled.enable_automatic_interceptors<filled_order>(
+    orm::mapper<filled_order, decltype(disabled)> disabled_orders{disabled};
+    auto disabled_result = disabled_orders.configure(
         orm::automatic_interceptor_options{
             .logical_delete = false,
             .multi_tenant = false,
@@ -1206,20 +1331,23 @@ TEST(orm_automatic_pipeline_controls_model_stage_policies)
             .optimistic_lock = false});
     ASSERT_TRUE(disabled_result.has_value());
     filled_order without_fill{.id = 1};
-    auto inserted_without_fill = cnetmod::sync_wait(disabled.insert(without_fill));
+    auto inserted_without_fill = cnetmod::sync_wait(
+        disabled_orders.insert(without_fill));
     ASSERT_TRUE(inserted_without_fill.ok());
     ASSERT_EQ(without_fill.created_at.year, 0U);
 
     orm::database_session enabled{client, orm::sql_dialect::mysql};
-    auto enabled_result = enabled.enable_automatic_interceptors<filled_order>();
+    orm::mapper<filled_order, decltype(enabled)> enabled_orders{enabled};
+    auto enabled_result = enabled_orders.configure();
     ASSERT_TRUE(enabled_result.has_value());
     filled_order with_fill{.id = 2};
-    auto inserted_with_fill = cnetmod::sync_wait(enabled.insert(with_fill));
+    auto inserted_with_fill = cnetmod::sync_wait(enabled_orders.insert(with_fill));
     ASSERT_TRUE(inserted_with_fill.ok());
     ASSERT_TRUE(with_fill.created_at.year > 2000U);
 
     orm::database_session unlocked{client, orm::sql_dialect::mysql};
-    auto unlocked_result = unlocked.enable_automatic_interceptors<versioned_order>(
+    orm::mapper<versioned_order, decltype(unlocked)> unlocked_orders{unlocked};
+    auto unlocked_result = unlocked_orders.configure(
         orm::automatic_interceptor_options{
             .logical_delete = false,
             .multi_tenant = false,
@@ -1228,14 +1356,14 @@ TEST(orm_automatic_pipeline_controls_model_stage_policies)
             .optimistic_lock = false});
     ASSERT_TRUE(unlocked_result.has_value());
     versioned_order model{7, 3, "changed"};
-    auto updated = cnetmod::sync_wait(unlocked.update(model));
+    auto updated = cnetmod::sync_wait(unlocked_orders.update_by_id(model));
     ASSERT_TRUE(updated.ok());
     ASSERT_FALSE(client.last_sql.contains("`version` = `version` + 1"));
     ASSERT_FALSE(client.last_sql.contains("AND `version` ="));
     ASSERT_EQ(model.version, 3);
 
     client.response = {};
-    auto zero_rows = cnetmod::sync_wait(unlocked.update(model));
+    auto zero_rows = cnetmod::sync_wait(unlocked_orders.update_by_id(model));
     ASSERT_TRUE(zero_rows.ok());
 }
 

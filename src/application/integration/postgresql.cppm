@@ -10,17 +10,10 @@ import std;
 import cnetmod.application.auto_configuration;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
-import cnetmod.application.orm_repository;
 import cnetmod.application.recovery_policy;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.protocol.postgresql;
-#ifdef CNETMOD_HAS_ORM
-import cnetmod.orm.automatic_interceptors;
-import cnetmod.orm.model_metadata;
-import cnetmod.orm.repository;
-import cnetmod.orm.session_gateway;
-#endif
 
 namespace cnetmod::application {
 
@@ -53,38 +46,6 @@ export [[nodiscard]] auto auto_configure_postgresql(
     const configured_service& configuration,
     auto_configuration_context& context)
     -> std::expected<void, std::error_code>;
-
-#ifdef CNETMOD_HAS_ORM
-/**
- * @brief Gateway used by provider-neutral repositories over PostgreSQL pools.
- */
-export using postgresql_session_gateway = orm::session_gateway<
-    postgresql::client, postgresql::pooled_connection>;
-
-/**
- * @brief Application repository handle specialized for PostgreSQL.
- */
-export template <orm::Model T>
-using postgresql_repository_handle = orm_repository_handle<
-    T, postgresql_session_gateway>;
-
-/**
- * @brief Binds an ORM session gateway to a managed PostgreSQL pool.
- */
-export [[nodiscard]] auto make_postgresql_session_gateway(
-    postgresql_service& service) -> postgresql_session_gateway;
-
-/**
- * @brief Creates a repository bound to one managed PostgreSQL pool instance.
- */
-export template <orm::Model T>
-[[nodiscard]] auto make_postgresql_repository_handle(
-    postgresql_service& service,
-    orm::automatic_interceptor_options interceptors = {})
-    -> std::expected<postgresql_repository_handle<T>, std::error_code>;
-
-#include "postgresql_repository.inl"
-#endif
 
 } // namespace cnetmod::application
 #endif

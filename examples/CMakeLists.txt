@@ -15,20 +15,6 @@ if(MSVC)
 endif()
 
 # ==============================================================================
-# Generate embedded mappers header for account_server_demo
-# ==============================================================================
-if(CNETMOD_ENABLE_HTTP AND CNETMOD_ENABLE_OPENAI AND
-   CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM AND
-   CNETMOD_HAS_SSL AND CNETMOD_HAS_JWT_CPP)
-    include(${CMAKE_SOURCE_DIR}/cmake/utils/EmbedMappers.cmake)
-    cnetmod_embed_mappers(
-        OUTPUT_FILE ${CMAKE_CURRENT_BINARY_DIR}/embedded_mappers.hpp
-        MAPPER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers
-        NAMESPACE embedded_mappers
-    )
-endif()
-
-# ==============================================================================
 # Core Examples
 # ==============================================================================
 set(CORE_EXAMPLES
@@ -239,17 +225,6 @@ endforeach()
 
 set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)
 
-# ==============================================================================
-# Special handling for account_server_demo (needs embedded_mappers.hpp)
-# ==============================================================================
-if(TARGET example_account_server_demo)
-    target_include_directories(example_account_server_demo PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-    # jwt-cpp is header-only and its nlohmann traits include json.hpp from the
-    # header context, so both third-party header dependencies belong here.
-    cnetmod_link_jwt_cpp(example_account_server_demo)
-    cnetmod_link_nlohmann_json(example_account_server_demo)
-endif()
-
 if(TARGET example_application)
     add_custom_command(TARGET example_application POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -270,48 +245,6 @@ if(MSVC)
             target_compile_options(${target_name} PRIVATE /Od /Ob0)
         endif()
     endforeach()
-endif()
-
-# ==============================================================================
-# Post-build commands
-# ==============================================================================
-
-# Copy mapper XML files once. Keeping this as a single target avoids parallel
-# POST_BUILD copy races when several database examples build at the same time.
-if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
-add_custom_command(
-    OUTPUT ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers/.cnetmod_mappers_copied
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers
-            ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers
-    COMMAND ${CMAKE_COMMAND} -E touch
-            ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers/.cnetmod_mappers_copied
-    DEPENDS
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/AiMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/ClientMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/ExpenseMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/FileMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/ProjectMapper.xml
-            ${CMAKE_CURRENT_SOURCE_DIR}/database/mysql/mappers/user_mapper.xml
-    COMMENT "Copying mapper XML files"
-    VERBATIM
-)
-
-add_custom_target(copy_example_mappers
-    DEPENDS ${CMAKE_BINARY_DIR}/examples/database/mysql/mappers/.cnetmod_mappers_copied
-)
-
-list(APPEND CNETMOD_EXAMPLE_TARGETS copy_example_mappers)
-
-foreach(mysql_mapper_example
-        example_mysql_xml_mapper
-        example_mysql_xml_complex
-        example_mysql_mybatis_plus_demo)
-    if(TARGET ${mysql_mapper_example})
-        add_dependencies(${mysql_mapper_example} copy_example_mappers)
-    endif()
-endforeach()
 endif()
 
 set(CNETMOD_EXAMPLE_TARGETS ${CNETMOD_EXAMPLE_TARGETS} PARENT_SCOPE)

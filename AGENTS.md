@@ -3243,9 +3243,9 @@ auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 
 auto result = co_await users->transaction<std::size_t>(
     [](auto& unit) -> task<std::expected<std::size_t, orm_error>> {
         auto user_mapper = unit.template mapper<User>();
-        auto order_mapper = unit.template mapper<Order>();
         auto first = co_await user_mapper.insert(...);
         if (!first) co_return std::unexpected(first.error());
+        auto order_mapper = unit.template mapper<Order>();
         auto second = co_await order_mapper.insert(...);
         if (!second) co_return std::unexpected(second.error());
         co_return std::size_t{2};
@@ -3345,7 +3345,8 @@ auto saved = co_await users.upsert(user);
 ```
 
 ```cpp
-auto users = runtime.postgresql_repository<User>("primary");
+auto users = runtime.repository<User>(
+    "primary", {}, application::database_provider::postgresql);
 auto page = co_await users->page(1, 20, query);
 ```
 
@@ -3461,9 +3462,9 @@ auto decoded = orm::from_json<Article>(nlohmann::json::parse(payload, nullptr, f
 
 `<id>`、`<result>`、`<association>` 与 `<collection>` 的映射元数据已解析并注册。
 
-`mysql_mapper_session::query_object_graph()` 提供 XML 对象图执行：连接查询会按根和 collection 的
-`<id>` 去重聚合；`association` / `collection` 带 `select` 时，会以父行的 `column` 值作为同名参数执行
-引用语句，并将结果填回动态 `mapped_object`。例如：
+`result_map_applier` 提供显式对象图材料化：连接查询可按根和 collection 的
+`<id>` 去重聚合。XML 语句仍通过 `repository<T>::select_xml()` 执行；框架不会在
+属性访问时隐式发起 N+1 查询。例如：
 
 ```xml
 <resultMap id="UserGraph" type="User">
@@ -3483,8 +3484,8 @@ auto decoded = orm::from_json<Article>(nlohmann::json::parse(payload, nullptr, f
 </select>
 ```
 
-嵌套 select 当前为显式的 eager N+1 执行。根对象的标量字段可通过
-`query_object_graph_as<T>()` 直接投影到 `CNETMOD_MODEL` DTO；关联和集合由
+嵌套 select 由业务在同一个 Repository 事务中显式编排。根对象的标量字段可通过
+`from_mapped_objects<T>()` 投影到 `CNETMOD_MODEL` DTO；关联和集合由
 `xml_object_graph_binder<T>` 显式绑定到真实的 C++ 成员，避免 XML 字符串猜测成员布局。
 例如为 `User` 声明一次绑定：
 
@@ -3500,7 +3501,6 @@ template <> struct xml_object_graph_binder<User> {
 ```
 
 `lazy_relation<T>` 可用于 C++ 业务层显式协程按需加载，访问必须 `co_await get()`，不会在普通属性访问中阻塞。
-因此这里不是 MyBatis / MyBatis-Plus 的完整 XML 运行时兼容。
 
 ## 4. mapper<T> — MyBatis-Plus BaseMapper 风格
 
@@ -3738,10 +3738,9 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 - 支持点路径访问集合元素属性：`#{user.name}`、`${cond.field}`。
 - 参数值来自 `param_context`（map、模型对象或集合，见「注册与加载」）。
 - `#{property,jdbcType=...,javaType=...,typeHandler=...,mode=...,numericScale=...}`
-  会绑定 `property`，并保留修饰元数据。MySQL XML session 默认使用
-  `COM_STMT_PREPARE` / `COM_STMT_EXECUTE`，值以二进制参数编码发送而非插入 SQL
-  文本；`set_native_prepared_statements(false)` 仅用于不支持 MySQL prepared
-  protocol 的旧代理兼容。
+  会绑定 `property`，并保留修饰元数据。XML Mapper 生成统一的
+  `parameterized_query`：MySQL 在协议适配器中安全编码参数，PostgreSQL 自动转换为
+  `$1...$N` 占位符；Repository 与业务层不拼接参数值。
 - `${}` 只做直接替换，不能用来传递 JDBC 修饰符。
 
 ### test 表达式
@@ -3831,15 +3830,11 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 
 ### 结果集映射
 
-普通查询的结果类型仍由 C++ 侧决定；XML `<select resultMap="...">` 则可用于动态对象图：
-
-- `session.query<T>(...)`：按**列名**匹配 `CNETMOD_MODEL` 注册的字段名
-  （列别名 `AS xxx` 只要与字段名一致即可映射），返回 `orm_result<T>`。
-- `session.query_tuple<Ts...>(...)`：按**列序**映射到 tuple 元素，适合聚合/单列查询，
-  无需定义模型。
-- `session.execute_query(...)`：返回原始 `result_set`（`columns` + `rows`），自行解析。
-- `session.query_object_graph(...)`：返回 `std::expected<std::vector<mapped_object>, std::string>`；支持
-  join 行按 `<id>` 去重聚合，以及 `association` / `collection` 的 eager 嵌套 select。
+`repository<T>::select_xml()` 按列名匹配 `CNETMOD_MODEL` 字段，返回与普通 CRUD
+完全相同的 `model_result<T>`，包括 SQLSTATE、数据库原生错误号、影响行数和生成主键。
+`get_one_xml()` 默认执行严格单条语义：多行不是“取第一条”，而是返回
+`result_out_of_range`。XML `resultMap` 元数据和 `result_map_applier` 仍可用于显式的
+动态对象图材料化；业务 Repository 不暴露数据库连接或原始 Session。
 
 ### 注册与加载
 
@@ -3853,32 +3848,38 @@ XML mapper 提供 MyBatis 风格的 SQL 定义与动态 SQL 能力：SQL 写在 
 | `find_statement(id)` | 查找语句节点（`"Ns.id"` 或裸 `"id"`） |
 | `statement_type(id)` | 返回语句标签名（select/insert/update/delete） |
 
-**mysql_mapper_session API**（`orm::mysql_mapper_session`）：
+**Repository XML API**（与普通 CRUD 共用同一个 Repository）：
 
 ```cpp
-mysql_mapper_session(client& cli, mapper_registry& registry);
-void set_sql_logging(bool enabled);               // 打印生成/最终 SQL
-auto last_generated_sql() const -> std::string_view;
-auto last_final_sql() const -> std::string_view;
+auto users = runtime.repository<User>("primary");
 
-// select → 模型（参数可以是 param_context、模型对象或 map）
-template <Model T> auto query(std::string_view id, const param_context& ctx) -> task<orm_result<T>>;
-template <Model T> auto query(std::string_view id, const T& model) -> task<orm_result<T>>;
+auto list = co_await users->select_xml(
+    registry, "UserMapper.findByCondition", parameters);
+auto one = co_await users->get_one_xml(
+    registry, "UserMapper.findById", parameters);
+auto changed = co_await users->execute_xml(
+    registry, "UserMapper.updateSelective", parameters);
+```
 
-// select → tuple（按列序）
-template <typename... Ts> auto query_tuple(std::string_view id, const param_context& ctx)
-    -> task<orm_result<std::tuple<Ts...>>>;
+三个入口都经过相同的连接池租约、自动拦截器、错误映射、OTEL 和事务边界。
+`execute_xml()` 自动开启写事务并在失败时回滚。跨模型事务中使用
+`unit.xml<User>(registry)`，它与 `unit.mapper<Order>()` 共享同一连接和事务。
 
-// insert/update/delete → exec_result{affected_rows, last_insert_id, error_msg}
-auto execute(std::string_view id, const param_context& ctx) -> task<exec_result>;
-template <Model T> auto execute(std::string_view id, const T& model) -> task<exec_result>;
+```cpp
+auto committed = co_await users->transaction<void>(
+    [&](auto& unit) -> task<std::expected<void, std::string>> {
+        auto user_xml = unit.template xml<User>(registry);
+        auto selected = co_await user_xml.select(
+            "UserMapper.findById", parameters);
+        if (selected.is_err())
+            co_return std::unexpected(selected.error_msg);
 
-// 任意语句 → 原始 result_set
-auto execute_query(std::string_view id, const param_context& ctx) -> task<result_set>;
-
-// select(resultMap) -> 动态对象图
-auto query_object_graph(std::string_view id, const param_context& ctx)
-    -> task<std::expected<std::vector<mapped_object>, std::string>>;
+        auto orders = unit.template mapper<Order>();
+        auto inserted = co_await orders.insert(order);
+        if (inserted.is_err())
+            co_return std::unexpected(inserted.error_msg);
+        co_return {};
+    });
 ```
 
 **参数传递（param_context）**：
@@ -3902,13 +3903,12 @@ items.push_back(orm::param_context::from_map({{"id", orm::param_value::from_int(
 ctx3.add_collection("ids", std::move(items));
 ```
 
-**完整示例**（加载 → 建表 → 查询 → 插入 → foreach）：
+**完整示例**（Application Repository + XML）：
 
 ```cpp
 import std;
-import cnetmod.io;
-import cnetmod.coro;
-import cnetmod.protocol.mysql;
+import cnetmod.application;
+import cnetmod.coro.task;
 #include <cnetmod/orm.hpp>
 
 using namespace cnetmod;
@@ -3930,59 +3930,36 @@ CNETMOD_MODEL(User, "users",
     CNETMOD_FIELD(status, "status", int_),
     CNETMOD_FIELD(created_at, "created_at", timestamp, NULLABLE))
 
-auto work(mysql::client& cli) -> task<void>
+auto work(application::application_runtime& runtime) -> task<void>
 {
-    // 1. 加载 mapper（文件 / 目录 / 字符串三种方式）
     mapper_registry registry;
-    if (auto r = registry.load_file("mappers/user_mapper.xml"); !r)
-        std::println("load failed: {}", r.error());
-    // registry.load_directory("mappers");
-    // registry.load_xml(xml_string);
+    auto loaded = registry.load_file("mappers/user_mapper.xml");
+    if (!loaded)
+        co_return;
 
-    // 2. （可选）确保表存在
-    co_await orm::mysql_synchronize_schema<User>(cli);
+    auto users = runtime.repository<User>("primary");
+    if (!users)
+        co_return;
 
-    // 3. 创建 session，打开 SQL 日志
-    mysql_mapper_session session(cli, registry);
-    session.set_sql_logging(true);
+    param_context parameters;
+    parameters.set("name", std::string{"Alice"});
+    parameters.set("status", std::int64_t{1});
+    auto found = co_await users->select_xml(
+        registry, "UserMapper.findByCondition", parameters);
 
-    // 4. select —— map 参数
-    auto r1 = co_await session.query<User>("UserMapper.findByCondition",
-        param_context::from_map({{"name", param_value::from_string("Alice")},
-            {"status", param_value::from_int(1)},
-            {"limit", param_value::from_int(10)}}));
-    if (r1.ok())
-        std::println("found {} users", r1.data.size());
-
-    // 5. insert —— 模型作为参数源，回填 last_insert_id
-    User nu;
-    nu.name = "Charlie";
-    nu.email = "charlie@example.com";
-    nu.status = 1;
-    nu.created_at = std::time(nullptr);
-    auto r2 = co_await session.execute("UserMapper.insertUser", nu);
-    if (r2.ok())
-        std::println("inserted id={}", r2.last_insert_id);
-
-    // 6. foreach —— 集合参数
-    auto ctx = param_context::from_map({});
+    auto context = param_context::from_map({});
     std::vector<param_context> ids;
     for (int i = 1; i <= 5; ++i)
         ids.push_back(param_context::from_map({{"id", param_value::from_int(i)}}));
-    ctx.add_collection("ids", std::move(ids));
-    auto r3 = co_await session.query<User>("UserMapper.findByIds", ctx);
-
-    // 7. query_tuple —— 聚合查询按列序映射，无需模型
-    auto r4 = co_await session.query_tuple<std::int64_t, double>(
-        "ProjectMapper.selectStats",
-        param_context::from_map({{"start_date", param_value::from_string("2026-01-01")},
-            {"end_date", param_value::from_string("2026-12-31")}}));
+    context.add_collection("ids", std::move(ids));
+    auto selected = co_await users->select_xml(
+        registry, "UserMapper.findByIds", context);
 }
 ```
 
-> **生产模式**：`mapper_registry` 通常在启动时全局构建一次（`static` 全局变量或
-> `load_xml` 加载嵌入式资源），之后每个请求用连接池取出的 `mysql::client&`
-> 临时构造 `mysql_mapper_session`（构造开销极低）。
+> **生产模式**：`mapper_registry` 在 Application 装配阶段加载并冻结语义，业务只保存
+> Registry 的只读引用和 `repository<T>`。Repository 管理连接、事务和生命周期，XML
+> 不创建第二套 Session/Pool，也不会绕过普通 ORM 的拦截器与错误契约。
 
 ## 9. 自动填充 / 软删除 / 多租户
 
@@ -4148,324 +4125,85 @@ rejects an empty map and validates every key against model metadata. An empty
 pass `allow_full_table` only in an explicitly authorized maintenance path.
 
 An empty conditional DELETE is rejected by default. A deliberate full-table
-operation must pass the visible authorization tag:
+operation must pass the visible authorization tag through Mapper or Repository:
 
 ```cpp
 orm::query_wrapper<User> all_users;
-auto deleted = co_await db.remove(all_users, orm::allow_full_table);
+auto deleted = co_await users.remove(all_users, orm::allow_full_table);
 ```
 
+## Application-managed repositories
+
+Application code obtains the only supported persistence facade from the runtime.
+The runtime owns pool leases, session creation, transaction boundaries and
+provider selection; business services never receive a client, pool, gateway,
+`database_session` or `io_context`.
+
 ```cpp
+import cnetmod.application;
 import cnetmod.orm;
-import cnetmod.protocol.mysql;
 
-task<void> load_user(mysql::client& client) {
-    orm::database_session db{client, orm::sql_dialect::mysql};
+auto users = runtime.repository<User>("primary");
+if (!users)
+    co_return std::unexpected(users.error());
 
-    auto user = co_await db.find_by_id<User>(orm::param_value::from_int(42));
-    if (!user.ok())
-        co_return;
-
-    auto active = co_await db.find(
-        orm::query_wrapper<User>{}.eq("status", 1).order_by_desc("id"));
-}
+auto active = co_await users->list(
+    orm::query_wrapper<User>{}.eq("status", 1).order_by_desc("id"));
 ```
 
-For PostgreSQL construct the same session with `sql_dialect::postgresql`.
-The session then emits quoted identifiers, `$1…$N` placeholders, uses the
-client's parameter binding, and adds `RETURNING *` for model inserts, updates,
-and deletes. MySQL keeps its native formatting path and fills an auto-increment
-primary key from `last_insert_id`. This makes the model mapping and CRUD API
-portable without removing `mysql_session` or `postgresql_session` for
-protocol-specific operations. Protocol-specific session aliases are not part of
-the public ORM API; use the Application repository factory instead.
-
-`query_wrapper<T>` and `update_wrapper<T>` never perform I/O: they only retain
-structured conditions and values, then build dialect-aware parameterized SQL.
-`mapper<T, Session>` is the sole model execution/mapping boundary. The session
-is created and leased by `session_gateway`; callers should not construct it in
-Application code. Direct SQL execution remains available only to infrastructure
-adapters and migration code.
-
-## CMake 启用
-
-```cmake
--DCNETMOD_ENABLE_ORM=ON     # ORM（默认 ON）
--DCNETMOD_ENABLE_MYSQL=ON   # MySQL 协议
-```
-
-## 连接池（生产级用法）
-
-### MySQL connection_pool
-
-Application 的 MySQL repository factory 从 `mysql::connection_pool` 获取租约，
-并在 gateway 内部创建短生命周期的 `database_session`。业务代码不接触裸 client
-或 session。
-
-**Pool API**（来自 `mysql_pool.cppm`）：
+When MySQL and PostgreSQL intentionally use the same instance name, select the
+provider explicitly while preserving the same repository type and operations:
 
 ```cpp
-// 连接池参数
-struct pool_params {
-    std::string host = "127.0.0.1";
-    std::uint16_t port = 3306;
-    std::string username, password, database;
-    ssl_mode ssl = ssl_mode::enable;
-    std::size_t initial_size = 1;
-    std::size_t max_size = 16;
-    std::chrono::steady_clock::duration connect_timeout = std::chrono::seconds(20);
-    std::chrono::steady_clock::duration pool_timeout = std::chrono::seconds(5);
-    std::chrono::steady_clock::duration ping_interval = std::chrono::hours(1);
-    // ...
-};
-
-// RAII 连接句柄 — 析构时自动归还
-class pooled_connection {
-    auto valid() const noexcept -> bool;
-    auto get() noexcept -> mysql::client&;
-    auto operator->() noexcept -> mysql::client*;
-    void return_without_reset();
-};
-
-// 连接池
-class connection_pool {
-    connection_pool(io_context& ctx, pool_params params);
-    auto async_run() -> task<void>;
-    auto async_get_connection() -> task<std::expected<pooled_connection, std::error_code>>;
-    auto async_get_connection(cancel_token& token) -> task<std::expected<pooled_connection, std::error_code>>;
-    auto try_get_connection() -> std::expected<pooled_connection, std::error_code>;
-    auto cancel() -> task<void>;
-    auto size() const noexcept -> std::size_t;
-    auto idle_count() const noexcept -> std::size_t;
-};
-
-// 分片连接池（多 worker 专用）
-class sharded_connection_pool {
-    sharded_connection_pool(std::vector<io_context*> worker_contexts, pool_params params);
-    sharded_connection_pool(std::vector<io_context*> worker_contexts, pool_params params,
-        std::size_t num_shards);
-    auto async_run() -> task<void>;
-    auto async_get_connection(io_context& io) -> task<std::expected<pooled_connection, std::error_code>>;
-    auto async_get_connection(io_context& io, cancel_token& token)
-        -> task<std::expected<pooled_connection, std::error_code>>;
-    auto async_get_connection() -> task<std::expected<pooled_connection, std::error_code>>;
-    auto cancel() -> task<void>;
-    auto size() const noexcept -> std::size_t;
-    auto idle_count() const noexcept -> std::size_t;
-    auto shard_count() const noexcept -> std::size_t;
-};
+auto users = runtime.repository<User>(
+    "primary", {}, application::database_provider::postgresql);
 ```
 
-**单线程 + 连接池示例**：
+The provider-neutral path is:
+
+```text
+application_runtime::repository<T>()
+  -> application_repository<T>
+    -> repository<T>
+      -> mapper<T>
+        -> internal database_session
+          -> managed session gateway
+            -> MySQL/PostgreSQL pool
+```
+
+`mapper<T>` is the sole model-aware SQL boundary. It owns typed CRUD,
+projections, paging, batch operations, native upsert selection and mapping.
+`database_session` is an internal raw execution/transaction context and is not
+re-exported by `cnetmod.orm`. Infrastructure tests or backend adapters that
+need it must explicitly import `cnetmod.orm.database_session`.
+
+Cross-model transactions obtain typed mappers from one unit of work; every
+mapper shares the same leased connection and transaction:
 
 ```cpp
-import std;
-import cnetmod.core;
-import cnetmod.coro;
-import cnetmod.io;
-import cnetmod.executor;
-import cnetmod.protocol.mysql;
-#include <cnetmod/orm.hpp>
+auto committed = co_await users->transaction<void>(
+    [](auto& unit) -> task<std::expected<void, std::string>>
+    {
+        auto users = unit.template mapper<User>();
+        auto saved_user = co_await users.insert(user);
+        if (saved_user.is_err())
+            co_return std::unexpected(saved_user.error_msg);
 
-namespace cn = cnetmod;
-
-auto run(cn::io_context& ctx) -> cn::task<void> {
-    // 创建连接池
-    cn::mysql::connection_pool pool(ctx, cn::mysql::pool_params{
-        .host = "127.0.0.1",
-        .port = 3306,
-        .username = "root",
-        .password = "secret",
-        .database = "myapp",
-        .initial_size = 2,
-        .max_size = 16,
+        auto orders = unit.template mapper<Order>();
+        auto saved_order = co_await orders.insert(order);
+        if (saved_order.is_err())
+            co_return std::unexpected(saved_order.error_msg);
+        co_return {};
     });
-
-    // 启动连接池后台维护
-    cn::spawn(ctx, pool.async_run());
-    co_await cn::async_sleep(ctx, std::chrono::milliseconds(100));
-
-    // 从池中获取连接
-    auto conn = co_await pool.async_get_connection();
-    if (!conn) {
-        std::println("get connection failed: {}", conn.error().message());
-        co_return;
-    }
-
-    // 用 pooled_connection 创建 ORM session
-    orm::mysql_session db(conn->get());
-
-    Article a;
-    a.title = "Hello ORM";
-    a.status = 1;
-    auto r = co_await db.insert(a);
-    std::println("inserted id={}", a.id);
-
-    auto all = co_await db.find_all<Article>();
-    std::println("total: {}", all.data.size());
-
-    // pooled_connection 析构时自动归还连接池
-}
 ```
 
-## 多核服务器部署
+## Managed pool behavior
 
-### sharded_connection_pool + server_context
-
-生产环境中，每个 worker 线程使用 `sharded_connection_pool` 获取本分片连接，避免跨线程竞争。
-
-**架构**：
-
-```
-server_context
-├── accept_io()          — 接受 HTTP 请求
-├── worker_io[0]         — sharded_pool shard[0]
-├── worker_io[1]         — sharded_pool shard[1]
-├── worker_io[2]         — sharded_pool shard[2]
-└── worker_io[3]         — sharded_pool shard[3]
-```
-
-**生产级 CRUD 服务示例**：
-
-```cpp
-import std;
-import cnetmod.core;
-import cnetmod.coro;
-import cnetmod.io;
-import cnetmod.executor;
-import cnetmod.protocol.http;
-import cnetmod.protocol.mysql;
-#include <cnetmod/orm.hpp>
-
-namespace cn = cnetmod;
-namespace mysql = cnetmod::mysql;
-
-// 模型定义
-struct User {
-    std::int64_t id = 0;
-    std::string name;
-    std::optional<std::string> email;
-    int status = 0;
-};
-
-CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
-    CNETMOD_FIELD(name, "name", varchar),
-    CNETMOD_FIELD(email, "email", varchar, NULLABLE),
-    CNETMOD_FIELD(status, "status", int_))
-
-// 全局分片连接池指针（worker 共享）
-mysql::sharded_connection_pool* g_pool = nullptr;
-
-// 处理 GET /users — 查询所有用户
-auto handle_get_users(cn::io_context& io, const cn::http::request& req)
-    -> cn::task<cn::http::response>
-{
-    auto conn = co_await g_pool->async_get_connection(io);
-    if (!conn)
-        co_return cn::http::make_json_response(500, R"({"error":"db unavailable"})");
-
-    orm::mysql_session db(conn->get());
-    auto result = co_await db.find_all<User>();
-
-    // 构建 JSON 响应...
-    co_return cn::http::make_json_response(200, "[...]");
-}
-
-// 处理 POST /users — 创建用户
-auto handle_create_user(cn::io_context& io, const cn::http::request& req)
-    -> cn::task<cn::http::response>
-{
-    auto conn = co_await g_pool->async_get_connection(io);
-    if (!conn)
-        co_return cn::http::make_json_response(500, R"({"error":"db unavailable"})");
-
-    orm::mysql_session db(conn->get());
-
-    User user;
-    user.name = "Alice";
-    user.status = 1;
-    auto r = co_await db.insert(user);
-
-    co_return cn::http::make_json_response(201,
-        std::format(R"({{"id":{}}})", user.id));
-}
-
-int main() {
-    cn::net_init net;
-
-    // 4 worker 线程
-    cn::server_context sctx(4, 4);
-
-    // 分片连接池 — 每个 worker 一个分片，避免锁竞争
-    mysql::sharded_connection_pool pool(
-        sctx.worker_ios(),
-        mysql::pool_params{
-            .host = "127.0.0.1",
-            .port = 3306,
-            .username = "root",
-            .password = "secret",
-            .database = "myapp",
-            .initial_size = 4,     // 每分片初始连接
-            .max_size = 32,        // 每分片最大连接
-            .ssl = mysql::ssl_mode::disable,
-        });
-    g_pool = &pool;
-
-    // HTTP 路由
-    cn::http::router router;
-    router.get("/users", [](cn::io_context& io, const cn::http::request& req)
-        -> cn::task<cn::http::response> {
-        co_return co_await handle_get_users(io, req);
-    });
-    router.post("/users", [](cn::io_context& io, const cn::http::request& req)
-        -> cn::task<cn::http::response> {
-        co_return co_await handle_create_user(io, req);
-    });
-
-    cn::http::server srv(sctx);
-    srv.listen("0.0.0.0", 8080);
-    srv.set_router(std::move(router));
-
-    // 启动连接池和服务器
-    cn::spawn(sctx.accept_io(), pool.async_run());
-    cn::spawn(sctx.accept_io(), srv.run());
-
-    sctx.run();
-}
-```
-
-> **关键模式**：`async_get_connection(io)` 传入当前 worker 的 `io_context`，分片池优先从对应分片获取连接，避免跨线程竞争。
-
-### 每 worker 独立 session 模式
-
-如果不想使用分片池，也可以为每个 worker 创建独立的 `connection_pool` + `mysql_session`：
-
-```cpp
-// 在 worker 启动时为每个 io_context 创建独立连接池
-for (auto* worker_io : sctx.worker_ios()) {
-    auto* pool = new mysql::connection_pool(*worker_io, mysql::pool_params{
-        .host = "127.0.0.1",
-        .username = "root",
-        .password = "secret",
-        .database = "myapp",
-        .max_size = 8,
-    });
-    cn::spawn(*worker_io, pool->async_run());
-    // pool 与 worker_io 生命周期一致
-}
-```
-
-> **推荐**：大多数场景使用 `sharded_connection_pool` 更简洁；独立池适合需要不同配置的混合负载。
-
-## Do's & Don'ts（连接池补充）
-
-| Do | Don't |
-|---|---|
-| 多核使用 `sharded_connection_pool` + `worker_ios()` | 不要跨 worker 共享单个 `connection_pool` |
-| `pooled_connection` 用完自动归还，作用域控制在最小 | 不要长期持有 `pooled_connection` 不放 |
-| 合理设置 `max_size` 避免数据库连接耗尽 | 不要设置 `max_size` 超过数据库 `max_connections` |
-| 使用 `pool_timeout` 防止获取连接无限等待 | 不要忽略 `async_get_connection()` 的错误 |
+MySQL and PostgreSQL retain separate wire clients, pool implementations,
+dialects, native diagnostics, cursors and upsert syntax. Those differences are
+bound behind the Application repository factory. Pool sizing, TLS, deadlines,
+health, recovery and shutdown remain configuration concerns rather than
+business-code dependencies.
 
 ## UTC `DATETIME` conversion
 
@@ -5787,9 +5525,8 @@ auto main() -> int
 ## 参考示例
 
 - `examples/database/mysql/mysql_crud.cpp` — 完整 CRUD、Prepared Statement、Pipeline
-- `examples/database/mysql/mysql_orm.cpp` — ORM 模型映射与 CRUD
-- `examples/database/mysql/mysql_transaction.cpp` — 事务与隔离级别
-- `examples/database/mysql/mysql_mybatis_plus_demo.cpp` — MyBatis-Plus 风格查询
+- `skill/database/database-orm.md` — Application Repository、Mapper、事务与 XML 映射
+- `testing/tests/test_orm_sharding_sessions.cpp` — Repository、事务、XML 与方言回归
 - `examples/http/multicore_http.cpp` — `server_context` 多核架构参考
 <!-- END SOURCE: skill/database/mysql.md -->
 
@@ -6101,7 +5838,8 @@ PostgreSQL 只提供协议客户端、连接池、方言和结果适配器。App
 代码不依赖 `postgresql_session` 或 PostgreSQL 专属结果类型。
 
 ```cpp
-auto users = runtime.postgresql_repository<User>("primary");
+auto users = runtime.repository<User>(
+    "primary", {}, application::database_provider::postgresql);
 auto user = co_await users->save(User{.name = "Alice", .email = "alice@example.com"});
 auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
 ```
@@ -8246,7 +7984,6 @@ srv.use(recover());
 ## 参考示例
 - `examples/http/hight_http.cpp` — 中间件链完整示例（recover + access_log + cors + request_id + body_limit）
 - `examples/http/http2_demo.cpp` — HTTP/2 + 中间件组合
-- `examples/http/account_server_demo.cpp` — 认证、授权、防火墙综合示例
 ## W3C Trace Context / OpenTelemetry bridge
 
 Use the optional tracing middleware when an HTTP service needs standard

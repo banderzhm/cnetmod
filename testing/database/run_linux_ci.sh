@@ -81,7 +81,6 @@ for protocol in postgresql mongodb; do
     ctest --test-dir "$build" --output-on-failure --no-tests=error --timeout 900 \
         -R "^python_${protocol}_interoperability$"
 done
-export CNETMOD_POSTGRESQL_EXAMPLE="$build/examples/database/postgresql/example_postgresql_production_service"
 export CNETMOD_MONGODB_EXAMPLE="$build/examples/database/mongodb/example_mongodb_production_service"
 ctest --test-dir "$build" --output-on-failure --no-tests=error --timeout 900 \
-    -R '^python_(postgresql|mongodb)_production_example_e2e$'
+    -R '^python_mongodb_production_example_e2e$'

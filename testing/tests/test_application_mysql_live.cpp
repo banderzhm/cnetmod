@@ -14,6 +14,7 @@ import cnetmod.executor.async_op;
 import nlohmann.json;
 #ifdef CNETMOD_TEST_HAS_ORM
 import cnetmod.orm;
+import cnetmod.orm.database_session;
 import cnetmod.instrumentation.tracing;
 #endif
 

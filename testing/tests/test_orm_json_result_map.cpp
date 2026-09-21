@@ -4,6 +4,7 @@
 import std;
 import nlohmann.json;
 import cnetmod.orm;
+import cnetmod.orm.database_session;
 import cnetmod.io.io_context;
 import cnetmod.core.net_init;
 import cnetmod.core.time;
@@ -61,7 +62,8 @@ CNETMOD_MODEL(orm_soft_deleted_record, "soft_deleted_records",
     cnetmod::mysql::client& client) -> cnetmod::task<void>
 {
     orm::database_session session{client, orm::sql_dialect::mysql};
-    auto result = co_await session.find_by_id<orm_crud_user>(
+    orm::mapper<orm_crud_user, decltype(session)> users{session};
+    auto result = co_await users.select_by_id(
         orm::param_value::from_int(7));
     static_cast<void>(result);
 }
@@ -565,8 +567,9 @@ TEST(orm_model_result_preserves_native_database_diagnostics)
     client.response.sql_state = "23000";
     client.response.error_code = 1062;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<orm_crud_user, decltype(session)> users{session};
 
-    const auto result = cnetmod::sync_wait(session.find_all<orm_crud_user>());
+    const auto result = cnetmod::sync_wait(users.select_list());
 
     ASSERT_TRUE(result.is_err());
     ASSERT_EQ(result.error_code, 1062U);
@@ -769,52 +772,54 @@ TEST(orm_database_session_unifies_mysql_crud_and_model_mapping)
 {
     mysql_style_orm_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<orm_crud_user, decltype(session)> users{session};
 
     const auto found = cnetmod::sync_wait(
-        session.find_by_id<orm_crud_user>(orm::param_value::from_int(7)));
+        users.select_by_id(orm::param_value::from_int(7)));
     ASSERT_TRUE(found.ok());
     ASSERT_EQ(found.first()->name, "Ada");
     ASSERT_TRUE(client.last_sql.contains("`users`"));
     ASSERT_TRUE(client.last_sql.contains("`id` = 7"));
 
     orm_crud_user created{.name = "Lin", .status = 3};
-    const auto inserted = cnetmod::sync_wait(session.insert(created));
+    const auto inserted = cnetmod::sync_wait(users.insert(created));
     ASSERT_TRUE(inserted.ok());
     ASSERT_EQ(created.id, 73);
     ASSERT_EQ(inserted.first()->id, 73);
     ASSERT_TRUE(client.last_sql.starts_with("INSERT INTO `users`"));
     ASSERT_TRUE(client.last_sql.contains("'Lin'"));
 
-    const auto updated = cnetmod::sync_wait(session.update(created));
+    const auto updated = cnetmod::sync_wait(users.update_by_id(created));
     ASSERT_TRUE(updated.ok());
     ASSERT_TRUE(client.last_sql.starts_with("UPDATE `users` SET"));
     ASSERT_TRUE(client.last_sql.contains("WHERE `id` = 73"));
 
-    const auto removed = cnetmod::sync_wait(session.remove(created));
+    const auto removed = cnetmod::sync_wait(
+        users.remove_by_id(orm::param_value::from_int(created.id)));
     ASSERT_TRUE(removed.ok());
     ASSERT_TRUE(client.last_sql.starts_with("DELETE FROM `users`"));
 
     const auto removed_by_id = cnetmod::sync_wait(
-        session.remove_by_id<orm_crud_user>(orm::param_value::from_int(73)));
+        users.remove_by_id(orm::param_value::from_int(73)));
     ASSERT_TRUE(removed_by_id.ok());
     ASSERT_TRUE(client.last_sql.contains("WHERE `id` = 73"));
 
     orm::query_wrapper<orm_crud_user> select_wrapper;
     select_wrapper.eq("status", 1);
-    const auto selected = cnetmod::sync_wait(session.execute(select_wrapper));
+    const auto selected = cnetmod::sync_wait(users.select_list(select_wrapper));
     ASSERT_TRUE(selected.ok());
     ASSERT_EQ(selected.first()->name, "Ada");
     ASSERT_TRUE(client.last_sql.starts_with("SELECT"));
 
     orm::query_wrapper<orm_crud_user> delete_wrapper;
     delete_wrapper.eq("id", 73).as_delete();
-    const auto deleted = cnetmod::sync_wait(session.execute(delete_wrapper));
+    const auto deleted = cnetmod::sync_wait(users.remove(delete_wrapper));
     ASSERT_TRUE(deleted.ok());
     ASSERT_TRUE(client.last_sql.starts_with("DELETE FROM `users`"));
 
     orm::update_wrapper<orm_crud_user> update_wrapper;
     update_wrapper.set("name", "Ada Lovelace").eq("id", 73);
-    const auto conditionally_updated = cnetmod::sync_wait(session.execute(update_wrapper));
+    const auto conditionally_updated = cnetmod::sync_wait(users.update(update_wrapper));
     ASSERT_TRUE(conditionally_updated.ok());
     ASSERT_TRUE(client.last_sql.starts_with("UPDATE `users` SET"));
 }
@@ -823,9 +828,10 @@ TEST(orm_database_session_uses_postgresql_binding_and_returning_mapping)
 {
     postgresql_style_orm_client client;
     orm::database_session session{client, orm::sql_dialect::postgresql};
+    orm::mapper<orm_crud_user, decltype(session)> users{session};
 
     const auto found = cnetmod::sync_wait(
-        session.find_by_id<orm_crud_user>(orm::param_value::from_int(17)));
+        users.select_by_id(orm::param_value::from_int(17)));
     ASSERT_TRUE(found.ok());
     ASSERT_EQ(found.first()->id, 17);
     ASSERT_TRUE(client.last_sql.contains("\"users\""));
@@ -834,7 +840,7 @@ TEST(orm_database_session_uses_postgresql_binding_and_returning_mapping)
     ASSERT_EQ(client.last_parameters.front().int_val, 17);
 
     orm_crud_user created{.name = "Grace", .status = 2};
-    const auto inserted = cnetmod::sync_wait(session.insert(created));
+    const auto inserted = cnetmod::sync_wait(users.insert(created));
     ASSERT_TRUE(inserted.ok());
     ASSERT_TRUE(client.last_sql.contains("RETURNING *"));
     ASSERT_EQ(created.id, 17);

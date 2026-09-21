@@ -1,5 +1,6 @@
 #include "test_framework.hpp"
 #include <cnetmod/config.hpp>
+#include <cnetmod/orm.hpp>
 
 import std;
 import nlohmann.json;
@@ -18,6 +19,9 @@ import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.observability.otlp;
+#ifdef CNETMOD_HAS_ORM
+import cnetmod.orm;
+#endif
 #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
 import cnetmod.protocol.mysql;
 #endif
@@ -26,6 +30,80 @@ import cnetmod.protocol.mongodb;
 #endif
 
 namespace application = cnetmod::application;
+
+#if defined(CNETMOD_HAS_ORM) &&             \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+struct runtime_repository_record
+{
+    std::int64_t id{};
+    std::string value;
+};
+
+CNETMOD_MODEL(runtime_repository_record, "runtime_repository_records",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(value, "value", varchar))
+
+static_assert(std::same_as<decltype(std::declval<application::application_runtime&>()
+                                   .repository<runtime_repository_record>()),
+    std::expected<application::managed_repository<runtime_repository_record>,
+        std::error_code>>);
+
+[[maybe_unused]] auto managed_repository_surface_compile_probe(
+    application::managed_repository<runtime_repository_record>& records)
+    -> cnetmod::task<void>
+{
+    cnetmod::orm::query_wrapper<runtime_repository_record> query;
+    runtime_repository_record model{1, "value"};
+    std::array models{model};
+    std::array ids{std::int64_t{1}};
+    std::array fields{std::pair<std::string, cnetmod::orm::param_value>{
+        "value", cnetmod::orm::param_value::from_string("value")}};
+    (void)co_await records.get_by_id(cnetmod::orm::param_value::from_int(1));
+    (void)co_await records.get_one(query);
+    (void)co_await records.list(query);
+    (void)co_await records.list_by_ids(std::span<const std::int64_t>{ids});
+    (void)co_await records.list_by_map(fields);
+    (void)co_await records.exists(query);
+    (void)co_await records.count(query);
+    (void)co_await records.page(1, 20, query);
+    (void)co_await records.select_maps(query);
+    (void)co_await records.select_objects(query);
+    (void)co_await records.page_maps(1, 20, query);
+    cnetmod::orm::mapper_registry registry;
+    cnetmod::orm::param_context xml_parameters;
+    (void)co_await records.select_xml(
+        registry, "RecordMapper.list", xml_parameters);
+    (void)co_await records.get_one_xml(
+        registry, "RecordMapper.one", xml_parameters);
+    (void)co_await records.save(model);
+    (void)co_await records.update_by_id(model);
+    cnetmod::orm::update_wrapper<runtime_repository_record> update;
+    update.set("value", "next").eq("id", 1);
+    (void)co_await records.update(update);
+    (void)co_await records.save_or_update(model);
+    (void)co_await records.upsert(model);
+    (void)co_await records.remove_by_id(cnetmod::orm::param_value::from_int(1));
+    (void)co_await records.remove(query);
+    (void)co_await records.remove_by_ids(std::span<const std::int64_t>{ids});
+    (void)co_await records.remove_by_map(fields);
+    (void)co_await records.execute_xml(
+        registry, "RecordMapper.update", xml_parameters);
+    (void)co_await records.save_batch(std::span<runtime_repository_record>{models});
+    (void)co_await records.update_batch_by_id(
+        std::span<const runtime_repository_record>{models});
+    (void)co_await records.save_or_update_batch(
+        std::span<runtime_repository_record>{models});
+    (void)co_await records.upsert_batch(
+        std::span<runtime_repository_record>{models});
+    (void)co_await records.for_each_map(query,
+        [](const cnetmod::orm::projection_row&)
+            -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        });
+}
+#endif
 
 TEST(request_drain_never_schedules_beyond_remaining_budget)
 {

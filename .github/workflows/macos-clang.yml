@@ -176,7 +176,7 @@ jobs:
           --ctest-command "${CTEST_EXECUTABLE}"
           --test-dir "${{ github.workspace }}/build"
           --output-on-failure --timeout 180
-          -E '^(test_application_mysql_live|test_application_mysql_sharding_live|test_application_redis_live|test_application_redis_cluster_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_postgresql_production_example_e2e|python_mongodb_production_example_e2e)$'
+          -E '^(test_application_mysql_live|test_application_mysql_sharding_live|test_application_redis_live|test_application_redis_cluster_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_mongodb_production_example_e2e)$'
         )
         if [[ "${{ matrix.os }}" == "macos-15" ]]; then
           # GitHub's runner service is subject to macOS 15 Local Network

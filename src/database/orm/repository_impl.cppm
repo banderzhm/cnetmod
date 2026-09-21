@@ -8,7 +8,11 @@ import cnetmod.orm.database_session;
 import cnetmod.orm.mapper;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.query_wrapper;
+import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_parameters;
+import cnetmod.orm.model_reflection;
+import cnetmod.orm.xml_mapper;
+import cnetmod.orm.xml_mapper_registry;
 
 export namespace cnetmod::orm {
 
@@ -36,7 +40,7 @@ struct session_stream_strategy
 };
 
 /**
- * @brief Application-facing ORM service over a lease-owning session gateway.
+ * @brief Application-facing repository over a lease-owning session gateway.
  *
  * Every operation acquires its session through the gateway and installs the
  * standard model policies before executing. Callers therefore do not manage
@@ -65,7 +69,12 @@ public:
         -> task<std::expected<Result, std::string>>
     {
         co_return co_await gateway_->template transaction<Result>(
-            std::forward<Operation>(operation));
+            [this, operation = std::forward<Operation>(operation)](
+                auto& unit) mutable -> task<std::expected<Result, std::string>>
+            {
+                configured_transaction transaction{unit, interceptors_};
+                co_return co_await operation(transaction);
+            });
     }
 
     auto get_by_id(param_value id) -> task<model_result<T>>
@@ -74,7 +83,8 @@ public:
             [id = std::move(id)](auto& session) mutable
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.select_by_id(std::move(id));
+                    session}
+                    .select_by_id(std::move(id));
             });
     }
 
@@ -83,7 +93,8 @@ public:
         co_return co_await read_model([query](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.select_one(query);
+                    session}
+                    .select_one(query);
             });
     }
 
@@ -92,8 +103,9 @@ public:
         co_return co_await read_model([query](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.select_list(query);
-        });
+                    session}
+                    .select_list(query);
+            });
     }
 
     template <typename Id>
@@ -102,7 +114,20 @@ public:
         co_return co_await read_model([ids](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.select_by_ids(ids);
+                    session}
+                    .select_by_ids(ids);
+            });
+    }
+
+    auto list_by_map(
+        std::span<const std::pair<std::string, param_value>> values)
+        -> task<model_result<T>>
+    {
+        co_return co_await read_model([values](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .select_by_map(values);
             });
     }
 
@@ -122,12 +147,41 @@ public:
                     co_return result;
                 }
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    exists(query);
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .exists(query);
             });
         if (outcome)
             co_return std::move(*outcome);
         model_result<bool> result;
+        result.error_msg = outcome.error();
+        result.framework_error = std::make_error_code(std::errc::io_error);
+        co_return result;
+    }
+
+    auto count(const query_wrapper<T>& query = {})
+        -> task<model_result<std::int64_t>>
+    {
+        auto outcome = co_await gateway_->template read<
+            model_result<std::int64_t>>(
+            [this, query](auto& session)
+                -> task<std::expected<model_result<std::int64_t>, std::string>>
+            {
+                auto configured = this->configure(session);
+                if (!configured)
+                {
+                    model_result<std::int64_t> result;
+                    result.error_msg = configured.error();
+                    result.framework_error = std::make_error_code(
+                        std::errc::invalid_argument);
+                    co_return result;
+                }
+                co_return co_await mapper<T,
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .count(query);
+            });
+        if (outcome)
+            co_return std::move(*outcome);
+        model_result<std::int64_t> result;
         result.error_msg = outcome.error();
         result.framework_error = std::make_error_code(std::errc::io_error);
         co_return result;
@@ -144,8 +198,8 @@ public:
                 if (!configured)
                     co_return std::unexpected(configured.error());
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    select_page(page_number, page_size, query);
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .select_page(page_number, page_size, query);
             });
         if (outcome)
             co_return std::move(*outcome);
@@ -172,8 +226,8 @@ public:
                     co_return result;
                 }
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    select_maps(query);
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .select_maps(query);
             });
         if (outcome)
             co_return std::move(*outcome);
@@ -198,8 +252,8 @@ public:
                     co_return result;
                 }
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    select_objects(query);
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .select_objects(query);
             });
         if (outcome)
             co_return std::move(*outcome);
@@ -228,8 +282,8 @@ public:
                     co_return result;
                 }
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    select_maps_page(page_number, page_size, query);
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .select_maps_page(page_number, page_size, query);
             });
         if (outcome)
             co_return std::move(*outcome);
@@ -239,12 +293,49 @@ public:
         co_return result;
     }
 
+    /**
+     * @brief Executes a typed select defined by a MyBatis-style XML mapper.
+     */
+    auto select_xml(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<T>>
+    {
+        co_return co_await read_model(
+            [&registry, statement_id = std::string{statement_id},
+                parameters](auto& session) mutable -> task<model_result<T>>
+            {
+                xml_mapper<T, std::remove_reference_t<decltype(session)>>
+                    statements{session, registry};
+                co_return co_await statements.select(statement_id, parameters);
+            });
+    }
+
+    /**
+     * @brief Executes a strict single-row XML select.
+     */
+    auto get_one_xml(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters,
+        single_result_policy policy = single_result_policy::require_unique)
+        -> task<model_result<T>>
+    {
+        co_return co_await read_model(
+            [&registry, statement_id = std::string{statement_id}, parameters,
+                policy](auto& session) mutable -> task<model_result<T>>
+            {
+                xml_mapper<T, std::remove_reference_t<decltype(session)>>
+                    statements{session, registry};
+                co_return co_await statements.select_one(
+                    statement_id, parameters, policy);
+            });
+    }
+
     auto save(T& model) -> task<model_result<T>>
     {
         co_return co_await write_model([&model](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.insert(model);
+                    session}
+                    .insert(model);
             });
     }
 
@@ -253,7 +344,29 @@ public:
         co_return co_await write_model([&model](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.update_by_id(model);
+                    session}
+                    .update_by_id(model);
+            });
+    }
+
+    auto update(const update_wrapper<T>& query) -> task<model_result<T>>
+    {
+        co_return co_await write_model([query](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .update(query);
+            });
+    }
+
+    auto update(const update_wrapper<T>& query, allow_full_table_t permission)
+        -> task<model_result<T>>
+    {
+        co_return co_await write_model([query, permission](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .update(query, permission);
             });
     }
 
@@ -262,7 +375,8 @@ public:
         co_return co_await write_model([&model](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.save_or_update(model);
+                    session}
+                    .save_or_update(model);
             });
     }
 
@@ -271,7 +385,8 @@ public:
         co_return co_await write_model([&model](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.upsert(model);
+                    session}
+                    .upsert(model);
             });
     }
 
@@ -281,7 +396,69 @@ public:
             [id = std::move(id)](auto& session) mutable
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.remove_by_id(std::move(id));
+                    session}
+                    .remove_by_id(std::move(id));
+            });
+    }
+
+    auto remove(const query_wrapper<T>& query) -> task<model_result<T>>
+    {
+        co_return co_await write_model([query](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .remove(query);
+            });
+    }
+
+    auto remove(const query_wrapper<T>& query, allow_full_table_t permission)
+        -> task<model_result<T>>
+    {
+        co_return co_await write_model([query, permission](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .remove(query, permission);
+            });
+    }
+
+    template <typename Id>
+    auto remove_by_ids(std::span<const Id> ids) -> task<model_result<T>>
+    {
+        co_return co_await write_model([ids](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .remove_by_ids(ids);
+            });
+    }
+
+    auto remove_by_map(
+        std::span<const std::pair<std::string, param_value>> values)
+        -> task<model_result<T>>
+    {
+        co_return co_await write_model([values](auto& session)
+            {
+                return mapper<T, std::remove_reference_t<decltype(session)>>{
+                    session}
+                    .remove_by_map(values);
+            });
+    }
+
+    /**
+     * @brief Executes an XML insert, update or delete in a managed transaction.
+     */
+    auto execute_xml(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<T>>
+    {
+        co_return co_await write_model(
+            [&registry, statement_id = std::string{statement_id},
+                parameters](auto& session) mutable -> task<model_result<T>>
+            {
+                xml_mapper<T, std::remove_reference_t<decltype(session)>>
+                    statements{session, registry};
+                co_return co_await statements.execute(statement_id, parameters);
             });
     }
 
@@ -292,7 +469,8 @@ public:
             [models, batch_size](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.insert_batch(models, batch_size);
+                    session}
+                    .insert_batch(models, batch_size);
             });
     }
 
@@ -303,7 +481,8 @@ public:
             [models, batch_size](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.update_batch(models, batch_size);
+                    session}
+                    .update_batch(models, batch_size);
             });
     }
 
@@ -314,7 +493,8 @@ public:
             [models, batch_size](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.save_or_update_batch(models, batch_size);
+                    session}
+                    .save_or_update_batch(models, batch_size);
             });
     }
 
@@ -325,7 +505,8 @@ public:
             [models, batch_size](auto& session)
             {
                 return mapper<T, std::remove_reference_t<decltype(session)>>{
-                    session}.upsert_batch(models, batch_size);
+                    session}
+                    .upsert_batch(models, batch_size);
             });
     }
 
@@ -343,12 +524,13 @@ public:
                     co_return std::unexpected(configured.error());
                 co_return co_await StreamStrategy::template for_each<T>(session,
                     query, std::move(handler), options, nullptr);
-        });
+            });
     }
 
     auto for_each_map(const query_wrapper<T>& query,
         std::function<task<std::expected<void, std::string>>(
-            const projection_row&)> handler,
+            const projection_row&)>
+            handler,
         stream_options options = {})
         -> task<std::expected<void, std::string>>
     {
@@ -360,14 +542,15 @@ public:
                 if (!configured)
                     co_return std::unexpected(configured.error());
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    for_each_map(query, std::move(handler), options);
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .for_each_map(query, std::move(handler), options);
             });
     }
 
     auto for_each_map(const query_wrapper<T>& query,
         std::function<task<std::expected<void, std::string>>(
-            const projection_row&)> handler,
+            const projection_row&)>
+            handler,
         stream_options options, cancel_token& cancellation)
         -> task<std::expected<void, std::string>>
     {
@@ -380,8 +563,8 @@ public:
                 if (!configured)
                     co_return std::unexpected(configured.error());
                 co_return co_await mapper<T,
-                    std::remove_reference_t<decltype(session)>>{session}.
-                    for_each_map(query, std::move(handler), options,
+                    std::remove_reference_t<decltype(session)>>{session}
+                    .for_each_map(query, std::move(handler), options,
                         cancellation);
             });
     }
@@ -405,10 +588,51 @@ public:
     }
 
 private:
+    template <typename Unit>
+    class configured_transaction
+    {
+    public:
+        configured_transaction(Unit& unit,
+            automatic_interceptor_options interceptors) noexcept
+            : unit_(&unit), interceptors_(interceptors)
+        {
+        }
+
+        /**
+         * @brief Creates a mapper with the repository policy chain installed.
+         *
+         * Policy construction failures propagate through the transaction's
+         * existing exception boundary. Obtain the mapper immediately before
+         * its operation when a transaction uses more than one model type.
+         */
+        template <Model U>
+        auto mapper()
+            -> decltype(std::declval<Unit&>().template mapper<U>())
+        {
+            return unit_->template mapper<U>(interceptors_);
+        }
+
+        /**
+         * @brief Creates an XML mapper sharing this transaction and policies.
+         */
+        template <Model U>
+        auto xml(const mapper_registry& registry)
+            -> decltype(std::declval<Unit&>().template xml<U>(registry,
+                std::declval<automatic_interceptor_options>()))
+        {
+            return unit_->template xml<U>(registry, interceptors_);
+        }
+
+    private:
+        Unit* unit_;
+        automatic_interceptor_options interceptors_;
+    };
+
     template <typename Session>
     auto configure(Session& session) const -> std::expected<void, std::string>
     {
-        return session.template enable_automatic_interceptors<T>(interceptors_);
+        mapper<T, Session> models{session};
+        return models.configure(interceptors_);
     }
 
     template <typename Operation>

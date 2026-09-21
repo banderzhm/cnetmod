@@ -586,7 +586,6 @@ auto main() -> int
 ## 参考示例
 
 - `examples/database/mysql/mysql_crud.cpp` — 完整 CRUD、Prepared Statement、Pipeline
-- `examples/database/mysql/mysql_orm.cpp` — ORM 模型映射与 CRUD
-- `examples/database/mysql/mysql_transaction.cpp` — 事务与隔离级别
-- `examples/database/mysql/mysql_mybatis_plus_demo.cpp` — MyBatis-Plus 风格查询
+- `skill/database/database-orm.md` — Application Repository、Mapper、事务与 XML 映射
+- `testing/tests/test_orm_sharding_sessions.cpp` — Repository、事务、XML 与方言回归
 - `examples/http/multicore_http.cpp` — `server_context` 多核架构参考

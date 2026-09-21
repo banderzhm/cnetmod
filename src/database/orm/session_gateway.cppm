@@ -2,32 +2,38 @@ export module cnetmod.orm.session_gateway;
 
 import std;
 import cnetmod.coro.task;
+import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.database_session;
 import cnetmod.orm.mapper;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.query_wrapper;
+import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_dialect;
+import cnetmod.orm.xml_mapper;
+import cnetmod.orm.xml_mapper_registry;
 
 export namespace cnetmod::orm {
 
 template <class Session>
 class transaction_session_gateway;
 
+/**
+ * @brief Owns database leases and session lifetimes for repositories.
+ */
 template <asynchronous_database_client Client, class Lease,
     class Session = database_session<Client>>
 class session_gateway
 {
 public:
     using session_type = Session;
-    using start_operation = std::function<task<std::expected<void, std::string>>() >;
+    using start_operation = std::function<task<std::expected<void, std::string>>()>;
     using acquire_operation =
-        std::function<task<std::expected<Lease, std::string>>() >;
+        std::function<task<std::expected<Lease, std::string>>()>;
     using client_accessor = std::function<Client&(Lease&)>;
 
     session_gateway(sql_dialect dialect, start_operation start,
         acquire_operation acquire, client_accessor client)
-        : dialect_(dialect), start_(std::move(start)),
-          acquire_(std::move(acquire)), client_(std::move(client))
+        : dialect_(dialect), start_(std::move(start)), acquire_(std::move(acquire)), client_(std::move(client))
     {
     }
 
@@ -73,7 +79,8 @@ public:
             co_return std::unexpected(lease.error());
 
         session_type session{client_(*lease), dialect_};
-        auto stream = session.template open_cursor<T>(std::move(query), options);
+        cnetmod::orm::mapper<T, session_type> models{session};
+        auto stream = models.open_cursor(std::move(query), options);
         try
         {
             co_return co_await std::forward<Operation>(operation)(stream);
@@ -173,38 +180,35 @@ public:
         return cnetmod::orm::mapper<T, Session>{session_};
     }
 
-    template <class T, class Operation>
-    auto read(Operation&& operation) -> task<std::expected<T, std::string>>
+    /**
+     * @brief Creates a typed mapper and installs its model policies.
+     *
+     * A transaction can touch multiple model types. Call this overload at the
+     * point of use so the shared session carries the policy chain belonging to
+     * the mapper that executes the next statement.
+     */
+    template <Model T>
+    auto mapper(automatic_interceptor_options options)
+        -> cnetmod::orm::mapper<T, Session>
     {
-        co_return co_await std::forward<Operation>(operation)(session_);
-    }
-
-    template <class T, class Operation>
-    auto write(Operation&& operation) -> task<std::expected<T, std::string>>
-    {
-        co_return co_await std::forward<Operation>(operation)(session_);
+        cnetmod::orm::mapper<T, Session> result{session_};
+        auto configured = result.configure(options);
+        if (!configured)
+            throw std::runtime_error(configured.error());
+        return result;
     }
 
     /**
-     * @brief Opens a cursor against an already pinned transaction session.
+     * @brief Creates an XML mapper on the same transaction session.
      */
-    template <Model T, class Operation>
-    auto cursor(Operation&& operation, query_wrapper<T> query = {},
-        cursor_options options = {})
-        -> task<std::expected<void, std::string>>
+    template <Model T>
+    auto xml(const mapper_registry& registry,
+        automatic_interceptor_options options)
+        -> cnetmod::orm::xml_mapper<T, Session>
     {
-        auto stream = session_.template open_cursor<T>(std::move(query), options);
-        co_return co_await std::forward<Operation>(operation)(stream);
-    }
-
-    /**
-     * @brief Streams through an already pinned transaction session.
-     */
-    template <Model T, class Operation>
-    auto stream(Operation&& operation)
-        -> task<std::expected<void, std::string>>
-    {
-        co_return co_await std::forward<Operation>(operation)(session_);
+        auto policies = mapper<T>(options);
+        (void)policies;
+        return cnetmod::orm::xml_mapper<T, Session>{session_, registry};
     }
 
 private:

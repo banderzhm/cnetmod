@@ -481,7 +481,6 @@ srv.use(recover());
 ## 参考示例
 - `examples/http/hight_http.cpp` — 中间件链完整示例（recover + access_log + cors + request_id + body_limit）
 - `examples/http/http2_demo.cpp` — HTTP/2 + 中间件组合
-- `examples/http/account_server_demo.cpp` — 认证、授权、防火墙综合示例
 ## W3C Trace Context / OpenTelemetry bridge
 
 Use the optional tracing middleware when an HTTP service needs standard

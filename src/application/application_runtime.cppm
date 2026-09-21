@@ -11,6 +11,7 @@ import std;
 import cnetmod.application.async_file_template;
 import cnetmod.application.rest_template;
 import cnetmod.application.json_template;
+import cnetmod.application.orm_repository;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.service_registry;
 import cnetmod.application.task_supervisor;
@@ -29,16 +30,47 @@ import cnetmod.application.chat_model_template;
 #endif
 #if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
 import cnetmod.application.mysql;
+import cnetmod.application.mysql_orm;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.model_metadata;
 #endif
 #if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) && defined(CNETMOD_HAS_ORM)
 import cnetmod.application.postgresql;
+import cnetmod.application.postgresql_orm;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.model_metadata;
 #endif
 
 namespace cnetmod::application {
+
+#if defined(CNETMOD_HAS_ORM) &&             \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+/**
+ * @brief Selects the managed relational database behind a repository.
+ */
+export enum class database_provider
+{
+    automatic,
+    mysql,
+    postgresql
+};
+
+    #if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL)
+export template <orm::Model T>
+using managed_repository = application_repository<T,
+    mysql_repository_handle<T>, postgresql_repository_handle<T>>;
+    #elif defined(CNETMOD_HAS_PROTOCOL_MYSQL)
+export template <orm::Model T>
+using managed_repository = application_repository<T,
+    mysql_repository_handle<T>>;
+    #else
+export template <orm::Model T>
+using managed_repository = application_repository<T,
+    postgresql_repository_handle<T>>;
+    #endif
+#endif
 
 /**
  * @brief Provides supervised background execution without exposing raw I/O state.
@@ -158,43 +190,76 @@ public:
         -> task<std::expected<void, std::error_code>>;
 #endif
 
-#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+#if defined(CNETMOD_HAS_ORM) &&             \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
     /**
-     * @brief Resolves a model repository from an application-managed pool.
+     * @brief Resolves a provider-neutral repository from a managed data source.
      *
-     * The returned handle owns its gateway and therefore remains valid after
-     * this call without exposing the application's I/O context or pool.
+     * Automatic selection succeeds only when exactly one supported provider
+     * owns the requested instance name. Specify a provider to disambiguate two
+     * data sources that deliberately share an instance name.
      */
     template <orm::Model T>
     [[nodiscard]] auto repository(std::string_view instance = "default",
-        orm::automatic_interceptor_options interceptors = {})
-        -> std::expected<mysql_repository_handle<T>, std::error_code>
+        orm::automatic_interceptor_options interceptors = {},
+        database_provider provider = database_provider::automatic)
+        -> std::expected<managed_repository<T>, std::error_code>
     {
-        auto service = services_.require<mysql_service>(instance);
-        if (!service)
-            return std::unexpected(service.error());
-        return make_mysql_repository_handle<T>(service->get(), interceptors);
-    }
-#endif
+    #if defined(CNETMOD_HAS_PROTOCOL_MYSQL)
+        auto* mysql = services_.find<mysql_service>(instance);
+        const bool mysql_available = mysql != nullptr;
+    #else
+        constexpr bool mysql_available = false;
+    #endif
+    #if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL)
+        auto* postgresql = services_.find<postgresql_service>(instance);
+        const bool postgresql_available = postgresql != nullptr;
+    #else
+        constexpr bool postgresql_available = false;
+    #endif
 
-#if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) && defined(CNETMOD_HAS_ORM)
-    /**
-     * @brief Resolves a model repository from an application-managed pool.
-     *
-     * PostgreSQL uses the same provider-neutral Mapper/Repository contract as
-     * MySQL; only the session gateway and SQL dialect differ.
-     */
-    template <orm::Model T>
-    [[nodiscard]] auto postgresql_repository(
-        std::string_view instance = "default",
-        orm::automatic_interceptor_options interceptors = {})
-        -> std::expected<postgresql_repository_handle<T>, std::error_code>
-    {
-        auto service = services_.require<postgresql_service>(instance);
-        if (!service)
-            return std::unexpected(service.error());
-        return make_postgresql_repository_handle<T>(service->get(),
-            interceptors);
+        if (provider == database_provider::automatic)
+        {
+            if (mysql_available == postgresql_available)
+            {
+                return std::unexpected(std::make_error_code(mysql_available
+                        ? std::errc::address_in_use
+                        : std::errc::no_such_file_or_directory));
+            }
+            provider = mysql_available ? database_provider::mysql
+                                       : database_provider::postgresql;
+        }
+
+    #if defined(CNETMOD_HAS_PROTOCOL_MYSQL)
+        if (provider == database_provider::mysql)
+        {
+            if (!mysql)
+                return std::unexpected(std::make_error_code(
+                    std::errc::no_such_file_or_directory));
+            auto handle = make_mysql_repository_handle<T>(*mysql, interceptors);
+            if (!handle)
+                return std::unexpected(handle.error());
+            return managed_repository<T>{std::move(*handle)};
+        }
+    #endif
+
+    #if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL)
+        if (provider == database_provider::postgresql)
+        {
+            if (!postgresql)
+                return std::unexpected(std::make_error_code(
+                    std::errc::no_such_file_or_directory));
+            auto handle = make_postgresql_repository_handle<T>(*postgresql,
+                interceptors);
+            if (!handle)
+                return std::unexpected(handle.error());
+            return managed_repository<T>{std::move(*handle)};
+        }
+    #endif
+
+        return std::unexpected(
+            std::make_error_code(std::errc::operation_not_supported));
     }
 #endif
 

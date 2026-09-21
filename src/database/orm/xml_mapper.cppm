@@ -1,0 +1,190 @@
+/**
+ * @brief Typed execution of MyBatis-style XML statements over an ORM session.
+ */
+export module cnetmod.orm.xml_mapper;
+
+import std;
+import cnetmod.coro.task;
+import cnetmod.orm.dynamic_sql;
+import cnetmod.orm.model_metadata;
+import cnetmod.orm.model_reflection;
+import cnetmod.orm.repository_contract;
+import cnetmod.orm.result_mapper;
+import cnetmod.orm.sql_parameters;
+import cnetmod.orm.sql_dialect;
+import cnetmod.orm.xml_mapper_registry;
+
+export namespace cnetmod::orm {
+
+/**
+ * @brief Adds XML-defined statements to the same typed Mapper session.
+ *
+ * The class is protocol-neutral. It renders XML dynamic SQL into the common
+ * parameterized query contract, then delegates execution, interception,
+ * diagnostics and transaction ownership to the supplied database session.
+ */
+template <Model T, typename Session>
+class xml_mapper
+{
+public:
+    xml_mapper(Session& session, const mapper_registry& registry) noexcept
+        : session_(&session), registry_(&registry)
+    {
+    }
+
+    auto select(std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<T>>
+    {
+        return select_impl(session_, registry_, std::string{statement_id},
+            parameters);
+    }
+
+    auto select(std::string_view statement_id, const T& parameters)
+        -> task<model_result<T>>
+    {
+        return select_impl(session_, registry_, std::string{statement_id},
+            param_context::from_model(parameters));
+    }
+
+    auto select_one(std::string_view statement_id,
+        const param_context& parameters,
+        single_result_policy policy = single_result_policy::require_unique)
+        -> task<model_result<T>>
+    {
+        return select_one_impl(session_, registry_, std::string{statement_id},
+            parameters, policy);
+    }
+
+    auto execute(std::string_view statement_id,
+        const param_context& parameters) -> task<model_result<T>>
+    {
+        return execute_impl(session_, registry_, std::string{statement_id},
+            parameters);
+    }
+
+    auto execute(std::string_view statement_id, const T& parameters)
+        -> task<model_result<T>>
+    {
+        return execute_impl(session_, registry_, std::string{statement_id},
+            param_context::from_model(parameters));
+    }
+
+private:
+    static auto select_impl(Session* session, const mapper_registry* registry,
+        std::string statement_id, param_context parameters)
+        -> task<model_result<T>>
+    {
+        auto statement = build(*session, *registry, statement_id, parameters);
+        if (!statement)
+            co_return failure(statement.error());
+        auto result = co_await session->execute(std::move(*statement));
+        co_return map(std::move(result));
+    }
+
+    static auto select_one_impl(Session* session,
+        const mapper_registry* registry, std::string statement_id,
+        param_context parameters, single_result_policy policy)
+        -> task<model_result<T>>
+    {
+        auto result = co_await select_impl(session, registry,
+            std::move(statement_id), std::move(parameters));
+        if (result.is_err() || result.data.size() <= 1)
+            co_return result;
+        if (policy == single_result_policy::first)
+        {
+            result.data.resize(1);
+            co_return result;
+        }
+        result.data.clear();
+        result.error_msg = "XML statement returned more than one row";
+        result.framework_error = std::make_error_code(
+            std::errc::result_out_of_range);
+        co_return result;
+    }
+
+    static auto execute_impl(Session* session, const mapper_registry* registry,
+        std::string statement_id, param_context parameters)
+        -> task<model_result<T>>
+    {
+        auto statement = build(*session, *registry, statement_id, parameters);
+        if (!statement)
+            co_return failure(statement.error());
+        auto result = co_await session->execute(std::move(*statement));
+        co_return map(std::move(result), false);
+    }
+
+    static auto build(Session& session, const mapper_registry& registry,
+        std::string_view statement_id,
+        const param_context& parameters)
+        -> std::expected<parameterized_query, std::string>
+    {
+        const auto* statement = registry.find_statement(statement_id);
+        if (!statement)
+            return std::unexpected(
+                "XML statement not found: " + std::string{statement_id});
+        const auto name_space = registry.get_namespace(statement_id);
+        static const fragment_map empty_fragments;
+        const auto* fragments = registry.get_fragments(name_space);
+        try
+        {
+            dynamic_sql_processor processor{format_options{}};
+            auto built = processor.process(*statement, parameters,
+                fragments ? *fragments : empty_fragments);
+            if (session.dialect() == sql_dialect::postgresql)
+            {
+                std::string normalized;
+                normalized.reserve(built.sql.size() + built.params.size() * 2);
+                std::size_t parameter = 1;
+                for (std::size_t index = 0; index < built.sql.size(); ++index)
+                {
+                    if (built.sql[index] == '{' &&
+                        index + 1 < built.sql.size() &&
+                        built.sql[index + 1] == '}')
+                    {
+                        normalized += std::format("${}", parameter++);
+                        ++index;
+                    }
+                    else
+                    {
+                        normalized.push_back(built.sql[index]);
+                    }
+                }
+                built.sql = std::move(normalized);
+            }
+            return parameterized_query{
+                std::move(built.sql), std::move(built.params)};
+        }
+        catch (const std::exception& error)
+        {
+            return std::unexpected(error.what());
+        }
+    }
+
+    static auto map(query_result source, bool include_rows = true)
+        -> model_result<T>
+    {
+        model_result<T> result;
+        result.affected_rows = source.affected_rows;
+        result.last_insert_id = source.last_insert_id;
+        result.error_msg = std::move(source.error_msg);
+        result.sql_state = std::move(source.sql_state);
+        result.error_code = source.error_code;
+        if (include_rows && result.error_msg.empty())
+            result.data = from_result_set<T>(source);
+        return result;
+    }
+
+    static auto failure(std::string message) -> model_result<T>
+    {
+        model_result<T> result;
+        result.error_msg = std::move(message);
+        result.framework_error = std::make_error_code(
+            std::errc::invalid_argument);
+        return result;
+    }
+
+    Session* session_;
+    const mapper_registry* registry_;
+};
+
+} // namespace cnetmod::orm

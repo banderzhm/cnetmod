@@ -20,7 +20,7 @@ import cnetmod.observability.http_server;
 import cnetmod.protocol.http.middleware;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 #if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
-import cnetmod.application.mysql;
+import cnetmod.application.mysql_orm;
 #endif
 
 namespace cnetmod::application {

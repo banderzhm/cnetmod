@@ -184,13 +184,25 @@ namespace {
             key += '=';
             switch (it->second.kind)
             {
-            case param_value::kind_t::int64_kind: key += std::to_string(it->second.int_val); break;
-            case param_value::kind_t::uint64_kind: key += std::to_string(it->second.uint_val); break;
-            case param_value::kind_t::double_kind: key += std::to_string(it->second.double_val); break;
+            case param_value::kind_t::int64_kind:
+                key += std::to_string(it->second.int_val);
+                break;
+            case param_value::kind_t::uint64_kind:
+                key += std::to_string(it->second.uint_val);
+                break;
+            case param_value::kind_t::double_kind:
+                key += std::to_string(it->second.double_val);
+                break;
             case param_value::kind_t::string_kind:
-            case param_value::kind_t::blob_kind: key += it->second.str_val; break;
-            case param_value::kind_t::null_kind: key += "<null>"; break;
-            default: key += "<temporal>"; break;
+            case param_value::kind_t::blob_kind:
+                key += it->second.str_val;
+                break;
+            case param_value::kind_t::null_kind:
+                key += "<null>";
+                break;
+            default:
+                key += "<temporal>";
+                break;
             }
             key += ';';
         }
@@ -254,8 +266,8 @@ auto result_map_applier::materialize_joined(const result_map_def& result_map,
 
         for (const auto& relation : result_map.associations)
         {
-            // A `select` relation is populated by mapper_session after the
-            // parent query; its columns do not belong to this joined row.
+            // A `select` relation is loaded explicitly through the repository
+            // after the parent query; its columns do not belong to this row.
             if (!relation.select.empty() || relation.result_map.empty() ||
                 root.associations.contains(relation.property))
                 continue;
@@ -274,7 +286,8 @@ auto result_map_applier::materialize_joined(const result_map_def& result_map,
             const auto child_key = mapped_identity(*nested_map, child_values, row_index);
             auto& children = root.collections[relation.property];
             const auto duplicate = std::ranges::any_of(children,
-                [&](const mapped_object& child) {
+                [&](const mapped_object& child)
+                {
                     return mapped_identity(*nested_map, child.values, row_index) == child_key;
                 });
             if (!duplicate)

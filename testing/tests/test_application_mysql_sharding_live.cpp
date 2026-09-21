@@ -3,6 +3,7 @@
 
 import std;
 import cnetmod.application.mysql;
+import cnetmod.application.mysql_orm;
 import cnetmod.application.service_registry;
 import cnetmod.application.managed_service;
 import cnetmod.application.recovery_policy;
@@ -112,8 +113,11 @@ TEST(mysql_live_named_pools_route_sharded_orm_transactions)
                 [id, description](auto& session)
                     -> cnetmod::task<std::expected<int, std::string>>
                 {
+                    using session_type = std::remove_reference_t<decltype(session)>;
+                    cnetmod::orm::mapper<sharded_order_live, session_type> orders{
+                        session};
                     sharded_order_live order{id, description};
-                    auto result = co_await session.insert(order);
+                    auto result = co_await orders.insert(order);
                     if (result.is_err())
                         co_return std::unexpected(result.error_msg);
                     co_return 1;
@@ -125,8 +129,11 @@ TEST(mysql_live_named_pools_route_sharded_orm_transactions)
                 [id](auto& session)
                     -> cnetmod::task<std::expected<std::string, std::string>>
                 {
-                    auto result = co_await session.template find_by_id<
-                        sharded_order_live>(cnetmod::orm::param_value::from_int(id));
+                    using session_type = std::remove_reference_t<decltype(session)>;
+                    cnetmod::orm::mapper<sharded_order_live, session_type> orders{
+                        session};
+                    auto result = co_await orders.select_by_id(
+                        cnetmod::orm::param_value::from_int(id));
                     if (result.is_err())
                         co_return std::unexpected(result.error_msg);
                     auto order = result.first();
@@ -150,12 +157,16 @@ TEST(mysql_live_named_pools_route_sharded_orm_transactions)
             {
                 for (auto& entry : sessions.entries())
                 {
+                    using session_type = std::remove_reference_t<
+                        decltype(entry.session)>;
+                    cnetmod::orm::mapper<sharded_order_live, session_type> orders{
+                        entry.session};
                     const auto shard = entry.route.database_shard;
                     sharded_order_live order{
                         static_cast<std::int64_t>(*keys[shard]),
                         std::format("xa-database-shard-{}", shard),
                     };
-                    auto updated = co_await entry.session.update(order);
+                    auto updated = co_await orders.update_by_id(order);
                     if (updated.is_err())
                         co_return std::unexpected(updated.error_msg);
                 }
@@ -169,8 +180,15 @@ TEST(mysql_live_named_pools_route_sharded_orm_transactions)
             [](const cnetmod::orm::shard_route&, auto& session)
                 -> cnetmod::task<std::expected<std::size_t, std::string>>
             {
-                co_return co_await session.template count<sharded_order_live>(
-                    cnetmod::orm::query_wrapper<sharded_order_live>{});
+                using session_type = std::remove_reference_t<decltype(session)>;
+                cnetmod::orm::mapper<sharded_order_live, session_type> orders{
+                    session};
+                auto counted = co_await orders.count();
+                if (counted.is_err())
+                    co_return std::unexpected(counted.error_msg);
+                co_return counted.data.empty()
+                    ? std::size_t{}
+                    : static_cast<std::size_t>(counted.data.front());
             },
             [](std::vector<cnetmod::orm::shard_read_result<std::size_t>> values)
                 -> std::expected<std::size_t, std::string>

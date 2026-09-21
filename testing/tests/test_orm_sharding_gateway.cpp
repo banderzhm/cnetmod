@@ -80,9 +80,11 @@ TEST(orm_sharded_gateway_pins_named_instance_and_table)
         orm::shard_key{"tenant-7"},
         [](auto& session) -> cnetmod::task<std::expected<int, std::string>>
         {
+            using session_type = std::remove_reference_t<decltype(session)>;
+            orm::mapper<gateway_order, session_type> orders{session};
             orm::query_wrapper<gateway_order> query;
             query.eq("id", 7);
-            auto result = co_await session.find(query);
+            auto result = co_await orders.select_list(query);
             if (result.is_err())
                 co_return std::unexpected(result.error_msg);
             co_return 7;
@@ -96,8 +98,10 @@ TEST(orm_sharded_gateway_pins_named_instance_and_table)
         orm::shard_key{"tenant-7"},
         [](auto& session) -> cnetmod::task<std::expected<int, std::string>>
         {
+            using session_type = std::remove_reference_t<decltype(session)>;
+            orm::mapper<gateway_order, session_type> orders{session};
             gateway_order order{7, "transaction"};
-            auto result = co_await session.update(order);
+            auto result = co_await orders.update_by_id(order);
             if (result.is_err())
                 co_return std::unexpected(result.error_msg);
             co_return 1;

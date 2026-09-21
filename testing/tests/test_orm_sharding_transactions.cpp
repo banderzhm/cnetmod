@@ -113,10 +113,14 @@ TEST(orm_distributed_transaction_uses_mysql_xa_two_phase_commit)
                 ASSERT_EQ(sessions.entries().size(), 2U);
                 for (auto& entry : sessions.entries())
                 {
+                    using session_type = std::remove_reference_t<
+                        decltype(entry.session)>;
+                    orm::mapper<transactional_order, session_type> orders{
+                        entry.session};
                     transactional_order order{
                         static_cast<std::int64_t>(entry.route.database_shard + 1),
                         "xa"};
-                    const auto updated = co_await entry.session.update(order);
+                    const auto updated = co_await orders.update_by_id(order);
                     if (updated.is_err())
                         co_return std::unexpected(updated.error_msg);
                 }

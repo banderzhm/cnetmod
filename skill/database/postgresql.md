@@ -303,7 +303,8 @@ PostgreSQL 只提供协议客户端、连接池、方言和结果适配器。App
 代码不依赖 `postgresql_session` 或 PostgreSQL 专属结果类型。
 
 ```cpp
-auto users = runtime.postgresql_repository<User>("primary");
+auto users = runtime.repository<User>(
+    "primary", {}, application::database_provider::postgresql);
 auto user = co_await users->save(User{.name = "Alice", .email = "alice@example.com"});
 auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
 ```

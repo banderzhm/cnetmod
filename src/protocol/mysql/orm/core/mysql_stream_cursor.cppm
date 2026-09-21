@@ -5,8 +5,10 @@ import :types;
 import :connection_client;
 import :orm_mysql_result_adapter;
 import cnetmod.orm.database_session;
+import cnetmod.orm.mapper;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.query_wrapper;
+import cnetmod.orm.repository_contract;
 import cnetmod.orm.result_mapper;
 import cnetmod.orm.sql_parameters;
 import cnetmod.coro.cancel;
@@ -55,9 +57,13 @@ public:
 
     mysql_stream_cursor(mysql_stream_cursor&& other) noexcept
         : client_(std::exchange(other.client_, nullptr)),
-          statement_(std::move(other.statement_)), state_(std::move(other.state_)),
-          options_(other.options_), preparation_error_(std::move(other.preparation_error_)),
-          delivered_(other.delivered_), started_(other.started_), done_(other.done_)
+          statement_(std::move(other.statement_)),
+          state_(std::move(other.state_)),
+          options_(other.options_),
+          preparation_error_(std::move(other.preparation_error_)),
+          delivered_(other.delivered_),
+          started_(other.started_),
+          done_(other.done_)
     {
         other.done_ = true;
     }
@@ -266,8 +272,9 @@ auto open_mysql_stream_cursor(Session& session, query_wrapper<T> query = {},
     cursor_options options = {})
 {
     using client_type = std::remove_reference_t<decltype(session.underlying())>;
+    mapper<T, Session> models{session};
     return mysql_stream_cursor<T, client_type>{session.underlying(),
-        session.template prepare_select<T>(query), options};
+        models.prepare_select(query), options};
 }
 
 /**
@@ -282,7 +289,8 @@ struct mysql_stream_strategy
     {
         auto cursor = open_mysql_stream_cursor<T>(session, query,
             cursor_options{.batch_size = options.batch_size,
-                .max_rows = options.max_rows, .deadline = options.deadline});
+                .max_rows = options.max_rows,
+                .deadline = options.deadline});
         while (!cursor.done())
         {
             auto batch = cancellation ? co_await cursor.next(*cancellation)

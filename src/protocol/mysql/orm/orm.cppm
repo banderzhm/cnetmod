@@ -30,7 +30,6 @@ export import :orm_xml_mapper;
 // The old protocol-local base mapper remains internal to legacy implementation
 // units and is deliberately not exported.
 export import :orm_wrapper;
-export import :orm_page;
 export import :orm_logical_delete;
 export import :orm_auto_fill;
 export import :orm_optimistic_lock;

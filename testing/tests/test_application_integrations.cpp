@@ -74,6 +74,9 @@ import cnetmod.coro.timer;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
 import cnetmod.application.mysql;
+    #ifdef CNETMOD_HAS_ORM
+import cnetmod.application.mysql_orm;
+    #endif
 import cnetmod.protocol.mysql;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI

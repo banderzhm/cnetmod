@@ -7,6 +7,7 @@ import cnetmod.orm.sql_statement_formatting;
 import cnetmod.orm.sql_dialect;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.result_mapper;
+import cnetmod.orm.repository_contract;
 import cnetmod.orm.query_wrapper;
 import cnetmod.orm.interceptor_chain;
 import cnetmod.orm.automatic_interceptors;
@@ -20,9 +21,16 @@ import cnetmod.instrumentation.error;
 
 export namespace cnetmod::orm {
 
-/// Protocol result adaptation point. Protocol modules with their own wire
-/// result representation specialize this at their boundary; database_session
-/// itself never needs to know those protocol types.
+namespace detail {
+    struct mapper_session_access;
+}
+
+/**
+ * @brief Adapts a protocol result into the provider-neutral query result.
+ *
+ * Protocol modules specialize this boundary for their wire result type so the
+ * session does not depend on a concrete database protocol.
+ */
 template <class Result> struct database_result_adapter
 {
     static auto adapt(Result&& result) -> query_result
@@ -51,31 +59,6 @@ struct sql_observation_options
     std::size_t max_query_bytes = 2048;
 };
 
-/**
- * @brief Selects the cardinality contract for a single-row query.
- *
- * `require_unique` rejects a query that matches more than one row. `first`
- * deliberately returns the first matching row and must therefore be chosen
- * explicitly by callers that do not require uniqueness.
- */
-enum class single_result_policy
-{
-    require_unique,
-    first
-};
-
-/**
- * @brief Explicit authorization for an unbounded DELETE operation.
- */
-struct allow_full_table_t
-{
-    explicit constexpr allow_full_table_t() = default;
-};
-
-inline constexpr allow_full_table_t allow_full_table{};
-
-using projection_row = std::map<std::string, field_value, std::less<>>;
-
 template <class Client>
 concept asynchronous_database_client = requires(Client& client,
     std::string_view sql,
@@ -87,113 +70,19 @@ concept asynchronous_database_client = requires(Client& client,
 };
 
 /**
- * @brief Carries mapped models and native database diagnostics.
+ * @brief Internal protocol-neutral execution context owned by ORM gateways.
  *
- * The native error number and SQLSTATE remain available so callers can use
- * precise vendor diagnostics without parsing human-readable messages.
+ * The session owns raw execution, transaction state, dialect selection and
+ * interception. Public model-aware persistence is exposed only through
+ * `mapper<T>` and `repository<T>`; application code does not construct or
+ * retain this type.
  */
-template <class T> struct model_result
-{
-    std::vector<T> data;
-    std::uint64_t affected_rows{};
-    std::uint64_t last_insert_id{};
-    std::string error_msg;
-    std::string sql_state;
-    std::uint32_t error_code{};
-    std::error_code framework_error;
-    /**
-     * @brief Batch location for failures produced by a batch operation.
-     *
-     * The fields are unset for non-batch operations. Keeping the location in
-     * the common result prevents callers from parsing error text to identify
-     * the failed item.
-     */
-    std::optional<std::size_t> batch_index;
-    std::optional<std::size_t> item_index;
-    std::string operation;
-
-    [[nodiscard]] auto ok() const noexcept -> bool
-    {
-        return error_msg.empty() && !framework_error;
-    }
-
-    [[nodiscard]] auto is_err() const noexcept -> bool
-    {
-        return !ok();
-    }
-
-    [[nodiscard]] auto empty() const noexcept -> bool
-    {
-        return data.empty();
-    }
-
-    [[nodiscard]] auto first() const -> std::optional<T>
-    {
-        return data.empty() ? std::nullopt : std::optional<T>{data.front()};
-    }
-};
-
-/**
- * @brief Carries a page of projected values and complete query diagnostics.
- */
-template <class T> struct page_result
-{
-    model_result<T> records;
-    std::size_t total{};
-    std::size_t page = 1;
-    std::size_t page_size = 20;
-    std::size_t total_pages{};
-
-    [[nodiscard]] auto ok() const noexcept -> bool
-    {
-        return records.ok();
-    }
-
-    [[nodiscard]] auto has_next() const noexcept -> bool
-    {
-        return page < total_pages;
-    }
-
-    [[nodiscard]] auto has_previous() const noexcept -> bool
-    {
-        return page > 1 && total_pages > 0;
-    }
-};
-
-/**
- * @brief Bounds a cooperative, page-backed ORM row stream.
- */
-struct stream_options
-{
-    std::size_t batch_size = 256;
-    std::size_t max_rows = std::numeric_limits<std::size_t>::max();
-    std::optional<std::chrono::steady_clock::time_point> deadline;
-};
-
-/**
- * @brief Stateful, bounded cursor policy for database sessions.
- *
- * The generic session backend implements this contract with bounded pages;
- * protocol clients that expose a wire cursor may provide a more direct
- * implementation through their own adapter without changing repository code.
- */
-struct cursor_options
-{
-    std::size_t batch_size = 256;
-    std::size_t max_rows = std::numeric_limits<std::size_t>::max();
-    std::optional<std::chrono::steady_clock::time_point> deadline;
-};
-
-/// Protocol-independent session used by ORM repositories and generated mappers.
-/// Higher-level model modules depend on this contract, never a wire protocol.
-///
-/// Raw SQL, typed CRUD and row-to-model mapping share this one session.  The
-/// selected dialect owns only identifier quoting, placeholder spelling and
-/// RETURNING support; protocol clients continue to own the wire operation.
 template <asynchronous_database_client Client,
     class ResultAdapter = default_database_result_adapter>
 class database_session
 {
+    friend struct detail::mapper_session_access;
+
 public:
     template <Model T>
     class cursor
@@ -216,8 +105,7 @@ public:
                 exhausted_ = true;
                 co_return result;
             }
-            if (options_.deadline && std::chrono::steady_clock::now() >=
-                    *options_.deadline)
+            if (options_.deadline && std::chrono::steady_clock::now() >= *options_.deadline)
             {
                 result.error_msg = "cursor deadline exceeded";
                 result.framework_error = std::make_error_code(
@@ -226,7 +114,7 @@ public:
             }
             auto bounded = query_;
             bounded.limit(static_cast<std::int64_t>(std::min(
-                options_.batch_size, options_.max_rows - offset_)))
+                              options_.batch_size, options_.max_rows - offset_)))
                 .offset(static_cast<std::int64_t>(offset_));
             result = co_await owner_->template find<T>(bounded);
             if (result.is_err())
@@ -346,6 +234,7 @@ public:
         return dialect_;
     }
 
+private:
     /**
      * @brief Builds an intercepted SELECT statement without executing it.
      *
@@ -397,6 +286,7 @@ public:
         return {};
     }
 
+public:
     // Long-lived units of work need an explicit lifecycle because their
     // repositories may suspend between individual commands. Keep the dialect
     // specific statements inside the ORM boundary rather than duplicating
@@ -426,12 +316,10 @@ public:
         co_return std::expected<void, std::string>{};
     }
 
-    // Model CRUD is consumed by cnetmod.orm.mapper. It remains public in this
-    // module because C++ module ownership prevents a cyclic friend declaration;
-    // application code should use Mapper/Repository instead.
-    // ---------------------------------------------------------------------
-    // Mapper implementation hooks
-    // ---------------------------------------------------------------------
+private:
+    // Model mapping and CRUD are private implementation hooks. The public
+    // typed surface is cnetmod::orm::mapper<T>; database_session remains a
+    // protocol-neutral execution and transaction context.
 
     template <Model T> auto find_all() -> task<model_result<T>>
     {
@@ -554,7 +442,8 @@ public:
     template <Model T>
     auto for_each_map(const query_wrapper<T>& query,
         std::function<task<std::expected<void, std::string>>(
-            const projection_row&)> handler,
+            const projection_row&)>
+            handler,
         stream_options options = {}) -> task<std::expected<void, std::string>>
     {
         if (!handler || options.batch_size == 0)
@@ -600,7 +489,8 @@ public:
     template <Model T>
     auto for_each_map(const query_wrapper<T>& query,
         std::function<task<std::expected<void, std::string>>(
-            const projection_row&)> handler,
+            const projection_row&)>
+            handler,
         stream_options options, cancel_token& cancellation)
         -> task<std::expected<void, std::string>>
     {
@@ -1140,8 +1030,7 @@ public:
         sql += make_placeholder(static_cast<int>(parameters.size()), dialect_config_);
         if (version_field)
         {
-            sql += " AND " + quote_identifier(version_field->col.column_name,
-                dialect_config_) + " = ";
+            sql += " AND " + quote_identifier(version_field->col.column_name, dialect_config_) + " = ";
             sql += make_placeholder(static_cast<int>(parameters.size() + 1),
                 dialect_config_);
             parameters.push_back(version_field->getter(model));
@@ -2129,5 +2018,247 @@ private:
     bool field_fill_enabled_ = true;
     bool optimistic_lock_enabled_ = true;
 };
+
+namespace detail {
+
+    /**
+ * @brief Bridges the public mapper module to private session implementation hooks.
+ *
+ * This non-owning boundary is deliberately placed in the session's module so
+ * C++ module ownership does not require declaring mapper<T> as a cross-module
+ * friend. Application code has no reason to use this detail API directly.
+ */
+    struct mapper_session_access
+    {
+        template <Model T, class Session>
+        static auto configure(Session& session,
+            automatic_interceptor_options options = {})
+        {
+            return session.template enable_automatic_interceptors<T>(options);
+        }
+
+        template <Model T, class Session>
+        static auto prepare_select(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template prepare_select<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto open_cursor(Session& session, query_wrapper<T> query = {},
+            cursor_options options = {})
+        {
+            return session.template open_cursor<T>(std::move(query), options);
+        }
+
+        template <Model T, class Session>
+        static auto select_by_id(Session& session, param_value id)
+        {
+            return session.template find_by_id<T>(std::move(id));
+        }
+
+        template <Model T, class Session>
+        static auto select_one(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template find_one<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto select_first(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template find_first<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto select_list(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template find<T>(query);
+        }
+
+        template <Model T, class Session, typename Id>
+        static auto select_by_ids(Session& session, std::span<const Id> ids)
+        {
+            return session.template find_by_ids<T>(ids);
+        }
+
+        template <Model T, class Session>
+        static auto select_by_map(Session& session,
+            std::span<const std::pair<std::string, param_value>> values)
+        {
+            return session.template find_by_map<T>(values);
+        }
+
+        template <Model T, class Session>
+        static auto exists(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template exists<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto count(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template count_result<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto select_page(Session& session, std::size_t page,
+            std::size_t page_size, const query_wrapper<T>& query)
+        {
+            return session.template page<T>(page, page_size, query);
+        }
+
+        template <Model T, class Session>
+        static auto select_maps(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template select_maps<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto select_objects(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template select_objects<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto select_maps_page(Session& session, std::size_t page,
+            std::size_t page_size, const query_wrapper<T>& query)
+        {
+            return session.template page_maps<T>(page, page_size, query);
+        }
+
+        template <Model T, class Session>
+        static auto insert(Session& session, T& model)
+        {
+            return session.insert(model);
+        }
+
+        template <Model T, class Session>
+        static auto update_by_id(Session& session, T& model)
+        {
+            return session.update(model);
+        }
+
+        template <Model T, class Session>
+        static auto update_by_id(Session& session, const T& model)
+        {
+            return session.update(model);
+        }
+
+        template <Model T, class Session>
+        static auto update(Session& session, const update_wrapper<T>& query)
+        {
+            return session.template update<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto update(Session& session, const update_wrapper<T>& query,
+            allow_full_table_t permission)
+        {
+            return session.template update<T>(query, permission);
+        }
+
+        template <Model T, class Session>
+        static auto save_or_update(Session& session, T& model)
+        {
+            return session.template save_or_update<T>(model);
+        }
+
+        template <Model T, class Session>
+        static auto upsert(Session& session, T& model)
+        {
+            return session.template upsert<T>(model);
+        }
+
+        template <Model T, class Session>
+        static auto remove(Session& session, const query_wrapper<T>& query)
+        {
+            return session.template remove<T>(query);
+        }
+
+        template <Model T, class Session>
+        static auto remove(Session& session, const query_wrapper<T>& query,
+            allow_full_table_t permission)
+        {
+            return session.template remove<T>(query, permission);
+        }
+
+        template <Model T, class Session>
+        static auto remove_by_id(Session& session, param_value id)
+        {
+            return session.template remove_by_id<T>(std::move(id));
+        }
+
+        template <Model T, class Session, typename Id>
+        static auto remove_by_ids(Session& session, std::span<const Id> ids)
+        {
+            return session.template remove_by_ids<T>(ids);
+        }
+
+        template <Model T, class Session>
+        static auto remove_by_map(Session& session,
+            std::span<const std::pair<std::string, param_value>> values)
+        {
+            return session.template remove_by_map<T>(values);
+        }
+
+        template <Model T, class Session>
+        static auto insert_batch(Session& session, std::span<T> models,
+            std::size_t batch_size)
+        {
+            return session.template insert_batch<T>(models, batch_size);
+        }
+
+        template <Model T, class Session>
+        static auto update_batch(Session& session, std::span<const T> models,
+            std::size_t batch_size)
+        {
+            return session.template update_batch_by_id<T>(models, batch_size);
+        }
+
+        template <Model T, class Session>
+        static auto save_or_update_batch(Session& session, std::span<T> models,
+            std::size_t batch_size)
+        {
+            return session.template save_or_update_batch<T>(models, batch_size);
+        }
+
+        template <Model T, class Session>
+        static auto upsert_batch(Session& session, std::span<T> models,
+            std::size_t batch_size)
+        {
+            return session.template upsert_batch<T>(models, batch_size);
+        }
+
+        template <Model T, class Session, class Handler>
+        static auto for_each(Session& session, const query_wrapper<T>& query,
+            Handler handler, stream_options options)
+        {
+            return session.template for_each<T>(query, std::move(handler), options);
+        }
+
+        template <Model T, class Session, class Handler>
+        static auto for_each(Session& session, const query_wrapper<T>& query,
+            Handler handler, stream_options options, cancel_token& cancellation)
+        {
+            return session.template for_each<T>(query, std::move(handler), options,
+                cancellation);
+        }
+
+        template <Model T, class Session, class Handler>
+        static auto for_each_map(Session& session, const query_wrapper<T>& query,
+            Handler handler, stream_options options)
+        {
+            return session.template for_each_map<T>(query, std::move(handler), options);
+        }
+
+        template <Model T, class Session, class Handler>
+        static auto for_each_map(Session& session, const query_wrapper<T>& query,
+            Handler handler, stream_options options, cancel_token& cancellation)
+        {
+            return session.template for_each_map<T>(query, std::move(handler), options,
+                cancellation);
+        }
+    };
+
+} // namespace detail
 
 } // namespace cnetmod::orm
