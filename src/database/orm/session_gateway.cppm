@@ -3,11 +3,15 @@ export module cnetmod.orm.session_gateway;
 import std;
 import cnetmod.coro.task;
 import cnetmod.orm.database_session;
+import cnetmod.orm.mapper;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.query_wrapper;
 import cnetmod.orm.sql_dialect;
 
 export namespace cnetmod::orm {
+
+template <class Session>
+class transaction_session_gateway;
 
 template <asynchronous_database_client Client, class Lease,
     class Session = database_session<Client>>
@@ -113,6 +117,29 @@ public:
         }
     }
 
+    /**
+     * @brief Runs a multi-model unit of work on one leased session.
+     *
+     * Every mapper obtained from the callback shares the same connection and
+     * transaction. This is the only cross-model transaction entry point.
+     */
+    template <typename Result, class Operation>
+    auto transaction(Operation&& operation)
+        -> task<std::expected<Result, std::string>>
+    {
+        auto lease = co_await acquire_lease();
+        if (!lease)
+            co_return std::unexpected(lease.error());
+
+        session_type session{client_(*lease), dialect_};
+        transaction_session_gateway<session_type> unit{session};
+        co_return co_await session.template transaction<Result>(
+            [&]() -> task<std::expected<Result, std::string>>
+            {
+                co_return co_await std::forward<Operation>(operation)(unit);
+            });
+    }
+
 private:
     auto acquire_lease() -> task<std::expected<Lease, std::string>>
     {
@@ -135,6 +162,15 @@ public:
     explicit transaction_session_gateway(Session& session) noexcept
         : session_(session)
     {
+    }
+
+    /**
+     * @brief Creates a typed mapper sharing this unit of work's session.
+     */
+    template <Model T>
+    auto mapper() noexcept -> cnetmod::orm::mapper<T, Session>
+    {
+        return cnetmod::orm::mapper<T, Session>{session_};
     }
 
     template <class T, class Operation>

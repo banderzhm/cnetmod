@@ -23,7 +23,7 @@
 | 批量命令 | `pipeline_request` / `run_pipeline` |
 | 事务 | `client::transaction` |
 | 连接池 | `connection_pool` |
-| ORM 映射 | `orm::mysql_session`（见 [database-orm.md](database-orm.md)） |
+| ORM 映射 | Application `repository<T>` + MySQL gateway（见 [database-orm.md](database-orm.md)） |
 
 ## API 参考
 
@@ -291,20 +291,14 @@ auto rs2 = co_await cli.transaction([&]() -> cn::task<void> {
 
 ### ORM 集成
 
-MySQL ORM 通过 `cnetmod.protocol.mysql:orm` 导出，包含核心映射、XML Mapper、MyBatis-Plus 功能。详见 [database-orm.md](database-orm.md)。
+MySQL 只提供协议客户端、连接池、方言和结果适配器。ORM 业务入口由
+Application 暴露的 `repository<T>` 提供，统一委托给 MySQL
+`session_gateway`；不存在协议专属的 ORM Session/Mapper 门面。
 
 ```cpp
-#include <cnetmod/orm.hpp>
-struct User { std::int64_t id = 0; std::string name; double balance = 0.0; };
-CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
-    CNETMOD_FIELD(name, "name", varchar),
-    CNETMOD_FIELD(balance, "balance", double_))
-
-orm::mysql_session db(cli);
-co_await db.create_table<User>();
-User user{.name = "Alice", .balance = 1000.0};
-auto rs = co_await db.insert(user);
+auto users = runtime.repository<User>("primary");
+auto user = co_await users->save(User{.name = "Alice", .balance = 1000.0});
+auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
 ```
 
 ## 连接池（生产级用法）

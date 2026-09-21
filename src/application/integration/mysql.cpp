@@ -6,6 +6,8 @@ import cnetmod.application.task_supervisor;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
+import cnetmod.orm.sql_dialect;
+import cnetmod.orm.sharding.shard_strategy;
 
 namespace cnetmod::application {
 

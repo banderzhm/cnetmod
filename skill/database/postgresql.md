@@ -19,7 +19,7 @@
 | COPY 导入/导出 | `client::copy_from` / `copy_to` |
 | 大批量流式读取 | `client::query_batches` |
 | 连接池 | `connection_pool` |
-| ORM 映射 | `orm::postgresql_session`（见 [database-orm.md](database-orm.md)） |
+| ORM 映射 | Application `repository<T>` + PostgreSQL gateway（见 [database-orm.md](database-orm.md)） |
 
 ## API 参考
 
@@ -296,43 +296,16 @@ Application 的 PostgreSQL 健康探测使用同一个 deadline 获取连接并�
 
 模块内置 **SCRAM-SHA-256**（推荐）、**MD5**（兼容旧版）、**Trust** 认证，在 `connect()` 阶段自动处理。TLS 协商在认证前完成。
 
-### ORM 集成 (`orm::postgresql_session`)
+### ORM 集成
 
-**签名**（关键方法）:
+PostgreSQL 只提供协议客户端、连接池、方言和结果适配器。Application
+通过统一的 `repository<T>` 绑定 PostgreSQL `session_gateway`，因此业务
+代码不依赖 `postgresql_session` 或 PostgreSQL 专属结果类型。
+
 ```cpp
-class postgresql_session {
-    explicit postgresql_session(client& connection) noexcept;
-    template <Model T> auto create_table() -> task<result_set>;
-    template <Model T> auto find_all() -> task<postgresql_orm_result<T>>;
-    template <Model T> auto find_by_id(param_value id) -> task<postgresql_orm_result<T>>;
-    template <Model T> auto insert(T& model) -> task<postgresql_orm_result<T>>;
-    template <Model T> auto insert_or_get(T& model, std::string_view unique_column)
-        -> task<postgresql_orm_result<T>>;
-    template <Model T> auto update(const T& model) -> task<postgresql_orm_result<T>>;
-    template <Model T> auto remove(const T& model) -> task<postgresql_orm_result<T>>;
-    template <Model T> auto find(const query_wrapper<T>& qb) -> task<postgresql_orm_result<T>>;
-    template <Function> auto transaction(Function fn) -> task<result_set>;
-};
-template <class T> struct postgresql_orm_result {
-    std::vector<T> data;  std::string error_msg, sql_state;
-    auto ok() const noexcept -> bool;
-    auto first() const -> std::optional<T>;
-};
-```
-
-**示例**:
-```cpp
-#include <cnetmod/orm.hpp>
-struct User { std::int64_t id = 0; std::string name; std::string email; };
-CNETMOD_MODEL(User, "users",
-    CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
-    CNETMOD_FIELD(name, "name", varchar),
-    CNETMOD_FIELD(email, "email", varchar))
-
-orm::postgresql_session db(pg_client);
-co_await db.create_table<User>();
-User user{.name = "Alice", .email = "alice@example.com"};
-auto rs = co_await db.insert(user); // RETURNING * 自动回填 id
+auto users = runtime.postgresql_repository<User>("primary");
+auto user = co_await users->save(User{.name = "Alice", .email = "alice@example.com"});
+auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
 ```
 
 连接租约的普通归还保持同步快速路径；状态锁竞争时，归还通知存放在池的稳定槽位中，

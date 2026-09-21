@@ -6,6 +6,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 #ifdef CNETMOD_HAS_ORM
 import cnetmod.orm.session_gateway;
+import cnetmod.orm.sql_dialect;
 #endif
 
 namespace cnetmod::application {

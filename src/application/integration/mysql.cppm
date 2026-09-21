@@ -19,6 +19,7 @@ import cnetmod.protocol.mysql;
     #ifdef CNETMOD_HAS_ORM
 import cnetmod.orm.repository;
 import cnetmod.orm.automatic_interceptors;
+import cnetmod.orm.model_metadata;
 import cnetmod.orm.session_gateway;
 import cnetmod.orm.sharding.shard_catalog;
 import cnetmod.orm.sharding.session_gateway;

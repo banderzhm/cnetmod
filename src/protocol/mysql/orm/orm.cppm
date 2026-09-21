@@ -11,8 +11,6 @@ export import :orm_mapper;
 export import :orm_mysql_result_adapter;
 export import :orm_stream_cursor;
 export import :orm_query;
-export import :orm_crud;
-export import :orm_migrate;
 export import :orm_reflect;
 export import :orm_enum;
 export import :orm_type_handler;
@@ -24,12 +22,13 @@ export import :orm_expr;
 export import :orm_xml_parser;
 export import :orm_dynamic_sql;
 export import :orm_xml_mapper;
-export import :orm_xml_crud;
 
 // =============================================================================
 // MyBatis-Plus style features
 // =============================================================================
-export import :orm_base_mapper;
+// The provider-neutral cnetmod.orm.mapper is the only public Mapper surface.
+// The old protocol-local base mapper remains internal to legacy implementation
+// units and is deliberately not exported.
 export import :orm_wrapper;
 export import :orm_page;
 export import :orm_logical_delete;

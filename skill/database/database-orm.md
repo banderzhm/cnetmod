@@ -6,7 +6,7 @@
 ## 核心原则
 
 - 模型定义用 `CNETMOD_MODEL` + `CNETMOD_FIELD` 宏（编译期反射）
-- CRUD 操作通过 `mysql_session` 或 `base_mapper<T>`
+- CRUD 操作通过 Application 的 `repository<T>`，底层映射由 `mapper<T>` 完成
 - 流式查询用 `query_wrapper<T>`（支持成员指针类型安全）
 - DDL 迁移用 `mysql_synchronize_schema<T>()`
 - XML mapper 提供 MyBatis 风格动态 SQL
@@ -79,66 +79,35 @@ CNETMOD_MODEL(Event, "events",
 - `snowflake_generator(uint16_t machine_id)` — 构造（0~1023）
 - `next_id() -> int64_t` — 生成 ID（非线程安全）
 
-创建 session 时传入: `orm::mysql_session db(cli, snowflake);`
+## 3. Application Repository 与 Mapper
 
-## 3. mysql_session — 异步 ORM 会话
-
-```cpp
-using mysql_session = basic_db_session<mysql::client>;
-mysql_session(mysql::client& cli);
-mysql_session(mysql::client& cli, snowflake_generator& sf);
-```
-
-| 方法 | 签名 |
-|------|------|
-| `find_all<T>()` | `-> task<orm_result<T>>` |
-| `find_by_id<T>(param_value)` | `-> task<orm_result<T>>` |
-| `find(const select_builder<T>&)` | `-> task<orm_result<T>>` |
-| `find(const query_wrapper<T>&)` | `-> task<orm_result<T>>` |
-| `insert(T&)` | `-> task<orm_result<T>>` |
-| `insert_many(span<T>)` | `-> task<orm_result<T>>` |
-| `update(const T&)` | `-> task<orm_result<T>>` |
-| `update(const update_wrapper<T>&)` | `-> task<orm_result<T>>` |
-| `remove(const T&)` | `-> task<orm_result<T>>` |
-| `remove_by_id<T>(param_value)` | `-> task<orm_result<T>>` |
-| `remove(const delete_builder<T>&)` | `-> task<orm_result<T>>` |
-| `remove(const query_wrapper<T>&)` | `-> task<orm_result<T>>` |
-| `count(const query_wrapper<T>&)` | `-> task<expected<size_t, string>>` |
-| `create_table<T>()` / `drop_table<T>()` | `-> task<orm_result<T>>` |
-| `raw_query(sql)` | `-> task<result_set>` |
-| `transaction(Func&&)` | `-> task<result_set>` |
-
-### orm_result<T>
+Application 负责从连接池创建 `session_gateway`，业务只依赖统一的
+`orm::repository<T, Gateway>`。Repository 获取连接租约并管理事务，Mapper
+负责类型化 SQL、结果映射和错误传播；业务代码不直接构造
+`database_session`，也不依赖 MySQL/ PostgreSQL 专属 ORM 门面。
 
 ```cpp
-template <class T> struct orm_result {
-    std::vector<T> data;
-    std::uint64_t affected_rows = 0;
-    std::uint64_t last_insert_id = 0;
-    std::string error_msg;
-    std::string sql_state;
-    std::uint32_t error_code = 0;
-    auto ok() const noexcept -> bool;
-    auto is_err() const noexcept -> bool;
-    auto empty() const noexcept -> bool;
-    auto first() const -> std::optional<T>;
-};
+auto users = runtime.repository<User>("primary");
+auto created = co_await users->save(User{.name = "Alice"});
+auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
+
+auto result = co_await users->transaction<std::size_t>(
+    [](auto& unit) -> task<std::expected<std::size_t, orm_error>> {
+        auto user_mapper = unit.template mapper<User>();
+        auto order_mapper = unit.template mapper<Order>();
+        auto first = co_await user_mapper.insert(...);
+        if (!first) co_return std::unexpected(first.error());
+        auto second = co_await order_mapper.insert(...);
+        if (!second) co_return std::unexpected(second.error());
+        co_return std::size_t{2};
+    });
 ```
 
-### 示例
-
-```cpp
-orm::mysql_session db(cli, snowflake);
-
-Article a; a.title = "Hello"; a.status = 1;
-auto r = co_await db.insert(a);           // a.id 自动回填
-auto all = co_await db.find_all<Article>();
-auto one = co_await db.find_by_id<Article>(orm::param_value::from_int(42));
-a.view_count += 100;
-co_await db.update(a);
-co_await db.remove(a);
-co_await db.remove_by_id<Article>(orm::param_value::from_int(1));
-```
+`repository<T>` 提供 MyBatis-Plus 风格的 `get_by_id`、严格 `get_one`、
+`list`、`page`、`save`、`save_batch`、`save_or_update`、`update_by_id`、
+`remove_by_id`、`exists`、投影查询和流式查询。`get_one` 默认要求最多一条；
+多条匹配返回 `too_many_results`，不会静默取第一条。所有数据库失败保留
+SQLSTATE、原生错误号和分类错误码。
 
 ## SQL 拦截器链
 
@@ -177,14 +146,11 @@ orm::database_session db{client, orm::sql_dialect::mysql, interceptors};
 `IService<T>/ServiceImpl<T>`。它通过 Gateway 获取 Session，再委托 Mapper 完成
 查询、写入、批量、分页和流式操作。业务 Service 只编排多个 Repository，不写 SQL。
 
-`database_session` 和 `session_repository<T, Session>` 只属于底层迁移和协议适配代码；
-Application 代码不应直接持有它们。
+`database_session` 只属于 Mapper/Gateway 内部执行边界；Application 代码不应直接持有它。
 
 ## Repository 门面
 
-`session_repository<T, Session>` 仅是低层迁移门面，供已经持有一个
-`database_session` 的基础设施代码使用。Application 业务代码应使用由
-`session_gateway` 支持的 `repository<T, Gateway>`：
+Application 业务代码应使用由 `session_gateway` 支持的 `repository<T, Gateway>`：
 
 ```cpp
 orm::repository<User, decltype(gateway)> users{gateway};
@@ -200,8 +166,8 @@ auto saved = co_await users.save_or_update(entity);
 批量方法按 `batch_size` 分段，每段独立开启、提交或回滚事务；首个失败结果原样返回。
 所有方法继续返回
 `model_result<T>` 或 `page_result<T>`，因此空结果、数据库错误和框架错误不会被门面
-压扁成 `optional` 或布尔值。连接池租约、事务边界和批处理策略仍由 Session/Gateway
-负责，Repository 不持有裸连接。
+压扁成 `optional` 或布尔值。连接池租约由 Gateway 负责，模型事务、批处理和拦截器由
+Repository 负责；Repository 不持有裸连接。
 
 `repository::upsert()` 和 `upsert_batch()` 使用数据库原生冲突语义：MySQL 生成
 `ON DUPLICATE KEY UPDATE`，PostgreSQL 生成 `ON CONFLICT (...) DO UPDATE`。它们与
@@ -241,10 +207,9 @@ MySQL Repository 的 `for_each()` 使用 MySQL 多函数执行协议：查询只
 Repository 还公开同样的 `list_by_ids`、`exists`、投影查询/分页和 `for_each_map` 能力；
 这些方法仍复用同一个 Session、租约和自动拦截器配置。
 
-MyBatis-Plus `base_mapper` 的现代公开方法全部返回 `model_result` 或
-`page_result`，包括单条查询、批量写入、Map/投影和原生 Upsert；数据库错误不会再被
-转换为空 optional/vector/bool。源码中保留的 `legacy_*` 方法只是显式命名的迁移兼容层，
-不属于新的错误透明契约。
+MyBatis-Plus `BaseMapper` 对应的公开方法全部位于 provider-neutral
+`mapper<T, Session>`；它们返回 `model_result` 或 `page_result`，数据库错误不会被
+转换为空 optional/vector/bool。协议模块不再导出 MySQL/PostgreSQL 各自的 ORM 门面。
 
 ## 分库分表
 
@@ -388,10 +353,10 @@ template <> struct xml_object_graph_binder<User> {
 `lazy_relation<T>` 可用于 C++ 业务层显式协程按需加载，访问必须 `co_await get()`，不会在普通属性访问中阻塞。
 因此这里不是 MyBatis / MyBatis-Plus 的完整 XML 运行时兼容。
 
-## 4. base_mapper<T> — MyBatis-Plus 风格
+## 4. mapper<T> — MyBatis-Plus BaseMapper 风格
 
 ```cpp
-orm::mysql_base_mapper<User> mapper(cli);
+orm::mapper<User, orm::mysql_database_session> mapper(session);
 
 co_await mapper.insert(user);
 auto selected = co_await mapper.select_by_id(42);
@@ -993,7 +958,7 @@ NULL can fail. Keep that distinction through mapper and domain boundaries;
 apply an application-specific sentinel such as `.value_or(0)` only at the
 boundary that explicitly defines zero as its fallback value.
 
-`database_session` is the protocol-independent repository surface. It accepts
+`database_session` is the protocol-independent execution context. It accepts
 either a MySQL or PostgreSQL client and preserves the native wire client below
 it. `model_result<T>` contains `data`, `affected_rows`, `last_insert_id`,
 `error_msg`, `sql_state`, the native `error_code`, and a separate
@@ -1063,17 +1028,15 @@ client's parameter binding, and adds `RETURNING *` for model inserts, updates,
 and deletes. MySQL keeps its native formatting path and fills an auto-increment
 primary key from `last_insert_id`. This makes the model mapping and CRUD API
 portable without removing `mysql_session` or `postgresql_session` for
-protocol-specific operations.
+protocol-specific operations. Protocol-specific session aliases are not part of
+the public ORM API; use the Application repository factory instead.
 
 `query_wrapper<T>` and `update_wrapper<T>` never perform I/O: they only retain
 structured conditions and values, then build dialect-aware parameterized SQL.
-`database_session` is the sole execution/mapping boundary. The convenience
-methods (`find_by_id`, `remove_by_id`, and model `insert`/`update`/`remove`)
-delegate to the same wrapper path where applicable; use `find(wrapper)`,
-`update(wrapper)`, and `remove(wrapper)` for conditional work. Direct dispatch
-is also available: `execute(query_wrapper)` defaults to SELECT, while
-`execute(query_wrapper.as_delete())` performs DELETE; `execute(update_wrapper)`
-performs UPDATE.
+`mapper<T, Session>` is the sole model execution/mapping boundary. The session
+is created and leased by `session_gateway`; callers should not construct it in
+Application code. Direct SQL execution remains available only to infrastructure
+adapters and migration code.
 
 ## CMake 启用
 
@@ -1086,7 +1049,9 @@ performs UPDATE.
 
 ### MySQL connection_pool
 
-ORM 的 `mysql_session` 接受 `mysql::client&`，而 `mysql::connection_pool` 提供的 `pooled_connection` 可通过 `->` 操作符获取 `mysql::client&`，两者天然集成。
+Application 的 MySQL repository factory 从 `mysql::connection_pool` 获取租约，
+并在 gateway 内部创建短生命周期的 `database_session`。业务代码不接触裸 client
+或 session。
 
 **Pool API**（来自 `mysql_pool.cppm`）：
 

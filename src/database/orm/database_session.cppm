@@ -426,8 +426,11 @@ public:
         co_return std::expected<void, std::string>{};
     }
 
+    // Model CRUD is consumed by cnetmod.orm.mapper. It remains public in this
+    // module because C++ module ownership prevents a cyclic friend declaration;
+    // application code should use Mapper/Repository instead.
     // ---------------------------------------------------------------------
-    // Unified model CRUD
+    // Mapper implementation hooks
     // ---------------------------------------------------------------------
 
     template <Model T> auto find_all() -> task<model_result<T>>
@@ -1519,6 +1522,7 @@ public:
         co_return co_await this->update(update);
     }
 
+public:
     /**
      * @brief Observes a query without coupling the database to HTTP or OTEL.
      * An empty sink returns the original task without an observation frame.

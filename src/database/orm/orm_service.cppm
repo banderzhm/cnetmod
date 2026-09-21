@@ -25,13 +25,13 @@ struct session_stream_strategy
         Handler handler, stream_options options, cancel_token* cancellation)
         -> task<std::expected<void, std::string>>
     {
+        mapper<T, Session> models{session};
         if (cancellation)
         {
-            co_return co_await session.template for_each<T>(query,
-                std::move(handler), options, *cancellation);
+            co_return co_await models.for_each(query, std::move(handler),
+                options, *cancellation);
         }
-        co_return co_await session.template for_each<T>(query,
-            std::move(handler), options);
+        co_return co_await models.for_each(query, std::move(handler), options);
     }
 };
 
@@ -51,6 +51,21 @@ public:
         automatic_interceptor_options interceptors = {}) noexcept
         : gateway_(&gateway), interceptors_(interceptors)
     {
+    }
+
+    /**
+     * @brief Executes a cross-model unit of work on one database transaction.
+     *
+     * The callback receives a transaction gateway and may obtain multiple
+     * typed mappers from it. Connection leases and commit/rollback remain
+     * owned by the gateway; business services never handle sessions directly.
+     */
+    template <typename Result, class Operation>
+    auto transaction(Operation&& operation)
+        -> task<std::expected<Result, std::string>>
+    {
+        co_return co_await gateway_->template transaction<Result>(
+            std::forward<Operation>(operation));
     }
 
     auto get_by_id(param_value id) -> task<model_result<T>>

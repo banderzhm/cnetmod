@@ -17,6 +17,7 @@ import cnetmod.io.io_context;
 import cnetmod.protocol.postgresql;
 #ifdef CNETMOD_HAS_ORM
 import cnetmod.orm.automatic_interceptors;
+import cnetmod.orm.model_metadata;
 import cnetmod.orm.repository;
 import cnetmod.orm.session_gateway;
 #endif

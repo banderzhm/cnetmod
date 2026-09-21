@@ -161,18 +161,20 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
 [[maybe_unused]] auto base_mapper_complete_surface_compile_probe(
     mysql::client& client) -> cnetmod::task<void>
 {
-    orm::mysql_base_mapper<routed_order> mapper{client};
+    orm::mysql_database_session session{client};
+    orm::mapper<routed_order, orm::mysql_database_session> mapper{session};
     std::array models{routed_order{1, "one"}, routed_order{2, "two"}};
     const std::span<const routed_order> immutable{models};
     const std::vector<std::pair<std::string, orm::param_value>> filters{
         {"id", orm::param_value::from_int(1)}};
     orm::query_wrapper<routed_order> query;
     query.select("id", "description");
-    (void)co_await mapper.update_batch_by_id(immutable, 1);
+    (void)co_await mapper.update_batch(immutable, 1);
     (void)co_await mapper.save_or_update(models[0]);
     (void)co_await mapper.save_or_update_batch(std::span{models}, 1);
     (void)co_await mapper.upsert_batch(std::span{models}, 1);
-    (void)co_await mapper.select_by_map(filters);
+    query.all_eq(filters);
+    (void)co_await mapper.select_list(query);
     (void)co_await mapper.select_maps(query);
     (void)co_await mapper.select_objects(query);
     (void)co_await mapper.select_maps_page(1, 20, query);
@@ -182,19 +184,19 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     recording_session_client& client) -> cnetmod::task<void>
 {
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::session_repository<routed_order, decltype(session)> orders{session};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
     query.select("id", "description");
     std::array models{routed_order{1, "one"}, routed_order{2, "two"}};
     (void)co_await orders.exists(query);
-    (void)co_await orders.list_by_ids(std::span<const std::int64_t>{ids});
+    (void)co_await orders.select_by_ids(std::span<const std::int64_t>{ids});
     (void)co_await orders.select_maps(query);
     (void)co_await orders.select_objects(query);
-    (void)co_await orders.page_maps(1, 20, query);
-    (void)co_await orders.update_by_wrapper(orm::update_wrapper<routed_order>{});
+    (void)co_await orders.select_maps_page(1, 20, query);
+    (void)co_await orders.update(orm::update_wrapper<routed_order>{});
     (void)co_await orders.remove(query);
-    (void)co_await orders.save_batch(std::span<routed_order>{models}, 1);
+    (void)co_await orders.insert_batch(std::span<routed_order>{models}, 1);
 }
 
 [[maybe_unused]] auto service_complete_surface_compile_probe(
@@ -230,6 +232,13 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
             std::expected<void, std::string>>
         {
             co_return std::expected<void, std::string>{};
+        });
+    (void)co_await orders.transaction<int>(
+        [](auto& unit) -> cnetmod::task<std::expected<int, std::string>>
+        {
+            auto mapper = unit.template mapper<routed_order>();
+            (void)mapper;
+            co_return 1;
         });
 }
 
@@ -632,11 +641,11 @@ TEST(orm_repository_delegates_to_database_session_contract)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::session_repository<routed_order, decltype(session)> orders{session};
+    orm::mapper<routed_order, decltype(session)> orders{session};
 
     client.responses.push_back(routed_order_result({{7, "stored"}}));
     auto loaded = cnetmod::sync_wait(
-        orders.get_by_id(orm::param_value::from_int(7)));
+        orders.select_by_id(orm::param_value::from_int(7)));
     ASSERT_TRUE(loaded.ok());
     ASSERT_EQ(loaded.data.front().id, 7);
 
@@ -651,7 +660,7 @@ TEST(orm_repository_batches_are_transactional_and_bounded)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::session_repository<routed_order, decltype(session)> orders{session};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     client.responses.push_back({});
     client.responses.push_back({.affected_rows = 1});
     client.responses.push_back({.affected_rows = 1});
@@ -664,7 +673,7 @@ TEST(orm_repository_batches_are_transactional_and_bounded)
         routed_order{1, "one"}, routed_order{2, "two"},
         routed_order{3, "three"}};
     auto result = cnetmod::sync_wait(
-        orders.save_batch(std::span<routed_order>{models}, 2));
+        orders.insert_batch(std::span<routed_order>{models}, 2));
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(result.affected_rows, 3U);
     ASSERT_EQ(client.statements.front(), "START TRANSACTION");
@@ -676,7 +685,7 @@ TEST(orm_repository_batch_failure_preserves_exact_location)
 {
     recording_session_client client;
     orm::database_session session{client, orm::sql_dialect::mysql};
-    orm::session_repository<routed_order, decltype(session)> orders{session};
+    orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_result failure;
     failure.error_msg = "duplicate key";
     failure.sql_state = "23000";
@@ -690,7 +699,7 @@ TEST(orm_repository_batch_failure_preserves_exact_location)
         routed_order{1, "one"}, routed_order{2, "two"},
         routed_order{3, "three"}};
     auto result = cnetmod::sync_wait(
-        orders.save_batch(std::span<routed_order>{models}, 2));
+        orders.insert_batch(std::span<routed_order>{models}, 2));
     ASSERT_TRUE(result.is_err());
     ASSERT_TRUE(result.batch_index.has_value());
     ASSERT_TRUE(result.item_index.has_value());
@@ -744,6 +753,51 @@ TEST(orm_service_owns_leases_transactions_and_automatic_model_policies)
     ASSERT_EQ(client.statements[client.statements.size() - 3],
         "START TRANSACTION");
     ASSERT_EQ(client.statements.back(), "ROLLBACK");
+}
+
+TEST(orm_repository_transaction_shares_one_session_across_mappers)
+{
+    recording_session_client client;
+    using gateway_type = orm::session_gateway<recording_session_client,
+        std::monostate>;
+    gateway_type gateway{
+        orm::sql_dialect::mysql,
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        },
+        []() -> cnetmod::task<std::expected<std::monostate, std::string>>
+        {
+            co_return std::monostate{};
+        },
+        [&client](std::monostate&) -> recording_session_client&
+        {
+            return client;
+        }};
+
+    client.responses.push_back(routed_order_result({{7, "stored"}}));
+    client.responses.push_back({});
+    orm::repository<routed_order, gateway_type> orders{gateway};
+    auto result = cnetmod::sync_wait(orders.transaction<int>(
+        [](auto& unit) -> cnetmod::task<std::expected<int, std::string>>
+        {
+            auto mapper = unit.template mapper<routed_order>();
+            auto loaded = co_await mapper.select_by_id(
+                orm::param_value::from_int(7));
+            if (loaded.is_err())
+                co_return std::unexpected(loaded.error_msg);
+            routed_order copy{8, "created"};
+            auto inserted = co_await mapper.insert(copy);
+            if (inserted.is_err())
+                co_return std::unexpected(inserted.error_msg);
+            co_return 2;
+        }));
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(*result, 2);
+    ASSERT_EQ(client.statements.front(), "START TRANSACTION");
+    ASSERT_EQ(client.statements.back(), "COMMIT");
+    ASSERT_EQ(client.statements.size(), 4U);
 }
 
 TEST(orm_update_wrapper_supports_parameterized_increment_and_decrement)

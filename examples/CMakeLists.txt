@@ -72,12 +72,6 @@ if(CNETMOD_ENABLE_HTTP)
     )
     if(CNETMOD_ENABLE_MYSQL)
         list(APPEND HTTP_EXAMPLES http/tfb_benchmark)
-        # jwt-cpp requires the TLS provider's OpenSSL-compatible headers.
-        # Do not add this optional HTTPS/JWT demo to no-SSL builds.
-        if(CNETMOD_ENABLE_OPENAI AND CNETMOD_ENABLE_ORM AND
-           CNETMOD_HAS_SSL AND CNETMOD_HAS_JWT_CPP)
-            list(APPEND HTTP_EXAMPLES http/account_server_demo)
-        endif()
     endif()
 endif()
 
@@ -99,19 +93,6 @@ endif()
 set(DATABASE_EXAMPLES)
 if(CNETMOD_ENABLE_MYSQL)
     list(APPEND DATABASE_EXAMPLES database/mysql/mysql_crud)
-    if(CNETMOD_ENABLE_ORM)
-        list(APPEND DATABASE_EXAMPLES
-        database/mysql/mysql_orm
-        database/mysql/mysql_transaction
-        database/mysql/mysql_xml_mapper
-        database/mysql/mysql_xml_complex
-        database/mysql/mysql_mybatis_plus_demo
-        database/mysql/mysql_transaction_rollback_demo
-        )
-    endif()
-endif()
-if(CNETMOD_ENABLE_POSTGRESQL AND CNETMOD_ENABLE_HTTP AND CNETMOD_ENABLE_ORM)
-    list(APPEND DATABASE_EXAMPLES database/postgresql/postgresql_production_service)
 endif()
 if(CNETMOD_ENABLE_MONGODB)
     list(APPEND DATABASE_EXAMPLES database/mongodb/mongodb_production_service)
