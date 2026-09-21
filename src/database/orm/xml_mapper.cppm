@@ -75,9 +75,8 @@ private:
         std::string statement_id, param_context parameters)
         -> task<model_result<T>>
     {
-        auto result = co_await xml_statement_executor<Session>{
-            *session, *registry}
-                          .select(statement_id, parameters);
+        xml_statement_executor<Session> executor{*session, *registry};
+        auto result = co_await executor.select(statement_id, parameters);
         co_return map_select(*registry, statement_id, std::move(result));
     }
 
@@ -106,9 +105,8 @@ private:
         std::string statement_id, param_context parameters)
         -> task<model_result<T>>
     {
-        auto result = co_await xml_statement_executor<Session>{
-            *session, *registry}
-                          .execute(statement_id, parameters);
+        xml_statement_executor<Session> executor{*session, *registry};
+        auto result = co_await executor.execute(statement_id, parameters);
         co_return map(std::move(result), false);
     }
 

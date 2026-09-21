@@ -164,8 +164,8 @@ public:
         std::string_view statement_id, const param_context& parameters)
         -> task<query_result>
     {
-        return xml_statement_executor<Session>{*session_, registry}.select(
-            statement_id, parameters);
+        xml_statement_executor<Session> executor{*session_, registry};
+        co_return co_await executor.select(statement_id, parameters);
     }
 
     /**
