@@ -818,6 +818,30 @@ auto query_wrapper<T>::build_where_clause(
     int& param_index) -> std::string
 {
     std::string sql;
+    auto render_subquery = [&](const subquery& query)
+    {
+        std::string rendered;
+        std::size_t position{};
+        std::size_t parameter{};
+        while (parameter < query.parameters.size())
+        {
+            const auto placeholder = query.sql.find("{}", position);
+            if (placeholder == std::string::npos)
+                break;
+            rendered.append(query.sql, position, placeholder - position);
+            ++param_index;
+            rendered += make_placeholder(param_index, cfg);
+            params.push_back(query.parameters[parameter++]);
+            position = placeholder + 2;
+        }
+        rendered.append(query.sql, position, std::string::npos);
+        while (parameter < query.parameters.size())
+        {
+            ++param_index;
+            params.push_back(query.parameters[parameter++]);
+        }
+        return rendered;
+    };
     for (std::size_t i = 0; i < conds.size(); ++i)
     {
         auto& cond = conds[i];
@@ -839,6 +863,16 @@ auto query_wrapper<T>::build_where_clause(
         if (cond.op == compare_op::raw)
         {
             sql += cond.column;
+            continue;
+        }
+
+        if (cond.op == compare_op::exists_subquery ||
+            cond.op == compare_op::not_exists_subquery)
+        {
+            if (!cond.nested_query)
+                continue;
+            sql += cond.op == compare_op::exists_subquery ? "EXISTS (" : "NOT EXISTS (";
+            sql += render_subquery(*cond.nested_query) + ")";
             continue;
         }
 
@@ -917,6 +951,36 @@ auto query_wrapper<T>::build_where_clause(
             }
             sql += ")";
             break;
+        case compare_op::in_subquery:
+        case compare_op::not_in_subquery:
+            if (!cond.nested_query)
+                break;
+            sql += cond.op == compare_op::in_subquery ? " IN (" : " NOT IN (";
+            sql += render_subquery(*cond.nested_query) + ")";
+            break;
+        case compare_op::eq_subquery:
+        case compare_op::ne_subquery:
+        case compare_op::gt_subquery:
+        case compare_op::ge_subquery:
+        case compare_op::lt_subquery:
+        case compare_op::le_subquery:
+            if (!cond.nested_query)
+                break;
+            switch (cond.op)
+            {
+            case compare_op::eq_subquery: sql += " = ("; break;
+            case compare_op::ne_subquery: sql += " != ("; break;
+            case compare_op::gt_subquery: sql += " > ("; break;
+            case compare_op::ge_subquery: sql += " >= ("; break;
+            case compare_op::lt_subquery: sql += " < ("; break;
+            case compare_op::le_subquery: sql += " <= ("; break;
+            default: break;
+            }
+            sql += render_subquery(*cond.nested_query) + ")";
+            break;
+        case compare_op::exists_subquery:
+        case compare_op::not_exists_subquery:
+            break;
         case compare_op::between:
             ++param_index;
             sql += " BETWEEN " + make_placeholder(param_index, cfg);
@@ -983,13 +1047,18 @@ auto update_wrapper<T>::build_sql(std::string_view physical_table,
     std::vector<param_value> params;
     int param_index = 0;
     bool first = true;
-    for (auto& [col, val] : set_fields_)
+    for (const auto& assignment : set_fields_)
     {
         if (!first)
             sql += ", ";
         ++param_index;
-        sql += quote_identifier(col, cfg) + " = " + make_placeholder(param_index, cfg);
-        params.push_back(val);
+        sql += quote_identifier(assignment.column, cfg) + " = ";
+        if (assignment.kind == update_value_kind::increment)
+            sql += quote_identifier(assignment.column, cfg) + " + ";
+        else if (assignment.kind == update_value_kind::decrement)
+            sql += quote_identifier(assignment.column, cfg) + " - ";
+        sql += make_placeholder(param_index, cfg);
+        params.push_back(assignment.value);
         first = false;
     }
 

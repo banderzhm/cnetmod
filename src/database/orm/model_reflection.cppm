@@ -52,6 +52,22 @@ public:
     auto get_param(std::string_view name) const -> param_value;
     void set(std::string name, expr_value val);
     void set(std::string name, param_value val);
+
+    /**
+     * @brief Stores a strongly typed SQL parameter without requiring callers
+     * to select a param_value factory manually.
+     */
+    template <typename T>
+    requires(!std::same_as<std::remove_cvref_t<T>, expr_value> &&
+        !std::same_as<std::remove_cvref_t<T>, param_value> &&
+        requires(const T& value) {
+            { to_query_parameter(value) } -> std::same_as<param_value>;
+        })
+    void set(std::string name, const T& value)
+    {
+        set(std::move(name), to_query_parameter(value));
+    }
+
     void add_nested(std::string name, param_context nested);
     void add_collection(std::string name, std::vector<param_context> items);
     auto get_collection(std::string_view name) const

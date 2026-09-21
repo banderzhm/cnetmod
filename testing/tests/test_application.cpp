@@ -1678,6 +1678,8 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     std::optional<std::expected<nlohmann::json, std::error_code>> parsed;
     std::optional<std::expected<std::string, std::error_code>> dumped;
     std::optional<std::expected<void, std::error_code>> file_written;
+    std::optional<std::expected<void, std::error_code>> file_flushed;
+    std::optional<std::expected<void, std::error_code>> file_closed;
     std::optional<std::expected<std::string, std::error_code>> file_read;
     std::optional<std::expected<void, std::error_code>> file_removed;
     std::optional<std::expected<void, std::error_code>> directory_rejected;
@@ -1706,6 +1708,13 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
             dumped = co_await application::dump_offloaded(runtime, **parsed);
         file_written = co_await runtime.files().write_all(
             file_path, "payload", file_cancellation);
+        auto opened = co_await runtime.files().open(
+            file_path, cnetmod::open_mode::read_write);
+        if (opened)
+        {
+            file_flushed = co_await runtime.files().flush(*opened);
+            file_closed = co_await runtime.files().close(*opened);
+        }
         file_read = co_await runtime.files().read_all(
             file_path, file_cancellation);
         file_removed = co_await runtime.files().remove(
@@ -1734,6 +1743,10 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_TRUE(dumped->value().contains("42"));
     ASSERT_TRUE(file_written.has_value());
     ASSERT_TRUE(file_written->has_value());
+    ASSERT_TRUE(file_flushed.has_value());
+    ASSERT_TRUE(file_flushed->has_value());
+    ASSERT_TRUE(file_closed.has_value());
+    ASSERT_TRUE(file_closed->has_value());
     ASSERT_TRUE(file_read.has_value());
     ASSERT_TRUE(file_read->has_value());
     ASSERT_EQ(file_read->value(), std::string{"payload"});

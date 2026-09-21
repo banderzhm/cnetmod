@@ -332,14 +332,38 @@ auto client::start_execution(with_params_t wp, execution_state& st)
     co_return co_await start_execution(*sql_r, st);
 }
 
+auto client::start_execution(cnetmod::database::parameterized_query parameters,
+    execution_state& st) -> task<void>
+{
+    if (!connected_)
+    {
+        st.set_error(0, "not connected");
+        co_return;
+    }
+
+    auto sql_r = format_sql(format_opts_, parameters.query, parameters.args);
+    if (!sql_r)
+    {
+        st.set_error(0, "format_sql error");
+        co_return;
+    }
+    co_return co_await start_execution(*sql_r, st);
+}
+
 auto client::read_some_rows(execution_state& st) -> task<std::vector<row>>
 {
+    co_return co_await read_some_rows(st, 100);
+}
+
+auto client::read_some_rows(execution_state& st, std::size_t max_rows)
+    -> task<std::vector<row>>
+{
     std::vector<row> batch;
-    if (!st.should_read_rows())
+    if (!st.should_read_rows() || max_rows == 0)
         co_return batch;
 
-    // Read a batch of rows (max 100 rows or until EOF)
-    for (int i = 0; i < 100; ++i)
+    batch.reserve(max_rows);
+    for (std::size_t i = 0; i < max_rows; ++i)
     {
         auto row_pkt = co_await read_packet();
         if (row_pkt.empty())

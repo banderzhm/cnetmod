@@ -73,9 +73,21 @@ public:
 
     auto start_execution(with_params_t wp, execution_state& st) -> task<void>;
 
+    /**
+     * @brief Starts a multi-function execution from the common ORM parameter contract.
+     */
+    auto start_execution(cnetmod::database::parameterized_query parameters,
+        execution_state& st) -> task<void>;
+
     // ── Multi-function: read_some_rows ──────────────────
 
     auto read_some_rows(execution_state& st) -> task<std::vector<row>>;
+
+    /**
+     * @brief Reads at most @p max_rows while preserving execution state.
+     */
+    auto read_some_rows(execution_state& st, std::size_t max_rows)
+        -> task<std::vector<row>>;
 
     // ── Multi-function: read_resultset_head ─────────────
 

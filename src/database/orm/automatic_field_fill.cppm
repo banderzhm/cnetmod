@@ -7,9 +7,15 @@ import cnetmod.orm.model_metadata;
 
 namespace cnetmod::orm {
 
-export constexpr col_flag FILL_INSERT = static_cast<col_flag>(0x80);
-export constexpr col_flag FILL_UPDATE = static_cast<col_flag>(0x100);
-export constexpr col_flag FILL_INSERT_UPDATE = FILL_INSERT | FILL_UPDATE;
+/**
+ * @brief Metadata flags used by the automatic field-fill policy.
+ *
+ * These aliases deliberately use the canonical model metadata bits; the
+ * previous independent bit values could never be observed by a mapped model.
+ */
+export constexpr col_flag FILL_INSERT = col_flag::fill_insert;
+export constexpr col_flag FILL_UPDATE = col_flag::fill_insert_update;
+export constexpr col_flag FILL_INSERT_UPDATE = col_flag::fill_insert_update;
 
 export enum class fill_strategy
 {
@@ -50,7 +56,8 @@ public:
                 continue;
             auto_fill_config config;
             config.field_name = std::string(field.col.column_name);
-            config.on_insert = has_flag(field.col.flags, FILL_INSERT);
+            config.on_insert = has_flag(field.col.flags, FILL_INSERT) ||
+                has_flag(field.col.flags, FILL_INSERT_UPDATE);
             config.on_update = has_flag(field.col.flags, FILL_UPDATE);
             if (field.col.column_name.ends_with("_at") ||
                 field.col.column_name.ends_with("_time") ||

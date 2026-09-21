@@ -18,6 +18,7 @@ set(TEST_SOURCES
     test_task_group.cpp
     test_task.cpp
     test_lazy.cpp
+    test_database_datetime.cpp
     test_channel.cpp
     test_mutex.cpp
     test_circuit_breaker.cpp

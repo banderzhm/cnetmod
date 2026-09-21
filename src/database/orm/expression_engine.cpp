@@ -97,30 +97,44 @@ auto expr_value::make_string(std::string v) -> expr_value
 auto expr_value::from_param(const param_value& v) -> expr_value
 {
     using K = param_value::kind_t;
+    expr_value result;
     switch (v.kind)
     {
     case K::int64_kind:
-        return make_int(v.int_val);
+        result = make_int(v.int_val);
+        break;
     case K::uint64_kind:
-        return make_int(static_cast<std::int64_t>(v.uint_val));
+        result = make_int(static_cast<std::int64_t>(v.uint_val));
+        break;
     case K::double_kind:
-        return make_double(v.double_val);
+        result = make_double(v.double_val);
+        break;
     case K::string_kind:
     case K::blob_kind:
-        return make_string(std::string(v.str_val));
+        result = make_string(std::string(v.str_val));
+        break;
     case K::date_kind:
-        return make_string(v.date_val.to_string());
+        result = make_string(v.date_val.to_string());
+        break;
     case K::datetime_kind:
-        return make_string(v.datetime_val.to_string());
+        result = make_string(v.datetime_val.to_string());
+        break;
     case K::time_kind:
-        return make_string(v.time_val.to_string());
+        result = make_string(v.time_val.to_string());
+        break;
     default:
-        return make_null();
+        result = make_null();
+        break;
     }
+    result.source_param = v;
+    return result;
 }
 
 auto expr_value::to_param() const -> param_value
 {
+    if (source_param)
+        return *source_param;
+
     switch (type)
     {
     case type_t::bool_type:

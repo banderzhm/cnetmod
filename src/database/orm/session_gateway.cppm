@@ -3,6 +3,8 @@ export module cnetmod.orm.session_gateway;
 import std;
 import cnetmod.coro.task;
 import cnetmod.orm.database_session;
+import cnetmod.orm.model_metadata;
+import cnetmod.orm.query_wrapper;
 import cnetmod.orm.sql_dialect;
 
 export namespace cnetmod::orm {
@@ -51,6 +53,66 @@ public:
             });
     }
 
+    /**
+     * @brief Runs a stateful ORM cursor while retaining one pool lease.
+     *
+     * The lease scope encloses the callback, so a cursor cannot outlive the
+     * physical connection that owns its result stream.
+     */
+    template <Model T, class Operation>
+    auto cursor(Operation&& operation, query_wrapper<T> query = {},
+        cursor_options options = {})
+        -> task<std::expected<void, std::string>>
+    {
+        auto lease = co_await acquire_lease();
+        if (!lease)
+            co_return std::unexpected(lease.error());
+
+        session_type session{client_(*lease), dialect_};
+        auto stream = session.template open_cursor<T>(std::move(query), options);
+        try
+        {
+            co_return co_await std::forward<Operation>(operation)(stream);
+        }
+        catch (const std::exception& error)
+        {
+            co_return std::unexpected(error.what());
+        }
+        catch (...)
+        {
+            co_return std::unexpected("ORM cursor callback failed");
+        }
+    }
+
+    /**
+     * @brief Retains one lease while a caller configures and streams a session.
+     *
+     * Unlike `cursor()`, this overload lets an application facade install
+     * model-specific interceptors before selecting a protocol cursor.
+     */
+    template <Model T, class Operation>
+    auto stream(Operation&& operation)
+        -> task<std::expected<void, std::string>>
+    {
+        auto lease = co_await acquire_lease();
+        if (!lease)
+            co_return std::unexpected(lease.error());
+
+        session_type session{client_(*lease), dialect_};
+        try
+        {
+            co_return co_await std::forward<Operation>(operation)(session);
+        }
+        catch (const std::exception& error)
+        {
+            co_return std::unexpected(error.what());
+        }
+        catch (...)
+        {
+            co_return std::unexpected("ORM stream callback failed");
+        }
+    }
+
 private:
     auto acquire_lease() -> task<std::expected<Lease, std::string>>
     {
@@ -83,6 +145,28 @@ public:
 
     template <class T, class Operation>
     auto write(Operation&& operation) -> task<std::expected<T, std::string>>
+    {
+        co_return co_await std::forward<Operation>(operation)(session_);
+    }
+
+    /**
+     * @brief Opens a cursor against an already pinned transaction session.
+     */
+    template <Model T, class Operation>
+    auto cursor(Operation&& operation, query_wrapper<T> query = {},
+        cursor_options options = {})
+        -> task<std::expected<void, std::string>>
+    {
+        auto stream = session_.template open_cursor<T>(std::move(query), options);
+        co_return co_await std::forward<Operation>(operation)(stream);
+    }
+
+    /**
+     * @brief Streams through an already pinned transaction session.
+     */
+    template <Model T, class Operation>
+    auto stream(Operation&& operation)
+        -> task<std::expected<void, std::string>>
     {
         co_return co_await std::forward<Operation>(operation)(session_);
     }

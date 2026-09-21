@@ -324,3 +324,15 @@ auto response = cnetmod::http::to_http_response(
 - `src/utils/converter.cppm` — 字节序、寄存器、CRC、Hex 工具
 - `src/utils/json.cppm` — JSON 安全读取辅助
 - `src/protocol/http/extension/application_result.cppm` — `utils::R` 到 HTTP 响应的无框架耦合适配
+
+## UTC Unix time
+
+`import cnetmod.core.time;` provides the framework clock used by application
+and database adapters:
+
+```cpp
+const auto seconds = cnetmod::unix_time_seconds();
+```
+
+The result is the signed number of whole seconds since the Unix epoch. Use this
+API instead of repeating `system_clock::now()` conversions in each adapter.

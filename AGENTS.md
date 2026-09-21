@@ -2385,6 +2385,18 @@ auto response = cnetmod::http::to_http_response(
 - `src/utils/converter.cppm` — 字节序、寄存器、CRC、Hex 工具
 - `src/utils/json.cppm` — JSON 安全读取辅助
 - `src/protocol/http/extension/application_result.cppm` — `utils::R` 到 HTTP 响应的无框架耦合适配
+
+## UTC Unix time
+
+`import cnetmod.core.time;` provides the framework clock used by application
+and database adapters:
+
+```cpp
+const auto seconds = cnetmod::unix_time_seconds();
+```
+
+The result is the signed number of whole seconds since the Unix epoch. Use this
+API instead of repeating `system_clock::now()` conversions in each adapter.
 <!-- END SOURCE: skill/core/utils-error.md -->
 
 <!-- BEGIN SOURCE: skill/coro/coroutine.md -->
@@ -3277,6 +3289,91 @@ co_await db.remove(a);
 co_await db.remove_by_id<Article>(orm::param_value::from_int(1));
 ```
 
+## SQL 拦截器链
+
+`interceptor_chain` 是 ORM SQL 的统一扩展点，适合做租户条件、审计字段、
+安全策略和观测标签等参数化改写。raw `query()`/`execute()`、参数化语句、typed CRUD
+和 streaming 查询都经过同一个 prepare 阶段；事务控制语句也会按 `execute` 操作分类
+进入该链，因此自定义拦截器必须显式放行不需要改写的语句。
+
+```cpp
+auto interceptors = std::make_shared<orm::interceptor_chain>();
+interceptors->add("tenant", 100,
+    [](orm::sql_operation operation, orm::intercepted_statement statement)
+        -> std::expected<orm::intercepted_statement, std::string> {
+        if (operation == orm::sql_operation::query)
+            statement.sql += " /* tenant policy */";
+        return statement;
+    });
+interceptors->freeze();
+
+orm::database_session db{client, orm::sql_dialect::mysql, interceptors};
+```
+
+拦截器按 `priority` 升序执行；名称必须唯一，`freeze()` 后不能再注册，未冻结的链
+不能应用。回调返回错误时，当前 ORM 操作会在访问数据库前失败，错误文本包含拦截器
+名称。回调拥有 `intercepted_statement` 的 SQL 和参数，可同时修改二者，但必须继续
+保持占位符与参数数量一致。建议在 Application 构建阶段完成注册和冻结，并把冻结后的
+`std::shared_ptr<const interceptor_chain>` 注入所有 Session。
+
+## Repository 门面
+
+`repository<T, Session>` 是应用层的轻量 CRUD 门面，复用注入的
+`database_session`，不会复制 SQL 生成或错误处理逻辑：
+
+```cpp
+orm::repository<User, decltype(session)> users{session};
+auto user = co_await users.get_by_id(orm::param_value::from_int(id));
+auto page = co_await users.page(1, 20, query);
+auto saved = co_await users.save_or_update(entity);
+```
+
+提供 `get_by_id`、`get_one`、`list`、`list_by_ids`、`exists`、`page`、
+`select_maps`、`select_objects`、`page_maps`、`save`、`save_batch`、
+`save_or_update`、`save_or_update_batch`、`upsert`、`upsert_batch`、
+`update_by_id`、`update_by_wrapper`、`remove` 和 `remove_by_id`。
+批量方法按 `batch_size` 分段，每段独立开启、提交或回滚事务；首个失败结果原样返回。
+所有方法继续返回
+`model_result<T>` 或 `page_result<T>`，因此空结果、数据库错误和框架错误不会被门面
+压扁成 `optional` 或布尔值。连接池租约、事务边界和批处理策略仍由 Session/Gateway
+负责，Repository 不持有裸连接。
+
+`repository::upsert()` 和 `upsert_batch()` 使用数据库原生冲突语义：MySQL 生成
+`ON DUPLICATE KEY UPDATE`，PostgreSQL 生成 `ON CONFLICT (...) DO UPDATE`。它们与
+`save_or_update()` 的“先查后写”语义不同，适合高并发写入和唯一键冲突场景。
+
+`orm::service<T, Gateway>` 是连接池/应用层门面。它通过 `session_gateway` 为每次操作
+持有租约，自动安装多租户、逻辑删除、字段填充和 SQL 安全策略，并管理写事务。失败的
+写操作先回滚，再原样返回 `model_result<T>` 中的 SQLSTATE、原生错误号和批次位置。
+
+`automatic_interceptor_options` 统一控制 SQL 阶段的多租户、逻辑删除和安全检查，以及
+模型阶段的字段填充和乐观锁。五项策略默认启用；显式关闭 `field_fill` 后 Session 不再
+修改自动填充字段，关闭 `optimistic_lock` 后版本列按普通字段更新，不再生成版本谓词、
+自动递增或把零影响行分类为冲突。直接构造且未安装自动流水线的低层 Session 保留历史
+默认行为。
+
+Application 的 MySQL 集成可直接创建完整门面：
+
+```cpp
+auto gateway = application::make_mysql_session_gateway(mysql_service);
+application::mysql_orm_service<User> users{gateway};
+
+auto page = co_await users.page(1, 20, query);
+auto saved = co_await users.upsert(user);
+```
+
+`mysql_orm_service` 的 `for_each()` 使用 MySQL 多函数执行协议：查询只提交一次，
+`read_some_rows()` 在 handler 完成后才读取下一批。取消、deadline、handler 失败或
+提前销毁会关闭未读完的连接；连接池不会复用带残留结果包的连接。
+
+Service 门面还公开同样的 `list_by_ids`、`exists`、投影查询/分页和
+`for_each_map` 能力；这些方法仍复用同一个 Session、租约和自动拦截器配置。
+
+MyBatis-Plus `base_mapper` 的现代公开方法全部返回 `model_result` 或
+`page_result`，包括单条查询、批量写入、Map/投影和原生 Upsert；数据库错误不会再被
+转换为空 optional/vector/bool。源码中保留的 `legacy_*` 方法只是显式命名的迁移兼容层，
+不属于新的错误透明契约。
+
 ## 分库分表
 
 `shard_catalog` 把稳定的 `shard_key` 同时映射到具名数据库实例和经过校验的物理表。
@@ -3425,20 +3522,51 @@ template <> struct xml_object_graph_binder<User> {
 orm::mysql_base_mapper<User> mapper(cli);
 
 co_await mapper.insert(user);
-auto opt = co_await mapper.select_by_id(42);
+auto selected = co_await mapper.select_by_id(42);
 auto list = co_await mapper.select_list();
 auto cnt = co_await mapper.select_count();
-bool exists = co_await mapper.exists_by_id(42);
+auto exists = co_await mapper.exists_by_id(42);
 co_await mapper.update_by_id(user);
-co_await mapper.update_selective(user);   // 仅更新非 null 字段
+co_await mapper.update_batch_by_id(users);
+co_await mapper.save_or_update(user);
+co_await mapper.upsert_batch(users);
 co_await mapper.delete_by_id(42);
 co_await mapper.delete_batch_ids(id_vec);
 auto page = co_await mapper.select_page(1, 20, wrapper);
 ```
 
-主要方法: `insert`, `insert_get_id`, `insert_batch`, `delete_by_id`, `delete_batch_ids`, `update_by_id`, `update_selective`, `select_by_id`, `select_batch_ids`, `select_list`, `select_one`, `select_count`, `exists_by_id`, `select_page`, `delete_by_wrapper`, `update_by_wrapper`。
+标准方法统一返回 `model_result<T>` 或 `page_result<T>`，包括 `insert`、
+`insert_batch`、`update_by_id`、`update_batch_by_id`、`save_or_update`、
+`save_or_update_batch`、`upsert_result`、`upsert_batch`、`delete_by_id`、
+`delete_batch_ids`、`select_by_id`、`select_batch_ids`、`select_by_map`、
+`select_list`、`select_one`、`select_count`、`exists_by_id`、`select_page`、
+`select_maps`、`select_objects`、`select_maps_page`、`delete_by_wrapper` 和
+`update_by_wrapper`。它们不会把数据库失败压扁成空值或 `false`。
+
+旧返回语义仅通过显式 `legacy_*` 名称保留，供迁移存量代码使用；新的标准方法不再
+暴露 `optional<T>`、裸 `vector<T>` 或裸布尔错误语义。
 
 ## 5. query_wrapper<T> — 流式查询
+
+`update_wrapper<T>` 支持参数化的 `set_increment(column, value)` 和
+`set_decrement(column, value)`，生成 `column = column +/- {}`，增量值仍通过绑定参数
+传输，不接受任意 SQL 表达式。这样可以安全覆盖计数器和库存扣减等更新场景。
+
+`database_session::for_each()` 和 `repository::for_each()` 提供有界流式消费：每次只
+读取 `stream_options::batch_size` 行，等待 handler 完成后才读取下一页，并可设置
+`max_rows`。带 `cancel_token` 的重载会在下一页和每行之间检查取消，handler 返回错误
+会立即终止。它是跨数据库的分页流；需要 PostgreSQL 线级 portal 时，应直接使用
+PostgreSQL 客户端的 `query_batches()`。
+
+`for_each_map()` 为动态投影提供相同的背压、`max_rows`、取消和 deadline 语义。
+MySQL 应用门面默认切换到 `mysql_stream_strategy`，不使用 `LIMIT/OFFSET`；通用
+`database_session::open_cursor()` 保留为跨协议的页式 fallback。
+
+Wrapper 的子查询使用 `subquery{sql, parameters}` 传递：`in_subquery`、
+`not_in_subquery`、`exists`、`not_exists` 以及 `eq_subquery`、`ne_subquery`、
+`gt_subquery`、`ge_subquery`、`lt_subquery`、`le_subquery` 都会把参数并入当前语句的
+绑定序列。子查询使用中立 `{}` 占位符；构建 PostgreSQL SQL 时会按外层参数位置重新
+编号成 `$N`，不会通过 `raw()` 绕过参数绑定。
 
 ```cpp
 // 成员指针（类型安全）
@@ -3770,11 +3898,12 @@ auto query_object_graph(std::string_view id, const param_context& ctx)
 **参数传递（param_context）**：
 
 ```cpp
-// 1. map 参数
-auto ctx = orm::param_context::from_map({
-    {"name", orm::param_value::from_string("Alice")},
-    {"status", orm::param_value::from_int(1)},
-    {"limit", orm::param_value::from_int(10)}});
+// 1. 类型化参数；框架保留 uint64、DATETIME 等原始 SQL 类型
+orm::param_context ctx;
+ctx.set("name", std::string_view{"Alice"});
+ctx.set("status", std::int64_t{1});
+ctx.set("limit", std::uint64_t{10});
+ctx.set("created_at", orm::calendar_datetime{2026, 9, 17, 8, 31, 57, 0});
 
 // 2. 模型对象作为参数源（按字段名映射）
 auto ctx2 = orm::param_context::from_model(user);
@@ -3912,15 +4041,56 @@ class database_session {
     template <Model T> auto find_by_id(param_value) -> task<model_result<T>>;
     template <Model T> auto find_one_by(std::string_view, param_value)
         -> task<model_result<T>>;
+    template <Model T> auto find_one(const query_wrapper<T>&,
+        single_result_policy = single_result_policy::require_unique)
+        -> task<model_result<T>>;
+    template <Model T> auto find_first(const query_wrapper<T>&)
+        -> task<model_result<T>>;
+    template <Model T, typename Id> auto find_by_ids(std::span<const Id>)
+        -> task<model_result<T>>;
+    template <Model T> auto find_by_map(
+        std::span<const std::pair<std::string, param_value>>)
+        -> task<model_result<T>>;
+    template <Model T> auto exists(const query_wrapper<T>&)
+        -> task<model_result<bool>>;
+    template <Model T> auto select_maps(const query_wrapper<T>&)
+        -> task<model_result<projection_row>>;
+    template <Model T> auto select_objects(const query_wrapper<T>&)
+        -> task<model_result<field_value>>;
+    template <Model T> auto page_maps(std::size_t, std::size_t,
+        const query_wrapper<T>& = {}) -> task<page_result<projection_row>>;
+    template <Model T> auto page(std::size_t, std::size_t,
+        const query_wrapper<T>& = {}) -> task<page_result<T>>;
+    template <Model T> auto prepare_select(const query_wrapper<T>&) const
+        -> std::expected<parameterized_query, std::string>;
+    template <Model T> auto for_each_map(const query_wrapper<T>&, Handler,
+        stream_options = {}) -> task<std::expected<void, std::string>>;
     template <Model T> auto insert(T&) -> task<model_result<T>>;
     template <Model T> auto update(const T&) -> task<model_result<T>>;
+    template <Model T> auto update_batch_by_id(std::span<const T>,
+        std::size_t batch_size = 256) -> task<model_result<T>>;
+    template <Model T> auto save_or_update(T&) -> task<model_result<T>>;
+    template <Model T> auto save_or_update_batch(std::span<T>,
+        std::size_t batch_size = 256) -> task<model_result<T>>;
+    template <Model T> auto upsert(T&) -> task<model_result<T>>;
+    template <Model T> auto upsert_batch(std::span<T>,
+        std::size_t batch_size = 256) -> task<model_result<T>>;
     template <Model T> auto remove(const T&) -> task<model_result<T>>;
     template <Model T> auto remove_by(std::string_view, param_value)
         -> task<model_result<T>>;
     template <Model T> auto remove_by_id(param_value) -> task<model_result<T>>;
+    template <Model T, typename Id> auto remove_by_ids(std::span<const Id>)
+        -> task<model_result<T>>;
+    template <Model T> auto remove_by_map(
+        std::span<const std::pair<std::string, param_value>>)
+        -> task<model_result<T>>;
     template <Model T> auto find(const query_wrapper<T>&) -> task<model_result<T>>;
     template <Model T> auto remove(const query_wrapper<T>&) -> task<model_result<T>>;
+    template <Model T> auto remove(const query_wrapper<T>&, allow_full_table_t)
+        -> task<model_result<T>>;
     template <Model T> auto update(const update_wrapper<T>&) -> task<model_result<T>>;
+    template <Model T> auto update(const update_wrapper<T>&, allow_full_table_t)
+        -> task<model_result<T>>;
     template <Model T> auto execute(const query_wrapper<T>&) -> task<model_result<T>>;
     template <Model T> auto execute(const update_wrapper<T>&) -> task<model_result<T>>;
     auto transaction(Func&&) -> task<query_result>;
@@ -3937,11 +4107,67 @@ Model fields may use `std::optional<calendar_datetime>` for nullable
 Unix time treats the stored wall-clock fields as UTC and therefore does not
 depend on the process or database-session timezone.
 
+Use the public UTC conversion helpers instead of duplicating chrono calendar
+arithmetic in mapper implementations:
+
+```cpp
+const auto now = cnetmod::unix_time_seconds();
+const auto datetime = cnetmod::database::datetime_from_unix_seconds(now);
+const auto seconds = cnetmod::database::unix_seconds_from_datetime(datetime);
+```
+
+Both conversion directions return `std::optional` where representation or SQL
+NULL can fail. Keep that distinction through mapper and domain boundaries;
+apply an application-specific sentinel such as `.value_or(0)` only at the
+boundary that explicitly defines zero as its fallback value.
+
 `database_session` is the protocol-independent repository surface. It accepts
 either a MySQL or PostgreSQL client and preserves the native wire client below
 it. `model_result<T>` contains `data`, `affected_rows`, `last_insert_id`,
-`error_msg`, `sql_state`, and the native `error_code`; use `ok()` and `first()`
-to distinguish an empty query from a failed operation.
+`error_msg`, `sql_state`, the native `error_code`, and a separate
+`framework_error`. Native database diagnostics are never overwritten by ORM
+cardinality or validation failures. Use `ok()` and `first()` to distinguish an
+empty query from a failed operation.
+
+Single-row reads are explicit. `find_one()` defaults to
+`single_result_policy::require_unique`, requests at most two rows, and reports
+`std::errc::result_out_of_range` when the predicate is ambiguous. Call
+`find_first()` or pass `single_result_policy::first` only when choosing the
+first matching row is intentional. `find_one_by()` uses the strict contract;
+primary-key lookup uses the first-row policy because the schema owns uniqueness.
+`exists()` returns `model_result<bool>` so an unavailable database is distinct
+from a successful negative result.
+
+Map filters accept only mapped columns and translate null values to `IS NULL`.
+For reusable wrapper construction, `query_wrapper::all_eq()` applies the same
+null policy. Dynamic projections use `projection_row`, an ordered map from
+column label to typed `field_value`; `select_objects()` returns the first
+projected column without converting it to text. `page_maps()` performs the
+count and page queries on the same session and keeps diagnostics from either
+operation.
+
+`update_batch_by_id()` and `save_or_update_batch()` execute inside one local
+transaction and roll back the successful prefix when a later item fails.
+`batch_size` bounds each processing group and must be greater than zero.
+`save_or_update()` inserts an unset auto-increment key; otherwise it checks the
+primary key before choosing INSERT or UPDATE.
+
+`page<T>()` is the typed counterpart to `page_maps()`. Both operations use the
+same session for COUNT and SELECT, and return an empty page when the requested
+page is outside the result range.
+
+`remove_by_ids()` treats an empty ID span as a successful no-op. `remove_by_map()`
+rejects an empty map and validates every key against model metadata. An empty
+`update_wrapper` is rejected by default for the same reason as an empty DELETE;
+pass `allow_full_table` only in an explicitly authorized maintenance path.
+
+An empty conditional DELETE is rejected by default. A deliberate full-table
+operation must pass the visible authorization tag:
+
+```cpp
+orm::query_wrapper<User> all_users;
+auto deleted = co_await db.remove(all_users, orm::allow_full_table);
+```
 
 ```cpp
 import cnetmod.orm;
@@ -9301,7 +9527,7 @@ JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有�
 `std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
 
 `application_runtime::files()` 返回 `async_file_template`，其
-`open/read/write/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
+`open/read/write/flush/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
 领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
 重载；`remove()` 对不存在的目标幂等成功。
 

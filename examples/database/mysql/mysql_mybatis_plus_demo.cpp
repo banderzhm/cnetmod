@@ -107,16 +107,16 @@ auto main() -> int
 
         // Select by ID
         auto user = co_await user_mapper.select_by_id(1);
-        if (user)
+        if (user.ok() && !user.data.empty())
         {
-            logger::info("Found user: {}", user->name);
+            logger::info("Found user: {}", user.first()->name);
         }
 
         // Update
-        if (user)
+        if (user.ok() && !user.data.empty())
         {
-            user->name = "Alice Updated";
-            co_await user_mapper.update_by_id(*user);
+            user.data.front().name = "Alice Updated";
+            co_await user_mapper.update_by_id(user.data.front());
         }
 
         // Delete
@@ -135,7 +135,7 @@ auto main() -> int
             .limit(10);
 
         auto users = co_await user_mapper.select_list(wrapper);
-        logger::info("Found {} users", users.size());
+        logger::info("Found {} users", users.data.size());
 
         // Complex query with nested conditions
         query_wrapper<User> complex_wrapper;
@@ -147,7 +147,8 @@ auto main() -> int
 
         // Count
         auto count = co_await user_mapper.select_count(complex_wrapper);
-        logger::info("Total count: {}", count);
+        if (count.ok() && count.first())
+            logger::info("Total count: {}", *count.first());
 
         // =====================================================================
         // 3. Pagination
@@ -159,10 +160,10 @@ auto main() -> int
 
         auto page_result = co_await user_mapper.select_page(1, 10, page_wrapper);
         logger::info("Page {}/{}, Total: {}, Records: {}",
-            page_result.current_page,
+            page_result.page,
             page_result.total_pages,
             page_result.total,
-            page_result.records.size());
+            page_result.records.data.size());
 
         // =====================================================================
         // 4. Logical Delete
@@ -177,7 +178,7 @@ auto main() -> int
 
         // SELECT will automatically add WHERE deleted = 0
         auto active_users = co_await user_mapper.select_list();
-        logger::info("Active users: {}", active_users.size());
+        logger::info("Active users: {}", active_users.data.size());
 
         // =====================================================================
         // 5. Auto Fill
@@ -200,15 +201,18 @@ auto main() -> int
         logger::info("\n=== 6. Optimistic Lock Demo ===");
 
         auto user_with_version = co_await user_mapper.select_by_id(3);
-        if (user_with_version)
+        if (user_with_version.ok() && !user_with_version.data.empty())
         {
-            user_with_version->name = "Updated with version check";
+            auto& versioned_user = user_with_version.data.front();
+            versioned_user.name = "Updated with version check";
 
             // Update with version check
-            bool success = co_await mysql_update_with_version_check(cli, *user_with_version);
+            bool success = co_await mysql_update_with_version_check(
+                cli, versioned_user);
             if (success)
             {
-                logger::info("Update successful, new version: {}", user_with_version->version);
+                logger::info("Update successful, new version: {}",
+                    versioned_user.version);
             }
             else
             {
@@ -291,7 +295,7 @@ auto main() -> int
 
             // All queries will automatically add WHERE tenant_id = 1001
             auto tenant_users = co_await user_mapper.select_list();
-            logger::info("Tenant 1001 users: {}", tenant_users.size());
+            logger::info("Tenant 1001 users: {}", tenant_users.data.size());
         }
 
         // Tenant context cleared after guard scope

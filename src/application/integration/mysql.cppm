@@ -16,6 +16,8 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.protocol.mysql;
     #ifdef CNETMOD_HAS_ORM
+import cnetmod.orm.service;
+import cnetmod.orm.session_gateway;
 import cnetmod.orm.sharding.shard_catalog;
 import cnetmod.orm.sharding.session_gateway;
     #endif
@@ -60,6 +62,25 @@ export [[nodiscard]] auto auto_configure_mysql(
  */
 export using mysql_sharded_session_gateway =
     orm::sharded_session_gateway<mysql::client, mysql::pooled_connection>;
+
+/**
+ * @brief Application-owned gateway for one managed MySQL pool.
+ */
+export using mysql_session_gateway = orm::session_gateway<mysql::client,
+    mysql::pooled_connection, orm::mysql_database_session>;
+
+/**
+ * @brief ORM service using automatic policies and the MySQL wire cursor.
+ */
+export template <orm::Model T>
+using mysql_orm_service = orm::service<T, mysql_session_gateway,
+    orm::mysql_stream_strategy>;
+
+/**
+ * @brief Binds an ORM session gateway to a managed MySQL service.
+ */
+export [[nodiscard]] auto make_mysql_session_gateway(mysql_service& service)
+    -> mysql_session_gateway;
 
 /**
  * @brief Binds a frozen shard catalog to named managed MySQL pools.

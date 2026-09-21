@@ -90,19 +90,6 @@ auto sql_type_str(column_type type) noexcept -> std::string_view
 } // namespace cnetmod::orm
 
 namespace cnetmod::orm::detail {
-auto datetime_to_unix_seconds(const calendar_datetime& value)
-    -> std::optional<std::int64_t>
-{
-    using namespace std::chrono;
-    const year_month_day date{year{value.year}, month{value.month}, day{value.day}};
-    if (!date.ok() || value.hour > 23 || value.minute > 59 || value.second > 59)
-        return std::nullopt;
-
-    const auto instant = sys_days{date} + hours{value.hour} +
-        minutes{value.minute} + seconds{value.second};
-    return duration_cast<seconds>(instant.time_since_epoch()).count();
-}
-
 void set_member(std::int64_t& m, const field_value& v)
 {
     if (v.is_int64())
@@ -114,7 +101,8 @@ void set_member(std::int64_t& m, const field_value& v)
             v.get_string().data() + v.get_string().size(), m);
     else if (v.is_datetime())
     {
-        if (const auto seconds = datetime_to_unix_seconds(v.get_datetime()))
+        if (const auto seconds =
+                database::unix_seconds_from_datetime(v.get_datetime()))
             m = *seconds;
     }
 }

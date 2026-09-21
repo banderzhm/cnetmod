@@ -93,7 +93,7 @@ JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有�
 `std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
 
 `application_runtime::files()` 返回 `async_file_template`，其
-`open/read/write/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
+`open/read/write/flush/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
 领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
 重载；`remove()` 对不存在的目标幂等成功。
 

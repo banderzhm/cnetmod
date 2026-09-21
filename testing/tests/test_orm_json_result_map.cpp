@@ -6,6 +6,7 @@ import nlohmann.json;
 import cnetmod.orm;
 import cnetmod.io.io_context;
 import cnetmod.core.net_init;
+import cnetmod.core.time;
 import cnetmod.core.socket;
 import cnetmod.core.buffer;
 import cnetmod.core.address;
@@ -579,6 +580,56 @@ TEST(orm_datetime_model_mapping_supports_nullable_and_utc_epoch_values)
     std::int64_t unix_seconds{};
     orm::detail::set_member(unix_seconds, field);
     ASSERT_EQ(unix_seconds, std::int64_t{1789633917});
+}
+
+TEST(database_temporal_conversions_preserve_utc_and_null_semantics)
+{
+    constexpr auto expected_seconds = std::int64_t{1789633917};
+    const auto datetime =
+        cnetmod::database::datetime_from_unix_seconds(expected_seconds);
+    ASSERT_TRUE(datetime.has_value());
+    ASSERT_EQ(datetime->to_string(), "2026-09-17 08:31:57");
+    const auto round_trip =
+        cnetmod::database::unix_seconds_from_datetime(*datetime);
+    ASSERT_TRUE(round_trip.has_value());
+    ASSERT_EQ(*round_trip, expected_seconds);
+
+    const std::optional<orm::calendar_datetime> null_datetime;
+    ASSERT_FALSE(cnetmod::database::unix_seconds_from_datetime(null_datetime)
+            .has_value());
+
+    const orm::calendar_datetime invalid{
+        .year = 2026,
+        .month = 2,
+        .day = 30};
+    ASSERT_FALSE(
+        cnetmod::database::unix_seconds_from_datetime(invalid).has_value());
+
+    const auto before = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch())
+                            .count();
+    const auto observed = cnetmod::unix_time_seconds();
+    const auto after = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch())
+                           .count();
+    ASSERT_TRUE(observed >= before);
+    ASSERT_TRUE(observed <= after);
+}
+
+TEST(orm_param_context_accepts_strongly_typed_values)
+{
+    orm::param_context parameters;
+    parameters.set("text", std::string_view{"value"});
+    parameters.set("unsigned", std::uint64_t{42});
+    parameters.set("signed", std::int64_t{-7});
+    parameters.set("datetime",
+        orm::calendar_datetime{2026, 9, 17, 8, 31, 57, 0});
+
+    ASSERT_EQ(parameters.get_param("text").str_val, "value");
+    ASSERT_EQ(parameters.get_param("unsigned").uint_val, 42U);
+    ASSERT_EQ(parameters.get_param("signed").int_val, -7);
+    ASSERT_EQ(parameters.get_param("datetime").datetime_val.to_string(),
+        "2026-09-17 08:31:57");
 }
 
 TEST(orm_logical_delete_supports_nullable_datetime_markers)

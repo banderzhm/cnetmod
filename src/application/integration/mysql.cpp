@@ -10,6 +10,29 @@ import cnetmod.executor.async_op;
 namespace cnetmod::application {
 
     #ifdef CNETMOD_HAS_ORM
+auto make_mysql_session_gateway(mysql_service& service)
+    -> mysql_session_gateway
+{
+    return mysql_session_gateway{
+        orm::sql_dialect::mysql,
+        []() -> task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        },
+        [&service]()
+            -> task<std::expected<mysql::pooled_connection, std::string>>
+        {
+            auto connection = co_await service.pool().async_get_connection();
+            if (!connection)
+                co_return std::unexpected(connection.error().message());
+            co_return std::move(*connection);
+        },
+        [](mysql::pooled_connection& connection) -> mysql::client&
+        {
+            return connection.get();
+        }};
+}
+
 auto make_mysql_sharded_session_gateway(service_registry& services,
     std::shared_ptr<const orm::shard_catalog> catalog)
     -> std::expected<mysql_sharded_session_gateway, std::error_code>

@@ -3,6 +3,7 @@ export module cnetmod.orm.model_metadata;
 import std;
 import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
+import cnetmod.database.datetime;
 import cnetmod.orm.id_generation;
 
 export namespace cnetmod::orm {
@@ -121,11 +122,6 @@ concept Model = requires {
 } // namespace cnetmod::orm
 
 export namespace cnetmod::orm::detail {
-/**
- * @brief Converts a timezone-free database datetime to Unix seconds as UTC.
- */
-[[nodiscard]] auto datetime_to_unix_seconds(const calendar_datetime&)
-    -> std::optional<std::int64_t>;
 void set_member(std::int64_t&, const field_value&);
 void set_member(std::uint64_t&, const field_value&);
 void set_member(int&, const field_value&);
@@ -191,7 +187,8 @@ inline void set_member(T& member, const field_value& value)
         member = static_cast<std::time_t>(value.get_uint64());
     else if (value.is_datetime())
     {
-        if (const auto seconds = datetime_to_unix_seconds(value.get_datetime()))
+        if (const auto seconds =
+                database::unix_seconds_from_datetime(value.get_datetime()))
             member = static_cast<std::time_t>(*seconds);
     }
 }

@@ -38,6 +38,25 @@ export enum class compare_op
     is_true,     // IS TRUE
     is_false,    // IS FALSE
     raw,         // Raw SQL fragment (use with caution)
+    in_subquery,
+    not_in_subquery,
+    exists_subquery,
+    not_exists_subquery,
+    eq_subquery,
+    ne_subquery,
+    gt_subquery,
+    ge_subquery,
+    lt_subquery,
+    le_subquery,
+};
+
+/**
+ * @brief Parameterized subquery fragment used by the structured predicates.
+ */
+export struct subquery
+{
+    std::string sql;
+    std::vector<param_value> parameters;
 };
 
 // =============================================================================
@@ -96,6 +115,23 @@ export enum class query_execution_kind
     delete_,
 };
 
+/**
+ * @brief Selects how an update assignment obtains its value.
+ */
+export enum class update_value_kind : std::uint8_t
+{
+    bound,
+    increment,
+    decrement,
+};
+
+export struct update_assignment
+{
+    std::string column;
+    param_value value;
+    update_value_kind kind = update_value_kind::bound;
+};
+
 // =============================================================================
 // Condition node
 // =============================================================================
@@ -110,6 +146,7 @@ export struct condition
     /// For nested conditions
     bool is_group = false;
     std::vector<condition> children;
+    std::optional<subquery> nested_query;
 };
 
 // =============================================================================
@@ -239,6 +276,28 @@ public:
         return *this;
     }
 
+    /**
+     * @brief Adds equality predicates for every supplied column and value.
+     *
+     * Null values become `IS NULL` by default. Set @p null_as_is_null to false
+     * to omit null entries. Values remain bound parameters.
+     */
+    auto all_eq(std::span<const std::pair<std::string, param_value>> values,
+        bool null_as_is_null = true) -> query_wrapper&
+    {
+        for (const auto& [column, value] : values)
+        {
+            if (value.kind == param_value::kind_t::null_kind)
+            {
+                if (null_as_is_null)
+                    is_null(column);
+                continue;
+            }
+            eq(column, value);
+        }
+        return *this;
+    }
+
     /// @brief WHERE column LIKE pattern
     auto like(std::string_view column, std::string_view pattern) -> query_wrapper&;
 
@@ -293,6 +352,94 @@ public:
         params.push_back(to_query_parameter(end));
         add_condition(column, compare_op::not_between, std::move(params));
         return *this;
+    }
+
+    /** @brief Adds `column IN (parameterized subquery)`. */
+    auto in_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        condition value;
+        value.column = std::string(column);
+        value.op = compare_op::in_subquery;
+        value.nested_query = std::move(query);
+        value.connector = current_logic_;
+        conditions_.push_back(std::move(value));
+        return *this;
+    }
+
+    /** @brief Adds `column NOT IN (parameterized subquery)`. */
+    auto not_in_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        condition value;
+        value.column = std::string(column);
+        value.op = compare_op::not_in_subquery;
+        value.nested_query = std::move(query);
+        value.connector = current_logic_;
+        conditions_.push_back(std::move(value));
+        return *this;
+    }
+
+    /** @brief Adds a parameterized EXISTS subquery. */
+    auto exists(subquery query) -> query_wrapper&
+    {
+        condition value;
+        value.op = compare_op::exists_subquery;
+        value.nested_query = std::move(query);
+        value.connector = current_logic_;
+        conditions_.push_back(std::move(value));
+        return *this;
+    }
+
+    /** @brief Adds a parameterized NOT EXISTS subquery. */
+    auto not_exists(subquery query) -> query_wrapper&
+    {
+        condition value;
+        value.op = compare_op::not_exists_subquery;
+        value.nested_query = std::move(query);
+        value.connector = current_logic_;
+        conditions_.push_back(std::move(value));
+        return *this;
+    }
+
+    /** @brief Adds `column = (parameterized subquery)`. */
+    auto eq_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        return add_scalar_subquery(column, compare_op::eq_subquery,
+            std::move(query));
+    }
+
+    /** @brief Adds `column != (parameterized subquery)`. */
+    auto ne_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        return add_scalar_subquery(column, compare_op::ne_subquery,
+            std::move(query));
+    }
+
+    /** @brief Adds `column > (parameterized subquery)`. */
+    auto gt_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        return add_scalar_subquery(column, compare_op::gt_subquery,
+            std::move(query));
+    }
+
+    /** @brief Adds `column >= (parameterized subquery)`. */
+    auto ge_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        return add_scalar_subquery(column, compare_op::ge_subquery,
+            std::move(query));
+    }
+
+    /** @brief Adds `column < (parameterized subquery)`. */
+    auto lt_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        return add_scalar_subquery(column, compare_op::lt_subquery,
+            std::move(query));
+    }
+
+    /** @brief Adds `column <= (parameterized subquery)`. */
+    auto le_subquery(std::string_view column, subquery query) -> query_wrapper&
+    {
+        return add_scalar_subquery(column, compare_op::le_subquery,
+            std::move(query));
     }
 
     // =========================================================================
@@ -733,6 +880,18 @@ private:
     void add_condition(std::string_view column, compare_op op, std::vector<param_value> values);
     void add_condition(std::string_view column, compare_op op, param_value value);
 
+    auto add_scalar_subquery(std::string_view column, compare_op operation,
+        subquery query) -> query_wrapper&
+    {
+        condition value;
+        value.column = std::string(column);
+        value.op = operation;
+        value.nested_query = std::move(query);
+        value.connector = current_logic_;
+        conditions_.push_back(std::move(value));
+        return *this;
+    }
+
     static auto build_where_clause(const std::vector<condition>& conds,
         std::vector<param_value>& params,
         const dialect_config& cfg,
@@ -753,17 +912,7 @@ public:
     template <query_parameter_compatible Value>
     auto set(std::string_view column, const Value& value) -> update_wrapper&
     {
-        auto name = std::string(column);
-        auto parameter = to_query_parameter(value);
-        for (auto& [existing_name, existing_value] : set_fields_)
-        {
-            if (existing_name == name)
-            {
-                existing_value = std::move(parameter);
-                return *this;
-            }
-        }
-        set_fields_.emplace_back(std::move(name), std::move(parameter));
+        set_assignment(column, to_query_parameter(value), update_value_kind::bound);
         return *this;
     }
 
@@ -772,6 +921,24 @@ public:
     auto set(U T::* member_ptr, const Value& value) -> update_wrapper&
     {
         return set(resolve_column_name<T>(member_ptr), value);
+    }
+
+    /** @brief Increments a numeric column by a bound value. */
+    template <query_parameter_compatible Value>
+    auto set_increment(std::string_view column, const Value& value)
+        -> update_wrapper&
+    {
+        set_assignment(column, to_query_parameter(value), update_value_kind::increment);
+        return *this;
+    }
+
+    /** @brief Decrements a numeric column by a bound value. */
+    template <query_parameter_compatible Value>
+    auto set_decrement(std::string_view column, const Value& value)
+        -> update_wrapper&
+    {
+        set_assignment(column, to_query_parameter(value), update_value_kind::decrement);
+        return *this;
     }
 
     // -- WHERE conditions (delegate to internal query_wrapper) --
@@ -1014,8 +1181,39 @@ public:
     auto build_sql(std::string_view physical_table, const dialect_config& cfg) const
         -> std::pair<std::string, std::vector<param_value>>;
 
+    /**
+     * @brief Reports whether the update has no WHERE predicates.
+     */
+    [[nodiscard]] auto has_conditions() const noexcept -> bool
+    {
+        return !where_.is_empty();
+    }
+
+    /**
+     * @brief Reports whether at least one assignment was supplied.
+     */
+    [[nodiscard]] auto has_assignments() const noexcept -> bool
+    {
+        return !set_fields_.empty();
+    }
+
 private:
-    std::vector<std::pair<std::string, param_value>> set_fields_;
+    void set_assignment(std::string_view column, param_value value,
+        update_value_kind kind)
+    {
+        for (auto& assignment : set_fields_)
+        {
+            if (assignment.column == column)
+            {
+                assignment.value = std::move(value);
+                assignment.kind = kind;
+                return;
+            }
+        }
+        set_fields_.push_back({std::string(column), std::move(value), kind});
+    }
+
+    std::vector<update_assignment> set_fields_;
     query_wrapper<T> where_;
 };
 
