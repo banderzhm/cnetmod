@@ -11,7 +11,6 @@ import cnetmod.orm.query_wrapper;
 import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.model_reflection;
-import cnetmod.orm.xml_mapper;
 import cnetmod.orm.xml_mapper_registry;
 
 export namespace cnetmod::orm {
@@ -304,9 +303,10 @@ public:
             [&registry, statement_id = std::string{statement_id},
                 parameters](auto& session) mutable -> task<model_result<T>>
             {
-                xml_mapper<T, std::remove_reference_t<decltype(session)>>
-                    statements{session, registry};
-                co_return co_await statements.select(statement_id, parameters);
+                mapper<T, std::remove_reference_t<decltype(session)>> models{
+                    session};
+                co_return co_await models.select_xml(
+                    registry, statement_id, parameters);
             });
     }
 
@@ -322,10 +322,10 @@ public:
             [&registry, statement_id = std::string{statement_id}, parameters,
                 policy](auto& session) mutable -> task<model_result<T>>
             {
-                xml_mapper<T, std::remove_reference_t<decltype(session)>>
-                    statements{session, registry};
-                co_return co_await statements.select_one(
-                    statement_id, parameters, policy);
+                mapper<T, std::remove_reference_t<decltype(session)>> models{
+                    session};
+                co_return co_await models.select_one_xml(
+                    registry, statement_id, parameters, policy);
             });
     }
 
@@ -456,9 +456,10 @@ public:
             [&registry, statement_id = std::string{statement_id},
                 parameters](auto& session) mutable -> task<model_result<T>>
             {
-                xml_mapper<T, std::remove_reference_t<decltype(session)>>
-                    statements{session, registry};
-                co_return co_await statements.execute(statement_id, parameters);
+                mapper<T, std::remove_reference_t<decltype(session)>> models{
+                    session};
+                co_return co_await models.execute_xml(
+                    registry, statement_id, parameters);
             });
     }
 
@@ -610,17 +611,6 @@ private:
             -> decltype(std::declval<Unit&>().template mapper<U>())
         {
             return unit_->template mapper<U>(interceptors_);
-        }
-
-        /**
-         * @brief Creates an XML mapper sharing this transaction and policies.
-         */
-        template <Model U>
-        auto xml(const mapper_registry& registry)
-            -> decltype(std::declval<Unit&>().template xml<U>(registry,
-                std::declval<automatic_interceptor_options>()))
-        {
-            return unit_->template xml<U>(registry, interceptors_);
         }
 
     private:

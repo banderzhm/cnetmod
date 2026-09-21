@@ -713,15 +713,16 @@ auto changed = co_await users->execute_xml(
 ```
 
 三个入口都经过相同的连接池租约、自动拦截器、错误映射、OTEL 和事务边界。
-`execute_xml()` 自动开启写事务并在失败时回滚。跨模型事务中使用
-`unit.xml<User>(registry)`，它与 `unit.mapper<Order>()` 共享同一连接和事务。
+`execute_xml()` 自动开启写事务并在失败时回滚。XML 不是独立的持久化门面：
+`mapper<T>` 同时提供标准 CRUD 与 XML 自定义语句，因此跨模型事务只需取得普通
+Mapper，它们自然共享同一连接和事务。
 
 ```cpp
 auto committed = co_await users->transaction<void>(
     [&](auto& unit) -> task<std::expected<void, std::string>> {
-        auto user_xml = unit.template xml<User>(registry);
-        auto selected = co_await user_xml.select(
-            "UserMapper.findById", parameters);
+        auto users = unit.template mapper<User>();
+        auto selected = co_await users.select_xml(
+            registry, "UserMapper.findById", parameters);
         if (selected.is_err())
             co_return std::unexpected(selected.error_msg);
 
@@ -840,7 +841,7 @@ logical_delete_interceptor interceptor{std::move(config)};
 ### 多租户
 `CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID)` — `tenant_context::set_tenant_id(id)` 设置线程级租户；`tenant_guard guard(id)` RAII 守卫；`multi_tenant_interceptor` 自动注入条件。`global_multi_tenant_interceptor()`。
 
-## 10. database_session<Client> — 协议无关会话
+## 10. database_session<Client> — 内部执行上下文
 
 ```cpp
 template <asynchronous_database_client Client>
@@ -850,67 +851,18 @@ class database_session {
     auto query(std::string_view sql) -> task<query_result>;
     auto execute(std::string_view sql) -> task<query_result>;
     auto execute(parameterized_query) -> task<query_result>;
-
-    template <Model T> auto find_all() -> task<model_result<T>>;
-    template <Model T> auto find_by_id(param_value) -> task<model_result<T>>;
-    template <Model T> auto find_one_by(std::string_view, param_value)
-        -> task<model_result<T>>;
-    template <Model T> auto find_one(const query_wrapper<T>&,
-        single_result_policy = single_result_policy::require_unique)
-        -> task<model_result<T>>;
-    template <Model T> auto find_first(const query_wrapper<T>&)
-        -> task<model_result<T>>;
-    template <Model T, typename Id> auto find_by_ids(std::span<const Id>)
-        -> task<model_result<T>>;
-    template <Model T> auto find_by_map(
-        std::span<const std::pair<std::string, param_value>>)
-        -> task<model_result<T>>;
-    template <Model T> auto exists(const query_wrapper<T>&)
-        -> task<model_result<bool>>;
-    template <Model T> auto select_maps(const query_wrapper<T>&)
-        -> task<model_result<projection_row>>;
-    template <Model T> auto select_objects(const query_wrapper<T>&)
-        -> task<model_result<field_value>>;
-    template <Model T> auto page_maps(std::size_t, std::size_t,
-        const query_wrapper<T>& = {}) -> task<page_result<projection_row>>;
-    template <Model T> auto page(std::size_t, std::size_t,
-        const query_wrapper<T>& = {}) -> task<page_result<T>>;
-    template <Model T> auto prepare_select(const query_wrapper<T>&) const
-        -> std::expected<parameterized_query, std::string>;
-    template <Model T> auto for_each_map(const query_wrapper<T>&, Handler,
-        stream_options = {}) -> task<std::expected<void, std::string>>;
-    template <Model T> auto insert(T&) -> task<model_result<T>>;
-    template <Model T> auto update(const T&) -> task<model_result<T>>;
-    template <Model T> auto update_batch_by_id(std::span<const T>,
-        std::size_t batch_size = 256) -> task<model_result<T>>;
-    template <Model T> auto save_or_update(T&) -> task<model_result<T>>;
-    template <Model T> auto save_or_update_batch(std::span<T>,
-        std::size_t batch_size = 256) -> task<model_result<T>>;
-    template <Model T> auto upsert(T&) -> task<model_result<T>>;
-    template <Model T> auto upsert_batch(std::span<T>,
-        std::size_t batch_size = 256) -> task<model_result<T>>;
-    template <Model T> auto remove(const T&) -> task<model_result<T>>;
-    template <Model T> auto remove_by(std::string_view, param_value)
-        -> task<model_result<T>>;
-    template <Model T> auto remove_by_id(param_value) -> task<model_result<T>>;
-    template <Model T, typename Id> auto remove_by_ids(std::span<const Id>)
-        -> task<model_result<T>>;
-    template <Model T> auto remove_by_map(
-        std::span<const std::pair<std::string, param_value>>)
-        -> task<model_result<T>>;
-    template <Model T> auto find(const query_wrapper<T>&) -> task<model_result<T>>;
-    template <Model T> auto remove(const query_wrapper<T>&) -> task<model_result<T>>;
-    template <Model T> auto remove(const query_wrapper<T>&, allow_full_table_t)
-        -> task<model_result<T>>;
-    template <Model T> auto update(const update_wrapper<T>&) -> task<model_result<T>>;
-    template <Model T> auto update(const update_wrapper<T>&, allow_full_table_t)
-        -> task<model_result<T>>;
-    template <Model T> auto execute(const query_wrapper<T>&) -> task<model_result<T>>;
-    template <Model T> auto execute(const update_wrapper<T>&) -> task<model_result<T>>;
-    auto transaction(Func&&) -> task<query_result>;
-    auto transaction(Func&&, isolation_level) -> task<query_result>;
+    auto begin_transaction(...) -> task<std::expected<void, std::string>>;
+    auto commit_transaction() -> task<std::expected<void, std::string>>;
+    auto rollback_transaction() -> task<std::expected<void, std::string>>;
+    auto transaction(Func&&) -> task<...>;
 };
 ```
+
+该类型没有公开 `find/insert/update/remove/page/upsert` 等模型方法。其源码职责也已
+拆开：`database_backend.cppm` 定义协议客户端和结果适配契约，
+`database_session.cppm` 只定义原始执行与事务门面，模型元数据、SQL 生成、结果映射和
+批处理实现位于内部 `mapper_operations.cppm`，只能由 `mapper<T>` 的访问桥调用。
+这样 Session 不会成为第二套 Mapper API，也不会向业务暴露内部 SQL 引擎。
 
 MySQL failures retain both the native server error number (for example `1062`
 for a duplicate key) and SQLSTATE. Prefer `error_code` for vendor-specific

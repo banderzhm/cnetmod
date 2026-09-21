@@ -9,8 +9,6 @@ import cnetmod.orm.model_metadata;
 import cnetmod.orm.query_wrapper;
 import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_dialect;
-import cnetmod.orm.xml_mapper;
-import cnetmod.orm.xml_mapper_registry;
 
 export namespace cnetmod::orm {
 
@@ -196,19 +194,6 @@ public:
         if (!configured)
             throw std::runtime_error(configured.error());
         return result;
-    }
-
-    /**
-     * @brief Creates an XML mapper on the same transaction session.
-     */
-    template <Model T>
-    auto xml(const mapper_registry& registry,
-        automatic_interceptor_options options)
-        -> cnetmod::orm::xml_mapper<T, Session>
-    {
-        auto policies = mapper<T>(options);
-        (void)policies;
-        return cnetmod::orm::xml_mapper<T, Session>{session_, registry};
     }
 
 private:

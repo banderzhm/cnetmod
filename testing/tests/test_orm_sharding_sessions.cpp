@@ -95,6 +95,27 @@ struct recording_session_client
     }
 };
 
+template <typename Session>
+concept exposes_model_insert = requires(Session& session, routed_order& value) {
+    session.insert(value);
+};
+
+template <typename Mapper>
+concept exposes_xml_statements = requires(Mapper& mapper,
+    const orm::mapper_registry& registry,
+    const orm::param_context& parameters) {
+    mapper.select_xml(registry, "OrderMapper.find", parameters);
+    mapper.select_one_xml(registry, "OrderMapper.find", parameters);
+    mapper.execute_xml(registry, "OrderMapper.update", parameters);
+};
+
+using recording_database_session = orm::database_session<recording_session_client>;
+using recording_order_mapper =
+    orm::mapper<routed_order, recording_database_session>;
+
+static_assert(!exposes_model_insert<recording_database_session>);
+static_assert(exposes_xml_statements<recording_order_mapper>);
+
 struct streaming_session_client : recording_session_client
 {
     std::deque<std::vector<mysql::row>> stream_batches;
@@ -863,6 +884,14 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
     ASSERT_EQ(selected.data.front().description, "xml");
     ASSERT_TRUE(client.last_sql.contains("WHERE id = {}"));
 
+    client.responses.push_back(
+        routed_order_result({{7, "first"}, {8, "second"}}));
+    auto ambiguous = cnetmod::sync_wait(
+        orders.get_one_xml(registry, "OrderMapper.findById", parameters));
+    ASSERT_TRUE(ambiguous.is_err());
+    ASSERT_EQ(ambiguous.framework_error,
+        std::make_error_code(std::errc::result_out_of_range));
+
     client.responses.push_back({});
     client.responses.push_back(orm::query_result{.affected_rows = 1});
     client.responses.push_back({});
@@ -878,6 +907,16 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
     ASSERT_EQ(client.statements.back(), "COMMIT");
 
     client.responses.push_back({});
+    client.responses.push_back(
+        orm::query_result{.error_msg = "write rejected", .error_code = 1213});
+    client.responses.push_back({});
+    auto rejected = cnetmod::sync_wait(
+        orders.execute_xml(registry, "OrderMapper.rename", rename));
+    ASSERT_TRUE(rejected.is_err());
+    ASSERT_EQ(rejected.error_code, 1213U);
+    ASSERT_EQ(client.statements.back(), "ROLLBACK");
+
+    client.responses.push_back({});
     client.responses.push_back(routed_order_result({{7, "shared"}}));
     client.responses.push_back(orm::query_result{.affected_rows = 1});
     client.responses.push_back({});
@@ -885,16 +924,15 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
         [&registry, &parameters](auto& unit)
             -> cnetmod::task<std::expected<int, std::string>>
         {
-            auto xml_orders = unit.template xml<routed_order>(registry);
-            auto selected_in_transaction = co_await xml_orders.select(
-                "OrderMapper.findById", parameters);
+            auto orders = unit.template mapper<routed_order>();
+            auto selected_in_transaction = co_await orders.select_xml(
+                registry, "OrderMapper.findById", parameters);
             if (selected_in_transaction.is_err())
                 co_return std::unexpected(
                     selected_in_transaction.error_msg);
 
             routed_order created{8, "typed"};
-            auto typed_orders = unit.template mapper<routed_order>();
-            auto inserted = co_await typed_orders.insert(created);
+            auto inserted = co_await orders.insert(created);
             if (inserted.is_err())
                 co_return std::unexpected(inserted.error_msg);
             co_return 2;
@@ -913,10 +951,11 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
     postgresql_client.responses.push_back(routed_order_result({{7, "pg"}}));
     orm::database_session postgresql_session{
         postgresql_client, orm::sql_dialect::postgresql};
-    orm::xml_mapper<routed_order, decltype(postgresql_session)> xml{
-        postgresql_session, registry};
+    orm::mapper<routed_order, decltype(postgresql_session)> postgresql_orders{
+        postgresql_session};
     auto postgresql = cnetmod::sync_wait(
-        xml.select("OrderMapper.findById", parameters));
+        postgresql_orders.select_xml(
+            registry, "OrderMapper.findById", parameters));
     ASSERT_TRUE(postgresql.ok());
     ASSERT_TRUE(postgresql_client.last_sql.contains("WHERE id = $1"));
 }

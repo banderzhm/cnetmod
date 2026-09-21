@@ -5,10 +5,14 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.database_session;
+import cnetmod.orm.mapper_operations;
 import cnetmod.orm.model_metadata;
+import cnetmod.orm.model_reflection;
 import cnetmod.orm.query_wrapper;
 import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_parameters;
+import cnetmod.orm.xml_mapper;
+import cnetmod.orm.xml_mapper_registry;
 
 namespace cnetmod::orm {
 
@@ -132,6 +136,44 @@ public:
     {
         return detail::mapper_session_access::template select_maps_page<T>(
             *session_, page, page_size, query);
+    }
+
+    /**
+     * @brief Executes a model select declared in a MyBatis-style XML mapper.
+     *
+     * XML statements are an extension of this mapper rather than a parallel
+     * persistence facade. They therefore share the same session, policies,
+     * transaction and result mapping as the built-in CRUD operations.
+     */
+    auto select_xml(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<T>>
+    {
+        return xml_mapper<T, Session>{*session_, registry}.select(
+            statement_id, parameters);
+    }
+
+    /**
+     * @brief Executes a cardinality-checked XML select for this model.
+     */
+    auto select_one_xml(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters,
+        single_result_policy policy = single_result_policy::require_unique)
+        -> task<model_result<T>>
+    {
+        return xml_mapper<T, Session>{*session_, registry}.select_one(
+            statement_id, parameters, policy);
+    }
+
+    /**
+     * @brief Executes an XML insert, update or delete on this mapper's session.
+     */
+    auto execute_xml(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<T>>
+    {
+        return xml_mapper<T, Session>{*session_, registry}.execute(
+            statement_id, parameters);
     }
 
     auto insert(T& model) -> task<model_result<T>>
