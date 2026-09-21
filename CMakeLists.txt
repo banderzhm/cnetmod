@@ -507,6 +507,13 @@ if(CNETMOD_HAS_PUGIXML AND CNETMOD_PUGIXML_TARGET STREQUAL "pugixml-static")
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     )
 endif()
+if(BoringSSL_FOUND AND TARGET ssl AND TARGET crypto)
+    install(TARGETS ssl crypto
+        ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/boringssl"
+        LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/boringssl")
+    install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/boringssl/include/"
+        DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+endif()
 install(TARGETS cnetmod_core
     EXPORT cnetmodTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"

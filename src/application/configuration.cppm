@@ -100,6 +100,42 @@ export struct configured_service
     service_requirement requirement = service_requirement::required;
     recovery_policy recovery;
     nlohmann::json properties = nlohmann::json::object();
+
+    /**
+     * Reads a nested string property addressed by a dot-separated path.
+     * Missing properties return an empty optional; type mismatches return an
+     * invalid-argument error.
+     */
+    [[nodiscard]] auto string_property(std::string_view path) const
+        -> std::expected<std::optional<std::string>, std::error_code>;
+
+    /**
+     * Reads a nested integer property addressed by a dot-separated path.
+     */
+    [[nodiscard]] auto integer_property(std::string_view path) const
+        -> std::expected<std::optional<std::int64_t>, std::error_code>;
+
+    /**
+     * Reads a nested array containing only strings.
+     */
+    [[nodiscard]] auto string_array_property(std::string_view path) const
+        -> std::expected<std::optional<std::vector<std::string>>,
+            std::error_code>;
+
+    /**
+     * Sets one top-level string property without exposing the JSON backend.
+     */
+    void set_property(std::string name, std::string value);
+
+    /**
+     * Sets one top-level integer property without exposing the JSON backend.
+     */
+    void set_property(std::string name, std::int64_t value);
+
+    /**
+     * Sets one top-level Boolean property without exposing the JSON backend.
+     */
+    void set_property(std::string name, bool value);
 };
 
 /**

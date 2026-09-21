@@ -574,7 +574,88 @@ namespace {
         return {};
     }
 
+    auto nested_property(const nlohmann::json& root,
+        std::string_view path) -> const nlohmann::json*
+    {
+        if (!root.is_object() || path.empty())
+            return nullptr;
+        const auto* current = &root;
+        for (const auto segment : std::views::split(path, '.'))
+        {
+            if (!current->is_object())
+                return nullptr;
+            const auto name = std::string{segment.begin(), segment.end()};
+            const auto found = current->find(name);
+            if (found == current->end())
+                return nullptr;
+            current = &*found;
+        }
+        return current;
+    }
+
 } // namespace
+
+auto configured_service::string_property(std::string_view path) const
+    -> std::expected<std::optional<std::string>, std::error_code>
+{
+    const auto* value = nested_property(properties, path);
+    if (value == nullptr)
+        return std::optional<std::string>{};
+    if (!value->is_string())
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    return std::optional<std::string>{value->get<std::string>()};
+}
+
+auto configured_service::integer_property(std::string_view path) const
+    -> std::expected<std::optional<std::int64_t>, std::error_code>
+{
+    const auto* value = nested_property(properties, path);
+    if (value == nullptr)
+        return std::optional<std::int64_t>{};
+    if (!value->is_number_integer())
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    return std::optional<std::int64_t>{value->get<std::int64_t>()};
+}
+
+auto configured_service::string_array_property(std::string_view path) const
+    -> std::expected<std::optional<std::vector<std::string>>,
+        std::error_code>
+{
+    const auto* value = nested_property(properties, path);
+    if (value == nullptr)
+        return std::optional<std::vector<std::string>>{};
+    if (!value->is_array())
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+
+    std::vector<std::string> result;
+    result.reserve(value->size());
+    for (const auto& item : *value)
+    {
+        if (!item.is_string())
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+        result.push_back(item.get<std::string>());
+    }
+    return std::optional<std::vector<std::string>>{std::move(result)};
+}
+
+void configured_service::set_property(std::string name, std::string value)
+{
+    properties[std::move(name)] = std::move(value);
+}
+
+void configured_service::set_property(std::string name, std::int64_t value)
+{
+    properties[std::move(name)] = value;
+}
+
+void configured_service::set_property(std::string name, bool value)
+{
+    properties[std::move(name)] = value;
+}
 
 auto load_configuration(const std::optional<std::filesystem::path>& file)
     -> std::expected<application_configuration, std::error_code>

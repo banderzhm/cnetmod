@@ -351,7 +351,11 @@ auto expr_parser::parse_or() -> std::unique_ptr<ast_node>
 {
     auto n = parse_and();
     while (cur_.type == token_type::or_op)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_and());
+    {
+        const auto op = advance().type;
+        auto right = parse_and();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -359,7 +363,11 @@ auto expr_parser::parse_and() -> std::unique_ptr<ast_node>
 {
     auto n = parse_equality();
     while (cur_.type == token_type::and_op)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_equality());
+    {
+        const auto op = advance().type;
+        auto right = parse_equality();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -367,7 +375,11 @@ auto expr_parser::parse_equality() -> std::unique_ptr<ast_node>
 {
     auto n = parse_comparison();
     while (cur_.type == token_type::eq || cur_.type == token_type::ne)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_comparison());
+    {
+        const auto op = advance().type;
+        auto right = parse_comparison();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -376,7 +388,11 @@ auto expr_parser::parse_comparison() -> std::unique_ptr<ast_node>
     auto n = parse_additive();
     while (cur_.type == token_type::lt || cur_.type == token_type::gt ||
         cur_.type == token_type::le || cur_.type == token_type::ge)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_additive());
+    {
+        const auto op = advance().type;
+        auto right = parse_additive();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -384,8 +400,11 @@ auto expr_parser::parse_additive() -> std::unique_ptr<ast_node>
 {
     auto n = parse_multiplicative();
     while (cur_.type == token_type::plus || cur_.type == token_type::minus)
-        n = ast_node::make_binary(advance().type, std::move(n),
-            parse_multiplicative());
+    {
+        const auto op = advance().type;
+        auto right = parse_multiplicative();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 
@@ -394,7 +413,11 @@ auto expr_parser::parse_multiplicative() -> std::unique_ptr<ast_node>
     auto n = parse_unary();
     while (cur_.type == token_type::star || cur_.type == token_type::slash ||
         cur_.type == token_type::percent)
-        n = ast_node::make_binary(advance().type, std::move(n), parse_unary());
+    {
+        const auto op = advance().type;
+        auto right = parse_unary();
+        n = ast_node::make_binary(op, std::move(n), std::move(right));
+    }
     return n;
 }
 

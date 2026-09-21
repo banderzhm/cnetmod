@@ -3,6 +3,7 @@
 
 import std;
 import cnetmod.core;
+import cnetmod.core.ssl;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
@@ -181,7 +182,8 @@ TEST(sse_context_exposes_conservative_commit_state)
         std::array<char, 4096> buffer{};
         while (!received.contains(": keepalive\n\n") ||
             !received.contains("event: update\ndata: {\"text\":\"ready\"}\n\n") ||
-            !received.contains("data: {\"done\":true}\n\n"))
+            !received.contains("data: {\"done\":true}\n\n") ||
+            !received.contains("0\r\n\r\n"))
         {
             auto read = co_await cnetmod::async_read(*io, *client,
                 cnetmod::mutable_buffer{buffer.data(), buffer.size()});
@@ -192,13 +194,203 @@ TEST(sse_context_exposes_conservative_commit_state)
         }
         verified = received.contains(": keepalive\n\n") &&
             received.contains("event: update\ndata: {\"text\":\"ready\"}\n\n") &&
-            received.contains("data: {\"done\":true}\n\n");
+            received.contains("data: {\"done\":true}\n\n") &&
+            received.contains("Transfer-Encoding: chunked\r\n") &&
+            received.ends_with("0\r\n\r\n");
         io->stop();
     };
     cnetmod::spawn(*io, run());
     io->run();
     ASSERT_TRUE(verified);
 }
+
+TEST(sse_finish_terminates_response_and_preserves_http1_keep_alive)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    server http_server{*io};
+    router routes;
+    routes.sse_get("/events",
+        [](request_context&, sse_stream& stream) -> cnetmod::task<void>
+        {
+            ASSERT_TRUE(co_await stream.send("ready", "update"));
+            ASSERT_TRUE(co_await stream.finish());
+        });
+    routes.get("/health",
+        [](request_context& request) -> cnetmod::task<void>
+        {
+            request.text(status::ok, "ok");
+            co_return;
+        });
+    http_server.set_router(std::move(routes));
+    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = http_server.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    auto listener = http_server.run();
+    listener.handle().resume();
+
+    bool verified = false;
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
+                .has_value());
+
+        constexpr std::string_view first =
+            "GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                         cnetmod::const_buffer{first.data(), first.size()}))
+                .has_value());
+
+        std::string streamed;
+        std::array<char, 4096> bytes{};
+        while (!streamed.contains("0\r\n\r\n"))
+        {
+            const auto read = co_await cnetmod::async_read(*io, *peer,
+                cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+            ASSERT_TRUE(read.has_value() && *read > 0);
+            if (!read || *read == 0)
+                break;
+            streamed.append(bytes.data(), *read);
+        }
+
+        constexpr std::string_view second =
+            "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                         cnetmod::const_buffer{second.data(), second.size()}))
+                .has_value());
+        const auto read = co_await cnetmod::async_read(*io, *peer,
+            cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+        ASSERT_TRUE(read.has_value() && *read > 0);
+        const std::string_view health{bytes.data(), read ? *read : 0};
+        verified = streamed.contains("Transfer-Encoding: chunked\r\n") &&
+            streamed.contains("event: update\n") &&
+            streamed.contains("data: ready\n\n") &&
+            streamed.contains("data: {\"done\":true}\n\n") &&
+            streamed.ends_with("0\r\n\r\n") &&
+            health.contains("HTTP/1.1 200 OK") && health.ends_with("ok");
+
+        peer->close();
+        http_server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        listener.handle().promise().result();
+        while (http_server.active_connections() != 0)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+    ASSERT_TRUE(verified);
+}
+
+#ifdef CNETMOD_HAS_SSL
+TEST(sse_finish_uses_tls_transport_and_preserves_http1_keep_alive)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto server_tls = cnetmod::ssl_context::server();
+    ASSERT_TRUE(server_tls.has_value());
+    ASSERT_TRUE(server_tls->load_cert_file(CNETMOD_HTTP_SSE_TEST_CERT)
+            .has_value());
+    ASSERT_TRUE(server_tls->load_key_file(CNETMOD_HTTP_SSE_TEST_KEY)
+            .has_value());
+
+    server http_server{*io};
+    router routes;
+    routes.sse_get("/events",
+        [](request_context&, sse_stream& stream) -> cnetmod::task<void>
+        {
+            ASSERT_TRUE(co_await stream.send("secure", "update"));
+            ASSERT_TRUE(co_await stream.finish());
+        });
+    routes.get("/health",
+        [](request_context& request) -> cnetmod::task<void>
+        {
+            request.text(status::ok, "ok");
+            co_return;
+        });
+    http_server.set_router(std::move(routes));
+    http_server.set_ssl_context(*server_tls);
+    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = http_server.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    auto listener = http_server.run();
+    listener.handle().resume();
+
+    bool verified = false;
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto client_tls = cnetmod::ssl_context::client();
+        ASSERT_TRUE(client_tls.has_value());
+        client_tls->set_verify_peer(false);
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
+                .has_value());
+        cnetmod::ssl_stream stream{*client_tls, *io, *peer};
+        stream.set_connect_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+
+        constexpr std::string_view first =
+            "GET /events HTTP/1.1\r\nHost: localhost\r\n\r\n";
+        ASSERT_TRUE((co_await stream.async_write_all(
+                         cnetmod::const_buffer{first.data(), first.size()}))
+                .has_value());
+
+        std::string streamed;
+        std::array<char, 4096> bytes{};
+        while (!streamed.contains("0\r\n\r\n"))
+        {
+            const auto read = co_await stream.async_read(
+                cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+            ASSERT_TRUE(read.has_value() && *read > 0);
+            if (!read || *read == 0)
+                break;
+            streamed.append(bytes.data(), *read);
+        }
+
+        constexpr std::string_view second =
+            "GET /health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        ASSERT_TRUE((co_await stream.async_write_all(
+                         cnetmod::const_buffer{second.data(), second.size()}))
+                .has_value());
+        const auto read = co_await stream.async_read(
+            cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+        ASSERT_TRUE(read.has_value() && *read > 0);
+        const std::string_view health{bytes.data(), read ? *read : 0};
+        verified = streamed.contains("Transfer-Encoding: chunked\r\n") &&
+            streamed.contains("event: update\n") &&
+            streamed.contains("data: secure\n\n") &&
+            streamed.contains("data: {\"done\":true}\n\n") &&
+            streamed.ends_with("0\r\n\r\n") &&
+            health.contains("HTTP/1.1 200 OK") && health.ends_with("ok");
+
+        peer->close();
+        http_server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::async_sleep(
+                *io, std::chrono::milliseconds{1});
+        listener.handle().promise().result();
+        while (http_server.active_connections() != 0)
+            co_await cnetmod::async_sleep(
+                *io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+    ASSERT_TRUE(verified);
+}
+#endif
 
 TEST(sse_router_registers_get_and_post_endpoints)
 {

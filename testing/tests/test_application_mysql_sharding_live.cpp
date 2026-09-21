@@ -47,7 +47,11 @@ TEST(mysql_live_named_pools_route_sharded_orm_transactions)
         options.username = std::getenv("CNETMOD_MYSQL_SHARD_TEST_USER");
         options.password = std::getenv("CNETMOD_MYSQL_SHARD_TEST_PASSWORD");
         options.database = database;
-        options.ssl = cnetmod::mysql::ssl_mode::disable;
+        // MySQL 8.4 creates caching_sha2_password users by default. The
+        // password exchange therefore requires TLS, just like the single-pool
+        // lifecycle gate that runs immediately before this test.
+        options.ssl = cnetmod::mysql::ssl_mode::require;
+        options.tls_verify = false;
         options.initial_size = options.max_size = 1;
         return std::make_shared<cnetmod::application::mysql_service>(*io,
             std::move(options), std::move(instance),

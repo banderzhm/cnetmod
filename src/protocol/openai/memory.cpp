@@ -80,6 +80,42 @@ auto make_error_code(chat_record_store_errc error) noexcept -> std::error_code
     return {static_cast<int>(error), chat_record_category()};
 }
 
+auto persisted_chat_message::set_metadata(std::string key,
+    std::int64_t value) -> void
+{
+    metadata[std::move(key)] = value;
+}
+
+auto persisted_chat_message::set_metadata(std::string key,
+    std::string value) -> void
+{
+    metadata[std::move(key)] = std::move(value);
+}
+
+auto persisted_chat_message::metadata_integer(std::string_view key,
+    std::int64_t fallback) const noexcept -> std::int64_t
+{
+    const auto found = metadata.find(std::string{key});
+    if (found == metadata.end())
+        return fallback;
+    if (found->is_number_integer())
+        return found->get<std::int64_t>();
+    if (found->is_number_unsigned())
+        return static_cast<std::int64_t>(found->get<std::uint64_t>());
+    if (found->is_number_float())
+        return static_cast<std::int64_t>(found->get<double>());
+    return fallback;
+}
+
+auto persisted_chat_message::metadata_text(std::string_view key,
+    std::string fallback) const -> std::string
+{
+    const auto found = metadata.find(std::string{key});
+    if (found == metadata.end() || !found->is_string())
+        return fallback;
+    return found->get<std::string>();
+}
+
 auto trim_messages(std::vector<message>& messages,
     const memory_options& options) -> trim_result
 {

@@ -413,6 +413,11 @@ auto request_context::sse_begin(int s) -> task<bool>
         co_return false;
     resp_.set_status(s);
     sse::prepare(resp_, sse::response_options{.status_code = s});
+    sse_chunked_ = resp_.version() == http_version::http_1_1;
+    if (sse_chunked_)
+        resp_.set_header("Transfer-Encoding", "chunked");
+    else
+        resp_.set_header("Connection", "close");
     auto h = resp_.serialize();
     sse_state_ = sse_stream_state::committing;
     if (!(co_await write_sse_bytes(h)))
@@ -441,6 +446,11 @@ void request_context::configure_sse(sse_stream_options options) noexcept
     deadline_ = sse_deadline_;
 }
 
+void request_context::set_stream_writer(stream_write_fn writer)
+{
+    stream_writer_ = std::move(writer);
+}
+
 void request_context::expire_sse() noexcept
 {
     if (sse_state_ != sse_stream_state::closed)
@@ -460,10 +470,12 @@ auto request_context::write_sse_bytes(std::string_view bytes) -> task<bool>
     operation_registration registration{*this, write_cancellation};
     const auto write_deadline = sse_deadline_.constrain(
         deadline::after(sse_write_timeout_));
+    auto operation = stream_writer_
+        ? stream_writer_(bytes, write_cancellation)
+        : async_write_all(ctx_, sock_,
+              const_buffer{bytes.data(), bytes.size()}, write_cancellation);
     auto written = co_await cnetmod::with_deadline(ctx_, write_deadline,
-        async_write_all(ctx_, sock_,
-            const_buffer{bytes.data(), bytes.size()}, write_cancellation),
-        write_cancellation);
+        std::move(operation), write_cancellation);
     if (!written)
     {
         expire_sse();
@@ -476,6 +488,13 @@ auto request_context::write_sse_frame(std::string frame) -> task<bool>
 {
     if (!(co_await sse_begin()))
         co_return false;
+    if (sse_chunked_)
+    {
+        auto chunk = std::format("{:x}\r\n", frame.size());
+        chunk += frame;
+        chunk += "\r\n";
+        co_return co_await write_sse_bytes(chunk);
+    }
     co_return co_await write_sse_bytes(frame);
 }
 
@@ -503,10 +522,12 @@ auto request_context::sse_heartbeat() -> task<bool>
 
 auto request_context::sse_done() -> task<bool>
 {
-    const auto written = co_await write_sse_frame(sse::done());
-    if (written)
-        sse_state_ = sse_stream_state::closed;
-    co_return written;
+    if (!(co_await write_sse_frame(sse::done())))
+        co_return false;
+    if (sse_chunked_ && !(co_await write_sse_bytes("0\r\n\r\n")))
+        co_return false;
+    sse_state_ = sse_stream_state::closed;
+    co_return true;
 }
 
 auto request_context::with_sse(sse_handler_fn handler,

@@ -69,7 +69,38 @@ namespace {
                 });
     }
 
-    auto quality(std::string_view parameters) noexcept -> double
+    auto parse_quality(std::string_view value) noexcept
+        -> std::optional<std::uint16_t>
+    {
+        if (value.empty() || (value.front() != '0' && value.front() != '1'))
+            return std::nullopt;
+
+        const auto whole = value.front();
+        value.remove_prefix(1);
+        if (value.empty())
+            return whole == '0' ? 0U : 1'000U;
+        if (value.front() != '.')
+            return std::nullopt;
+
+        value.remove_prefix(1);
+        if (value.size() > 3U)
+            return std::nullopt;
+
+        std::uint16_t fraction{};
+        std::uint16_t scale = 100U;
+        for (const auto digit : value)
+        {
+            if (digit < '0' || digit > '9' ||
+                (whole == '1' && digit != '0'))
+                return std::nullopt;
+            fraction = static_cast<std::uint16_t>(
+                fraction + static_cast<std::uint16_t>(digit - '0') * scale);
+            scale = static_cast<std::uint16_t>(scale / 10U);
+        }
+        return whole == '0' ? fraction : 1'000U;
+    }
+
+    auto quality(std::string_view parameters) noexcept -> std::uint16_t
     {
         while (!parameters.empty())
         {
@@ -84,22 +115,15 @@ namespace {
                 !equal_ascii(trim(parameter.substr(0, equals)), "q"))
                 continue;
             auto value = trim(parameter.substr(equals + 1));
-            double result{};
-            const auto parsed = std::from_chars(
-                value.data(), value.data() + value.size(), result);
-            if (parsed.ec != std::errc{} ||
-                parsed.ptr != value.data() + value.size() ||
-                !std::isfinite(result) || result < 0.0 || result > 1.0)
-                return 0.0;
-            return result;
+            return parse_quality(value).value_or(0U);
         }
-        return 1.0;
+        return 1'000U;
     }
 
     auto accepts_gzip(std::string_view value) noexcept -> bool
     {
-        std::optional<double> explicit_quality;
-        std::optional<double> wildcard_quality;
+        std::optional<std::uint16_t> explicit_quality;
+        std::optional<std::uint16_t> wildcard_quality;
         while (!value.empty())
         {
             const auto comma = value.find(',');
@@ -119,8 +143,8 @@ namespace {
                 wildcard_quality = quality(parameters);
         }
         if (explicit_quality)
-            return *explicit_quality > 0.0;
-        return wildcard_quality && *wildcard_quality > 0.0;
+            return *explicit_quality > 0U;
+        return wildcard_quality && *wildcard_quality > 0U;
     }
 
     auto is_compressible(std::string_view content_type) -> bool

@@ -37,6 +37,14 @@ export struct chat_request
     json tool_choice_object;
     json extra_body = json::object();
 
+    /**
+     * @brief Adds a provider-specific textual request property.
+     *
+     * This keeps application adapters independent of the JSON implementation
+     * used by the OpenAI-compatible wire layer.
+     */
+    auto set_extra_text(std::string key, std::string value) -> void;
+
     [[nodiscard]] auto to_json() const -> std::string;
 };
 

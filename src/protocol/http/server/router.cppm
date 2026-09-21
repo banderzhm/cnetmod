@@ -107,6 +107,12 @@ public:
         -> task<bool>;
     auto sse_comment(std::string_view comment) -> task<bool>;
     auto sse_heartbeat() -> task<bool>;
+    /**
+     * @brief Sends the terminal event and completes the HTTP response body.
+     *
+     * On HTTP/1.1 this also writes the final chunk marker. The underlying
+     * keep-alive connection remains reusable after the logical response ends.
+     */
     auto sse_done() -> task<bool>;
 
     /**
@@ -185,7 +191,12 @@ public:
 private:
     friend class sse_stream;
     friend class router;
+    friend class server;
+    using stream_write_fn = std::function<task<
+        std::expected<void, std::error_code>>(
+        std::string_view, cnetmod::cancel_token&)>;
     void configure_sse(sse_stream_options options) noexcept;
+    void set_stream_writer(stream_write_fn writer);
     void expire_sse() noexcept;
     auto write_sse_bytes(std::string_view bytes) -> task<bool>;
     auto write_sse_frame(std::string frame) -> task<bool>;
@@ -206,6 +217,8 @@ private:
     std::optional<form_data> form_cache_;
     mutable bool body_stream_drained_ = false;
     sse_stream_state sse_state_ = sse_stream_state::not_started;
+    bool sse_chunked_ = false;
+    stream_write_fn stream_writer_;
     deadline sse_deadline_{};
     std::chrono::milliseconds sse_write_timeout_{5000};
     cnetmod::deadline deadline_{};
@@ -288,7 +301,10 @@ public:
     auto heartbeat() -> task<bool>;
 
     /**
-     * @brief Sends the terminal frame and closes this logical stream.
+     * @brief Sends the terminal frame and completes this logical response.
+     *
+     * A successful call makes an HTTP/1.1 client observe end-of-body without
+     * waiting for the transport connection to close.
      */
     auto finish() -> task<bool>;
 

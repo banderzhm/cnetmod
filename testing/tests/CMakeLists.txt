@@ -19,6 +19,7 @@ set(TEST_SOURCES
     test_task.cpp
     test_lazy.cpp
     test_database_datetime.cpp
+    test_configuration_properties.cpp
     test_channel.cpp
     test_mutex.cpp
     test_circuit_breaker.cpp
@@ -243,6 +244,12 @@ if(TARGET test_ssl_shutdown)
         CNETMOD_TLS_TEST_CERT="${redis_tls_fixture}/cert.pem"
         CNETMOD_TLS_TEST_KEY="${redis_tls_fixture}/key.pem")
     set_tests_properties(test_ssl_shutdown PROPERTIES TIMEOUT 5 LABELS "tls;shutdown")
+    if(TARGET test_http_sse)
+        add_dependencies(test_http_sse redis_tls_test_identity)
+        target_compile_definitions(test_http_sse PRIVATE
+            CNETMOD_HTTP_SSE_TEST_CERT="${redis_tls_fixture}/cert.pem"
+            CNETMOD_HTTP_SSE_TEST_KEY="${redis_tls_fixture}/key.pem")
+    endif()
     if(TARGET test_redis_tls)
         add_dependencies(test_redis_tls redis_tls_test_identity)
         target_compile_definitions(test_redis_tls PRIVATE

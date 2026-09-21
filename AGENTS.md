@@ -4480,6 +4480,21 @@ for (auto* worker_io : sctx.worker_ios()) {
 | `pooled_connection` 用完自动归还，作用域控制在最小 | 不要长期持有 `pooled_connection` 不放 |
 | 合理设置 `max_size` 避免数据库连接耗尽 | 不要设置 `max_size` 超过数据库 `max_connections` |
 | 使用 `pool_timeout` 防止获取连接无限等待 | 不要忽略 `async_get_connection()` 的错误 |
+
+## UTC `DATETIME` conversion
+
+`cnetmod.database.datetime` converts between Unix seconds and the timezone-free
+`calendar_datetime` value used for UTC wall-clock database columns:
+
+```cpp
+auto value = cnetmod::database::datetime_from_unix_seconds(seconds);
+auto seconds = cnetmod::database::unix_seconds_from_datetime(value);
+```
+
+Both directions return `std::optional` so invalid calendar components and years
+outside the database representation are explicit. ORM parameter APIs accept
+`calendar_datetime` and `std::optional<calendar_datetime>` directly through
+`to_query_parameter`; do not add local `w_time`/`p_time` wrappers.
 <!-- END SOURCE: skill/database/database-orm.md -->
 
 <!-- BEGIN SOURCE: skill/database/mongodb.md -->
@@ -6756,7 +6771,7 @@ auto replies = co_await cache.execute(batch);
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的默认 codec，可用满足同一静态接口的业务 codec 替换。
+- `json_codec` 是 `get_as` / `set_as` 的 Glaze 默认 codec；Redis 模块不会向消费方泄漏 nlohmann JSON。可用满足 `cnetmod::json::codec_for` 的业务 codec 替换。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
 
@@ -8695,6 +8710,10 @@ auto sse_heartbeat() -> task<bool>;
 #### `request_context::sse_done`
 **签名**: `auto sse_done() -> task<bool>`
 
+`sse_done()` 不只是发送应用层 `{"done":true}` 事件；在 HTTP/1.1 下还会写出分块正文的
+终止标记。客户端收到完整响应后即可结束本次流，不需要等待 keep-alive 连接关闭；同一连接
+仍可用于后续 HTTP 请求。
+
 #### `request_context::with_sse`
 
 **签名**:
@@ -8761,6 +8780,9 @@ HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`
 没有结构化的总时限看门狗。Application 的 recover 中间件发现 SSE 已
 提交后不会再尝试普通 JSON 响应，而是尽力写出具名 `error` 帧和终止帧；业务可在异常前
 自行写出更具体的错误契约。
+
+`finish()` 成功后会同时完成 SSE 语义和 HTTP 响应 framing。前端仍应以 `done` 事件作为
+业务完成信号，但不得依赖服务端关闭 TCP/TLS 连接来判断本次响应结束。
 
 `sse_stream_options::max_duration` 限制整条流的绝对生命周期，默认 120 秒；
 `write_timeout` 限制每次响应头或事件帧的写出时间，默认 5 秒。二者必须为正数。超时会取消

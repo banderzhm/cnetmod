@@ -1,10 +1,10 @@
 export module cnetmod.protocol.redis:redis_template;
 
 import std;
-import nlohmann.json;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.instrumentation.tracing;
+import cnetmod.json;
 import :client;
 import :pool;
 import :request;
@@ -42,40 +42,12 @@ struct template_options
 };
 
 /**
- * @brief JSON codec used by typed Redis template operations.
+ * @brief Glaze-backed JSON codec used by typed Redis template operations.
+ *
+ * Applications may still supply any codec satisfying cnetmod::json::codec_for
+ * to get_as() and set_as().
  */
-struct json_codec
-{
-    template <typename T>
-    [[nodiscard]] static auto encode(const T& value)
-        -> std::expected<std::string, std::error_code>
-    {
-        try
-        {
-            return nlohmann::json(value).dump();
-        }
-        catch (...)
-        {
-            return std::unexpected(
-                std::make_error_code(std::errc::invalid_argument));
-        }
-    }
-
-    template <typename T>
-    [[nodiscard]] static auto decode(std::string_view value)
-        -> std::expected<T, std::error_code>
-    {
-        try
-        {
-            return nlohmann::json::parse(value).template get<T>();
-        }
-        catch (...)
-        {
-            return std::unexpected(
-                std::make_error_code(std::errc::invalid_argument));
-        }
-    }
-};
+using json_codec = cnetmod::json::glaze_codec;
 
 /**
  * @brief Builds one ordered Redis pipeline without owning a connection.
