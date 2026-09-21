@@ -311,6 +311,36 @@ public:
     }
 
     /**
+     * @brief Executes an XML select and returns its provider-neutral result.
+     */
+    auto select_xml_result(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<query_result>
+    {
+        auto outcome = co_await gateway_->template read<query_result>(
+            [this, &registry, statement_id = std::string{statement_id},
+                parameters](auto& session) mutable -> task<query_result>
+            {
+                auto configured = this->configure(session);
+                if (!configured)
+                {
+                    query_result result;
+                    result.error_msg = configured.error();
+                    co_return result;
+                }
+                mapper<T, std::remove_reference_t<decltype(session)>> models{
+                    session};
+                co_return co_await models.select_xml_result(
+                    registry, statement_id, parameters);
+            });
+        if (outcome)
+            co_return std::move(*outcome);
+        query_result result;
+        result.error_msg = outcome.error();
+        co_return result;
+    }
+
+    /**
      * @brief Executes a strict single-row XML select.
      */
     auto get_one_xml(const mapper_registry& registry,

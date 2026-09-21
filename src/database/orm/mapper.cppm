@@ -13,6 +13,7 @@ import cnetmod.orm.repository_contract;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.xml_mapper;
 import cnetmod.orm.xml_mapper_registry;
+import cnetmod.orm.xml_statement_executor;
 
 namespace cnetmod::orm {
 
@@ -150,6 +151,20 @@ public:
         -> task<model_result<T>>
     {
         return xml_mapper<T, Session>{*session_, registry}.select(
+            statement_id, parameters);
+    }
+
+    /**
+     * @brief Executes an XML select without applying a model projection.
+     *
+     * Use this for arbitrary projections and infrastructure queries that need
+     * column metadata. The result remains provider-neutral.
+     */
+    auto select_xml_result(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<query_result>
+    {
+        return xml_statement_executor<Session>{*session_, registry}.select(
             statement_id, parameters);
     }
 

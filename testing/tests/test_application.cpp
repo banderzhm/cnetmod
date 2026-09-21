@@ -74,6 +74,8 @@ static_assert(std::same_as<decltype(std::declval<application::application_runtim
     cnetmod::orm::param_context xml_parameters;
     (void)co_await records.select_xml(
         registry, "RecordMapper.list", xml_parameters);
+    (void)co_await records.select_xml_result(
+        registry, "RecordMapper.projection", xml_parameters);
     (void)co_await records.get_one_xml(
         registry, "RecordMapper.one", xml_parameters);
     (void)co_await records.save(model);

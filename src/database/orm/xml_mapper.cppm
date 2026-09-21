@@ -12,8 +12,8 @@ import cnetmod.orm.repository_contract;
 import cnetmod.orm.result_mapper;
 import cnetmod.orm.result_map;
 import cnetmod.orm.sql_parameters;
-import cnetmod.orm.sql_dialect;
 import cnetmod.orm.xml_mapper_registry;
+import cnetmod.orm.xml_statement_executor;
 
 export namespace cnetmod::orm {
 
@@ -75,10 +75,9 @@ private:
         std::string statement_id, param_context parameters)
         -> task<model_result<T>>
     {
-        auto statement = build(*session, *registry, statement_id, parameters);
-        if (!statement)
-            co_return failure(statement.error());
-        auto result = co_await session->execute(std::move(*statement));
+        auto result = co_await xml_statement_executor<Session>{
+            *session, *registry}
+                          .select(statement_id, parameters);
         co_return map_select(*registry, statement_id, std::move(result));
     }
 
@@ -107,58 +106,10 @@ private:
         std::string statement_id, param_context parameters)
         -> task<model_result<T>>
     {
-        auto statement = build(*session, *registry, statement_id, parameters);
-        if (!statement)
-            co_return failure(statement.error());
-        auto result = co_await session->execute(std::move(*statement));
+        auto result = co_await xml_statement_executor<Session>{
+            *session, *registry}
+                          .execute(statement_id, parameters);
         co_return map(std::move(result), false);
-    }
-
-    static auto build(Session& session, const mapper_registry& registry,
-        std::string_view statement_id,
-        const param_context& parameters)
-        -> std::expected<parameterized_query, std::string>
-    {
-        const auto* statement = registry.find_statement(statement_id);
-        if (!statement)
-            return std::unexpected(
-                "XML statement not found: " + std::string{statement_id});
-        const auto name_space = registry.get_namespace(statement_id);
-        static const fragment_map empty_fragments;
-        const auto* fragments = registry.get_fragments(name_space);
-        try
-        {
-            dynamic_sql_processor processor{format_options{}};
-            auto built = processor.process(*statement, parameters,
-                fragments ? *fragments : empty_fragments);
-            if (session.dialect() == sql_dialect::postgresql)
-            {
-                std::string normalized;
-                normalized.reserve(built.sql.size() + built.params.size() * 2);
-                std::size_t parameter = 1;
-                for (std::size_t index = 0; index < built.sql.size(); ++index)
-                {
-                    if (built.sql[index] == '{' &&
-                        index + 1 < built.sql.size() &&
-                        built.sql[index + 1] == '}')
-                    {
-                        normalized += std::format("${}", parameter++);
-                        ++index;
-                    }
-                    else
-                    {
-                        normalized.push_back(built.sql[index]);
-                    }
-                }
-                built.sql = std::move(normalized);
-            }
-            return parameterized_query{
-                std::move(built.sql), std::move(built.params)};
-        }
-        catch (const std::exception& error)
-        {
-            return std::unexpected(error.what());
-        }
     }
 
     static auto map(query_result source, bool include_rows = true)

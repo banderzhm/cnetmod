@@ -3244,6 +3244,7 @@ Automatic provider selection succeeds only when exactly one supported provider o
 | `select_objects` | Return the first projected column. |
 | `page_maps` | Return a projected page and total count. |
 | `select_xml` | Execute a typed XML select. |
+| `select_xml_result` | Execute an XML select and return the provider-neutral column/row result. |
 | `get_one_xml` | Execute a cardinality-checked XML select. |
 | `save` | Insert one model. |
 | `update_by_id` | Update one model by primary key. |
@@ -3285,6 +3286,7 @@ Automatic provider selection succeeds only when exactly one supported provider o
 | `select_objects` | Select the first projected column. |
 | `select_maps_page` | Select a projected page. |
 | `select_xml` | Execute a typed XML select. |
+| `select_xml_result` | Execute an XML select without applying a model projection. |
 | `select_one_xml` | Execute a cardinality-checked XML select. |
 | `execute_xml` | Execute an XML write. |
 | `insert` | Insert one model. |
@@ -3412,6 +3414,17 @@ parameter and result types remain determined by `param_context` and `mapper<T>`.
 |---|---|---|---|
 | `application_repository<T>` / `repository<T>` | `select_xml` | `get_one_xml` | `execute_xml` |
 | transaction `mapper<T>` | `select_xml` | `select_one_xml` | `execute_xml` |
+
+For an arbitrary projection that cannot be represented by `T`, both layers
+also expose `select_xml_result()`. It returns
+`cnetmod::database::query_result`, including column metadata, rows, affected
+rows and native diagnostics. Despite serving an untyped projection, it still
+uses the same dynamic SQL builder, bound parameters, dialect normalization,
+interceptors, connection lease and telemetry as `select_xml()`.
+
+Do not use `select_xml_result()` as a migration-script escape hatch. Schema
+migrations remain infrastructure operations executed by
+`schema_migration_runner`; they are not model or XML mapper statements.
 
 `get_one_xml` and `select_one_xml` default to
 `single_result_policy::require_unique`: zero rows succeed with empty data, one

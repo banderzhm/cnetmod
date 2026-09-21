@@ -82,6 +82,11 @@ XML Mapper 不是另一套持久层。它只负责定义 SQL，执行仍沿用
 | 结果 | `CNETMOD_MODEL` 直接映射，或自动执行 `resultMap` 的 `<id>`、`<result>`、关联与集合映射 |
 | Provider | MySQL 与 PostgreSQL；PostgreSQL 自动转换为 `$1...$n` 占位符 |
 
+任意投影或基础设施查询可以调用 `select_xml_result()`，返回保留列元数据、行、
+affected rows 和数据库诊断信息的 `cnetmod::database::query_result`。它不是
+MySQL/PostgreSQL 原生协议对象，并且仍经过同一套参数绑定、拦截器、连接租约和遥测。
+迁移脚本不走这个入口；裸迁移 SQL 继续由 `schema_migration_runner` 执行。
+
 `${name}` 会直接进入 SQL，只能传入应用白名单选出的列名或排序方向，不能传入请求原文。
 `jdbcType/javaType/typeHandler/mode/numericScale` 元数据可以解析和保留，但当前只绑定参数值，
 不会执行 Java type handler 或存储过程 OUT 参数。

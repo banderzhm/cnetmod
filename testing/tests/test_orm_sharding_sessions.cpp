@@ -105,6 +105,7 @@ concept exposes_xml_statements = requires(Mapper& mapper,
     const orm::mapper_registry& registry,
     const orm::param_context& parameters) {
     mapper.select_xml(registry, "OrderMapper.find", parameters);
+    mapper.select_xml_result(registry, "OrderMapper.find", parameters);
     mapper.select_one_xml(registry, "OrderMapper.find", parameters);
     mapper.execute_xml(registry, "OrderMapper.update", parameters);
 };
@@ -883,6 +884,21 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
     ASSERT_EQ(selected.data.size(), 1U);
     ASSERT_EQ(selected.data.front().description, "xml");
     ASSERT_TRUE(client.last_sql.contains("WHERE id = {}"));
+
+    orm::query_result arbitrary;
+    arbitrary.columns = {{.name = "migration_version"},
+        {.name = "checksum"}};
+    arbitrary.rows = {{orm::field_value::from_int64(12),
+        orm::field_value::from_string("abc123")}};
+    arbitrary.info = "projection preserved";
+    client.responses.push_back(std::move(arbitrary));
+    auto untyped = cnetmod::sync_wait(orders.select_xml_result(
+        registry, "OrderMapper.findById", parameters));
+    ASSERT_TRUE(untyped.ok());
+    ASSERT_EQ(untyped.columns.size(), 2U);
+    ASSERT_EQ(untyped.columns.front().name, "migration_version");
+    ASSERT_EQ(untyped.rows.front().at(1).get_string(), "abc123");
+    ASSERT_EQ(untyped.info, "projection preserved");
 
     client.responses.push_back(
         routed_order_result({{7, "first"}, {8, "second"}}));

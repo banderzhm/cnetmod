@@ -84,6 +84,14 @@ telemetry.
 | Results | Direct `CNETMOD_MODEL` mapping or automatic `resultMap` handling for `<id>`, `<result>`, associations and collections |
 | Providers | MySQL and PostgreSQL; PostgreSQL placeholders become `$1...$n` |
 
+Arbitrary projections and infrastructure queries can call
+`select_xml_result()`. It returns a `cnetmod::database::query_result` retaining
+column metadata, rows, affected rows and database diagnostics. This is a
+provider-neutral result rather than a native MySQL/PostgreSQL protocol object,
+and it still traverses the normal binding, interceptor, lease and telemetry
+pipeline. Migration scripts do not use this entry point; raw migration SQL
+continues through `schema_migration_runner`.
+
 `${name}` inserts text directly and must only receive application allow-listed
 identifiers such as known sort columns. Never forward request text into it.
 `jdbcType/javaType/typeHandler/mode/numericScale` metadata is parsed and

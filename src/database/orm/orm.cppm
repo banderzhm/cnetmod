@@ -23,6 +23,7 @@ export import cnetmod.orm.sql_dialect;
 export import cnetmod.orm.dynamic_sql;
 export import cnetmod.orm.xml_mapper_parser;
 export import cnetmod.orm.xml_mapper_registry;
+export import cnetmod.orm.xml_statement_executor;
 export import cnetmod.orm.query_wrapper;
 export import cnetmod.orm.logical_delete;
 export import cnetmod.orm.multi_tenant;

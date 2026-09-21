@@ -3,6 +3,7 @@ export module cnetmod.application.orm_repository;
 import std;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
+import cnetmod.database.sql_query_data;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.database_session;
 import cnetmod.orm.model_metadata;
@@ -187,6 +188,21 @@ public:
                             &parameters](auto& repository)
             {
                 return repository.select_xml(
+                    registry, statement_id, parameters);
+            });
+    }
+
+    /**
+     * @brief Executes an XML select without a model projection.
+     */
+    auto select_xml_result(const orm::mapper_registry& registry,
+        std::string_view statement_id, const orm::param_context& parameters)
+        -> task<database::query_result>
+    {
+        return dispatch([&registry, statement_id,
+                            &parameters](auto& repository)
+            {
+                return repository.select_xml_result(
                     registry, statement_id, parameters);
             });
     }
