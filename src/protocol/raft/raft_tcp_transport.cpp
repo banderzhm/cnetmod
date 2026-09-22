@@ -1785,8 +1785,8 @@ auto raft_tcp_transport::cleanup_snapshot_files_blocking(
         return std::unexpected(ec);
 
     std::vector<snapshot_file_candidate> files;
-    for (std::filesystem::directory_iterator it{directory, ec}, end;
-         !ec && it != end; it.increment(ec))
+    for (std::filesystem::directory_iterator it{directory, ec};
+         !ec && it != std::default_sentinel; it.increment(ec))
     {
         if (!it->is_regular_file(ec) || ec)
             continue;

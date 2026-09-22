@@ -27,8 +27,10 @@ auto mapper_registry::load_directory(const std::filesystem::path& dir)
 {
     if (!std::filesystem::is_directory(dir))
         return std::unexpected("not a directory");
-    for (auto& entry : std::filesystem::directory_iterator(dir))
+    for (std::filesystem::directory_iterator iterator{dir};
+        iterator != std::default_sentinel; ++iterator)
     {
+        const auto& entry = *iterator;
         if (entry.is_regular_file() && entry.path().extension() == ".xml")
         {
             auto result = load_file(entry.path());

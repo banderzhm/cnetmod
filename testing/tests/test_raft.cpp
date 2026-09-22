@@ -1347,8 +1347,10 @@ TEST(raft_snapshot_retention_removes_old_files_beyond_keep_last)
 
     ASSERT_TRUE(cleaned);
     std::size_t remaining = 0;
-    for (const auto& item : std::filesystem::directory_iterator{dir})
+    for (std::filesystem::directory_iterator iterator{dir};
+        iterator != std::default_sentinel; ++iterator)
     {
+        const auto& item = *iterator;
         if (item.path().extension() == ".snapshot")
             ++remaining;
     }

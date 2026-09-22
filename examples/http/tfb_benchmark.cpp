@@ -62,6 +62,15 @@ static auto random_world_id() -> int {
     return dist(rng);
 }
 
+static void write_json_response(http::request_context& ctx, const json& value) {
+    auto encoded = cnetmod::json::write_document(value);
+    if (!encoded) {
+        ctx.text(http::status::internal_server_error, "JSON serialization failed");
+        return;
+    }
+    ctx.json(http::status::ok, *encoded);
+}
+
 /// HTML-escape for Fortunes
 static auto html_escape(std::string_view s) -> std::string {
     std::string out;
@@ -84,7 +93,8 @@ static auto html_escape(std::string_view s) -> std::string {
 // =============================================================================
 
 auto handle_json(http::request_context& ctx) -> cn::task<void> {
-    ctx.json(http::status::ok, json{{"message", "Hello, World!"}}.dump());
+    write_json_response(
+        ctx, cnetmod::json::object({{"message", "Hello, World!"}}));
     co_return;
 }
 
@@ -120,10 +130,10 @@ auto make_db_handler(cn::mysql::sharded_connection_pool& pool) -> http::handler_
         }
 
         auto& row = result.rows[0];
-        ctx.json(http::status::ok, json{
+        write_json_response(ctx, cnetmod::json::object({
             {"id",           row[0].get_int64()},
             {"randomNumber", row[1].get_int64()},
-        }.dump());
+        }));
         co_return;
     };
 }
@@ -143,7 +153,7 @@ auto make_queries_handler(cn::mysql::sharded_connection_pool& pool) -> http::han
         }
         auto& conn = *conn_result;
 
-        json arr = json::array();
+        auto arr = cnetmod::json::array();
         for (int i = 0; i < n; ++i) {
             int id = random_world_id();
             auto result = co_await conn->query(
@@ -151,10 +161,12 @@ auto make_queries_handler(cn::mysql::sharded_connection_pool& pool) -> http::han
             if (result.is_err() || result.rows.empty()) continue;
 
             auto& row = result.rows[0];
-            arr.push_back({{"id", row[0].get_int64()}, {"randomNumber", row[1].get_int64()}});
+            arr.get_array().push_back(cnetmod::json::object(
+                {{"id", row[0].get_int64()},
+                    {"randomNumber", row[1].get_int64()}}));
         }
 
-        ctx.json(http::status::ok, arr.dump());
+        write_json_response(ctx, arr);
         co_return;
     };
 }
@@ -251,11 +263,12 @@ auto make_updates_handler(cn::mysql::sharded_connection_pool& pool) -> http::han
         }
 
         // Build JSON response
-        json arr = json::array();
+        auto arr = cnetmod::json::array();
         for (auto& w : worlds)
-            arr.push_back({{"id", w.id}, {"randomNumber", w.random_number}});
+            arr.get_array().push_back(cnetmod::json::object(
+                {{"id", w.id}, {"randomNumber", w.random_number}}));
 
-        ctx.json(http::status::ok, arr.dump());
+        write_json_response(ctx, arr);
         co_return;
     };
 }
