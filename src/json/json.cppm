@@ -20,18 +20,7 @@ enum class errc
 
 class document;
 
-/**
- * @brief Structural limits applied before a JSON document is materialized.
- */
-struct parse_options
-{
-    std::size_t max_depth = 256;
-    bool reject_duplicate_keys = true;
-};
-
 [[nodiscard]] auto parse_document(std::string_view input)
-    -> std::expected<document, std::error_code>;
-[[nodiscard]] auto parse_document(std::string_view input, parse_options options)
     -> std::expected<document, std::error_code>;
 [[nodiscard]] auto write_document(const document& value)
     -> std::expected<std::string, std::error_code>;

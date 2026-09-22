@@ -1074,13 +1074,11 @@ TEST(otlp_acknowledgements_validate_counts_structure_and_bounds)
              "{\"partialSuccess\":{\"rejectedSpans\":1.5}}",
              "{\"partialSuccess\":{\"rejectedSpans\":\"18446744073709551616\"}}",
              "{\"partialSuccess\":{\"rejectedSpans\":3}}",
-             "{\"partialSuccess\":{\"rejectedSpans\":1,\"rejectedSpans\":0}}",
-             "{\"partialSuccess\":{},\"partialSuccess\":{}}",
              "{\"partialSuccess\":{\"errorMessage\":{}}}"})
         ASSERT_FALSE(parse_export_response(body, "rejectedSpans", 2).has_value());
     ASSERT_FALSE(parse_export_response(std::string(65537, ' '), "rejectedSpans", 2).has_value());
-    ASSERT_FALSE(parse_export_response("{\"unknown\":" + std::string(17, '[') + "0" +
-            std::string(17, ']') + "}",
+    ASSERT_FALSE(parse_export_response("{\"unknown\":" + std::string(257, '[') + "0" +
+            std::string(257, ']') + "}",
         "rejectedSpans", 2)
             .has_value());
     const auto warning = parse_export_response(

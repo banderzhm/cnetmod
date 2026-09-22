@@ -106,6 +106,18 @@ TEST(framework_document_null_lookup_and_numeric_equality_are_stable)
         cnetmod::json::document(std::int64_t{-2}));
 }
 
+TEST(framework_document_uses_native_parser_boundaries)
+{
+    const auto duplicate = cnetmod::json::parse_document(
+        R"({"value":1,"value":2})");
+    ASSERT_TRUE(duplicate.has_value());
+    ASSERT_EQ(duplicate->at("value").get<std::uint64_t>(), 2U);
+
+    ASSERT_FALSE(cnetmod::json::parse_document("{}{}").has_value());
+    ASSERT_FALSE(cnetmod::json::parse_document(
+        std::string(257, '[') + "0" + std::string(257, ']')).has_value());
+}
+
 TEST(json_codec_spi_accepts_an_application_codec)
 {
     auto encoded = cnetmod::json::write<custom_document, custom_codec>(

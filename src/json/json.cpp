@@ -10,121 +10,9 @@ import std;
 
 namespace cnetmod::json {
 namespace {
-    class structural_validator
+    struct document_read_options : glz::opts
     {
-    public:
-        structural_validator(std::string_view input, parse_options options)
-            : input_(input), options_(options)
-        {
-        }
-
-        [[nodiscard]] auto validate() -> bool
-        {
-            skip_space();
-            if (!scan_value(0)) return false;
-            skip_space();
-            return position_ == input_.size();
-        }
-
-    private:
-        auto skip_space() -> void
-        {
-            while (position_ < input_.size() &&
-                (input_[position_] == ' ' || input_[position_] == '\n' ||
-                    input_[position_] == '\r' || input_[position_] == '\t'))
-                ++position_;
-        }
-
-        [[nodiscard]] auto scan_string(std::string* decoded = nullptr) -> bool
-        {
-            if (position_ >= input_.size() || input_[position_] != '"') return false;
-            const auto begin = position_++;
-            bool escaped = false;
-            while (position_ < input_.size())
-            {
-                const auto character = input_[position_++];
-                if (escaped)
-                {
-                    escaped = false;
-                    continue;
-                }
-                if (character == '\\')
-                {
-                    escaped = true;
-                    continue;
-                }
-                if (character != '"') continue;
-                if (decoded != nullptr)
-                {
-                    const auto token = input_.substr(begin, position_ - begin);
-                    auto key = glz::read_json<std::string>(token);
-                    if (!key) return false;
-                    *decoded = std::move(*key);
-                }
-                return true;
-            }
-            return false;
-        }
-
-        [[nodiscard]] auto scan_compound(char open, char close,
-            std::size_t depth) -> bool
-        {
-            if (depth >= options_.max_depth) return false;
-            ++position_;
-            skip_space();
-            if (position_ < input_.size() && input_[position_] == close)
-            {
-                ++position_;
-                return true;
-            }
-
-            std::unordered_set<std::string> keys;
-            while (position_ < input_.size())
-            {
-                if (open == '{')
-                {
-                    std::string key;
-                    if (!scan_string(&key)) return false;
-                    if (options_.reject_duplicate_keys && !keys.emplace(std::move(key)).second)
-                        return false;
-                    skip_space();
-                    if (position_ >= input_.size() || input_[position_++] != ':') return false;
-                    skip_space();
-                }
-                if (!scan_value(depth + 1)) return false;
-                skip_space();
-                if (position_ >= input_.size()) return false;
-                if (input_[position_] == close)
-                {
-                    ++position_;
-                    return true;
-                }
-                if (input_[position_++] != ',') return false;
-                skip_space();
-            }
-            return false;
-        }
-
-        [[nodiscard]] auto scan_value(std::size_t depth) -> bool
-        {
-            skip_space();
-            if (position_ >= input_.size()) return false;
-            if (input_[position_] == '{') return scan_compound('{', '}', depth);
-            if (input_[position_] == '[') return scan_compound('[', ']', depth);
-            if (input_[position_] == '"') return scan_string();
-
-            const auto begin = position_;
-            while (position_ < input_.size() && input_[position_] != ',' &&
-                input_[position_] != ']' && input_[position_] != '}' &&
-                input_[position_] != ' ' && input_[position_] != '\n' &&
-                input_[position_] != '\r' && input_[position_] != '\t')
-                ++position_;
-            return position_ != begin;
-        }
-
-        std::string_view input_;
-        parse_options options_;
-        std::size_t position_ = 0;
+        bool validate_trailing_whitespace = true;
     };
 
     class category final : public std::error_category
@@ -196,17 +84,10 @@ auto make_error_code(errc value) noexcept -> std::error_code
 
 auto parse_document(std::string_view input) -> std::expected<document, std::error_code>
 {
-    return parse_document(input, {});
-}
-
-auto parse_document(std::string_view input, parse_options options)
-    -> std::expected<document, std::error_code>
-{
-    if (!structural_validator{input, options}.validate())
-        return std::unexpected(make_error_code(errc::parse_failed));
-    auto parsed = glz::read_json<glz::generic_u64>(input);
-    if (!parsed) return std::unexpected(make_error_code(errc::parse_failed));
-    return from_glaze(*parsed);
+    glz::generic_u64 parsed;
+    const auto error = glz::read<document_read_options{}>(parsed, input);
+    if (error) return std::unexpected(make_error_code(errc::parse_failed));
+    return from_glaze(parsed);
 }
 
 auto write_document(const document& value) -> std::expected<std::string, std::error_code>

@@ -12,8 +12,7 @@ auto parse_export_response(std::string_view body, std::string_view rejected_fiel
         return std::nullopt;
     try
     {
-        const auto parsed = cnetmod::json::parse_document(body,
-            {.max_depth = 16, .reject_duplicate_keys = true});
+        const auto parsed = cnetmod::json::parse_document(body);
         if (!parsed || !parsed->is_object())
             return std::nullopt;
         export_acknowledgement result;
