@@ -208,7 +208,7 @@ export enum class http_version
     http_1_0,
     http_1_1,
     http_2, // HTTP/2 (RFC 9113)
-    http_3, // HTTP/3 (RFC 9114) — reserved for future
+    http_3, // HTTP/3 (RFC 9114)
 };
 
 export constexpr auto version_to_string(http_version v) noexcept

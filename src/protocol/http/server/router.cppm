@@ -48,6 +48,37 @@ export class sse_stream;
 export using sse_handler_fn =
     std::function<task<void>(request_context&, sse_stream&)>;
 
+/**
+ * @brief Owns typed values whose lifetime is exactly one HTTP request.
+ *
+ * Middleware may bind an authenticated principal or another request service.
+ * Explicit request ownership remains correct when a coroutine resumes on a
+ * different thread and prevents cross-request state leakage.
+ */
+export class request_scope
+{
+public:
+    template <typename T>
+    void bind(std::shared_ptr<T> value)
+    {
+        if (!value)
+            throw std::invalid_argument("request-scoped value cannot be null");
+        values_.insert_or_assign(std::type_index{typeid(T)}, std::move(value));
+    }
+
+    template <typename T>
+    [[nodiscard]] auto find() const noexcept -> const T*
+    {
+        const auto found = values_.find(std::type_index{typeid(T)});
+        return found == values_.end()
+            ? nullptr
+            : static_cast<const T*>(found->second.get());
+    }
+
+private:
+    std::unordered_map<std::type_index, std::shared_ptr<void>> values_;
+};
+
 export struct route_params
 {
     cnetmod::flat_map<std::string, std::string, std::less<>> named;
@@ -83,6 +114,8 @@ public:
         -> std::string_view;
     [[nodiscard]] auto wildcard() const noexcept -> std::string_view;
     [[nodiscard]] auto params() const noexcept -> const route_params&;
+    [[nodiscard]] auto scope() noexcept -> request_scope&;
+    [[nodiscard]] auto scope() const noexcept -> const request_scope&;
     void text(int status_code, std::string_view text_body);
     void json(int status_code, std::string_view json_body);
     void html(int status_code, std::string_view html_body);
@@ -223,6 +256,7 @@ private:
     std::chrono::milliseconds sse_write_timeout_{5000};
     cnetmod::deadline deadline_{};
     cnetmod::cancel_token cancellation_;
+    request_scope scope_;
 
     struct operation_registration
     {

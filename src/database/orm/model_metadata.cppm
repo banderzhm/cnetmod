@@ -21,6 +21,8 @@ enum class col_flag : std::uint16_t
     fill_insert_update = 1 << 6,
     tenant_id = 1 << 7,
     unique = 1 << 8,
+    data_partition = 1 << 9,
+    data_owner = 1 << 10,
 };
 
 // Kept constexpr because downstream model declarations form compile-time flag

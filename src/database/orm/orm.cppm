@@ -10,6 +10,7 @@ export import cnetmod.orm.mapper;
 export import cnetmod.orm.repository;
 export import cnetmod.orm.interceptor_chain;
 export import cnetmod.orm.automatic_interceptors;
+export import cnetmod.orm.data_permission;
 export import cnetmod.orm.schema_migration_runner;
 export import cnetmod.orm.id_generation;
 export import cnetmod.orm.model_metadata;

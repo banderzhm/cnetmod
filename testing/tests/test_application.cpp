@@ -1754,9 +1754,10 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
         {.export_traces = false, .export_metrics = false, .export_logs = false}};
     application::task_supervisor supervisor{*io};
     application::service_registry services;
+    application::application_configuration configuration;
     std::stop_source stopping;
     application::application_runtime runtime{*io, cpu_pool, supervisor,
-        telemetry, services, stopping.get_token()};
+        telemetry, services, stopping.get_token(), configuration};
     bool background_ran = false;
     auto accepted = runtime.spawn_managed("runtime-test",
         [&](cnetmod::cancel_token& token)
@@ -2190,6 +2191,36 @@ TEST(application_configuration_parses_opt_in_orm_sharding)
     ASSERT_TRUE(orders.distributed_transactions);
 }
 
+TEST(application_configuration_validates_and_exposes_jwt_security)
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        "cnetmod-application-security-test.json";
+    {
+        std::ofstream output{path};
+        output << R"({"security":{"jwt":{"enabled":true,"issuer":"test-issuer","secret":"0123456789abcdef0123456789abcdef"}},"management":{"enabled":false},"logging":{"manage_lifecycle":false}})";
+    }
+    auto host = application::application_builder{"security-configuration-test"}
+                    .configuration_file(path)
+                    .build();
+    std::filesystem::remove(path);
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    ASSERT_TRUE(host->configuration().security.jwt.enabled);
+    ASSERT_EQ(host->configuration().security.jwt.issuer, "test-issuer");
+    ASSERT_EQ(host->runtime().configuration().security.jwt.secret.size(), 32U);
+
+    auto invalid = application::application_builder{"invalid-security"}
+                       .configure([](application::application_configuration& value)
+                           {
+                               value.security.jwt.enabled = true;
+                               value.security.jwt.issuer = "test-issuer";
+                               value.security.jwt.secret = "too-short";
+                           })
+                       .build();
+    ASSERT_FALSE(invalid.has_value());
+}
+
 TEST(application_configuration_rejects_invalid_orm_sharding)
 {
     auto empty = application::application_builder{"invalid-sharding"}
@@ -2262,8 +2293,7 @@ services:
     ASSERT_EQ(host->configuration().name, "builder-name");
     ASSERT_EQ(host->configuration().http.port, std::uint16_t{18083});
     ASSERT_EQ(host->configuration().services.at("primary").instance, "cache");
-    ASSERT_EQ(host->configuration().services.at("primary").properties.at("password")
-                  .get<std::string>(),
+    ASSERT_EQ(host->configuration().services.at("primary").properties.at("password").get<std::string>(),
         "yaml-secret");
 }
 

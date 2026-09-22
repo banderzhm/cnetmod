@@ -615,7 +615,7 @@ namespace {
                     std::min(credit_batch, count - index), false, runtime.cancellation));
             auto delivery = require_value(co_await receiver.receive(runtime.cancellation));
             auto body = message_body_to_json(delivery.payload.body);
-            const auto sequence = body.get<std::uint64_t>();
+            const auto sequence = body.as<std::uint64_t>();
             if (!seen.insert(sequence).second)
                 ++duplicates;
             if (!delivery.settled)

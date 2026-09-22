@@ -33,9 +33,9 @@ struct orm_json_user
 };
 
 CNETMOD_MODEL(orm_json_user, "users",
-    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(id, "id", bigint, PK | DATA_OWNER),
     CNETMOD_FIELD(name, "name", varchar),
-    CNETMOD_FIELD(status, "status", int_))
+    CNETMOD_FIELD(status, "status", int_, DATA_PARTITION))
 
 struct orm_crud_user
 {
@@ -596,6 +596,30 @@ TEST(dynamic_sql_foreach_binds_iteration_index_as_a_parameter)
     ASSERT_EQ(built.params[1].int_val, 10);
     ASSERT_EQ(built.params[2].int_val, 1);
     ASSERT_EQ(built.params[3].int_val, 20);
+}
+
+TEST(orm_data_permission_interceptor_rewrites_typed_and_xml_sql)
+{
+    orm::data_permission_scope scope{
+        .include_owner = true,
+        .owner_id = 7,
+        .partition_ids = {2, 3},
+    };
+    orm::data_permission_interceptor<orm_json_user> policy{std::move(scope)};
+    auto rewritten = policy.apply(orm::sql_operation::query,
+        orm::intercepted_statement{
+            .sql = "select u.id from users AS u where u.name = {} order by u.id",
+            .parameters = {orm::param_value::from_string("Ada")},
+        });
+    ASSERT_TRUE(rewritten.has_value());
+    ASSERT_TRUE(rewritten->sql.find("u.status IN ({}, {})") !=
+        std::string::npos);
+    ASSERT_TRUE(rewritten->sql.find("u.id = {}") != std::string::npos);
+    ASSERT_EQ(rewritten->parameters.size(), 4U);
+    ASSERT_EQ(rewritten->parameters[0].int_val, 2);
+    ASSERT_EQ(rewritten->parameters[1].int_val, 3);
+    ASSERT_EQ(rewritten->parameters[2].int_val, 7);
+    ASSERT_EQ(rewritten->parameters[3].str_val, "Ada");
 }
 
 TEST(expression_engine_sequences_binary_operator_parsing_portably)

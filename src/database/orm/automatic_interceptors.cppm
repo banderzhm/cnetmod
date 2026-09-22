@@ -6,6 +6,7 @@ import cnetmod.orm.logical_delete;
 import cnetmod.orm.multi_tenant;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.automatic_field_fill;
+import cnetmod.orm.data_permission;
 
 namespace cnetmod::orm {
 
@@ -19,6 +20,7 @@ export struct automatic_interceptor_options
     bool sql_safety = true;
     bool field_fill = true;
     bool optimistic_lock = true;
+    std::shared_ptr<const data_permission_scope> data_permission;
 };
 
 /**
@@ -74,6 +76,19 @@ auto make_automatic_interceptor_chain(
                     statement.sql = policy.template transform_delete_to_update<T>(
                         std::move(statement.sql));
                 return statement;
+            });
+        if (!added)
+            return std::unexpected(added.error());
+    }
+    if (options.data_permission)
+    {
+        auto policy = data_permission_interceptor<T>{*options.data_permission};
+        auto added = chain->add("data_permission", 150,
+            [policy = std::move(policy)](sql_operation operation,
+                intercepted_statement statement) mutable
+                -> std::expected<intercepted_statement, std::string>
+            {
+                return policy.apply(operation, std::move(statement));
             });
         if (!added)
             return std::unexpected(added.error());

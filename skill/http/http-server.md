@@ -1,6 +1,6 @@
 # HTTP Server
 
-> 高性能异步 HTTP/HTTPS 服务器，支持路由、中间件、SSE、Swagger、HTTP/2 与文件上传。
+> 高性能异步 HTTP/HTTPS 服务器栈，支持 HTTP/1.1、HTTP/2、HTTP/3、路由、中间件、SSE、Swagger 与文件上传。
 
 **import**: `import cnetmod.protocol.http;`
 **CMake**: `-DCNETMOD_ENABLE_HTTP=ON`
@@ -11,11 +11,13 @@
 - 我要注册路由 → [看这里](#路由注册)
 - 我要处理请求参数 → [看这里](#request_context--请求访问)
 - 我要返回 JSON/HTML/文本 → [看这里](#response--响应构建)
+- 我要先返回 202、再运行后台任务 → [参见 Application 托管任务](../infra/application.md#http-先响应后台继续执行)
 - 我要推送实时事件 (SSE) → [看这里](#sse-server-sent-events)
 - 我要生成 API 文档 → [看这里](#swaggeropenapi-文档)
 - 我要处理文件上传 → [看这里](#multipartform-data--文件上传)
 - 我要设置 Cookie → [看这里](#cookie-处理)
 - 我要启用 HTTP/2 → [看这里](#http2-支持)
+- 我要启用 HTTP/3 / QUIC → [看这里](#http3--quic-支持)
 - 我要升级为 WebSocket → [参见 websocket.md](websocket.md)
 
 ## API 参考
@@ -480,6 +482,44 @@ import cnetmod.protocol.http;
 
 ---
 
+### HTTP/3 / QUIC 支持
+
+HTTP/3（RFC 9114）已经包含完整客户端和服务端，但它不是 TCP `http::server` 上的
+另一个 ALPN 分支。HTTP/1.1 与 HTTP/2 共用 TCP/TLS listener；HTTP/3 使用独立的 UDP
+listener、QUIC、TLS 1.3 和 ALPN `h3`，因此需要创建 `http::v3::http3_server`。两者可以
+绑定同一个数字端口，因为传输协议分别是 TCP 和 UDP。
+
+启用条件：
+
+```text
+-DCNETMOD_ENABLE_HTTP=ON
+-DCNETMOD_ENABLE_SSL=ON
+-DCNETMOD_ENABLE_QUIC=ON
+-DCNETMOD_ENABLE_BORINGSSL_QUIC=ON
+```
+
+```cpp
+import cnetmod.protocol.http.v3.server;
+
+namespace h3 = cnetmod::http::v3;
+
+auto server = h3::make_http3_server(io, tls,
+    cnetmod::endpoint{cnetmod::ipv4_address::any(), 8443},
+    [](h3::http3_request& request,
+        h3::http3_response& response) -> std::error_code {
+        response.status = cnetmod::http::status::ok;
+        response.body = R"({"protocol":"h3"})";
+        return {};
+    });
+auto started = server->start();
+```
+
+HTTP/3 还支持异步 handler、请求/响应流式正文、QPACK 动态表、0-RTT、连接迁移、
+Datagram、WebTransport、实验性 Multipath QUIC 和 Path MTU Discovery。完整配置、取消、
+背压和生命周期规则参见 [HTTP/3 / QUIC](http3-quic.md)。
+
+---
+
 ### multipart/form-data — 文件上传
 
 #### `form_data`
@@ -713,6 +753,7 @@ auto main() -> int {
 - `examples/http/http_demo.cpp` — 底层 HTTP 请求/响应解析
 - `examples/http/hight_plus_http.cpp` — 高级功能（Cookie、SSE 等）
 - `examples/http/http2_demo.cpp` — HTTP/2 TLS + ALPN 示例
+- `skill/http/http3-quic.md` — HTTP/3 / QUIC 客户端与服务端完整指南
 - `examples/http/websocket_upgrade_demo.cpp` — HTTP 升级至 WebSocket
 - `examples/http/multicore_http.cpp` — 多核 server_context + pool 卸载完整示例
 - `examples/http/tfb_benchmark.cpp` — TechEmpower 基准测试（多核 + 数据库连接池）

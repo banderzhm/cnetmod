@@ -174,6 +174,31 @@ export struct orm_configuration
 };
 
 /**
+ * @brief Validated JWT settings owned by the application configuration.
+ *
+ * Secrets are resolved by the central configuration pipeline and are never
+ * read directly by middleware or business code.
+ */
+export struct jwt_configuration
+{
+    bool enabled = false;
+    std::string issuer;
+    std::string secret;
+
+    auto operator==(const jwt_configuration&) const -> bool = default;
+};
+
+/**
+ * @brief Security settings shared by application infrastructure.
+ */
+export struct security_configuration
+{
+    jwt_configuration jwt;
+
+    auto operator==(const security_configuration&) const -> bool = default;
+};
+
+/**
  * @brief Complete immutable-at-runtime application configuration model.
  */
 export struct application_configuration
@@ -188,6 +213,7 @@ export struct application_configuration
     lifecycle_policy lifecycle;
     health_policy health;
     orm_configuration orm;
+    security_configuration security;
     bool install_signal_handlers = true;
     std::map<std::string, configured_service, std::less<>> services;
 };

@@ -248,7 +248,7 @@ namespace {
     auto apply_document(application_configuration& result,
         const cnetmod::json::document& root) -> bool
     {
-        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "orm", "services"}))
+        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "orm", "security", "services"}))
             return false;
         try
         {
@@ -460,6 +460,19 @@ namespace {
                                 topology_name, std::move(configured));
                         }
                     }
+                }
+            }
+            if (const auto* item = cnetmod::json::find(root, "security"))
+            {
+                if (!keys_are_known(*item, {"jwt"}))
+                    return false;
+                if (const auto* jwt = cnetmod::json::find(*item, "jwt"))
+                {
+                    if (!keys_are_known(*jwt, {"enabled", "issuer", "secret"}))
+                        return false;
+                    assign(*jwt, "enabled", result.security.jwt.enabled);
+                    assign(*jwt, "issuer", result.security.jwt.issuer);
+                    assign(*jwt, "secret", result.security.jwt.secret);
                 }
             }
             if (const auto* item = cnetmod::json::find(root, "services"))
@@ -751,6 +764,11 @@ auto validate_configuration(const application_configuration& value)
         (value.management.address.empty() || value.management.port == 0U))
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
+    if (value.security.jwt.enabled &&
+        (value.security.jwt.issuer.empty() ||
+            value.security.jwt.secret.size() < 32U))
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
     for (const auto& [name, service] : value.services)
     {
         if (name.empty() || service.name.empty() || service.instance.empty() ||
@@ -911,6 +929,7 @@ static auto prepare_configuration_reload(application_configuration& active,
         active.lifecycle.http_drain_timeout != candidate.lifecycle.http_drain_timeout ||
         active.lifecycle.telemetry_flush_timeout != candidate.lifecycle.telemetry_flush_timeout ||
         active.orm != candidate.orm ||
+        active.security != candidate.security ||
         active.services.size() != candidate.services.size();
     if (!result.restart_required)
     {

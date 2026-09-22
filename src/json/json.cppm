@@ -14,6 +14,12 @@ export module cnetmod.json;
 
 import std;
 
+// Glaze's parser templates refer to this helper namespace during downstream
+// instantiation. Reopen it in the exported module surface so MSVC can resolve
+// the namespace name without exposing a second JSON abstraction.
+export namespace glz::unicode {
+}
+
 export namespace cnetmod::json {
 
 enum class errc

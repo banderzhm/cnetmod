@@ -31,6 +31,8 @@
 #define FILL_INSERT_UPDATE ::cnetmod::orm::col_flag::fill_insert_update
 #define TENANT_ID ::cnetmod::orm::col_flag::tenant_id
 #define UNIQUE_KEY ::cnetmod::orm::col_flag::unique
+#define DATA_PARTITION ::cnetmod::orm::col_flag::data_partition
+#define DATA_OWNER ::cnetmod::orm::col_flag::data_owner
 
 // ID strategy composite flag aliases
 // UUID_PK   — Primary key + UUID strategy (C++ type uses orm::uuid, DDL generates CHAR(36))

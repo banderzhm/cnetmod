@@ -2,16 +2,23 @@ module cnetmod.application.runtime;
 
 import cnetmod.coro.cancel;
 import cnetmod.protocol.http.middleware.compress;
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.security.jwt;
+#endif
 #ifdef CNETMOD_HAS_CHAT_MODEL
 import cnetmod.application.chat_model_service;
+#endif
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
+import cnetmod.application.redis;
 #endif
 
 namespace cnetmod::application {
 
 application_runtime::application_runtime(io_context& io, thread_pool& cpu_pool,
     task_supervisor& supervisor, observability::telemetry_hub& telemetry,
-    service_registry& services, std::stop_token cancellation) noexcept
-    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), services_(services), cancellation_(cancellation), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
+    service_registry& services, std::stop_token cancellation,
+    const application_configuration& configuration) noexcept
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), services_(services), cancellation_(cancellation), configuration_(configuration), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
 {
 }
 
@@ -41,6 +48,33 @@ auto application_runtime::json() noexcept -> json_template&
 {
     return json_;
 }
+
+auto application_runtime::configuration() const noexcept
+    -> const application_configuration&
+{
+    return configuration_;
+}
+
+#ifdef CNETMOD_HAS_SSL
+auto application_runtime::verify_jwt(std::string_view token,
+    std::string_view secret)
+    -> task<std::expected<security::jwt_claims, std::string>>
+{
+    co_return co_await security::verify_jwt(cpu_pool_, io_, token, secret);
+}
+#endif
+
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
+auto application_runtime::redis(std::string_view instance,
+    redis::template_options options)
+    -> std::expected<redis::redis_template, std::error_code>
+{
+    auto service = services_.require<redis_service>(instance);
+    if (!service)
+        return std::unexpected(service.error());
+    return service->get().make_template(std::move(options));
+}
+#endif
 
 #ifdef CNETMOD_HAS_CHAT_MODEL
 auto application_runtime::chat_model(std::string_view instance,

@@ -316,6 +316,14 @@ if(MSVC)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/http/client/http_client.cpp"
         PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
     )
+
+    # The RAG implementation imports the native Glaze document graph and
+    # instantiates several coroutine state machines. Give that translation unit
+    # a larger compiler heap on MSVC without increasing memory use elsewhere.
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/openai/rag.cpp"
+        PROPERTIES COMPILE_OPTIONS "/Zm200"
+    )
 endif()
 
 # Filter by platform: Exclude I/O backend modules not needed for current platform

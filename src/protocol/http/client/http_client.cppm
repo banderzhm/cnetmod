@@ -116,7 +116,7 @@ export struct client_options
 };
 
 // =============================================================================
-// client — Unified HTTP/HTTPS Client (HTTP/1.1 and HTTP/2)
+// client — Unified HTTP/HTTPS Client (HTTP/1.1, HTTP/2, and HTTP/3)
 // =============================================================================
 
 export class client

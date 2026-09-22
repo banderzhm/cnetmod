@@ -42,6 +42,42 @@ TEST(redis_live_resp3_health_and_supervised_stop)
         ASSERT_TRUE(started.has_value());
         if (started)
         {
+            auto redis = service.make_template(
+                {.ns = {.prefix = "cnetmod-live:"}});
+            auto owner = co_await redis.try_lock(
+                "distributed-lock", std::chrono::seconds{5});
+            ASSERT_TRUE(owner.has_value());
+            ASSERT_TRUE(owner && owner->has_value());
+            if (owner && *owner)
+            {
+                auto contender = co_await redis.try_lock(
+                    "distributed-lock", std::chrono::seconds{5});
+                ASSERT_TRUE(contender.has_value());
+                ASSERT_TRUE(contender && !contender->has_value());
+                auto renewed = co_await (**owner).renew(
+                    std::chrono::seconds{10});
+                ASSERT_TRUE(renewed.has_value());
+                ASSERT_TRUE(renewed && *renewed);
+                auto released = co_await (**owner).release();
+                ASSERT_TRUE(released.has_value());
+                ASSERT_TRUE(released && *released);
+                auto successor = co_await redis.try_lock(
+                    "distributed-lock", std::chrono::seconds{5});
+                ASSERT_TRUE(successor.has_value());
+                ASSERT_TRUE(successor && successor->has_value());
+                if (successor && *successor)
+                {
+                    ASSERT_TRUE((**successor).fencing_token() >
+                        (**owner).fencing_token());
+                    ASSERT_TRUE((co_await (**successor).release()).value_or(false));
+                }
+            }
+            auto cleanup = redis.pipeline();
+            const std::vector<std::string> cleanup_command{
+                "DEL", "cnetmod-live:distributed-lock:fence"};
+            cleanup.raw_command(cleanup_command);
+            ASSERT_TRUE((co_await redis.execute(cleanup)).has_value());
+
             for (unsigned index = 0; index < 3; ++index)
             {
                 auto health = co_await service.probe(context);

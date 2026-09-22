@@ -3642,6 +3642,17 @@ Pass `automatic_interceptor_options` when resolving the repository. The configur
 
 The framework does not accept arbitrary SQL expressions in logical-delete touch fields.
 
+Per-request row visibility is an automatic interceptor policy. Mark the model
+partition and owner columns with `DATA_PARTITION` and `DATA_OWNER`, bind one
+`data_permission_scope` in the HTTP request scope during authentication, then
+resolve the repository with `runtime.repository<T>(request, "primary")`.
+Typed CRUD, XML statements, projections and transactions all pass through the
+same frozen chain. Service and Mapper code do not receive, resolve or bind a
+data-scope object. The request repository owns a scope snapshot instead of
+using thread-local state, so coroutine suspension cannot leak another user's
+policy. A restricted scope with no visible partitions or owner denies every
+row.
+
 ## Upsert semantics
 
 - `save_or_update` is identity-based and may perform a read before insert/update.
@@ -5944,6 +5955,40 @@ auto replies = co_await cache.execute(batch);
 Application 的 `redis_service::make_template(options, parent)` 自动复用服务连接池及
 Telemetry Hub 的 span exporter；调用方只显式传递当前协程的 trace parent。
 
+### 分布式锁
+
+`redis_template` 提供所有权安全的单 Redis 分布式锁。获取使用一条 Lua 脚本原子执行
+`SET key token NX PX lease` 与 fencing counter 递增；续租与释放分别使用 Lua 比较随机
+owner token 后再执行 `PEXPIRE`/`DEL`。锁过期后，旧持有者不能续租或删除新持有者的锁。
+
+```cpp
+auto acquired = co_await cache.lock("settlement:{tenant-42}", {
+    .lease = std::chrono::seconds{15},
+    .wait_timeout = std::chrono::seconds{2},
+    .retry_interval = std::chrono::milliseconds{50},
+    .retry_jitter = 0.2,
+}, cancellation);
+if (!acquired)
+    co_return std::unexpected(acquired.error());
+
+const auto fence = acquired->fencing_token();
+auto stored = co_await write_with_fencing_token(fence, cancellation);
+auto released = co_await acquired->release(cancellation);
+```
+
+- `try_lock()` 只尝试一次；被占用返回成功的 `std::optional{}`，协议/网络失败仍为错误。
+- `lock()` 在 `wait_timeout` 内进行带 jitter 的有界重试；超时返回 `errc::timed_out`。
+- Application 创建的模板自动绑定其事件循环，因此支持等待重试。直接构造模板时，如需
+  `wait_timeout > 0`，应把所属 `io_context*` 作为最后一个构造参数传入。
+- `distributed_lock` 仅可移动。析构函数不会隐藏异步网络 I/O，正常路径必须显式
+  `co_await release()`；释放失败时按业务重试或等待 lease 到期。
+- `renew()`/`release()` 返回 `false` 表示 owner token 已不匹配，即调用方已经失去所有权。
+- fencing token 必须随受保护写入传给存储端，并由存储端拒绝小于已见最大值的旧 token；
+  仅凭 Redis lease 不能阻止暂停过久的旧进程在恢复后继续写外部系统。
+- Redis Cluster 场景中的锁键应使用 hash tag，例如
+  `settlement:{tenant-42}`，确保锁键及其 `:fence` 键落在同一 slot。
+- 不把锁用于长事务；lease 应覆盖单次临界区，并为最坏延迟留出余量。
+
 `is_open()` 只表示传输层 socket 尚未关闭；连接池使用更严格的
 `is_reusable()`，同时要求不存在未消费的 RESP 数据。`cmd`、`exec`、`pipe` 和
 `exchange` 在写入后发生解析错误、取消、EOF 或检测到多余应答时都会关闭连接，防止
@@ -7569,7 +7614,7 @@ ignored and never changes the database or Redis operation outcome.
 
 # HTTP Server
 
-> 高性能异步 HTTP/HTTPS 服务器，支持路由、中间件、SSE、Swagger、HTTP/2 与文件上传。
+> 高性能异步 HTTP/HTTPS 服务器栈，支持 HTTP/1.1、HTTP/2、HTTP/3、路由、中间件、SSE、Swagger 与文件上传。
 
 **import**: `import cnetmod.protocol.http;`
 **CMake**: `-DCNETMOD_ENABLE_HTTP=ON`
@@ -7580,11 +7625,13 @@ ignored and never changes the database or Redis operation outcome.
 - 我要注册路由 → [看这里](#路由注册)
 - 我要处理请求参数 → [看这里](#request_context--请求访问)
 - 我要返回 JSON/HTML/文本 → [看这里](#response--响应构建)
+- 我要先返回 202、再运行后台任务 → [参见 Application 托管任务](../infra/application.md#http-先响应后台继续执行)
 - 我要推送实时事件 (SSE) → [看这里](#sse-server-sent-events)
 - 我要生成 API 文档 → [看这里](#swaggeropenapi-文档)
 - 我要处理文件上传 → [看这里](#multipartform-data--文件上传)
 - 我要设置 Cookie → [看这里](#cookie-处理)
 - 我要启用 HTTP/2 → [看这里](#http2-支持)
+- 我要启用 HTTP/3 / QUIC → [看这里](#http3--quic-支持)
 - 我要升级为 WebSocket → [参见 websocket.md](websocket.md)
 
 ## API 参考
@@ -8049,6 +8096,44 @@ import cnetmod.protocol.http;
 
 ---
 
+### HTTP/3 / QUIC 支持
+
+HTTP/3（RFC 9114）已经包含完整客户端和服务端，但它不是 TCP `http::server` 上的
+另一个 ALPN 分支。HTTP/1.1 与 HTTP/2 共用 TCP/TLS listener；HTTP/3 使用独立的 UDP
+listener、QUIC、TLS 1.3 和 ALPN `h3`，因此需要创建 `http::v3::http3_server`。两者可以
+绑定同一个数字端口，因为传输协议分别是 TCP 和 UDP。
+
+启用条件：
+
+```text
+-DCNETMOD_ENABLE_HTTP=ON
+-DCNETMOD_ENABLE_SSL=ON
+-DCNETMOD_ENABLE_QUIC=ON
+-DCNETMOD_ENABLE_BORINGSSL_QUIC=ON
+```
+
+```cpp
+import cnetmod.protocol.http.v3.server;
+
+namespace h3 = cnetmod::http::v3;
+
+auto server = h3::make_http3_server(io, tls,
+    cnetmod::endpoint{cnetmod::ipv4_address::any(), 8443},
+    [](h3::http3_request& request,
+        h3::http3_response& response) -> std::error_code {
+        response.status = cnetmod::http::status::ok;
+        response.body = R"({"protocol":"h3"})";
+        return {};
+    });
+auto started = server->start();
+```
+
+HTTP/3 还支持异步 handler、请求/响应流式正文、QPACK 动态表、0-RTT、连接迁移、
+Datagram、WebTransport、实验性 Multipath QUIC 和 Path MTU Discovery。完整配置、取消、
+背压和生命周期规则参见 [HTTP/3 / QUIC](http3-quic.md)。
+
+---
+
 ### multipart/form-data — 文件上传
 
 #### `form_data`
@@ -8282,6 +8367,7 @@ auto main() -> int {
 - `examples/http/http_demo.cpp` — 底层 HTTP 请求/响应解析
 - `examples/http/hight_plus_http.cpp` — 高级功能（Cookie、SSE 等）
 - `examples/http/http2_demo.cpp` — HTTP/2 TLS + ALPN 示例
+- `skill/http/http3-quic.md` — HTTP/3 / QUIC 客户端与服务端完整指南
 - `examples/http/websocket_upgrade_demo.cpp` — HTTP 升级至 WebSocket
 - `examples/http/multicore_http.cpp` — 多核 server_context + pool 卸载完整示例
 - `examples/http/tfb_benchmark.cpp` — TechEmpower 基准测试（多核 + 数据库连接池）
@@ -8713,6 +8799,59 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
 JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
 `std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
 
+## HTTP 先响应、后台继续执行
+
+该场景使用 `application_runtime::spawn_managed()`，不能直接 `spawn()` 一个失管协程。
+注册动作同步完成，因此 handler 可以在任务被 supervisor 接管后立即返回 HTTP 202；
+Application 停机时会取消并等待任务，不会让协程访问已经析构的服务。
+
+```cpp
+builder.routes([](http::router& routes, application_runtime& runtime) {
+    auto reports = std::make_shared<report_service>();
+
+    routes.post("/reports", [&runtime, reports](http::request_context& request)
+        -> task<void> {
+        // request_context 只活到本次请求结束；后台任务必须按值拥有所需输入。
+        auto input = std::string{request.body()};
+        auto job_id = make_job_id();
+        auto task_name = std::string{"report:"};
+        task_name.append(job_id);
+
+        recovery_policy one_shot;
+        one_shot.budget = std::chrono::milliseconds{0};
+        auto accepted = runtime.spawn_managed(std::move(task_name),
+            [reports, input = std::move(input), job_id](cancel_token& cancellation)
+                -> task<std::expected<void, std::error_code>> {
+                co_return co_await reports->generate(
+                    job_id, input, cancellation);
+            },
+            one_shot,
+            false); // 单个业务任务失败不触发整个应用停机
+
+        if (!accepted) {
+            request.json(http::status::service_unavailable,
+                R"({"error":"background task was not accepted"})");
+            co_return;
+        }
+        request.json(http::status::accepted,
+            make_job_accepted_document(job_id));
+    });
+});
+```
+
+必须遵守以下生命周期语义：
+
+1. 后台 lambda 不捕获 `request_context&`、请求 body 的 view、局部变量引用或裸业务指针。
+2. 输入按值移动，服务使用 `shared_ptr` 或其他覆盖任务生命周期的受管理所有权。
+3. `202 Accepted` 只表示 supervisor 已接管，不表示任务成功；任务状态应持久化，并提供
+   `GET /jobs/{id}` 等查询接口。
+4. 任务名称必须唯一。重复名称返回 `errc::file_exists`，停机期间注册返回
+   `errc::operation_canceled`。
+5. 非幂等任务把 recovery budget 设为 0；需要自动恢复的任务必须先设计幂等键，再配置
+   有界退避和恢复预算。
+6. `required=false` 适合单个用户任务；基础设施泵、关键消费循环等应使用 required 任务，
+   恢复预算耗尽后由 Application 撤销 readiness 并进入优雅停机。
+
 `application_runtime::files()` 返回 `async_file_template`，其
 `open/read/write/flush/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
 领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
@@ -8867,6 +9006,27 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 ## 配置
 
 优先级固定为：框架默认值 < YAML/JSON < 环境变量 < builder `configure()` 显式覆盖。
+
+安全组件必须从已经解析并校验的 Application 配置读取凭据。中间件和业务
+代码不得直接调用 `std::getenv()`；这样未知字段、缺失值、长度约束、集中脱敏
+与重载分类会在启动前统一完成。JWT 使用 `security.jwt`：
+
+```json
+{
+  "security": {
+    "jwt": {
+      "enabled": true,
+      "issuer": "order-service",
+      "secret": "${ORDER_SERVICE_JWT_SECRET}"
+    }
+  }
+}
+```
+
+`enabled: true` 时，issuer 必须非空且 secret 至少 32 字节。`${...}` 只由
+配置加载器集中展开；Application 代码通过
+`runtime.configuration().security.jwt` 获取经过校验的只读值。JWT 配置变更
+被分类为需要重启，且 `secret` 在配置诊断输出中始终脱敏。
 
 新项目推荐使用 YAML（`.yaml` 或 `.yml`）作为 Application 配置格式；JSON 继续作为
 兼容输入格式，并仍用于 HTTP/消息负载的类型化编解码，两者不是同一层职责。

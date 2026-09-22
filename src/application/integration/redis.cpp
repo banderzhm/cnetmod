@@ -26,7 +26,7 @@ auto redis_service::make_template(redis::template_options options,
     instrumentation::trace_context parent) -> redis::redis_template
 {
     return redis::redis_template{
-        pool_, std::move(options), std::move(parent), spans_};
+        pool_, std::move(options), std::move(parent), spans_, &io_};
 }
 
 auto redis_service::key() const -> service_key

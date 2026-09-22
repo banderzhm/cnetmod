@@ -491,6 +491,17 @@ Pass `automatic_interceptor_options` when resolving the repository. The configur
 
 The framework does not accept arbitrary SQL expressions in logical-delete touch fields.
 
+Per-request row visibility is an automatic interceptor policy. Mark the model
+partition and owner columns with `DATA_PARTITION` and `DATA_OWNER`, bind one
+`data_permission_scope` in the HTTP request scope during authentication, then
+resolve the repository with `runtime.repository<T>(request, "primary")`.
+Typed CRUD, XML statements, projections and transactions all pass through the
+same frozen chain. Service and Mapper code do not receive, resolve or bind a
+data-scope object. The request repository owns a scope snapshot instead of
+using thread-local state, so coroutine suspension cannot leak another user's
+policy. A restricted scope with no visible partitions or owner denies every
+row.
+
 ## Upsert semantics
 
 - `save_or_update` is identity-based and may perform a read before insert/update.

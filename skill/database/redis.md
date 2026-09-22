@@ -377,6 +377,40 @@ auto replies = co_await cache.execute(batch);
 Application 的 `redis_service::make_template(options, parent)` 自动复用服务连接池及
 Telemetry Hub 的 span exporter；调用方只显式传递当前协程的 trace parent。
 
+### 分布式锁
+
+`redis_template` 提供所有权安全的单 Redis 分布式锁。获取使用一条 Lua 脚本原子执行
+`SET key token NX PX lease` 与 fencing counter 递增；续租与释放分别使用 Lua 比较随机
+owner token 后再执行 `PEXPIRE`/`DEL`。锁过期后，旧持有者不能续租或删除新持有者的锁。
+
+```cpp
+auto acquired = co_await cache.lock("settlement:{tenant-42}", {
+    .lease = std::chrono::seconds{15},
+    .wait_timeout = std::chrono::seconds{2},
+    .retry_interval = std::chrono::milliseconds{50},
+    .retry_jitter = 0.2,
+}, cancellation);
+if (!acquired)
+    co_return std::unexpected(acquired.error());
+
+const auto fence = acquired->fencing_token();
+auto stored = co_await write_with_fencing_token(fence, cancellation);
+auto released = co_await acquired->release(cancellation);
+```
+
+- `try_lock()` 只尝试一次；被占用返回成功的 `std::optional{}`，协议/网络失败仍为错误。
+- `lock()` 在 `wait_timeout` 内进行带 jitter 的有界重试；超时返回 `errc::timed_out`。
+- Application 创建的模板自动绑定其事件循环，因此支持等待重试。直接构造模板时，如需
+  `wait_timeout > 0`，应把所属 `io_context*` 作为最后一个构造参数传入。
+- `distributed_lock` 仅可移动。析构函数不会隐藏异步网络 I/O，正常路径必须显式
+  `co_await release()`；释放失败时按业务重试或等待 lease 到期。
+- `renew()`/`release()` 返回 `false` 表示 owner token 已不匹配，即调用方已经失去所有权。
+- fencing token 必须随受保护写入传给存储端，并由存储端拒绝小于已见最大值的旧 token；
+  仅凭 Redis lease 不能阻止暂停过久的旧进程在恢复后继续写外部系统。
+- Redis Cluster 场景中的锁键应使用 hash tag，例如
+  `settlement:{tenant-42}`，确保锁键及其 `:fence` 键落在同一 slot。
+- 不把锁用于长事务；lease 应覆盖单次临界区，并为最坏延迟留出余量。
+
 `is_open()` 只表示传输层 socket 尚未关闭；连接池使用更严格的
 `is_reusable()`，同时要求不存在未消费的 RESP 数据。`cmd`、`exec`、`pipe` 和
 `exchange` 在写入后发生解析错误、取消、EOF 或检测到多余应答时都会关闭连接，防止

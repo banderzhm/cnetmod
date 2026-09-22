@@ -30,6 +30,26 @@ auto run_config::is_cancelled() const noexcept -> bool
 }
 
 namespace {
+    [[nodiscard]] auto tags_document(const std::vector<std::string>& tags)
+        -> cnetmod::json::document
+    {
+        auto result = cnetmod::json::array();
+        result.get_array().reserve(tags.size());
+        for (const auto& tag : tags)
+            result.get_array().emplace_back(tag);
+        return result;
+    }
+
+    [[nodiscard]] auto metadata_document(
+        const std::map<std::string, std::string>& metadata)
+        -> cnetmod::json::document
+    {
+        auto result = cnetmod::json::object();
+        for (const auto& [key, value] : metadata)
+            result[key] = value;
+        return result;
+    }
+
     auto next_operation_id(std::string_view run_id) -> std::string
     {
         static std::atomic<std::uint64_t> sequence{0};
@@ -105,9 +125,9 @@ void run_config::notify(const run_event& event) const
         if ((add_tags || add_metadata) && !observed->attributes.is_object())
             observed->attributes = cnetmod::json::object();
         if (add_tags)
-            observed->attributes["tags"] = tags;
+            observed->attributes["tags"] = tags_document(tags);
         if (add_metadata)
-            observed->attributes["metadata"] = metadata;
+            observed->attributes["metadata"] = metadata_document(metadata);
         if (add_trace)
             observed->trace_parent = trace_parent;
         if (add_parent)

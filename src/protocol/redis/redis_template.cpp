@@ -3,11 +3,19 @@ module cnetmod.protocol.redis;
 import std;
 import cnetmod.instrumentation.error;
 import cnetmod.instrumentation.operation_scope;
+import cnetmod.coro.timer;
 import :redis_template;
 
 namespace cnetmod::redis {
 
 namespace {
+
+    constexpr std::string_view acquire_lock_script =
+        "local acquired=redis.call('SET',KEYS[1],ARGV[1],'NX','PX',ARGV[2]);" "if acquired then return redis.call('INCR',KEYS[2]);end;return 0";
+    constexpr std::string_view renew_lock_script =
+        "if redis.call('GET',KEYS[1])==ARGV[1] then " "return redis.call('PEXPIRE',KEYS[1],ARGV[2]);end;return 0";
+    constexpr std::string_view release_lock_script =
+        "if redis.call('GET',KEYS[1])==ARGV[1] then " "return redis.call('DEL',KEYS[1]);end;return 0";
 
     [[nodiscard]] auto invalid_argument() -> std::error_code
     {
@@ -17,6 +25,45 @@ namespace {
     [[nodiscard]] auto protocol_error() -> std::error_code
     {
         return std::make_error_code(std::errc::protocol_error);
+    }
+
+    [[nodiscard]] auto make_owner_token()
+        -> std::expected<std::string, std::error_code>
+    {
+        try
+        {
+            std::random_device random;
+            constexpr char digits[] = "0123456789abcdef";
+            std::array<std::uint32_t, 4> words{};
+            for (auto& word : words)
+                word = random();
+            std::string token(32U, '0');
+            auto offset = std::size_t{};
+            for (const auto word : words)
+                for (auto shift = 28; shift >= 0; shift -= 4)
+                    token[offset++] = digits[(word >> shift) & 0x0fU];
+            return token;
+        }
+        catch (const std::bad_alloc&)
+        {
+            return std::unexpected(
+                std::make_error_code(std::errc::not_enough_memory));
+        }
+        catch (...)
+        {
+            return std::unexpected(
+                std::make_error_code(std::errc::io_error));
+        }
+    }
+
+    [[nodiscard]] auto valid_lock_options(
+        const distributed_lock_options& options) noexcept -> bool
+    {
+        return options.lease > std::chrono::milliseconds::zero() &&
+            options.wait_timeout >= std::chrono::milliseconds::zero() &&
+            options.retry_interval > std::chrono::milliseconds::zero() &&
+            std::isfinite(options.retry_jitter) &&
+            options.retry_jitter >= 0.0 && options.retry_jitter <= 1.0;
     }
 
     [[nodiscard]] auto safe_operation_name(std::string_view value)
@@ -148,6 +195,71 @@ namespace {
     }
 
 } // namespace
+
+distributed_lock::distributed_lock(redis_template& owner,
+    std::string physical_key, std::string owner_token,
+    std::uint64_t fencing_token) noexcept
+    : owner_(&owner), physical_key_(std::move(physical_key)), owner_token_(std::move(owner_token)), fencing_token_(fencing_token), owned_(true)
+{
+}
+
+distributed_lock::distributed_lock(distributed_lock&& other) noexcept
+    : owner_(std::exchange(other.owner_, nullptr)),
+      physical_key_(std::move(other.physical_key_)),
+      owner_token_(std::move(other.owner_token_)),
+      fencing_token_(std::exchange(other.fencing_token_, 0)),
+      owned_(std::exchange(other.owned_, false))
+{
+}
+
+auto distributed_lock::owns_lock() const noexcept -> bool
+{
+    return owned_;
+}
+
+auto distributed_lock::fencing_token() const noexcept -> std::uint64_t
+{
+    return fencing_token_;
+}
+
+auto distributed_lock::renew(std::chrono::milliseconds lease)
+    -> task<std::expected<bool, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await renew(lease, cancellation);
+}
+
+auto distributed_lock::renew(std::chrono::milliseconds lease,
+    cancel_token& cancellation)
+    -> task<std::expected<bool, std::error_code>>
+{
+    if (!owned_ || !owner_)
+        co_return false;
+    auto renewed = co_await owner_->renew_lock(
+        physical_key_, owner_token_, lease, cancellation);
+    if (renewed && !*renewed)
+        owned_ = false;
+    co_return renewed;
+}
+
+auto distributed_lock::release()
+    -> task<std::expected<bool, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await release(cancellation);
+}
+
+auto distributed_lock::release(cancel_token& cancellation)
+    -> task<std::expected<bool, std::error_code>>
+{
+    if (!owned_ || !owner_)
+        co_return false;
+    auto released = co_await owner_->release_lock(
+        physical_key_, owner_token_, cancellation);
+    if (released)
+        owned_ = false;
+    co_return released;
+}
 
 auto key_namespace::key(std::string_view suffix) const -> std::string
 {
@@ -310,9 +422,134 @@ auto pipeline_builder::size() const noexcept -> std::size_t
 
 redis_template::redis_template(connection_pool& pool, template_options options,
     instrumentation::trace_context parent,
-    instrumentation::span_exporter spans)
-    : pool_(pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans))
+    instrumentation::span_exporter spans, io_context* timer_context)
+    : pool_(pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)), timer_context_(timer_context)
 {
+}
+
+auto redis_template::try_lock(std::string_view key,
+    std::chrono::milliseconds lease)
+    -> task<std::expected<std::optional<distributed_lock>, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await try_lock(key, lease, cancellation);
+}
+
+auto redis_template::try_lock(std::string_view key,
+    std::chrono::milliseconds lease, cancel_token& cancellation)
+    -> task<std::expected<std::optional<distributed_lock>, std::error_code>>
+{
+    if (key.empty() || lease <= std::chrono::milliseconds::zero())
+        co_return std::unexpected(invalid_argument());
+    auto token = make_owner_token();
+    if (!token)
+        co_return std::unexpected(token.error());
+    auto physical = physical_key(key);
+    auto response = co_await execute_one({"EVAL",
+                                             std::string{acquire_lock_script}, "2", physical, physical + ":fence",
+                                             *token, std::to_string(lease.count())},
+        cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    auto fence = integer(*response);
+    if (!fence)
+        co_return std::unexpected(fence.error());
+    if (*fence == 0)
+        co_return std::optional<distributed_lock>{};
+    if (*fence < 0)
+        co_return std::unexpected(protocol_error());
+    distributed_lock acquired{*this, std::move(physical),
+        std::move(*token), static_cast<std::uint64_t>(*fence)};
+    co_return std::optional<distributed_lock>{std::move(acquired)};
+}
+
+auto redis_template::lock(std::string_view key,
+    distributed_lock_options options)
+    -> task<std::expected<distributed_lock, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await lock(key, options, cancellation);
+}
+
+auto redis_template::lock(std::string_view key,
+    distributed_lock_options options, cancel_token& cancellation)
+    -> task<std::expected<distributed_lock, std::error_code>>
+{
+    if (key.empty() || !valid_lock_options(options))
+        co_return std::unexpected(invalid_argument());
+    if (options.wait_timeout > std::chrono::milliseconds::zero() &&
+        !timer_context_)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::operation_not_supported));
+
+    const auto expires = std::chrono::steady_clock::now() +
+        options.wait_timeout;
+    auto seed = static_cast<std::uint64_t>(
+                    std::chrono::steady_clock::now().time_since_epoch().count()) ^
+        static_cast<std::uint64_t>(std::hash<std::string_view>{}(key));
+    std::mt19937_64 generator{seed};
+    std::uniform_real_distribution<double> jitter{
+        -options.retry_jitter, options.retry_jitter};
+
+    while (true)
+    {
+        auto acquired = co_await try_lock(key, options.lease, cancellation);
+        if (!acquired)
+            co_return std::unexpected(acquired.error());
+        if (*acquired)
+            co_return std::move(**acquired);
+        if (options.wait_timeout == std::chrono::milliseconds::zero() ||
+            std::chrono::steady_clock::now() >= expires)
+            co_return std::unexpected(
+                std::make_error_code(std::errc::timed_out));
+
+        const auto remaining = std::chrono::duration_cast<
+            std::chrono::milliseconds>(expires - std::chrono::steady_clock::now());
+        const auto factor = 1.0 + jitter(generator);
+        auto delay = std::chrono::duration_cast<std::chrono::milliseconds>(
+            options.retry_interval * factor);
+        delay = std::max(std::chrono::milliseconds{1},
+            std::min(delay, remaining));
+        auto waited = co_await async_timer_wait(
+            *timer_context_, delay, cancellation);
+        if (!waited)
+            co_return std::unexpected(waited.error());
+    }
+}
+
+auto redis_template::renew_lock(std::string_view physical_key,
+    std::string_view owner_token, std::chrono::milliseconds lease,
+    cancel_token& cancellation)
+    -> task<std::expected<bool, std::error_code>>
+{
+    if (lease <= std::chrono::milliseconds::zero())
+        co_return std::unexpected(invalid_argument());
+    auto response = co_await execute_one({"EVAL",
+                                             std::string{renew_lock_script}, "1", std::string{physical_key},
+                                             std::string{owner_token}, std::to_string(lease.count())},
+        cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    auto result = integer(*response);
+    if (!result)
+        co_return std::unexpected(result.error());
+    co_return *result != 0;
+}
+
+auto redis_template::release_lock(std::string_view physical_key,
+    std::string_view owner_token, cancel_token& cancellation)
+    -> task<std::expected<bool, std::error_code>>
+{
+    auto response = co_await execute_one({"EVAL",
+                                             std::string{release_lock_script}, "1", std::string{physical_key},
+                                             std::string{owner_token}},
+        cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    auto result = integer(*response);
+    if (!result)
+        co_return std::unexpected(result.error());
+    co_return *result != 0;
 }
 
 auto redis_template::physical_key(std::string_view key) const -> std::string

@@ -84,6 +84,72 @@ auto write_fragments(cnetmod::io_context& io, cnetmod::socket& peer,
     co_return true;
 }
 
+auto read_resp_line(cnetmod::io_context& io, cnetmod::socket& peer)
+    -> cnetmod::task<std::optional<std::string>>
+{
+    std::string line;
+    while (line.size() < 8192U)
+    {
+        char character{};
+        auto read = co_await cnetmod::async_read(
+            io, peer, cnetmod::mutable_buffer{&character, 1});
+        if (!read || *read == 0U)
+            co_return std::nullopt;
+        line.push_back(character);
+        if (line.size() >= 2U && line.ends_with("\r\n"))
+        {
+            line.resize(line.size() - 2U);
+            co_return line;
+        }
+    }
+    co_return std::nullopt;
+}
+
+auto read_resp_command(cnetmod::io_context& io, cnetmod::socket& peer)
+    -> cnetmod::task<std::optional<std::vector<std::string>>>
+{
+    auto header = co_await read_resp_line(io, peer);
+    if (!header || header->empty() || header->front() != '*')
+        co_return std::nullopt;
+    std::size_t count{};
+    const auto [count_end, count_error] = std::from_chars(
+        header->data() + 1, header->data() + header->size(), count);
+    if (count_error != std::errc{} ||
+        count_end != header->data() + header->size())
+        co_return std::nullopt;
+
+    std::vector<std::string> arguments;
+    arguments.reserve(count);
+    for (std::size_t index = 0; index < count; ++index)
+    {
+        auto bulk = co_await read_resp_line(io, peer);
+        if (!bulk || bulk->empty() || bulk->front() != '$')
+            co_return std::nullopt;
+        std::size_t length{};
+        const auto [length_end, length_error] = std::from_chars(
+            bulk->data() + 1, bulk->data() + bulk->size(), length);
+        if (length_error != std::errc{} ||
+            length_end != bulk->data() + bulk->size())
+            co_return std::nullopt;
+        std::string value(length + 2U, '\0');
+        std::size_t offset = 0;
+        while (offset < value.size())
+        {
+            auto read = co_await cnetmod::async_read(io, peer,
+                cnetmod::mutable_buffer{
+                    value.data() + offset, value.size() - offset});
+            if (!read || *read == 0U)
+                co_return std::nullopt;
+            offset += *read;
+        }
+        if (!value.ends_with("\r\n"))
+            co_return std::nullopt;
+        value.resize(length);
+        arguments.push_back(std::move(value));
+    }
+    co_return arguments;
+}
+
 [[nodiscard]] auto pool_parameters(std::uint16_t port)
     -> cnetmod::redis::pool_params
 {
@@ -99,6 +165,234 @@ auto write_fragments(cnetmod::io_context& io, cnetmod::socket& peer,
 }
 
 } // namespace
+
+TEST(redis_template_distributed_lock_uses_owner_checked_atomic_scripts)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+                                   cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    if (!listener || !endpoint)
+        return;
+
+    cnetmod::redis::connection_pool pool{*io,
+        pool_parameters(endpoint->port())};
+    cnetmod::redis::redis_template redis{pool,
+        {.ns = {.prefix = "app:"}}, {}, {}, io.get()};
+    bool server_ok = false;
+    bool exercise_ok = false;
+    bool run_finished = false;
+    bool server_finished = false;
+
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto peer = co_await cnetmod::async_accept(*io, *listener);
+        if (!peer)
+        {
+            server_finished = true;
+            co_return;
+        }
+        std::string owner_token;
+        for (std::size_t step = 0; step < 5U; ++step)
+        {
+            auto arguments = co_await read_resp_command(*io, *peer);
+            if (!arguments || arguments->size() < 5U ||
+                (*arguments)[0] != "EVAL")
+            {
+                server_finished = true;
+                co_return;
+            }
+            const auto& script = (*arguments)[1];
+            const auto is_acquire = script.contains("'SET'") &&
+                script.contains("'INCR'");
+            const auto is_renew = script.contains("'PEXPIRE'");
+            const auto is_release = script.contains("'DEL'");
+            bool valid = false;
+            std::string response;
+            if (step == 0U || step == 3U || step == 4U)
+            {
+                valid = is_acquire && arguments->size() == 7U &&
+                    (*arguments)[2] == "2" &&
+                    (*arguments)[3] == "app:job" &&
+                    (*arguments)[4] == "app:job:fence" &&
+                    (*arguments)[5].size() == 32U;
+                if (step == 0U)
+                {
+                    owner_token = (*arguments)[5];
+                    valid = valid && (*arguments)[6] == "1500";
+                    response = ":41\r\n";
+                }
+                else if (step == 3U)
+                    response = ":0\r\n";
+                else
+                    response = ":42\r\n";
+            }
+            else if (step == 1U)
+            {
+                valid = is_renew && arguments->size() == 6U &&
+                    (*arguments)[2] == "1" &&
+                    (*arguments)[3] == "app:job" &&
+                    (*arguments)[4] == owner_token &&
+                    (*arguments)[5] == "2500";
+                response = ":1\r\n";
+            }
+            else
+            {
+                valid = is_release && arguments->size() == 5U &&
+                    (*arguments)[2] == "1" &&
+                    (*arguments)[3] == "app:job" &&
+                    (*arguments)[4] == owner_token;
+                response = ":1\r\n";
+            }
+            if (!valid || !(co_await write_fragments(*io, *peer, {response})))
+            {
+                server_finished = true;
+                co_return;
+            }
+        }
+        server_ok = true;
+        server_finished = true;
+    };
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        run_finished = true;
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto acquired = co_await redis.try_lock(
+            "job", std::chrono::milliseconds{1500});
+        auto renewed = acquired && *acquired
+            ? co_await (**acquired).renew(std::chrono::milliseconds{2500})
+            : std::expected<bool, std::error_code>{false};
+        auto released = acquired && *acquired
+            ? co_await (**acquired).release()
+            : std::expected<bool, std::error_code>{false};
+        auto released_twice = acquired && *acquired
+            ? co_await (**acquired).release()
+            : std::expected<bool, std::error_code>{false};
+        auto busy = co_await redis.try_lock(
+            "job", std::chrono::milliseconds{1500});
+        auto successor = co_await redis.try_lock(
+            "job", std::chrono::milliseconds{1500});
+        exercise_ok = acquired && *acquired && renewed && *renewed &&
+            released && *released && released_twice && !*released_twice &&
+            !(**acquired).owns_lock() &&
+            (**acquired).fencing_token() == 41U && busy && !*busy &&
+            successor && *successor &&
+            (**successor).fencing_token() == 42U;
+
+        co_await pool.cancel();
+        while (!run_finished || !server_finished)
+            co_await cnetmod::async_sleep(
+                *io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, exercise());
+    io->run();
+    ASSERT_TRUE(server_ok);
+    ASSERT_TRUE(exercise_ok);
+}
+
+TEST(redis_template_distributed_lock_waits_with_bounded_retry)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+                                   cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    if (!listener || !endpoint)
+        return;
+
+    cnetmod::redis::connection_pool pool{*io,
+        pool_parameters(endpoint->port())};
+    cnetmod::redis::redis_template redis{pool,
+        {.ns = {.prefix = "app:"}}, {}, {}, io.get()};
+    bool server_ok = false;
+    bool exercise_ok = false;
+    bool run_finished = false;
+    bool server_finished = false;
+
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto peer = co_await cnetmod::async_accept(*io, *listener);
+        if (!peer)
+        {
+            server_finished = true;
+            co_return;
+        }
+        for (std::size_t step = 0; step < 3U; ++step)
+        {
+            auto arguments = co_await read_resp_command(*io, *peer);
+            const auto acquire = step < 2U;
+            const auto valid = arguments && !arguments->empty() &&
+                (*arguments)[0] == "EVAL" &&
+                (acquire
+                        ? arguments->size() == 7U &&
+                            (*arguments)[1].contains("'SET'") &&
+                            (*arguments)[3] == "app:waited"
+                        : arguments->size() == 5U &&
+                            (*arguments)[1].contains("'DEL'") &&
+                            (*arguments)[3] == "app:waited");
+            const auto response = step == 0U
+                ? ":0\r\n"
+                : (step == 1U ? ":7\r\n" : ":1\r\n");
+            if (!valid || !(co_await write_fragments(*io, *peer, {std::string{response}})))
+            {
+                server_finished = true;
+                co_return;
+            }
+        }
+        server_ok = true;
+        server_finished = true;
+    };
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        run_finished = true;
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto acquired = co_await redis.lock("waited",
+            {.lease = std::chrono::seconds{5},
+                .wait_timeout = std::chrono::milliseconds{200},
+                .retry_interval = std::chrono::milliseconds{1},
+                .retry_jitter = 0.0});
+        auto released = acquired
+            ? co_await acquired->release()
+            : std::expected<bool, std::error_code>{false};
+        exercise_ok = acquired && acquired->owns_lock() == false &&
+            acquired->fencing_token() == 7U && released && *released;
+        co_await pool.cancel();
+        while (!run_finished || !server_finished)
+            co_await cnetmod::async_sleep(
+                *io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, exercise());
+    io->run();
+    ASSERT_TRUE(server_ok);
+    ASSERT_TRUE(exercise_ok);
+}
 
 TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
 {

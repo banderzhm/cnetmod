@@ -4,6 +4,7 @@ import std;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.instrumentation.tracing;
+import cnetmod.io.io_context;
 import cnetmod.json;
 import :client;
 import :pool;
@@ -15,6 +16,78 @@ export namespace cnetmod::redis {
 using ttl_seconds = std::chrono::seconds;
 using reply = std::vector<resp3_node>;
 using pipeline_reply = std::expected<reply, std::error_code>;
+
+class redis_template;
+
+/**
+ * @brief Controls one bounded Redis distributed-lock acquisition.
+ */
+struct distributed_lock_options
+{
+    std::chrono::milliseconds lease{30000};
+    std::chrono::milliseconds wait_timeout{};
+    std::chrono::milliseconds retry_interval{50};
+    double retry_jitter = 0.2;
+};
+
+/**
+ * @brief Move-only ownership proof for one Redis distributed lock.
+ *
+ * The lease uses a unique owner token. release() and renew() execute atomic
+ * compare-and-act Lua scripts, so an expired owner can never delete or extend
+ * a successor's lock. Destruction does not perform hidden asynchronous I/O;
+ * callers should explicitly await release().
+ */
+class distributed_lock
+{
+public:
+    distributed_lock(distributed_lock&& other) noexcept;
+    auto operator=(distributed_lock&& other) noexcept
+        -> distributed_lock& = delete;
+    distributed_lock(const distributed_lock&) = delete;
+    auto operator=(const distributed_lock&) -> distributed_lock& = delete;
+    ~distributed_lock() = default;
+
+    /**
+     * @brief Reports whether this object still represents an acquired lease.
+     */
+    [[nodiscard]] auto owns_lock() const noexcept -> bool;
+
+    /**
+     * @brief Returns the monotonically increasing fencing token for this key.
+     */
+    [[nodiscard]] auto fencing_token() const noexcept -> std::uint64_t;
+
+    /**
+     * @brief Extends the lease only while its owner token still matches.
+     * @return true when renewed, or false when ownership was already lost.
+     */
+    [[nodiscard]] auto renew(std::chrono::milliseconds lease)
+        -> task<std::expected<bool, std::error_code>>;
+    [[nodiscard]] auto renew(std::chrono::milliseconds lease,
+        cancel_token& cancellation)
+        -> task<std::expected<bool, std::error_code>>;
+
+    /**
+     * @brief Deletes the lock only while its owner token still matches.
+     * @return true when deleted, or false when ownership was already lost.
+     */
+    [[nodiscard]] auto release()
+        -> task<std::expected<bool, std::error_code>>;
+    [[nodiscard]] auto release(cancel_token& cancellation)
+        -> task<std::expected<bool, std::error_code>>;
+
+private:
+    friend class redis_template;
+    redis_template* owner_ = nullptr;
+    std::string physical_key_;
+    std::string owner_token_;
+    std::uint64_t fencing_token_ = 0;
+    bool owned_ = false;
+
+    distributed_lock(redis_template& owner, std::string physical_key,
+        std::string owner_token, std::uint64_t fencing_token) noexcept;
+};
 
 /**
  * @brief Adds a stable application namespace to every logical Redis key.
@@ -131,7 +204,37 @@ public:
     explicit redis_template(connection_pool& pool,
         template_options options = {},
         instrumentation::trace_context parent = {},
-        instrumentation::span_exporter spans = {});
+        instrumentation::span_exporter spans = {},
+        io_context* timer_context = nullptr);
+
+    /**
+     * @brief Attempts one immediate atomic lock acquisition.
+     *
+     * A successful result containing nullopt means another owner currently
+     * holds the lock. Transport and protocol failures remain errors.
+     */
+    [[nodiscard]] auto try_lock(std::string_view key,
+        std::chrono::milliseconds lease = std::chrono::seconds{30})
+        -> task<std::expected<std::optional<distributed_lock>,
+            std::error_code>>;
+    [[nodiscard]] auto try_lock(std::string_view key,
+        std::chrono::milliseconds lease, cancel_token& cancellation)
+        -> task<std::expected<std::optional<distributed_lock>,
+            std::error_code>>;
+
+    /**
+     * @brief Waits for lock ownership using bounded jittered retries.
+     *
+     * A positive wait_timeout requires a timer context. Application-created
+     * templates provide it automatically. Exhausting the budget returns
+     * errc::timed_out without acquiring the lock.
+     */
+    [[nodiscard]] auto lock(std::string_view key,
+        distributed_lock_options options = {})
+        -> task<std::expected<distributed_lock, std::error_code>>;
+    [[nodiscard]] auto lock(std::string_view key,
+        distributed_lock_options options, cancel_token& cancellation)
+        -> task<std::expected<distributed_lock, std::error_code>>;
 
     /**
      * @brief Reads one value while preserving the distinction between nil and failure.
@@ -337,10 +440,12 @@ public:
     }
 
 private:
+    friend class distributed_lock;
     connection_pool& pool_;
     template_options options_;
     instrumentation::trace_context parent_;
     instrumentation::span_exporter spans_;
+    io_context* timer_context_ = nullptr;
 
     [[nodiscard]] auto physical_key(std::string_view key) const -> std::string;
     [[nodiscard]] auto effective_ttl(ttl_seconds ttl) const noexcept
@@ -348,6 +453,13 @@ private:
     [[nodiscard]] auto execute_one(std::vector<std::string> arguments,
         cancel_token& cancellation)
         -> task<std::expected<reply, std::error_code>>;
+    [[nodiscard]] auto renew_lock(std::string_view physical_key,
+        std::string_view owner_token, std::chrono::milliseconds lease,
+        cancel_token& cancellation)
+        -> task<std::expected<bool, std::error_code>>;
+    [[nodiscard]] auto release_lock(std::string_view physical_key,
+        std::string_view owner_token, cancel_token& cancellation)
+        -> task<std::expected<bool, std::error_code>>;
 };
 
 } // namespace cnetmod::redis

@@ -81,7 +81,12 @@ auto response_request::to_json() const -> std::string
             {"name", response_schema_name}, {"strict", response_schema_strict},
             {"schema", response_schema}});
     if (!metadata.empty())
-        value["metadata"] = metadata;
+    {
+        auto wire_metadata = cnetmod::json::object();
+        for (const auto& [key, item] : metadata)
+            wire_metadata[key] = item;
+        value["metadata"] = std::move(wire_metadata);
+    }
     if (!service_tier.empty())
         value["service_tier"] = service_tier;
     if (!prompt_cache_key.empty())

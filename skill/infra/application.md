@@ -92,6 +92,59 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
 JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有输入直到执行完成并返回
 `std::expected`；语法错误为 `invalid_argument`，内存不足保持 `not_enough_memory`。
 
+## HTTP 先响应、后台继续执行
+
+该场景使用 `application_runtime::spawn_managed()`，不能直接 `spawn()` 一个失管协程。
+注册动作同步完成，因此 handler 可以在任务被 supervisor 接管后立即返回 HTTP 202；
+Application 停机时会取消并等待任务，不会让协程访问已经析构的服务。
+
+```cpp
+builder.routes([](http::router& routes, application_runtime& runtime) {
+    auto reports = std::make_shared<report_service>();
+
+    routes.post("/reports", [&runtime, reports](http::request_context& request)
+        -> task<void> {
+        // request_context 只活到本次请求结束；后台任务必须按值拥有所需输入。
+        auto input = std::string{request.body()};
+        auto job_id = make_job_id();
+        auto task_name = std::string{"report:"};
+        task_name.append(job_id);
+
+        recovery_policy one_shot;
+        one_shot.budget = std::chrono::milliseconds{0};
+        auto accepted = runtime.spawn_managed(std::move(task_name),
+            [reports, input = std::move(input), job_id](cancel_token& cancellation)
+                -> task<std::expected<void, std::error_code>> {
+                co_return co_await reports->generate(
+                    job_id, input, cancellation);
+            },
+            one_shot,
+            false); // 单个业务任务失败不触发整个应用停机
+
+        if (!accepted) {
+            request.json(http::status::service_unavailable,
+                R"({"error":"background task was not accepted"})");
+            co_return;
+        }
+        request.json(http::status::accepted,
+            make_job_accepted_document(job_id));
+    });
+});
+```
+
+必须遵守以下生命周期语义：
+
+1. 后台 lambda 不捕获 `request_context&`、请求 body 的 view、局部变量引用或裸业务指针。
+2. 输入按值移动，服务使用 `shared_ptr` 或其他覆盖任务生命周期的受管理所有权。
+3. `202 Accepted` 只表示 supervisor 已接管，不表示任务成功；任务状态应持久化，并提供
+   `GET /jobs/{id}` 等查询接口。
+4. 任务名称必须唯一。重复名称返回 `errc::file_exists`，停机期间注册返回
+   `errc::operation_canceled`。
+5. 非幂等任务把 recovery budget 设为 0；需要自动恢复的任务必须先设计幂等键，再配置
+   有界退避和恢复预算。
+6. `required=false` 适合单个用户任务；基础设施泵、关键消费循环等应使用 required 任务，
+   恢复预算耗尽后由 Application 撤销 readiness 并进入优雅停机。
+
 `application_runtime::files()` 返回 `async_file_template`，其
 `open/read/write/flush/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
 领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
@@ -246,6 +299,27 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
 ## 配置
 
 优先级固定为：框架默认值 < YAML/JSON < 环境变量 < builder `configure()` 显式覆盖。
+
+安全组件必须从已经解析并校验的 Application 配置读取凭据。中间件和业务
+代码不得直接调用 `std::getenv()`；这样未知字段、缺失值、长度约束、集中脱敏
+与重载分类会在启动前统一完成。JWT 使用 `security.jwt`：
+
+```json
+{
+  "security": {
+    "jwt": {
+      "enabled": true,
+      "issuer": "order-service",
+      "secret": "${ORDER_SERVICE_JWT_SECRET}"
+    }
+  }
+}
+```
+
+`enabled: true` 时，issuer 必须非空且 secret 至少 32 字节。`${...}` 只由
+配置加载器集中展开；Application 代码通过
+`runtime.configuration().security.jwt` 获取经过校验的只读值。JWT 配置变更
+被分类为需要重启，且 `secret` 在配置诊断输出中始终脱敏。
 
 新项目推荐使用 YAML（`.yaml` 或 `.yml`）作为 Application 配置格式；JSON 继续作为
 兼容输入格式，并仍用于 HTTP/消息负载的类型化编解码，两者不是同一层职责。

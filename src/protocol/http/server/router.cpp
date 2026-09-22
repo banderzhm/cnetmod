@@ -373,6 +373,16 @@ auto request_context::params() const noexcept -> const route_params&
     return params_;
 }
 
+auto request_context::scope() noexcept -> request_scope&
+{
+    return scope_;
+}
+
+auto request_context::scope() const noexcept -> const request_scope&
+{
+    return scope_;
+}
+
 void request_context::text(int s, std::string_view b)
 {
     resp_.set_status(s);

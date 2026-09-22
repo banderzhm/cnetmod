@@ -9,6 +9,7 @@ export module cnetmod.application.runtime;
 
 import std;
 import cnetmod.application.async_file_template;
+import cnetmod.application.configuration;
 import cnetmod.application.rest_template;
 import cnetmod.application.json_template;
 import cnetmod.application.orm_repository;
@@ -24,21 +25,30 @@ import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.compress;
+#ifdef CNETMOD_HAS_SSL
+import cnetmod.security.jwt;
+#endif
 #ifdef CNETMOD_HAS_CHAT_MODEL
 import cnetmod.application.chat_model_service;
 import cnetmod.application.chat_model_template;
+#endif
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
+import cnetmod.application.redis;
+import cnetmod.protocol.redis;
 #endif
 #if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
 import cnetmod.application.mysql;
 import cnetmod.application.mysql_orm;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.model_metadata;
+import cnetmod.orm.data_permission;
 #endif
 #if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) && defined(CNETMOD_HAS_ORM)
 import cnetmod.application.postgresql;
 import cnetmod.application.postgresql_orm;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.model_metadata;
+import cnetmod.orm.data_permission;
 #endif
 
 namespace cnetmod::application {
@@ -92,7 +102,8 @@ public:
     application_runtime(io_context& io, thread_pool& cpu_pool,
         task_supervisor& supervisor,
         observability::telemetry_hub& telemetry,
-        service_registry& services, std::stop_token cancellation) noexcept;
+        service_registry& services, std::stop_token cancellation,
+        const application_configuration& configuration) noexcept;
 
     application_runtime(const application_runtime&) = delete;
     auto operator=(const application_runtime&) -> application_runtime& = delete;
@@ -166,6 +177,27 @@ public:
      * @brief Returns typed JSON operations offloaded to the application CPU pool.
      */
     [[nodiscard]] auto json() noexcept -> json_template&;
+
+#ifdef CNETMOD_HAS_SSL
+    /**
+     * @brief Verifies and decodes a JWT on the managed CPU executor.
+     */
+    [[nodiscard]] auto verify_jwt(std::string_view token,
+        std::string_view secret)
+        -> task<std::expected<security::jwt_claims, std::string>>;
+#endif
+
+#ifdef CNETMOD_HAS_PROTOCOL_REDIS
+    /**
+     * @brief Resolves a namespaced Redis template from a managed service.
+     *
+     * The returned template borrows the service-owned connection pool and
+     * remains valid for the application host lifetime.
+     */
+    [[nodiscard]] auto redis(std::string_view instance = "default",
+        redis::template_options options = {})
+        -> std::expected<redis::redis_template, std::error_code>;
+#endif
 
 #ifdef CNETMOD_HAS_CHAT_MODEL
     /**
@@ -261,6 +293,31 @@ public:
         return std::unexpected(
             std::make_error_code(std::errc::operation_not_supported));
     }
+
+    /**
+     * @brief Resolves a repository with request-level data permission enabled.
+     *
+     * Authentication middleware may bind `orm::data_permission_scope` to the
+     * HTTP request scope. The resulting repository owns a snapshot of that
+     * value, so every typed, XML and transactional operation uses the same
+     * frozen interceptor chain without thread-local state.
+     */
+    template <orm::Model T>
+    [[nodiscard]] auto repository(const http::request_context& request,
+        std::string_view instance = "default",
+        orm::automatic_interceptor_options interceptors = {},
+        database_provider provider = database_provider::automatic)
+        -> std::expected<managed_repository<T>, std::error_code>
+    {
+        if (const auto* scope =
+                request.scope().template find<orm::data_permission_scope>())
+            interceptors.data_permission =
+                std::make_shared<const orm::data_permission_scope>(*scope);
+        else
+            interceptors.data_permission =
+                std::make_shared<const orm::data_permission_scope>();
+        return repository<T>(instance, std::move(interceptors), provider);
+    }
 #endif
 
     /**
@@ -298,6 +355,15 @@ public:
     [[nodiscard]] auto telemetry() noexcept
         -> observability::telemetry_hub&;
 
+    /**
+     * @brief Returns the validated immutable-at-runtime application settings.
+     *
+     * Restart-only fields, including credentials, remain unchanged during a
+     * hot reload. Callers must not copy secrets into logs or telemetry.
+     */
+    [[nodiscard]] auto configuration() const noexcept
+        -> const application_configuration&;
+
 private:
     io_context& io_;
     thread_pool& cpu_pool_;
@@ -305,6 +371,7 @@ private:
     observability::telemetry_hub& telemetry_;
     service_registry& services_;
     std::stop_token cancellation_;
+    const application_configuration& configuration_;
     async_file_template files_;
     rest_template rest_;
     json_template json_;
