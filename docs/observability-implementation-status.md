@@ -3978,7 +3978,7 @@ remains unfinished. This closes policy-table partial updates, not the full reloa
 - Windows core and Application builds succeeded; `test_application` passed
   in 4.25 seconds before the final redundant JSON initialization removal.
 - The new host fault sweep terminates on both Windows and Arch ASAN. GDB
-  identified allocation inside nlohmann JSON destruction, initially reached
+  identified allocation inside the former JSON backend destruction, initially reached
   by erasing the copied `recovery` object. Copying only integration properties
   removes that redundant copy/erase path, but a subsequent run still terminates
   during configuration loading. This is an unresolved failure, not a passing

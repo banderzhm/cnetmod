@@ -14,7 +14,7 @@ import :messages;
 import :model;
 import :retrieval;
 import :filters;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

@@ -26,7 +26,7 @@ import :foundation;
 import :messages;
 import :chat;
 import :responses;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

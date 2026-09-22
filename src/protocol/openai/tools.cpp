@@ -13,7 +13,7 @@ import :tool_contracts;
 import :model;
 import :prompt;
 import :tools;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

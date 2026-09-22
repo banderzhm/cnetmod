@@ -4,7 +4,7 @@
 export module cnetmod.application.json;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.application.runtime;
 import cnetmod.coro.task;
 
@@ -17,7 +17,7 @@ namespace cnetmod::application {
  * @return Parsed JSON or a classified portable error.
  */
 export auto parse_offloaded(application_runtime& runtime, std::string text)
-    -> task<std::expected<nlohmann::json, std::error_code>>;
+    -> task<std::expected<cnetmod::json::document, std::error_code>>;
 
 /**
  * @brief Serializes JSON on the application CPU pool.
@@ -26,7 +26,7 @@ export auto parse_offloaded(application_runtime& runtime, std::string text)
  * @param indentation Negative for compact output, otherwise indentation width.
  * @return Serialized JSON or a classified portable error.
  */
-export auto dump_offloaded(application_runtime& runtime, nlohmann::json value,
+export auto dump_offloaded(application_runtime& runtime, cnetmod::json::document value,
     int indentation = -1)
     -> task<std::expected<std::string, std::error_code>>;
 

@@ -25,7 +25,7 @@ import :embeddings;
 import :audio;
 import :images;
 import :moderation;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -60,7 +60,7 @@ auto client::list_models()
     }
 
     std::vector<model_info> models;
-    auto j = nlohmann::json::parse(resp_body, nullptr, false);
+    auto j = cnetmod::json::document::parse(resp_body, nullptr, false);
     if (!j.is_discarded() && j.contains("data") && j["data"].is_array())
     {
         for (auto& m : j["data"])

@@ -3,7 +3,7 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.application;
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC
 import cnetmod.observability.grpc;

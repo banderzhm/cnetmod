@@ -18,7 +18,7 @@ import :agent;
 import :retrieval;
 import :rag;
 import :guardrails;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

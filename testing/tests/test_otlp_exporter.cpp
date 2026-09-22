@@ -10,7 +10,7 @@ import cnetmod.application.service_registry;
 import cnetmod.application.recovery_policy;
 import cnetmod.observability.export_retry;
 import cnetmod.observability.export_response;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.instrumentation.operation_result;
 import cnetmod.instrumentation.operation_scope;
 import cnetmod.core;
@@ -724,7 +724,7 @@ TEST(otlp_exporter_posts_valid_otlp_json_to_a_real_http_collector)
     ASSERT_TRUE(observation.logs_payload.contains("\"resourceLogs\""));
     ASSERT_TRUE(observation.logs_payload.contains("dependency recovering"));
     ASSERT_TRUE(observation.logs_payload.contains("\"traceId\""));
-    const auto document = nlohmann::json::parse(observation.payload);
+    const auto document = cnetmod::json::document::parse(observation.payload);
 #ifdef CNETMOD_TEST_ORM
     unsigned database_spans = 0;
     for (const auto& span : document.at("resourceSpans").at(0).at("scopeSpans").at(0).at("spans"))
@@ -778,9 +778,9 @@ TEST(otlp_exporter_posts_valid_otlp_json_to_a_real_http_collector)
         }
     }
     ASSERT_EQ(terminal_spans, 3U);
-    const auto metric_document = nlohmann::json::parse(observation.metrics_payload);
+    const auto metric_document = cnetmod::json::document::parse(observation.metrics_payload);
     ASSERT_EQ(observation.metric_batches.size(), 2U);
-    const auto first_metrics = nlohmann::json::parse(observation.metric_batches[0]);
+    const auto first_metrics = cnetmod::json::document::parse(observation.metric_batches[0]);
     const auto& initial_point = first_metrics.at("resourceMetrics").at(0).at("scopeMetrics").at(0).at("metrics").at(0).at("sum").at("dataPoints").at(0);
     const auto& final_sum = metric_document.at("resourceMetrics").at(0).at("scopeMetrics").at(0).at("metrics").at(0).at("sum");
     ASSERT_TRUE(final_sum.at("aggregationTemporality") == "AGGREGATION_TEMPORALITY_CUMULATIVE");
@@ -870,7 +870,7 @@ TEST(telemetry_logger_bridge_exports_explicit_correlation_to_real_collector)
     io->run();
     logger::shutdown();
 
-    const auto document = nlohmann::json::parse(logs_payload);
+    const auto document = cnetmod::json::document::parse(logs_payload);
     const auto& record = document.at("resourceLogs").at(0).at("scopeLogs").at(0).at("logRecords").at(0);
     ASSERT_EQ(record.at("body").at("stringValue").get<std::string>(), "persisted order");
     ASSERT_EQ(record.at("severityText").get<std::string>(), "INFO");
@@ -951,7 +951,7 @@ TEST(collector_connection_refusal_recovers_and_accepts_later_batches)
     routes.post("/v1/*signal", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
         {
             const auto body = std::string{co_await request.read_full_body()};
-            const auto document = nlohmann::json::parse(body);
+            const auto document = cnetmod::json::document::parse(body);
             if (request.path() == "/v1/traces")
             {
                 ASSERT_TRUE(document.contains("resourceSpans"));

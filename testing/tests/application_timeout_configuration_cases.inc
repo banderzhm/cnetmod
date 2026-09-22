@@ -2,7 +2,7 @@ TEST(application_rejects_invalid_client_timeouts_before_registration)
 {
     const auto verify = [](std::string service_name, std::string property)
     {
-        const std::vector<nlohmann::json> invalid{
+        const std::vector<cnetmod::json::document> invalid{
             -1, 0, 1.5, true, nullptr, "1000", std::numeric_limits<std::uint64_t>::max()};
         for (const auto& timeout : invalid)
         {

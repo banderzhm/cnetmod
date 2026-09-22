@@ -4,7 +4,7 @@
 
 **import**: `import cnetmod.protocol.mqtt;`
 **CMake**: `-DCNETMOD_ENABLE_MQTT=ON`
-**依赖**: `cnetmod.io.io_context`、`cnetmod.coro.task`、`cnetmod.coro.channel`、`nlohmann.json`（安全配置）
+**依赖**: `cnetmod.io.io_context`、`cnetmod.coro.task`、`cnetmod.coro.channel`、`cnetmod.json`（安全配置）
 **源码**: `src/protocol/mqtt/`
 
 ## 场景导航

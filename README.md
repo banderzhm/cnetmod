@@ -46,6 +46,7 @@ The [`skill/`](skill/) directory contains the project-specific instructions for 
 
 ### Protocols
 - **HTTP/1.1 & HTTP/2**: Full server with router, middleware pipeline, chunked transfer, multipart upload; HTTP/2 via TLS + ALPN negotiation with multiplexed streams
+- **HTTP/3 / QUIC**: Full client and server with TLS 1.3, ALPN, dynamic-table QPACK, multiplexed streams, connection migration, multipath, and path-MTU discovery
 - **WebSocket**: Server-side upgrade from HTTP, frame codec, ping/pong, per-message deflate
 - **SOCKS5**: Proxy protocol client and server — CONNECT, BIND, UDP ASSOCIATE commands; authentication methods (no auth, username/password, RFC 1961 GSSAPI provider callbacks); IPv4, IPv6, and domain name support
 - **MQTT v3.1.1 / v5.0**: Full broker + async client — QoS 0/1/2, retained messages, will, session resume, shared subscriptions, topic alias, auto-reconnect; sync client wrapper
@@ -359,8 +360,9 @@ cmake --build --preset conan-release --target cnetmod_core
 conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 ```
 
-The default Conan recipe installs ConanCenter packages for `jwt-cpp`,
-`nlohmann_json`, `pugixml`, `leveldb`, `openssl`, and `zlib`.
+The default Conan recipe installs the remaining ConanCenter packages such as
+`pugixml`, `leveldb`, `openssl`, and `zlib`. JSON is provided through
+`cnetmod.json`; its Glaze backend remains a private implementation detail.
 `mimalloc` is enabled by default and can be disabled with
 `-o cnetmod/*:with_mimalloc=False`. `stdexec` is normally taken from
 `3rdparty/stdexec`; if your Conan remote provides the upstream `p2300` package,
@@ -385,7 +387,8 @@ cnetmod.io            — io_context + platform backends (iocp, io_uring, epoll,
 cnetmod.executor      — async_op, server_context, coroutine scheduler, CPU-pool bridge
 cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP async I/O
-cnetmod.protocol.http — HTTP/1.1 + HTTP/2 server, router, middleware pipeline, ALPN negotiation
+cnetmod.protocol.http — HTTP/1.1 + HTTP/2 + HTTP/3 client/server, router, middleware, and QPACK
+cnetmod.protocol.quic — QUIC transport, TLS 1.3, connection migration, multipath, and congestion control
 cnetmod.protocol.websocket — WebSocket server
 cnetmod.protocol.socks5 — SOCKS5 proxy client + server
 cnetmod.protocol.mqtt — MQTT broker + client (v3.1.1 / v5.0)
@@ -424,7 +427,7 @@ cnetmod.utils         — Protocol conversion utilities (endian, CRC, hex, regis
 
 ## Project Status
 
-cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1 & HTTP/2, MQTT, MySQL, WebSocket, Modbus, CoAP, and more, all built with zero-overhead async/await.
+cnetmod is a modern C++23 network library showcasing the power of modules and coroutines. It provides production-grade implementations of HTTP/1.1, HTTP/2, HTTP/3, MQTT, MySQL, WebSocket, Modbus, CoAP, and more, all built with zero-overhead async/await.
 
 The library demonstrates that C++23 modules are ready for real-world use, with full cross-platform support on Linux, macOS, and Windows.
 

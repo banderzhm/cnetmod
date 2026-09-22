@@ -42,12 +42,12 @@ struct template_options
 };
 
 /**
- * @brief Glaze-backed JSON codec used by typed Redis template operations.
+ * @brief Framework JSON codec used by typed Redis template operations.
  *
  * Applications may still supply any codec satisfying cnetmod::json::codec_for
  * to get_as() and set_as().
  */
-using json_codec = cnetmod::json::glaze_codec;
+using json_codec = cnetmod::json::default_codec;
 
 /**
  * @brief Builds one ordered Redis pipeline without owning a connection.

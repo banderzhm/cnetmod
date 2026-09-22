@@ -169,6 +169,23 @@ public:
     }
 
     /**
+     * @brief Executes an XML select and materializes a read-only DTO projection.
+     *
+     * Projection must be declared with CNETMOD_PROJECTION. Persistent models
+     * are also accepted when a statement intentionally returns another model.
+     */
+    template <ResultRecord Projection>
+    auto select_xml_as(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<Projection>>
+    {
+        xml_statement_executor<Session> executor{*session_, registry};
+        auto result = co_await executor.select(statement_id, parameters);
+        co_return map_xml_select_result<Projection>(
+            registry, statement_id, std::move(result));
+    }
+
+    /**
      * @brief Executes a cardinality-checked XML select for this model.
      */
     auto select_one_xml(const mapper_registry& registry,

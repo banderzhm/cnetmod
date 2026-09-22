@@ -422,7 +422,6 @@ cnetmod_link_mimalloc(cnetmod_core)
 configure_cxx_modules(
     TARGET cnetmod_core
     MODULE_INTERFACE_FILES ${MODULE_INTERFACE_FILES}
-    JSON_MODULE ${NLOHMANN_JSON_MODULE}
 )
 
 # Module generation mode
@@ -541,9 +540,6 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/src/"
         PATTERN "*.inl"
         PATTERN "*.ipp"
         PATTERN "*.tpp")
-install(TARGETS cnetmod_glaze EXPORT cnetmodTargets)
-install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/glaze/include/glaze"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 if(TARGET cnetmod_c)
     install(TARGETS cnetmod_c
         EXPORT cnetmodTargets

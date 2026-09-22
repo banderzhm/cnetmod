@@ -1,17 +1,17 @@
 module;
 
 #include <cnetmod/config.hpp>
-#include <nlohmann/json.hpp>
 
 module cnetmod.testing.database.postgresql_interoperability_driver;
 
 import std;
+import cnetmod.json;
 import cnetmod.protocol.postgresql;
 
 namespace cnetmod::testing::database {
 namespace {
 
-    using json = nlohmann::json;
+    using json = cnetmod::json::document;
 
     auto success(json result) -> std::string
     {

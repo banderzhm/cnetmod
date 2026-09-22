@@ -32,7 +32,7 @@ import :embeddings;
 import :audio;
 import :images;
 import :moderation;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

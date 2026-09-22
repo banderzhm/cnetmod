@@ -18,6 +18,64 @@ import cnetmod.orm.xml_statement_executor;
 export namespace cnetmod::orm {
 
 /**
+ * @brief Materializes a provider-neutral XML query result as a typed record.
+ *
+ * Projection records declared with CNETMOD_PROJECTION and persistent models
+ * declared with CNETMOD_MODEL share this mapping path. A statement resultMap
+ * is honored when present; otherwise columns bind by their declared names.
+ */
+template <ResultRecord Record>
+auto map_xml_select_result(const mapper_registry& registry,
+    std::string_view statement_id, query_result source)
+    -> model_result<Record>
+{
+    auto direct = [](query_result value) -> model_result<Record>
+    {
+        model_result<Record> result;
+        result.affected_rows = value.affected_rows;
+        result.last_insert_id = value.last_insert_id;
+        result.error_msg = std::move(value.error_msg);
+        result.sql_state = std::move(value.sql_state);
+        result.error_code = value.error_code;
+        if (result.error_msg.empty())
+            result.data = from_result_set<Record>(value);
+        return result;
+    };
+
+    const auto result_map_id = registry.statement_result_map(statement_id);
+    if (result_map_id.empty() || source.is_err())
+        return direct(std::move(source));
+
+    const auto name_space = registry.get_namespace(statement_id);
+    std::string qualified_result_map;
+    if (result_map_id.contains('.'))
+        qualified_result_map = result_map_id;
+    else
+        qualified_result_map = std::format(
+            "{}.{}", name_space, result_map_id);
+    const auto* definition = registry.find_result_map(qualified_result_map);
+    const auto* definitions = registry.result_maps(name_space);
+    if (!definition || !definitions)
+    {
+        model_result<Record> result;
+        result.error_msg = "XML resultMap not found: " + qualified_result_map;
+        result.framework_error = std::make_error_code(
+            std::errc::invalid_argument);
+        return result;
+    }
+
+    model_result<Record> result;
+    result.affected_rows = source.affected_rows;
+    result.last_insert_id = source.last_insert_id;
+    result.sql_state = std::move(source.sql_state);
+    result.error_code = source.error_code;
+    result.data = from_mapped_objects<Record>(
+        result_map_applier::materialize_joined(
+            *definition, source, *definitions));
+    return result;
+}
+
+/**
  * @brief Adds XML-defined statements to the same typed Mapper session.
  *
  * The class is protocol-neutral. It renders XML dynamic SQL into the common
@@ -77,7 +135,8 @@ private:
     {
         xml_statement_executor<Session> executor{*session, *registry};
         auto result = co_await executor.select(statement_id, parameters);
-        co_return map_select(*registry, statement_id, std::move(result));
+        co_return map_xml_select_result<T>(
+            *registry, statement_id, std::move(result));
     }
 
     static auto select_one_impl(Session* session,
@@ -121,46 +180,6 @@ private:
         result.error_code = source.error_code;
         if (include_rows && result.error_msg.empty())
             result.data = from_result_set<T>(source);
-        return result;
-    }
-
-    static auto map_select(const mapper_registry& registry,
-        std::string_view statement_id, query_result source) -> model_result<T>
-    {
-        const auto result_map_id = registry.statement_result_map(statement_id);
-        if (result_map_id.empty() || source.is_err())
-            return map(std::move(source));
-
-        const auto name_space = registry.get_namespace(statement_id);
-        std::string qualified_result_map;
-        if (result_map_id.contains('.'))
-            qualified_result_map = result_map_id;
-        else
-            qualified_result_map = std::format("{}.{}", name_space,
-                result_map_id);
-
-        const auto* definition = registry.find_result_map(qualified_result_map);
-        const auto* definitions = registry.result_maps(name_space);
-        if (!definition || !definitions)
-            return failure("XML resultMap not found: " + qualified_result_map);
-
-        model_result<T> result;
-        result.affected_rows = source.affected_rows;
-        result.last_insert_id = source.last_insert_id;
-        result.sql_state = std::move(source.sql_state);
-        result.error_code = source.error_code;
-        result.data = from_mapped_objects<T>(
-            result_map_applier::materialize_joined(
-                *definition, source, *definitions));
-        return result;
-    }
-
-    static auto failure(std::string message) -> model_result<T>
-    {
-        model_result<T> result;
-        result.error_msg = std::move(message);
-        result.framework_error = std::make_error_code(
-            std::errc::invalid_argument);
         return result;
     }
 

@@ -234,19 +234,16 @@ function(cnetmod_link_selected_stdlib TARGET_NAME)
 endfunction()
 
 #[[
-  Configure C++ module file sets for a target, including:
-    - project module interfaces
-    - standard library modules (if detected)
-    - nlohmann/json module interface
+  Configure C++ module file sets for a target, including project module
+  interfaces and detected standard-library modules.
 
   Args:
     TARGET <target_name>
     MODULE_INTERFACE_FILES <list...>
-    JSON_MODULE <path>
 ]]
 function(configure_cxx_modules)
     set(options)
-    set(oneValueArgs TARGET JSON_MODULE)
+    set(oneValueArgs TARGET)
     set(multiValueArgs MODULE_INTERFACE_FILES)
     cmake_parse_arguments(CFG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -266,7 +263,6 @@ function(configure_cxx_modules)
                 ${CFG_MODULE_INTERFACE_FILES}
                 ${STDLIB_MODULE_DIRS}/std.cppm
                 ${STDLIB_MODULE_DIRS}/std.compat.cppm
-                ${CFG_JSON_MODULE}
         )
     elseif(WIN32 AND STDLIB_MODULE_DIRS AND CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
         # Windows/MSVC: Visual Studio builds the STL modules for import std.
@@ -277,7 +273,6 @@ function(configure_cxx_modules)
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
             FILES
                 ${CFG_MODULE_INTERFACE_FILES}
-                ${CFG_JSON_MODULE}
         )
     elseif(WIN32 AND STDLIB_MODULE_DIRS)
         # Windows non-MSVC toolchains: keep explicit standard-library modules.
@@ -288,7 +283,6 @@ function(configure_cxx_modules)
                 ${CFG_MODULE_INTERFACE_FILES}
                 ${STDLIB_MODULE_DIRS}/std.ixx
                 ${STDLIB_MODULE_DIRS}/std.compat.ixx
-                ${CFG_JSON_MODULE}
         )
     else()
         message(WARNING "Standard library module path not detected, please set STDLIB_MODULE_DIRS manually")
@@ -297,7 +291,6 @@ function(configure_cxx_modules)
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
             FILES
                 ${CFG_MODULE_INTERFACE_FILES}
-                ${CFG_JSON_MODULE}
         )
     endif()
 endfunction()

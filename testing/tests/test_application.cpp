@@ -3,7 +3,7 @@
 #include <cnetmod/orm.hpp>
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.application;
 import cnetmod.core;
 import cnetmod.core.error;
@@ -44,6 +44,16 @@ CNETMOD_MODEL(runtime_repository_record, "runtime_repository_records",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(value, "value", varchar))
 
+struct runtime_record_summary
+{
+    std::int64_t id{};
+    std::string summary;
+};
+
+CNETMOD_PROJECTION(runtime_record_summary,
+    CNETMOD_FIELD(id, "id", bigint),
+    CNETMOD_FIELD(summary, "summary", varchar))
+
 static_assert(std::same_as<decltype(std::declval<application::application_runtime&>()
                                    .repository<runtime_repository_record>()),
     std::expected<application::managed_repository<runtime_repository_record>,
@@ -76,6 +86,8 @@ static_assert(std::same_as<decltype(std::declval<application::application_runtim
         registry, "RecordMapper.list", xml_parameters);
     (void)co_await records.select_xml_result(
         registry, "RecordMapper.projection", xml_parameters);
+    (void)co_await records.select_xml_as<runtime_record_summary>(
+        registry, "RecordMapper.summary", xml_parameters);
     (void)co_await records.get_one_xml(
         registry, "RecordMapper.one", xml_parameters);
     (void)co_await records.save(model);
@@ -1755,7 +1767,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
         });
     ASSERT_TRUE(accepted.has_value());
 
-    std::optional<std::expected<nlohmann::json, std::error_code>> parsed;
+    std::optional<std::expected<cnetmod::json::document, std::error_code>> parsed;
     std::optional<std::expected<std::string, std::error_code>> dumped;
     std::optional<std::expected<void, std::error_code>> file_written;
     std::optional<std::expected<void, std::error_code>> file_flushed;
@@ -2144,7 +2156,7 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_TRUE(host->configuration().observability.otlp.capture_framework_logs);
     ASSERT_EQ(host->configuration().services.at("primary").name, "redis");
 
-    auto secrets = nlohmann::json::object();
+    auto secrets = cnetmod::json::document::object();
     secrets["password"] = "secret";
     secrets["endpoint"] = "postgres://user:password@localhost/database";
     const auto redacted = application::redact_configuration(secrets);

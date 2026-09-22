@@ -370,7 +370,7 @@ auto replies = co_await cache.execute(batch);
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的 Glaze 默认 codec；Redis 模块不会向消费方泄漏 nlohmann JSON。可用满足 `cnetmod::json::codec_for` 的业务 codec 替换。
+- `json_codec` 是 `get_as` / `set_as` 的框架默认 codec；Redis 模块只依赖 `cnetmod.json`，不会向消费方泄漏具体 JSON 后端。可用满足 `cnetmod::json::codec_for` 的业务 codec 替换。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
 

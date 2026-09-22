@@ -61,6 +61,17 @@
             },                                                    \
             [](const auto& obj) -> ::cnetmod::orm::param_value {  \
                 return ::cnetmod::orm::detail::get_member(obj.M); \
+            },                                                    \
+            [](auto& obj, const ::cnetmod::json::document& value) \
+                -> std::expected<void, std::error_code> {         \
+                return ::cnetmod::orm::detail::decode_json_member(\
+                    obj.M, value);                                \
+            },                                                    \
+            [](const auto& obj)                                   \
+                -> std::expected<::cnetmod::json::document,       \
+                    std::error_code> {                            \
+                return ::cnetmod::orm::detail::encode_json_member(\
+                    obj.M);                                       \
             }                                                     \
     }
 
@@ -76,6 +87,17 @@
             },                                                    \
             [](const auto& obj) -> ::cnetmod::orm::param_value {  \
                 return ::cnetmod::orm::detail::get_member(obj.M); \
+            },                                                    \
+            [](auto& obj, const ::cnetmod::json::document& value) \
+                -> std::expected<void, std::error_code> {         \
+                return ::cnetmod::orm::detail::decode_json_member(\
+                    obj.M, value);                                \
+            },                                                    \
+            [](const auto& obj)                                   \
+                -> std::expected<::cnetmod::json::document,       \
+                    std::error_code> {                            \
+                return ::cnetmod::orm::detail::encode_json_member(\
+                    obj.M);                                       \
             }                                                     \
     }
 
@@ -90,6 +112,17 @@
             },                                                       \
             [](const auto& obj) -> ::cnetmod::orm::param_value {     \
                 return ::cnetmod::orm::detail::get_member(obj.M);    \
+            },                                                       \
+            [](auto& obj, const ::cnetmod::json::document& value)    \
+                -> std::expected<void, std::error_code> {            \
+                return ::cnetmod::orm::detail::decode_json_member(   \
+                    obj.M, value);                                   \
+            },                                                       \
+            [](const auto& obj)                                      \
+                -> std::expected<::cnetmod::json::document,          \
+                    std::error_code> {                               \
+                return ::cnetmod::orm::detail::encode_json_member(   \
+                    obj.M);                                          \
             }                                                        \
     }
 
@@ -121,6 +154,67 @@
                     fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
             return m;                                                      \
         }                                                                  \
+    };                                                               \
+    template <>                                                      \
+    struct ::cnetmod::json::document_traits<TYPE>                    \
+    {                                                                \
+        static auto encode(const TYPE& value, bool emit_nulls)       \
+            -> std::expected<::cnetmod::json::document,              \
+                std::error_code>                                     \
+        {                                                            \
+            return ::cnetmod::orm::record_to_document(               \
+                value, emit_nulls);                                  \
+        }                                                            \
+        static auto decode(                                          \
+            const ::cnetmod::json::document& source,                 \
+            bool reject_unknown) -> std::expected<TYPE,              \
+                std::error_code>                                     \
+        {                                                            \
+            return ::cnetmod::orm::record_from_document<TYPE>(       \
+                source, reject_unknown);                             \
+        }                                                            \
+    };
+
+/**
+ * @brief Declares a read-only DTO projection for select_xml_as<Projection>().
+ *
+ * Unlike CNETMOD_MODEL it has no table identity and is never accepted by CRUD
+ * APIs. Fields use the same CNETMOD_FIELD declarations as persistent models.
+ */
+#define CNETMOD_PROJECTION(TYPE, ...)                                      \
+    template <>                                                            \
+    struct ::cnetmod::orm::projection_traits<TYPE>                         \
+    {                                                                      \
+        using _cnetmod_model_type = TYPE;                                  \
+        static auto meta()                                                 \
+            -> const ::cnetmod::orm::projection_meta<TYPE>&                \
+        {                                                                  \
+            static const ::cnetmod::orm::field_mapping<TYPE> fields_[] = { \
+                __VA_ARGS__};                                              \
+            static const ::cnetmod::orm::projection_meta<TYPE> m{          \
+                std::span<const ::cnetmod::orm::field_mapping<TYPE>>(      \
+                    fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
+            return m;                                                      \
+        }                                                                  \
+    };                                                               \
+    template <>                                                      \
+    struct ::cnetmod::json::document_traits<TYPE>                    \
+    {                                                                \
+        static auto encode(const TYPE& value, bool emit_nulls)       \
+            -> std::expected<::cnetmod::json::document,              \
+                std::error_code>                                     \
+        {                                                            \
+            return ::cnetmod::orm::record_to_document(               \
+                value, emit_nulls);                                  \
+        }                                                            \
+        static auto decode(                                          \
+            const ::cnetmod::json::document& source,                 \
+            bool reject_unknown) -> std::expected<TYPE,              \
+                std::error_code>                                     \
+        {                                                            \
+            return ::cnetmod::orm::record_from_document<TYPE>(       \
+                source, reject_unknown);                             \
+        }                                                            \
     };
 
 // Helper macro to define field name constants

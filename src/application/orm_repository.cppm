@@ -207,6 +207,22 @@ public:
             });
     }
 
+    /**
+     * @brief Executes an XML select as a strongly typed read-only projection.
+     */
+    template <orm::ResultRecord Projection>
+    auto select_xml_as(const orm::mapper_registry& registry,
+        std::string_view statement_id, const orm::param_context& parameters)
+        -> task<orm::model_result<Projection>>
+    {
+        return dispatch([&registry, statement_id,
+                            &parameters](auto& repository)
+            {
+                return repository.template select_xml_as<Projection>(
+                    registry, statement_id, parameters);
+            });
+    }
+
     auto get_one_xml(const orm::mapper_registry& registry,
         std::string_view statement_id, const orm::param_context& parameters,
         orm::single_result_policy policy =

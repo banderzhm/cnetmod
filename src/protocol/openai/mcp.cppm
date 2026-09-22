@@ -16,7 +16,7 @@ import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.protocol.http;
 import :foundation;
 import :tools;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

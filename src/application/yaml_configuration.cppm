@@ -8,7 +8,7 @@
 export module cnetmod.application.yaml_configuration;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::application {
 
@@ -24,6 +24,6 @@ namespace cnetmod::application {
  */
 export [[nodiscard]] auto load_yaml_configuration_document(
     const std::filesystem::path& path)
-    -> std::expected<nlohmann::json, std::error_code>;
+    -> std::expected<cnetmod::json::document, std::error_code>;
 
 } // namespace cnetmod::application

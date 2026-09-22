@@ -22,7 +22,7 @@ import cnetmod.core.ssl;
 #endif
 import :client;
 import :foundation;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

@@ -5,11 +5,11 @@ module;
 export module cnetmod.protocol.mqtt:security;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import :types;
 
 export namespace cnetmod::mqtt {
-using json = nlohmann::json;
+using json = cnetmod::json::document;
 enum class auth_method
 {
     plain_password,

@@ -5,7 +5,7 @@ module;
 module cnetmod.protocol.mqtt;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
@@ -16,7 +16,7 @@ import :retained;
 
 namespace cnetmod::mqtt {
 namespace {
-    using json = nlohmann::json;
+    using json = cnetmod::json::document;
 
     auto props_to_json(const properties& props) -> json
     {

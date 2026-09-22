@@ -5,7 +5,7 @@ module cnetmod.testing.messaging.amqp091_driver;
 import :rabbitmq_operation_executor;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.io.io_context;
 import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
@@ -17,7 +17,7 @@ import cnetmod.protocol.amqp091;
 namespace cnetmod::testing::messaging::amqp091_driver {
 namespace {
 
-    using json = nlohmann::json;
+    using json = cnetmod::json::document;
     using namespace std::chrono_literals;
 
     template <class T>

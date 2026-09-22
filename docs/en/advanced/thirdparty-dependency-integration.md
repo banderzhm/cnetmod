@@ -33,9 +33,6 @@ cnetmod reuses existing dependency targets when they are already present:
 For header-only dependencies, the host can override:
 
 - `CNETMOD_STDEXEC_INCLUDE_DIR`
-- `CNETMOD_JWT_CPP_INCLUDE_DIR`
-- `CNETMOD_JSON_INCLUDE_DIR`
-- `CNETMOD_JSON_MODULE`
 
 ## vcpkg
 
@@ -87,8 +84,6 @@ The repository includes a Conan 2 `conanfile.py`. It generates `CMakeDeps` and
 `CMakeToolchain` files and maps Conan package names to the targets cnetmod
 understands:
 
-- `jwt-cpp` -> `jwt-cpp::jwt-cpp`
-- `nlohmann_json` -> `nlohmann_json::nlohmann_json`
 - `pugixml` -> `pugixml::pugixml`
 - `leveldb` -> `leveldb::leveldb`
 

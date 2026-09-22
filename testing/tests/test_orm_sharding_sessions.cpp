@@ -22,6 +22,16 @@ CNETMOD_MODEL(routed_order, "orders",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(description, "description", varchar))
 
+struct order_summary
+{
+    std::int64_t id{};
+    std::string summary;
+};
+
+CNETMOD_PROJECTION(order_summary,
+    CNETMOD_FIELD(id, "id", bigint),
+    CNETMOD_FIELD(summary, "summary", varchar))
+
 struct policy_order
 {
     std::int64_t id{};
@@ -106,6 +116,8 @@ concept exposes_xml_statements = requires(Mapper& mapper,
     const orm::param_context& parameters) {
     mapper.select_xml(registry, "OrderMapper.find", parameters);
     mapper.select_xml_result(registry, "OrderMapper.find", parameters);
+    mapper.template select_xml_as<order_summary>(
+        registry, "OrderMapper.summary", parameters);
     mapper.select_one_xml(registry, "OrderMapper.find", parameters);
     mapper.execute_xml(registry, "OrderMapper.update", parameters);
 };
@@ -116,6 +128,8 @@ using recording_order_mapper =
 
 static_assert(!exposes_model_insert<recording_database_session>);
 static_assert(exposes_xml_statements<recording_order_mapper>);
+static_assert(orm::Projection<order_summary>);
+static_assert(!orm::Model<order_summary>);
 
 struct streaming_session_client : recording_session_client
 {
@@ -865,8 +879,19 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
     orm::mapper_registry registry;
     auto loaded = registry.load_xml(R"(
         <mapper namespace="OrderMapper">
+          <resultMap id="OrderSummaryMap" type="order_summary">
+            <id property="id" column="order_id"/>
+            <result property="summary" column="summary_text"/>
+          </resultMap>
           <select id="findById" resultType="routed_order">
             SELECT id, description FROM orders WHERE id = #{id}
+          </select>
+          <select id="summary" resultMap="OrderSummaryMap">
+            SELECT id AS order_id, description AS summary_text
+            FROM orders WHERE id = #{id}
+          </select>
+          <select id="summaryDirect" resultType="order_summary">
+            SELECT id, description AS summary FROM orders WHERE id = #{id}
           </select>
           <update id="rename" parameterType="routed_order">
             UPDATE orders SET description = #{description} WHERE id = #{id}
@@ -899,6 +924,42 @@ TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
     ASSERT_EQ(untyped.columns.front().name, "migration_version");
     ASSERT_EQ(untyped.rows.front().at(1).get_string(), "abc123");
     ASSERT_EQ(untyped.info, "projection preserved");
+
+    orm::query_result projection;
+    projection.columns = {{.name = "order_id"}, {.name = "summary_text"}};
+    projection.rows = {{orm::field_value::from_int64(7),
+        orm::field_value::from_string("typed summary")}};
+    client.responses.push_back(std::move(projection));
+    auto typed_projection = cnetmod::sync_wait(
+        orders.select_xml_as<order_summary>(
+            registry, "OrderMapper.summary", parameters));
+    ASSERT_TRUE(typed_projection.ok());
+    ASSERT_EQ(typed_projection.data.size(), 1U);
+    ASSERT_EQ(typed_projection.data.front().id, 7);
+    ASSERT_EQ(typed_projection.data.front().summary, "typed summary");
+
+    orm::query_result direct_projection;
+    direct_projection.columns = {{.name = "id"}, {.name = "summary"}};
+    direct_projection.rows = {{orm::field_value::from_int64(8),
+        orm::field_value::from_string("direct summary")}};
+    client.responses.push_back(std::move(direct_projection));
+    auto direct = cnetmod::sync_wait(orders.select_xml_as<order_summary>(
+        registry, "OrderMapper.summaryDirect", parameters));
+    ASSERT_TRUE(direct.ok());
+    ASSERT_EQ(direct.data.size(), 1U);
+    ASSERT_EQ(direct.data.front().id, 8);
+    ASSERT_EQ(direct.data.front().summary, "direct summary");
+
+    client.responses.push_back(orm::query_result{
+        .error_msg = "projection rejected",
+        .sql_state = "42000",
+        .error_code = 1064});
+    auto projection_error = cnetmod::sync_wait(
+        orders.select_xml_as<order_summary>(
+            registry, "OrderMapper.summary", parameters));
+    ASSERT_TRUE(projection_error.is_err());
+    ASSERT_EQ(projection_error.sql_state, "42000");
+    ASSERT_EQ(projection_error.error_code, 1064U);
 
     client.responses.push_back(
         routed_order_result({{7, "first"}, {8, "second"}}));

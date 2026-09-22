@@ -4,7 +4,7 @@ import std;
 
 namespace cnetmod::application {
 
-auto properties_are_known(const nlohmann::json& properties,
+auto properties_are_known(const cnetmod::json::document& properties,
     std::initializer_list<std::string_view> allowed) -> bool
 {
     if (!properties.is_object())
@@ -17,7 +17,7 @@ auto properties_are_known(const nlohmann::json& properties,
     return true;
 }
 
-auto integer_property_in_range(const nlohmann::json& properties,
+auto integer_property_in_range(const cnetmod::json::document& properties,
     std::string_view name, std::int64_t minimum, std::int64_t maximum) -> bool
 {
     if (!properties.is_object() || minimum > maximum)
@@ -37,7 +37,7 @@ auto integer_property_in_range(const nlohmann::json& properties,
     return value >= minimum && value <= maximum;
 }
 
-auto pool_size_properties_are_valid(const nlohmann::json& properties,
+auto pool_size_properties_are_valid(const cnetmod::json::document& properties,
     std::size_t default_minimum, std::size_t default_maximum) -> bool
 {
     constexpr auto limit = static_cast<std::int64_t>(std::min<std::uint64_t>(

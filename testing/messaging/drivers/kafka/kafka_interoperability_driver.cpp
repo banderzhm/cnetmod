@@ -5,7 +5,7 @@ module;
 module cnetmod.testing.messaging.kafka_interoperability_driver;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
 import cnetmod.coro.wait_group;
@@ -18,7 +18,7 @@ import cnetmod.protocol.kafka.kafka_consumer;
 namespace cnetmod::testing::messaging {
 namespace {
 
-    using json = nlohmann::json;
+    using json = cnetmod::json::document;
     using kafka::error;
     using kafka::error_code;
     using kafka::result;

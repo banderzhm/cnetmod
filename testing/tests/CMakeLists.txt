@@ -272,6 +272,11 @@ if(TARGET test_raft)
 endif()
 
 find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+    add_test(NAME json_backend_boundary
+        COMMAND Python3::Interpreter
+            "${PROJECT_SOURCE_DIR}/tools/check_json_boundary.py")
+endif()
 if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MAIL)
     add_executable(smtp_bench_server
         "${CMAKE_CURRENT_SOURCE_DIR}/../mail/smtp_bench_server.cpp")

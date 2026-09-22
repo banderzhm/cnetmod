@@ -5,7 +5,7 @@ export module cnetmod.application.configuration;
 
 import std;
 import cnetmod.application.recovery_policy;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.application.health_registry;
 import cnetmod.application.managed_service;
 import cnetmod.application.service_lifecycle;
@@ -99,7 +99,7 @@ export struct configured_service
     bool enabled = false;
     service_requirement requirement = service_requirement::required;
     recovery_policy recovery;
-    nlohmann::json properties = nlohmann::json::object();
+    cnetmod::json::document properties = cnetmod::json::document::object();
 
     /**
      * Reads a nested string property addressed by a dot-separated path.
@@ -234,6 +234,6 @@ export [[nodiscard]] auto reload_safe_configuration(
  * @brief Returns a recursively redacted copy suitable for diagnostics.
  */
 export [[nodiscard]] auto redact_configuration(
-    const nlohmann::json& value) -> nlohmann::json;
+    const cnetmod::json::document& value) -> cnetmod::json::document;
 
 } // namespace cnetmod::application

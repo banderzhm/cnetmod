@@ -5,6 +5,7 @@ import cnetmod.orm.sql_query_data;
 import cnetmod.orm.sql_parameters;
 import cnetmod.database.datetime;
 import cnetmod.orm.id_generation;
+export import cnetmod.json;
 
 export namespace cnetmod::orm {
 
@@ -62,12 +63,18 @@ struct column_def
 
 template <class T> using field_setter = void (*)(T&, const field_value&);
 template <class T> using field_getter = param_value (*)(const T&);
+template <class T> using json_field_setter = std::expected<void, std::error_code> (*)(
+    T&, const cnetmod::json::document&);
+template <class T> using json_field_getter = std::expected<cnetmod::json::document,
+    std::error_code> (*)(const T&);
 
 template <class T> struct field_mapping
 {
     column_def col;
     field_setter<T> setter;
     field_getter<T> getter;
+    json_field_setter<T> json_setter;
+    json_field_getter<T> json_getter;
 };
 
 template <class T> struct table_meta
@@ -117,11 +124,168 @@ template <class T>
 concept Model = requires {
     { model_traits<T>::meta() } -> std::same_as<const table_meta<T>&>;
 };
+
+/**
+ * @brief Describes a read-only result projection without database table identity.
+ */
+template <class T> struct projection_meta
+{
+    std::span<const field_mapping<T>> fields;
+
+    [[nodiscard]] auto find_column(std::string_view name) const noexcept
+        -> const field_mapping<T>*
+    {
+        for (const auto& field : fields)
+            if (field.col.column_name == name)
+                return &field;
+        return nullptr;
+    }
+};
+
+template <class T> struct projection_traits;
+template <class T>
+concept Projection = requires {
+    { projection_traits<T>::meta() } -> std::same_as<const projection_meta<T>&>;
+};
+
+/**
+ * @brief A type that can receive database result columns.
+ */
+template <class T>
+concept ResultRecord = Model<T> || Projection<T>;
+
+/**
+ * @brief Returns the field metadata used to materialize a result record.
+ */
+template <ResultRecord T>
+[[nodiscard]] auto result_fields() noexcept
+    -> std::span<const field_mapping<T>>
+{
+    if constexpr (Model<T>)
+        return model_traits<T>::meta().fields;
+    else
+        return projection_traits<T>::meta().fields;
+}
+
+/**
+ * @brief Finds a result field by its declared database column name.
+ */
+template <ResultRecord T>
+[[nodiscard]] auto find_result_column(std::string_view name) noexcept
+    -> const field_mapping<T>*
+{
+    if constexpr (Model<T>)
+        return model_traits<T>::meta().find_column(name);
+    else
+        return projection_traits<T>::meta().find_column(name);
+}
+
 [[nodiscard]] auto sql_type_str(column_type type) noexcept -> std::string_view;
+
+/**
+ * @brief Serializes a registered ORM model or projection with its field metadata.
+ */
+template <ResultRecord T>
+[[nodiscard]] auto record_to_document(const T& value, bool emit_nulls)
+    -> std::expected<cnetmod::json::document, std::error_code>
+{
+    auto result = cnetmod::json::document::object();
+    for (const auto& field : result_fields<T>())
+    {
+        auto encoded = field.json_getter(value);
+        if (!encoded)
+            return std::unexpected(encoded.error());
+        if (!emit_nulls && encoded->is_null())
+            continue;
+        result[field.col.field_name] = std::move(*encoded);
+    }
+    return result;
+}
+
+/**
+ * @brief Deserializes a document with the same metadata used by ORM mapping.
+ */
+template <ResultRecord T>
+[[nodiscard]] auto record_from_document(
+    const cnetmod::json::document& source, bool reject_unknown)
+    -> std::expected<T, std::error_code>
+{
+    if (!source.is_object())
+        return std::unexpected(
+            cnetmod::json::make_error_code(cnetmod::json::errc::type_mismatch));
+    T result{};
+    std::size_t consumed{};
+    for (const auto& field : result_fields<T>())
+    {
+        const auto found = source.find(field.col.field_name);
+        if (found == source.end())
+        {
+            if (!field.col.is_nullable())
+                return std::unexpected(cnetmod::json::make_error_code(
+                    cnetmod::json::errc::missing_field));
+            continue;
+        }
+        ++consumed;
+        auto assigned = field.json_setter(result, *found);
+        if (!assigned)
+            return std::unexpected(assigned.error());
+    }
+    if (reject_unknown && consumed != source.size())
+        return std::unexpected(
+            cnetmod::json::make_error_code(cnetmod::json::errc::unknown_field));
+    return result;
+}
 
 } // namespace cnetmod::orm
 
 export namespace cnetmod::orm::detail {
+[[nodiscard]] auto encode_json_member(const calendar_date& value)
+    -> std::expected<cnetmod::json::document, std::error_code>;
+[[nodiscard]] auto encode_json_member(const calendar_datetime& value)
+    -> std::expected<cnetmod::json::document, std::error_code>;
+[[nodiscard]] auto encode_json_member(const clock_time& value)
+    -> std::expected<cnetmod::json::document, std::error_code>;
+[[nodiscard]] auto encode_json_member(
+    const std::optional<calendar_datetime>& value)
+    -> std::expected<cnetmod::json::document, std::error_code>;
+[[nodiscard]] auto encode_json_member(const uuid& value)
+    -> std::expected<cnetmod::json::document, std::error_code>;
+
+[[nodiscard]] auto decode_json_member(
+    calendar_date& member, const cnetmod::json::document& source)
+    -> std::expected<void, std::error_code>;
+[[nodiscard]] auto decode_json_member(
+    calendar_datetime& member, const cnetmod::json::document& source)
+    -> std::expected<void, std::error_code>;
+[[nodiscard]] auto decode_json_member(
+    clock_time& member, const cnetmod::json::document& source)
+    -> std::expected<void, std::error_code>;
+[[nodiscard]] auto decode_json_member(std::optional<calendar_datetime>& member,
+    const cnetmod::json::document& source)
+    -> std::expected<void, std::error_code>;
+[[nodiscard]] auto decode_json_member(
+    uuid& member, const cnetmod::json::document& source)
+    -> std::expected<void, std::error_code>;
+
+template <typename Member>
+[[nodiscard]] auto encode_json_member(const Member& value)
+    -> std::expected<cnetmod::json::document, std::error_code>
+{
+    return cnetmod::json::to_document(value);
+}
+
+template <typename Member>
+[[nodiscard]] auto decode_json_member(
+    Member& member, const cnetmod::json::document& source)
+    -> std::expected<void, std::error_code>
+{
+    auto decoded = cnetmod::json::from_document<Member>(source);
+    if (!decoded)
+        return std::unexpected(decoded.error());
+    member = std::move(*decoded);
+    return {};
+}
+
 void set_member(std::int64_t&, const field_value&);
 void set_member(std::uint64_t&, const field_value&);
 void set_member(int&, const field_value&);

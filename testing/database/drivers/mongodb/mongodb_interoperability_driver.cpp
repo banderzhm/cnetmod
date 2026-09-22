@@ -1,11 +1,11 @@
 module;
 
 #include <cnetmod/config.hpp>
-#include <nlohmann/json.hpp>
 
 module cnetmod.testing.database.mongodb_interoperability_driver;
 
 import std;
+import cnetmod.json;
 import cnetmod.protocol.mongodb;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
@@ -13,7 +13,7 @@ import cnetmod.coro.timer;
 namespace cnetmod::testing::database {
 namespace {
 
-    using json = nlohmann::json;
+    using json = cnetmod::json::document;
 
     auto success(json result) -> std::string
     {

@@ -9,7 +9,7 @@ export module cnetmod.protocol.openai:prompt;
 import std;
 import :foundation;
 import :messages;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

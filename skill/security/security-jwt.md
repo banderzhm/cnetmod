@@ -1,6 +1,6 @@
 # JWT 签发与验证
 
-> 协程原生 JWT 模块，基于 jwt-cpp，CPU 密集操作卸载到 cnetmod 线程池。
+> 协程原生 JWT 模块，使用 `cnetmod.json` 与框架 HMAC-SHA256，CPU 密集操作卸载到 cnetmod 线程池。
 > 模块: `import cnetmod.security.jwt;`
 
 ## 核心原则
@@ -223,4 +223,4 @@ auto jwt_middleware(cnetmod::thread_pool& pool, std::string_view secret)
 ## CMake 依赖
 
 JWT 模块位于 `cnetmod_core` 静态库中，无需额外 CMake 开关。
-依赖 `3rdparty/jwt-cpp`（已内置）。
+JWT 的 JSON 与密码学实现只依赖框架门面，不向下游公开第三方 JSON/JWT 类型。

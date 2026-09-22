@@ -1,8 +1,9 @@
 #include "test_framework.hpp"
 #include <cnetmod/orm.hpp>
+#include <cnetmod/json.hpp>
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.orm;
 import cnetmod.orm.database_session;
 import cnetmod.io.io_context;
@@ -57,6 +58,22 @@ struct orm_soft_deleted_record
 CNETMOD_MODEL(orm_soft_deleted_record, "soft_deleted_records",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(deleted_at, "deleted_at", datetime, NULLABLE | LOGIC_DELETE))
+
+struct orm_json_temporal_record
+{
+    orm::uuid id;
+    orm::calendar_date business_date;
+    orm::calendar_datetime created_at;
+    orm::clock_time elapsed;
+    std::optional<orm::calendar_datetime> deleted_at;
+};
+
+CNETMOD_MODEL(orm_json_temporal_record, "temporal_records",
+    CNETMOD_FIELD(id, "id", char_, PK, ::cnetmod::orm::id_strategy::uuid),
+    CNETMOD_FIELD(business_date, "business_date", date),
+    CNETMOD_FIELD(created_at, "created_at", datetime),
+    CNETMOD_FIELD(elapsed, "elapsed", time),
+    CNETMOD_FIELD(deleted_at, "deleted_at", datetime, NULLABLE))
 
 [[maybe_unused]] auto mysql_database_session_compile_probe(
     cnetmod::mysql::client& client) -> cnetmod::task<void>
@@ -283,18 +300,48 @@ template <> struct xml_object_graph_binder<::orm_json_user_graph>
 
 } // namespace cnetmod::orm
 
-TEST(orm_json_uses_model_metadata_without_nlohmann_macros)
+TEST(orm_models_reuse_metadata_with_the_framework_json_codec)
 {
     const orm_json_user original{42, "Ada", 1};
-    const auto encoded = orm::to_json(original);
-    ASSERT_EQ(encoded.at("id").get<std::int64_t>(), 42);
-    ASSERT_EQ(encoded.at("name").get<std::string>(), "Ada");
+    const auto encoded = cnetmod::json::write(original);
+    ASSERT_TRUE(encoded.has_value());
+    ASSERT_TRUE(encoded->contains("\"id\":42"));
+    ASSERT_TRUE(encoded->contains("\"name\":\"Ada\""));
 
-    const auto decoded = orm::from_json<orm_json_user>(encoded);
+    const auto decoded = cnetmod::json::parse<orm_json_user>(*encoded);
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(decoded->id, 42);
     ASSERT_EQ(decoded->name, "Ada");
     ASSERT_EQ(decoded->status, 1);
+}
+
+TEST(orm_json_metadata_covers_temporal_uuid_and_nullable_fields)
+{
+    const auto id = orm::uuid::from_string(
+        "550e8400-e29b-41d4-a716-446655440000");
+    ASSERT_TRUE(id.has_value());
+    const orm_json_temporal_record original{
+        .id = *id,
+        .business_date = {2026, 9, 22},
+        .created_at = {2026, 9, 22, 14, 35, 17, 123456},
+        .elapsed = {true, 125, 4, 3, 654321},
+        .deleted_at = std::nullopt,
+    };
+
+    const auto encoded = cnetmod::json::write(original);
+    ASSERT_TRUE(encoded.has_value());
+    ASSERT_TRUE(encoded->contains("\"business_date\":\"2026-09-22\""));
+    ASSERT_TRUE(encoded->contains("\"created_at\":\"2026-09-22 14:35:17.123456\""));
+    ASSERT_TRUE(encoded->contains("\"elapsed\":\"-125:04:03.654321\""));
+    ASSERT_FALSE(encoded->contains("deleted_at"));
+
+    const auto decoded = cnetmod::json::parse<orm_json_temporal_record>(*encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->id.to_string(), id->to_string());
+    ASSERT_EQ(decoded->business_date.to_string(), "2026-09-22");
+    ASSERT_EQ(decoded->created_at.to_string(), "2026-09-22 14:35:17.123456");
+    ASSERT_EQ(decoded->elapsed.to_string(), "-125:04:03.654321");
+    ASSERT_FALSE(decoded->deleted_at.has_value());
 }
 
 TEST(xml_result_map_projects_scalar_object_graph_into_model_dto)

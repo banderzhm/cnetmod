@@ -5,7 +5,7 @@ module;
 module cnetmod.protocol.mqtt;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import :security;
 import :types;
 import :topic_filter;

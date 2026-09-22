@@ -72,7 +72,6 @@ class CnetmodConan(ConanFile):
         "with_leveldb": True,
         "with_mimalloc": True,
         "with_stdexec_package": False,
-        "jwt-cpp/*:with_picojson": False,
         "leveldb/*:shared": False,
         "leveldb/*:with_crc32c": False,
         "leveldb/*:with_snappy": False,
@@ -96,10 +95,6 @@ class CnetmodConan(ConanFile):
         self.options.shared = False
 
     def requirements(self):
-        self.requires("nlohmann_json/3.12.0")
-
-        if self.options.with_http:
-            self.requires("jwt-cpp/0.7.2")
         if self.options.with_postgresql:
             self.requires("icu/[>=74 <79]")
         if self.options.with_orm:

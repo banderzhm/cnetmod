@@ -10,7 +10,7 @@ import std;
 import :foundation;
 import :messages;
 import :prompt;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

@@ -4,7 +4,7 @@
 export module cnetmod.application.auto_configuration;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.application.configuration;
 import cnetmod.application.service_registry;
 import cnetmod.application.task_supervisor;
@@ -30,7 +30,7 @@ export using service_auto_configurator = std::function<
 /**
  * @brief Validates that a service configuration contains only allowed keys.
  */
-export [[nodiscard]] auto properties_are_known(const nlohmann::json& properties,
+export [[nodiscard]] auto properties_are_known(const cnetmod::json::document& properties,
     std::initializer_list<std::string_view> allowed) -> bool;
 
 /**
@@ -38,7 +38,7 @@ export [[nodiscard]] auto properties_are_known(const nlohmann::json& properties,
  * Missing properties retain their defaults; present values must be integers
  * within the inclusive bounds. Booleans and floating-point values are rejected.
  */
-export [[nodiscard]] auto integer_property_in_range(const nlohmann::json& properties,
+export [[nodiscard]] auto integer_property_in_range(const cnetmod::json::document& properties,
     std::string_view name, std::int64_t minimum, std::int64_t maximum) -> bool;
 
 /**
@@ -46,7 +46,7 @@ export [[nodiscard]] auto integer_property_in_range(const nlohmann::json& proper
  * Applies defaults to omitted bounds and requires zero or more initial
  * connections, a positive maximum, and minimum no greater than maximum.
  */
-export [[nodiscard]] auto pool_size_properties_are_valid(const nlohmann::json& properties,
+export [[nodiscard]] auto pool_size_properties_are_valid(const cnetmod::json::document& properties,
     std::size_t default_minimum, std::size_t default_maximum) -> bool;
 
 export class auto_configuration_registry

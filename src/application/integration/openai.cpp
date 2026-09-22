@@ -7,7 +7,7 @@ import cnetmod.observability.openai;
 import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
 import cnetmod.coro.task_group;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::application {
 
@@ -20,7 +20,7 @@ namespace {
     };
 
     [[nodiscard]] auto parse_openai_settings(
-        const nlohmann::json& properties)
+        const cnetmod::json::document& properties)
         -> std::expected<openai_service_settings, std::error_code>
     {
         if (!properties_are_known(properties,

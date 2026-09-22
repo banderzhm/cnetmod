@@ -13,11 +13,11 @@ TEST(application_rejects_invalid_pool_capacity_without_normalization)
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
     names.emplace_back("mongodb");
 #endif
-    const std::vector<nlohmann::json> invalid_values{
+    const std::vector<cnetmod::json::document> invalid_values{
         -1, 1.5, true, nullptr, "2", std::numeric_limits<std::uint64_t>::max()};
     for (const auto& name : names)
     {
-        const auto build = [&](nlohmann::json properties)
+        const auto build = [&](cnetmod::json::document properties)
         {
             return application::application_builder{"pool-capacity"}
                 .enable_auto_configuration()
@@ -36,7 +36,7 @@ TEST(application_rejects_invalid_pool_capacity_without_normalization)
                     })
                 .build();
         };
-        const auto reject = [&](nlohmann::json properties)
+        const auto reject = [&](cnetmod::json::document properties)
         {
             auto result = build(std::move(properties));
             ASSERT_FALSE(result.has_value());
@@ -45,12 +45,12 @@ TEST(application_rejects_invalid_pool_capacity_without_normalization)
         };
         for (const auto* field : {"minimum_size", "maximum_size"})
             for (const auto& invalid : invalid_values)
-                reject(nlohmann::json{{field, invalid}});
+                reject(cnetmod::json::document{{field, invalid}});
         reject({{"maximum_size", 0}});
         reject({{"minimum_size", 2}, {"maximum_size", 1}});
         reject({{"minimum_size", 1000}});
         ASSERT_TRUE(build({{"minimum_size", 0}, {"maximum_size", 1}}).has_value());
         ASSERT_TRUE(build({{"minimum_size", 2}, {"maximum_size", 2}}).has_value());
-        ASSERT_TRUE(build(nlohmann::json::object()).has_value());
+        ASSERT_TRUE(build(cnetmod::json::document::object()).has_value());
     }
 }

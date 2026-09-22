@@ -10,7 +10,7 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.coro.mutex;
 import :foundation;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

@@ -2,13 +2,13 @@
 
 import std;
 import cnetmod.application.configuration;
-import nlohmann.json;
+import cnetmod.json;
 
 TEST(configured_service_reads_nested_properties_without_exposing_json)
 {
     cnetmod::application::configured_service service;
-    service.properties = nlohmann::json{
-        {"security", nlohmann::json{{"issuer", "issuer-a"}, {"ttl", 3600}, {"origins", nlohmann::json::array({"a", "b"})}}}};
+    service.properties = cnetmod::json::document{
+        {"security", cnetmod::json::document{{"issuer", "issuer-a"}, {"ttl", 3600}, {"origins", cnetmod::json::document::array({"a", "b"})}}}};
 
     const auto issuer = service.string_property("security.issuer");
     ASSERT_TRUE(issuer.has_value());
@@ -29,7 +29,7 @@ TEST(configured_service_reads_nested_properties_without_exposing_json)
 TEST(configured_service_distinguishes_missing_and_invalid_properties)
 {
     cnetmod::application::configured_service service;
-    service.properties = nlohmann::json{{"port", "not-an-integer"}};
+    service.properties = cnetmod::json::document{{"port", "not-an-integer"}};
 
     const auto missing = service.string_property("missing");
     ASSERT_TRUE(missing.has_value());

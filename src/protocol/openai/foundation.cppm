@@ -7,11 +7,11 @@ module;
 export module cnetmod.protocol.openai:foundation;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
-export using json = nlohmann::json;
+export using json = cnetmod::json::document;
 
 export struct usage
 {

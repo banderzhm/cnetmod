@@ -14,7 +14,7 @@ import cnetmod.executor.pool;
 import :model;
 import :prompt;
 import :checkpoint;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

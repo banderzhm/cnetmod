@@ -24,7 +24,7 @@ import :model;
 import :prompt;
 import :checkpoint;
 import :agentic;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

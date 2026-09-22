@@ -26,6 +26,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 - `skill/infra/application.md`
 - `skill/infra/architecture.md`
 - `skill/infra/code-style.md`
+- `skill/infra/json.md`
 - `skill/infra/module-conventions.md`
 - `skill/infra/new-module-guide.md`
 - `skill/infra/observability.md`
@@ -73,6 +74,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | 我想… | 看这个文件 |
 |-------|-----------|
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
+| 使用后端无关 JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
 | 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
 | 了解代码风格、clang-format、命名规范 | [code-style.md](infra/code-style.md) |
@@ -3245,6 +3247,7 @@ Automatic provider selection succeeds only when exactly one supported provider o
 | `page_maps` | Return a projected page and total count. |
 | `select_xml` | Execute a typed XML select. |
 | `select_xml_result` | Execute an XML select and return the provider-neutral column/row result. |
+| `select_xml_as` | Execute an XML select as a strongly typed read-only projection. |
 | `get_one_xml` | Execute a cardinality-checked XML select. |
 | `save` | Insert one model. |
 | `update_by_id` | Update one model by primary key. |
@@ -3287,6 +3290,7 @@ Automatic provider selection succeeds only when exactly one supported provider o
 | `select_maps_page` | Select a projected page. |
 | `select_xml` | Execute a typed XML select. |
 | `select_xml_result` | Execute an XML select without applying a model projection. |
+| `select_xml_as` | Execute an XML select as a strongly typed read-only projection. |
 | `select_one_xml` | Execute a cardinality-checked XML select. |
 | `execute_xml` | Execute an XML write. |
 | `insert` | Insert one model. |
@@ -3415,8 +3419,31 @@ parameter and result types remain determined by `param_context` and `mapper<T>`.
 | `application_repository<T>` / `repository<T>` | `select_xml` | `get_one_xml` | `execute_xml` |
 | transaction `mapper<T>` | `select_xml` | `select_one_xml` | `execute_xml` |
 
-For an arbitrary projection that cannot be represented by `T`, both layers
-also expose `select_xml_result()`. It returns
+For a strongly typed DTO projection, declare its read-only metadata and call
+`select_xml_as<Projection>()`:
+
+```cpp
+struct user_summary
+{
+    std::int64_t id{};
+    std::string display_name;
+};
+
+CNETMOD_PROJECTION(user_summary,
+    CNETMOD_FIELD(id, "id", bigint),
+    CNETMOD_FIELD(display_name, "display_name", varchar))
+
+auto summaries = co_await users->select_xml_as<user_summary>(
+    registry, "UserMapper.summaries", parameters);
+```
+
+`CNETMOD_PROJECTION` deliberately has no table name or persistence identity.
+It can receive direct columns or a declared `resultMap`, but it cannot be used
+with insert, update or delete CRUD APIs. The repository entity `T` continues
+to determine tenant, logical-delete and other automatic policies.
+
+For a truly dynamic projection whose columns are not known at compile time,
+both layers expose `select_xml_result()`. It returns
 `cnetmod::database::query_result`, including column metadata, rows, affected
 rows and native diagnostics. Despite serving an untyped projection, it still
 uses the same dynamic SQL builder, bound parameters, dialect normalization,
@@ -3476,10 +3503,12 @@ dotted properties, parentheses, unary `not`/`!`/minus, comparisons
 There are two supported result paths:
 
 1. With no `resultMap`, `select_xml()` maps result columns directly into `T`
-   using `CNETMOD_MODEL`. SQL aliases must match a declared field or column name.
+   using `CNETMOD_MODEL`; `select_xml_as<P>()` uses `CNETMOD_PROJECTION` (or a
+   second model). SQL aliases must match a declared field or column name.
 2. With `resultMap="MapId"`, execution automatically applies `<id>`, `<result>`,
    nested `<association resultMap="...">` and
-   `<collection resultMap="...">`, then projects the object graph into `T`.
+   `<collection resultMap="...">`, then projects the object graph into the
+   requested model or projection type.
 
 Scalar properties are assigned through normal model setters. For associations
 and collections, specialize `xml_object_graph_binder<T>` and use
@@ -3512,6 +3541,9 @@ parameters.set("id", std::int64_t{42});
 
 auto selected = co_await users->get_one_xml(
     registry, "UserMapper.findById", parameters);
+
+auto summaries = co_await users->select_xml_as<user_summary>(
+    registry, "UserMapper.summaries", parameters);
 ```
 
 Example XML:
@@ -3551,6 +3583,14 @@ Example XML:
     </where>
   </select>
 
+  <select id="summaries" parameterType="map" resultType="user_summary">
+    SELECT u.id, u.name AS display_name
+    FROM users u
+    <where>
+      <if test="id != null">AND u.id = #{id}</if>
+    </where>
+  </select>
+
   <update id="rename" parameterType="map">
     UPDATE users
     <set>
@@ -3562,7 +3602,7 @@ Example XML:
 </mapper>
 ```
 
-`select_xml`, `get_one_xml` and `execute_xml` reuse the same leased connection,
+`select_xml`, `select_xml_as`, `get_one_xml` and `execute_xml` reuse the same leased connection,
 transaction, SQL dialect, placeholder normalization, model mapping,
 diagnostics, automatic policies and instrumentation. MySQL uses its parameter
 adapter; PostgreSQL placeholders are normalized to `$1`, `$2`, and so on.
@@ -5897,7 +5937,7 @@ auto replies = co_await cache.execute(batch);
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的 Glaze 默认 codec；Redis 模块不会向消费方泄漏 nlohmann JSON。可用满足 `cnetmod::json::codec_for` 的业务 codec 替换。
+- `json_codec` 是 `get_as` / `set_as` 的框架默认 codec；Redis 模块只依赖 `cnetmod.json`，不会向消费方泄漏具体 JSON 后端。可用满足 `cnetmod::json::codec_for` 的业务 codec 替换。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
 
@@ -9294,8 +9334,7 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # nlohmann/json
-│   ├── jwt-cpp/            # JWT 编解码
+│   ├── json/               # backend-neutral JSON facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
@@ -9422,8 +9461,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 
 | 依赖 | 目录 | 用途 |
 |------|------|------|
-| nlohmann/json | `3rdparty/json` | JSON 序列化 |
-| jwt-cpp | `3rdparty/jwt-cpp` | JWT 令牌编解码 |
+| Glaze | `3rdparty/glaze` | `cnetmod.json` private parsing backend |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
 | spdlog | `3rdparty/spdlog` | 日志后端 |
@@ -9643,6 +9681,125 @@ bool skip(std::size_t n) noexcept;
 - `src/core/log.cppm` — 命名空间、函数签名示例
 - `src/core/error.cppm` — 枚举定义、全局片段示例
 <!-- END SOURCE: skill/infra/code-style.md -->
+
+<!-- BEGIN SOURCE: skill/infra/json.md -->
+# Source: `skill/infra/json.md`
+
+# JSON
+
+> `cnetmod.json` is the backend-neutral JSON document and typed codec facade. Glaze is a private parser implementation compiled only by `src/json/json.cpp`.
+
+**import**: `import cnetmod.json;`
+**macro header**: `#include <cnetmod/json.hpp>`
+**sources**: `src/json/json.cppm`, `src/json/json.cpp`
+
+## Boundary rules
+
+1. Application and protocol code imports `cnetmod.json`; it never imports a parser library.
+2. Glaze headers and `glz::*` names are restricted to `src/json/json.cpp`.
+3. `document`, errors, codecs, and DTO metadata contain only framework or standard-library types.
+4. `tools/check_json_boundary.py` enforces the boundary in CTest.
+
+## Dynamic documents
+
+```cpp
+import std;
+import cnetmod.json;
+
+auto parsed = cnetmod::json::parse_document(
+    R"({"service":"orders","replicas":3})");
+if (!parsed)
+    co_return std::unexpected(parsed.error());
+
+const auto service = parsed->at("service").get<std::string>();
+parsed->operator[]("ready") = true;
+auto wire = cnetmod::json::write_document(*parsed);
+```
+
+`document` supports null, booleans, signed and unsigned integers, floating-point
+numbers, strings, arrays, and objects. Binary payloads must use an explicit
+application representation such as a byte array or Base64 string because JSON
+has no binary value type.
+
+## Plain DTOs
+
+C++23 has no general static reflection. A plain DTO declares its mapping once:
+
+```cpp
+#include <cnetmod/json.hpp>
+
+import std;
+import cnetmod.json;
+
+struct user_view
+{
+    std::uint64_t id{};
+    std::string name;
+    std::optional<std::string> nickname;
+};
+
+CNETMOD_JSON(user_view,
+    CNETMOD_JSON_FIELD(id),
+    CNETMOD_JSON_FIELD(name),
+    CNETMOD_JSON_FIELD(nickname))
+
+auto encoded = cnetmod::json::write(user_view{42, "Ada", std::nullopt});
+auto decoded = cnetmod::json::parse<user_view>(*encoded);
+```
+
+The default codec rejects unknown fields and missing required fields. Optional
+members may be absent. `lenient_codec` accepts unknown fields and
+`explicit_null_codec` emits disengaged optionals as JSON null.
+
+Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
+string-keyed associative containers. Numeric decoding checks integral sign and
+range instead of silently narrowing.
+
+## ORM models and projections
+
+Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
+`CNETMOD_PROJECTION`. ORM field metadata is also its JSON metadata:
+
+```cpp
+CNETMOD_MODEL(user_record, "users",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(name, "name", varchar))
+
+auto wire = cnetmod::json::write(user_record{42, "Ada"});
+```
+
+This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
+and nullable `DATETIME`. Database temporal values use their canonical
+timezone-free SQL text representation.
+
+## Application offload
+
+Use `cnetmod::application::json_template` for parsing or writing on the
+Application-managed CPU pool. Its typed operations use the same codec contract,
+support cancellation, and resume on the application execution context.
+
+## Codec SPI
+
+A custom codec implements:
+
+```cpp
+template <typename T>
+static auto decode(std::string_view) -> std::expected<T, std::error_code>;
+
+template <typename T>
+static auto encode(const T&) -> std::expected<std::string, std::error_code>;
+```
+
+and satisfies `cnetmod::json::codec_for<Codec, T>`. RedisTemplate and other
+framework templates accept this SPI without exposing the parser backend.
+
+## Verification
+
+```bash
+python tools/check_json_boundary.py
+ctest --test-dir build -R "json_backend_boundary|test_json_template|test_orm_json_result_map"
+```
+<!-- END SOURCE: skill/infra/json.md -->
 
 <!-- BEGIN SOURCE: skill/infra/module-conventions.md -->
 # Source: `skill/infra/module-conventions.md`
@@ -13476,7 +13633,7 @@ auto main() -> int {
 
 **import**: `import cnetmod.protocol.mqtt;`
 **CMake**: `-DCNETMOD_ENABLE_MQTT=ON`
-**依赖**: `cnetmod.io.io_context`、`cnetmod.coro.task`、`cnetmod.coro.channel`、`nlohmann.json`（安全配置）
+**依赖**: `cnetmod.io.io_context`、`cnetmod.coro.task`、`cnetmod.coro.channel`、`cnetmod.json`（安全配置）
 **源码**: `src/protocol/mqtt/`
 
 ## 场景导航
@@ -16541,7 +16698,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 
 # JWT 签发与验证
 
-> 协程原生 JWT 模块，基于 jwt-cpp，CPU 密集操作卸载到 cnetmod 线程池。
+> 协程原生 JWT 模块，使用 `cnetmod.json` 与框架 HMAC-SHA256，CPU 密集操作卸载到 cnetmod 线程池。
 > 模块: `import cnetmod.security.jwt;`
 
 ## 核心原则
@@ -16764,5 +16921,5 @@ auto jwt_middleware(cnetmod::thread_pool& pool, std::string_view secret)
 ## CMake 依赖
 
 JWT 模块位于 `cnetmod_core` 静态库中，无需额外 CMake 开关。
-依赖 `3rdparty/jwt-cpp`（已内置）。
+JWT 的 JSON 与密码学实现只依赖框架门面，不向下游公开第三方 JSON/JWT 类型。
 <!-- END SOURCE: skill/security/security-jwt.md -->

@@ -56,7 +56,7 @@ TEST(application_openai_metrics_reach_otlp_and_local_registry_once)
     ASSERT_EQ(payloads.size(), std::size_t{1});
     if (payloads.empty())
         return;
-    const auto parsed = nlohmann::json::parse(payloads.front());
+    const auto parsed = cnetmod::json::document::parse(payloads.front());
     double tokens = 0;
     unsigned durations = 0;
     for (const auto& metric : parsed["resourceMetrics"][0]["scopeMetrics"][0]["metrics"])

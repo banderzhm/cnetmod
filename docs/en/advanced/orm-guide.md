@@ -81,10 +81,15 @@ telemetry.
 | Dynamic SQL | `<if>`, `<where>`, `<set>`, `<trim>`, `<foreach>`, `<choose>/<when>/<otherwise>`, `<include>`, `<bind>` |
 | Parameters | Bound `#{name}`, dotted properties, collections, foreach item/index, and raw `${name}` substitution |
 | Expressions | Null/boolean/number/string literals, dotted paths, parentheses, comparison, logical, arithmetic and unary operators |
-| Results | Direct `CNETMOD_MODEL` mapping or automatic `resultMap` handling for `<id>`, `<result>`, associations and collections |
+| Results | Direct `CNETMOD_MODEL`/`CNETMOD_PROJECTION` mapping or automatic `resultMap` handling for `<id>`, `<result>`, associations and collections |
 | Providers | MySQL and PostgreSQL; PostgreSQL placeholders become `$1...$n` |
 
-Arbitrary projections and infrastructure queries can call
+For a compile-time DTO, declare `CNETMOD_PROJECTION(summary_type, ...)` and
+call `select_xml_as<summary_type>()`. Projection metadata has no table identity,
+so the type is available for reads without being accepted by CRUD writes. It
+supports both direct column aliases and XML `resultMap` definitions.
+
+Arbitrary runtime projections and infrastructure queries can call
 `select_xml_result()`. It returns a `cnetmod::database::query_result` retaining
 column metadata, rows, affected rows and database diagnostics. This is a
 provider-neutral result rather than a native MySQL/PostgreSQL protocol object,

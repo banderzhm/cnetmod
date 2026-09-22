@@ -5,7 +5,7 @@ module;
 module cnetmod.testing.messaging.amqp10_interop_driver;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.io.io_context;
 import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
@@ -17,7 +17,7 @@ import cnetmod.protocol.amqp10;
 namespace cnetmod::testing::messaging::amqp10 {
 namespace {
 
-    using json = nlohmann::json;
+    using json = cnetmod::json::document;
     namespace protocol = cnetmod::amqp10;
 
     [[nodiscard]] auto unique_name(std::string_view prefix) -> std::string
@@ -125,7 +125,7 @@ namespace {
                 }
                 else if constexpr (std::same_as<stored_value, protocol::binary>)
                 {
-                    return json::binary(std::vector<std::uint8_t>(
+                    return json(std::vector<std::uint8_t>(
                         reinterpret_cast<const std::uint8_t*>(stored.data()),
                         reinterpret_cast<const std::uint8_t*>(stored.data()) +
                             stored.size()));
@@ -144,7 +144,7 @@ namespace {
         if (const auto* value = std::get_if<protocol::value>(&body))
             return amqp_value_to_json(*value);
         if (const auto* binary = std::get_if<protocol::binary>(&body))
-            return json::binary(std::vector<std::uint8_t>(
+            return json(std::vector<std::uint8_t>(
                 reinterpret_cast<const std::uint8_t*>(binary->data()),
                 reinterpret_cast<const std::uint8_t*>(binary->data()) + binary->size()));
         auto result = json::array();

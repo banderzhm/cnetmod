@@ -5,7 +5,7 @@ import cnetmod.instrumentation.error;
 import cnetmod.instrumentation.operation_scope;
 import cnetmod.instrumentation.operation_result;
 import cnetmod.instrumentation.tracing;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task_group;
 import cnetmod.protocol.http.middleware.tracing;
@@ -371,7 +371,7 @@ auto health_registry::snapshots() const
 
 auto health_registry::json(bool readiness_only) const -> std::string
 {
-    nlohmann::json components = nlohmann::json::object();
+    cnetmod::json::document components = cnetmod::json::document::object();
     for (const auto& item : snapshots())
     {
         components[item.key.canonical_name()] = {
@@ -396,7 +396,7 @@ auto health_registry::json(bool readiness_only) const -> std::string
             }
         }
     }
-    return nlohmann::json{{"status", healthy ? "UP" : "DOWN"},
+    return cnetmod::json::document{{"status", healthy ? "UP" : "DOWN"},
         {"components", std::move(components)}}
         .dump();
 }

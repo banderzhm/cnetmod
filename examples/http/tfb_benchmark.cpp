@@ -23,7 +23,7 @@
 #include <cnetmod/config.hpp>
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.core;
 import cnetmod.coro;
 import cnetmod.io;
@@ -34,7 +34,7 @@ import cnetmod.protocol.mysql;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;
-using json = nlohmann::json;
+using json = cnetmod::json::document;
 
 constexpr std::uint16_t PORT = 8080;
 

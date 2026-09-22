@@ -96,6 +96,7 @@ Automatic provider selection succeeds only when exactly one supported provider o
 | `page_maps` | Return a projected page and total count. |
 | `select_xml` | Execute a typed XML select. |
 | `select_xml_result` | Execute an XML select and return the provider-neutral column/row result. |
+| `select_xml_as` | Execute an XML select as a strongly typed read-only projection. |
 | `get_one_xml` | Execute a cardinality-checked XML select. |
 | `save` | Insert one model. |
 | `update_by_id` | Update one model by primary key. |
@@ -138,6 +139,7 @@ Automatic provider selection succeeds only when exactly one supported provider o
 | `select_maps_page` | Select a projected page. |
 | `select_xml` | Execute a typed XML select. |
 | `select_xml_result` | Execute an XML select without applying a model projection. |
+| `select_xml_as` | Execute an XML select as a strongly typed read-only projection. |
 | `select_one_xml` | Execute a cardinality-checked XML select. |
 | `execute_xml` | Execute an XML write. |
 | `insert` | Insert one model. |
@@ -266,8 +268,31 @@ parameter and result types remain determined by `param_context` and `mapper<T>`.
 | `application_repository<T>` / `repository<T>` | `select_xml` | `get_one_xml` | `execute_xml` |
 | transaction `mapper<T>` | `select_xml` | `select_one_xml` | `execute_xml` |
 
-For an arbitrary projection that cannot be represented by `T`, both layers
-also expose `select_xml_result()`. It returns
+For a strongly typed DTO projection, declare its read-only metadata and call
+`select_xml_as<Projection>()`:
+
+```cpp
+struct user_summary
+{
+    std::int64_t id{};
+    std::string display_name;
+};
+
+CNETMOD_PROJECTION(user_summary,
+    CNETMOD_FIELD(id, "id", bigint),
+    CNETMOD_FIELD(display_name, "display_name", varchar))
+
+auto summaries = co_await users->select_xml_as<user_summary>(
+    registry, "UserMapper.summaries", parameters);
+```
+
+`CNETMOD_PROJECTION` deliberately has no table name or persistence identity.
+It can receive direct columns or a declared `resultMap`, but it cannot be used
+with insert, update or delete CRUD APIs. The repository entity `T` continues
+to determine tenant, logical-delete and other automatic policies.
+
+For a truly dynamic projection whose columns are not known at compile time,
+both layers expose `select_xml_result()`. It returns
 `cnetmod::database::query_result`, including column metadata, rows, affected
 rows and native diagnostics. Despite serving an untyped projection, it still
 uses the same dynamic SQL builder, bound parameters, dialect normalization,
@@ -327,10 +352,12 @@ dotted properties, parentheses, unary `not`/`!`/minus, comparisons
 There are two supported result paths:
 
 1. With no `resultMap`, `select_xml()` maps result columns directly into `T`
-   using `CNETMOD_MODEL`. SQL aliases must match a declared field or column name.
+   using `CNETMOD_MODEL`; `select_xml_as<P>()` uses `CNETMOD_PROJECTION` (or a
+   second model). SQL aliases must match a declared field or column name.
 2. With `resultMap="MapId"`, execution automatically applies `<id>`, `<result>`,
    nested `<association resultMap="...">` and
-   `<collection resultMap="...">`, then projects the object graph into `T`.
+   `<collection resultMap="...">`, then projects the object graph into the
+   requested model or projection type.
 
 Scalar properties are assigned through normal model setters. For associations
 and collections, specialize `xml_object_graph_binder<T>` and use
@@ -363,6 +390,9 @@ parameters.set("id", std::int64_t{42});
 
 auto selected = co_await users->get_one_xml(
     registry, "UserMapper.findById", parameters);
+
+auto summaries = co_await users->select_xml_as<user_summary>(
+    registry, "UserMapper.summaries", parameters);
 ```
 
 Example XML:
@@ -402,6 +432,14 @@ Example XML:
     </where>
   </select>
 
+  <select id="summaries" parameterType="map" resultType="user_summary">
+    SELECT u.id, u.name AS display_name
+    FROM users u
+    <where>
+      <if test="id != null">AND u.id = #{id}</if>
+    </where>
+  </select>
+
   <update id="rename" parameterType="map">
     UPDATE users
     <set>
@@ -413,7 +451,7 @@ Example XML:
 </mapper>
 ```
 
-`select_xml`, `get_one_xml` and `execute_xml` reuse the same leased connection,
+`select_xml`, `select_xml_as`, `get_one_xml` and `execute_xml` reuse the same leased connection,
 transaction, SQL dialect, placeholder normalization, model mapping,
 diagnostics, automatic policies and instrumentation. MySQL uses its parameter
 adapter; PostgreSQL placeholders are normalized to `$1`, `$2`, and so on.

@@ -1,7 +1,7 @@
 module cnetmod.application.yaml_configuration;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import yaml_cpp;
 import cnetmod.utils.charconv;
 
@@ -13,7 +13,7 @@ namespace {
     /**
      * @brief Converts a YAML scalar without losing explicit string tags.
      */
-    auto convert_scalar(const yaml_cpp::Node& node) -> nlohmann::json
+    auto convert_scalar(const yaml_cpp::Node& node) -> cnetmod::json::document
     {
         const auto value = node.Scalar();
         const auto tag = node.Tag();
@@ -47,19 +47,19 @@ namespace {
      * @brief Recursively converts one bounded YAML node into JSON.
      */
     auto convert_node(const yaml_cpp::Node& node, std::size_t depth)
-        -> std::expected<nlohmann::json, std::error_code>
+        -> std::expected<cnetmod::json::document, std::error_code>
     {
         const auto kind = yaml_cpp::kind_of(node);
         if (depth > maximum_yaml_depth || !node ||
             kind == yaml_cpp::node_kind::undefined)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         if (kind == yaml_cpp::node_kind::null)
-            return nlohmann::json{nullptr};
+            return cnetmod::json::document{nullptr};
         if (kind == yaml_cpp::node_kind::scalar)
             return convert_scalar(node);
         if (kind == yaml_cpp::node_kind::sequence)
         {
-            auto result = nlohmann::json::array();
+            auto result = cnetmod::json::document::array();
             for (std::size_t index = 0; index < node.size(); ++index)
             {
                 auto child = convert_node(node[index], depth + 1U);
@@ -72,7 +72,7 @@ namespace {
         if (kind != yaml_cpp::node_kind::map)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-        auto result = nlohmann::json::object();
+        auto result = cnetmod::json::document::object();
         for (const auto& entry : node)
         {
             if (yaml_cpp::kind_of(entry.first) != yaml_cpp::node_kind::scalar)
@@ -90,7 +90,7 @@ namespace {
 }
 
 auto load_yaml_configuration_document(const std::filesystem::path& path)
-    -> std::expected<nlohmann::json, std::error_code>
+    -> std::expected<cnetmod::json::document, std::error_code>
 {
     try
     {

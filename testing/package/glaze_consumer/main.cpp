@@ -11,12 +11,14 @@ struct payload
 };
 } // namespace consumer
 
-auto glaze_header_is_available() -> bool;
+CNETMOD_JSON(consumer::payload,
+    CNETMOD_JSON_FIELD(name),
+    CNETMOD_JSON_FIELD(count))
 
 auto main() -> int
 {
     auto encoded = cnetmod::json::write(consumer::payload{"installed", 22});
-    if (!encoded || !glaze_header_is_available())
+    if (!encoded)
         return 1;
     auto decoded = cnetmod::json::parse<consumer::payload>(*encoded);
     return decoded && decoded->name == "installed" && decoded->count == 22

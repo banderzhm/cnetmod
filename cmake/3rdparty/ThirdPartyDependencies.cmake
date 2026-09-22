@@ -1,8 +1,6 @@
 include_guard(GLOBAL)
 
 include(${CMAKE_CURRENT_LIST_DIR}/Stdexec.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/JwtCpp.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/NlohmannJson.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Glaze.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/YamlCppModules.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/Pugixml.cmake)
@@ -24,10 +22,8 @@ macro(cnetmod_configure_third_party_dependencies)
         "Use the bundled BoringSSL submodule (required by cnetmod)" FORCE)
     cnetmod_configure_stdexec()
     cnetmod_configure_boringssl_quic()
-    cnetmod_configure_nlohmann_json()
     cnetmod_configure_glaze()
     cnetmod_configure_yaml_cpp_modules()
-    cnetmod_configure_jwt_cpp()
     cnetmod_configure_pugixml()
     if(CNETMOD_ENABLE_SSL AND NOT BoringSSL_FOUND)
         message(FATAL_ERROR "cnetmod requires the bundled BoringSSL provider")
@@ -42,14 +38,11 @@ endmacro()
 
 function(cnetmod_link_third_party_dependencies TARGET_NAME)
     cnetmod_link_stdexec(${TARGET_NAME})
-    cnetmod_link_nlohmann_json(${TARGET_NAME})
     cnetmod_link_glaze(${TARGET_NAME})
     cnetmod_link_yaml_cpp_modules(${TARGET_NAME})
-    cnetmod_link_jwt_cpp(${TARGET_NAME})
     cnetmod_link_pugixml(${TARGET_NAME})
 
-    # BoringSSL is the sole TLS provider and supplies the crypto API consumed
-    # by jwt-cpp.
+    # BoringSSL is the sole TLS provider and supplies the framework crypto API.
     if(BoringSSL_FOUND AND DEFINED BoringSSL_LIBRARIES)
         target_link_libraries(${TARGET_NAME} PRIVATE ${BoringSSL_LIBRARIES})
         if(DEFINED BoringSSL_INCLUDE_DIRS)

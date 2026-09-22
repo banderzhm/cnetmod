@@ -30,9 +30,6 @@ cnetmod 会优先复用已经存在的依赖 target：
 对于 header-only 依赖，宿主项目可以覆盖：
 
 - `CNETMOD_STDEXEC_INCLUDE_DIR`
-- `CNETMOD_JWT_CPP_INCLUDE_DIR`
-- `CNETMOD_JSON_INCLUDE_DIR`
-- `CNETMOD_JSON_MODULE`
 
 ## vcpkg
 
@@ -81,8 +78,6 @@ cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 仓库包含 Conan 2 `conanfile.py`。它会生成 `CMakeDeps` 和
 `CMakeToolchain` 文件，并把 Conan 包名映射到 cnetmod 可识别的 target：
 
-- `jwt-cpp` -> `jwt-cpp::jwt-cpp`
-- `nlohmann_json` -> `nlohmann_json::nlohmann_json`
 - `pugixml` -> `pugixml::pugixml`
 - `leveldb` -> `leveldb::leveldb`
 

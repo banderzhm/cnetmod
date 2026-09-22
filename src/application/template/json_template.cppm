@@ -17,8 +17,8 @@ export namespace cnetmod::application {
 /**
  * @brief Offloads typed JSON work to the application-managed CPU pool.
  *
- * Codec policies are selected per call and default to Glaze. Completion is
- * always resumed on the application event loop.
+ * Codec policies are selected per call and default to the backend-neutral
+ * framework codec. Completion is always resumed on the application event loop.
  */
 class json_template
 {
@@ -32,7 +32,7 @@ public:
     /**
      * @brief Parses an owned JSON document without blocking the event loop.
      */
-    template <typename T, typename Codec = json::glaze_codec>
+    template <typename T, typename Codec = json::default_codec>
     requires json::codec_for<Codec, T>
     [[nodiscard]] auto parse(std::string input,
         cancel_token* cancellation = nullptr)
@@ -55,7 +55,7 @@ public:
     /**
      * @brief Serializes an owned value without blocking the event loop.
      */
-    template <typename T, typename Codec = json::glaze_codec>
+    template <typename T, typename Codec = json::default_codec>
     requires json::codec_for<Codec, T>
     [[nodiscard]] auto write(T value, cancel_token* cancellation = nullptr)
         -> task<std::expected<std::string, std::error_code>>
@@ -77,7 +77,7 @@ public:
     /**
      * @brief Reads and parses the complete HTTP request body.
      */
-    template <typename T, typename Codec = json::glaze_codec>
+    template <typename T, typename Codec = json::default_codec>
     requires json::codec_for<Codec, T>
     [[nodiscard]] auto body(http::request_context& request)
         -> task<std::expected<T, std::error_code>>
@@ -90,7 +90,7 @@ public:
     /**
      * @brief Serializes a value and writes an HTTP JSON response.
      */
-    template <typename T, typename Codec = json::glaze_codec>
+    template <typename T, typename Codec = json::default_codec>
     requires json::codec_for<Codec, T>
     [[nodiscard]] auto respond(http::request_context& request,
         int status_code, T value) -> task<std::expected<void, std::error_code>>

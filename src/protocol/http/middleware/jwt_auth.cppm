@@ -3,7 +3,8 @@
  * @brief JWT / Bearer Token authentication middleware
  *
  * Extracts Bearer token from Authorization header and calls user-provided verification function.
- * Pluggable verification logic: supports jwt-cpp, custom HMAC, API Key, and any other schemes.
+ * Pluggable verification logic supports cnetmod JWT, custom HMAC, API keys,
+ * and application-defined schemes.
  *
  * Usage example:
  *   import cnetmod.protocol.http.middleware.jwt_auth;
@@ -14,7 +15,7 @@
  *       .skip_paths = {"/", "/login"},
  *   }));
  *
- *   // Using jwt-cpp to verify HS256 (in application layer #include <jwt-cpp/jwt.h>)
+ *   // Verify HS256 with cnetmod.security.jwt in the application layer.
  *   svr.use(jwt_auth({
  *       .verify = [](std::string_view token) {
  *           try {

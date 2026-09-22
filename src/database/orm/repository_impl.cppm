@@ -341,6 +341,29 @@ public:
     }
 
     /**
+     * @brief Executes an XML select as a strongly typed read-only projection.
+     *
+     * The repository's entity model still determines policy configuration,
+     * while Projection only controls result materialization.
+     */
+    template <ResultRecord Projection>
+    auto select_xml_as(const mapper_registry& registry,
+        std::string_view statement_id, const param_context& parameters)
+        -> task<model_result<Projection>>
+    {
+        co_return co_await read_record<Projection>(
+            [&registry, statement_id = std::string{statement_id},
+                parameters](auto& session) mutable
+                -> task<model_result<Projection>>
+            {
+                mapper<T, std::remove_reference_t<decltype(session)>> models{
+                    session};
+                co_return co_await models.template select_xml_as<Projection>(
+                    registry, statement_id, parameters);
+            });
+    }
+
+    /**
      * @brief Executes a strict single-row XML select.
      */
     auto get_one_xml(const mapper_registry& registry,
@@ -658,16 +681,23 @@ private:
     template <typename Operation>
     auto read_model(Operation operation) -> task<model_result<T>>
     {
-        auto outcome = co_await gateway_->template read<model_result<T>>(
+        co_return co_await read_record<T>(std::move(operation));
+    }
+
+    template <ResultRecord Record, typename Operation>
+    auto read_record(Operation operation) -> task<model_result<Record>>
+    {
+        auto outcome = co_await gateway_->template read<model_result<Record>>(
             [this, operation = std::move(operation)](auto& session) mutable
-                -> task<std::expected<model_result<T>, std::string>>
+                -> task<std::expected<model_result<Record>, std::string>>
             {
                 auto configured = this->configure(session);
                 if (!configured)
                     co_return std::unexpected(configured.error());
                 co_return co_await operation(session);
             });
-        co_return outcome ? std::move(*outcome) : failure(outcome.error());
+        co_return outcome ? std::move(*outcome)
+                          : failure_record<Record>(outcome.error());
     }
 
     template <typename Operation>
@@ -722,7 +752,14 @@ private:
 
     [[nodiscard]] static auto failure(std::string message) -> model_result<T>
     {
-        model_result<T> result;
+        return failure_record<T>(std::move(message));
+    }
+
+    template <ResultRecord Record>
+    [[nodiscard]] static auto failure_record(std::string message)
+        -> model_result<Record>
+    {
+        model_result<Record> result;
         result.error_msg = std::move(message);
         result.framework_error = std::make_error_code(std::errc::io_error);
         return result;

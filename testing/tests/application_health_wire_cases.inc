@@ -64,8 +64,8 @@ TEST(application_health_outcomes_reach_the_http_collector)
     {
         cnetmod::net_init network;
         auto io = cnetmod::make_io_context();
-        std::vector<nlohmann::json> spans;
-        std::vector<nlohmann::json> logs;
+        std::vector<cnetmod::json::document> spans;
+        std::vector<cnetmod::json::document> logs;
         unsigned requests = 0;
         std::map<std::pair<std::string, std::string>, double> operation_totals;
         cnetmod::http::router routes;
@@ -74,7 +74,7 @@ TEST(application_health_outcomes_reach_the_http_collector)
                 ++requests;
                 const auto body = std::string{co_await request.read_full_body()};
                 ASSERT_FALSE(body.contains("private-probe-diagnostic"));
-                const auto document = nlohmann::json::parse(body);
+                const auto document = cnetmod::json::document::parse(body);
                 if (request.path() == "/v1/traces")
                     for (const auto& resource : document.at("resourceSpans"))
                         for (const auto& scope : resource.at("scopeSpans"))

@@ -1,6 +1,6 @@
 /**
  * @file jwt.cppm
- * @brief Coroutine-native JWT sign/verify module — backed by jwt-cpp
+ * @brief Coroutine-native JWT sign/verify module using cnetmod JSON and crypto.
  *
  * Provides non-blocking JWT operations by offloading CPU-intensive
  * cryptographic work to the cnetmod CPU pool via blocking_invoke.

@@ -79,10 +79,14 @@ XML Mapper 不是另一套持久层。它只负责定义 SQL，执行仍沿用
 | 动态 SQL | `<if>`、`<where>`、`<set>`、`<trim>`、`<foreach>`、`<choose>/<when>/<otherwise>`、`<include>`、`<bind>` |
 | 参数 | `#{name}` 安全绑定、嵌套属性、集合、foreach 的 item/index，以及 `${name}` 原样替换 |
 | 表达式 | null/布尔/数字/字符串、点路径、括号、比较、逻辑、算术和一元运算 |
-| 结果 | `CNETMOD_MODEL` 直接映射，或自动执行 `resultMap` 的 `<id>`、`<result>`、关联与集合映射 |
+| 结果 | `CNETMOD_MODEL`/`CNETMOD_PROJECTION` 直接映射，或自动执行 `resultMap` 的 `<id>`、`<result>`、关联与集合映射 |
 | Provider | MySQL 与 PostgreSQL；PostgreSQL 自动转换为 `$1...$n` 占位符 |
 
-任意投影或基础设施查询可以调用 `select_xml_result()`，返回保留列元数据、行、
+编译期已知的 DTO 使用 `CNETMOD_PROJECTION(summary_type, ...)` 声明只读字段，
+再调用 `select_xml_as<summary_type>()`。投影元数据没有表身份，因此只能承接查询结果，
+不会误入 CRUD 写操作；直接列别名与 XML `resultMap` 两种映射方式都支持。
+
+运行期才知道列结构的任意投影或基础设施查询可以调用 `select_xml_result()`，返回保留列元数据、行、
 affected rows 和数据库诊断信息的 `cnetmod::database::query_result`。它不是
 MySQL/PostgreSQL 原生协议对象，并且仍经过同一套参数绑定、拦截器、连接租约和遥测。
 迁移脚本不走这个入口；裸迁移 SQL 继续由 `schema_migration_runner` 执行。

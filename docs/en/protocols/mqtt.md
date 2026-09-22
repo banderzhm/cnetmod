@@ -308,7 +308,7 @@ task<void> device_controller(io_context& ctx) {
     
     client.on_message([&](const mqtt::publish_message& msg) -> task<void> {
         // Parse command
-        auto json = nlohmann::json::parse(msg.payload);
+        auto json = cnetmod::json::document::parse(msg.payload);
         auto action = json["action"].get<std::string>();
         
         // Execute command

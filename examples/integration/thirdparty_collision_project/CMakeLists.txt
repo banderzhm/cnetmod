@@ -26,24 +26,11 @@ message(STATUS "Using cnetmod source: ${CNETMOD_SOURCE_DIR}")
 #      subdirectories again.
 #   3. Header-only paths are passed to cnetmod through cache variables.
 
-# Host-owned stdexec / jwt-cpp / nlohmann_json checkouts.
+# Host-owned stdexec checkout.
 set(CNETMOD_STDEXEC_INCLUDE_DIR
     "${CNETMOD_SOURCE_DIR}/3rdparty/stdexec/include"
     CACHE PATH "" FORCE
 )
-set(CNETMOD_JWT_CPP_INCLUDE_DIR
-    "${CNETMOD_SOURCE_DIR}/3rdparty/jwt-cpp/include"
-    CACHE PATH "" FORCE
-)
-set(CNETMOD_JSON_INCLUDE_DIR
-    "${CNETMOD_SOURCE_DIR}/3rdparty/json/include"
-    CACHE PATH "" FORCE
-)
-set(CNETMOD_JSON_MODULE
-    "${CNETMOD_SOURCE_DIR}/3rdparty/json/src/modules/json.cppm"
-    CACHE FILEPATH "" FORCE
-)
-
 # Host-owned pugixml target. cnetmod should reuse pugixml::pugixml.
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/host_deps/pugixml")

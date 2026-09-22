@@ -4,7 +4,7 @@ module;
 module cnetmod.testing.messaging.amqp091_driver;
 
 import std;
-import nlohmann.json;
+import cnetmod.json;
 import cnetmod.io.io_context;
 import cnetmod.coro.spawn;
 import cnetmod.coro.task;
@@ -13,7 +13,7 @@ import :rabbitmq_operation_executor;
 namespace cnetmod::testing::messaging::amqp091_driver {
 namespace {
 
-    auto error_response(std::string code, std::string message) -> nlohmann::json
+    auto error_response(std::string code, std::string message) -> cnetmod::json::document
     {
         return {{"contract_version", 1},
             {"status", "error"},
@@ -21,7 +21,7 @@ namespace {
             {"message", std::move(message)}};
     }
 
-    auto process_request(nlohmann::json request) -> nlohmann::json
+    auto process_request(cnetmod::json::document request) -> cnetmod::json::document
     {
         if (request.value("contract_version", 0) != 1)
             return error_response("unsupported_contract", "contract_version must be 1");
@@ -29,13 +29,13 @@ namespace {
             return error_response("wrong_protocol", "protocol must be amqp091");
 
         auto context = make_io_context();
-        std::optional<nlohmann::json> response;
+        std::optional<cnetmod::json::document> response;
         spawn(*context, [&]() -> task<void>
             {
                 try
                 {
                     auto result = co_await execute_rabbitmq_operation(*context, request);
-                    response = nlohmann::json{{"contract_version", 1},
+                    response = cnetmod::json::document{{"contract_version", 1},
                         {"status", "ok"},
                         {"result", std::move(result)}};
                 }
@@ -68,7 +68,7 @@ auto run_json_lines(std::istream& input, std::ostream& output,
     }
     try
     {
-        std::println(output, "{}", process_request(nlohmann::json::parse(line)).dump());
+        std::println(output, "{}", process_request(cnetmod::json::document::parse(line)).dump());
         output.flush();
         return 0;
     }

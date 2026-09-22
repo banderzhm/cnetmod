@@ -18,7 +18,7 @@ import cnetmod.protocol.http.middleware.metrics;
 import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.protocol.openai;
 import cnetmod.observability.openai;
-import nlohmann.json;
+import cnetmod.json;
 
 TEST(openai_aggregate_import_preserves_narrow_std_format_visibility)
 {
@@ -1455,7 +1455,7 @@ TEST(openai_unobserved_scope_preserves_child_cancellation_without_operation_id)
 TEST(openai_lazy_start_skips_disabled_and_preserves_factory_failure_lifecycle)
 {
     unsigned factories = 0;
-    auto factory = [&]() -> nlohmann::json
+    auto factory = [&]() -> cnetmod::json::document
     {
         ++factories;
         throw std::bad_alloc{};
@@ -1484,7 +1484,7 @@ TEST(openai_lazy_start_skips_disabled_and_preserves_factory_failure_lifecycle)
 TEST(openai_lazy_completion_skips_disabled_and_completed_scopes)
 {
     unsigned factories = 0;
-    auto factory = [&]() -> nlohmann::json
+    auto factory = [&]() -> cnetmod::json::document
     {
         ++factories;
         return {{"input_tokens", 4}};
@@ -1511,7 +1511,7 @@ TEST(openai_lazy_completion_skips_disabled_and_completed_scopes)
     ASSERT_EQ(events.back().detail, "done");
     openai::run_scope failure{enabled, openai::run_event_type::model_start,
         openai::run_event_type::model_end, openai::run_event_type::model_error, "model"};
-    failure.fail_lazy([]() -> nlohmann::json
+    failure.fail_lazy([]() -> cnetmod::json::document
         {
             throw std::bad_alloc{};
         },
@@ -1869,7 +1869,7 @@ TEST(openai_telemetry_ignores_malformed_attributes_and_contains_export_failures)
         openai::run_event end{.type = openai::run_event_type::model_end,
             .run_id = "fault-test"};
         if (attempt == 0)
-            end.attributes = nlohmann::json::array({1});
+            end.attributes = cnetmod::json::document::array({1});
         listener.on_event(end);
     }
     ASSERT_EQ(calls, 3U);

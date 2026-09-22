@@ -13,7 +13,7 @@ import cnetmod.application.chat_model_template;
 import cnetmod.application.managed_service;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::application {
 
@@ -26,7 +26,7 @@ namespace cnetmod::application {
  */
 export struct chat_model_reconfiguration
 {
-    nlohmann::json properties = nlohmann::json::object();
+    cnetmod::json::document properties = cnetmod::json::document::object();
 };
 
 /**

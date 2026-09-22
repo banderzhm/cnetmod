@@ -3,19 +3,19 @@ module cnetmod.application.json;
 namespace cnetmod::application {
 
 auto parse_offloaded(application_runtime& runtime, std::string text)
-    -> task<std::expected<nlohmann::json, std::error_code>>
+    -> task<std::expected<cnetmod::json::document, std::error_code>>
 {
     try
     {
         co_return co_await runtime.offload(
             [text = std::move(text)]() mutable
-                -> std::expected<nlohmann::json, std::error_code>
+                -> std::expected<cnetmod::json::document, std::error_code>
             {
                 try
                 {
-                    return nlohmann::json::parse(text);
+                    return cnetmod::json::document::parse(text);
                 }
-                catch (const nlohmann::json::parse_error&)
+                catch (const cnetmod::json::document::exception&)
                 {
                     return std::unexpected(
                         std::make_error_code(std::errc::invalid_argument));
@@ -47,7 +47,7 @@ auto parse_offloaded(application_runtime& runtime, std::string text)
     }
 }
 
-auto dump_offloaded(application_runtime& runtime, nlohmann::json value,
+auto dump_offloaded(application_runtime& runtime, cnetmod::json::document value,
     int indentation)
     -> task<std::expected<std::string, std::error_code>>
 {

@@ -11,7 +11,7 @@ import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.protocol.http;
 import cnetmod.executor.async_op;
-import nlohmann.json;
+import cnetmod.json;
 #ifdef CNETMOD_TEST_HAS_ORM
 import cnetmod.orm;
 import cnetmod.orm.database_session;
@@ -439,13 +439,13 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                     const auto body = std::string{co_await request.read_full_body()};
                     const std::string_view password{std::getenv("CNETMOD_MYSQL_TEST_PASSWORD")};
                     invalid_payload |= !password.empty() && body.contains(password);
-                    const auto document = nlohmann::json::parse(body);
+                    const auto document = cnetmod::json::document::parse(body);
                     const unsigned signal = request.path() == "/v1/traces" ? 0U
                         : request.path() == "/v1/metrics"                  ? 1U
                                                                            : 2U;
                     const std::array keys{"resourceSpans", "resourceMetrics", "resourceLogs"};
                     invalid_payload |= !document.contains(keys[signal]) || document.at(keys[signal]).empty();
-                    const auto attributes = [](const nlohmann::json& record)
+                    const auto attributes = [](const cnetmod::json::document& record)
                     {
                         std::map<std::string, std::string> result;
                         for (const auto& attribute : record.at("attributes"))

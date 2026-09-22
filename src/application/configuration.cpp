@@ -18,7 +18,7 @@ namespace {
     class document_cleanup
     {
     public:
-        explicit document_cleanup(nlohmann::json& document) noexcept
+        explicit document_cleanup(cnetmod::json::document& document) noexcept
             : document_(document)
         {
         }
@@ -36,21 +36,21 @@ namespace {
                 {
                     parent = node;
                     node = node->is_object()
-                        ? &node->get_ref<nlohmann::json::object_t&>().begin()->second
-                        : &node->get_ref<nlohmann::json::array_t&>().back();
+                        ? &node->get_ref<cnetmod::json::document::object_t&>().begin()->second
+                        : &node->get_ref<cnetmod::json::document::array_t&>().back();
                 }
                 if (parent->is_object())
                 {
-                    auto& object = parent->get_ref<nlohmann::json::object_t&>();
+                    auto& object = parent->get_ref<cnetmod::json::document::object_t&>();
                     object.erase(object.begin());
                 }
                 else
-                    parent->get_ref<nlohmann::json::array_t&>().pop_back();
+                    parent->get_ref<cnetmod::json::document::array_t&>().pop_back();
             }
         }
 
     private:
-        nlohmann::json& document_;
+        cnetmod::json::document& document_;
     };
 
     auto environment(std::string_view name) -> std::optional<std::string>
@@ -63,7 +63,7 @@ namespace {
     }
 
     auto read_document(const std::filesystem::path& path)
-        -> std::expected<nlohmann::json, std::error_code>
+        -> std::expected<cnetmod::json::document, std::error_code>
     {
         const auto extension = path.extension().string();
 #if defined(CNETMOD_HAS_YAML_CONFIGURATION)
@@ -80,7 +80,7 @@ namespace {
                 std::make_error_code(std::errc::no_such_file_or_directory));
         try
         {
-            auto result = nlohmann::json::parse(input, nullptr, true, true);
+            auto result = cnetmod::json::document::parse(input, nullptr, true, true);
             const document_cleanup cleanup{result};
             if (!result.is_object())
                 return std::unexpected(
@@ -99,7 +99,7 @@ namespace {
         }
     }
 
-    auto keys_are_known(const nlohmann::json& object,
+    auto keys_are_known(const cnetmod::json::document& object,
         std::initializer_list<std::string_view> allowed) -> bool
     {
         if (!object.is_object())
@@ -113,14 +113,14 @@ namespace {
     }
 
     template <class Value>
-    void assign(const nlohmann::json& object, std::string_view key,
+    void assign(const cnetmod::json::document& object, std::string_view key,
         Value& destination)
     {
         if (const auto found = object.find(key); found != object.end())
             destination = found->template get<Value>();
     }
 
-    void assign_duration(const nlohmann::json& object, std::string_view key,
+    void assign_duration(const cnetmod::json::document& object, std::string_view key,
         std::chrono::milliseconds& destination)
     {
         if (const auto found = object.find(key); found != object.end())
@@ -202,7 +202,7 @@ namespace {
         return source;
     }
 
-    auto expand_environment(nlohmann::json& value)
+    auto expand_environment(cnetmod::json::document& value)
         -> std::expected<void, std::error_code>
     {
         if (value.is_string())
@@ -225,7 +225,7 @@ namespace {
     }
 
     auto apply_document(application_configuration& result,
-        const nlohmann::json& root) -> bool
+        const cnetmod::json::document& root) -> bool
     {
         if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "orm", "services"}))
             return false;
@@ -574,8 +574,8 @@ namespace {
         return {};
     }
 
-    auto nested_property(const nlohmann::json& root,
-        std::string_view path) -> const nlohmann::json*
+    auto nested_property(const cnetmod::json::document& root,
+        std::string_view path) -> const cnetmod::json::document*
     {
         if (!root.is_object() || path.empty())
             return nullptr;
@@ -944,11 +944,11 @@ auto reload_safe_configuration(application_configuration& active,
     }
 }
 
-auto redact_configuration(const nlohmann::json& value) -> nlohmann::json
+auto redact_configuration(const cnetmod::json::document& value) -> cnetmod::json::document
 {
     if (value.is_array())
     {
-        auto result = nlohmann::json::array();
+        auto result = cnetmod::json::document::array();
         for (const auto& child : value)
             result.push_back(redact_configuration(child));
         return result;
@@ -967,7 +967,7 @@ auto redact_configuration(const nlohmann::json& value) -> nlohmann::json
     }
     if (!value.is_object())
         return value;
-    auto result = nlohmann::json::object();
+    auto result = cnetmod::json::document::object();
     for (auto item = value.begin(); item != value.end(); ++item)
     {
         const auto& key = item.key();
@@ -983,7 +983,7 @@ auto redact_configuration(const nlohmann::json& value) -> nlohmann::json
             lowered.contains("authorization") || lowered.contains("api_key") ||
             lowered.contains("credential") || lowered.contains("connection_string") ||
             lowered == "dsn";
-        result[key] = secret ? nlohmann::json("[REDACTED]")
+        result[key] = secret ? cnetmod::json::document("[REDACTED]")
                              : redact_configuration(child);
     }
     return result;

@@ -19,7 +19,7 @@ import :memory;
 import :tools;
 import :tool_search;
 import :agent;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 

@@ -25,12 +25,12 @@ TEST(application_validates_connector_ports_before_narrowing)
 #ifdef CNETMOD_HAS_PROTOCOL_AMQP10
     services.emplace_back("amqp10");
 #endif
-    const std::vector<nlohmann::json> invalid{
+    const std::vector<cnetmod::json::document> invalid{
         -1, 0, 65536, 65537, 1.5, true, nullptr, "3306",
         std::numeric_limits<std::uint64_t>::max()};
     for (const auto& name : services)
     {
-        const auto build = [&](const nlohmann::json& port)
+        const auto build = [&](const cnetmod::json::document& port)
         {
             return application::application_builder{"port-validation"}
                 .enable_auto_configuration()

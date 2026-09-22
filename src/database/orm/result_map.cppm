@@ -119,7 +119,7 @@ namespace detail {
 /// XML: the concrete C++ member which receives an association or collection.
 /// Keep this explicit instead of guessing member offsets from property strings.
 /// A specialization can use mapped_association_as()/mapped_collection_as().
-export template <Model T> struct xml_object_graph_binder
+export template <ResultRecord T> struct xml_object_graph_binder
 {
     static void bind(T&, const mapped_object&) {}
 };
@@ -129,11 +129,11 @@ export template <Model T> struct xml_object_graph_binder
 /// existing CNETMOD_MODEL setters. Both resultMap property names and declared
 /// database column names are accepted, which keeps aliases explicit in XML.
 /// xml_object_graph_binder<T> completes any explicitly-declared typed relations.
-export template <Model T>
+export template <ResultRecord T>
 auto from_mapped_object(const mapped_object& source) -> T
 {
     T result{};
-    for (const auto& field : model_traits<T>::meta().fields)
+    for (const auto& field : result_fields<T>())
     {
         const auto property = source.values.find(std::string(field.col.field_name));
         const auto value = property != source.values.end() ? property
@@ -145,7 +145,7 @@ auto from_mapped_object(const mapped_object& source) -> T
     return result;
 }
 
-export template <Model T>
+export template <ResultRecord T>
 auto from_mapped_objects(const std::vector<mapped_object>& source)
     -> std::vector<T>
 {
@@ -159,7 +159,7 @@ auto from_mapped_objects(const std::vector<mapped_object>& source)
 /// Convert one named <association> to the application model, if the joined
 /// result contained a child object. This deliberately returns optional so a
 /// nullable SQL join is represented without a sentinel DTO.
-export template <Model T>
+export template <ResultRecord T>
 auto mapped_association_as(const mapped_object& source,
     std::string_view property) -> std::optional<T>
 {
@@ -172,7 +172,7 @@ auto mapped_association_as(const mapped_object& source,
 /// Convert one named <collection> to a vector of application models. Joined
 /// row de-duplication has already happened in result_map_applier, so the
 /// vector preserves the mapper's object-graph semantics.
-export template <Model T>
+export template <ResultRecord T>
 auto mapped_collection_as(const mapped_object& source,
     std::string_view property) -> std::vector<T>
 {

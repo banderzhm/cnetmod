@@ -46,6 +46,7 @@
 
 ### 协议支持
 - **HTTP/1.1 & HTTP/2**: 完整服务器，包含路由器、中间件管道、分块传输、多部分上传；HTTP/2 通过 TLS + ALPN 协商，支持多路复用流
+- **HTTP/3 / QUIC**: 完整客户端与服务器，支持 TLS 1.3、ALPN、QPACK 动态表、多路复用流、连接迁移、多路径与路径 MTU 探测
 - **WebSocket**: 服务端从 HTTP 升级、帧编解码、ping/pong、per-message deflate
 - **SOCKS5**: 代理协议客户端和服务端 — CONNECT、BIND、UDP ASSOCIATE 命令；认证方法（无认证、用户名/密码、RFC 1961 GSSAPI provider 回调）；支持 IPv4、IPv6 和域名
 - **MQTT v3.1.1 / v5.0**: 完整 broker + 异步客户端 — QoS 0/1/2、保留消息、遗嘱、会话恢复、共享订阅、主题别名、自动重连；同步客户端封装
@@ -308,9 +309,10 @@ cmake --build --preset conan-release --target cnetmod_core
 conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 ```
 
-默认 Conan recipe 会从 ConanCenter 安装 `jwt-cpp`、`nlohmann_json`、
-`pugixml`、`leveldb`、`openssl` 和 `zlib`。`mimalloc`
-默认启用；如需关闭可传 `-o cnetmod/*:with_mimalloc=False`。`stdexec`
+默认 Conan recipe 会从 ConanCenter 安装 `pugixml`、`leveldb` 等依赖；
+JSON 统一通过 `cnetmod.json` 使用，Glaze 只作为私有实现后端。
+`mimalloc` 默认启用；如需关闭可传
+`-o cnetmod/*:with_mimalloc=False`。`stdexec`
 默认使用 `3rdparty/stdexec`；如果你的 Conan remote 提供上游 `p2300` 包，可以开启
 `-o cnetmod/*:with_stdexec_package=True`。
 
@@ -333,7 +335,8 @@ cnetmod.io            — io_context + 平台后端（iocp、io_uring、epoll、
 cnetmod.executor      — async_op、server_context、scheduler、stdexec 桥接
 cnetmod.protocol.tcp  — TCP acceptor/connector
 cnetmod.protocol.udp  — UDP 异步 I/O
-cnetmod.protocol.http — HTTP/1.1 + HTTP/2 服务器、路由器、中间件管道、ALPN 协商
+cnetmod.protocol.http — HTTP/1.1 + HTTP/2 + HTTP/3 客户端/服务器、路由器、中间件、QPACK
+cnetmod.protocol.quic — QUIC 传输、TLS 1.3、连接迁移、多路径与拥塞控制
 cnetmod.protocol.websocket — WebSocket 服务器
 cnetmod.protocol.socks5 — SOCKS5 代理客户端 + 服务端
 cnetmod.protocol.mqtt — MQTT broker + 客户端（v3.1.1 / v5.0）
@@ -372,7 +375,7 @@ cnetmod.utils         — 协议转换工具（字节序、CRC、十六进制、
 
 ## 项目状态
 
-cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1 & HTTP/2、MQTT、MySQL、WebSocket、Modbus、CoAP 等协议的生产级实现，全部基于零开销的 async/await 构建。
+cnetmod 是一个展示 C++23 模块和协程强大能力的现代网络库。它提供了 HTTP/1.1、HTTP/2、HTTP/3、MQTT、MySQL、WebSocket、Modbus、CoAP 等协议的生产级实现，全部基于零开销的 async/await 构建。
 
 该库证明了 C++23 模块已经可以用于实际项目，并在 Linux、macOS 和 Windows 上提供完整的跨平台支持。
 

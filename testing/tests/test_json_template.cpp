@@ -24,6 +24,18 @@ struct custom_document
     std::string value;
 };
 
+struct nested_document
+{
+    std::string label;
+};
+
+struct aggregate_document
+{
+    std::optional<std::string> note;
+    std::vector<nested_document> children;
+    std::map<std::string, std::uint64_t> counters;
+};
+
 struct custom_codec
 {
     template <typename T>
@@ -48,11 +60,24 @@ struct custom_codec
 };
 } // namespace cnetmod_test
 
+CNETMOD_JSON(cnetmod_test::sample_document,
+    CNETMOD_JSON_FIELD(name),
+    CNETMOD_JSON_FIELD(count))
+
+CNETMOD_JSON(cnetmod_test::nested_document,
+    CNETMOD_JSON_FIELD(label))
+
+CNETMOD_JSON(cnetmod_test::aggregate_document,
+    CNETMOD_JSON_FIELD(note),
+    CNETMOD_JSON_FIELD(children),
+    CNETMOD_JSON_FIELD(counters))
+
 using cnetmod_test::custom_codec;
 using cnetmod_test::custom_document;
 using cnetmod_test::sample_document;
+using cnetmod_test::aggregate_document;
 
-TEST(glaze_is_the_default_json_codec)
+TEST(framework_document_is_the_default_json_codec)
 {
     const sample_document expected{"orders", 7};
     auto encoded = cnetmod::json::write(expected);
@@ -68,6 +93,19 @@ TEST(glaze_is_the_default_json_codec)
         cnetmod::json::make_error_code(cnetmod::json::errc::parse_failed));
 }
 
+TEST(framework_document_null_lookup_and_numeric_equality_are_stable)
+{
+    const cnetmod::json::document empty;
+    ASSERT_TRUE(empty.find("missing") == empty.end());
+
+    const auto values = cnetmod::json::document::array({1, 2});
+    ASSERT_TRUE(values.find("missing") == values.end());
+    ASSERT_TRUE(cnetmod::json::document(std::uint64_t{2}) ==
+        cnetmod::json::document(std::int64_t{2}));
+    ASSERT_FALSE(cnetmod::json::document(std::uint64_t{2}) ==
+        cnetmod::json::document(std::int64_t{-2}));
+}
+
 TEST(json_codec_spi_accepts_an_application_codec)
 {
     auto encoded = cnetmod::json::write<custom_document, custom_codec>(
@@ -78,6 +116,49 @@ TEST(json_codec_spi_accepts_an_application_codec)
     auto decoded = cnetmod::json::parse<custom_document, custom_codec>("wire");
     ASSERT_TRUE(decoded.has_value());
     ASSERT_EQ(decoded->value, std::string{"wire"});
+}
+
+TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
+{
+    const aggregate_document original{
+        .note = std::nullopt,
+        .children = {{"first"}, {"second"}},
+        .counters = {{"large", std::numeric_limits<std::uint64_t>::max()}},
+    };
+    const auto encoded = cnetmod::json::write(original);
+    ASSERT_TRUE(encoded.has_value());
+    ASSERT_FALSE(encoded->contains("note"));
+
+    const auto decoded = cnetmod::json::parse<aggregate_document>(*encoded);
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_FALSE(decoded->note.has_value());
+    ASSERT_EQ(decoded->children.size(), 2U);
+    ASSERT_EQ(decoded->children.at(1).label, "second");
+    ASSERT_EQ(decoded->counters.at("large"),
+        std::numeric_limits<std::uint64_t>::max());
+
+    const auto unknown = cnetmod::json::parse<sample_document>(
+        R"({"name":"orders","count":7,"extra":true})");
+    ASSERT_FALSE(unknown.has_value());
+    ASSERT_EQ(unknown.error(),
+        cnetmod::json::make_error_code(cnetmod::json::errc::unknown_field));
+
+    const auto lenient = cnetmod::json::parse<sample_document,
+        cnetmod::json::lenient_codec>(
+        R"({"name":"orders","count":7,"extra":true})");
+    ASSERT_TRUE(lenient.has_value());
+
+    const auto missing = cnetmod::json::parse<sample_document>(
+        R"({"name":"orders"})");
+    ASSERT_FALSE(missing.has_value());
+    ASSERT_EQ(missing.error(),
+        cnetmod::json::make_error_code(cnetmod::json::errc::missing_field));
+
+    const auto overflow = cnetmod::json::parse<sample_document>(
+        R"({"name":"orders","count":18446744073709551615})");
+    ASSERT_FALSE(overflow.has_value());
+    ASSERT_EQ(overflow.error(),
+        cnetmod::json::make_error_code(cnetmod::json::errc::type_mismatch));
 }
 
 TEST(json_template_offloads_and_honours_cancellation)

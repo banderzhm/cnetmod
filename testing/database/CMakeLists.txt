@@ -12,7 +12,6 @@ if(CNETMOD_ENABLE_POSTGRESQL)
             drivers/postgresql/postgresql_interoperability_driver.cppm
     )
     target_link_libraries(postgresql_interoperability_driver PRIVATE cnetmod_core)
-    cnetmod_link_nlohmann_json(postgresql_interoperability_driver)
     set_property(TARGET postgresql_interoperability_driver PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE")
     list(APPEND CNETMOD_TEST_TARGETS postgresql_interoperability_driver)
@@ -28,7 +27,6 @@ if(CNETMOD_ENABLE_MONGODB)
             drivers/mongodb/mongodb_interoperability_driver.cppm
     )
     target_link_libraries(mongodb_interoperability_driver PRIVATE cnetmod_core)
-    cnetmod_link_nlohmann_json(mongodb_interoperability_driver)
     set_property(TARGET mongodb_interoperability_driver PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE")
     list(APPEND CNETMOD_TEST_TARGETS mongodb_interoperability_driver)

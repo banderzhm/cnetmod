@@ -12,7 +12,7 @@ import cnetmod.coro.mutex;
 import :foundation;
 import :filters;
 import :model;
-import nlohmann.json;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
