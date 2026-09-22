@@ -96,11 +96,13 @@ auto tool_registry::invoke_detailed(const tool_call& call,
     if (found == tools_.end())
         co_return std::unexpected(tool_error{tool_error_kind::not_found,
             call.function.name, "unknown tool: " + call.function.name});
-    auto arguments = json::parse(call.function.arguments, nullptr, false);
-    if (arguments.is_discarded())
+    auto parsed_arguments = cnetmod::json::parse_document(
+        call.function.arguments);
+    if (!parsed_arguments)
         co_return std::unexpected(tool_error{tool_error_kind::invalid_arguments,
             call.function.name,
             "invalid JSON arguments for tool: " + call.function.name});
+    auto& arguments = *parsed_arguments;
     auto valid = validate_json_schema(arguments,
         found->second.definition.function_parameters);
     if (!valid)
@@ -120,16 +122,19 @@ auto tool_registry::invoke_detailed(const tool_call& call,
         co_return std::unexpected(tool_error{tool_error_kind::cancelled,
             call.function.name, "tool invocation cancelled"});
     }
-    if (result)
-        observation.succeed(result->dump(), 0,
-            {{"tool_call_id", call.id}});
-    else
+    if (!result)
+    {
         observation.fail(result.error(), 0,
             {{"tool_call_id", call.id}});
-    if (!result)
         co_return std::unexpected(tool_error{tool_error_kind::execution_failed,
             call.function.name, result.error()});
-    co_return result->dump();
+    }
+    auto serialized = cnetmod::json::write_document(*result);
+    if (!serialized)
+        co_return std::unexpected(tool_error{tool_error_kind::execution_failed,
+            call.function.name, "tool result serialization failed"});
+    observation.succeed(*serialized, 0, {{"tool_call_id", call.id}});
+    co_return std::move(*serialized);
 }
 
 auto tool_provider::is_dynamic() const noexcept -> bool

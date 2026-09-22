@@ -1,6 +1,7 @@
 module cnetmod.application.amqp091;
 #ifdef CNETMOD_HAS_PROTOCOL_AMQP091
 import std;
+import cnetmod.json;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.timer;
 import cnetmod.coro.wait_group;
@@ -240,11 +241,16 @@ auto auto_configure_amqp091(const configured_service& configuration,
         if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         amqp091::connection_options options;
-        options.endpoint.host = configuration.properties.value("host", options.endpoint.host);
-        options.endpoint.port = configuration.properties.value("port", options.endpoint.port);
-        options.credentials.username = configuration.properties.value("username", std::string{});
-        options.credentials.password = configuration.properties.value("password", std::string{});
-        options.virtual_host = configuration.properties.value("virtual_host", options.virtual_host);
+        options.endpoint.host = cnetmod::json::value_or(
+            configuration.properties, "host", options.endpoint.host);
+        options.endpoint.port = cnetmod::json::value_or(
+            configuration.properties, "port", options.endpoint.port);
+        options.credentials.username = cnetmod::json::value_or(
+            configuration.properties, "username", std::string{});
+        options.credentials.password = cnetmod::json::value_or(
+            configuration.properties, "password", std::string{});
+        options.virtual_host = cnetmod::json::value_or(
+            configuration.properties, "virtual_host", options.virtual_host);
         auto service = std::make_shared<amqp091_service>(context.io, std::move(options),
             configuration.instance, configuration.requirement, configuration.recovery);
         return context.services.add_managed_named<amqp091_service>(

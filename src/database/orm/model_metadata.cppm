@@ -189,7 +189,7 @@ template <ResultRecord T>
 [[nodiscard]] auto record_to_document(const T& value, bool emit_nulls)
     -> std::expected<cnetmod::json::document, std::error_code>
 {
-    auto result = cnetmod::json::document::object();
+    auto result = cnetmod::json::object();
     for (const auto& field : result_fields<T>())
     {
         auto encoded = field.json_getter(value);
@@ -217,8 +217,8 @@ template <ResultRecord T>
     std::size_t consumed{};
     for (const auto& field : result_fields<T>())
     {
-        const auto found = source.find(field.col.field_name);
-        if (found == source.end())
+        const auto* found = cnetmod::json::find(source, field.col.field_name);
+        if (found == nullptr)
         {
             if (!field.col.is_nullable())
                 return std::unexpected(cnetmod::json::make_error_code(
@@ -365,3 +365,27 @@ requires std::same_as<T, std::time_t> &&
     return param_value::from_int(static_cast<std::int64_t>(value));
 }
 } // namespace cnetmod::orm::detail
+
+export namespace cnetmod::json::detail {
+
+/**
+ * @brief Maps every registered ORM record through its declared field metadata.
+ */
+template <cnetmod::orm::ResultRecord T>
+struct document_codec<T>
+{
+    [[nodiscard]] static auto encode(const T& value, bool emit_nulls)
+        -> std::expected<document, std::error_code>
+    {
+        return cnetmod::orm::record_to_document(value, emit_nulls);
+    }
+
+    [[nodiscard]] static auto decode(
+        const document& source, bool reject_unknown)
+        -> std::expected<T, std::error_code>
+    {
+        return cnetmod::orm::record_from_document<T>(source, reject_unknown);
+    }
+};
+
+} // namespace cnetmod::json::detail

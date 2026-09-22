@@ -371,10 +371,10 @@ auto health_registry::snapshots() const
 
 auto health_registry::json(bool readiness_only) const -> std::string
 {
-    cnetmod::json::document components = cnetmod::json::document::object();
+    cnetmod::json::document components = cnetmod::json::object();
     for (const auto& item : snapshots())
     {
-        components[item.key.canonical_name()] = {
+        components[item.key.canonical_name()] = cnetmod::json::object({
             {"status", status_name(item.report.status)},
             {"required", item.requirement == service_requirement::required},
             {"message", item.report.message},
@@ -382,7 +382,7 @@ auto health_registry::json(bool readiness_only) const -> std::string
             {"checkedAtUnixMs", std::chrono::duration_cast<std::chrono::milliseconds>(item.report.checked_at.time_since_epoch()).count()},
             {"consecutiveFailures", item.consecutive_failures},
             {"consecutiveSuccesses", item.consecutive_successes},
-        };
+        });
     }
     auto healthy = readiness_only ? ready() : live();
     if (!readiness_only)
@@ -396,9 +396,10 @@ auto health_registry::json(bool readiness_only) const -> std::string
             }
         }
     }
-    return cnetmod::json::document{{"status", healthy ? "UP" : "DOWN"},
-        {"components", std::move(components)}}
-        .dump();
+    const auto encoded = cnetmod::json::write_document(cnetmod::json::object({
+        {"status", healthy ? "UP" : "DOWN"},
+        {"components", std::move(components)}}));
+    return encoded.value_or("{}");
 }
 
 auto health_registry::policy() const noexcept -> health_policy

@@ -39,7 +39,7 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # backend-neutral JSON facade
+│   ├── json/               # Glaze-only JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）

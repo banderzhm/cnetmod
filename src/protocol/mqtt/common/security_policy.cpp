@@ -143,13 +143,13 @@ auto security_config::load_json(const json& config)
         if (config.contains("anonymous_user"))
             set_anonymous_user(config["anonymous_user"].get<std::string>());
         if (config.contains("users") && config["users"].is_object())
-            for (auto it = config["users"].begin(); it != config["users"].end();
-                 ++it)
+            for (const auto& [username, object] :
+                config["users"].get_object())
             {
-                const auto& object = it.value();
                 user_entry user;
                 user.method = auth_method::plain_password;
-                user.password = object.value("password", "");
+                user.password = cnetmod::json::value_or(
+                    object, "password", std::string{});
                 if (object.contains("method"))
                 {
                     const auto method = object["method"].get<std::string>();
@@ -163,29 +163,32 @@ auto security_config::load_json(const json& config)
                 if (object.contains("salt"))
                     user.salt = object["salt"].get<std::string>();
                 if (object.contains("groups") && object["groups"].is_array())
-                    for (const auto& group : object["groups"])
+                    for (const auto& group : object["groups"].get_array())
                         user.groups.push_back(group.get<std::string>());
-                users_[it.key()] = std::move(user);
+                users_[username] = std::move(user);
             }
         if (config.contains("rules") && config["rules"].is_array())
-            for (const auto& object : config["rules"])
+            for (const auto& object : config["rules"].get_array())
             {
                 auth_rule rule;
-                rule.topic_filter = object.value("topic", "#");
-                rule.pub_action = object.value("pub", "deny") == "allow"
+                rule.topic_filter = cnetmod::json::value_or(
+                    object, "topic", std::string{"#"});
+                rule.pub_action = cnetmod::json::value_or(
+                    object, "pub", std::string{"deny"}) == "allow"
                     ? auth_action::allow
                     : auth_action::deny;
-                rule.sub_action = object.value("sub", "deny") == "allow"
+                rule.sub_action = cnetmod::json::value_or(
+                    object, "sub", std::string{"deny"}) == "allow"
                     ? auth_action::allow
                     : auth_action::deny;
                 if (object.contains("groups") && object["groups"].is_array())
-                    for (const auto& group : object["groups"])
+                    for (const auto& group : object["groups"].get_array())
                         rule.groups.insert(group.get<std::string>());
                 rules_.push_back(std::move(rule));
             }
         return {};
     }
-    catch (const json::exception& error)
+    catch (const std::exception& error)
     {
         return std::unexpected(std::string("security config parse error: ") +
             error.what());
@@ -198,14 +201,12 @@ auto security_config::load_file(const std::string& path)
     std::ifstream input(path);
     if (!input)
         return std::unexpected("cannot open: " + path);
-    try
-    {
-        return load_json(json::parse(input));
-    }
-    catch (const json::exception& error)
-    {
-        return std::unexpected(std::string("JSON parse error: ") + error.what());
-    }
+    const std::string content{std::istreambuf_iterator<char>{input},
+        std::istreambuf_iterator<char>{}};
+    auto parsed = cnetmod::json::parse_document(content);
+    if (!parsed)
+        return std::unexpected("JSON parse error");
+    return load_json(*parsed);
 }
 
 auto security_config::get_user_groups(const std::string& username) const

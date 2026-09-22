@@ -154,25 +154,6 @@
                     fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
             return m;                                                      \
         }                                                                  \
-    };                                                               \
-    template <>                                                      \
-    struct ::cnetmod::json::document_traits<TYPE>                    \
-    {                                                                \
-        static auto encode(const TYPE& value, bool emit_nulls)       \
-            -> std::expected<::cnetmod::json::document,              \
-                std::error_code>                                     \
-        {                                                            \
-            return ::cnetmod::orm::record_to_document(               \
-                value, emit_nulls);                                  \
-        }                                                            \
-        static auto decode(                                          \
-            const ::cnetmod::json::document& source,                 \
-            bool reject_unknown) -> std::expected<TYPE,              \
-                std::error_code>                                     \
-        {                                                            \
-            return ::cnetmod::orm::record_from_document<TYPE>(       \
-                source, reject_unknown);                             \
-        }                                                            \
     };
 
 /**
@@ -196,25 +177,6 @@
                     fields_, sizeof(fields_) / sizeof(fields_[0]))};       \
             return m;                                                      \
         }                                                                  \
-    };                                                               \
-    template <>                                                      \
-    struct ::cnetmod::json::document_traits<TYPE>                    \
-    {                                                                \
-        static auto encode(const TYPE& value, bool emit_nulls)       \
-            -> std::expected<::cnetmod::json::document,              \
-                std::error_code>                                     \
-        {                                                            \
-            return ::cnetmod::orm::record_to_document(               \
-                value, emit_nulls);                                  \
-        }                                                            \
-        static auto decode(                                          \
-            const ::cnetmod::json::document& source,                 \
-            bool reject_unknown) -> std::expected<TYPE,              \
-                std::error_code>                                     \
-        {                                                            \
-            return ::cnetmod::orm::record_from_document<TYPE>(       \
-                source, reject_unknown);                             \
-        }                                                            \
     };
 
 // Helper macro to define field name constants

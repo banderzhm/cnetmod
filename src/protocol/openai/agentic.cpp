@@ -20,6 +20,7 @@ import cnetmod.coro.task_group;
 import cnetmod.coro.bridge;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
+import cnetmod.json;
 import :model;
 import :prompt;
 import :checkpoint;
@@ -81,8 +82,10 @@ namespace {
             !value["id"].is_string() || !value.contains("prompt") ||
             !value["prompt"].is_string())
             return std::unexpected("checkpoint human input is invalid");
-        auto response_key = value.value("response_key", "human_input");
-        auto response_schema = value.value("response_schema", json::object());
+        auto response_key = cnetmod::json::value_or(
+            value, "response_key", std::string{"human_input"});
+        auto response_schema = cnetmod::json::value_or(
+            value, "response_schema", cnetmod::json::object());
         if (response_key.empty() || !response_schema.is_object())
             return std::unexpected("checkpoint human input is invalid");
         return human_input_request{.id = value["id"].get<std::string>(),
@@ -113,9 +116,15 @@ namespace {
         if (!input)
             return std::unexpected(
                 "cannot open checkpoint file: " + path.string());
-        auto payload = json::parse(input, nullptr, false);
-        if (!payload.is_object() || payload.value("version", 0) != 1 ||
-            payload.value("workflow_id", "") != workflow_id ||
+        const std::string content{std::istreambuf_iterator<char>{input}, {}};
+        auto parsed = cnetmod::json::parse_document(content);
+        if (!parsed)
+            return std::unexpected("checkpoint file contains invalid JSON");
+        auto& payload = *parsed;
+        if (!payload.is_object() ||
+            cnetmod::json::value_or(payload, "version", std::uint64_t{0}) != 1 ||
+            cnetmod::json::value_or(
+                payload, "workflow_id", std::string{}) != workflow_id ||
             !payload.contains("checkpoint") ||
             !payload["checkpoint"].is_object())
             return std::unexpected("checkpoint file has an invalid envelope");
@@ -123,11 +132,11 @@ namespace {
         if (!value.contains("scope") || !value["scope"].is_object() ||
             !value.contains("planner") || !value["planner"].is_object() ||
             !value.contains("completed_steps") ||
-            !value["completed_steps"].is_number_unsigned())
+            !value["completed_steps"].is_uint64())
             return std::unexpected("checkpoint payload is invalid");
         agentic_checkpoint checkpoint{.scope = value["scope"],
             .planner = value["planner"],
-            .completed_steps = value["completed_steps"].get<std::size_t>()};
+            .completed_steps = value["completed_steps"].as<std::size_t>()};
         if (value.contains("pending_human_input") &&
             !value["pending_human_input"].is_null())
         {
@@ -148,16 +157,21 @@ namespace {
         if (error)
             return std::unexpected(
                 "cannot create checkpoint directory: " + error.message());
-        json value = {{"scope", checkpoint.scope},
-            {"planner", checkpoint.planner},
-            {"completed_steps", checkpoint.completed_steps},
-            {"pending_human_input", nullptr}};
+        auto value = cnetmod::json::object();
+        value["scope"] = checkpoint.scope;
+        value["planner"] = checkpoint.planner;
+        value["completed_steps"] = checkpoint.completed_steps;
+        value["pending_human_input"] = nullptr;
         if (checkpoint.pending_human_input)
             value["pending_human_input"] =
                 encode_human_input(*checkpoint.pending_human_input);
-        const auto content = json{{"version", 1},
-            {"workflow_id", workflow_id}, {"checkpoint", std::move(value)}}
-                                 .dump();
+        auto encoded = cnetmod::json::write_document(cnetmod::json::object(
+            {{"version", std::uint64_t{1}},
+                {"workflow_id", std::string{workflow_id}},
+                {"checkpoint", std::move(value)}}));
+        if (!encoded)
+            return std::unexpected("cannot encode workflow checkpoint");
+        const auto& content = *encoded;
         if (content.size() > max_bytes)
             return std::unexpected(std::format(
                 "workflow checkpoint exceeds {} bytes", max_bytes));
@@ -195,8 +209,8 @@ auto agentic_scope::read(std::string key) -> task<std::optional<json>>
 {
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    const auto found = state_.find(key);
-    if (found == state_.end())
+    const auto* found = cnetmod::json::find(state_, key);
+    if (found == nullptr)
         co_return std::nullopt;
     co_return *found;
 }
@@ -212,7 +226,8 @@ auto agentic_scope::erase(std::string key) -> task<void>
 {
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    state_.erase(key);
+    if (state_.is_object())
+        state_.get_object().erase(key);
 }
 
 auto agentic_scope::contains(std::string key) -> task<bool>
@@ -262,7 +277,7 @@ auto functional_agent::invoke(agentic_scope& scope,
 
 auto workflow_planner::save_state() const -> json
 {
-    return json::object();
+    return cnetmod::json::object();
 }
 
 auto workflow_planner::restore_state(const json&)
@@ -298,7 +313,8 @@ auto sequence_planner::restore_state(const json& state)
 {
     if (!state.is_object())
         return std::unexpected("sequence planner state must be an object");
-    const auto cursor = state.value("cursor", std::size_t{0});
+    const auto cursor = cnetmod::json::value_or(
+        state, "cursor", std::size_t{0});
     if (cursor > agents_.size())
         return std::unexpected("sequence planner cursor is out of range");
     cursor_ = cursor;
@@ -356,11 +372,11 @@ auto checkpoint_agentic_scope_store::load(std::string workflow_id)
         !value["scope"].is_object() || !value.contains("planner") ||
         !value["planner"].is_object() ||
         !value.contains("completed_steps") ||
-        !value["completed_steps"].is_number_unsigned())
+        !value["completed_steps"].is_uint64())
         co_return std::unexpected("agentic checkpoint state is invalid");
     agentic_checkpoint checkpoint{.scope = value["scope"],
         .planner = value["planner"],
-        .completed_steps = value["completed_steps"].get<std::size_t>()};
+        .completed_steps = value["completed_steps"].as<std::size_t>()};
     if (value.contains("pending_human_input") &&
         !value["pending_human_input"].is_null())
     {
@@ -378,17 +394,18 @@ auto checkpoint_agentic_scope_store::save(std::string workflow_id,
     auto latest = co_await store_.load_latest(workflow_id, branch_);
     if (!latest)
         co_return std::unexpected(latest.error());
-    json state{{"scope", std::move(checkpoint.scope)},
-        {"planner", std::move(checkpoint.planner)},
-        {"completed_steps", checkpoint.completed_steps},
-        {"pending_human_input", nullptr}};
+    auto state = cnetmod::json::object();
+    state["scope"] = std::move(checkpoint.scope);
+    state["planner"] = std::move(checkpoint.planner);
+    state["completed_steps"] = checkpoint.completed_steps;
+    state["pending_human_input"] = nullptr;
     if (checkpoint.pending_human_input)
         state["pending_human_input"] =
             encode_human_input(*checkpoint.pending_human_input);
     auto committed = co_await store_.commit({.thread_id = workflow_id,
         .branch = branch_,
         .state = std::move(state),
-        .metadata = {{"kind", "agentic_scope"}},
+        .metadata = cnetmod::json::object({{"kind", "agentic_scope"}}),
         .expected_head_version = *latest
             ? std::optional<std::uint64_t>{(*latest)->version}
             : std::optional<std::uint64_t>{0}});
@@ -653,7 +670,7 @@ auto agentic_runtime::resume(std::string workflow_id,
     if (!saved)
         co_return std::unexpected("checkpoint save failed: " + saved.error());
     co_return co_await execute(std::move(workflow_id), planner,
-        json::object(), config);
+        cnetmod::json::object(), config);
 }
 
 auto agentic_runtime::discard(std::string workflow_id)

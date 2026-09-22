@@ -1,6 +1,7 @@
 module cnetmod.application.http_client;
 
 import std;
+import cnetmod.json;
 
 namespace cnetmod::application {
 
@@ -75,12 +76,12 @@ auto auto_configure_http_client(const configured_service& configuration,
     try
     {
         options.connect_timeout = std::chrono::milliseconds{
-            configuration.properties.value("connect_timeout_ms",
+            cnetmod::json::value_or(configuration.properties, "connect_timeout_ms",
                 options.connect_timeout.count())};
         options.request_timeout = std::chrono::milliseconds{
-            configuration.properties.value("request_timeout_ms",
+            cnetmod::json::value_or(configuration.properties, "request_timeout_ms",
                 options.request_timeout.count())};
-        options.verify_peer = configuration.properties.value("tls_verify",
+        options.verify_peer = cnetmod::json::value_or(configuration.properties, "tls_verify",
             options.verify_peer);
     }
     catch (...)

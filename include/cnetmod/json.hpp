@@ -1,20 +1,14 @@
 #pragma once
 
 /**
- * @brief Declares backend-neutral JSON fields for a plain DTO.
+ * @brief Marks an aggregate DTO as JSON serializable.
  *
- * Import `cnetmod.json` before using these macros.
+ * Glaze reflects public aggregate fields directly. This declaration marker
+ * intentionally emits no metadata or intermediate mapping code.
  */
-#define CNETMOD_JSON(TYPE, ...)                                      \
-    template <>                                                      \
-    struct ::cnetmod::json::document_traits<TYPE>                    \
-    {                                                                \
-        using _cnetmod_json_type = TYPE;                             \
-        static constexpr auto fields()                              \
-        {                                                            \
-            return std::tuple{__VA_ARGS__};                          \
-        }                                                            \
-    };
+#define CNETMOD_JSON(TYPE, ...)
 
-#define CNETMOD_JSON_FIELD(MEMBER)                                   \
-    ::cnetmod::json::field(#MEMBER, &_cnetmod_json_type::MEMBER)
+/**
+ * @brief Names a field in a CNETMOD_JSON declaration marker.
+ */
+#define CNETMOD_JSON_FIELD(MEMBER)

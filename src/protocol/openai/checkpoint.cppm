@@ -43,8 +43,8 @@ export struct checkpoint_record
     std::uint64_t version = 0;
     std::optional<std::uint64_t> parent_version;
     std::optional<checkpoint_reference> origin;
-    json state = json::object();
-    json metadata = json::object();
+    json state = cnetmod::json::object();
+    json metadata = cnetmod::json::object();
     std::vector<checkpoint_pending_write> pending_writes;
     std::uint64_t write_revision = 0;
     std::chrono::system_clock::time_point created_at;
@@ -57,8 +57,8 @@ export struct checkpoint_commit
 {
     std::string thread_id;
     std::string branch = "main";
-    json state = json::object();
-    json metadata = json::object();
+    json state = cnetmod::json::object();
+    json metadata = cnetmod::json::object();
     std::optional<std::uint64_t> expected_head_version;
 };
 

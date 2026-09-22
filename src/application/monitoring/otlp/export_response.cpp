@@ -16,20 +16,24 @@ auto parse_export_response(std::string_view body, std::string_view rejected_fiel
         if (!parsed || !parsed->is_object())
             return std::nullopt;
         export_acknowledgement result;
-        const auto partial = parsed->find("partialSuccess");
-        if (partial == parsed->end())
+        const auto& root = parsed->get_object();
+        const auto partial = root.find("partialSuccess");
+        if (partial == root.end())
             return result;
-        if (!partial->is_object())
+        const auto& partial_value = partial->second;
+        if (!partial_value.is_object())
             return std::nullopt;
+        const auto& partial_object = partial_value.get_object();
         result.partial = true;
-        if (const auto rejected = partial->find(rejected_field);
-            rejected != partial->end())
+        if (const auto rejected = partial_object.find(rejected_field);
+            rejected != partial_object.end())
         {
-            if (rejected->is_number_integer())
-                result.rejected = rejected->get<std::uint64_t>();
-            else if (rejected->is_string())
+            const auto& rejected_value = rejected->second;
+            if (rejected_value.is_uint64() || rejected_value.is_int64())
+                result.rejected = rejected_value.as<std::uint64_t>();
+            else if (rejected_value.is_string())
             {
-                const auto value = rejected->get<std::string>();
+                const auto value = rejected_value.get<std::string>();
                 const auto converted = std::from_chars(value.data(),
                     value.data() + value.size(), result.rejected);
                 if (converted.ec != std::errc{} ||
@@ -39,12 +43,12 @@ auto parse_export_response(std::string_view body, std::string_view rejected_fiel
             else
                 return std::nullopt;
         }
-        if (const auto message = partial->find("errorMessage");
-            message != partial->end())
+        if (const auto message = partial_object.find("errorMessage");
+            message != partial_object.end())
         {
-            if (!message->is_string())
+            if (!message->second.is_string())
                 return std::nullopt;
-            result.warning = !message->get<std::string>().empty();
+            result.warning = !message->second.get<std::string>().empty();
         }
         if (result.rejected > sent)
             return std::nullopt;

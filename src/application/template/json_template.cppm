@@ -17,8 +17,8 @@ export namespace cnetmod::application {
 /**
  * @brief Offloads typed JSON work to the application-managed CPU pool.
  *
- * Codec policies are selected per call and default to the backend-neutral
- * framework codec. Completion is always resumed on the application event loop.
+ * Every operation uses the framework's Glaze-only JSON module. Completion is
+ * always resumed on the application event loop.
  */
 class json_template
 {
@@ -32,8 +32,7 @@ public:
     /**
      * @brief Parses an owned JSON document without blocking the event loop.
      */
-    template <typename T, typename Codec = json::default_codec>
-    requires json::codec_for<Codec, T>
+    template <typename T>
     [[nodiscard]] auto parse(std::string input,
         cancel_token* cancellation = nullptr)
         -> task<std::expected<T, std::error_code>>
@@ -44,7 +43,7 @@ public:
         auto result = co_await blocking_invoke(cpu_pool_, io_,
             [input = std::move(input)]
             {
-                return json::parse<T, Codec>(input);
+                return json::parse<T>(input);
             });
         if (cancellation && cancellation->is_cancelled())
             co_return std::unexpected(
@@ -55,8 +54,7 @@ public:
     /**
      * @brief Serializes an owned value without blocking the event loop.
      */
-    template <typename T, typename Codec = json::default_codec>
-    requires json::codec_for<Codec, T>
+    template <typename T>
     [[nodiscard]] auto write(T value, cancel_token* cancellation = nullptr)
         -> task<std::expected<std::string, std::error_code>>
     {
@@ -66,7 +64,7 @@ public:
         auto result = co_await blocking_invoke(cpu_pool_, io_,
             [value = std::move(value)]
             {
-                return json::write<T, Codec>(value);
+                return json::write<T>(value);
             });
         if (cancellation && cancellation->is_cancelled())
             co_return std::unexpected(
@@ -77,25 +75,23 @@ public:
     /**
      * @brief Reads and parses the complete HTTP request body.
      */
-    template <typename T, typename Codec = json::default_codec>
-    requires json::codec_for<Codec, T>
+    template <typename T>
     [[nodiscard]] auto body(http::request_context& request)
         -> task<std::expected<T, std::error_code>>
     {
         const auto body = co_await request.read_full_body();
-        co_return co_await parse<T, Codec>(std::string{body},
+        co_return co_await parse<T>(std::string{body},
             &request.cancellation_token());
     }
 
     /**
      * @brief Serializes a value and writes an HTTP JSON response.
      */
-    template <typename T, typename Codec = json::default_codec>
-    requires json::codec_for<Codec, T>
+    template <typename T>
     [[nodiscard]] auto respond(http::request_context& request,
         int status_code, T value) -> task<std::expected<void, std::error_code>>
     {
-        auto encoded = co_await write<T, Codec>(std::move(value),
+        auto encoded = co_await write<T>(std::move(value),
             &request.cancellation_token());
         if (!encoded)
             co_return std::unexpected(encoded.error());

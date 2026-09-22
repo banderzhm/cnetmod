@@ -12,11 +12,11 @@ macro(cnetmod_configure_glaze)
 endmacro()
 
 function(cnetmod_link_glaze TARGET_NAME)
-    # Glaze is an implementation detail of src/json/json.cpp. Its headers and
-    # compiler contract must not leak through cnetmod's public usage requirements.
-    target_include_directories(${TARGET_NAME} PRIVATE
-        "${CNETMOD_GLAZE_SOURCE_DIR}/include")
-    target_compile_options(${TARGET_NAME} PRIVATE
+    # cnetmod.json exports direct Glaze templates and native document types.
+    target_include_directories(${TARGET_NAME} PUBLIC
+        $<BUILD_INTERFACE:${CNETMOD_GLAZE_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    target_compile_options(${TARGET_NAME} PUBLIC
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:preprocessor>
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/permissive->
         $<$<COMPILE_LANG_AND_ID:CXX,MSVC>:/Zc:lambda>)

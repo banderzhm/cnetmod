@@ -60,15 +60,16 @@ auto client::list_models()
     }
 
     std::vector<model_info> models;
-    auto j = cnetmod::json::document::parse(resp_body, nullptr, false);
-    if (!j.is_discarded() && j.contains("data") && j["data"].is_array())
+    auto parsed = cnetmod::json::parse_document(resp_body);
+    if (parsed && parsed->contains("data") && (*parsed)["data"].is_array())
     {
-        for (auto& m : j["data"])
+        for (const auto& m : (*parsed)["data"].get_array())
         {
             model_info info;
-            info.id = m.value("id", "");
-            info.owned_by = m.value("owned_by", "");
-            info.created = m.value("created", 0);
+            info.id = cnetmod::json::value_or(m, "id", std::string{});
+            info.owned_by = cnetmod::json::value_or(
+                m, "owned_by", std::string{});
+            info.created = cnetmod::json::value_or(m, "created", 0);
             models.push_back(std::move(info));
         }
     }

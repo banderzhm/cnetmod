@@ -106,7 +106,10 @@ auto in_memory_long_term_store::put(store_namespace name_space,
     std::vector<float> embedding;
     if (options.index_for_semantic_search && semantic_model_)
     {
-        auto embedded = co_await semantic_model_->embed_documents({value.dump()});
+        auto encoded = cnetmod::json::write_document(value);
+        if (!encoded)
+            co_return std::unexpected("long-term value serialization failed");
+        auto embedded = co_await semantic_model_->embed_documents({*encoded});
         if (!embedded)
             co_return std::unexpected("long-term memory indexing failed: " +
                 embedded.error());

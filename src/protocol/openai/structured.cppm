@@ -22,7 +22,7 @@ export template <typename T>
 struct structured_output_contract
 {
     std::string schema_name = "response";
-    json schema = json::object();
+    json schema = cnetmod::json::object();
     std::function<std::expected<T, std::string>(const json&)> decode;
     bool strict = true;
 };
@@ -65,9 +65,10 @@ public:
         if (!result)
             co_return std::unexpected(result.error());
 
-        auto value = json::parse(result->output.content, nullptr, false);
-        if (value.is_discarded())
+        auto parsed = cnetmod::json::parse_document(result->output.content);
+        if (!parsed)
             co_return std::unexpected("structured output is not valid JSON");
+        auto value = std::move(*parsed);
         auto valid = validate_json_schema(value, contract_.schema);
         if (!valid)
             co_return std::unexpected("structured output validation failed: " +

@@ -29,7 +29,7 @@ export struct tool
     std::string type = "function";
     std::string function_name;
     std::string function_description;
-    json function_parameters = json::object();
+    json function_parameters = cnetmod::json::object();
     bool strict = true;
 };
 

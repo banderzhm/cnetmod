@@ -51,6 +51,6 @@ TEST(application_rejects_invalid_pool_capacity_without_normalization)
         reject({{"minimum_size", 1000}});
         ASSERT_TRUE(build({{"minimum_size", 0}, {"maximum_size", 1}}).has_value());
         ASSERT_TRUE(build({{"minimum_size", 2}, {"maximum_size", 2}}).has_value());
-        ASSERT_TRUE(build(cnetmod::json::document::object()).has_value());
+        ASSERT_TRUE(build(cnetmod::json::object()).has_value());
     }
 }

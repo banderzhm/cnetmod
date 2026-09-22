@@ -439,7 +439,7 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                     const auto body = std::string{co_await request.read_full_body()};
                     const std::string_view password{std::getenv("CNETMOD_MYSQL_TEST_PASSWORD")};
                     invalid_payload |= !password.empty() && body.contains(password);
-                    const auto document = cnetmod::json::document::parse(body);
+                    const auto document = cnetmod::json::parse_document(body).value();
                     const unsigned signal = request.path() == "/v1/traces" ? 0U
                         : request.path() == "/v1/metrics"                  ? 1U
                                                                            : 2U;
@@ -448,23 +448,23 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                     const auto attributes = [](const cnetmod::json::document& record)
                     {
                         std::map<std::string, std::string> result;
-                        for (const auto& attribute : record.at("attributes"))
+                        for (const auto& attribute : record.at("attributes").get_array())
                             result.emplace(attribute.at("key").get<std::string>(),
                                 attribute.at("value").at("stringValue").get<std::string>());
                         return result;
                     };
                     if (signal == 0)
                     {
-                        for (const auto& resource : document.at("resourceSpans"))
-                            for (const auto& scope : resource.at("scopeSpans"))
-                                for (const auto& span : scope.at("spans"))
+                        for (const auto& resource : document.at("resourceSpans").get_array())
+                            for (const auto& scope : resource.at("scopeSpans").get_array())
+                                for (const auto& span : scope.at("spans").get_array())
                                 {
                                     const auto labels = attributes(span);
                                     if (labels.contains("service.name") && labels.at("service.name") == "mysql" &&
-                                        span.at("name") == "application.service.start")
+                                        span.at("name").get<std::string>() == "application.service.start")
                                     {
                                         invalid_payload |= labels.at("service.instance") != "default";
-                                        invalid_payload |= span.at("kind") != "SPAN_KIND_INTERNAL";
+                                        invalid_payload |= span.at("kind").get<std::string>() != "SPAN_KIND_INTERNAL";
                                         mysql_start_spans.emplace_back(span.at("traceId").get<std::string>(),
                                             span.at("spanId").get<std::string>());
                                     }
@@ -472,9 +472,9 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                     }
                     else if (signal == 2)
                     {
-                        for (const auto& resource : document.at("resourceLogs"))
-                            for (const auto& scope : resource.at("scopeLogs"))
-                                for (const auto& record : scope.at("logRecords"))
+                        for (const auto& resource : document.at("resourceLogs").get_array())
+                            for (const auto& scope : resource.at("scopeLogs").get_array())
+                                for (const auto& record : scope.at("logRecords").get_array())
                                 {
                                     const auto labels = attributes(record);
                                     if (labels.at("service.name") == "mysql" && labels.at("operation") == "start")
@@ -487,18 +487,18 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                     }
                     else
                     {
-                        for (const auto& resource : document.at("resourceMetrics"))
-                            for (const auto& scope : resource.at("scopeMetrics"))
-                                for (const auto& metric : scope.at("metrics"))
+                        for (const auto& resource : document.at("resourceMetrics").get_array())
+                            for (const auto& scope : resource.at("scopeMetrics").get_array())
+                                for (const auto& metric : scope.at("metrics").get_array())
                                 {
-                                    if (metric.at("name") != "application.service.operations")
+                                    if (metric.at("name").get<std::string>() != "application.service.operations")
                                         continue;
-                                    for (const auto& point : metric.at("sum").at("dataPoints"))
+                                    for (const auto& point : metric.at("sum").at("dataPoints").get_array())
                                     {
                                         const auto labels = attributes(point);
                                         if (labels.at("service.name") == "mysql" && labels.at("operation") == "start" &&
                                             labels.at("outcome") == "success" && labels.at("service.instance") == "default")
-                                            mysql_start_metric |= point.at("asDouble").get<double>() >= 1.0;
+                                            mysql_start_metric |= point.at("asDouble").as<double>() >= 1.0;
                                     }
                                 }
                     }
@@ -545,11 +545,14 @@ static void verify_mysql_host_lease_cleanup(unsigned collector_mode)
                             }
                             value.lifecycle.total_stop_timeout = std::chrono::milliseconds{100};
                             app::configured_service database{.name = "mysql", .enabled = true};
-                            database.properties = {{"host", mysql_test_host}, {"port", mysql_test_port},
-                                {"username", std::getenv("CNETMOD_MYSQL_TEST_USER")},
-                                {"password", std::getenv("CNETMOD_MYSQL_TEST_PASSWORD")},
-                                {"database", std::getenv("CNETMOD_MYSQL_TEST_DATABASE")},
-                                {"minimum_size", 1}, {"maximum_size", 1}};
+                            database.properties = cnetmod::json::object();
+                            database.properties["host"] = mysql_test_host;
+                            database.properties["port"] = mysql_test_port;
+                            database.properties["username"] = std::getenv("CNETMOD_MYSQL_TEST_USER");
+                            database.properties["password"] = std::getenv("CNETMOD_MYSQL_TEST_PASSWORD");
+                            database.properties["database"] = std::getenv("CNETMOD_MYSQL_TEST_DATABASE");
+                            database.properties["minimum_size"] = 1;
+                            database.properties["maximum_size"] = 1;
                             value.services.emplace("database", std::move(database));
                         })
                     .enable_auto_configuration()

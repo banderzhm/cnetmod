@@ -11,6 +11,7 @@ import cnetmod.coro.task;
 import :model;
 import :agentic;
 import :planners;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -43,7 +44,7 @@ auto parallel_planner::restore_state(const json& state)
 {
     if (!state.is_object())
         return std::unexpected("parallel planner state must be an object");
-    dispatched_ = state.value("dispatched", false);
+    dispatched_ = cnetmod::json::value_or(state, "dispatched", false);
     return {};
 }
 
@@ -84,7 +85,7 @@ auto conditional_planner::restore_state(const json& state)
     if (!state.is_object())
         return std::unexpected(
             "conditional planner state must be an object");
-    dispatched_ = state.value("dispatched", false);
+    dispatched_ = cnetmod::json::value_or(state, "dispatched", false);
     return {};
 }
 
@@ -123,7 +124,8 @@ auto loop_planner::restore_state(const json& state)
 {
     if (!state.is_object())
         return std::unexpected("loop planner state must be an object");
-    const auto iterations = state.value("iterations", std::size_t{0});
+    const auto iterations = cnetmod::json::value_or(
+        state, "iterations", std::size_t{0});
     if (iterations > max_iterations_)
         return std::unexpected("loop planner iteration is out of range");
     iterations_ = iterations;

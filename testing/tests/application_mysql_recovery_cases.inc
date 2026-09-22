@@ -38,9 +38,13 @@ TEST(mysql_optional_outage_keeps_host_live_but_not_ready)
                                  .maximum_delay = std::chrono::milliseconds{1},
                                  .budget = std::chrono::milliseconds{60},
                                  .jitter = 0.0};
-                             database.properties = {{"host", "127.0.0.1"}, {"port", database_endpoint->port()},
-                                 {"username", "test-only"}, {"database", "test-only"},
-                                 {"minimum_size", 1}, {"maximum_size", 1}};
+                             database.properties = cnetmod::json::object();
+                             database.properties["host"] = "127.0.0.1";
+                             database.properties["port"] = database_endpoint->port();
+                             database.properties["username"] = "test-only";
+                             database.properties["database"] = "test-only";
+                             database.properties["minimum_size"] = 1;
+                             database.properties["maximum_size"] = 1;
                              value.services.emplace("database", std::move(database));
                          })
                      .enable_auto_configuration()
@@ -142,9 +146,13 @@ TEST(mysql_host_failed_start_cleans_supervised_pool)
                                  application::configured_service database{.name = "mysql", .enabled = true};
                                  database.requirement = optional ? application::service_requirement::optional
                                                                  : application::service_requirement::required;
-                                 database.properties = {{"host", "127.0.0.1"}, {"port", endpoint->port()},
-                                     {"username", "test-only"}, {"database", "test-only"},
-                                     {"minimum_size", 1}, {"maximum_size", 1}};
+                                 database.properties = cnetmod::json::object();
+                                 database.properties["host"] = "127.0.0.1";
+                                 database.properties["port"] = endpoint->port();
+                                 database.properties["username"] = "test-only";
+                                 database.properties["database"] = "test-only";
+                                 database.properties["minimum_size"] = 1;
+                                 database.properties["maximum_size"] = 1;
                                  value.services.emplace("database", std::move(database));
                              })
                          .enable_auto_configuration()

@@ -83,14 +83,20 @@ namespace {
         std::ifstream input{path, std::ios::binary};
         if (!input)
             return std::unexpected("cannot open memory file: " + path.string());
-        auto payload = json::parse(input, nullptr, false);
-        if (!payload.is_object() || payload.value("version", 0) != 1 ||
-            payload.value("session_id", "") != session_id ||
+        const std::string content{std::istreambuf_iterator<char>{input}, {}};
+        auto parsed = cnetmod::json::parse_document(content);
+        if (!parsed)
+            return std::unexpected("memory file contains invalid JSON");
+        const auto& payload = *parsed;
+        if (!payload.is_object() ||
+            cnetmod::json::value_or(payload, "version", std::uint64_t{0}) != 1 ||
+            cnetmod::json::value_or(
+                payload, "session_id", std::string{}) != session_id ||
             !payload.contains("messages") || !payload["messages"].is_array())
             return std::unexpected("memory file has an invalid envelope");
         std::vector<message> messages;
-        messages.reserve(payload["messages"].size());
-        for (const auto& value : payload["messages"])
+        messages.reserve(payload["messages"].get_array().size());
+        for (const auto& value : payload["messages"].get_array())
         {
             auto decoded = message::from_json_object(value);
             if (!decoded)
@@ -110,11 +116,16 @@ namespace {
         if (error)
             return std::unexpected("cannot create memory directory: " +
                 error.message());
-        json encoded = {{"version", 1}, {"session_id", session_id},
-            {"messages", json::array()}};
+        auto encoded = cnetmod::json::object();
+        encoded["version"] = 1;
+        encoded["session_id"] = session_id;
+        encoded["messages"] = cnetmod::json::array();
         for (const auto& value : messages)
-            encoded["messages"].push_back(value.to_json_object());
-        auto content = encoded.dump();
+            encoded["messages"].get_array().push_back(value.to_json_object());
+        auto serialized = cnetmod::json::write_document(encoded);
+        if (!serialized)
+            return std::unexpected("cannot encode memory session");
+        const auto& content = *serialized;
         if (content.size() > max_bytes)
             return std::unexpected(std::format(
                 "memory session exceeds {} bytes", max_bytes));

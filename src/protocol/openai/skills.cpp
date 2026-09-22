@@ -14,6 +14,7 @@ import cnetmod.executor.pool;
 import :model;
 import :tools;
 import :skills;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -23,11 +24,11 @@ namespace {
     {
         if (value.role != "tool")
             return std::nullopt;
-        auto payload = json::parse(value.content, nullptr, false);
-        if (!payload.is_object() || !payload.contains(field) ||
-            !payload[field].is_string())
+        auto payload = cnetmod::json::parse_document(value.content);
+        if (!payload || !payload->is_object() || !payload->contains(field) ||
+            !(*payload)[field].is_string())
             return std::nullopt;
-        return payload[field].get<std::string>();
+        return (*payload)[field].get<std::string>();
     }
 
     auto read_file(const std::filesystem::path& path, std::size_t limit)
@@ -231,7 +232,8 @@ auto skill_catalog::provide(const tool_provider_request& request)
                                     {"additionalProperties", false}}},
         .handler = [this](const json& arguments) -> task<std::expected<json, std::string>>
         {
-            const auto name = arguments.value("name", "");
+            const auto name = cnetmod::json::value_or(
+                arguments, "name", std::string{});
             const auto found = skills_.find(name);
             if (found == skills_.end())
                 co_return std::unexpected("unknown skill: " + name);
@@ -241,9 +243,12 @@ auto skill_catalog::provide(const tool_provider_request& request)
                 (void)content;
                 resources.push_back(resource_name);
             }
-            co_return json{{"activated_skill", name},
+            auto wire_resources = cnetmod::json::array();
+            for (const auto& resource : resources)
+                wire_resources.get_array().emplace_back(resource);
+            co_return cnetmod::json::object({{"activated_skill", name},
                 {"instructions", found->second.instructions},
-                {"resources", resources}};
+                {"resources", std::move(wire_resources)}});
         },
         .visibility = tool_visibility::always_visible});
     result.tools.push_back({.definition = {.function_name = "deactivate_skill",
@@ -255,7 +260,8 @@ auto skill_catalog::provide(const tool_provider_request& request)
                                     {"additionalProperties", false}}},
         .handler = [this](const json& arguments) -> task<std::expected<json, std::string>>
         {
-            const auto name = arguments.value("name", "");
+            const auto name = cnetmod::json::value_or(
+                arguments, "name", std::string{});
             if (!skills_.contains(name))
                 co_return std::unexpected("unknown skill: " + name);
             co_return json{{"deactivated_skill", name}};
@@ -272,8 +278,10 @@ auto skill_catalog::provide(const tool_provider_request& request)
                                     {"additionalProperties", false}}},
         .handler = [this, active](const json& arguments) -> task<std::expected<json, std::string>>
         {
-            const auto skill_name = arguments.value("skill", "");
-            const auto resource_name = arguments.value("resource", "");
+            const auto skill_name = cnetmod::json::value_or(
+                arguments, "skill", std::string{});
+            const auto resource_name = cnetmod::json::value_or(
+                arguments, "resource", std::string{});
             if (!active.contains(skill_name))
                 co_return std::unexpected(
                     "skill is not active: " + skill_name);

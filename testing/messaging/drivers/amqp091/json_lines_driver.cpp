@@ -23,9 +23,9 @@ namespace {
 
     auto process_request(cnetmod::json::document request) -> cnetmod::json::document
     {
-        if (request.value("contract_version", 0) != 1)
+        if (cnetmod::json::value_or(request, "contract_version", 0) != 1)
             return error_response("unsupported_contract", "contract_version must be 1");
-        if (request.value("protocol", "") != "amqp091")
+        if (cnetmod::json::value_or(request, "protocol", "") != "amqp091")
             return error_response("wrong_protocol", "protocol must be amqp091");
 
         auto context = make_io_context();
@@ -68,14 +68,21 @@ auto run_json_lines(std::istream& input, std::ostream& output,
     }
     try
     {
-        std::println(output, "{}", process_request(cnetmod::json::document::parse(line)).dump());
+        const auto parsed = cnetmod::json::parse_document(line);
+        if (!parsed)
+            throw std::runtime_error("invalid JSON request");
+        const auto encoded = cnetmod::json::write_document(process_request(*parsed));
+        if (!encoded)
+            throw std::runtime_error("failed to encode JSON response");
+        std::println(output, "{}", *encoded);
         output.flush();
         return 0;
     }
     catch (const std::exception& exception)
     {
-        std::println(output, "{}",
-            error_response("invalid_json", exception.what()).dump());
+        const auto encoded = cnetmod::json::write_document(
+            error_response("invalid_json", exception.what()));
+        std::println(output, "{}", encoded.value_or("{}"));
         output.flush();
         return 0;
     }

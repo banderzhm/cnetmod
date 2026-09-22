@@ -9,6 +9,7 @@ module cnetmod.protocol.openai;
 import std;
 import :foundation;
 import :images;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -27,21 +28,26 @@ auto image_generation_request::to_json() const -> std::string
         value["style"] = style;
     if (!user.empty())
         value["user"] = user;
-    return value.dump();
+    return cnetmod::json::write_document(value).value_or("{}");
 }
 
 auto image_response::from_json(std::string_view text) -> image_response
 {
     image_response result;
-    auto value = json::parse(text, nullptr, false);
-    if (value.is_discarded())
+    auto parsed = cnetmod::json::parse_document(text);
+    if (!parsed)
         return result;
-    result.created = value.value("created", std::int64_t{0});
+    const auto& value = *parsed;
+    result.created = cnetmod::json::value_or(
+        value, "created", std::int64_t{0});
     if (value.contains("data") && value["data"].is_array())
-        for (const auto& item : value["data"])
-            result.data.push_back({.url = item.value("url", ""),
-                .b64_json = item.value("b64_json", ""),
-                .revised_prompt = item.value("revised_prompt", "")});
+        for (const auto& item : value["data"].get_array())
+            result.data.push_back({.url = cnetmod::json::value_or(
+                                       item, "url", std::string{}),
+                .b64_json = cnetmod::json::value_or(
+                    item, "b64_json", std::string{}),
+                .revised_prompt = cnetmod::json::value_or(
+                    item, "revised_prompt", std::string{})});
     return result;
 }
 

@@ -2,6 +2,7 @@ module cnetmod.application.mysql;
 
 #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
 import std;
+import cnetmod.json;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
@@ -156,13 +157,13 @@ auto auto_configure_mysql(const configured_service& configuration,
     try
     {
         const auto& value = configuration.properties;
-        options.host = value.value("host", options.host);
-        options.port = value.value("port", options.port);
-        options.username = value.value("username", options.username);
-        options.password = value.value("password", options.password);
-        options.database = value.value("database", options.database);
-        options.initial_size = value.value("minimum_size", options.initial_size);
-        options.max_size = value.value("maximum_size", options.max_size);
+        options.host = cnetmod::json::value_or(value, "host", options.host);
+        options.port = cnetmod::json::value_or(value, "port", options.port);
+        options.username = cnetmod::json::value_or(value, "username", options.username);
+        options.password = cnetmod::json::value_or(value, "password", options.password);
+        options.database = cnetmod::json::value_or(value, "database", options.database);
+        options.initial_size = cnetmod::json::value_or(value, "minimum_size", options.initial_size);
+        options.max_size = cnetmod::json::value_or(value, "maximum_size", options.max_size);
         if (value.contains("ssl"))
         {
             const auto mode = value.at("ssl").get<std::string>();
@@ -176,15 +177,15 @@ auto auto_configure_mysql(const configured_service& configuration,
                 return std::unexpected(
                     std::make_error_code(std::errc::invalid_argument));
         }
-        options.tls_verify = value.value("tls_verify", options.tls_verify);
-        options.tls_ca_file = value.value("tls_ca_file", options.tls_ca_file);
+        options.tls_verify = cnetmod::json::value_or(value, "tls_verify", options.tls_verify);
+        options.tls_ca_file = cnetmod::json::value_or(value, "tls_ca_file", options.tls_ca_file);
         const auto duration = [&value](std::string_view name,
                                   std::chrono::steady_clock::duration fallback)
         {
             if (!value.contains(name))
                 return fallback;
             return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
-                std::chrono::milliseconds{value.at(name).get<std::int64_t>()});
+                std::chrono::milliseconds{value.at(name).as<std::int64_t>()});
         };
         options.connect_timeout = duration("connect_timeout_ms", options.connect_timeout);
         options.pool_timeout = duration("pool_timeout_ms", options.pool_timeout);

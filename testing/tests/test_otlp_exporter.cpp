@@ -724,19 +724,19 @@ TEST(otlp_exporter_posts_valid_otlp_json_to_a_real_http_collector)
     ASSERT_TRUE(observation.logs_payload.contains("\"resourceLogs\""));
     ASSERT_TRUE(observation.logs_payload.contains("dependency recovering"));
     ASSERT_TRUE(observation.logs_payload.contains("\"traceId\""));
-    const auto document = cnetmod::json::document::parse(observation.payload);
+    const auto document = cnetmod::json::parse_document(observation.payload).value();
 #ifdef CNETMOD_TEST_ORM
     unsigned database_spans = 0;
-    for (const auto& span : document.at("resourceSpans").at(0).at("scopeSpans").at(0).at("spans"))
+    for (const auto& span : document.at("resourceSpans")[0].at("scopeSpans")[0].at("spans").get_array())
     {
-        if (span.at("name") != "SQL QUERY")
+        if (span.at("name").get<std::string>() != "SQL QUERY")
             continue;
         ++database_spans;
         ASSERT_EQ(span.at("kind").get<std::string>(), "SPAN_KIND_CLIENT");
         ASSERT_EQ(span.at("parentSpanId").get<std::string>(), observation.expected_parent_span_id);
         ASSERT_EQ(span.at("status").at("code").get<std::string>(), "STATUS_CODE_ERROR");
         std::map<std::string, std::string> attributes;
-        for (const auto& attribute : span.at("attributes"))
+        for (const auto& attribute : span.at("attributes").get_array())
         {
             const auto key = attribute.at("key").get<std::string>();
             const auto value = attribute.at("value").at("stringValue").get<std::string>();
@@ -753,19 +753,19 @@ TEST(otlp_exporter_posts_valid_otlp_json_to_a_real_http_collector)
     ASSERT_EQ(database_spans, 2U);
 #endif
     unsigned terminal_spans = 0;
-    for (const auto& span : document.at("resourceSpans").at(0).at("scopeSpans").at(0).at("spans"))
+    for (const auto& span : document.at("resourceSpans")[0].at("scopeSpans")[0].at("spans").get_array())
     {
-        if (span.at("name") != "terminal-outcome")
+        if (span.at("name").get<std::string>() != "terminal-outcome")
             continue;
         ++terminal_spans;
         std::string outcome;
         bool has_error_code = false;
-        for (const auto& attribute : span.at("attributes"))
+        for (const auto& attribute : span.at("attributes").get_array())
         {
-            ASSERT_FALSE(attribute.at("key") == "http.response.status_code");
-            if (attribute.at("key") == "cnetmod.operation.status")
+            ASSERT_FALSE(attribute.at("key").get<std::string>() == "http.response.status_code");
+            if (attribute.at("key").get<std::string>() == "cnetmod.operation.status")
                 outcome = attribute.at("value").at("stringValue").get<std::string>();
-            if (attribute.at("key") == "cnetmod.error.code")
+            if (attribute.at("key").get<std::string>() == "cnetmod.error.code")
                 has_error_code = true;
         }
         ASSERT_TRUE(has_error_code);
@@ -778,52 +778,64 @@ TEST(otlp_exporter_posts_valid_otlp_json_to_a_real_http_collector)
         }
     }
     ASSERT_EQ(terminal_spans, 3U);
-    const auto metric_document = cnetmod::json::document::parse(observation.metrics_payload);
+    const auto metric_document = cnetmod::json::parse_document(observation.metrics_payload).value();
     ASSERT_EQ(observation.metric_batches.size(), 2U);
-    const auto first_metrics = cnetmod::json::document::parse(observation.metric_batches[0]);
-    const auto& initial_point = first_metrics.at("resourceMetrics").at(0).at("scopeMetrics").at(0).at("metrics").at(0).at("sum").at("dataPoints").at(0);
-    const auto& final_sum = metric_document.at("resourceMetrics").at(0).at("scopeMetrics").at(0).at("metrics").at(0).at("sum");
-    ASSERT_TRUE(final_sum.at("aggregationTemporality") == "AGGREGATION_TEMPORALITY_CUMULATIVE");
+    const auto first_metrics = cnetmod::json::parse_document(observation.metric_batches[0]).value();
+    const auto& initial_point = first_metrics.at("resourceMetrics")[0].at("scopeMetrics")[0].at("metrics")[0].at("sum").at("dataPoints")[0];
+    const auto& final_sum = metric_document.at("resourceMetrics")[0].at("scopeMetrics")[0].at("metrics")[0].at("sum");
+    ASSERT_EQ(final_sum.at("aggregationTemporality").get<std::string>(), "AGGREGATION_TEMPORALITY_CUMULATIVE");
     ASSERT_EQ(final_sum.at("dataPoints").size(), 2U);
-    const auto& final_point = final_sum.at("dataPoints").at(0);
-    ASSERT_EQ(initial_point.at("asDouble").get<double>(), 3.0);
-    ASSERT_EQ(final_point.at("asDouble").get<double>(), 5.0);
-    ASSERT_TRUE(initial_point.at("startTimeUnixNano") == final_point.at("startTimeUnixNano"));
-    const auto& overflow = final_sum.at("dataPoints").at(1);
-    ASSERT_EQ(overflow.at("asDouble").get<double>(), 7.0);
-    ASSERT_TRUE(overflow.at("attributes").at(0).at("key") == "otel.metric.overflow");
-    ASSERT_TRUE(overflow.at("attributes").at(0).at("value").at("boolValue").get<bool>());
+    const auto& final_point = final_sum.at("dataPoints")[0];
+    ASSERT_EQ(initial_point.at("asDouble").as<double>(), 3.0);
+    ASSERT_EQ(final_point.at("asDouble").as<double>(), 5.0);
+    ASSERT_TRUE(cnetmod::json::equivalent(
+        initial_point.at("startTimeUnixNano"), final_point.at("startTimeUnixNano")));
+    const auto& overflow = final_sum.at("dataPoints")[1];
+    ASSERT_EQ(overflow.at("asDouble").as<double>(), 7.0);
+    ASSERT_EQ(overflow.at("attributes")[0].at("key").get<std::string>(),
+        "otel.metric.overflow");
+    ASSERT_TRUE(overflow.at("attributes")[0].at("value").at("boolValue").get<bool>());
     std::vector<double> values;
     unsigned histograms{};
-    for (const auto& metric : metric_document.at("resourceMetrics").at(0).at("scopeMetrics").at(0).at("metrics"))
+    for (const auto& metric : metric_document.at("resourceMetrics")[0].at("scopeMetrics")[0].at("metrics").get_array())
     {
         if (metric.contains("gauge"))
-            values.push_back(metric.at("gauge").at("dataPoints").at(0).at("asDouble").get<double>());
+            values.push_back(metric.at("gauge").at("dataPoints")[0].at("asDouble").as<double>());
         if (metric.contains("histogram"))
         {
             ++histograms;
             const auto& histogram = metric.at("histogram");
-            ASSERT_TRUE(histogram.at("aggregationTemporality") == "AGGREGATION_TEMPORALITY_CUMULATIVE");
-            const auto& point = histogram.at("dataPoints").at(0);
+            ASSERT_EQ(histogram.at("aggregationTemporality").get<std::string>(),
+                "AGGREGATION_TEMPORALITY_CUMULATIVE");
+            const auto& point = histogram.at("dataPoints")[0];
             ASSERT_TRUE(point.contains("startTimeUnixNano"));
             ASSERT_FALSE(point.contains("asDouble"));
-            if (metric.at("name") == "duration")
+            if (metric.at("name").get<std::string>() == "duration")
             {
-                ASSERT_TRUE(point.at("count") == "3");
-                ASSERT_EQ(point.at("sum").get<double>(), 3.5);
-                ASSERT_EQ(point.at("min").get<double>(), 0.5);
-                ASSERT_EQ(point.at("max").get<double>(), 2.0);
-                ASSERT_TRUE(point.at("explicitBounds").get<std::vector<double>>() == std::vector<double>({0.5, 1.0}));
-                ASSERT_TRUE(point.at("bucketCounts").get<std::vector<std::string>>() == std::vector<std::string>({"1", "1", "1"}));
+                ASSERT_EQ(point.at("count").get<std::string>(), "3");
+                ASSERT_EQ(point.at("sum").as<double>(), 3.5);
+                ASSERT_EQ(point.at("min").as<double>(), 0.5);
+                ASSERT_EQ(point.at("max").as<double>(), 2.0);
+                const auto& bounds = point.at("explicitBounds").get_array();
+                ASSERT_EQ(bounds.size(), 2U);
+                ASSERT_EQ(bounds[0].as<double>(), 0.5);
+                ASSERT_EQ(bounds[1].as<double>(), 1.0);
+                const auto& buckets = point.at("bucketCounts").get_array();
+                ASSERT_EQ(buckets.size(), 3U);
+                ASSERT_EQ(buckets[0].get<std::string>(), "1");
+                ASSERT_EQ(buckets[1].get<std::string>(), "1");
+                ASSERT_EQ(buckets[2].get<std::string>(), "1");
             }
             else
             {
-                ASSERT_TRUE(metric.at("name") == "temperature");
-                ASSERT_TRUE(point.at("count") == "1");
+                ASSERT_EQ(metric.at("name").get<std::string>(), "temperature");
+                ASSERT_EQ(point.at("count").get<std::string>(), "1");
                 ASSERT_FALSE(point.contains("sum"));
-                ASSERT_EQ(point.at("min").get<double>(), -5.0);
+                ASSERT_EQ(point.at("min").as<double>(), -5.0);
                 ASSERT_TRUE(point.at("explicitBounds").empty());
-                ASSERT_TRUE(point.at("bucketCounts").get<std::vector<std::string>>() == std::vector<std::string>({"1"}));
+                const auto& buckets = point.at("bucketCounts").get_array();
+                ASSERT_EQ(buckets.size(), 1U);
+                ASSERT_EQ(buckets[0].get<std::string>(), "1");
             }
         }
     }
@@ -870,8 +882,8 @@ TEST(telemetry_logger_bridge_exports_explicit_correlation_to_real_collector)
     io->run();
     logger::shutdown();
 
-    const auto document = cnetmod::json::document::parse(logs_payload);
-    const auto& record = document.at("resourceLogs").at(0).at("scopeLogs").at(0).at("logRecords").at(0);
+    const auto document = cnetmod::json::parse_document(logs_payload).value();
+    const auto& record = document.at("resourceLogs")[0].at("scopeLogs")[0].at("logRecords")[0];
     ASSERT_EQ(record.at("body").at("stringValue").get<std::string>(), "persisted order");
     ASSERT_EQ(record.at("severityText").get<std::string>(), "INFO");
     ASSERT_EQ(record.at("traceId").get<std::string>(), trace_id);
@@ -951,32 +963,32 @@ TEST(collector_connection_refusal_recovers_and_accepts_later_batches)
     routes.post("/v1/*signal", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
         {
             const auto body = std::string{co_await request.read_full_body()};
-            const auto document = cnetmod::json::document::parse(body);
+            const auto document = cnetmod::json::parse_document(body).value();
             if (request.path() == "/v1/traces")
             {
                 ASSERT_TRUE(document.contains("resourceSpans"));
-                const auto& spans = document.at("resourceSpans").at(0).at("scopeSpans").at(0).at("spans");
+                const auto& spans = document.at("resourceSpans")[0].at("scopeSpans")[0].at("spans");
                 ASSERT_EQ(spans.size(), 1U);
-                ASSERT_EQ(spans.at(0).at("name").get<std::string>(), requests[0] == 0 ? "before recovery" : "after recovery");
+                ASSERT_EQ(spans[0].at("name").get<std::string>(), requests[0] == 0 ? "before recovery" : "after recovery");
                 ++requests[0];
             }
             else if (request.path() == "/v1/metrics")
             {
                 ASSERT_TRUE(document.contains("resourceMetrics"));
-                const auto& metrics = document.at("resourceMetrics").at(0).at("scopeMetrics").at(0).at("metrics");
+                const auto& metrics = document.at("resourceMetrics")[0].at("scopeMetrics")[0].at("metrics");
                 ASSERT_EQ(metrics.size(), 1U);
-                const auto& points = metrics.at(0).at("gauge").at("dataPoints");
+                const auto& points = metrics[0].at("gauge").at("dataPoints");
                 ASSERT_EQ(points.size(), 1U);
-                ASSERT_EQ(points.at(0).at("asDouble").get<double>(), requests[1] == 0 ? 1.0 : 2.0);
+                ASSERT_EQ(points[0].at("asDouble").as<double>(), requests[1] == 0 ? 1.0 : 2.0);
                 ++requests[1];
             }
             else
             {
                 ASSERT_EQ(request.path(), "/v1/logs");
                 ASSERT_TRUE(document.contains("resourceLogs"));
-                const auto& logs = document.at("resourceLogs").at(0).at("scopeLogs").at(0).at("logRecords");
+                const auto& logs = document.at("resourceLogs")[0].at("scopeLogs")[0].at("logRecords");
                 ASSERT_EQ(logs.size(), 1U);
-                ASSERT_EQ(logs.at(0).at("body").at("stringValue").get<std::string>(), requests[2] == 0 ? "before recovery" : "after recovery");
+                ASSERT_EQ(logs[0].at("body").at("stringValue").get<std::string>(), requests[2] == 0 ? "before recovery" : "after recovery");
                 ++requests[2];
             }
             request.json(cnetmod::http::status::ok, "{}");

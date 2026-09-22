@@ -95,14 +95,14 @@ auto persisted_chat_message::set_metadata(std::string key,
 auto persisted_chat_message::metadata_integer(std::string_view key,
     std::int64_t fallback) const noexcept -> std::int64_t
 {
-    const auto found = metadata.find(std::string{key});
-    if (found == metadata.end())
+    const auto* found = cnetmod::json::find(metadata, key);
+    if (found == nullptr)
         return fallback;
-    if (found->is_number_integer())
+    if (found->is_int64())
         return found->get<std::int64_t>();
-    if (found->is_number_unsigned())
+    if (found->is_uint64())
         return static_cast<std::int64_t>(found->get<std::uint64_t>());
-    if (found->is_number_float())
+    if (found->is_double())
         return static_cast<std::int64_t>(found->get<double>());
     return fallback;
 }
@@ -110,8 +110,8 @@ auto persisted_chat_message::metadata_integer(std::string_view key,
 auto persisted_chat_message::metadata_text(std::string_view key,
     std::string fallback) const -> std::string
 {
-    const auto found = metadata.find(std::string{key});
-    if (found == metadata.end() || !found->is_string())
+    const auto* found = cnetmod::json::find(metadata, key);
+    if (found == nullptr || !found->is_string())
         return fallback;
     return found->get<std::string>();
 }

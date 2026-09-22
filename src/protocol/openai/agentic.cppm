@@ -30,7 +30,7 @@ public:
 
 private:
     async_mutex mutex_;
-    json state_ = json::object();
+    json state_ = cnetmod::json::object();
 };
 
 export struct agent_invocation
@@ -77,7 +77,7 @@ export struct human_input_request
     std::string id;
     std::string prompt;
     std::string response_key = "human_input";
-    json response_schema = json::object();
+    json response_schema = cnetmod::json::object();
 };
 
 export struct human_input_response
@@ -122,8 +122,8 @@ private:
 
 export struct agentic_checkpoint
 {
-    json scope = json::object();
-    json planner = json::object();
+    json scope = cnetmod::json::object();
+    json planner = cnetmod::json::object();
     std::size_t completed_steps = 0;
     std::optional<human_input_request> pending_human_input;
 };
@@ -216,7 +216,7 @@ export enum class workflow_status
 export struct workflow_result
 {
     workflow_status status = workflow_status::completed;
-    json state = json::object();
+    json state = cnetmod::json::object();
     std::vector<agent_invocation> invocations;
     std::string suspension_reason;
     std::optional<human_input_request> pending_human_input;
@@ -231,7 +231,7 @@ public:
         std::size_t max_steps = 64);
 
     auto execute(std::string workflow_id, workflow_planner& planner,
-        json initial_state = json::object(), const run_config& config = {})
+        json initial_state = cnetmod::json::object(), const run_config& config = {})
         -> task<std::expected<workflow_result, std::string>>;
     auto resume(std::string workflow_id, workflow_planner& planner,
         human_input_response response, const run_config& config = {})

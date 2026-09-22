@@ -9,9 +9,10 @@ auto properties_are_known(const cnetmod::json::document& properties,
 {
     if (!properties.is_object())
         return false;
-    for (auto item = properties.begin(); item != properties.end(); ++item)
+    for (const auto& [key, unused] : properties.get_object())
     {
-        if (std::ranges::find(allowed, item.key()) == allowed.end())
+        (void)unused;
+        if (std::ranges::find(allowed, key) == allowed.end())
             return false;
     }
     return true;
@@ -22,16 +23,16 @@ auto integer_property_in_range(const cnetmod::json::document& properties,
 {
     if (!properties.is_object() || minimum > maximum)
         return false;
-    const auto found = properties.find(name);
-    if (found == properties.end())
+    const auto* found = cnetmod::json::find(properties, name);
+    if (found == nullptr)
         return true;
-    if (found->is_number_unsigned())
+    if (found->is_uint64())
     {
         const auto value = found->get<std::uint64_t>();
         return maximum >= 0 && value <= static_cast<std::uint64_t>(maximum) &&
             (minimum <= 0 || value >= static_cast<std::uint64_t>(minimum));
     }
-    if (!found->is_number_integer())
+    if (!found->is_int64())
         return false;
     const auto value = found->get<std::int64_t>();
     return value >= minimum && value <= maximum;
@@ -45,8 +46,10 @@ auto pool_size_properties_are_valid(const cnetmod::json::document& properties,
     if (!integer_property_in_range(properties, "minimum_size", 0, limit) ||
         !integer_property_in_range(properties, "maximum_size", 1, limit))
         return false;
-    const auto minimum = properties.value("minimum_size", default_minimum);
-    const auto maximum = properties.value("maximum_size", default_maximum);
+    const auto minimum = cnetmod::json::value_or(
+        properties, "minimum_size", default_minimum);
+    const auto maximum = cnetmod::json::value_or(
+        properties, "maximum_size", default_maximum);
     return maximum > 0 && minimum <= maximum;
 }
 

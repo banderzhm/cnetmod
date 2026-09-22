@@ -1525,11 +1525,12 @@ TEST(application_auto_configuration_registers_redis_cluster_mode)
                                 .enabled = true,
                                 .requirement = application::service_requirement::optional,
                             };
-                            redis.properties = {
-                                {"mode", "cluster"},
-                                {"database", 0},
-                                {"seeds", {{{"host", "127.0.0.1"}, {"port", 7000}}, {{"host", "127.0.0.1"}, {"port", 7001}}}},
-                            };
+                            redis.properties = cnetmod::json::object();
+                            redis.properties["mode"] = "cluster";
+                            redis.properties["database"] = 0;
+                            redis.properties["seeds"] = cnetmod::json::array(
+                                {cnetmod::json::object({{"host", "127.0.0.1"}, {"port", 7000}}),
+                                    cnetmod::json::object({{"host", "127.0.0.1"}, {"port", 7001}})});
                             value.services.emplace("redis-cluster", std::move(redis));
                         })
                     .build();
@@ -1554,11 +1555,11 @@ TEST(application_redis_cluster_rejects_nonzero_database)
                                 .name = "redis",
                                 .enabled = true,
                             };
-                            redis.properties = {
-                                {"mode", "cluster"},
-                                {"database", 1},
-                                {"seeds", {{{"host", "127.0.0.1"}, {"port", 7000}}}},
-                            };
+                            redis.properties = cnetmod::json::object();
+                            redis.properties["mode"] = "cluster";
+                            redis.properties["database"] = 1;
+                            redis.properties["seeds"] = cnetmod::json::array(
+                                {cnetmod::json::object({{"host", "127.0.0.1"}, {"port", 7000}})});
                             value.services.emplace("redis", std::move(redis));
                         })
                     .build();
@@ -1684,18 +1685,17 @@ TEST(application_mysql_configuration_accepts_transport_and_pool_timeouts)
                         .enabled = true,
                         .requirement = application::service_requirement::optional,
                     };
-                    mysql.properties = {
-                        {"username", "test"},
-                        {"database", "test"},
-                        {"ssl", ssl},
-                        {"tls_verify", true},
-                        {"tls_ca_file", "ca.pem"},
-                        {"connect_timeout_ms", connect_timeout},
-                        {"pool_timeout_ms", 2'000},
-                        {"retry_interval_ms", 3'000},
-                        {"ping_interval_ms", 4'000},
-                        {"ping_timeout_ms", 1'000},
-                    };
+                    mysql.properties = cnetmod::json::object();
+                    mysql.properties["username"] = "test";
+                    mysql.properties["database"] = "test";
+                    mysql.properties["ssl"] = ssl;
+                    mysql.properties["tls_verify"] = true;
+                    mysql.properties["tls_ca_file"] = "ca.pem";
+                    mysql.properties["connect_timeout_ms"] = connect_timeout;
+                    mysql.properties["pool_timeout_ms"] = 2'000;
+                    mysql.properties["retry_interval_ms"] = 3'000;
+                    mysql.properties["ping_interval_ms"] = 4'000;
+                    mysql.properties["ping_timeout_ms"] = 1'000;
                     value.services.emplace("mysql", std::move(mysql));
                 })
             .build();

@@ -9,6 +9,7 @@ module cnetmod.protocol.openai;
 import std;
 import :foundation;
 import :embeddings;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -16,39 +17,51 @@ auto embedding_request::to_json() const -> std::string
 {
     json value;
     value["model"] = model;
-    value["input"] = input.size() == 1 ? json(input.front()) : json(input);
+    if (input.size() == 1)
+        value["input"] = input.front();
+    else
+    {
+        auto inputs = cnetmod::json::array();
+        for (const auto& item : input)
+            inputs.get_array().emplace_back(item);
+        value["input"] = std::move(inputs);
+    }
     if (!encoding_format.empty())
         value["encoding_format"] = encoding_format;
     if (dimensions)
         value["dimensions"] = *dimensions;
     if (!user.empty())
         value["user"] = user;
-    return value.dump();
+    return cnetmod::json::write_document(value).value_or("{}");
 }
 
 auto embedding_response::from_json(std::string_view text) -> embedding_response
 {
     embedding_response result;
-    auto value = json::parse(text, nullptr, false);
-    if (value.is_discarded())
+    auto parsed = cnetmod::json::parse_document(text);
+    if (!parsed)
         return result;
-    result.model = value.value("model", "");
+    const auto& value = *parsed;
+    result.model = cnetmod::json::value_or(value, "model", std::string{});
     if (value.contains("data") && value["data"].is_array())
     {
-        for (const auto& item : value["data"])
+        for (const auto& item : value["data"].get_array())
         {
-            embedding_data embedding{.index = item.value("index", 0)};
+            embedding_data embedding{.index = cnetmod::json::value_or(
+                                         item, "index", 0)};
             if (item.contains("embedding") && item["embedding"].is_array())
-                for (const auto& component : item["embedding"])
-                    embedding.embedding.push_back(component.get<float>());
+                for (const auto& component : item["embedding"].get_array())
+                    embedding.embedding.push_back(component.as<float>());
             result.data.push_back(std::move(embedding));
         }
     }
     if (value.contains("usage") && value["usage"].is_object())
     {
         const auto& tokens = value["usage"];
-        result.token_usage.prompt_tokens = tokens.value("prompt_tokens", 0);
-        result.token_usage.total_tokens = tokens.value("total_tokens", 0);
+        result.token_usage.prompt_tokens = cnetmod::json::value_or(
+            tokens, "prompt_tokens", 0);
+        result.token_usage.total_tokens = cnetmod::json::value_or(
+            tokens, "total_tokens", 0);
     }
     return result;
 }

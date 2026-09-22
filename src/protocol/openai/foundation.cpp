@@ -8,28 +8,32 @@ module cnetmod.protocol.openai;
 
 import std;
 import :foundation;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
 auto error_response::from_json(std::string_view text) -> error_response
 {
     error_response result;
-    auto value = json::parse(text, nullptr, false);
-    if (value.is_discarded())
+    auto parsed = cnetmod::json::parse_document(text);
+    if (!parsed)
     {
         result.message = std::string(text);
         return result;
     }
+    const auto& value = *parsed;
     if (value.contains("error") && value["error"].is_object())
     {
         const auto& error = value["error"];
-        result.message = error.value("message", "");
-        result.type = error.value("type", "");
-        result.code = error.value("code", "");
+        result.message = cnetmod::json::value_or(
+            error, "message", std::string{});
+        result.type = cnetmod::json::value_or(error, "type", std::string{});
+        result.code = cnetmod::json::value_or(error, "code", std::string{});
     }
     else
     {
-        result.message = value.value("message", std::string(text));
+        result.message = cnetmod::json::value_or(
+            value, "message", std::string{text});
     }
     return result;
 }

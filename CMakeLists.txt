@@ -549,6 +549,8 @@ if(TARGET cnetmod_c)
 endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(DIRECTORY "${CNETMOD_GLAZE_SOURCE_DIR}/include/glaze"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 # stdexec remains a private build-time implementation dependency.  It is not
 # installed because no public cnetmod module interface exposes its types.

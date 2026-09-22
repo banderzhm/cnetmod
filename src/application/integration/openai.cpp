@@ -2,6 +2,7 @@ module cnetmod.application.openai;
 
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
 import std;
+import cnetmod.json;
 import cnetmod.ai;
 import cnetmod.observability.openai;
 import cnetmod.coro.mutex;
@@ -34,15 +35,15 @@ namespace {
         try
         {
             openai_service_settings settings;
-            settings.connection.api_base = properties.value("base_url",
+            settings.connection.api_base = cnetmod::json::value_or(properties, "base_url",
                 settings.connection.api_base);
-            settings.connection.api_key = properties.value("api_key",
+            settings.connection.api_key = cnetmod::json::value_or(properties, "api_key",
                 settings.connection.api_key);
-            settings.connection.tls_verify = properties.value("tls_verify",
+            settings.connection.tls_verify = cnetmod::json::value_or(properties, "tls_verify",
                 settings.connection.tls_verify);
-            settings.connection.timeout_seconds = properties.value(
+            settings.connection.timeout_seconds = cnetmod::json::value_or(properties,
                 "timeout_seconds", settings.connection.timeout_seconds);
-            settings.pool_size = properties.value(
+            settings.pool_size = cnetmod::json::value_or(properties,
                 "pool_size", settings.pool_size);
             if (settings.connection.api_key.empty())
                 return std::unexpected(

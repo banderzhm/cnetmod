@@ -21,7 +21,7 @@ namespace cnetmod::openai {
 export struct retrieval_query
 {
     std::string text;
-    json metadata = json::object();
+    json metadata = cnetmod::json::object();
     std::size_t limit = 4;
     float minimum_score = -1.0F;
     metadata_filter filter;

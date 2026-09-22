@@ -152,26 +152,34 @@ auto model_judge_evaluator::evaluate(const evaluation_case& sample,
     request.response_schema_name = "evaluation_score";
     request.response_schema = schema;
     request.response_schema_strict = true;
+    auto metadata = cnetmod::json::object();
+    for (const auto& [key, value] : sample.metadata)
+        metadata[key] = value;
+    auto judge_input = cnetmod::json::object();
+    judge_input["criterion"] = options_.criterion;
+    judge_input["input"] = sample.input;
+    judge_input["expected_output"] = sample.expected_output;
+    judge_input["actual_output"] = sample.actual_output;
+    judge_input["metadata"] = std::move(metadata);
     request.messages = {message::system(
                             "You are a deterministic response quality evaluator. " "Apply the supplied criterion and return only the requested JSON."),
-        message::user(json{{"criterion", options_.criterion},
-            {"input", sample.input}, {"expected_output", sample.expected_output},
-            {"actual_output", sample.actual_output}, {"metadata", sample.metadata}}
-                .dump())};
+        message::user(cnetmod::json::write_document(judge_input)
+                          .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return std::unexpected("model judge failed: " + response.error());
     if (response->choices.empty())
         co_return std::unexpected("model judge returned no choices");
-    auto verdict = json::parse(
-        response->choices.front().msg.content, nullptr, false);
-    if (verdict.is_discarded())
+    auto parsed_verdict = cnetmod::json::parse_document(
+        response->choices.front().msg.content);
+    if (!parsed_verdict)
         co_return std::unexpected("model judge returned invalid JSON");
+    const auto& verdict = *parsed_verdict;
     auto valid = validate_json_schema(verdict, schema);
     if (!valid)
         co_return std::unexpected(
             "model judge response validation failed: " + valid.error());
-    const auto score = verdict["score"].get<double>();
+    const auto score = verdict["score"].as<double>();
     co_return evaluation_score{.evaluator = std::string{name()},
         .value = score,
         .passed = score >= options_.passing_score,

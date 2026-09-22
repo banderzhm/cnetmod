@@ -26,9 +26,9 @@ namespace {
     auto decode_mcp_body(std::string_view body)
         -> std::expected<std::vector<json>, std::string>
     {
-        auto direct = json::parse(body, nullptr, false);
-        if (!direct.is_discarded())
-            return std::vector<json>{std::move(direct)};
+        auto direct = cnetmod::json::parse_document(body);
+        if (direct)
+            return std::vector<json>{std::move(*direct)};
 
         std::vector<json> messages;
         std::size_t offset = 0;
@@ -47,11 +47,11 @@ namespace {
                     line.remove_prefix(1);
                 if (!line.empty() && line != "[DONE]")
                 {
-                    auto message = json::parse(line, nullptr, false);
-                    if (message.is_discarded())
+                    auto message = cnetmod::json::parse_document(line);
+                    if (!message)
                         return std::unexpected(
                             "MCP SSE event contains invalid JSON");
-                    messages.push_back(std::move(message));
+                    messages.push_back(std::move(*message));
                 }
             }
             if (end == std::string_view::npos)
@@ -102,7 +102,8 @@ auto mcp_streamable_http_transport::send(json payload, bool expect_response)
 {
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    const auto expected_id = payload.value("id", json{});
+    const auto expected_id = cnetmod::json::value_or(
+        payload, "id", json{});
     http::request request(http::http_method::POST, options_.endpoint);
     request.set_header("Content-Type", "application/json");
     request.set_header("Accept", "application/json, text/event-stream");
@@ -110,7 +111,7 @@ auto mcp_streamable_http_transport::send(json payload, bool expect_response)
         request.set_header("Mcp-Session-Id", session_id_);
     for (const auto& [name, value] : options_.headers)
         request.set_header(name, value);
-    request.set_body(payload.dump());
+    request.set_body(cnetmod::json::write_document(payload).value_or("{}"));
 
     auto response = co_await client_.send(request);
     if (!response)
@@ -123,7 +124,7 @@ auto mcp_streamable_http_transport::send(json payload, bool expect_response)
         co_return std::unexpected(std::format("MCP HTTP status {}: {}",
             response->status_code(), response->body()));
     if (response->status_code() == 202 || response->body().empty())
-        co_return json::object();
+        co_return cnetmod::json::object();
     auto messages = decode_mcp_body(response->body());
     if (!messages)
         co_return std::unexpected(messages.error());
@@ -132,7 +133,7 @@ auto mcp_streamable_http_transport::send(json payload, bool expect_response)
     {
         if (expect_response && message.is_object() &&
             message.contains("id") && !message.contains("method") &&
-            message["id"] == expected_id)
+            cnetmod::json::equivalent(message["id"], expected_id))
         {
             matched_response = std::move(message);
             continue;
@@ -151,7 +152,8 @@ auto mcp_streamable_http_transport::send(json payload, bool expect_response)
             reply_request.set_header("Mcp-Session-Id", session_id_);
         for (const auto& [name, value] : options_.headers)
             reply_request.set_header(name, value);
-        reply_request.set_body(reply->dump());
+        reply_request.set_body(
+            cnetmod::json::write_document(*reply).value_or("{}"));
         auto acknowledged = co_await client_.send(reply_request);
         if (!acknowledged)
             co_return std::unexpected("MCP HTTP reply failed: " +
@@ -164,7 +166,7 @@ auto mcp_streamable_http_transport::send(json payload, bool expect_response)
     if (matched_response)
         co_return std::move(*matched_response);
     if (!expect_response)
-        co_return json::object();
+        co_return cnetmod::json::object();
     co_return std::unexpected("MCP HTTP response did not contain matching id");
 }
 
@@ -200,7 +202,8 @@ auto mcp_stdio_transport::exchange(json request)
 {
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    const auto expected_id = request.value("id", json{});
+    const auto expected_id = cnetmod::json::value_or(
+        request, "id", json{});
     auto written = co_await blocking_invoke(pool_, context_,
         [this, request = std::move(request)]() mutable
             -> std::expected<void, std::string>
@@ -208,7 +211,7 @@ auto mcp_stdio_transport::exchange(json request)
             auto started = ensure_started();
             if (!started)
                 return std::unexpected(started.error());
-            auto wire = request.dump();
+            auto wire = cnetmod::json::write_document(request).value_or("{}");
             wire.push_back('\n');
             auto result = process_->write(wire);
             if (!result)
@@ -232,17 +235,18 @@ auto mcp_stdio_transport::exchange(json request)
                             line.error().message());
                     if (line->empty())
                         continue;
-                    auto response = json::parse(*line, nullptr, false);
-                    if (response.is_discarded())
+                    auto response = cnetmod::json::parse_document(*line);
+                    if (!response)
                         return std::unexpected(
                             "MCP stdio server returned invalid JSON");
-                    return response;
+                    return std::move(*response);
                 }
             });
         if (!response)
             co_return std::unexpected(response.error());
         if (response->is_object() && response->contains("id") &&
-            !response->contains("method") && (*response)["id"] == expected_id)
+            !response->contains("method") &&
+            cnetmod::json::equivalent((*response)["id"], expected_id))
             co_return response;
         if (!inbound_handler_)
             continue;
@@ -253,7 +257,7 @@ auto mcp_stdio_transport::exchange(json request)
             [this, reply = std::move(*reply)]() mutable
                 -> std::expected<void, std::string>
             {
-                auto wire = reply.dump();
+                auto wire = cnetmod::json::write_document(reply).value_or("{}");
                 wire.push_back('\n');
                 auto result = process_->write(wire);
                 if (!result)
@@ -278,7 +282,7 @@ auto mcp_stdio_transport::notify(json notification)
             auto started = ensure_started();
             if (!started)
                 return std::unexpected(started.error());
-            auto wire = notification.dump();
+            auto wire = cnetmod::json::write_document(notification).value_or("{}");
             wire.push_back('\n');
             auto written = process_->write(wire);
             if (!written)
@@ -321,7 +325,8 @@ auto mcp_client::handle_inbound(json message) -> task<std::optional<json>>
         !message["method"].is_string())
         co_return std::nullopt;
     const auto method = message["method"].get<std::string>();
-    const auto parameters = message.value("params", json::object());
+    const auto parameters = cnetmod::json::value_or(
+        message, "params", cnetmod::json::object());
     if (!message.contains("id"))
     {
         if (options_.handlers.notification)
@@ -365,7 +370,9 @@ auto mcp_client::request(std::string method, json parameters)
     {
         const auto& error = (*response)["error"];
         co_return std::unexpected(std::format("MCP error {}: {}",
-            error.value("code", 0), error.value("message", "unknown error")));
+            cnetmod::json::value_or(error, "code", 0),
+            cnetmod::json::value_or(
+                error, "message", std::string{"unknown error"})));
     }
     if (!response->contains("result"))
         co_return std::unexpected("MCP JSON-RPC response has no result");
@@ -374,16 +381,18 @@ auto mcp_client::request(std::string method, json parameters)
 
 auto mcp_client::initialize() -> task<std::expected<json, std::string>>
 {
-    json parameters = json::object();
+    json parameters = cnetmod::json::object();
     parameters["protocolVersion"] = options_.protocol_version;
     parameters["capabilities"] = options_.capabilities;
-    parameters["clientInfo"] = {
-        {"name", options_.name}, {"version", options_.version}};
+    parameters["clientInfo"] = cnetmod::json::object(
+        {{"name", options_.name}, {"version", options_.version}});
     auto result = co_await request("initialize", std::move(parameters));
     if (!result)
         co_return std::unexpected(result.error());
-    server_capabilities_ = result->value("capabilities", json::object());
-    server_info_ = result->value("serverInfo", json::object());
+    server_capabilities_ = cnetmod::json::value_or(
+        *result, "capabilities", cnetmod::json::object());
+    server_info_ = cnetmod::json::value_or(
+        *result, "serverInfo", cnetmod::json::object());
     auto notified = co_await transport_.notify(
         {{"jsonrpc", "2.0"}, {"method", "notifications/initialized"}});
     if (!notified)
@@ -496,7 +505,8 @@ auto mcp_client::set_logging_level(std::string level)
 
 auto mcp_client::ping() -> task<std::expected<void, std::string>>
 {
-    co_return co_await request_acknowledgement("ping", json::object());
+    co_return co_await request_acknowledgement(
+        "ping", cnetmod::json::object());
 }
 
 auto mcp_client::register_tools(tool_registry& registry)
@@ -508,16 +518,19 @@ auto mcp_client::register_tools(tool_registry& registry)
     if (!listed->contains("tools") || !(*listed)["tools"].is_array())
         co_return std::unexpected("MCP tools/list result has no tools array");
     std::size_t count = 0;
-    for (const auto& remote : (*listed)["tools"])
+    for (const auto& remote : (*listed)["tools"].get_array())
     {
-        const auto name = remote.value("name", "");
+        const auto name = cnetmod::json::value_or(
+            remote, "name", std::string{});
         if (name.empty())
             co_return std::unexpected("MCP tool has no name");
         auto added = registry.add({.definition = {
                                        .type = "function",
                                        .function_name = name,
-                                       .function_description = remote.value("description", ""),
-                                       .function_parameters = remote.value("inputSchema", json::object()),
+                                       .function_description = cnetmod::json::value_or(
+                                           remote, "description", std::string{}),
+                                       .function_parameters = cnetmod::json::value_or(
+                                           remote, "inputSchema", cnetmod::json::object()),
                                        .strict = true},
             .handler = [this, name](const json& arguments) -> task<std::expected<json, std::string>>
             {
@@ -628,22 +641,28 @@ auto mcp_tool_provider::provide(const tool_provider_request&)
             continue;
         }
 
-        for (const auto& remote : (*listed)["tools"])
+        for (const auto& remote : (*listed)["tools"].get_array())
         {
             tool definition{
                 .type = "function",
-                .function_name = remote.value("name", ""),
-                .function_description = remote.value("description", ""),
-                .function_parameters = remote.value(
-                    "inputSchema", json::object()),
+                .function_name = cnetmod::json::value_or(
+                    remote, "name", std::string{}),
+                .function_description = cnetmod::json::value_or(
+                    remote, "description", std::string{}),
+                .function_parameters = cnetmod::json::value_or(
+                    remote,
+                    "inputSchema", cnetmod::json::object()),
                 .strict = true};
             if (definition.function_name.empty())
                 continue;
-            if (std::ranges::any_of(filters,
-                    [&](const auto& filter)
-                    {
-                        return !filter(*client, definition);
-                    }))
+            bool rejected = false;
+            for (const auto& filter : filters)
+                if (!filter(*client, definition))
+                {
+                    rejected = true;
+                    break;
+                }
+            if (rejected)
                 continue;
             if (!names.insert(definition.function_name).second)
                 co_return std::unexpected(std::format(

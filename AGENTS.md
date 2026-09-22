@@ -74,7 +74,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | 我想… | 看这个文件 |
 |-------|-----------|
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
-| 使用后端无关 JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
+| 使用 Glaze-only JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
 | 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
 | 了解代码风格、clang-format、命名规范 | [code-style.md](infra/code-style.md) |
@@ -5937,7 +5937,7 @@ auto replies = co_await cache.execute(batch);
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的框架默认 codec；Redis 模块只依赖 `cnetmod.json`，不会向消费方泄漏具体 JSON 后端。可用满足 `cnetmod::json::codec_for` 的业务 codec 替换。
+- `json_codec` 是 `get_as` / `set_as` 的 Glaze-only 默认 JSON codec；Redis 模块只通过 `cnetmod.json` 解析和序列化。若业务需要非 JSON 值编码，可显式传入 Redis 值 codec，但这不会替换框架 JSON 引擎。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
 
@@ -9334,7 +9334,7 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # backend-neutral JSON facade
+│   ├── json/               # Glaze-only JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
@@ -9687,18 +9687,19 @@ bool skip(std::size_t n) noexcept;
 
 # JSON
 
-> `cnetmod.json` is the backend-neutral JSON document and typed codec facade. Glaze is a private parser implementation compiled only by `src/json/json.cpp`.
+> `cnetmod.json` is a Glaze-only C++23 module. It exposes Glaze's native typed codec and dynamic document without an intermediate DOM or a switchable backend layer.
 
 **import**: `import cnetmod.json;`
-**macro header**: `#include <cnetmod/json.hpp>`
 **sources**: `src/json/json.cppm`, `src/json/json.cpp`
 
-## Boundary rules
+## Design contract
 
-1. Application and protocol code imports `cnetmod.json`; it never imports a parser library.
-2. Glaze headers and `glz::*` names are restricted to `src/json/json.cpp`.
-3. `document`, errors, codecs, and DTO metadata contain only framework or standard-library types.
-4. `tools/check_json_boundary.py` enforces the boundary in CTest.
+1. Glaze is the only JSON engine. There is no backend registry, virtual JSON interface, structural validator, or conversion through another DOM.
+2. `document` is `glz::generic_u64`, preserving unsigned 64-bit integers in dynamic JSON.
+3. `parse<T>()` and `write<T>()` invoke Glaze directly for ordinary C++ types. Registered ORM records use their existing field metadata to produce Glaze's native document so database temporal and identifier wire forms remain stable.
+4. Only `src/json/json.cppm` and `src/json/json.cpp` may include Glaze headers or spell `glz::*` names. Other framework code imports `cnetmod.json`.
+5. Glaze headers are placed in the module's global module fragment. Consumers import the compiled module rather than including Glaze themselves.
+6. The bundled Glaze headers are installed because the public module interface owns a native Glaze document type.
 
 ## Dynamic documents
 
@@ -9712,22 +9713,36 @@ if (!parsed)
     co_return std::unexpected(parsed.error());
 
 const auto service = parsed->at("service").get<std::string>();
+const auto replicas = parsed->at("replicas").as<std::uint32_t>();
 parsed->operator[]("ready") = true;
+
 auto wire = cnetmod::json::write_document(*parsed);
 ```
 
-`document` supports null, booleans, signed and unsigned integers, floating-point
-numbers, strings, arrays, and objects. Binary payloads must use an explicit
-application representation such as a byte array or Base64 string because JSON
-has no binary value type.
+Use the module helpers instead of emulating nlohmann APIs:
 
-## Plain DTOs
+| Operation | API |
+|---|---|
+| Empty object | `cnetmod::json::object()` |
+| Empty array | `cnetmod::json::array()` |
+| Object lookup | `cnetmod::json::find(document, key)` |
+| Member with fallback | `cnetmod::json::value_or(document, key, fallback)` |
+| Array iteration | `document.get_array()` |
+| Object iteration | `document.get_object()` |
+| Numeric conversion | `document.as<T>()` |
+| Exact stored scalar | `document.get<T>()` |
+| Semantic comparison | `cnetmod::json::equivalent(left, right)` |
 
-C++23 has no general static reflection. A plain DTO declares its mapping once:
+`get<T>()` is for an exact Glaze variant alternative. Parsed integral values
+are stored as `std::uint64_t` or `std::int64_t`; use `as<T>()` when narrowing to
+an application integer type.
+
+## Typed aggregates
+
+Glaze reflects ordinary public aggregates directly. DTOs do not need generated
+traits, registration tables, or field macros when JSON names match member names:
 
 ```cpp
-#include <cnetmod/json.hpp>
-
 import std;
 import cnetmod.json;
 
@@ -9738,27 +9753,23 @@ struct user_view
     std::optional<std::string> nickname;
 };
 
-CNETMOD_JSON(user_view,
-    CNETMOD_JSON_FIELD(id),
-    CNETMOD_JSON_FIELD(name),
-    CNETMOD_JSON_FIELD(nickname))
-
-auto encoded = cnetmod::json::write(user_view{42, "Ada", std::nullopt});
+auto encoded = cnetmod::json::write(
+    user_view{42, "Ada", std::nullopt});
 auto decoded = cnetmod::json::parse<user_view>(*encoded);
 ```
 
-The default codec rejects unknown fields and missing required fields. Optional
-members may be absent. `lenient_codec` accepts unknown fields and
-`explicit_null_codec` emits disengaged optionals as JSON null.
-
-Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
-string-keyed associative containers. Numeric decoding checks integral sign and
-range instead of silently narrowing.
+The default policy rejects unknown fields and missing required fields.
+Use `parse_lenient<T>()` when unknown object members are acceptable and
+`write_explicit_nulls<T>()` when nullable members must remain on the wire.
+Both are fixed Glaze policies; the public parse/write API has no pluggable
+backend or caller-supplied JSON codec.
 
 ## ORM models and projections
 
-Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
-`CNETMOD_PROJECTION`. ORM field metadata is also its JSON metadata:
+`CNETMOD_MODEL` and `CNETMOD_PROJECTION` metadata remains the ORM source of
+truth. The framework installs this bridge automatically: application DTOs do
+not declare JSON traits. ORM JSON conversion produces and consumes the same
+native `document`; it does not build a second JSON mapping registry.
 
 ```cpp
 CNETMOD_MODEL(user_record, "users",
@@ -9768,37 +9779,21 @@ CNETMOD_MODEL(user_record, "users",
 auto wire = cnetmod::json::write(user_record{42, "Ada"});
 ```
 
-This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
-and nullable `DATETIME`. Database temporal values use their canonical
-timezone-free SQL text representation.
-
 ## Application offload
 
-Use `cnetmod::application::json_template` for parsing or writing on the
-Application-managed CPU pool. Its typed operations use the same codec contract,
-support cancellation, and resume on the application execution context.
+Use `cnetmod::application::json_template` when parsing or serialization should
+run on the Application-managed CPU pool. It calls the same Glaze-only codec,
+supports cancellation, and resumes on the application execution context.
 
-## Codec SPI
-
-A custom codec implements:
-
-```cpp
-template <typename T>
-static auto decode(std::string_view) -> std::expected<T, std::error_code>;
-
-template <typename T>
-static auto encode(const T&) -> std::expected<std::string, std::error_code>;
-```
-
-and satisfies `cnetmod::json::codec_for<Codec, T>`. RedisTemplate and other
-framework templates accept this SPI without exposing the parser backend.
-
-## Verification
+## Boundary verification
 
 ```bash
 python tools/check_json_boundary.py
 ctest --test-dir build -R "json_backend_boundary|test_json_template|test_orm_json_result_map"
 ```
+
+The boundary check rejects nlohmann usage everywhere and rejects direct Glaze
+usage outside the two `cnetmod.json` implementation files.
 <!-- END SOURCE: skill/infra/json.md -->
 
 <!-- BEGIN SOURCE: skill/infra/module-conventions.md -->

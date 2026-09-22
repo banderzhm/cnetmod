@@ -1,6 +1,7 @@
 module cnetmod.application.mqtt;
 #ifdef CNETMOD_HAS_PROTOCOL_MQTT
 import std;
+import cnetmod.json;
 namespace cnetmod::application {
 mqtt_service::mqtt_service(io_context& io, mqtt::connect_options connection,
     mqtt::reconnect_options reconnect, std::string instance,
@@ -46,12 +47,18 @@ auto auto_configure_mqtt(const configured_service& configuration,
         if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         mqtt::connect_options options;
-        options.host = configuration.properties.value("host", options.host);
-        options.port = configuration.properties.value("port", options.port);
-        options.client_id = configuration.properties.value("client_id", options.client_id);
-        options.username = configuration.properties.value("username", options.username);
-        options.password = configuration.properties.value("password", options.password);
-        options.tls = configuration.properties.value("tls", options.tls);
+        options.host = cnetmod::json::value_or(
+            configuration.properties, "host", options.host);
+        options.port = cnetmod::json::value_or(
+            configuration.properties, "port", options.port);
+        options.client_id = cnetmod::json::value_or(
+            configuration.properties, "client_id", options.client_id);
+        options.username = cnetmod::json::value_or(
+            configuration.properties, "username", options.username);
+        options.password = cnetmod::json::value_or(
+            configuration.properties, "password", options.password);
+        options.tls = cnetmod::json::value_or(
+            configuration.properties, "tls", options.tls);
         auto service = std::make_shared<mqtt_service>(context.io, std::move(options),
             mqtt::reconnect_options{}, configuration.instance,
             configuration.requirement, configuration.recovery);

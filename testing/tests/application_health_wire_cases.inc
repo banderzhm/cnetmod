@@ -74,37 +74,37 @@ TEST(application_health_outcomes_reach_the_http_collector)
                 ++requests;
                 const auto body = std::string{co_await request.read_full_body()};
                 ASSERT_FALSE(body.contains("private-probe-diagnostic"));
-                const auto document = cnetmod::json::document::parse(body);
+                const auto document = cnetmod::json::parse_document(body).value();
                 if (request.path() == "/v1/traces")
-                    for (const auto& resource : document.at("resourceSpans"))
-                        for (const auto& scope : resource.at("scopeSpans"))
-                            for (const auto& span : scope.at("spans"))
+                    for (const auto& resource : document.at("resourceSpans").get_array())
+                        for (const auto& scope : resource.at("scopeSpans").get_array())
+                            for (const auto& span : scope.at("spans").get_array())
                                 spans.push_back(span);
                 else if (request.path() == "/v1/logs")
-                    for (const auto& resource : document.at("resourceLogs"))
-                        for (const auto& scope : resource.at("scopeLogs"))
-                            for (const auto& record : scope.at("logRecords"))
+                    for (const auto& resource : document.at("resourceLogs").get_array())
+                        for (const auto& scope : resource.at("scopeLogs").get_array())
+                            for (const auto& record : scope.at("logRecords").get_array())
                                 logs.push_back(record);
                 else
-                    for (const auto& resource : document.at("resourceMetrics"))
-                        for (const auto& scope : resource.at("scopeMetrics"))
-                            for (const auto& metric : scope.at("metrics"))
+                    for (const auto& resource : document.at("resourceMetrics").get_array())
+                        for (const auto& scope : resource.at("scopeMetrics").get_array())
+                            for (const auto& metric : scope.at("metrics").get_array())
                             {
-                                if (metric.at("name") != "application.service.operations")
+                                if (metric.at("name").get<std::string>() != "application.service.operations")
                                     continue;
                                 const auto& sum = metric.at("sum");
                                 ASSERT_EQ(sum.at("aggregationTemporality").get<std::string>(), "AGGREGATION_TEMPORALITY_CUMULATIVE");
                                 ASSERT_TRUE(sum.at("isMonotonic").get<bool>());
-                                for (const auto& point : sum.at("dataPoints"))
+                                for (const auto& point : sum.at("dataPoints").get_array())
                                 {
                                     std::map<std::string, std::string> labels;
-                                    for (const auto& attribute : point.at("attributes"))
+                                    for (const auto& attribute : point.at("attributes").get_array())
                                         ASSERT_TRUE(labels.emplace(attribute.at("key").get<std::string>(),
                                                               attribute.at("value").at("stringValue").get<std::string>())
                                                 .second);
                                     ASSERT_EQ(labels.at("service.name"), "wire-probe");
                                     ASSERT_EQ(labels.at("service.instance"), "default");
-                                    const auto value = point.at("asDouble").get<double>();
+                                    const auto value = point.at("asDouble").as<double>();
                                     auto& previous = operation_totals[{labels.at("operation"), labels.at("outcome")}];
                                     ASSERT_TRUE(value >= previous);
                                     previous = value;
@@ -202,7 +202,7 @@ TEST(application_health_outcomes_reach_the_http_collector)
             ASSERT_EQ(span.at("name").get<std::string>(), "application.health.probe");
             ASSERT_EQ(span.at("kind").get<std::string>(), "SPAN_KIND_INTERNAL");
             std::map<std::string, std::string> attributes;
-            for (const auto& attribute : span.at("attributes"))
+            for (const auto& attribute : span.at("attributes").get_array())
                 attributes.emplace(attribute.at("key").get<std::string>(), attribute.at("value").at("stringValue").get<std::string>());
             ASSERT_EQ(attributes.at("cnetmod.operation.status"), expected[index]);
             if (errors[index])
@@ -224,7 +224,7 @@ TEST(application_health_outcomes_reach_the_http_collector)
             else
                 ASSERT_FALSE(span.contains("status"));
             std::map<std::string, std::string> attributes;
-            for (const auto& attribute : span.at("attributes"))
+            for (const auto& attribute : span.at("attributes").get_array())
                 attributes.emplace(attribute.at("key").get<std::string>(), attribute.at("value").at("stringValue").get<std::string>());
             ASSERT_EQ(attributes.at("service.name"), "wire-probe");
             ASSERT_EQ(attributes.at("service.instance"), "default");
@@ -233,8 +233,10 @@ TEST(application_health_outcomes_reach_the_http_collector)
                 ASSERT_EQ(attributes.at("cnetmod.error.code"), std::to_string(std::make_error_code(index == 1 ? std::errc::permission_denied : std::errc::timed_out).value()));
             if (index < logs.size())
             {
-                ASSERT_EQ(logs[index].at("traceId"), span.at("traceId"));
-                ASSERT_EQ(logs[index].at("spanId"), span.at("spanId"));
+                ASSERT_TRUE(cnetmod::json::equivalent(
+                    logs[index].at("traceId"), span.at("traceId")));
+                ASSERT_TRUE(cnetmod::json::equivalent(
+                    logs[index].at("spanId"), span.at("spanId")));
                 ASSERT_EQ(logs[index].at("severityText").get<std::string>(), index == 1 || index == 3 ? "ERROR" : "INFO");
             }
         }

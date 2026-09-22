@@ -38,9 +38,10 @@ json_output_parser::json_output_parser(json schema) : schema_(std::move(schema))
 auto json_output_parser::parse(std::string_view text) const
     -> std::expected<json, std::string>
 {
-    auto value = json::parse(text, nullptr, false);
-    if (value.is_discarded())
+    auto parsed = cnetmod::json::parse_document(text);
+    if (!parsed)
         return std::unexpected("model output is not valid JSON");
+    auto value = std::move(*parsed);
     if (!schema_.empty())
     {
         auto valid = validate_json_schema(value, schema_);
@@ -58,9 +59,9 @@ auto validate_json_schema(const json& value, const json& schema,
     if (schema.contains("enum") && schema["enum"].is_array())
     {
         auto matched = false;
-        for (const auto& candidate : schema["enum"])
+        for (const auto& candidate : schema["enum"].get_array())
         {
-            if (candidate == value)
+            if (cnetmod::json::equivalent(candidate, value))
             {
                 matched = true;
                 break;
@@ -70,13 +71,16 @@ auto validate_json_schema(const json& value, const json& schema,
             return std::unexpected(std::format("{}: value is not in enum", path));
     }
 
-    const auto type = schema.value("type", "");
+    const auto type = cnetmod::json::value_or(
+        schema, "type", std::string{});
+    const auto integer = value.is_int64() || value.is_uint64();
+    const auto number = integer || value.is_double();
     const bool type_matches = type.empty() ||
         (type == "object" && value.is_object()) ||
         (type == "array" && value.is_array()) ||
         (type == "string" && value.is_string()) ||
-        (type == "integer" && value.is_number_integer()) ||
-        (type == "number" && value.is_number()) ||
+        (type == "integer" && integer) ||
+        (type == "number" && number) ||
         (type == "boolean" && value.is_boolean()) ||
         (type == "null" && value.is_null());
     if (!type_matches)
@@ -86,7 +90,7 @@ auto validate_json_schema(const json& value, const json& schema,
     {
         if (schema.contains("required") && schema["required"].is_array())
         {
-            for (const auto& required : schema["required"])
+            for (const auto& required : schema["required"].get_array())
             {
                 if (required.is_string() && !value.contains(required.get<std::string>()))
                     return std::unexpected(std::format("{}: missing required property {}",
@@ -95,26 +99,28 @@ auto validate_json_schema(const json& value, const json& schema,
         }
         const auto has_properties = schema.contains("properties") &&
             schema["properties"].is_object();
-        for (auto entry = value.begin(); entry != value.end(); ++entry)
+        for (const auto& [key, entry] : value.get_object())
         {
-            if (has_properties && schema["properties"].contains(entry.key()))
+            if (has_properties && schema["properties"].contains(key))
             {
-                auto nested = validate_json_schema(entry.value(),
-                    schema["properties"][entry.key()],
-                    std::format("{}.{}", path, entry.key()));
+                auto nested = validate_json_schema(entry,
+                    schema["properties"][key],
+                    std::format("{}.{}", path, key));
                 if (!nested)
                     return nested;
             }
-            else if (schema.value("additionalProperties", true) == false)
+            else if (!cnetmod::json::value_or(
+                         schema, "additionalProperties", true))
                 return std::unexpected(std::format("{}: unexpected property {}",
-                    path, entry.key()));
+                    path, key));
         }
     }
     if (value.is_array() && schema.contains("items"))
     {
-        for (std::size_t index = 0; index < value.size(); ++index)
+        const auto& elements = value.get_array();
+        for (std::size_t index = 0; index < elements.size(); ++index)
         {
-            auto nested = validate_json_schema(value[index], schema["items"],
+            auto nested = validate_json_schema(elements[index], schema["items"],
                 std::format("{}[{}]", path, index));
             if (!nested)
                 return nested;

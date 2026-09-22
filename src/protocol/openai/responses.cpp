@@ -11,6 +11,7 @@ import :foundation;
 import :tool_contracts;
 import :messages;
 import :responses;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -19,43 +20,47 @@ auto response_request::to_json() const -> std::string
     json value{{"model", model}};
     if (!instructions.empty())
         value["instructions"] = instructions;
-    auto input_items = json::array();
+    auto input_items = cnetmod::json::array();
     for (const auto& item : input)
     {
         if (item.content_parts.empty())
         {
-            input_items.push_back(item.to_json_object());
+            input_items.get_array().push_back(item.to_json_object());
             continue;
         }
-        auto content = json::array();
+        auto content = cnetmod::json::array();
         for (const auto& part : item.content_parts)
         {
             if (part.type == "text")
-                content.push_back({{"type", "input_text"}, {"text", part.text}});
+                content.get_array().push_back(cnetmod::json::object(
+                    {{"type", "input_text"}, {"text", part.text}}));
             else if (part.type == "image_url")
-                content.push_back({{"type", "input_image"},
-                    {"image_url", part.image_url.url},
-                    {"detail", part.image_url.detail}});
+                content.get_array().push_back(cnetmod::json::object(
+                    {{"type", "input_image"},
+                        {"image_url", part.image_url.url},
+                        {"detail", part.image_url.detail}}));
         }
-        input_items.push_back({{"role", item.role}, {"content", std::move(content)}});
+        input_items.get_array().push_back(cnetmod::json::object(
+            {{"role", item.role}, {"content", std::move(content)}}));
     }
     for (const auto& item : tool_outputs)
-        input_items.push_back({{"type", "function_call_output"},
-            {"call_id", item.call_id}, {"output", item.output}});
+        input_items.get_array().push_back(cnetmod::json::object(
+            {{"type", "function_call_output"},
+                {"call_id", item.call_id}, {"output", item.output}}));
     for (const auto& item : additional_input_items)
-        input_items.push_back(item);
+        input_items.get_array().push_back(item);
     value["input"] = std::move(input_items);
 
-    auto wire_tools = json::array();
+    auto wire_tools = cnetmod::json::array();
     for (const auto& item : tools)
-        wire_tools.push_back({{"type", "function"},
+        wire_tools.get_array().push_back(cnetmod::json::object({{"type", "function"},
             {"name", item.function_name},
             {"description", item.function_description},
             {"parameters", item.function_parameters},
-            {"strict", item.strict}});
+            {"strict", item.strict}}));
     for (const auto& item : additional_tools)
-        wire_tools.push_back(item);
-    if (!wire_tools.empty())
+        wire_tools.get_array().push_back(item);
+    if (!wire_tools.get_array().empty())
         value["tools"] = std::move(wire_tools);
     if (!tool_choice_object.is_null())
         value["tool_choice"] = tool_choice_object;
@@ -72,9 +77,9 @@ auto response_request::to_json() const -> std::string
     value["parallel_tool_calls"] = parallel_tool_calls;
     value["store"] = store;
     if (!response_schema.empty())
-        value["text"]["format"] = {{"type", "json_schema"},
+        value["text"]["format"] = cnetmod::json::object({{"type", "json_schema"},
             {"name", response_schema_name}, {"strict", response_schema_strict},
-            {"schema", response_schema}};
+            {"schema", response_schema}});
     if (!metadata.empty())
         value["metadata"] = metadata;
     if (!service_tier.empty())
@@ -85,45 +90,49 @@ auto response_request::to_json() const -> std::string
         value["safety_identifier"] = safety_identifier;
     if (!reasoning.empty())
         value["reasoning"] = reasoning;
-    for (auto item = extra_body.begin(); item != extra_body.end(); ++item)
-        value[item.key()] = item.value();
-    return value.dump();
+    if (extra_body.is_object())
+        for (const auto& [key, item] : extra_body.get_object())
+            value[key] = item;
+    return cnetmod::json::write_document(value).value_or("{}");
 }
 
 auto response_result::from_json(std::string_view text) -> response_result
 {
     response_result result;
-    auto value = json::parse(text, nullptr, false);
-    if (value.is_discarded())
+    auto parsed = cnetmod::json::parse_document(text);
+    if (!parsed)
         return result;
+    const auto& value = *parsed;
     result.raw = value;
-    result.id = value.value("id", "");
-    result.model = value.value("model", "");
-    result.status = value.value("status", "");
+    result.id = cnetmod::json::value_or(value, "id", std::string{});
+    result.model = cnetmod::json::value_or(value, "model", std::string{});
+    result.status = cnetmod::json::value_or(value, "status", std::string{});
     if (value.contains("output_text") && value["output_text"].is_string())
         result.output_text = value["output_text"].get<std::string>();
     const auto collect_text = result.output_text.empty();
     if (value.contains("output") && value["output"].is_array())
-        for (const auto& item : value["output"])
+        for (const auto& item : value["output"].get_array())
         {
-            const auto type = item.value("type", "");
+            const auto type = cnetmod::json::value_or(item, "type", std::string{});
             if (type == "function_call")
-                result.tool_calls.push_back({.id = item.value("call_id", item.value("id", "")),
+                result.tool_calls.push_back({.id = cnetmod::json::value_or(
+                                                 item, "call_id",
+                                                 cnetmod::json::value_or(item, "id", std::string{})),
                     .type = "function",
-                    .function = {.name = item.value("name", ""),
-                        .arguments = item.value("arguments", "")}});
+                    .function = {.name = cnetmod::json::value_or(item, "name", std::string{}),
+                        .arguments = cnetmod::json::value_or(item, "arguments", std::string{})}});
             if (collect_text && type == "message" && item.contains("content") &&
                 item["content"].is_array())
-                for (const auto& content : item["content"])
-                    if (content.value("type", "") == "output_text")
-                        result.output_text += content.value("text", "");
+                for (const auto& content : item["content"].get_array())
+                    if (cnetmod::json::value_or(content, "type", std::string{}) == "output_text")
+                        result.output_text += cnetmod::json::value_or(content, "text", std::string{});
         }
     if (value.contains("usage") && value["usage"].is_object())
     {
         const auto& tokens = value["usage"];
-        result.token_usage.prompt_tokens = tokens.value("input_tokens", 0);
-        result.token_usage.completion_tokens = tokens.value("output_tokens", 0);
-        result.token_usage.total_tokens = tokens.value("total_tokens", 0);
+        result.token_usage.prompt_tokens = cnetmod::json::value_or(tokens, "input_tokens", 0);
+        result.token_usage.completion_tokens = cnetmod::json::value_or(tokens, "output_tokens", 0);
+        result.token_usage.total_tokens = cnetmod::json::value_or(tokens, "total_tokens", 0);
     }
     return result;
 }

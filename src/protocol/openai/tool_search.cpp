@@ -11,6 +11,7 @@ import cnetmod.coro.task;
 import :model;
 import :tools;
 import :tool_search;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -38,7 +39,9 @@ namespace {
     auto searchable_text(const tool& candidate) -> std::string
     {
         return std::format("{} {} {}", candidate.function_name,
-            candidate.function_description, candidate.function_parameters.dump());
+            candidate.function_description,
+            cnetmod::json::write_document(candidate.function_parameters)
+                .value_or("{}"));
     }
 
     auto cosine_similarity(const std::vector<float>& left,

@@ -1,6 +1,7 @@
 module cnetmod.application.amqp10;
 #ifdef CNETMOD_HAS_PROTOCOL_AMQP10
 import std;
+import cnetmod.json;
 namespace cnetmod::application {
 amqp10_service::amqp10_service(io_context& io, amqp10::client_options options,
     std::string instance, service_requirement requirement, recovery_policy recovery)
@@ -40,11 +41,16 @@ auto auto_configure_amqp10(const configured_service& configuration,
         if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         amqp10::client_options options;
-        options.endpoint.host = configuration.properties.value("host", options.endpoint.host);
-        options.endpoint.port = configuration.properties.value("port", options.endpoint.port);
-        options.credentials.username = configuration.properties.value("username", std::string{});
-        options.credentials.password = configuration.properties.value("password", std::string{});
-        options.container_id = configuration.properties.value("container_id", std::string{"cnetmod"});
+        options.endpoint.host = cnetmod::json::value_or(
+            configuration.properties, "host", options.endpoint.host);
+        options.endpoint.port = cnetmod::json::value_or(
+            configuration.properties, "port", options.endpoint.port);
+        options.credentials.username = cnetmod::json::value_or(
+            configuration.properties, "username", std::string{});
+        options.credentials.password = cnetmod::json::value_or(
+            configuration.properties, "password", std::string{});
+        options.container_id = cnetmod::json::value_or(
+            configuration.properties, "container_id", std::string{"cnetmod"});
         auto service = std::make_shared<amqp10_service>(context.io, std::move(options),
             configuration.instance, configuration.requirement, configuration.recovery);
         return context.services.add_managed_named<amqp10_service>(

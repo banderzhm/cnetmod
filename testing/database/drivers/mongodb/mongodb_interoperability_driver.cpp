@@ -15,18 +15,22 @@ namespace {
 
     using json = cnetmod::json::document;
 
+    template <typename T>
+    auto get_or(const json& source, std::string_view key, T fallback) -> T
+    {
+        return cnetmod::json::value_or(source, key, std::move(fallback));
+    }
+
     auto success(json result) -> std::string
     {
-        return json{{"contract_version", 1}, {"status", "ok"},
-            {"result", std::move(result)}}
-            .dump();
+        return cnetmod::json::write_document(json{{"contract_version", 1}, {"status", "ok"},
+            {"result", std::move(result)}}).value_or("{}");
     }
 
     auto failure(std::string_view code, std::string message) -> std::string
     {
-        return json{{"contract_version", 1}, {"status", "error"},
-            {"error_code", code}, {"message", std::move(message)}}
-            .dump();
+        return cnetmod::json::write_document(json{{"contract_version", 1}, {"status", "error"},
+            {"error_code", code}, {"message", std::move(message)}}).value_or("{}");
     }
 
     auto error_name(mongodb::error_code code) -> std::string_view
@@ -70,22 +74,22 @@ namespace {
     auto options_from_json(const json& parameters) -> mongodb::connection_options
     {
         mongodb::connection_options options;
-        options.host = parameters.value("host", std::string("127.0.0.1"));
-        options.port = static_cast<std::uint16_t>(parameters.value("port", 27017));
-        options.database = parameters.value("database", std::string("admin"));
-        options.username = parameters.value("username", std::string{});
-        options.password = parameters.value("password", std::string{});
-        options.authentication_database = parameters.value(
+        options.host = get_or(parameters, "host", std::string("127.0.0.1"));
+        options.port = static_cast<std::uint16_t>(get_or(parameters, "port", 27017));
+        options.database = get_or(parameters, "database", std::string("admin"));
+        options.username = get_or(parameters, "username", std::string{});
+        options.password = get_or(parameters, "password", std::string{});
+        options.authentication_database = get_or(parameters,
             "authentication_database", std::string("admin"));
-        options.tls = parameters.value("tls", false);
-        options.tls_verify = parameters.value("tls_verify", true);
-        options.tls_ca_file = parameters.value("tls_ca_file", std::string{});
+        options.tls = get_or(parameters, "tls", false);
+        options.tls_verify = get_or(parameters, "tls_verify", true);
+        options.tls_ca_file = get_or(parameters, "tls_ca_file", std::string{});
         options.connect_timeout = std::chrono::milliseconds(
-            parameters.value("connect_timeout_milliseconds", 10000));
+            get_or(parameters, "connect_timeout_milliseconds", 10000));
         options.command_timeout = std::chrono::milliseconds(
-            parameters.value("command_timeout_milliseconds", 30000));
-        options.enable_zlib_compression = parameters.value("enable_zlib_compression", true);
-        options.compression_minimum_bytes = parameters.value(
+            get_or(parameters, "command_timeout_milliseconds", 30000));
+        options.enable_zlib_compression = get_or(parameters, "enable_zlib_compression", true);
+        options.compression_minimum_bytes = get_or(parameters,
             "compression_minimum_bytes", std::size_t{1024});
         options.max_message_bytes = 16U * 1024U * 1024U;
         return options;
@@ -97,7 +101,7 @@ namespace {
         mongodb::topology_connection_pool_options topology;
         topology.seeds.clear();
         if (parameters.contains("seeds"))
-            for (const auto& seed : parameters.at("seeds"))
+            for (const auto& seed : parameters.at("seeds").get_array())
             {
                 auto parsed = mongodb::parse_server_address(seed.get<std::string>());
                 if (!parsed)
@@ -105,8 +109,8 @@ namespace {
                 topology.seeds.push_back(*parsed);
             }
         if (topology.seeds.empty())
-            topology.seeds.push_back({parameters.value("host", std::string("127.0.0.1")),
-                static_cast<std::uint16_t>(parameters.value("port", 27017))});
+            topology.seeds.push_back({get_or(parameters, "host", std::string("127.0.0.1")),
+                static_cast<std::uint16_t>(get_or(parameters, "port", 27017))});
         topology.per_server_pool.connection = options_from_json(parameters);
         topology.per_server_pool.minimum_size = 1;
         topology.per_server_pool.maximum_size = 8;
@@ -189,11 +193,11 @@ namespace {
     {
         mongodb::connection_pool_options result;
         result.connection = std::move(connection);
-        result.minimum_size = parameters.value("pool_minimum_size", std::size_t{0});
-        result.maximum_size = parameters.value("pool_maximum_size", std::size_t{4});
-        result.maximum_connecting = parameters.value("pool_maximum_connecting", std::size_t{2});
+        result.minimum_size = get_or(parameters, "pool_minimum_size", std::size_t{0});
+        result.maximum_size = get_or(parameters, "pool_maximum_size", std::size_t{4});
+        result.maximum_connecting = get_or(parameters, "pool_maximum_connecting", std::size_t{2});
         result.wait_queue_timeout = std::chrono::milliseconds(
-            parameters.value("pool_wait_timeout_milliseconds", 250));
+            get_or(parameters, "pool_wait_timeout_milliseconds", 250));
         return result;
     }
 
@@ -214,9 +218,12 @@ auto execute_mongodb_interoperability_request(io_context& context,
 {
     try
     {
-        const auto request = json::parse(request_json);
-        if (request.value("contract_version", 0) != 1 ||
-            request.value("protocol", std::string{}) != "mongodb")
+        const auto parsed = cnetmod::json::parse_document(request_json);
+        if (!parsed)
+            co_return failure("invalid_request", parsed.error().message());
+        const auto& request = *parsed;
+        if (get_or(request, "contract_version", 0) != 1 ||
+            get_or(request, "protocol", std::string{}) != "mongodb")
             co_return failure("invalid_request", "unsupported request contract");
 
         const auto& parameters = request.at("parameters");
@@ -233,24 +240,25 @@ auto execute_mongodb_interoperability_request(io_context& context,
                     refreshed.error().message);
             if (operation == "topology_status")
             {
-                json servers = json::array();
+                json servers = cnetmod::json::array();
                 for (const auto& server : pool.topology().snapshot())
-                    servers.push_back({{"address", address_text(server.address)},
+                    servers.get_array().push_back(cnetmod::json::object(
+                        {{"address", address_text(server.address)},
                         {"kind", static_cast<int>(server.kind)},
-                        {"writable", server.writable()}, {"readable", server.readable()}});
+                        {"writable", server.writable()}, {"readable", server.readable()}}));
                 co_return success({{"servers", std::move(servers)},
                     {"topology_kind", static_cast<int>(pool.topology().kind())}});
             }
             const auto duration = std::chrono::milliseconds(
-                parameters.value("duration_milliseconds", 30000));
+                get_or(parameters, "duration_milliseconds", 30000));
             const auto interval = std::chrono::milliseconds(
-                parameters.value("interval_milliseconds", 200));
+                get_or(parameters, "interval_milliseconds", 200));
             const auto deadline = std::chrono::steady_clock::now() + duration;
             std::set<std::string> primaries;
             std::size_t successful_writes{};
             std::size_t transient_failures{};
             std::int64_t sequence{};
-            const auto marker_prefix = parameters.value(
+            const auto marker_prefix = get_or(parameters,
                 "marker_prefix", std::string("failover"));
             while (std::chrono::steady_clock::now() < deadline)
             {
@@ -265,7 +273,7 @@ auto execute_mongodb_interoperability_request(io_context& context,
                     {"documents", std::move(documents)}, {"ordered", true},
                     {"writeConcern", mongodb::bson_document{{"w", "majority"}}}};
                 auto written = co_await mongodb::execute_retryable_command(pool,
-                    parameters.value("database", std::string("admin")), std::move(insert),
+                    get_or(parameters, "database", std::string("admin")), std::move(insert),
                     mongodb::operation_kind::write);
                 if (written)
                     ++successful_writes;
@@ -273,9 +281,9 @@ auto execute_mongodb_interoperability_request(io_context& context,
                     ++transient_failures;
                 co_await async_sleep(context, interval);
             }
-            json observed = json::array();
+            json observed = cnetmod::json::array();
             for (const auto& primary : primaries)
-                observed.push_back(primary);
+                observed.get_array().emplace_back(primary);
             pool.close();
             co_return success({{"successful_writes", successful_writes},
                 {"transient_failures", transient_failures},
@@ -303,7 +311,7 @@ auto execute_mongodb_interoperability_request(io_context& context,
             if (!attempt)
                 co_return failure(error_name(attempt.error().code), attempt.error().message);
             const auto delay = std::chrono::milliseconds(
-                parameters.value("cancel_after_milliseconds", 100));
+                get_or(parameters, "cancel_after_milliseconds", 100));
             std::jthread canceller([&cancelled, delay](std::stop_token stop)
                 {
                     std::this_thread::sleep_for(delay);
@@ -351,7 +359,7 @@ auto execute_mongodb_interoperability_request(io_context& context,
             if (!first)
                 co_return failure(error_name(first.error().code), first.error().message);
             const auto delay = std::chrono::milliseconds(
-                parameters.value("cancel_after_milliseconds", 100));
+                get_or(parameters, "cancel_after_milliseconds", 100));
             std::jthread closer([&pool, delay]
                 {
                     std::this_thread::sleep_for(delay);
@@ -380,7 +388,7 @@ auto execute_mongodb_interoperability_request(io_context& context,
                 co_return failure(error_name(first.error().code), first.error().message);
             std::stop_source cancellation;
             const auto delay = std::chrono::milliseconds(
-                parameters.value("cancel_after_milliseconds", 100));
+                get_or(parameters, "cancel_after_milliseconds", 100));
             std::jthread canceller([&cancellation, delay]
                 {
                     std::this_thread::sleep_for(delay);
@@ -576,7 +584,7 @@ auto execute_mongodb_interoperability_request(io_context& context,
                     {"documents", mongodb::bson_array{mongodb::bson_value{mongodb::bson_document{{"_id", committed}, {"marker", committed}}}}}});
             if (!write)
                 co_return failure(error_name(write.error().code), write.error().message);
-            const bool inject_commit_disconnect = parameters.value(
+            const bool inject_commit_disconnect = get_or(parameters,
                 "inject_commit_disconnect", false);
             auto committed_result = co_await commit_session.commit_transaction(pool);
             if (!committed_result)
@@ -622,7 +630,7 @@ auto execute_mongodb_interoperability_request(io_context& context,
                 co_return failure("change_stream_closed", first ? "change stream produced no event/token" : first.error().message);
             auto resume_token = *stream.resume_token();
             const auto observed_first = event_marker(**first);
-            if (parameters.value("inject_get_more_disconnect", false))
+            if (get_or(parameters, "inject_get_more_disconnect", false))
             {
                 writer = co_await pool.acquire();
                 if (!writer)

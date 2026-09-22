@@ -30,12 +30,12 @@ export struct chat_request
     std::string user;
     std::string response_format;
     std::string response_schema_name = "response";
-    json response_schema = json::object();
+    json response_schema = cnetmod::json::object();
     bool response_schema_strict = true;
     std::vector<tool> tools;
     std::string tool_choice;
     json tool_choice_object;
-    json extra_body = json::object();
+    json extra_body = cnetmod::json::object();
 
     /**
      * @brief Adds a provider-specific textual request property.

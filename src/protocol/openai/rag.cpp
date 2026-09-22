@@ -90,9 +90,10 @@ auto model_query_transformer::transform(retrieval_query query,
     request.response_schema_strict = true;
     request.messages = {message::system(instruction +
                             " Return only the requested structured result."),
-        message::user(json{{"query", query.text},
-            {"metadata", query.metadata}}
-                .dump())};
+        message::user(cnetmod::json::write_document(
+                          cnetmod::json::object({{"query", query.text},
+                              {"metadata", query.metadata}}))
+                          .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return std::unexpected(
@@ -100,17 +101,18 @@ auto model_query_transformer::transform(retrieval_query query,
     if (response->choices.empty())
         co_return std::unexpected(
             "model query transformer returned no choices");
-    auto transformed = json::parse(
-        response->choices.front().msg.content, nullptr, false);
-    if (transformed.is_discarded())
+    auto parsed_transformed = cnetmod::json::parse_document(
+        response->choices.front().msg.content);
+    if (!parsed_transformed)
         co_return std::unexpected(
             "model query transformer returned invalid JSON");
+    const auto& transformed = *parsed_transformed;
     auto valid = validate_json_schema(transformed, schema);
     if (!valid)
         co_return std::unexpected(
             "model query transformer response validation failed: " +
             valid.error());
-    const auto& values = transformed["queries"];
+    const auto& values = transformed["queries"].get_array();
     if (values.empty() || values.size() > maximum)
         co_return std::unexpected(std::format(
             "model query transformer returned {} queries; expected 1..{}",
@@ -283,13 +285,14 @@ auto model_query_router::route(const retrieval_query& query,
 {
     if (config.is_cancelled())
         co_return std::unexpected("query routing cancelled");
-    json candidates = json::array();
-    json names = json::array();
+    json candidates = cnetmod::json::array();
+    json names = cnetmod::json::array();
     for (const auto& candidate : retrievers_)
     {
-        candidates.push_back({{"name", candidate.name},
-            {"description", candidate.description}});
-        names.push_back(candidate.name);
+        candidates.get_array().push_back(cnetmod::json::object(
+            {{"name", candidate.name},
+                {"description", candidate.description}}));
+        names.get_array().emplace_back(candidate.name);
     }
     const json schema{{"type", "object"},
         {"properties",
@@ -305,18 +308,21 @@ auto model_query_router::route(const retrieval_query& query,
     request.response_schema_strict = true;
     request.messages = {message::system(
                             "Select every retriever relevant to the query. " "Return only the requested structured result."),
-        message::user(json{{"query", query.text},
-            {"query_metadata", query.metadata}, {"retrievers", candidates}}
-                .dump())};
+        message::user(cnetmod::json::write_document(cnetmod::json::object(
+                          {{"query", query.text},
+                              {"query_metadata", query.metadata},
+                              {"retrievers", candidates}}))
+                          .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return fallback("model query routing failed: " + response.error());
     if (response->choices.empty())
         co_return fallback("model query router returned no choices");
-    auto selection = json::parse(
-        response->choices.front().msg.content, nullptr, false);
-    if (selection.is_discarded())
+    auto parsed_selection = cnetmod::json::parse_document(
+        response->choices.front().msg.content);
+    if (!parsed_selection)
         co_return fallback("model query router returned invalid JSON");
+    const auto& selection = *parsed_selection;
     auto valid = validate_json_schema(selection, schema);
     if (!valid)
         co_return fallback(
@@ -325,7 +331,7 @@ auto model_query_router::route(const retrieval_query& query,
 
     std::vector<retriever*> result;
     std::set<std::string, std::less<>> selected_names;
-    for (const auto& name : selection["routes"])
+    for (const auto& name : selection["routes"].get_array())
     {
         const auto value = name.get<std::string>();
         if (!selected_names.insert(value).second)
@@ -421,12 +427,14 @@ auto chat_scoring_model::score(std::string query,
     if (documents.empty())
         co_return std::vector<float>{};
 
-    json candidates = json::array();
+    json candidates = cnetmod::json::array();
     for (std::size_t index = 0; index < documents.size(); ++index)
     {
         const auto& candidate = documents[index];
-        candidates.push_back({{"index", index}, {"id", candidate.id},
-            {"content", candidate.page_content.substr(0, options_.max_document_characters)}});
+        candidates.get_array().push_back(cnetmod::json::object(
+            {{"index", index}, {"id", candidate.id},
+                {"content", candidate.page_content.substr(
+                                0, options_.max_document_characters)}}));
     }
     const json schema{{"type", "object"},
         {"properties",
@@ -450,18 +458,20 @@ auto chat_scoring_model::score(std::string query,
     request.response_schema_strict = true;
     request.messages = {message::system(
                             "Score every candidate's relevance to the query " "from 0 to 1. Return each index exactly once."),
-        message::user(json{{"query", query}, {"candidates", candidates}}
-                .dump())};
+        message::user(cnetmod::json::write_document(cnetmod::json::object(
+                          {{"query", query}, {"candidates", candidates}}))
+                          .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return std::unexpected("document scoring failed: " +
             response.error());
     if (response->choices.empty())
         co_return std::unexpected("document scoring returned no choices");
-    auto result = json::parse(
-        response->choices.front().msg.content, nullptr, false);
-    if (result.is_discarded())
+    auto parsed_result = cnetmod::json::parse_document(
+        response->choices.front().msg.content);
+    if (!parsed_result)
         co_return std::unexpected("document scoring returned invalid JSON");
+    const auto& result = *parsed_result;
     auto valid = validate_json_schema(result, schema);
     if (!valid)
         co_return std::unexpected(
@@ -469,10 +479,10 @@ auto chat_scoring_model::score(std::string query,
 
     std::vector<float> scores(documents.size());
     std::vector<bool> assigned(documents.size(), false);
-    for (const auto& item : result["scores"])
+    for (const auto& item : result["scores"].get_array())
     {
-        const auto index = item["index"].get<std::size_t>();
-        const auto value = item["score"].get<float>();
+        const auto index = item["index"].as<std::size_t>();
+        const auto value = item["score"].as<float>();
         if (index >= documents.size() || assigned[index] ||
             !std::isfinite(value) || value < 0.0F || value > 1.0F)
             co_return std::unexpected(
@@ -576,12 +586,14 @@ auto citation_context_injector::inject(message input,
             context += " score=" + std::format("{:.6g}", match.score);
         for (const auto& field : options_.metadata_fields)
         {
-            const auto entry = match.value.metadata.find(field);
-            if (entry == match.value.metadata.end() || entry->is_null())
+            const auto* entry = cnetmod::json::find(
+                match.value.metadata, field);
+            if (entry == nullptr || entry->is_null())
                 continue;
             context += ' ' + field + '=';
             context += entry->is_string() ? entry->get<std::string>()
-                                          : entry->dump();
+                                          : cnetmod::json::write_document(*entry)
+                                                .value_or("null");
         }
         context += '\n';
         context += match.value.page_content;

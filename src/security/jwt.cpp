@@ -124,12 +124,12 @@ auto sign_jwt_sync(const jwt_sign_options& options, std::string_view secret)
 {
     try
     {
-        json::document header = json::document::object();
+        json::document header = json::object();
         header["alg"] = "HS256";
         header["typ"] = "JWT";
 
         const auto now = std::chrono::system_clock::now();
-        json::document payload = json::document::object();
+        json::document payload = json::object();
         payload["iss"] = options.issuer;
         payload["sub"] = options.subject;
         payload["iat"] = seconds_since_epoch(now);
@@ -190,32 +190,32 @@ auto verify_jwt_sync(std::string_view token, std::string_view secret)
         const auto payload = json::parse_document(*payload_text);
         if (!header || !header->is_object() || !payload || !payload->is_object())
             return std::unexpected("invalid JWT JSON document");
-        if (header->value("alg", std::string{}) != "HS256" ||
-            header->value("typ", std::string{"JWT"}) != "JWT")
+        if (json::value_or(*header, "alg", std::string{}) != "HS256" ||
+            json::value_or(*header, "typ", std::string{"JWT"}) != "JWT")
             return std::unexpected("unsupported JWT header");
 
-        const auto issued_at = payload->find("iat");
-        const auto expires_at = payload->find("exp");
-        if (issued_at == payload->end() || expires_at == payload->end() ||
-            !issued_at->is_number_integer() || !expires_at->is_number_integer())
+        const auto* issued_at = json::find(*payload, "iat");
+        const auto* expires_at = json::find(*payload, "exp");
+        if (issued_at == nullptr || expires_at == nullptr ||
+            !issued_at->is_number() || !expires_at->is_number())
             return std::unexpected("JWT is missing numeric time claims");
 
         jwt_claims claims{};
-        claims.issuer = payload->value("iss", std::string{});
-        claims.subject = payload->value("sub", std::string{});
+        claims.issuer = json::value_or(*payload, "iss", std::string{});
+        claims.subject = json::value_or(*payload, "sub", std::string{});
         claims.issued_at = std::chrono::system_clock::time_point{
-            std::chrono::seconds{issued_at->get<std::int64_t>()}};
+            std::chrono::seconds{issued_at->as<std::int64_t>()}};
         claims.expires_at = std::chrono::system_clock::time_point{
-            std::chrono::seconds{expires_at->get<std::int64_t>()}};
+            std::chrono::seconds{expires_at->as<std::int64_t>()}};
         if (std::chrono::system_clock::now() > claims.expires_at)
             return std::unexpected("JWT has expired");
 
-        const auto scope = payload->find("scope");
-        if (scope != payload->end())
+        const auto* scope = json::find(*payload, "scope");
+        if (scope != nullptr)
         {
             if (!scope->is_string())
                 return std::unexpected("JWT scope claim must be a string");
-            std::string_view remaining = scope->get_ref<const std::string&>();
+            std::string_view remaining = scope->get<std::string>();
             while (!remaining.empty())
             {
                 const auto separator = remaining.find(' ');
@@ -230,8 +230,7 @@ auto verify_jwt_sync(std::string_view token, std::string_view secret)
 
         constexpr std::array standard_claims{
             "iss", "sub", "aud", "exp", "nbf", "iat", "jti", "scope"};
-        for (const auto& [key, value] :
-            payload->get_ref<const json::document::object_type&>())
+        for (const auto& [key, value] : payload->get_object())
         {
             const auto standard = std::ranges::find(standard_claims, key) !=
                 standard_claims.end();

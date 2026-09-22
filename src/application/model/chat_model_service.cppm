@@ -26,7 +26,7 @@ namespace cnetmod::application {
  */
 export struct chat_model_reconfiguration
 {
-    cnetmod::json::document properties = cnetmod::json::document::object();
+    cnetmod::json::document properties = cnetmod::json::object();
 };
 
 /**

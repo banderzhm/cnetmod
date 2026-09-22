@@ -70,21 +70,22 @@ namespace {
         return result;
     }
 
-    auto make_message(std::string_view body_hex, const json& properties = json::object())
+    auto make_message(std::string_view body_hex,
+        const json& properties = cnetmod::json::object())
         -> cnetmod::amqp091::message
     {
         cnetmod::amqp091::message message;
         message.body = decode_hex(body_hex);
-        message.content_type = properties.value("content_type", "");
-        message.content_encoding = properties.value("content_encoding", "");
-        message.message_id = properties.value("message_id", "");
-        message.correlation_id = properties.value("correlation_id", "");
-        message.reply_to = properties.value("reply_to", "");
-        message.durable = properties.value("durable", false);
-        if (auto found = properties.find("headers");
-            found != properties.end() && found->is_object())
-            for (auto iterator = found->begin(); iterator != found->end(); ++iterator)
-                message.headers.emplace(iterator.key(), iterator.value().get<std::string>());
+        message.content_type = cnetmod::json::value_or(properties, "content_type", "");
+        message.content_encoding = cnetmod::json::value_or(properties, "content_encoding", "");
+        message.message_id = cnetmod::json::value_or(properties, "message_id", "");
+        message.correlation_id = cnetmod::json::value_or(properties, "correlation_id", "");
+        message.reply_to = cnetmod::json::value_or(properties, "reply_to", "");
+        message.durable = cnetmod::json::value_or(properties, "durable", false);
+        if (const auto* found = cnetmod::json::find(properties, "headers");
+            found != nullptr && found->is_object())
+            for (const auto& [key, value] : found->get_object())
+                message.headers.emplace(key, value.get<std::string>());
         return message;
     }
 
@@ -93,21 +94,23 @@ namespace {
     {
         amqp091::connection_options options;
         options.endpoint.host = parameters.at("host").get<std::string>();
-        options.endpoint.port = parameters.at("port").get<std::uint16_t>();
+        options.endpoint.port = parameters.at("port").as<std::uint16_t>();
         if (parameters.contains("connect_timeout_milliseconds"))
             options.endpoint.connect_timeout = std::chrono::milliseconds(
-                parameters.at("connect_timeout_milliseconds").get<std::int64_t>());
+                parameters.at("connect_timeout_milliseconds").as<std::int64_t>());
         options.credentials.username = parameters.at("username").get<std::string>();
         options.credentials.password = parameters.at("password").get<std::string>();
-        options.virtual_host = parameters.value("virtual_host", "/");
-        options.heartbeat = std::chrono::seconds(parameters.value("heartbeat_seconds", 3));
-        options.automatic_recovery = parameters.value("automatic_recovery", false);
-        if (parameters.value("tls", false))
+        options.virtual_host = cnetmod::json::value_or(parameters, "virtual_host", "/");
+        options.heartbeat = std::chrono::seconds(
+            cnetmod::json::value_or(parameters, "heartbeat_seconds", 3));
+        options.automatic_recovery = cnetmod::json::value_or(parameters, "automatic_recovery", false);
+        if (cnetmod::json::value_or(parameters, "tls", false))
         {
             options.endpoint.tls.enabled = true;
             options.endpoint.tls.verify_peer = true;
-            options.endpoint.tls.ca_file = parameters.value("ca_file", "");
-            options.endpoint.tls.server_name = parameters.value("server_name", options.endpoint.host);
+            options.endpoint.tls.ca_file = cnetmod::json::value_or(parameters, "ca_file", "");
+            options.endpoint.tls.server_name = cnetmod::json::value_or(
+                parameters, "server_name", options.endpoint.host);
         }
         return options;
     }
@@ -282,14 +285,14 @@ namespace {
         auto connection = co_await connect_client(context, parameters);
         auto channel = co_await open_channel(*connection);
         std::shared_ptr<confirmation_collector> confirms;
-        if (parameters.value("publisher_confirm", false))
+        if (cnetmod::json::value_or(parameters, "publisher_confirm", false))
             confirms = co_await enable_confirms(*channel);
         const auto tag = unwrap(
             co_await channel->async_publish(
-                {.exchange = parameters.value("exchange", ""),
+                {.exchange = cnetmod::json::value_or(parameters, "exchange", ""),
                     .routing_key = parameters.at("routing_key").get<std::string>()},
                 make_message(parameters.at("body_hex").get<std::string>(),
-                    parameters.value("properties", json::object()))),
+                    cnetmod::json::value_or(parameters, "properties", cnetmod::json::object()))),
             "publish message");
         if (confirms)
             co_await wait_until(context, [&]
@@ -320,7 +323,7 @@ namespace {
             },
             15s, "one delivery");
         auto delivery = deliveries->at(0);
-        const auto settlement = parameters.value("settlement", "ack");
+        const auto settlement = cnetmod::json::value_or(parameters, "settlement", "ack");
         if (settlement == "nack_requeue")
             ensure(co_await channel->async_nack(delivery.delivery_tag, false, true),
                 "nack and requeue delivery");
@@ -371,7 +374,7 @@ namespace {
             {
                 return connection->client->state() != amqp091::connection_state::open;
             },
-            std::chrono::seconds(parameters.value("reconnect_timeout_seconds", 60)),
+            std::chrono::seconds(cnetmod::json::value_or(parameters, "reconnect_timeout_seconds", 60)),
             "injected broker disconnect");
         co_await connection->read_loop_completion.wait();
         connection->read_loop_cancellation.reset();
@@ -405,11 +408,11 @@ namespace {
         }
         catch (const std::exception&)
         {
-            if (parameters.value("expected_authentication", true))
+            if (cnetmod::json::value_or(parameters, "expected_authentication", true))
                 throw;
             co_return json{{"authentication_rejected", true}};
         }
-        if (!parameters.value("expected_authentication", true))
+        if (!cnetmod::json::value_or(parameters, "expected_authentication", true))
             throw std::runtime_error("broker unexpectedly accepted invalid credentials");
         co_return json{{"tls_verified", true}};
     }
@@ -429,8 +432,9 @@ namespace {
                                        deliveries->add(delivery);
                                    }),
             "start boundary consumer");
-        json properties{{"headers", parameters.value("headers", json::object())}};
-        for (const auto& body : parameters.at("bodies_hex"))
+        json properties{{"headers", cnetmod::json::value_or(
+            parameters, "headers", cnetmod::json::object())}};
+        for (const auto& body : parameters.at("bodies_hex").get_array())
             (void)unwrap(co_await channel->async_publish(
                              {.exchange = "", .routing_key = queue},
                              make_message(body.get<std::string>(), properties)),
@@ -441,11 +445,11 @@ namespace {
                 return deliveries->size() == expected;
             },
             20s, "boundary message round trips");
-        json round_trip = json::array();
+        json round_trip = cnetmod::json::array();
         for (std::size_t index = 0; index < expected; ++index)
         {
             auto delivery = deliveries->at(index);
-            round_trip.push_back(encode_hex(delivery.message.body));
+            round_trip.get_array().push_back(encode_hex(delivery.message.body));
             ensure(co_await channel->async_ack(delivery.delivery_tag), "ack boundary message");
         }
         ensure(co_await channel->async_cancel_consumer(consumer), "cancel boundary consumer");
@@ -460,8 +464,8 @@ namespace {
         auto connection = co_await connect_client(context, parameters);
         auto channel = co_await open_channel(*connection);
         const auto queue = parameters.at("queue").get<std::string>();
-        const auto count = parameters.at("published_message_count").get<std::size_t>();
-        const auto prefetch = parameters.at("prefetch_count").get<std::uint16_t>();
+        const auto count = parameters.at("published_message_count").as<std::size_t>();
+        const auto prefetch = parameters.at("prefetch_count").as<std::uint16_t>();
         co_await declare_test_queue(*channel, queue);
         ensure(co_await channel->async_set_qos({.prefetch_count = prefetch}), "set QoS");
         auto deliveries = std::make_shared<delivery_collector>();
@@ -531,11 +535,11 @@ namespace {
         auto connection = co_await connect_client(context, parameters);
         auto channel = co_await open_channel(*connection);
         const auto queue = parameters.at("queue").get<std::string>();
-        const auto count = parameters.at("message_count").get<std::size_t>();
-        const auto payload_size = parameters.at("payload_size").get<std::size_t>();
-        const auto prefetch = parameters.at("prefetch_count").get<std::uint16_t>();
+        const auto count = parameters.at("message_count").as<std::size_t>();
+        const auto payload_size = parameters.at("payload_size").as<std::size_t>();
+        const auto prefetch = parameters.at("prefetch_count").as<std::uint16_t>();
         const auto confirm_window = std::max<std::size_t>(
-            1, parameters.value("publisher_confirm_window", std::size_t{256}));
+            1, cnetmod::json::value_or(parameters, "publisher_confirm_window", std::size_t{256}));
         co_await declare_test_queue(*channel, queue);
         ensure(co_await channel->async_set_qos({.prefetch_count = prefetch}),
             "set sustained-delivery QoS");
@@ -611,7 +615,7 @@ auto execute_rabbitmq_operation(io_context& context, const json& request)
     if (!request.contains("parameters") || !request["parameters"].is_object())
         throw std::invalid_argument("parameters must be a JSON object");
     const auto& parameters = request["parameters"];
-    const auto operation = request.value("operation", "");
+    const auto operation = cnetmod::json::value_or(request, "operation", "");
     if (operation == "publish")
         co_return co_await publish_operation(context, parameters);
     if (operation == "consume_one")

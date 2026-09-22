@@ -1829,7 +1829,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_EQ(restored_thread, event_loop_thread);
     ASSERT_TRUE(parsed.has_value());
     ASSERT_TRUE(parsed->has_value());
-    ASSERT_EQ(parsed->value().at("value").get<int>(), 42);
+    ASSERT_EQ(parsed->value().at("value").as<int>(), 42);
     ASSERT_TRUE(dumped.has_value());
     ASSERT_TRUE(dumped->has_value());
     ASSERT_TRUE(dumped->value().contains("42"));
@@ -2156,7 +2156,7 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_TRUE(host->configuration().observability.otlp.capture_framework_logs);
     ASSERT_EQ(host->configuration().services.at("primary").name, "redis");
 
-    auto secrets = cnetmod::json::document::object();
+    auto secrets = cnetmod::json::object();
     secrets["password"] = "secret";
     secrets["endpoint"] = "postgres://user:password@localhost/database";
     const auto redacted = application::redact_configuration(secrets);
@@ -2262,7 +2262,8 @@ services:
     ASSERT_EQ(host->configuration().name, "builder-name");
     ASSERT_EQ(host->configuration().http.port, std::uint16_t{18083});
     ASSERT_EQ(host->configuration().services.at("primary").instance, "cache");
-    ASSERT_EQ(host->configuration().services.at("primary").properties.at("password"),
+    ASSERT_EQ(host->configuration().services.at("primary").properties.at("password")
+                  .get<std::string>(),
         "yaml-secret");
 }
 

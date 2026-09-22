@@ -23,10 +23,35 @@ namespace {
     using kafka::error_code;
     using kafka::result;
 
+    template <typename T>
+    auto get_or(const json& source, std::string_view key, T fallback) -> T
+    {
+        return cnetmod::json::value_or(source, key, std::move(fallback));
+    }
+
+    auto get_or(const json& source, std::string_view key, const char* fallback)
+        -> std::string
+    {
+        return cnetmod::json::value_or(source, key, fallback);
+    }
+
+    auto encode_json(const json& value) -> std::string
+    {
+        return cnetmod::json::write_document(value).value_or("{}");
+    }
+
+    template <std::ranges::input_range Range>
+    auto json_array(const Range& values) -> json
+    {
+        auto result = cnetmod::json::array();
+        for (const auto& value : values)
+            result.get_array().emplace_back(value);
+        return result;
+    }
+
     auto success(json value) -> std::string
     {
-        return json{{"contract_version", 1}, {"status", "ok"}, {"result", value}}
-            .dump();
+        return encode_json(json{{"contract_version", 1}, {"status", "ok"}, {"result", value}});
     }
 
     auto error_name(error_code code) -> std::string_view
@@ -75,11 +100,10 @@ namespace {
 
     auto failure(std::string_view code, std::string message) -> std::string
     {
-        return json{{"contract_version", 1},
+        return encode_json(json{{"contract_version", 1},
             {"status", "error"},
             {"error_code", code},
-            {"message", std::move(message)}}
-            .dump();
+            {"message", std::move(message)}});
     }
 
     auto failure(const error& value) -> std::string
@@ -164,8 +188,8 @@ namespace {
             parameters.at("bootstrap_servers").get<std::string>());
         if (!parsed)
             return std::unexpected(parsed.error());
-        const auto protocol =
-            parameters.value("security_protocol", std::string("PLAINTEXT"));
+        const auto protocol = get_or(
+            parameters, "security_protocol", std::string("PLAINTEXT"));
         const bool tls = protocol == "SSL" || protocol == "SASL_SSL";
         const bool sasl = protocol == "SASL_PLAINTEXT" || protocol == "SASL_SSL";
         if (protocol != "PLAINTEXT" && protocol != "SSL" &&
@@ -178,22 +202,22 @@ namespace {
         endpoint.port = parsed->second;
         endpoint.tls.enabled = tls;
         endpoint.tls.verify_peer = true;
-        endpoint.tls.ca_file = parameters.value("ca_file", std::string{});
-        endpoint.tls.server_name = parameters.value("server_name", endpoint.host);
+        endpoint.tls.ca_file = get_or(parameters, "ca_file", std::string{});
+        endpoint.tls.server_name = get_or(parameters, "server_name", endpoint.host);
 
         kafka::client_options options;
         options.bootstrap_servers.push_back(std::move(endpoint));
-        options.client_id = parameters.value("client_id", "cnetmod-interop-driver");
+        options.client_id = get_or(parameters, "client_id", "cnetmod-interop-driver");
         options.request_timeout = std::chrono::milliseconds(
-            parameters.value("request_timeout_milliseconds", 30000));
-        options.retries = parameters.value("retries", std::size_t{10});
+            get_or(parameters, "request_timeout_milliseconds", 30000));
+        options.retries = get_or(parameters, "retries", std::size_t{10});
         options.retry_backoff = std::chrono::milliseconds(100);
         options.retry_backoff_max = std::chrono::milliseconds(2000);
         options.metadata_refresh_interval = std::chrono::milliseconds(1000);
         if (sasl)
         {
-            const auto mechanism =
-                parameters.value("sasl_mechanism", std::string("PLAIN"));
+            const auto mechanism = get_or(
+                parameters, "sasl_mechanism", std::string("PLAIN"));
             if (mechanism == "PLAIN")
             {
                 options.sasl = kafka::sasl_mechanism::plain;
@@ -211,8 +235,8 @@ namespace {
                 return std::unexpected(kafka::make_error(
                     error_code::configuration, "unsupported sasl_mechanism"));
             }
-            options.credentials.username = parameters.value("username", std::string{});
-            options.credentials.password = parameters.value("password", std::string{});
+            options.credentials.username = get_or(parameters, "username", std::string{});
+            options.credentials.password = get_or(parameters, "password", std::string{});
         }
         return options;
     }
@@ -263,22 +287,22 @@ namespace {
         -> result<kafka::producer_options>
     {
         auto compression = compression_from_name(
-            parameters.value("compression", std::string("none")));
+            get_or(parameters, "compression", std::string("none")));
         if (!compression)
             return std::unexpected(compression.error());
         auto acknowledgements = acknowledgement_from_name(
-            parameters.value("acknowledgements", std::string("all")));
+            get_or(parameters, "acknowledgements", std::string("all")));
         if (!acknowledgements)
             return std::unexpected(acknowledgements.error());
         kafka::producer_options options;
         options.acks = *acknowledgements;
         options.compression_type = *compression;
-        options.idempotent = parameters.value("idempotent_producer", true);
-        options.max_in_flight = parameters.value("max_in_flight", std::size_t{5});
-        options.batch_bytes = parameters.value("batch_bytes", std::size_t{1024 * 1024});
-        options.linger = std::chrono::milliseconds(parameters.value("linger_milliseconds", 5));
+        options.idempotent = get_or(parameters, "idempotent_producer", true);
+        options.max_in_flight = get_or(parameters, "max_in_flight", std::size_t{5});
+        options.batch_bytes = get_or(parameters, "batch_bytes", std::size_t{1024 * 1024});
+        options.linger = std::chrono::milliseconds(get_or(parameters, "linger_milliseconds", 5));
         options.delivery_timeout = std::chrono::milliseconds(
-            parameters.value("delivery_timeout_milliseconds", 120000));
+            get_or(parameters, "delivery_timeout_milliseconds", 120000));
         if (parameters.contains("transactional_id"))
             options.transactional_id = parameters.at("transactional_id").get<std::string>();
         return options;
@@ -302,10 +326,11 @@ namespace {
                 return std::unexpected(payload.error());
             value.value = std::move(*payload);
         }
-        value.timestamp = description.value("timestamp", std::int64_t{-1});
-        for (const auto& item : description.value("headers", json::array()))
+        value.timestamp = get_or(description, "timestamp", std::int64_t{-1});
+        for (const auto& item : get_or(
+                 description, "headers", cnetmod::json::array()).get_array())
         {
-            auto header_value = bytes_from_hex(item.value("value_hex", std::string{}));
+            auto header_value = bytes_from_hex(get_or(item, "value_hex", std::string{}));
             if (!header_value)
                 return std::unexpected(header_value.error());
             value.headers.push_back(
@@ -313,8 +338,8 @@ namespace {
         }
         if (description.contains("partition"))
             value.destination = kafka::topic_partition{
-                description.value("topic", std::string{}),
-                description.at("partition").get<std::int32_t>()};
+                get_or(description, "topic", std::string{}),
+                description.at("partition").as<std::int32_t>()};
         return value;
     }
 
@@ -337,7 +362,7 @@ namespace {
         if (!made)
             co_return failure(made.error());
         std::vector<std::int32_t> partitions;
-        for (const auto& description : parameters.at("records"))
+        for (const auto& description : parameters.at("records").get_array())
         {
             auto value = record_from_json(description);
             if (!value)
@@ -354,7 +379,7 @@ namespace {
             co_return failure(flushed.error());
         co_return success({{"api_versions_negotiated", negotiated},
             {"record_batch_crc_valid", true},
-            {"partitions", std::move(partitions)}});
+            {"partitions", json_array(partitions)}});
     }
 
     auto consume_and_commit(io_context& context, const json& parameters)
@@ -371,9 +396,9 @@ namespace {
         kafka::consumer_options consumer_options;
         consumer_options.group_id = parameters.at("group_id").get<std::string>();
         consumer_options.max_poll_records =
-            parameters.at("maximum_records").get<std::size_t>();
-        consumer_options.enable_auto_commit = parameters.value("automatic_commit", false);
-        const auto reset = parameters.value("offset_reset", std::string("earliest"));
+            parameters.at("maximum_records").as<std::size_t>();
+        consumer_options.enable_auto_commit = get_or(parameters, "automatic_commit", false);
+        const auto reset = get_or(parameters, "offset_reset", std::string("earliest"));
         consumer_options.auto_offset_reset =
             reset == "latest"  ? kafka::offset_reset_policy::latest
             : reset == "error" ? kafka::offset_reset_policy::error
@@ -384,7 +409,7 @@ namespace {
         auto subscribed = co_await made->subscribe({topic});
         if (!subscribed)
             co_return failure(subscribed.error());
-        const auto maximum = parameters.at("maximum_records").get<std::size_t>();
+        const auto maximum = parameters.at("maximum_records").as<std::size_t>();
         std::vector<std::string> values;
         std::size_t empty_polls = 0;
         while (values.size() < maximum && empty_polls < 3)
@@ -420,7 +445,7 @@ namespace {
         auto closed = co_await made->close();
         if (!closed)
             co_return failure(closed.error());
-        co_return success({{"record_count", values.size()}, {"values", values}});
+        co_return success({{"record_count", values.size()}, {"values", json_array(values)}});
     }
 
     struct rebalance_member_observation
@@ -482,7 +507,7 @@ namespace {
             co_return failure(options.error());
         const auto topic = parameters.at("topic").get<std::string>();
         const auto group = parameters.at("group_id").get<std::string>();
-        const auto consumer_count = parameters.at("consumer_count").get<std::size_t>();
+        const auto consumer_count = parameters.at("consumer_count").as<std::size_t>();
         if (consumer_count == 0)
             co_return failure("configuration", "consumer_count must be positive");
         kafka::client_facade client(context, std::move(*options));
@@ -495,8 +520,8 @@ namespace {
         auto producer = client.make_producer();
         if (!producer)
             co_return failure(producer.error());
-        json generations = json::array();
-        const auto cycles = parameters.at("join_and_leave_cycles").get<std::size_t>();
+        json generations = cnetmod::json::array();
+        const auto cycles = parameters.at("join_and_leave_cycles").as<std::size_t>();
         for (std::size_t cycle = 0; cycle < cycles; ++cycle)
         {
             for (auto partition : partitions)
@@ -542,7 +567,7 @@ namespace {
                 spawn(context, observe_rebalance_member(consumers[index], observations[index], observation_wait_group));
             }
             co_await observation_wait_group.wait();
-            json members = json::array();
+            json members = cnetmod::json::array();
             std::set<std::int32_t> assigned_partitions;
             std::size_t assignment_count = 0;
             for (std::size_t index = 0; index < consumer_count; ++index)
@@ -556,8 +581,9 @@ namespace {
                     assigned_partitions.insert(assignment.partition);
                     ++assignment_count;
                 }
-                members.push_back({{"member", std::format("member-{}", index)},
-                    {"partitions", std::move(member_partitions)}});
+                members.get_array().push_back(cnetmod::json::object(
+                    {{"member", std::format("member-{}", index)},
+                        {"partitions", json_array(member_partitions)}}));
             }
             if (assignment_count != assigned_partitions.size())
                 co_return failure("assignment_overlap",
@@ -575,7 +601,8 @@ namespace {
             for (const auto& observation : observations)
                 if (observation.failure)
                     co_return failure(*observation.failure);
-            generations.push_back({{"cycle", cycle}, {"members", std::move(members)}});
+            generations.get_array().push_back(cnetmod::json::object(
+                {{"cycle", cycle}, {"members", std::move(members)}}));
         }
         co_return success({{"generations", std::move(generations)}});
     }
@@ -607,7 +634,7 @@ namespace {
         if (!begun)
             co_return failure(begun.error());
         const auto identity = producer->producer_identity();
-        for (const auto& text : parameters.at("committed_values"))
+        for (const auto& text : parameters.at("committed_values").get_array())
         {
             kafka::record value;
             value.value = text_bytes(text.get<std::string>());
@@ -622,7 +649,7 @@ namespace {
         begun = co_await producer->begin_transaction();
         if (!begun)
             co_return failure(begun.error());
-        for (const auto& text : parameters.at("aborted_values"))
+        for (const auto& text : parameters.at("aborted_values").get_array())
         {
             kafka::record value;
             value.value = text_bytes(text.get<std::string>());
@@ -711,7 +738,7 @@ namespace {
                 {"producer_epoch", identity ? identity->second : -1},
                 {"producer_fenced", fenced},
                 {"duplicate_count", visible.size() - unique.size()},
-                {"read_committed_values", visible}});
+                {"read_committed_values", json_array(visible)}});
     }
 
     auto broker_restart_probe(io_context& context, const json& parameters)
@@ -728,14 +755,14 @@ namespace {
         kafka::producer_options producer_options;
         producer_options.linger = std::chrono::milliseconds(100);
         producer_options.delivery_timeout = std::chrono::milliseconds(
-            parameters.value("request_timeout_milliseconds", 30000));
+            get_or(parameters, "request_timeout_milliseconds", 30000));
         auto producer = client.make_producer(producer_options);
         if (!producer)
             co_return failure(producer.error());
         bool retried = false;
         std::size_t records_lost = 0;
         const auto retry_budget = std::chrono::milliseconds(
-            parameters.value("request_timeout_milliseconds", 30000));
+            get_or(parameters, "request_timeout_milliseconds", 30000));
         for (std::size_t index = 0; index < 40; ++index)
         {
             const auto deadline = std::chrono::steady_clock::now() + retry_budget;
@@ -809,13 +836,13 @@ namespace {
             co_return failure(ready.error());
         kafka::producer_options producer_options;
         producer_options.batch_bytes =
-            parameters.at("oversized_value_size").get<std::size_t>() + 1024;
+            parameters.at("oversized_value_size").as<std::size_t>() + 1024;
         auto producer = client.make_producer(producer_options);
         if (!producer)
             co_return failure(producer.error());
         kafka::record oversized;
         oversized.value = kafka::bytes(
-            parameters.at("oversized_value_size").get<std::size_t>(), std::byte{0x5a});
+            parameters.at("oversized_value_size").as<std::size_t>(), std::byte{0x5a});
         auto rejected = co_await producer->send(topic, std::move(oversized));
         std::string category = rejected ? "none" : std::string(error_name(rejected.error().code));
         auto follow_up = bytes_from_hex(parameters.at("follow_up_value_hex").get<std::string>());
@@ -869,8 +896,8 @@ namespace {
         if (!options)
             co_return failure(options.error());
         const auto topic = parameters.at("topic").get<std::string>();
-        const auto count = parameters.at("record_count").get<std::size_t>();
-        const auto payload_size = parameters.at("payload_size").get<std::size_t>();
+        const auto count = parameters.at("record_count").as<std::size_t>();
+        const auto payload_size = parameters.at("payload_size").as<std::size_t>();
         kafka::client_facade client(context, std::move(*options));
         auto ready = co_await connect_and_refresh(client, {topic});
         if (!ready)
@@ -996,9 +1023,9 @@ namespace {
 
     auto dispatch(io_context& context, const json& request) -> task<std::string>
     {
-        if (request.value("contract_version", 0) != 1)
+        if (get_or(request, "contract_version", 0) != 1)
             co_return failure("unsupported_contract_version", "expected contract_version 1");
-        if (request.value("protocol", std::string{}) != "kafka")
+        if (get_or(request, "protocol", std::string{}) != "kafka")
             co_return failure("protocol_mismatch", "expected kafka protocol request");
         const auto operation = request.at("operation").get<std::string>();
         const auto& parameters = request.at("parameters");
@@ -1034,14 +1061,12 @@ auto execute_kafka_interoperability_request(io_context& context,
     std::string request_json)
     -> task<std::string>
 {
+    const auto request = cnetmod::json::parse_document(request_json);
+    if (!request)
+        co_return failure("invalid_json", request.error().message());
     try
     {
-        auto request = json::parse(request_json);
-        co_return co_await dispatch(context, request);
-    }
-    catch (const json::exception& exception)
-    {
-        co_return failure("invalid_json", exception.what());
+        co_return co_await dispatch(context, *request);
     }
     catch (const std::exception& exception)
     {

@@ -1,6 +1,7 @@
 module cnetmod.application.kafka;
 #ifdef CNETMOD_HAS_PROTOCOL_KAFKA
 import std;
+import cnetmod.json;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 
@@ -172,12 +173,17 @@ auto auto_configure_kafka(const configured_service& configuration,
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         kafka::client_options options;
         kafka::client_endpoint endpoint;
-        endpoint.host = configuration.properties.value("host", endpoint.host);
-        endpoint.port = configuration.properties.value("port", endpoint.port);
+        endpoint.host = cnetmod::json::value_or(
+            configuration.properties, "host", endpoint.host);
+        endpoint.port = cnetmod::json::value_or(
+            configuration.properties, "port", endpoint.port);
         options.bootstrap_servers.push_back(std::move(endpoint));
-        options.client_id = configuration.properties.value("client_id", options.client_id);
-        options.credentials.username = configuration.properties.value("username", std::string{});
-        options.credentials.password = configuration.properties.value("password", std::string{});
+        options.client_id = cnetmod::json::value_or(
+            configuration.properties, "client_id", options.client_id);
+        options.credentials.username = cnetmod::json::value_or(
+            configuration.properties, "username", std::string{});
+        options.credentials.password = cnetmod::json::value_or(
+            configuration.properties, "password", std::string{});
         auto service = std::make_shared<kafka_service>(context.io, std::move(options),
             configuration.instance, configuration.requirement, configuration.recovery, context.telemetry.spans());
         return context.services.add_managed_named<kafka_service>(

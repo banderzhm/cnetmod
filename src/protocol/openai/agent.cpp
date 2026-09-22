@@ -190,30 +190,36 @@ auto agent_executor::execute(std::vector<message> input,
                             {"additionalProperties", false}}},
                     .handler = [strategy = tool_search_, searchable, &discovered_tools, operation_config](const json& arguments) -> task<std::expected<json, std::string>>
                     {
-                        const auto limit = arguments.value(
-                            "max_results", std::size_t{5});
+                        const auto limit = cnetmod::json::value_or(
+                            arguments, "max_results", std::size_t{5});
                         auto matches = co_await strategy->search(
-                            {.query = arguments.value("query", ""),
+                            {.query = cnetmod::json::value_or(
+                                 arguments, "query", std::string{}),
                                 .candidates = searchable,
                                 .max_results = limit},
                             operation_config);
                         if (!matches)
                             co_return std::unexpected(matches.error());
-                        auto found = json::array();
+                        auto found = cnetmod::json::array();
                         for (const auto& match : *matches)
                         {
-                            const auto known = std::ranges::any_of(searchable,
-                                [&](const auto& candidate)
+                            bool known = false;
+                            for (const auto& candidate : searchable)
+                            {
+                                if (candidate.function_name == match.name)
                                 {
-                                    return candidate.function_name == match.name;
-                                });
+                                    known = true;
+                                    break;
+                                }
+                            }
                             if (!known)
                                 continue;
                             discovered_tools.insert(match.name);
-                            found.push_back({{"name", match.name},
-                                {"score", match.score}});
+                            found.get_array().push_back(cnetmod::json::object(
+                                {{"name", match.name}, {"score", match.score}}));
                         }
-                        co_return json{{"tools", std::move(found)}};
+                        co_return cnetmod::json::object(
+                            {{"tools", std::move(found)}});
                     },
                     .visibility = tool_visibility::always_visible};
                 auto added = visible.add(std::move(search_command));
@@ -326,14 +332,19 @@ auto agent_executor::execute(std::vector<message> input,
                             ? observation.error().message
                             : resolution.message);
                 tool_content = resolution.message.empty()
-                    ? json{{"error", observation.error().message}}.dump()
+                    ? cnetmod::json::write_document(cnetmod::json::object(
+                          {{"error", observation.error().message}}))
+                          .value_or("{}")
                     : std::move(resolution.message);
             }
             else
             {
                 if (!options_.continue_on_tool_error)
                     co_return std::unexpected(observation.error().message);
-                tool_content = json{{"error", observation.error().message}}.dump();
+                tool_content = cnetmod::json::write_document(
+                    cnetmod::json::object(
+                        {{"error", observation.error().message}}))
+                                   .value_or("{}");
             }
             agent_step step{.call = call,
                 .observation = tool_content,

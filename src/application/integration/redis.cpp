@@ -2,6 +2,7 @@ module cnetmod.application.redis;
 
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
 import std;
+import cnetmod.json;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
@@ -229,7 +230,8 @@ auto auto_configure_redis(const configured_service& configuration,
             std::make_error_code(std::errc::invalid_argument));
     if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    const auto mode = configuration.properties.value("mode", std::string{"standalone"});
+    const auto mode = cnetmod::json::value_or(
+        configuration.properties, "mode", std::string{"standalone"});
     if (mode != "standalone" && mode != "cluster")
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
     if (mode == "cluster")
@@ -240,34 +242,34 @@ auto auto_configure_redis(const configured_service& configuration,
             if (value.contains("host") || value.contains("port") ||
                 value.contains("minimum_size") ||
                 value.contains("maximum_size") ||
-                value.value("database", 0U) != 0U ||
+                cnetmod::json::value_or(value, "database", 0U) != 0U ||
                 !value.contains("seeds") || !value["seeds"].is_array() ||
                 value["seeds"].empty())
                 return std::unexpected(
                     std::make_error_code(std::errc::invalid_argument));
             std::vector<redis::connect_options> seeds;
             seeds.reserve(value["seeds"].size());
-            for (const auto& entry : value["seeds"])
+            for (const auto& entry : value["seeds"].get_array())
             {
                 if (!entry.is_object() ||
                     !properties_are_known(entry, {"host", "port"}) ||
                     !entry.contains("host") || !entry["host"].is_string() ||
-                    entry["host"].get_ref<const std::string&>().empty() ||
+                    entry["host"].get<std::string>().empty() ||
                     !integer_property_in_range(entry, "port", 1, 65535))
                     return std::unexpected(
                         std::make_error_code(std::errc::invalid_argument));
                 redis::connect_options options;
                 options.host = entry["host"].get<std::string>();
-                options.port = entry.value("port", 6379);
-                options.username = value.value("username", std::string{});
-                options.password = value.value("password", std::string{});
+                options.port = cnetmod::json::value_or(entry, "port", 6379);
+                options.username = cnetmod::json::value_or(value, "username", std::string{});
+                options.password = cnetmod::json::value_or(value, "password", std::string{});
                 options.db = 0;
-                options.tls = value.value("tls", false);
-                options.tls_verify = value.value("tls_verify", true);
-                options.tls_ca_file = value.value("tls_ca_file", std::string{});
-                options.tls_cert_file = value.value("tls_cert_file", std::string{});
-                options.tls_key_file = value.value("tls_key_file", std::string{});
-                options.tls_sni = value.value("tls_sni", std::string{});
+                options.tls = cnetmod::json::value_or(value, "tls", false);
+                options.tls_verify = cnetmod::json::value_or(value, "tls_verify", true);
+                options.tls_ca_file = cnetmod::json::value_or(value, "tls_ca_file", std::string{});
+                options.tls_cert_file = cnetmod::json::value_or(value, "tls_cert_file", std::string{});
+                options.tls_key_file = cnetmod::json::value_or(value, "tls_key_file", std::string{});
+                options.tls_sni = cnetmod::json::value_or(value, "tls_sni", std::string{});
                 seeds.push_back(std::move(options));
             }
             auto service = std::make_shared<redis_cluster_service>(context.io,
@@ -291,20 +293,20 @@ auto auto_configure_redis(const configured_service& configuration,
     try
     {
         const auto& value = configuration.properties;
-        options.host = value.value("host", options.host);
-        options.port = value.value("port", options.port);
-        options.username = value.value("username", options.username);
-        options.password = value.value("password", options.password);
-        options.db = value.value("database", options.db);
-        options.initial_size = value.value("minimum_size", options.initial_size);
-        options.max_size = value.value("maximum_size", options.max_size);
-        options.tls = value.value("tls", options.tls);
-        options.tls_verify = value.value("tls_verify", options.tls_verify);
-        options.tls_ca_file = value.value("tls_ca_file", options.tls_ca_file);
-        options.tls_cert_file = value.value(
+        options.host = cnetmod::json::value_or(value, "host", options.host);
+        options.port = cnetmod::json::value_or(value, "port", options.port);
+        options.username = cnetmod::json::value_or(value, "username", options.username);
+        options.password = cnetmod::json::value_or(value, "password", options.password);
+        options.db = cnetmod::json::value_or(value, "database", options.db);
+        options.initial_size = cnetmod::json::value_or(value, "minimum_size", options.initial_size);
+        options.max_size = cnetmod::json::value_or(value, "maximum_size", options.max_size);
+        options.tls = cnetmod::json::value_or(value, "tls", options.tls);
+        options.tls_verify = cnetmod::json::value_or(value, "tls_verify", options.tls_verify);
+        options.tls_ca_file = cnetmod::json::value_or(value, "tls_ca_file", options.tls_ca_file);
+        options.tls_cert_file = cnetmod::json::value_or(value,
             "tls_cert_file", options.tls_cert_file);
-        options.tls_key_file = value.value("tls_key_file", options.tls_key_file);
-        options.tls_sni = value.value("tls_sni", options.tls_sni);
+        options.tls_key_file = cnetmod::json::value_or(value, "tls_key_file", options.tls_key_file);
+        options.tls_sni = cnetmod::json::value_or(value, "tls_sni", options.tls_sni);
     }
     catch (...)
     {

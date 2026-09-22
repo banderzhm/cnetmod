@@ -13,18 +13,22 @@ namespace {
 
     using json = cnetmod::json::document;
 
+    template <typename T>
+    auto get_or(const json& source, std::string_view key, T fallback) -> T
+    {
+        return cnetmod::json::value_or(source, key, std::move(fallback));
+    }
+
     auto success(json result) -> std::string
     {
-        return json{{"contract_version", 1}, {"status", "ok"},
-            {"result", std::move(result)}}
-            .dump();
+        return cnetmod::json::write_document(json{{"contract_version", 1}, {"status", "ok"},
+            {"result", std::move(result)}}).value_or("{}");
     }
 
     auto failure(std::string_view code, std::string message) -> std::string
     {
-        return json{{"contract_version", 1}, {"status", "error"},
-            {"error_code", code}, {"message", std::move(message)}}
-            .dump();
+        return cnetmod::json::write_document(json{{"contract_version", 1}, {"status", "error"},
+            {"error_code", code}, {"message", std::move(message)}}).value_or("{}");
     }
 
     auto tls_mode_from_name(std::string_view name) -> postgresql::tls_mode
@@ -44,17 +48,17 @@ namespace {
         -> postgresql::connection_options
     {
         postgresql::connection_options options;
-        options.host = parameters.value("host", std::string("localhost"));
-        options.port = static_cast<std::uint16_t>(parameters.value("port", 5432));
-        options.username = parameters.value("username", std::string("postgres"));
-        options.password = parameters.value("password", std::string{});
-        options.database = parameters.value("database", std::string("postgres"));
+        options.host = get_or(parameters, "host", std::string("localhost"));
+        options.port = static_cast<std::uint16_t>(get_or(parameters, "port", 5432));
+        options.username = get_or(parameters, "username", std::string("postgres"));
+        options.password = get_or(parameters, "password", std::string{});
+        options.database = get_or(parameters, "database", std::string("postgres"));
         options.application_name = "cnetmod-postgresql-interoperability";
         options.tls = tls_mode_from_name(
-            parameters.value("tls_mode", std::string("prefer")));
-        options.tls_ca_file = parameters.value("tls_ca_file", std::string{});
+            get_or(parameters, "tls_mode", std::string("prefer")));
+        options.tls_ca_file = get_or(parameters, "tls_ca_file", std::string{});
         options.connect_timeout = std::chrono::milliseconds(
-            parameters.value("connect_timeout_milliseconds", 10000));
+            get_or(parameters, "connect_timeout_milliseconds", 10000));
         options.maximum_message_size = 16U * 1024U * 1024U;
         options.maximum_row_count = 1000;
         return options;
@@ -74,9 +78,12 @@ auto execute_postgresql_interoperability_request(io_context& context,
 {
     try
     {
-        const auto request = json::parse(request_json);
-        if (request.value("contract_version", 0) != 1 ||
-            request.value("protocol", std::string{}) != "postgresql")
+        const auto parsed = cnetmod::json::parse_document(request_json);
+        if (!parsed)
+            co_return failure("invalid_request", parsed.error().message());
+        const auto& request = *parsed;
+        if (get_or(request, "contract_version", 0) != 1 ||
+            get_or(request, "protocol", std::string{}) != "postgresql")
             co_return failure("invalid_request", "unsupported request contract");
 
         const auto& parameters = request.at("parameters");

@@ -17,6 +17,7 @@ import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.observability.otlp;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.protocol.openai;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -87,19 +88,22 @@ namespace {
             return;
         for (const auto key : {"input_tokens", "output_tokens", "total_tokens"})
         {
-            const auto found = attributes.find(key);
-            if (found == attributes.end() || !found->is_number_integer())
+            const auto* found = cnetmod::json::find(attributes, key);
+            if (found == nullptr ||
+                (!found->is_uint64() && !found->is_int64()))
                 continue;
-            if (!found->is_number_unsigned() && found->get<std::int64_t>() < 0)
+            if (found->is_int64() && found->get<std::int64_t>() < 0)
                 continue;
-            destination.emplace_back(std::string{"gen_ai."} + key, found->dump());
+            destination.emplace_back(std::string{"gen_ai."} + key,
+                cnetmod::json::write_document(*found).value_or("0"));
         }
-        if (const auto model = attributes.find("response_model");
-            model != attributes.end() && model->is_string())
+        if (const auto* model = cnetmod::json::find(
+                attributes, "response_model");
+            model != nullptr && model->is_string())
             destination.emplace_back("gen_ai.response_model",
-                bounded(model->get_ref<const std::string&>(), limit));
-        if (const auto stream = attributes.find("stream");
-            stream != attributes.end() && stream->is_boolean())
+                bounded(model->get<std::string>(), limit));
+        if (const auto* stream = cnetmod::json::find(attributes, "stream");
+            stream != nullptr && stream->is_boolean())
             destination.emplace_back("gen_ai.stream", stream->get<bool>() ? "true" : "false");
     }
 
@@ -109,8 +113,9 @@ namespace {
         std::string identifier;
         if (!event.operation_id.empty())
             identifier = event.operation_id;
-        else if (const auto found = event.attributes.find("operation_id");
-            found != event.attributes.end() && found->is_string())
+        else if (const auto* found = cnetmod::json::find(
+                     event.attributes, "operation_id");
+            found != nullptr && found->is_string())
             identifier = found->get<std::string>();
         return std::format("{}\x1f{}\x1f{}", event.run_id,
             operation, identifier);
@@ -120,8 +125,9 @@ namespace {
     {
         if (!event.operation_id.empty())
             return event.operation_id;
-        if (const auto found = event.attributes.find("operation_id");
-            found != event.attributes.end() && found->is_string())
+        if (const auto* found = cnetmod::json::find(
+                event.attributes, "operation_id");
+            found != nullptr && found->is_string())
             return found->get<std::string>();
         return {};
     }
@@ -140,9 +146,10 @@ namespace {
     auto number_attribute(const run_event& event, std::string_view name)
         -> double
     {
-        const auto found = event.attributes.find(name);
-        return found != event.attributes.end() && found->is_number()
-            ? found->get<double>()
+        const auto* found = cnetmod::json::find(event.attributes, name);
+        return found != nullptr &&
+                (found->is_double() || found->is_uint64() || found->is_int64())
+            ? found->as<double>()
             : 0.0;
     }
 

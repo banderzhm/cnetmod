@@ -11,25 +11,7 @@ auto parse_offloaded(application_runtime& runtime, std::string text)
             [text = std::move(text)]() mutable
                 -> std::expected<cnetmod::json::document, std::error_code>
             {
-                try
-                {
-                    return cnetmod::json::document::parse(text);
-                }
-                catch (const cnetmod::json::document::exception&)
-                {
-                    return std::unexpected(
-                        std::make_error_code(std::errc::invalid_argument));
-                }
-                catch (const std::bad_alloc&)
-                {
-                    return std::unexpected(
-                        std::make_error_code(std::errc::not_enough_memory));
-                }
-                catch (...)
-                {
-                    return std::unexpected(
-                        std::make_error_code(std::errc::io_error));
-                }
+                return cnetmod::json::parse_document(text);
             });
     }
     catch (const std::system_error& error)
@@ -60,20 +42,7 @@ auto dump_offloaded(application_runtime& runtime, cnetmod::json::document value,
             [value = std::move(value), indentation]() mutable
                 -> std::expected<std::string, std::error_code>
             {
-                try
-                {
-                    return value.dump(indentation);
-                }
-                catch (const std::bad_alloc&)
-                {
-                    return std::unexpected(
-                        std::make_error_code(std::errc::not_enough_memory));
-                }
-                catch (...)
-                {
-                    return std::unexpected(
-                        std::make_error_code(std::errc::invalid_argument));
-                }
+                return cnetmod::json::write_document(value, indentation >= 0);
             });
     }
     catch (const std::system_error& error)

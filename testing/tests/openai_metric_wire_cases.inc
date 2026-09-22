@@ -56,15 +56,15 @@ TEST(application_openai_metrics_reach_otlp_and_local_registry_once)
     ASSERT_EQ(payloads.size(), std::size_t{1});
     if (payloads.empty())
         return;
-    const auto parsed = cnetmod::json::document::parse(payloads.front());
+    const auto parsed = cnetmod::json::parse_document(payloads.front()).value();
     double tokens = 0;
     unsigned durations = 0;
-    for (const auto& metric : parsed["resourceMetrics"][0]["scopeMetrics"][0]["metrics"])
+    for (const auto& metric : parsed["resourceMetrics"][0]["scopeMetrics"][0]["metrics"].get_array())
     {
-        if (metric["name"] == "gen_ai_client_tokens")
-            for (const auto& point : metric["sum"]["dataPoints"])
-                tokens += point["asDouble"].get<double>();
-        if (metric["name"] == "gen_ai_client_operation_duration")
+        if (metric["name"].get<std::string>() == "gen_ai_client_tokens")
+            for (const auto& point : metric["sum"]["dataPoints"].get_array())
+                tokens += point["asDouble"].as<double>();
+        if (metric["name"].get<std::string>() == "gen_ai_client_operation_duration")
         {
             ++durations;
             ASSERT_EQ(metric["histogram"]["dataPoints"][0]["count"].get<std::string>(), "1");

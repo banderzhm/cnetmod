@@ -38,14 +38,14 @@ export struct response_request
     bool parallel_tool_calls = true;
     bool store = false;
     std::string response_schema_name = "response";
-    json response_schema = json::object();
+    json response_schema = cnetmod::json::object();
     bool response_schema_strict = true;
     std::map<std::string, std::string> metadata;
     std::string service_tier;
     std::string prompt_cache_key;
     std::string safety_identifier;
-    json reasoning = json::object();
-    json extra_body = json::object();
+    json reasoning = cnetmod::json::object();
+    json extra_body = cnetmod::json::object();
 
     [[nodiscard]] auto to_json() const -> std::string;
 };
@@ -58,7 +58,7 @@ export struct response_result
     std::string output_text;
     std::vector<tool_call> tool_calls;
     usage token_usage;
-    json raw = json::object();
+    json raw = cnetmod::json::object();
 
     [[nodiscard]] static auto from_json(std::string_view text) -> response_result;
 };

@@ -99,7 +99,7 @@ export struct configured_service
     bool enabled = false;
     service_requirement requirement = service_requirement::required;
     recovery_policy recovery;
-    cnetmod::json::document properties = cnetmod::json::document::object();
+    cnetmod::json::document properties = cnetmod::json::object();
 
     /**
      * Reads a nested string property addressed by a dot-separated path.

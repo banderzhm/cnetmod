@@ -20,6 +20,27 @@ namespace {
     using json = cnetmod::json::document;
     namespace protocol = cnetmod::amqp10;
 
+    template <typename T>
+    auto get_or(const json& source, std::string_view key, T fallback) -> T
+    {
+        return cnetmod::json::value_or(source, key, std::move(fallback));
+    }
+
+    auto get_or(const json& source, std::string_view key, const char* fallback)
+        -> std::string
+    {
+        return cnetmod::json::value_or(source, key, fallback);
+    }
+
+    auto bytes_to_json(std::span<const std::byte> bytes) -> json
+    {
+        auto result = cnetmod::json::array();
+        result.get_array().reserve(bytes.size());
+        for (const auto value : bytes)
+            result.get_array().emplace_back(std::to_integer<std::uint8_t>(value));
+        return result;
+    }
+
     [[nodiscard]] auto unique_name(std::string_view prefix) -> std::string
     {
         return std::format("{}-{}", prefix,
@@ -53,11 +74,11 @@ namespace {
             return {};
         if (input.is_boolean())
             return protocol::value{input.get<bool>()};
-        if (input.is_number_unsigned())
+        if (input.is_uint64())
             return protocol::value{input.get<std::uint64_t>()};
-        if (input.is_number_integer())
+        if (input.is_int64())
             return protocol::value{input.get<std::int64_t>()};
-        if (input.is_number_float())
+        if (input.is_double())
             return protocol::value{input.get<double>()};
         if (input.is_string())
             return protocol::value{input.get<std::string>()};
@@ -65,7 +86,7 @@ namespace {
         {
             protocol::list entries;
             entries.reserve(input.size());
-            for (const auto& entry : input)
+            for (const auto& entry : input.get_array())
                 entries.emplace_back(json_to_amqp_value(entry));
             return protocol::value::make_list(std::move(entries));
         }
@@ -73,9 +94,8 @@ namespace {
         {
             protocol::map entries;
             entries.reserve(input.size());
-            for (auto iterator = input.begin(); iterator != input.end(); ++iterator)
-                entries.emplace_back(protocol::value{iterator.key()},
-                    json_to_amqp_value(iterator.value()));
+            for (const auto& [key, value] : input.get_object())
+                entries.emplace_back(protocol::value{key}, json_to_amqp_value(value));
             return protocol::value::make_map(std::move(entries));
         }
         throw std::invalid_argument("unsupported JSON value");
@@ -102,16 +122,16 @@ namespace {
                     std::same_as<stored_value,
                         std::shared_ptr<protocol::array>>)
                 {
-                    auto result = json::array();
+                    auto result = cnetmod::json::array();
                     if (stored)
                         for (const auto& entry : *stored)
-                            result.push_back(amqp_value_to_json(entry));
+                            result.get_array().push_back(amqp_value_to_json(entry));
                     return result;
                 }
                 else if constexpr (std::same_as<stored_value,
                                        std::shared_ptr<protocol::map>>)
                 {
-                    auto result = json::object();
+                    auto result = cnetmod::json::object();
                     if (stored)
                         for (const auto& [key, entry] : *stored)
                         {
@@ -125,10 +145,7 @@ namespace {
                 }
                 else if constexpr (std::same_as<stored_value, protocol::binary>)
                 {
-                    return json(std::vector<std::uint8_t>(
-                        reinterpret_cast<const std::uint8_t*>(stored.data()),
-                        reinterpret_cast<const std::uint8_t*>(stored.data()) +
-                            stored.size()));
+                    return bytes_to_json(stored);
                 }
                 else
                 {
@@ -144,16 +161,14 @@ namespace {
         if (const auto* value = std::get_if<protocol::value>(&body))
             return amqp_value_to_json(*value);
         if (const auto* binary = std::get_if<protocol::binary>(&body))
-            return json(std::vector<std::uint8_t>(
-                reinterpret_cast<const std::uint8_t*>(binary->data()),
-                reinterpret_cast<const std::uint8_t*>(binary->data()) + binary->size()));
-        auto result = json::array();
+            return bytes_to_json(*binary);
+        auto result = cnetmod::json::array();
         for (const auto& sequence : std::get<std::vector<protocol::list>>(body))
         {
-            auto entries = json::array();
+            auto entries = cnetmod::json::array();
             for (const auto& entry : sequence)
-                entries.push_back(amqp_value_to_json(entry));
-            result.push_back(std::move(entries));
+                entries.get_array().push_back(amqp_value_to_json(entry));
+            result.get_array().push_back(std::move(entries));
         }
         return result;
     }
@@ -167,10 +182,8 @@ namespace {
         message.properties = protocol::properties_section{};
         message.properties->content_type = "application/json";
         if (application_properties && application_properties->is_object())
-            for (auto iterator = application_properties->begin();
-                iterator != application_properties->end(); ++iterator)
-                message.application.emplace(iterator.key(),
-                    json_to_amqp_value(iterator.value()));
+            for (const auto& [key, value] : application_properties->get_object())
+                message.application.emplace(key, json_to_amqp_value(value));
         return message;
     }
 
@@ -231,10 +244,10 @@ namespace {
     {
         protocol::client_options options;
         options.endpoint.host = parameters.at("host").get<std::string>();
-        options.endpoint.port = parameters.at("port").get<std::uint16_t>();
-        options.endpoint.tls.enabled = parameters.value("tls", false);
-        options.endpoint.tls.verify_peer = parameters.value("verify_hostname", true);
-        options.endpoint.tls.ca_file = parameters.value("ca_file", std::string{});
+        options.endpoint.port = parameters.at("port").as<std::uint16_t>();
+        options.endpoint.tls.enabled = get_or(parameters, "tls", false);
+        options.endpoint.tls.verify_peer = get_or(parameters, "verify_hostname", true);
+        options.endpoint.tls.ca_file = get_or(parameters, "ca_file", std::string{});
         options.endpoint.tls.server_name = options.endpoint.host;
         options.credentials.mechanism =
             cnetmod::amqp10::authentication_mechanism::plain;
@@ -243,7 +256,7 @@ namespace {
         options.container_id = unique_name("cnetmod-amqp10-interop");
         options.hostname = options.endpoint.host;
         options.idle_timeout = std::chrono::milliseconds(
-            parameters.value("idle_timeout_milliseconds", 60000));
+            get_or(parameters, "idle_timeout_milliseconds", 60000));
         return options;
     }
 
@@ -297,7 +310,7 @@ namespace {
         runtime.stage = "sender link attach";
         auto sender = co_await make_sender(session, parameters.at("address").get<std::string>(),
             runtime.cancellation);
-        const bool settled = parameters.value("settlement", "unsettled") == "settled";
+        const bool settled = get_or(parameters, "settlement", "unsettled") == "settled";
         runtime.stage = "message transfer";
         auto sent = require_value(co_await sender.send(
             make_message(parameters.at("body")), {.settled = settled},
@@ -312,12 +325,12 @@ namespace {
         auto session = co_await begin_session(runtime);
         auto receiver = co_await make_receiver(
             session, parameters.at("address").get<std::string>(),
-            parameters.value("link_credit", 1U), runtime.cancellation);
+            get_or(parameters, "link_credit", 1U), runtime.cancellation);
         auto received = require_value(co_await receiver.receive(runtime.cancellation));
         if (!received.settled)
             require_success(co_await receiver.settle(
                 received.delivery_id,
-                parse_outcome(parameters.value("outcome", "accepted")),
+                parse_outcome(get_or(parameters, "outcome", "accepted")),
                 runtime.cancellation));
         const auto content_type = received.payload.properties
             ? received.payload.properties->content_type
@@ -334,23 +347,23 @@ namespace {
         auto session = co_await begin_session(runtime);
         auto receiver = co_await make_receiver(
             session, parameters.at("address").get<std::string>(),
-            parameters.at("initial_credit").get<std::uint32_t>(), runtime.cancellation);
+            parameters.at("initial_credit").as<std::uint32_t>(), runtime.cancellation);
         auto first = require_value(co_await receiver.receive(runtime.cancellation));
         if (!first.settled)
             require_success(co_await receiver.settle(
                 first.delivery_id, {.kind = protocol::outcome_kind::accepted},
                 runtime.cancellation));
-        json bodies = json::array({message_body_to_json(first.payload.body)});
+        json bodies = cnetmod::json::array({message_body_to_json(first.payload.body)});
         const auto before = bodies.size();
         require_success(co_await receiver.add_credit(
-            parameters.at("replenish_credit").get<std::uint32_t>(), false,
+            parameters.at("replenish_credit").as<std::uint32_t>(), false,
             runtime.cancellation));
         auto second = require_value(co_await receiver.receive(runtime.cancellation));
         if (!second.settled)
             require_success(co_await receiver.settle(
                 second.delivery_id, {.kind = protocol::outcome_kind::accepted},
                 runtime.cancellation));
-        bodies.push_back(message_body_to_json(second.payload.body));
+        bodies.get_array().push_back(message_body_to_json(second.payload.body));
         co_return json{{"before_replenish_count", before},
             {"after_replenish_count", bodies.size()},
             {"bodies", std::move(bodies)}};
@@ -367,9 +380,9 @@ namespace {
             co_await make_sender(sender_session, address, runtime.cancellation);
         auto receiver =
             co_await make_receiver(receiver_session, address, 1, runtime.cancellation);
-        json observed = json::array();
+        json observed = cnetmod::json::array();
         std::uint64_t sequence = 0;
-        for (const auto& requested : parameters.at("outcomes"))
+        for (const auto& requested : parameters.at("outcomes").get_array())
         {
             require_value(co_await sender.send(make_message(sequence++), {.settled = false},
                 runtime.cancellation));
@@ -378,7 +391,7 @@ namespace {
             auto outcome = parse_outcome(name);
             require_success(co_await receiver.settle(delivery.delivery_id, outcome,
                 runtime.cancellation));
-            observed.push_back(outcome_name(outcome.kind));
+            observed.get_array().emplace_back(outcome_name(outcome.kind));
             require_success(co_await receiver.add_credit(1, false, runtime.cancellation));
         }
         co_return json{{"observed_outcomes", std::move(observed)}};
@@ -427,8 +440,9 @@ namespace {
     {
         co_await connect_client(runtime, parameters);
         bool requested_plain = false;
-        for (const auto& mechanism : parameters.at("sasl_mechanisms"))
-            requested_plain = requested_plain || mechanism == "PLAIN";
+        for (const auto& mechanism : parameters.at("sasl_mechanisms").get_array())
+            requested_plain = requested_plain ||
+                mechanism.get<std::string>() == "PLAIN";
         if (!requested_plain)
             throw std::invalid_argument("the AMQP 1.0 driver supports PLAIN in this probe");
         co_return json{{"tls_verified", runtime.connection.state() == protocol::connection_state::opened},
@@ -449,18 +463,18 @@ namespace {
             static_cast<std::uint32_t>(parameters.at("bodies").size()),
             runtime.cancellation);
         bool fragmented = false;
-        for (const auto& body : parameters.at("bodies"))
+        for (const auto& body : parameters.at("bodies").get_array())
         {
             const auto message = make_message(body, &parameters.at("application_properties"));
             fragmented = fragmented || protocol::encode_message(message).size() > 261888;
             require_value(co_await sender.send(message, {.settled = false},
                 runtime.cancellation));
         }
-        json round_trip = json::array();
+        json round_trip = cnetmod::json::array();
         for (std::size_t index = 0; index < parameters.at("bodies").size(); ++index)
         {
             auto received = require_value(co_await receiver.receive(runtime.cancellation));
-            round_trip.push_back(message_body_to_json(received.payload.body));
+            round_trip.get_array().push_back(message_body_to_json(received.payload.body));
             if (!received.settled)
                 require_success(co_await receiver.settle(
                     received.delivery_id, {.kind = protocol::outcome_kind::accepted},
@@ -485,7 +499,7 @@ namespace {
         auto commit_id = require_value(co_await controller.declare(runtime.cancellation));
         runtime.stage = "committed transactional transfers";
         std::vector<std::uint32_t> committed_delivery_ids;
-        for (const auto& body : parameters.at("committed_bodies"))
+        for (const auto& body : parameters.at("committed_bodies").get_array())
             committed_delivery_ids.push_back(require_value(
                 co_await sender.begin_send(make_message(body),
                 {.settled = false,
@@ -502,7 +516,7 @@ namespace {
         auto rollback_id = require_value(co_await controller.declare(runtime.cancellation));
         runtime.stage = "rolled-back transactional transfers";
         std::vector<std::uint32_t> rolled_back_delivery_ids;
-        for (const auto& body : parameters.at("rolled_back_bodies"))
+        for (const auto& body : parameters.at("rolled_back_bodies").get_array())
             rolled_back_delivery_ids.push_back(require_value(
                 co_await sender.begin_send(make_message(body),
                 {.settled = false,
@@ -521,12 +535,12 @@ namespace {
             receiver_session, parameters.at("address").get<std::string>(),
             static_cast<std::uint32_t>(parameters.at("committed_bodies").size()),
             runtime.cancellation);
-        json visible = json::array();
+        json visible = cnetmod::json::array();
         for (std::size_t index = 0; index < parameters.at("committed_bodies").size();
             ++index)
         {
             auto delivery = require_value(co_await receiver.receive(runtime.cancellation));
-            visible.push_back(message_body_to_json(delivery.payload.body));
+            visible.get_array().push_back(message_body_to_json(delivery.payload.body));
             if (!delivery.settled)
                 require_success(co_await receiver.settle(
                     delivery.delivery_id, {.kind = protocol::outcome_kind::accepted},
@@ -546,8 +560,8 @@ namespace {
         auto session = co_await begin_session(runtime);
         const auto address = parameters.at("address").get<std::string>();
         auto sender = co_await make_sender(session, address, runtime.cancellation);
-        const auto count = parameters.at("delivery_count").get<std::uint32_t>();
-        const auto window = parameters.at("unsettled_window").get<std::size_t>();
+        const auto count = parameters.at("delivery_count").as<std::uint32_t>();
+        const auto window = parameters.at("unsettled_window").as<std::size_t>();
         if (window == 0)
             throw std::invalid_argument("unsettled_window must be greater than zero");
         std::uint32_t accepted = 0;
@@ -587,7 +601,7 @@ namespace {
                 "broker credit limited the requested unsettled window: requested {}, observed {}",
                 window, maximum_pending));
 
-        const auto credit_batch = parameters.at("receiver_credit").get<std::uint32_t>();
+        const auto credit_batch = parameters.at("receiver_credit").as<std::uint32_t>();
         auto receiver_session = co_await begin_session(runtime);
         auto receiver = co_await make_receiver(receiver_session, address,
             std::min(count, credit_batch),
@@ -641,9 +655,9 @@ namespace {
 
     auto execute_request(const json& request) -> json
     {
-        if (request.at("contract_version") != 1)
+        if (request.at("contract_version").as<int>() != 1)
             throw std::invalid_argument("unsupported contract_version");
-        if (request.at("protocol") != "amqp10")
+        if (request.at("protocol").get<std::string>() != "amqp10")
             throw std::invalid_argument("request protocol must be amqp10");
 
         connected_client runtime(cnetmod::make_io_context());
@@ -666,7 +680,7 @@ namespace {
         auto watchdog = [&]() -> cnetmod::task<void>
         {
             const auto timeout = std::chrono::milliseconds{
-                request.at("parameters").value(
+                get_or(request.at("parameters"),
                     "operation_timeout_milliseconds", 30000)};
             auto waited = co_await cnetmod::async_timer_wait(
                 *runtime.context, timeout, runtime.cancellation);
@@ -702,9 +716,11 @@ auto run_json_lines(std::istream& input, std::ostream& output,
         json response{{"contract_version", 1}};
         try
         {
-            const auto request = json::parse(line);
+            const auto parsed = cnetmod::json::parse_document(line);
+            if (!parsed)
+                throw std::runtime_error("invalid JSON request");
             response["status"] = "ok";
-            response["result"] = execute_request(request);
+            response["result"] = execute_request(*parsed);
         }
         catch (const std::exception& error)
         {
@@ -713,7 +729,7 @@ auto run_json_lines(std::istream& input, std::ostream& output,
             response["message"] = error.what();
             diagnostics << "AMQP 1.0 interop request failed: " << error.what() << '\n';
         }
-        output << response.dump() << '\n';
+        output << cnetmod::json::write_document(response).value_or("{}") << '\n';
         output.flush();
     }
     return 0;

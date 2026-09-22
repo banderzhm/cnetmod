@@ -2,6 +2,7 @@ module cnetmod.application.mongodb;
 
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
 import std;
+import cnetmod.json;
 import cnetmod.application.task_supervisor;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
@@ -286,16 +287,16 @@ auto auto_configure_mongodb(const configured_service& configuration,
     try
     {
         const auto& value = configuration.properties;
-        options.connection.host = value.value("host", options.connection.host);
-        options.connection.port = value.value("port", options.connection.port);
-        options.connection.username = value.value("username",
+        options.connection.host = cnetmod::json::value_or(value, "host", options.connection.host);
+        options.connection.port = cnetmod::json::value_or(value, "port", options.connection.port);
+        options.connection.username = cnetmod::json::value_or(value, "username",
             options.connection.username);
-        options.connection.password = value.value("password",
+        options.connection.password = cnetmod::json::value_or(value, "password",
             options.connection.password);
-        options.connection.database = value.value("database",
+        options.connection.database = cnetmod::json::value_or(value, "database",
             options.connection.database);
-        options.minimum_size = value.value("minimum_size", options.minimum_size);
-        options.maximum_size = value.value("maximum_size", options.maximum_size);
+        options.minimum_size = cnetmod::json::value_or(value, "minimum_size", options.minimum_size);
+        options.maximum_size = cnetmod::json::value_or(value, "maximum_size", options.maximum_size);
     }
     catch (...)
     {

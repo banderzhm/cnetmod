@@ -19,11 +19,6 @@ struct sample_document
     auto operator==(const sample_document&) const -> bool = default;
 };
 
-struct custom_document
-{
-    std::string value;
-};
-
 struct nested_document
 {
     std::string label;
@@ -36,28 +31,6 @@ struct aggregate_document
     std::map<std::string, std::uint64_t> counters;
 };
 
-struct custom_codec
-{
-    template <typename T>
-    static auto decode(std::string_view input)
-        -> std::expected<T, std::error_code>
-    {
-        if constexpr (std::same_as<T, custom_document>)
-            return custom_document{std::string{input}};
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    }
-
-    template <typename T>
-    static auto encode(const T& value)
-        -> std::expected<std::string, std::error_code>
-    {
-        if constexpr (std::same_as<T, custom_document>)
-            return "custom:" + value.value;
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    }
-};
 } // namespace cnetmod_test
 
 CNETMOD_JSON(cnetmod_test::sample_document,
@@ -72,8 +45,6 @@ CNETMOD_JSON(cnetmod_test::aggregate_document,
     CNETMOD_JSON_FIELD(children),
     CNETMOD_JSON_FIELD(counters))
 
-using cnetmod_test::custom_codec;
-using cnetmod_test::custom_document;
 using cnetmod_test::sample_document;
 using cnetmod_test::aggregate_document;
 
@@ -96,14 +67,28 @@ TEST(framework_document_is_the_default_json_codec)
 TEST(framework_document_null_lookup_and_numeric_equality_are_stable)
 {
     const cnetmod::json::document empty;
-    ASSERT_TRUE(empty.find("missing") == empty.end());
+    ASSERT_TRUE(cnetmod::json::find(empty, "missing") == nullptr);
 
-    const auto values = cnetmod::json::document::array({1, 2});
-    ASSERT_TRUE(values.find("missing") == values.end());
-    ASSERT_TRUE(cnetmod::json::document(std::uint64_t{2}) ==
-        cnetmod::json::document(std::int64_t{2}));
-    ASSERT_FALSE(cnetmod::json::document(std::uint64_t{2}) ==
-        cnetmod::json::document(std::int64_t{-2}));
+    auto object = cnetmod::json::object();
+    ASSERT_TRUE(object.is_object());
+    object["ready"] = true;
+    ASSERT_TRUE(object.at("ready").get<bool>());
+    const auto initialized_object = cnetmod::json::object(
+        {{"enabled", true}});
+    ASSERT_TRUE(initialized_object.is_object());
+    ASSERT_TRUE(initialized_object.at("enabled").is_boolean());
+    ASSERT_TRUE(cnetmod::json::value_or(
+        initialized_object, "enabled", false));
+
+    auto values = cnetmod::json::array({1, 2});
+    ASSERT_TRUE(values.is_array());
+    values.get_array().emplace_back(3);
+    ASSERT_EQ(values.size(), std::size_t{3});
+    ASSERT_TRUE(cnetmod::json::find(values, "missing") == nullptr);
+    ASSERT_TRUE(cnetmod::json::document(std::uint64_t{2}).as<std::int64_t>() ==
+        cnetmod::json::document(std::int64_t{2}).as<std::int64_t>());
+    ASSERT_FALSE(cnetmod::json::document(std::uint64_t{2}).as<std::int64_t>() ==
+        cnetmod::json::document(std::int64_t{-2}).as<std::int64_t>());
 }
 
 TEST(framework_document_uses_native_parser_boundaries)
@@ -116,18 +101,6 @@ TEST(framework_document_uses_native_parser_boundaries)
     ASSERT_FALSE(cnetmod::json::parse_document("{}{}").has_value());
     ASSERT_FALSE(cnetmod::json::parse_document(
         std::string(257, '[') + "0" + std::string(257, ']')).has_value());
-}
-
-TEST(json_codec_spi_accepts_an_application_codec)
-{
-    auto encoded = cnetmod::json::write<custom_document, custom_codec>(
-        custom_document{"payload"});
-    ASSERT_TRUE(encoded.has_value());
-    ASSERT_EQ(*encoded, std::string{"custom:payload"});
-
-    auto decoded = cnetmod::json::parse<custom_document, custom_codec>("wire");
-    ASSERT_TRUE(decoded.has_value());
-    ASSERT_EQ(decoded->value, std::string{"wire"});
 }
 
 TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
@@ -155,8 +128,7 @@ TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
     ASSERT_EQ(unknown.error(),
         cnetmod::json::make_error_code(cnetmod::json::errc::unknown_field));
 
-    const auto lenient = cnetmod::json::parse<sample_document,
-        cnetmod::json::lenient_codec>(
+    const auto lenient = cnetmod::json::parse_lenient<sample_document>(
         R"({"name":"orders","count":7,"extra":true})");
     ASSERT_TRUE(lenient.has_value());
 

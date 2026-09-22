@@ -9,6 +9,7 @@ module cnetmod.protocol.openai;
 import std;
 import :foundation;
 import :filters;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -43,10 +44,10 @@ namespace {
                                               : end - begin);
             if (part.empty() || !current->is_object())
                 return nullptr;
-            const auto found = current->find(std::string(part));
-            if (found == current->end())
+            const auto* found = cnetmod::json::find(*current, part);
+            if (found == nullptr)
                 return nullptr;
-            current = &*found;
+            current = found;
             if (end == std::string_view::npos)
                 return current;
             begin = end + 1;
@@ -57,10 +58,14 @@ namespace {
     auto ordered_compare(const json& actual, const json& expected)
         -> std::optional<std::strong_ordering>
     {
-        if (actual.is_number() && expected.is_number())
+        const auto numeric = [](const json& value)
         {
-            const auto left = actual.get<double>();
-            const auto right = expected.get<double>();
+            return value.is_double() || value.is_int64() || value.is_uint64();
+        };
+        if (numeric(actual) && numeric(expected))
+        {
+            const auto left = actual.as<double>();
+            const auto right = expected.as<double>();
             if (left < right)
                 return std::strong_ordering::less;
             if (left > right)
@@ -68,8 +73,7 @@ namespace {
             return std::strong_ordering::equal;
         }
         if (actual.is_string() && expected.is_string())
-            return actual.get_ref<const std::string&>() <=>
-                expected.get_ref<const std::string&>();
+            return actual.get<std::string>() <=> expected.get<std::string>();
         return std::nullopt;
     }
 
@@ -79,16 +83,20 @@ namespace {
         if (!actual)
             return comparison == metadata_operator::not_equal;
         if (comparison == metadata_operator::equal)
-            return *actual == expected;
+            return cnetmod::json::equivalent(*actual, expected);
         if (comparison == metadata_operator::not_equal)
-            return *actual != expected;
+            return !cnetmod::json::equivalent(*actual, expected);
         if (comparison == metadata_operator::contains)
         {
             if (actual->is_string() && expected.is_string())
-                return actual->get_ref<const std::string&>().contains(
-                    expected.get_ref<const std::string&>());
+                return actual->get<std::string>().contains(
+                    expected.get<std::string>());
             if (actual->is_array())
-                return std::ranges::find(*actual, expected) != actual->end();
+                return std::ranges::any_of(actual->get_array(),
+                    [&](const auto& item)
+                    {
+                        return cnetmod::json::equivalent(item, expected);
+                    });
             return false;
         }
         const auto ordering = ordered_compare(*actual, expected);

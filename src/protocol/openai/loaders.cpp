@@ -470,7 +470,7 @@ auto markdown_document_parser::parse(document source,
         auto cursor = first_line_end + 1;
         std::size_t closing_start = std::string::npos;
         std::size_t closing_end = std::string::npos;
-        json fields = json::object();
+        json fields = cnetmod::json::object();
         while (cursor < source.page_content.size() && cursor <= 64 * 1024)
         {
             const auto line_end = source.page_content.find('\n', cursor);

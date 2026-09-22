@@ -28,24 +28,26 @@ namespace {
 
         ~document_cleanup() noexcept
         {
-            while (document_.is_structured() && !document_.empty())
+            while ((document_.is_object() || document_.is_array()) &&
+                !document_.empty())
             {
                 auto* parent = &document_;
                 auto* node = &document_;
-                while (node->is_structured() && !node->empty())
+                while ((node->is_object() || node->is_array()) &&
+                    !node->empty())
                 {
                     parent = node;
                     node = node->is_object()
-                        ? &node->get_ref<cnetmod::json::document::object_t&>().begin()->second
-                        : &node->get_ref<cnetmod::json::document::array_t&>().back();
+                        ? &node->get_object().begin()->second
+                        : &node->get_array().back();
                 }
                 if (parent->is_object())
                 {
-                    auto& object = parent->get_ref<cnetmod::json::document::object_t&>();
+                    auto& object = parent->get_object();
                     object.erase(object.begin());
                 }
                 else
-                    parent->get_ref<cnetmod::json::document::array_t&>().pop_back();
+                    parent->get_array().pop_back();
             }
         }
 
@@ -80,7 +82,12 @@ namespace {
                 std::make_error_code(std::errc::no_such_file_or_directory));
         try
         {
-            auto result = cnetmod::json::document::parse(input, nullptr, true, true);
+            const std::string text{std::istreambuf_iterator<char>{input},
+                std::istreambuf_iterator<char>{}};
+            auto parsed = cnetmod::json::parse_document(text);
+            if (!parsed)
+                return std::unexpected(parsed.error());
+            auto result = std::move(*parsed);
             const document_cleanup cleanup{result};
             if (!result.is_object())
                 return std::unexpected(
@@ -104,9 +111,10 @@ namespace {
     {
         if (!object.is_object())
             return false;
-        for (auto item = object.begin(); item != object.end(); ++item)
+        for (const auto& [key, unused] : object.get_object())
         {
-            if (std::ranges::find(allowed, item.key()) == allowed.end())
+            (void)unused;
+            if (std::ranges::find(allowed, key) == allowed.end())
                 return false;
         }
         return true;
@@ -116,16 +124,21 @@ namespace {
     void assign(const cnetmod::json::document& object, std::string_view key,
         Value& destination)
     {
-        if (const auto found = object.find(key); found != object.end())
-            destination = found->template get<Value>();
+        if (const auto* found = cnetmod::json::find(object, key))
+        {
+            auto decoded = cnetmod::json::from_document<Value>(*found);
+            if (!decoded)
+                throw std::invalid_argument("invalid configuration value");
+            destination = std::move(*decoded);
+        }
     }
 
     void assign_duration(const cnetmod::json::document& object, std::string_view key,
         std::chrono::milliseconds& destination)
     {
-        if (const auto found = object.find(key); found != object.end())
+        if (const auto* found = cnetmod::json::find(object, key))
             destination = std::chrono::milliseconds{
-                found->get<std::int64_t>()};
+                found->as<std::int64_t>()};
     }
 
     auto parse_log_level(std::string_view value)
@@ -212,15 +225,23 @@ namespace {
                 return std::unexpected(expanded.error());
             value = std::move(*expanded);
         }
-        else if (value.is_structured())
+        else if (value.is_object())
         {
-            for (auto& child : value)
+            for (auto& [key, child] : value.get_object())
             {
+                (void)key;
                 auto expanded = expand_environment(child);
                 if (!expanded)
                     return expanded;
             }
         }
+        else if (value.is_array())
+            for (auto& child : value.get_array())
+            {
+                auto expanded = expand_environment(child);
+                if (!expanded)
+                    return expanded;
+            }
         return {};
     }
 
@@ -231,7 +252,7 @@ namespace {
             return false;
         try
         {
-            if (const auto item = root.find("application"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "application"))
             {
                 if (!keys_are_known(*item,
                         {"name", "install_signal_handlers", "cpu_threads"}))
@@ -241,15 +262,14 @@ namespace {
                     result.install_signal_handlers);
                 assign(*item, "cpu_threads", result.execution.cpu_threads);
             }
-            if (const auto item = root.find("logging"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "logging"))
             {
                 if (!keys_are_known(*item,
                         {"manage_lifecycle", "level", "format"}))
                     return false;
                 assign(*item, "manage_lifecycle",
                     result.logging.manage_lifecycle);
-                if (const auto level = item->find("level");
-                    level != item->end())
+                if (const auto* level = cnetmod::json::find(*item, "level"))
                 {
                     const auto parsed = parse_log_level(
                         level->get<std::string>());
@@ -257,8 +277,7 @@ namespace {
                         return false;
                     result.logging.level = *parsed;
                 }
-                if (const auto format = item->find("format");
-                    format != item->end())
+                if (const auto* format = cnetmod::json::find(*item, "format"))
                 {
                     const auto name = format->get<std::string>();
                     if (name != "text" && name != "json")
@@ -268,18 +287,18 @@ namespace {
                         : logger::output_format::text;
                 }
             }
-            if (const auto item = root.find("http"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "http"))
             {
                 if (!keys_are_known(*item, {"address", "port", "max_connections", "request_timeout_ms", "sse", "request_ids", "access_logging", "recover_exceptions"}))
                     return false;
                 assign(*item, "address", result.http.address);
                 assign(*item, "port", result.http.port);
                 assign(*item, "max_connections", result.http.max_connections);
-                if (const auto timeout = item->find("request_timeout_ms");
-                    timeout != item->end())
+                if (const auto* timeout = cnetmod::json::find(
+                        *item, "request_timeout_ms"))
                     result.http.request_timeout = std::chrono::milliseconds{
-                        timeout->get<std::int64_t>()};
-                if (const auto sse = item->find("sse"); sse != item->end())
+                        timeout->as<std::int64_t>()};
+                if (const auto* sse = cnetmod::json::find(*item, "sse"))
                 {
                     if (!keys_are_known(*sse,
                             {"max_duration_ms", "write_timeout_ms"}))
@@ -294,7 +313,7 @@ namespace {
                 assign(*item, "recover_exceptions",
                     result.http.recover_exceptions);
             }
-            if (const auto item = root.find("management"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "management"))
             {
                 if (!keys_are_known(*item, {"enabled", "address", "port", "same_port", "live_path", "ready_path", "health_path", "metrics_path"}))
                     return false;
@@ -307,8 +326,7 @@ namespace {
                 assign(*item, "health_path", result.management.health_path);
                 assign(*item, "metrics_path", result.management.metrics_path);
             }
-            if (const auto item = root.find("observability");
-                item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "observability"))
             {
                 if (!keys_are_known(*item, {"tracing", "metrics", "logs", "sampling_ratio", "otlp"}))
                     return false;
@@ -317,7 +335,7 @@ namespace {
                 assign(*item, "logs", result.observability.logs);
                 assign(*item, "sampling_ratio",
                     result.observability.sampling_ratio);
-                if (const auto otlp = item->find("otlp"); otlp != item->end())
+                if (const auto* otlp = cnetmod::json::find(*item, "otlp"))
                 {
                     if (!keys_are_known(*otlp, {"traces_endpoint", "metrics_endpoint", "logs_endpoint", "service_name", "service_version", "service_namespace", "service_instance_id", "deployment_environment", "resource_attributes", "headers", "queue_capacity", "max_batch_size", "request_timeout_ms", "max_attempts", "initial_retry_delay_ms", "max_retry_delay_ms", "max_metric_instruments", "max_metric_attribute_sets", "capture_framework_logs"}))
                         return false;
@@ -360,13 +378,13 @@ namespace {
                         result.observability.otlp.max_retry_delay);
                 }
             }
-            if (const auto item = root.find("crash_dump"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "crash_dump"))
             {
                 if (!keys_are_known(*item, {"directory"}))
                     return false;
                 assign(*item, "directory", result.crash_dump.directory);
             }
-            if (const auto item = root.find("lifecycle"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "lifecycle"))
             {
                 if (!keys_are_known(*item, {"service_start_timeout_ms", "total_start_timeout_ms", "service_stop_timeout_ms", "total_stop_timeout_ms", "http_drain_timeout_ms", "telemetry_flush_timeout_ms"}))
                     return false;
@@ -383,7 +401,7 @@ namespace {
                 assign_duration(*item, "telemetry_flush_timeout_ms",
                     result.lifecycle.telemetry_flush_timeout);
             }
-            if (const auto item = root.find("health"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "health"))
             {
                 if (!keys_are_known(*item, {"interval_ms", "timeout_ms", "failures_before_down", "successes_before_up"}))
                     return false;
@@ -394,79 +412,75 @@ namespace {
                 assign(*item, "successes_before_up",
                     result.health.successes_before_up);
             }
-            if (const auto item = root.find("orm"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "orm"))
             {
                 if (!keys_are_known(*item, {"sharding"}))
                     return false;
-                if (const auto sharding = item->find("sharding");
-                    sharding != item->end())
+                if (const auto* sharding = cnetmod::json::find(
+                        *item, "sharding"))
                 {
                     if (!keys_are_known(*sharding, {"enabled", "topologies"}))
                         return false;
                     assign(*sharding, "enabled", result.orm.sharding.enabled);
-                    if (const auto topologies = sharding->find("topologies");
-                        topologies != sharding->end())
+                    if (const auto* topologies = cnetmod::json::find(
+                            *sharding, "topologies"))
                     {
                         if (!topologies->is_object())
                             return false;
-                        for (auto topology = topologies->begin();
-                            topology != topologies->end(); ++topology)
+                        for (const auto& [topology_name, topology_value] :
+                            topologies->get_object())
                         {
-                            if (!topology.value().is_object() ||
-                                !keys_are_known(topology.value(),
+                            if (!topology_value.is_object() ||
+                                !keys_are_known(topology_value,
                                     {"logical_table", "table_count", "databases",
                                         "scatter_gather", "distributed_transactions"}))
                                 return false;
                             orm_shard_topology_configuration configured;
-                            configured.logical_table = topology.key();
-                            assign(topology.value(), "logical_table",
+                            configured.logical_table = topology_name;
+                            assign(topology_value, "logical_table",
                                 configured.logical_table);
-                            if (const auto count = topology.value().find("table_count");
-                                count != topology.value().end())
+                            if (const auto* count = cnetmod::json::find(
+                                    topology_value, "table_count"))
                             {
-                                if (!count->is_number_unsigned() &&
-                                    !count->is_number_integer())
+                                if (!count->is_uint64() && !count->is_int64())
                                     return false;
-                                const auto raw = count->get<std::int64_t>();
+                                const auto raw = count->as<std::int64_t>();
                                 if (raw <= 0 || static_cast<std::uint64_t>(raw) > std::numeric_limits<std::size_t>::max())
                                     return false;
                                 configured.table_count =
                                     static_cast<std::size_t>(raw);
                             }
-                            assign(topology.value(), "databases",
+                            assign(topology_value, "databases",
                                 configured.databases);
-                            assign(topology.value(), "scatter_gather",
+                            assign(topology_value, "scatter_gather",
                                 configured.scatter_gather);
-                            assign(topology.value(), "distributed_transactions",
+                            assign(topology_value, "distributed_transactions",
                                 configured.distributed_transactions);
                             result.orm.sharding.topologies.insert_or_assign(
-                                topology.key(), std::move(configured));
+                                topology_name, std::move(configured));
                         }
                     }
                 }
             }
-            if (const auto item = root.find("services"); item != root.end())
+            if (const auto* item = cnetmod::json::find(root, "services"))
             {
                 if (!item->is_object())
                     return false;
-                for (auto service_item = item->begin();
-                    service_item != item->end(); ++service_item)
+                for (const auto& [name, value] : item->get_object())
                 {
-                    const auto& name = service_item.key();
-                    const auto& value = service_item.value();
                     if (!value.is_object())
                         return false;
                     configured_service service{.name = name};
                     assign(value, "type", service.name);
                     assign(value, "enabled", service.enabled);
                     assign(value, "instance", service.instance);
-                    if (const auto required = value.find("required");
-                        required != value.end())
+                    if (const auto* required = cnetmod::json::find(
+                            value, "required"))
                         service.requirement = required->get<bool>()
                             ? service_requirement::required
                             : service_requirement::optional;
-                    if (const auto recovery = value.find("recovery");
-                        recovery != value.end())
+                    if (const auto* recovery = cnetmod::json::find(
+                            value, "recovery"))
                     {
                         if (!keys_are_known(*recovery, {"initial_delay_ms", "maximum_delay_ms", "budget_ms", "multiplier", "jitter"}))
                             return false;
@@ -480,12 +494,11 @@ namespace {
                             service.recovery.multiplier);
                         assign(*recovery, "jitter", service.recovery.jitter);
                     }
-                    for (auto property = value.begin(); property != value.end(); ++property)
+                    for (const auto& [key, property] : value.get_object())
                     {
-                        const auto& key = property.key();
                         if (key != "enabled" && key != "type" && key != "instance" &&
                             key != "required" && key != "recovery")
-                            service.properties[key] = property.value();
+                            service.properties[key] = property;
                     }
                     result.services.insert_or_assign(name, std::move(service));
                 }
@@ -585,10 +598,10 @@ namespace {
             if (!current->is_object())
                 return nullptr;
             const auto name = std::string{segment.begin(), segment.end()};
-            const auto found = current->find(name);
-            if (found == current->end())
+            const auto* found = cnetmod::json::find(*current, name);
+            if (found == nullptr)
                 return nullptr;
-            current = &*found;
+            current = found;
         }
         return current;
     }
@@ -613,10 +626,10 @@ auto configured_service::integer_property(std::string_view path) const
     const auto* value = nested_property(properties, path);
     if (value == nullptr)
         return std::optional<std::int64_t>{};
-    if (!value->is_number_integer())
+    if (!value->is_int64() && !value->is_uint64())
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
-    return std::optional<std::int64_t>{value->get<std::int64_t>()};
+    return std::optional<std::int64_t>{value->as<std::int64_t>()};
 }
 
 auto configured_service::string_array_property(std::string_view path) const
@@ -632,7 +645,7 @@ auto configured_service::string_array_property(std::string_view path) const
 
     std::vector<std::string> result;
     result.reserve(value->size());
-    for (const auto& item : *value)
+    for (const auto& item : value->get_array())
     {
         if (!item.is_string())
             return std::unexpected(
@@ -909,7 +922,8 @@ static auto prepare_configuration_reload(application_configuration& active,
                 service.instance != found->second.instance ||
                 service.enabled != found->second.enabled ||
                 service.requirement != found->second.requirement ||
-                service.properties != found->second.properties)
+                !cnetmod::json::equivalent(
+                    service.properties, found->second.properties))
             {
                 result.restart_required = true;
                 break;
@@ -948,9 +962,9 @@ auto redact_configuration(const cnetmod::json::document& value) -> cnetmod::json
 {
     if (value.is_array())
     {
-        auto result = cnetmod::json::document::array();
-        for (const auto& child : value)
-            result.push_back(redact_configuration(child));
+        auto result = cnetmod::json::array();
+        for (const auto& child : value.get_array())
+            result.get_array().push_back(redact_configuration(child));
         return result;
     }
     if (value.is_string())
@@ -967,11 +981,9 @@ auto redact_configuration(const cnetmod::json::document& value) -> cnetmod::json
     }
     if (!value.is_object())
         return value;
-    auto result = cnetmod::json::document::object();
-    for (auto item = value.begin(); item != value.end(); ++item)
+    auto result = cnetmod::json::object();
+    for (const auto& [key, child] : value.get_object())
     {
-        const auto& key = item.key();
-        const auto& child = item.value();
         auto lowered = key;
         std::ranges::transform(lowered, lowered.begin(),
             [](unsigned char character)

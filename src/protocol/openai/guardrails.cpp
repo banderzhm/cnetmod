@@ -152,13 +152,13 @@ json_schema_output_guardrail::json_schema_output_guardrail(json schema,
 auto json_schema_output_guardrail::validate(const message& output,
     const run_config&) -> task<std::expected<guardrail_result, std::string>>
 {
-    const auto parsed = json::parse(output.content, nullptr, false);
-    if (parsed.is_discarded())
+    const auto parsed = cnetmod::json::parse_document(output.content);
+    if (!parsed)
         co_return guardrail_result{
             .action = retry_on_failure_ ? guardrail_action::retry
                                         : guardrail_action::reject,
             .reason = "model output is not valid JSON"};
-    auto valid = validate_json_schema(parsed, schema_);
+    auto valid = validate_json_schema(*parsed, schema_);
     if (!valid)
         co_return guardrail_result{
             .action = retry_on_failure_ ? guardrail_action::retry

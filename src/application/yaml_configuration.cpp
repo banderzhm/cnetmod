@@ -59,20 +59,20 @@ namespace {
             return convert_scalar(node);
         if (kind == yaml_cpp::node_kind::sequence)
         {
-            auto result = cnetmod::json::document::array();
+            auto result = cnetmod::json::array();
             for (std::size_t index = 0; index < node.size(); ++index)
             {
                 auto child = convert_node(node[index], depth + 1U);
                 if (!child)
                     return std::unexpected(child.error());
-                result.push_back(std::move(*child));
+                result.get_array().push_back(std::move(*child));
             }
             return result;
         }
         if (kind != yaml_cpp::node_kind::map)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
-        auto result = cnetmod::json::document::object();
+        auto result = cnetmod::json::object();
         for (const auto& entry : node)
         {
             if (yaml_cpp::kind_of(entry.first) != yaml_cpp::node_kind::scalar)
@@ -83,7 +83,7 @@ namespace {
             auto child = convert_node(entry.second, depth + 1U);
             if (!child)
                 return std::unexpected(child.error());
-            result.emplace(key, std::move(*child));
+            result[key] = std::move(*child);
         }
         return result;
     }

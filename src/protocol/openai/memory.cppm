@@ -158,7 +158,7 @@ private:
 export struct persisted_chat_message
 {
     message value;
-    json metadata = json::object();
+    json metadata = cnetmod::json::object();
 
     /**
      * @brief Stores a signed integer metadata value.

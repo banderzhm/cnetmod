@@ -243,7 +243,7 @@ public:
     auto restore_state(const openai::json& state)
         -> std::expected<void, std::string> override
     {
-        completed_ = state.value("completed", false);
+        completed_ = cnetmod::json::value_or(state, "completed", false);
         return {};
     }
 
@@ -275,13 +275,13 @@ public:
 
     auto save_state() const -> openai::json override
     {
-        return {{"requested", requested_}};
+        return cnetmod::json::object({{"requested", requested_}});
     }
 
     auto restore_state(const openai::json& state)
         -> std::expected<void, std::string> override
     {
-        requested_ = state.value("requested", false);
+        requested_ = cnetmod::json::value_or(state, "requested", false);
         return {};
     }
 
@@ -411,8 +411,8 @@ TEST(openai_structured_output_serializes_and_validates)
     request.response_format = "json_schema";
     request.response_schema_name = "answer";
     request.response_schema = schema;
-    const auto wire = openai::json::parse(request.to_json());
-    ASSERT_EQ(wire["response_format"]["type"], "json_schema");
+    const auto wire = cnetmod::json::parse_document(request.to_json()).value();
+    ASSERT_EQ(wire["response_format"]["type"].get<std::string>(), "json_schema");
 
     openai::json_output_parser parser{schema};
     ASSERT_TRUE(parser.parse(R"({"answer":"yes"})").has_value());
@@ -522,12 +522,12 @@ TEST(openai_responses_api_parses_text_tools_and_usage)
     request.tool_outputs = {{.call_id = "call_1", .output = R"({"value":42})"}};
     request.additional_tools = {{{"type", "web_search"}}};
     request.prompt_cache_key = "test-cache";
-    const auto wire = openai::json::parse(request.to_json());
-    ASSERT_EQ(wire["input"][0]["content"][0]["type"], "input_text");
-    ASSERT_EQ(wire["input"][0]["content"][1]["type"], "input_image");
-    ASSERT_EQ(wire["input"][1]["type"], "function_call_output");
-    ASSERT_EQ(wire["tools"][0]["type"], "web_search");
-    ASSERT_EQ(wire["prompt_cache_key"], "test-cache");
+    const auto wire = cnetmod::json::parse_document(request.to_json()).value();
+    ASSERT_EQ(wire["input"][0]["content"][0]["type"].get<std::string>(), "input_text");
+    ASSERT_EQ(wire["input"][0]["content"][1]["type"].get<std::string>(), "input_image");
+    ASSERT_EQ(wire["input"][1]["type"].get<std::string>(), "function_call_output");
+    ASSERT_EQ(wire["tools"][0]["type"].get<std::string>(), "web_search");
+    ASSERT_EQ(wire["prompt_cache_key"].get<std::string>(), "test-cache");
 
     const auto parsed = openai::response_result::from_json(R"({
       "id":"resp_1","model":"gpt-test","status":"completed","output_text":"done",
@@ -557,7 +557,7 @@ TEST(openai_runnable_composes_prompt_model_and_parser)
     auto result = cnetmod::sync_wait(chain.invoke(
         openai::prompt_variables{{"question", "six times seven?"}}));
     ASSERT_TRUE(result.has_value());
-    ASSERT_EQ(std::get<openai::json>(*result)["answer"], "42");
+    ASSERT_EQ(std::get<openai::json>(*result)["answer"].get<std::string>(), "42");
     ASSERT_EQ(model.last_request.messages.size(), std::size_t{2});
 }
 
@@ -606,7 +606,7 @@ TEST(openai_agent_executes_validated_tool_loop)
         .decode = [](const openai::json& value)
             -> std::expected<double_arguments, std::string>
         {
-            return double_arguments{value["value"].get<int>()};
+            return double_arguments{value["value"].as<int>()};
         },
         .execute = [](double_arguments arguments)
             -> cnetmod::task<std::expected<int, std::string>>
@@ -721,7 +721,7 @@ TEST(openai_agent_maps_tool_argument_errors_with_application_policy)
                                    {"required", {"value"}}}},
                               .handler = [](const openai::json&) -> cnetmod::task<std::expected<openai::json, std::string>>
                               {
-                                  co_return openai::json::object();
+                                  co_return cnetmod::json::object();
                               }})
             .has_value());
     std::size_t handled = 0;
@@ -793,7 +793,7 @@ TEST(openai_agent_refreshes_dynamic_tools_and_supports_immediate_return)
     ASSERT_EQ(model.last_request.tools.size(), std::size_t{1});
     ASSERT_EQ(model.last_request.tools.front().function_name,
         std::string("finish"));
-    ASSERT_EQ(openai::json::parse(result->output.content)["state"], "done");
+    ASSERT_EQ(cnetmod::json::parse_document(result->output.content).value()["state"].get<std::string>(), "done");
     ASSERT_EQ(result->intermediate_steps.size(), std::size_t{2});
 }
 
@@ -821,7 +821,7 @@ TEST(openai_contextual_tool_receives_invocation_configuration)
 
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(observed, &config);
-    ASSERT_EQ(openai::json::parse(*result).at("run_id"), "tool-run");
+    ASSERT_EQ(cnetmod::json::parse_document(*result).value().at("run_id").get<std::string>(), "tool-run");
 }
 
 TEST(openai_agent_discovers_searchable_tools_without_exposing_full_catalog)
@@ -961,7 +961,7 @@ TEST(openai_agent_skill_reveals_instructions_resources_and_scoped_tools)
     auto content = cnetmod::sync_wait(resource->handler(
         {{"skill", "code_review"}, {"resource", "checklist.md"}}));
     ASSERT_TRUE(content.has_value());
-    ASSERT_EQ((*content)["content"], "Validate lifetime and cancellation.");
+    ASSERT_EQ((*content)["content"].get<std::string>(), "Validate lifetime and cancellation.");
 }
 
 TEST(openai_filesystem_skill_loader_preloads_bounded_resources_off_event_loop)
@@ -1061,10 +1061,10 @@ TEST(openai_model_query_transformer_expands_with_strict_validated_output)
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result->size(), std::size_t{2});
     ASSERT_EQ((*result)[0].text, "original question");
-    ASSERT_EQ((*result)[0].metadata.at("transformation"), "original");
+    ASSERT_EQ((*result)[0].metadata.at("transformation").get<std::string>(), "original");
     ASSERT_EQ((*result)[1].text, "alternative terminology");
-    ASSERT_EQ((*result)[1].metadata.at("transformation"), "expand");
-    ASSERT_EQ((*result)[1].metadata.at("tenant"), "north");
+    ASSERT_EQ((*result)[1].metadata.at("transformation").get<std::string>(), "expand");
+    ASSERT_EQ((*result)[1].metadata.at("tenant").get<std::string>(), "north");
     ASSERT_EQ((*result)[1].limit, std::size_t{7});
     ASSERT_EQ(model.last_request.response_format, "json_schema");
     ASSERT_EQ(model.last_request.response_schema_name,
@@ -1506,7 +1506,7 @@ TEST(openai_lazy_completion_skips_disabled_and_completed_scopes)
     observed.fail_lazy(factory);
     ASSERT_EQ(factories, 1U);
     ASSERT_EQ(events.size(), std::size_t{2});
-    ASSERT_EQ(events.back().attributes.at("input_tokens"), 4);
+    ASSERT_EQ(events.back().attributes.at("input_tokens").as<int>(), 4);
     ASSERT_EQ(events.back().attempt, std::size_t{2});
     ASSERT_EQ(events.back().detail, "done");
     openai::run_scope failure{enabled, openai::run_event_type::model_start,
@@ -1599,7 +1599,7 @@ TEST(openai_event_dispatch_borrows_complete_events_and_preserves_overrides)
     ASSERT_EQ(calls, 1U);
     ASSERT_TRUE(copied);
     ASSERT_EQ(enriched.run_id, "default-run");
-    ASSERT_EQ(enriched.attributes.at("metadata").at("tenant"), "default");
+    ASSERT_EQ(enriched.attributes.at("metadata").at("tenant").get<std::string>(), "default");
     ASSERT_EQ(enriched.parent_operation_id, "default-parent");
     ASSERT_EQ(enriched.trace_parent->trace_id, config.trace_parent->trace_id);
     ASSERT_TRUE(missing.run_id.empty());
@@ -1617,7 +1617,7 @@ TEST(openai_run_listeners_are_isolated_and_receive_structured_events)
         [&](const openai::run_event& event)
         {
             ++received;
-            ASSERT_EQ(event.attributes["tenant"], "alpha");
+            ASSERT_EQ(event.attributes["tenant"].get<std::string>(), "alpha");
         }};
     openai::run_config config{
         .callback = [](const openai::run_event&)
@@ -1869,7 +1869,7 @@ TEST(openai_telemetry_ignores_malformed_attributes_and_contains_export_failures)
         openai::run_event end{.type = openai::run_event_type::model_end,
             .run_id = "fault-test"};
         if (attempt == 0)
-            end.attributes = cnetmod::json::document::array({1});
+            end.attributes = cnetmod::json::array({1});
         listener.on_event(end);
     }
     ASSERT_EQ(calls, 3U);
@@ -2101,7 +2101,7 @@ TEST(openai_rejection_observation_preserves_results_and_stream_attributes)
     ASSERT_EQ(listener.events.size(), std::size_t{2});
     ASSERT_TRUE(listener.events[0].type == openai::run_event_type::model_rejected);
     ASSERT_TRUE(listener.events[0].attributes.is_null());
-    ASSERT_EQ(listener.events[1].attributes.at("stream"), true);
+    ASSERT_TRUE(listener.events[1].attributes.at("stream").get<bool>());
 }
 
 TEST(openai_memory_persists_sessions_and_applies_windows)
@@ -2191,7 +2191,7 @@ TEST(openai_chat_record_store_keeps_metadata_outside_protocol_messages)
             .metadata = {{"id", "message-42"},
                 {"model", "fixture"}, {"tokens", 7}}}));
     ASSERT_TRUE(persisted.has_value());
-    ASSERT_EQ(persisted->metadata["id"], "message-42");
+    ASSERT_EQ(persisted->metadata["id"].get<std::string>(), "message-42");
 
     openai::chat_record_memory_adapter adapter{records};
     openai::conversation_memory memory{"record-session", adapter,
@@ -2207,7 +2207,7 @@ TEST(openai_chat_record_store_keeps_metadata_outside_protocol_messages)
     ASSERT_EQ(snapshot->size(), std::size_t{2});
     ASSERT_EQ(snapshot->front().content, "hello");
     ASSERT_TRUE(stored.has_value());
-    ASSERT_EQ(stored->front().metadata["model"], "fixture");
+    ASSERT_EQ(stored->front().metadata["model"].get<std::string>(), "fixture");
     ASSERT_TRUE(stored->back().metadata.empty());
 }
 
@@ -2241,8 +2241,8 @@ TEST(openai_chat_record_store_supports_paging_count_and_classified_errors)
     ASSERT_EQ(*total, std::size_t{5});
     ASSERT_TRUE(page.has_value());
     ASSERT_EQ(page->size(), std::size_t{2});
-    ASSERT_EQ((*page)[0].metadata["index"], 1);
-    ASSERT_EQ((*page)[1].metadata["index"], 2);
+    ASSERT_EQ((*page)[0].metadata["index"].as<int>(), 1);
+    ASSERT_EQ((*page)[1].metadata["index"].as<int>(), 2);
     ASSERT_TRUE(empty.has_value());
     ASSERT_TRUE(empty->empty());
     ASSERT_TRUE(beyond.has_value());
@@ -2512,7 +2512,7 @@ TEST(openai_structured_service_decodes_domain_object)
             {
                 return answer_record{
                     value["answer"].get<std::string>(),
-                    value["confidence"].get<int>()};
+                    value["confidence"].as<int>()};
             }}};
 
     auto result = cnetmod::sync_wait(structured.invoke("answer"));
@@ -2545,7 +2545,7 @@ TEST(openai_service_method_maps_typed_request_and_response)
                 {
                     return answer_record{
                         value["answer"].get<std::string>(),
-                        value["confidence"].get<int>()};
+                        value["confidence"].as<int>()};
                 }}}};
 
     auto result = cnetmod::sync_wait(method.invoke(
@@ -2664,18 +2664,18 @@ TEST(openai_checkpoint_store_forks_rolls_back_and_paginates_history)
         store.load("thread-2", "main", 2));
 
     ASSERT_TRUE(forked.has_value());
-    ASSERT_EQ(forked->state["value"], "first");
+    ASSERT_EQ(forked->state["value"].get<std::string>(), "first");
     ASSERT_TRUE(forked->origin.has_value());
     ASSERT_EQ(forked->origin->branch, std::string("main"));
     ASSERT_TRUE(rolled_back.has_value());
     ASSERT_EQ(rolled_back->version, std::uint64_t{3});
-    ASSERT_EQ(rolled_back->state["value"], "first");
+    ASSERT_EQ(rolled_back->state["value"].get<std::string>(), "first");
     ASSERT_TRUE(history.has_value());
     ASSERT_EQ(history->size(), std::size_t{2});
     ASSERT_EQ((*history)[0].version, std::uint64_t{2});
     ASSERT_TRUE(old_second.has_value());
     ASSERT_TRUE(*old_second);
-    ASSERT_EQ((**old_second).state["value"], "second");
+    ASSERT_EQ((**old_second).state["value"].get<std::string>(), "second");
 }
 
 TEST(openai_checkpoint_agentic_adapter_preserves_runtime_versions)
@@ -2701,7 +2701,7 @@ TEST(openai_checkpoint_agentic_adapter_preserves_runtime_versions)
 
     ASSERT_TRUE(loaded.has_value());
     ASSERT_TRUE(*loaded);
-    ASSERT_EQ((**loaded).scope["value"], 2);
+    ASSERT_EQ((**loaded).scope["value"].as<int>(), 2);
     ASSERT_TRUE(history.has_value());
     ASSERT_EQ(history->size(), std::size_t{2});
 }
@@ -2753,7 +2753,8 @@ TEST(openai_file_agentic_store_round_trips_suspended_checkpoint)
             .id = "approval-7",
             .prompt = "Approve deployment?",
             .response_key = "approved",
-            .response_schema = {{"type", "boolean"}}}};
+                .response_schema = cnetmod::json::object(
+                    {{"type", "boolean"}})}};
 
     auto saved = cnetmod::sync_wait(
         store.save("tenant/workflow", checkpoint));
@@ -2766,12 +2767,12 @@ TEST(openai_file_agentic_store_round_trips_suspended_checkpoint)
     ASSERT_TRUE(saved.has_value());
     ASSERT_TRUE(loaded.has_value());
     ASSERT_TRUE(loaded->has_value());
-    ASSERT_EQ((*loaded)->scope["topic"], "modules");
-    ASSERT_EQ((*loaded)->planner["cursor"], 2);
+    ASSERT_EQ((*loaded)->scope["topic"].get<std::string>(), "modules");
+    ASSERT_EQ((*loaded)->planner["cursor"].as<int>(), 2);
     ASSERT_EQ((*loaded)->completed_steps, std::size_t{2});
     ASSERT_TRUE((*loaded)->pending_human_input.has_value());
     ASSERT_EQ((*loaded)->pending_human_input->response_key, "approved");
-    ASSERT_EQ((*loaded)->pending_human_input->response_schema["type"],
+    ASSERT_EQ((*loaded)->pending_human_input->response_schema["type"].get<std::string>(),
         "boolean");
     ASSERT_TRUE(erased.has_value());
     ASSERT_TRUE(empty.has_value());
@@ -2792,7 +2793,7 @@ TEST(openai_loop_planner_repeats_until_async_condition_is_false)
         {
             auto current = co_await scope.read("count");
             co_await scope.write("count",
-                current ? current->get<int>() + 1 : 1);
+                current ? current->as<int>() + 1 : 1);
             co_return std::expected<void, std::string>{};
         }};
     openai::loop_planner planner{increment,
@@ -2800,7 +2801,7 @@ TEST(openai_loop_planner_repeats_until_async_condition_is_false)
             -> cnetmod::task<std::expected<bool, std::string>>
         {
             auto current = co_await scope.read("count");
-            co_return !current || current->get<int>() < 3;
+            co_return !current || current->as<int>() < 3;
         },
         4};
     openai::agentic_runtime runtime{*context, store};
@@ -2816,7 +2817,7 @@ TEST(openai_loop_planner_repeats_until_async_condition_is_false)
     ASSERT_TRUE(result.has_value());
     ASSERT_TRUE(result->status == openai::workflow_status::completed);
     ASSERT_EQ(result->completed_steps, std::size_t{3});
-    ASSERT_EQ(result->state["count"].get<int>(), 3);
+    ASSERT_EQ(result->state["count"].as<int>(), 3);
 }
 
 TEST(openai_mcp_client_negotiates_and_adapts_remote_tools)
@@ -2824,7 +2825,7 @@ TEST(openai_mcp_client_negotiates_and_adapts_remote_tools)
     scripted_mcp_transport transport;
     transport.responses = {
         {{"jsonrpc", "2.0"}, {"id", 1},
-            {"result", {{"protocolVersion", "2025-11-25"}, {"capabilities", {{"tools", openai::json::object()}}}, {"serverInfo", {{"name", "fixture"}, {"version", "1"}}}}}},
+            {"result", {{"protocolVersion", "2025-11-25"}, {"capabilities", {{"tools", cnetmod::json::object()}}}, {"serverInfo", {{"name", "fixture"}, {"version", "1"}}}}}},
         {{"jsonrpc", "2.0"}, {"id", 2},
             {"result", {{"tools", {{{"name", "lookup"}, {"description", "Lookup a value"}, {"inputSchema", {{"type", "object"}, {"properties", {{"key", {{"type", "string"}}}}}, {"required", {"key"}}}}}}}}}},
         {{"jsonrpc", "2.0"}, {"id", 3},
@@ -2851,7 +2852,7 @@ TEST(openai_mcp_client_negotiates_and_adapts_remote_tools)
     auto notification_reply = cnetmod::sync_wait(transport.inbound({{"jsonrpc", "2.0"}, {"method", "notifications/progress"},
         {"params", {{"progress", 0.5}}}}));
     ASSERT_TRUE(roots_reply.has_value());
-    ASSERT_EQ((*roots_reply)["result"]["roots"][0]["uri"],
+    ASSERT_EQ((*roots_reply)["result"]["roots"][0]["uri"].get<std::string>(),
         "file:///workspace");
     ASSERT_FALSE(notification_reply.has_value());
     ASSERT_EQ(roots_calls, std::size_t{1});
@@ -2874,15 +2875,15 @@ TEST(openai_mcp_client_supports_resource_completion_logging_and_ping)
     scripted_mcp_transport transport;
     transport.responses = {
         {{"jsonrpc", "2.0"}, {"id", 1},
-            {"result", {{"protocolVersion", "2025-11-25"}, {"capabilities", openai::json::object()}, {"serverInfo", {{"name", "fixture"}, {"version", "1"}}}}}},
+            {"result", {{"protocolVersion", "2025-11-25"}, {"capabilities", cnetmod::json::object()}, {"serverInfo", {{"name", "fixture"}, {"version", "1"}}}}}},
         {{"jsonrpc", "2.0"}, {"id", 2},
-            {"result", {{"resourceTemplates", openai::json::array()}}}},
-        {{"jsonrpc", "2.0"}, {"id", 3}, {"result", openai::json::object()}},
-        {{"jsonrpc", "2.0"}, {"id", 4}, {"result", openai::json::object()}},
+            {"result", {{"resourceTemplates", cnetmod::json::array()}}}},
+        {{"jsonrpc", "2.0"}, {"id", 3}, {"result", cnetmod::json::object()}},
+        {{"jsonrpc", "2.0"}, {"id", 4}, {"result", cnetmod::json::object()}},
         {{"jsonrpc", "2.0"}, {"id", 5},
             {"result", {{"completion", {{"values", {"alpha", "beta"}}, {"hasMore", false}}}}}},
-        {{"jsonrpc", "2.0"}, {"id", 6}, {"result", openai::json::object()}},
-        {{"jsonrpc", "2.0"}, {"id", 7}, {"result", openai::json::object()}},
+        {{"jsonrpc", "2.0"}, {"id", 6}, {"result", cnetmod::json::object()}},
+        {{"jsonrpc", "2.0"}, {"id", 7}, {"result", cnetmod::json::object()}},
     };
     openai::mcp_client client{transport};
     ASSERT_TRUE(cnetmod::sync_wait(client.initialize()).has_value());
@@ -2916,7 +2917,7 @@ TEST(openai_mcp_tool_provider_filters_and_executes_remote_tools)
     scripted_mcp_transport transport;
     transport.responses = {
         {{"jsonrpc", "2.0"}, {"id", 1},
-            {"result", {{"protocolVersion", "2025-11-25"}, {"capabilities", {{"tools", openai::json::object()}}}, {"serverInfo", {{"name", "fixture"}, {"version", "1"}}}}}},
+            {"result", {{"protocolVersion", "2025-11-25"}, {"capabilities", {{"tools", cnetmod::json::object()}}}, {"serverInfo", {{"name", "fixture"}, {"version", "1"}}}}}},
         {{"jsonrpc", "2.0"}, {"id", 2},
             {"result", {{"tools", {
                                       {{"name", "read"}, {"inputSchema", {{"type", "object"}}}},
@@ -3027,22 +3028,23 @@ TEST(openai_ingestion_transformers_filter_and_enrich_metadata)
     std::vector<openai::document> documents{
         {.id = "keep",
             .page_content = "important",
-            .metadata = {{"tenant", "existing"}, {"enabled", true}}},
+            .metadata = cnetmod::json::object(
+                {{"tenant", "existing"}, {"enabled", true}})},
         {.id = "drop",
             .page_content = "discard",
-            .metadata = {{"enabled", false}}},
+            .metadata = cnetmod::json::object({{"enabled", false}})},
     };
     openai::metadata_enricher enricher{
         {{"tenant", "default"}, {"environment", "test"}}};
     auto enriched = cnetmod::sync_wait(enricher.transform(documents, {}));
     ASSERT_TRUE(enriched.has_value());
-    ASSERT_EQ((*enriched)[0].metadata["tenant"], "existing");
-    ASSERT_EQ((*enriched)[0].metadata["environment"], "test");
-    ASSERT_EQ((*enriched)[1].metadata["tenant"], "default");
+    ASSERT_EQ((*enriched)[0].metadata["tenant"].get<std::string>(), "existing");
+    ASSERT_EQ((*enriched)[0].metadata["environment"].get<std::string>(), "test");
+    ASSERT_EQ((*enriched)[1].metadata["tenant"].get<std::string>(), "default");
 
     openai::document_filter filter{[](const openai::document& candidate)
         {
-            return candidate.metadata.value("enabled", false);
+            return cnetmod::json::value_or(candidate.metadata, "enabled", false);
         }};
     auto filtered = cnetmod::sync_wait(
         filter.transform(std::move(*enriched), {}));
@@ -3062,11 +3064,11 @@ TEST(openai_markdown_header_splitter_preserves_section_metadata)
     ASSERT_EQ(sections->size(), std::size_t{3});
     ASSERT_EQ((*sections)[0].id, "guide#section-0");
     ASSERT_EQ((*sections)[0].page_content, "introduction\n");
-    ASSERT_EQ((*sections)[1].metadata["source_id"], "guide");
-    ASSERT_EQ((*sections)[1].metadata["heading"], "First");
-    ASSERT_EQ((*sections)[1].metadata["heading_level"], std::size_t{1});
+    ASSERT_EQ((*sections)[1].metadata["source_id"].get<std::string>(), "guide");
+    ASSERT_EQ((*sections)[1].metadata["heading"].get<std::string>(), "First");
+    ASSERT_EQ((*sections)[1].metadata["heading_level"].as<std::size_t>(), std::size_t{1});
     ASSERT_EQ((*sections)[1].page_content, "alpha\n");
-    ASSERT_EQ((*sections)[2].metadata["heading"], "Detail");
+    ASSERT_EQ((*sections)[2].metadata["heading"].get<std::string>(), "Detail");
     ASSERT_TRUE((*sections)[2].page_content.contains("### Inline"));
 }
 
@@ -3087,7 +3089,7 @@ TEST(openai_text_file_source_uses_async_file_io)
     ASSERT_EQ(loaded->size(), std::size_t{1});
     ASSERT_TRUE(loaded->front().page_content.contains(
         "openai_text_file_source_uses_async_file_io"));
-    ASSERT_EQ(loaded->front().metadata["extension"], ".cpp");
+    ASSERT_EQ(loaded->front().metadata["extension"].get<std::string>(), ".cpp");
 }
 
 TEST(openai_directory_document_source_filters_and_orders_files)
@@ -3120,11 +3122,11 @@ TEST(openai_directory_document_source_filters_and_orders_files)
         }));
     const auto own_file = std::ranges::find_if(*loaded, [](const auto& document)
         {
-            return document.metadata.at("file_name") == "test_openai.cpp";
+            return document.metadata.at("file_name").template get<std::string>() == "test_openai.cpp";
         });
     ASSERT_TRUE(own_file != loaded->end());
-    ASSERT_EQ(own_file->metadata.at("extension"), ".cpp");
-    ASSERT_EQ(own_file->metadata.at("source_root"),
+    ASSERT_EQ(own_file->metadata.at("extension").get<std::string>(), ".cpp");
+    ASSERT_EQ(own_file->metadata.at("source_root").get<std::string>(),
         root.lexically_normal().generic_string());
 }
 
@@ -3158,10 +3160,10 @@ TEST(openai_markdown_document_parser_extracts_metadata_and_content)
         {}));
 
     ASSERT_TRUE(parsed.has_value());
-    ASSERT_EQ(parsed->metadata.at("format"), "markdown");
-    ASSERT_EQ(parsed->metadata.at("title"), "Integration Guide");
-    ASSERT_EQ(parsed->metadata.at("front_matter").at("author"), "Ada");
-    ASSERT_EQ(parsed->metadata.at("front_matter").at("category"), "docs");
+    ASSERT_EQ(parsed->metadata.at("format").get<std::string>(), "markdown");
+    ASSERT_EQ(parsed->metadata.at("title").get<std::string>(), "Integration Guide");
+    ASSERT_EQ(parsed->metadata.at("front_matter").at("author").get<std::string>(), "Ada");
+    ASSERT_EQ(parsed->metadata.at("front_matter").at("category").get<std::string>(), "docs");
     ASSERT_TRUE(parsed->page_content.starts_with("# Integration Guide"));
     ASSERT_TRUE(parsed->metadata.at("front_matter_raw").get<std::string>().contains("author: Ada"));
 
@@ -3179,8 +3181,8 @@ TEST(openai_html_document_parser_extracts_visible_text_and_title)
         {}));
 
     ASSERT_TRUE(parsed.has_value());
-    ASSERT_EQ(parsed->metadata.at("format"), "html");
-    ASSERT_EQ(parsed->metadata.at("title"), "A & B");
+    ASSERT_EQ(parsed->metadata.at("format").get<std::string>(), "html");
+    ASSERT_EQ(parsed->metadata.at("title").get<std::string>(), "A & B");
     ASSERT_TRUE(parsed->page_content.contains("Hello"));
     ASSERT_TRUE(parsed->page_content.contains("one two"));
     ASSERT_FALSE(parsed->page_content.contains("steal"));
@@ -3210,7 +3212,7 @@ TEST(openai_document_parser_registry_prefers_media_type_and_adapts_handlers)
     auto parsed = cnetmod::sync_wait(selected->parse(
         {.id = "report", .page_content = "opaque"}, {}));
     ASSERT_TRUE(parsed.has_value());
-    ASSERT_EQ(parsed->metadata.at("parser"), "external");
+    ASSERT_EQ(parsed->metadata.at("parser").get<std::string>(), "external");
     ASSERT_EQ(calls, std::size_t{1});
 }
 
@@ -3227,9 +3229,9 @@ TEST(openai_url_document_source_fetches_metadata_and_selects_parser)
     ASSERT_TRUE(loaded.has_value());
     ASSERT_EQ(loaded->size(), std::size_t{1});
     ASSERT_EQ(loaded->front().page_content, std::string("remote text"));
-    ASSERT_EQ(loaded->front().metadata.at("url"),
+    ASSERT_EQ(loaded->front().metadata.at("url").get<std::string>(),
         std::string("https://example.test/guide.txt?revision=2"));
-    ASSERT_EQ(loaded->front().metadata.at("content_type"),
+    ASSERT_EQ(loaded->front().metadata.at("content_type").get<std::string>(),
         std::string("text/plain; charset=utf-8"));
     ASSERT_EQ(fetcher.requested_urls.size(), std::size_t{1});
 }

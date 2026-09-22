@@ -24,7 +24,7 @@ export struct document
 {
     std::string id;
     std::string page_content;
-    json metadata = json::object();
+    json metadata = cnetmod::json::object();
 };
 
 export struct document_match

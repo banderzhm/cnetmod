@@ -13,6 +13,7 @@ import cnetmod.coro.timer;
 import cnetmod.coro.circuit_breaker;
 import cnetmod.coro.semaphore;
 import cnetmod.coro.rate_limiter;
+import cnetmod.json;
 import :foundation;
 import :chat;
 import :embeddings;
@@ -102,7 +103,7 @@ void run_config::notify(const run_event& event) const
         if (add_run_id)
             observed->run_id = run_id;
         if ((add_tags || add_metadata) && !observed->attributes.is_object())
-            observed->attributes = json::object();
+            observed->attributes = cnetmod::json::object();
         if (add_tags)
             observed->attributes["tags"] = tags;
         if (add_metadata)
@@ -259,7 +260,9 @@ namespace {
                     .name = std::string{name},
                     .detail = std::string{detail},
                     .attempt = attempt,
-                    .attributes = streaming ? json{{"stream", true}} : json{}};
+                    .attributes = streaming
+                        ? cnetmod::json::object({{"stream", true}})
+                        : json{}};
             });
     }
 } // namespace
@@ -323,7 +326,7 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
         run_event_type::model_end, run_event_type::model_error,
         requested_model, []
         {
-            return json{{"stream", true}};
+            return cnetmod::json::object({{"stream", true}});
         });
 
     chat_response aggregate;
@@ -361,7 +364,7 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
     {
         model_run.fail_lazy([]
             {
-                return json{{"stream", true}};
+                return cnetmod::json::object({{"stream", true}});
             },
             streamed.error());
         co_return std::unexpected(streamed.error());
@@ -370,7 +373,8 @@ auto openai_chat_model::stream(chat_request request, stream_handler handler,
     {
         model_run.fail_lazy([]
             {
-                return json{{"stream", true}, {"cancelled", true}};
+                return cnetmod::json::object(
+                    {{"stream", true}, {"cancelled", true}});
             },
             "model stream cancelled");
         co_return std::unexpected("model stream cancelled");
@@ -694,20 +698,23 @@ auto openai_image_model::generate(image_generation_request request,
         co_return std::unexpected("image generation cancelled");
     auto model_run = run_scope::start_lazy(config, run_event_type::model_start, run_event_type::model_end, run_event_type::model_error, request.model, []
         {
-            return json{{"operation", "image_generation"}};
+            return cnetmod::json::object(
+                {{"operation", "image_generation"}});
         },
         "image generation");
     auto result = co_await api_.create_image(std::move(request));
     if (result)
         model_run.succeed_lazy([]
             {
-                return json{{"operation", "image_generation"}};
+                return cnetmod::json::object(
+                    {{"operation", "image_generation"}});
             },
             "image generation");
     else
         model_run.fail_lazy([]
             {
-                return json{{"operation", "image_generation"}};
+                return cnetmod::json::object(
+                    {{"operation", "image_generation"}});
             },
             result.error());
     co_return result;
@@ -726,20 +733,22 @@ auto openai_moderation_model::moderate(moderation_request request,
         co_return std::unexpected("content moderation cancelled");
     auto model_run = run_scope::start_lazy(config, run_event_type::model_start, run_event_type::model_end, run_event_type::model_error, request.model, []
         {
-            return json{{"operation", "moderation"}};
+            return cnetmod::json::object({{"operation", "moderation"}});
         },
         "content moderation");
     auto result = co_await api_.moderate(std::move(request));
     if (result)
         model_run.succeed_lazy([&]
             {
-                return json{{"operation", "moderation"}, {"response_model", result->model}};
+                return cnetmod::json::object(
+                    {{"operation", "moderation"},
+                        {"response_model", result->model}});
             },
             "content moderation");
     else
         model_run.fail_lazy([]
             {
-                return json{{"operation", "moderation"}};
+                return cnetmod::json::object({{"operation", "moderation"}});
             },
             result.error());
     co_return result;

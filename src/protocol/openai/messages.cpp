@@ -10,6 +10,7 @@ import std;
 import :foundation;
 import :tool_contracts;
 import :messages;
+import cnetmod.json;
 
 namespace cnetmod::openai {
 
@@ -39,7 +40,8 @@ auto content_part::to_json_object() const -> json
         value["text"] = text;
     else if (type == "image_url")
     {
-        value["image_url"] = {{"url", image_url.url}};
+        value["image_url"] =
+            cnetmod::json::object({{"url", image_url.url}});
         if (image_url.detail != "auto")
             value["image_url"]["detail"] = image_url.detail;
     }
@@ -98,7 +100,7 @@ auto message::from_json_object(const json& value)
             result.content = value["content"].get<std::string>();
         else if (value["content"].is_array())
         {
-            for (const auto& part : value["content"])
+            for (const auto& part : value["content"].get_array())
             {
                 if (!part.is_object() || !part.contains("type") ||
                     !part["type"].is_string())
@@ -123,8 +125,8 @@ auto message::from_json_object(const json& value)
                             "image content part has no URL");
                     decoded.image_url.url =
                         part["image_url"]["url"].get<std::string>();
-                    decoded.image_url.detail =
-                        part["image_url"].value("detail", "auto");
+                    decoded.image_url.detail = cnetmod::json::value_or(
+                        part["image_url"], "detail", std::string{"auto"});
                 }
                 else
                 {
@@ -140,22 +142,27 @@ auto message::from_json_object(const json& value)
                 "message content must be a string, array or null");
         }
     }
-    result.name = value.value("name", "");
-    result.tool_call_id = value.value("tool_call_id", "");
+    result.name = cnetmod::json::value_or(value, "name", std::string{});
+    result.tool_call_id = cnetmod::json::value_or(
+        value, "tool_call_id", std::string{});
     if (value.contains("tool_calls"))
     {
         if (!value["tool_calls"].is_array())
             return std::unexpected("message tool_calls must be an array");
-        for (const auto& call : value["tool_calls"])
+        for (const auto& call : value["tool_calls"].get_array())
         {
             if (!call.is_object() || !call.contains("function") ||
                 !call["function"].is_object())
                 return std::unexpected("invalid message tool call");
-            result.tool_calls.push_back({.id = call.value("id", ""),
-                .type = call.value("type", "function"),
+            result.tool_calls.push_back({.id = cnetmod::json::value_or(
+                                             call, "id", std::string{}),
+                .type = cnetmod::json::value_or(
+                    call, "type", std::string{"function"}),
                 .function = {
-                    .name = call["function"].value("name", ""),
-                    .arguments = call["function"].value("arguments", "")}});
+                    .name = cnetmod::json::value_or(
+                        call["function"], "name", std::string{}),
+                    .arguments = cnetmod::json::value_or(
+                        call["function"], "arguments", std::string{})}});
         }
     }
     return result;
@@ -167,9 +174,9 @@ auto message::to_json_object() const -> json
     value["role"] = role;
     if (!content_parts.empty())
     {
-        auto content = json::array();
+        auto content = cnetmod::json::array();
         for (const auto& part : content_parts)
-            content.push_back(part.to_json_object());
+            content.get_array().push_back(part.to_json_object());
         value["content"] = std::move(content);
     }
     else
@@ -182,10 +189,14 @@ auto message::to_json_object() const -> json
         value["tool_call_id"] = tool_call_id;
     if (!tool_calls.empty())
     {
-        auto calls = json::array();
+        auto calls = cnetmod::json::array();
         for (const auto& call : tool_calls)
-            calls.push_back({{"id", call.id}, {"type", call.type},
-                {"function", {{"name", call.function.name}, {"arguments", call.function.arguments}}}});
+            calls.get_array().push_back(cnetmod::json::object(
+                {{"id", call.id},
+                    {"type", call.type},
+                    {"function", cnetmod::json::object(
+                                     {{"name", call.function.name},
+                                         {"arguments", call.function.arguments}})}}));
         value["tool_calls"] = std::move(calls);
     }
     return value;

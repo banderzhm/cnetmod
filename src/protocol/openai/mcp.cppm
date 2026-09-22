@@ -113,7 +113,7 @@ export struct mcp_client_options
     std::string name = "cnetmod";
     std::string version = "2.0.0";
     std::string protocol_version = "2025-11-25";
-    json capabilities = json::object();
+    json capabilities = cnetmod::json::object();
     mcp_client_handlers handlers;
 };
 
@@ -129,7 +129,7 @@ public:
 
     auto initialize() -> task<std::expected<json, std::string>>;
     auto list_tools() -> task<std::expected<json, std::string>>;
-    auto call_tool(std::string name, json arguments = json::object())
+    auto call_tool(std::string name, json arguments = cnetmod::json::object())
         -> task<std::expected<json, std::string>>;
     auto list_resources() -> task<std::expected<json, std::string>>;
     auto list_resource_templates() -> task<std::expected<json, std::string>>;
@@ -140,10 +140,10 @@ public:
     auto unsubscribe_resource(std::string uri)
         -> task<std::expected<void, std::string>>;
     auto list_prompts() -> task<std::expected<json, std::string>>;
-    auto get_prompt(std::string name, json arguments = json::object())
+    auto get_prompt(std::string name, json arguments = cnetmod::json::object())
         -> task<std::expected<json, std::string>>;
     auto complete(json reference, json argument,
-        json context = json::object())
+        json context = cnetmod::json::object())
         -> task<std::expected<json, std::string>>;
     auto set_logging_level(std::string level)
         -> task<std::expected<void, std::string>>;
@@ -156,7 +156,7 @@ public:
     [[nodiscard]] auto key() const noexcept -> const std::string&;
 
 private:
-    auto request(std::string method, json parameters = json::object())
+    auto request(std::string method, json parameters = cnetmod::json::object())
         -> task<std::expected<json, std::string>>;
     auto handle_inbound(json message) -> task<std::optional<json>>;
     auto request_acknowledgement(std::string method, json parameters)
@@ -166,8 +166,8 @@ private:
     mcp_client_options options_;
     std::atomic<std::uint64_t> next_id_{1};
     bool initialized_ = false;
-    json server_capabilities_ = json::object();
-    json server_info_ = json::object();
+    json server_capabilities_ = cnetmod::json::object();
+    json server_info_ = cnetmod::json::object();
 };
 
 export using mcp_tool_filter = std::function<bool(

@@ -153,11 +153,13 @@ namespace {
 
     [[nodiscard]] auto requests_stream_usage(const chat_request& request) -> bool
     {
-        const auto options = request.extra_body.find("stream_options");
-        if (options == request.extra_body.end() || !options->is_object())
+        const auto* options = cnetmod::json::find(
+            request.extra_body, "stream_options");
+        if (options == nullptr || !options->is_object())
             return false;
-        const auto include_usage = options->find("include_usage");
-        return include_usage != options->end() && include_usage->is_boolean() &&
+        const auto* include_usage = cnetmod::json::find(
+            *options, "include_usage");
+        return include_usage != nullptr && include_usage->is_boolean() &&
             include_usage->get<bool>();
     }
 } // namespace

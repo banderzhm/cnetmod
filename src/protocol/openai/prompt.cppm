@@ -121,7 +121,7 @@ public:
 export class json_output_parser final : public output_parser
 {
 public:
-    explicit json_output_parser(json schema = json::object());
+    explicit json_output_parser(json schema = cnetmod::json::object());
     [[nodiscard]] auto parse(std::string_view text) const
         -> std::expected<json, std::string> override;
 

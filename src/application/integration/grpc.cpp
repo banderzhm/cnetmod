@@ -2,6 +2,7 @@ module cnetmod.application.grpc;
 
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC
 import std;
+import cnetmod.json;
 
 namespace cnetmod::application {
 
@@ -143,7 +144,7 @@ auto auto_configure_grpc_server(const configured_service& configuration,
     {
         auto service = std::make_shared<grpc_server_service>(context.telemetry,
             configuration.instance, configuration.requirement);
-        const auto path = configuration.properties.value("path",
+        const auto path = cnetmod::json::value_or(configuration.properties, "path",
             std::string{"/*path"});
         context.routes.any(path, service->handler());
         return context.services.add_managed_named<grpc_server_service>(

@@ -8,7 +8,7 @@ TEST(configured_service_reads_nested_properties_without_exposing_json)
 {
     cnetmod::application::configured_service service;
     service.properties = cnetmod::json::document{
-        {"security", cnetmod::json::document{{"issuer", "issuer-a"}, {"ttl", 3600}, {"origins", cnetmod::json::document::array({"a", "b"})}}}};
+        {"security", cnetmod::json::document{{"issuer", "issuer-a"}, {"ttl", 3600}, {"origins", cnetmod::json::array({"a", "b"})}}}};
 
     const auto issuer = service.string_property("security.issuer");
     ASSERT_TRUE(issuer.has_value());
@@ -47,8 +47,13 @@ TEST(configured_service_sets_typed_properties)
     service.set_property("port", std::int64_t{3306});
     service.set_property("tls", true);
 
-    ASSERT_EQ(service.properties.at("host").get<std::string>(), "localhost");
-    ASSERT_EQ(service.properties.at("port").get<std::int64_t>(), 3306);
+    const auto host = service.string_property("host");
+    const auto port = service.integer_property("port");
+    ASSERT_TRUE(host.has_value() && host->has_value());
+    ASSERT_TRUE(port.has_value() && port->has_value());
+    ASSERT_EQ(**host, "localhost");
+    ASSERT_EQ(**port, 3306);
+    ASSERT_TRUE(service.properties.at("tls").is_boolean());
     ASSERT_TRUE(service.properties.at("tls").get<bool>());
 }
 
