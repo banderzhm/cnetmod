@@ -184,6 +184,8 @@ export struct jwt_configuration
     bool enabled = false;
     std::string issuer;
     std::string secret;
+    std::int64_t expires_in_seconds = 604800;
+    std::int64_t session_idle_seconds = 900;
 
     auto operator==(const jwt_configuration&) const -> bool = default;
 };

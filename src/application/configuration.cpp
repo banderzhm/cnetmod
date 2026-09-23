@@ -468,11 +468,16 @@ namespace {
                     return false;
                 if (const auto* jwt = cnetmod::json::find(*item, "jwt"))
                 {
-                    if (!keys_are_known(*jwt, {"enabled", "issuer", "secret"}))
+                    if (!keys_are_known(*jwt, {"enabled", "issuer", "secret",
+                            "expires_in_seconds", "session_idle_seconds"}))
                         return false;
                     assign(*jwt, "enabled", result.security.jwt.enabled);
                     assign(*jwt, "issuer", result.security.jwt.issuer);
                     assign(*jwt, "secret", result.security.jwt.secret);
+                    assign(*jwt, "expires_in_seconds",
+                        result.security.jwt.expires_in_seconds);
+                    assign(*jwt, "session_idle_seconds",
+                        result.security.jwt.session_idle_seconds);
                 }
             }
             if (const auto* item = cnetmod::json::find(root, "services"))
@@ -766,7 +771,12 @@ auto validate_configuration(const application_configuration& value)
             std::make_error_code(std::errc::invalid_argument));
     if (value.security.jwt.enabled &&
         (value.security.jwt.issuer.empty() ||
-            value.security.jwt.secret.size() < 32U))
+            value.security.jwt.secret.size() < 32U ||
+            value.security.jwt.expires_in_seconds <= 0 ||
+            value.security.jwt.expires_in_seconds > 2592000 ||
+            value.security.jwt.session_idle_seconds <= 0 ||
+            value.security.jwt.session_idle_seconds >
+                value.security.jwt.expires_in_seconds))
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
     for (const auto& [name, service] : value.services)

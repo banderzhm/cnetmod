@@ -310,13 +310,18 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
     "jwt": {
       "enabled": true,
       "issuer": "order-service",
-      "secret": "${ORDER_SERVICE_JWT_SECRET}"
+      "secret": "${ORDER_SERVICE_JWT_SECRET}",
+      "expires_in_seconds": 604800,
+      "session_idle_seconds": 900
     }
   }
 }
 ```
 
-`enabled: true` 时，issuer 必须非空且 secret 至少 32 字节。`${...}` 只由
+`enabled: true` 时，issuer 必须非空、secret 至少 32 字节，
+`expires_in_seconds` 在 1 到 2592000 之间，`session_idle_seconds` 在 1 到
+`expires_in_seconds` 之间。两者分别供 JWT 的绝对有效期和应用会话空闲超时使用。
+`${...}` 只由
 配置加载器集中展开；Application 代码通过
 `runtime.configuration().security.jwt` 获取经过校验的只读值。JWT 配置变更
 被分类为需要重启，且 `secret` 在配置诊断输出中始终脱敏。

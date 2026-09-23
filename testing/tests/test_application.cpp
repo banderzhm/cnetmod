@@ -2197,7 +2197,7 @@ TEST(application_configuration_validates_and_exposes_jwt_security)
         "cnetmod-application-security-test.json";
     {
         std::ofstream output{path};
-        output << R"({"security":{"jwt":{"enabled":true,"issuer":"test-issuer","secret":"0123456789abcdef0123456789abcdef"}},"management":{"enabled":false},"logging":{"manage_lifecycle":false}})";
+        output << R"({"security":{"jwt":{"enabled":true,"issuer":"test-issuer","secret":"0123456789abcdef0123456789abcdef","expires_in_seconds":3600,"session_idle_seconds":600}},"management":{"enabled":false},"logging":{"manage_lifecycle":false}})";
     }
     auto host = application::application_builder{"security-configuration-test"}
                     .configuration_file(path)
@@ -2209,6 +2209,8 @@ TEST(application_configuration_validates_and_exposes_jwt_security)
     ASSERT_TRUE(host->configuration().security.jwt.enabled);
     ASSERT_EQ(host->configuration().security.jwt.issuer, "test-issuer");
     ASSERT_EQ(host->runtime().configuration().security.jwt.secret.size(), 32U);
+    ASSERT_EQ(host->configuration().security.jwt.expires_in_seconds, 3600);
+    ASSERT_EQ(host->configuration().security.jwt.session_idle_seconds, 600);
 
     auto invalid = application::application_builder{"invalid-security"}
                        .configure([](application::application_configuration& value)
@@ -2219,6 +2221,54 @@ TEST(application_configuration_validates_and_exposes_jwt_security)
                            })
                        .build();
     ASSERT_FALSE(invalid.has_value());
+
+    auto invalid_lifetime = application::application_builder{"invalid-jwt-lifetime"}
+                                .configure([](application::application_configuration& value)
+                                    {
+                                        value.security.jwt.enabled = true;
+                                        value.security.jwt.issuer = "test-issuer";
+                                        value.security.jwt.secret =
+                                            "0123456789abcdef0123456789abcdef";
+                                        value.security.jwt.expires_in_seconds = 0;
+                                    })
+                                .build();
+    ASSERT_FALSE(invalid_lifetime.has_value());
+
+    auto invalid_idle = application::application_builder{"invalid-jwt-idle"}
+                            .configure([](application::application_configuration& value)
+                                {
+                                    value.security.jwt.enabled = true;
+                                    value.security.jwt.issuer = "test-issuer";
+                                    value.security.jwt.secret =
+                                        "0123456789abcdef0123456789abcdef";
+                                    value.security.jwt.expires_in_seconds = 60;
+                                    value.security.jwt.session_idle_seconds = 120;
+                                })
+                            .build();
+    ASSERT_FALSE(invalid_idle.has_value());
+}
+
+TEST(application_configuration_reads_jwt_yaml_lifetimes)
+{
+    const auto path = std::filesystem::temp_directory_path() /
+        "cnetmod-application-jwt-lifetime-test.yaml";
+    {
+        std::ofstream output{path};
+        output << "security:\n"
+                  "  jwt:\n"
+                  "    enabled: true\n"
+                  "    issuer: test-issuer\n"
+                  "    secret: 0123456789abcdef0123456789abcdef\n"
+                  "    expires_in_seconds: 7200\n"
+                  "    session_idle_seconds: 300\n";
+    }
+    auto configuration = application::load_configuration(path);
+    std::filesystem::remove(path);
+    ASSERT_TRUE(configuration.has_value());
+    if (!configuration)
+        return;
+    ASSERT_EQ(configuration->security.jwt.expires_in_seconds, 7200);
+    ASSERT_EQ(configuration->security.jwt.session_idle_seconds, 300);
 }
 
 TEST(application_configuration_rejects_invalid_orm_sharding)
