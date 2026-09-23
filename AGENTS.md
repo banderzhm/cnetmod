@@ -9448,6 +9448,12 @@ host 在现有清理截止时间内重试仍登记的服务，退避从 1ms 增�
 - 自动装配 registry：显式启用的 Strategy 集合。
 
 业务模块应继续通过构造函数依赖明确接口，不要把 `service_registry` 当作全局 Service Locator。
+# JWT operations
+
+`application_runtime::sign_jwt(options, secret)` and
+`application_runtime::verify_jwt(token, secret)` use the managed CPU executor
+and resume on the application event loop. The application retains ownership of
+the secret and passes it only at the call site.
 <!-- END SOURCE: skill/infra/application.md -->
 
 <!-- BEGIN SOURCE: skill/infra/architecture.md -->

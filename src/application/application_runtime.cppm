@@ -179,6 +179,11 @@ public:
     [[nodiscard]] auto json() noexcept -> json_template&;
 
 #ifdef CNETMOD_HAS_SSL
+    /** Signs a JWT on the managed CPU executor. */
+    [[nodiscard]] auto sign_jwt(const security::jwt_sign_options& options,
+        std::string_view secret)
+        -> task<std::expected<std::string, std::string>>;
+
     /**
      * @brief Verifies and decodes a JWT on the managed CPU executor.
      */

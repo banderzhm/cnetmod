@@ -56,6 +56,13 @@ auto application_runtime::configuration() const noexcept
 }
 
 #ifdef CNETMOD_HAS_SSL
+auto application_runtime::sign_jwt(const security::jwt_sign_options& options,
+    std::string_view secret)
+    -> task<std::expected<std::string, std::string>>
+{
+    co_return co_await security::sign_jwt(cpu_pool_, io_, options, secret);
+}
+
 auto application_runtime::verify_jwt(std::string_view token,
     std::string_view secret)
     -> task<std::expected<security::jwt_claims, std::string>>
