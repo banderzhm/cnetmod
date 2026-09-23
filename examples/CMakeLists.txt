@@ -51,11 +51,13 @@ if(CNETMOD_ENABLE_HTTP)
         http/http_demo
         http/http2_demo
         http/hight_http
-        http/hight_plus_http
         http/multicore_http
         http/client_demo
         http/cookie_demo
     )
+    if(CNETMOD_ENABLE_SSL)
+        list(APPEND HTTP_EXAMPLES http/hight_plus_http)
+    endif()
     if(CNETMOD_ENABLE_MYSQL)
         list(APPEND HTTP_EXAMPLES http/tfb_benchmark)
     endif()

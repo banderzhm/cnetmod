@@ -141,7 +141,6 @@ srv.use(jwt_auth({
 }));
 ```
 
-辅助函数：`generate_secure_token(std::size_t bytes = 32) -> std::string` 生成 CSPRNG 安全令牌。
 
 ### 3. authorization — 授权
 

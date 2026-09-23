@@ -7164,7 +7164,6 @@ srv.use(jwt_auth({
 }));
 ```
 
-辅助函数：`generate_secure_token(std::size_t bytes = 32) -> std::string` 生成 CSPRNG 安全令牌。
 
 ### 3. authorization — 授权
 
@@ -16875,6 +16874,11 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 - CPU 密集的签名/验证操作自动卸载到 `thread_pool`，不阻塞 IO 线程
 - 使用 `std::expected<T, std::string>` 返回结果
 - 当前仅支持 HS256（HMAC-SHA256 对称签名）
+- `generate_secure_token()` 使用配置的 TLS 提供者的 CSPRNG 生成十六进制令牌；随机源失败时抛出异常
+
+```cpp
+auto token = cnetmod::security::generate_secure_token(32); // 64 位十六进制字符
+```
 
 ## 1. jwt_algorithm — 签名算法
 

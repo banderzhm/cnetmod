@@ -28,6 +28,10 @@ import cnetmod.io.io_context;
 
 export namespace cnetmod::security {
 
+/// Generate a hex-encoded token using the configured TLS provider's CSPRNG.
+/// Throws std::runtime_error if the provider cannot supply random bytes.
+[[nodiscard]] auto generate_secure_token(std::size_t bytes = 32) -> std::string;
+
 // =============================================================================
 // jwt_algorithm — Supported signing algorithms
 // =============================================================================

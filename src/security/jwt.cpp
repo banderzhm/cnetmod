@@ -1,3 +1,7 @@
+module;
+
+#include <openssl/rand.h>
+
 /**
  * @file jwt.cpp
  * @brief Backend-neutral JWT HS256 implementation.
@@ -10,6 +14,27 @@ import cnetmod.json;
 import cnetmod.utils.hmac_sha256;
 
 namespace cnetmod::security {
+
+auto generate_secure_token(std::size_t bytes) -> std::string
+{
+    if (bytes > static_cast<std::size_t>(std::numeric_limits<int>::max()))
+        throw std::length_error("secure token length exceeds RAND_bytes limit");
+
+    std::vector<unsigned char> random(bytes);
+    if (bytes != 0 && RAND_bytes(random.data(), static_cast<int>(bytes)) != 1)
+        throw std::runtime_error("secure token generation failed");
+
+    constexpr std::string_view hex = "0123456789abcdef";
+    std::string token;
+    token.reserve(bytes * 2);
+    for (const auto byte : random)
+    {
+        token.push_back(hex[byte >> 4]);
+        token.push_back(hex[byte & 0x0f]);
+    }
+    return token;
+}
+
 namespace {
 
 constexpr std::string_view base64url_alphabet =

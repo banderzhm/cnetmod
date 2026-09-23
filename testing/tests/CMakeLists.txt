@@ -81,6 +81,10 @@ set(TEST_SOURCES
     test_http3_frame.cpp
 )
 
+if(CNETMOD_ENABLE_SSL)
+    list(APPEND TEST_SOURCES test_security_token.cpp)
+endif()
+
 # Filter out QUIC/HTTP3 tests if QUIC not available
 if(NOT CNETMOD_HAS_QUIC)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "^(test_quic|test_http3)")

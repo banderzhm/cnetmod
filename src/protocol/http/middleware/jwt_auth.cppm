@@ -12,27 +12,6 @@ import cnetmod.protocol.http;
 
 namespace cnetmod {
 
-// =============================================================================
-// generate_secure_token — CSPRNG secure token (hex encoded)
-// =============================================================================
-
-/// Generate cryptographically secure random token (hex encoded)
-/// MSVC uses BCryptGenRandom, GCC/Clang uses /dev/urandom
-export inline auto generate_secure_token(std::size_t bytes = 32) -> std::string
-{
-    static thread_local std::random_device rd;
-    static constexpr char hex[] = "0123456789abcdef";
-    std::string token;
-    token.reserve(bytes * 2);
-    for (std::size_t i = 0; i < bytes; ++i)
-    {
-        auto byte = static_cast<std::uint8_t>(rd() & 0xFF);
-        token.push_back(hex[(byte >> 4) & 0x0F]);
-        token.push_back(hex[byte & 0x0F]);
-    }
-    return token;
-}
-
 export struct jwt_auth_failure
 {
     int status = http::status::unauthorized;

@@ -26,7 +26,7 @@ import cnetmod.protocol.http.middleware.request_id;
 import cnetmod.protocol.http.middleware.body_limit;
 import cnetmod.protocol.http.middleware.metrics;
 import cnetmod.protocol.http.middleware.rate_limiter;
-import cnetmod.protocol.http.middleware.jwt_auth;
+import cnetmod.security.jwt;
 
 namespace cn = cnetmod;
 namespace http = cnetmod::http;
@@ -316,7 +316,7 @@ auto handle_login(http::request_context& ctx) -> cn::task<void> {
         }
 
         auto now = std::chrono::steady_clock::now();
-        token = cn::generate_secure_token();
+        token = cn::security::generate_secure_token();
         g_state->sessions[token] = session_info{
             .token         = token,
             .client_ip     = client_ip,
