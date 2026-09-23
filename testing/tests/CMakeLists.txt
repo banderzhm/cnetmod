@@ -45,6 +45,7 @@ set(TEST_SOURCES
     test_http_utils.cpp
     http_client_test.cpp
     test_http_ip_filter.cpp
+    test_http_jwt_auth.cpp
     test_http2_hpack.cpp
     test_http2_stream.cpp
     test_dns.cpp

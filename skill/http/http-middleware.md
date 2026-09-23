@@ -120,10 +120,17 @@ struct jwt_auth_options {
     std::vector<std::string> skip_paths;
     std::string header_name = "Authorization";
     std::string token_prefix = "Bearer ";
+    std::function<task<std::expected<void, jwt_auth_failure>>(
+        http::request_context&, std::string_view)> authenticate_async;
+    std::function<void(http::request_context&,
+        const jwt_auth_failure&)> on_failure;
 };
 ```
 
 **行为**: 检查 `skip_paths` → 提取 `Authorization` 头 → 去除 `Bearer ` 前缀 → 调用 `verify(token)` → 失败返回 401。
+需要异步验签或查询当前用户时，设置 `authenticate_async`；它优先于同步 `verify`，
+并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message}` 拒绝请求；
+`on_failure` 可输出应用自己的错误响应格式。不设置新字段时保持原有同步行为。
 
 ```cpp
 srv.use(jwt_auth({

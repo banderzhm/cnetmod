@@ -63,6 +63,12 @@ export inline auto generate_secure_token(std::size_t bytes = 32) -> std::string
 // jwt_auth_options — JWT authentication configuration
 // =============================================================================
 
+export struct jwt_auth_failure
+{
+    int status = http::status::unauthorized;
+    std::string message = "invalid or expired token";
+};
+
 export struct jwt_auth_options
 {
     /// Token verification function: returns true if valid
@@ -76,6 +82,15 @@ export struct jwt_auth_options
 
     /// Token prefix (default: "Bearer "), set to empty to use entire header value
     std::string token_prefix = "Bearer ";
+
+    /// Coroutine authentication can verify a token and bind a request principal.
+    /// When set, this takes precedence over the synchronous verify callback.
+    std::function<task<std::expected<void, jwt_auth_failure>>(
+        http::request_context&, std::string_view)> authenticate_async;
+
+    /// Optional application-specific response envelope for authentication failures.
+    std::function<void(http::request_context&,
+        const jwt_auth_failure&)> on_failure;
 };
 
 // =============================================================================
@@ -93,6 +108,15 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
 {
     return [opts = std::move(opts)](http::request_context& ctx, http::next_fn next) -> task<void>
     {
+        auto reject = [&opts, &ctx](jwt_auth_failure failure,
+            std::string_view default_body)
+        {
+            if (opts.on_failure)
+                opts.on_failure(ctx, failure);
+            else
+                ctx.json(failure.status, default_body);
+        };
+
         // Skip specified paths
         auto path = ctx.path();
         for (auto& skip : opts.skip_paths)
@@ -108,7 +132,8 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         auto auth = ctx.get_header(opts.header_name);
         if (auth.empty())
         {
-            ctx.json(http::status::unauthorized,
+            reject({http::status::unauthorized,
+                "missing authorization header"},
                 R"({"error":"missing authorization header"})");
             co_return;
         }
@@ -118,17 +143,38 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         {
             if (!auth.starts_with(opts.token_prefix))
             {
-                ctx.json(http::status::unauthorized,
+                reject({http::status::unauthorized,
+                    "invalid authorization format"},
                     R"({"error":"invalid authorization format"})");
                 co_return;
             }
             token = auth.substr(opts.token_prefix.size());
         }
 
-        // Verify
-        if (!opts.verify || !opts.verify(token))
+        if (token.empty())
         {
-            ctx.json(http::status::unauthorized,
+            reject({http::status::unauthorized,
+                "invalid authorization format"},
+                R"({"error":"invalid authorization format"})");
+            co_return;
+        }
+
+        // Own the token across suspension in a coroutine authenticator.
+        const std::string owned_token{token};
+        if (opts.authenticate_async)
+        {
+            auto result = co_await opts.authenticate_async(ctx, owned_token);
+            if (!result)
+            {
+                reject(std::move(result.error()),
+                    R"({"error":"invalid or expired token"})");
+                co_return;
+            }
+        }
+        else if (!opts.verify || !opts.verify(owned_token))
+        {
+            reject({http::status::unauthorized,
+                "invalid or expired token"},
                 R"({"error":"invalid or expired token"})");
             co_return;
         }
