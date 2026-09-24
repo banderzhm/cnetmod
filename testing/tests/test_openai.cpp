@@ -1039,6 +1039,15 @@ TEST(openai_model_query_router_selects_named_retrievers_and_falls_back)
     ASSERT_EQ(fallback->size(), std::size_t{2});
     ASSERT_EQ(model.last_request.response_format, "json_schema");
     ASSERT_EQ(model.last_request.response_schema_name, "retrieval_routes");
+    const auto& routes_schema = model.last_request.response_schema;
+    ASSERT_EQ(routes_schema["type"].get<std::string>(), "object");
+    ASSERT_EQ(routes_schema["properties"]["routes"]["type"].get<std::string>(), "array");
+    ASSERT_EQ(routes_schema["properties"]["routes"]["items"]["enum"].get_array().size(),
+        std::size_t{2});
+    ASSERT_EQ(routes_schema["properties"]["routes"]["items"]["enum"][0].get<std::string>(),
+        "guides");
+    ASSERT_EQ(routes_schema["required"][0].get<std::string>(), "routes");
+    ASSERT_EQ(routes_schema["additionalProperties"].get<bool>(), false);
 }
 
 TEST(openai_model_query_transformer_expands_with_strict_validated_output)
@@ -1069,6 +1078,12 @@ TEST(openai_model_query_transformer_expands_with_strict_validated_output)
     ASSERT_EQ(model.last_request.response_format, "json_schema");
     ASSERT_EQ(model.last_request.response_schema_name,
         "transformed_retrieval_queries");
+    const auto& queries_schema = model.last_request.response_schema;
+    ASSERT_EQ(queries_schema["properties"]["queries"]["type"].get<std::string>(), "array");
+    ASSERT_EQ(queries_schema["properties"]["queries"]["items"]["type"].get<std::string>(),
+        "string");
+    ASSERT_EQ(queries_schema["required"][0].get<std::string>(), "queries");
+    ASSERT_EQ(queries_schema["additionalProperties"].get<bool>(), false);
 }
 
 TEST(openai_retrieval_augmentor_runs_fanout_concurrently_with_context)
@@ -1225,6 +1240,17 @@ TEST(openai_chat_scoring_model_requires_one_score_per_candidate)
     ASSERT_EQ((*scores)[1], 0.25F);
     ASSERT_EQ(model.last_request.response_format, "json_schema");
     ASSERT_EQ(model.last_request.response_schema_name, "relevance_scores");
+    const auto& scores_schema = model.last_request.response_schema;
+    ASSERT_EQ(scores_schema["properties"]["scores"]["items"]["properties"]["score"]["type"].get<std::string>(),
+        "number");
+    ASSERT_EQ(scores_schema["properties"]["scores"]["items"]["properties"]["score"]["minimum"].as<double>(),
+        0.0);
+    ASSERT_EQ(scores_schema["properties"]["scores"]["items"]["properties"]["score"]["maximum"].as<double>(),
+        1.0);
+    ASSERT_EQ(scores_schema["properties"]["scores"]["items"]["required"][0].get<std::string>(),
+        "index");
+    ASSERT_EQ(scores_schema["properties"]["scores"]["items"]["additionalProperties"].get<bool>(),
+        false);
 }
 
 TEST(openai_vector_store_embeds_upserts_and_ranks)
@@ -2753,8 +2779,8 @@ TEST(openai_file_agentic_store_round_trips_suspended_checkpoint)
             .id = "approval-7",
             .prompt = "Approve deployment?",
             .response_key = "approved",
-                .response_schema = cnetmod::json::object(
-                    {{"type", "boolean"}})}};
+            .response_schema = cnetmod::json::object(
+                {{"type", "boolean"}})}};
 
     auto saved = cnetmod::sync_wait(
         store.save("tenant/workflow", checkpoint));

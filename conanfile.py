@@ -83,8 +83,14 @@ class CnetmodConan(ConanFile):
         "cmake/*",
         "include/*",
         "src/*",
+        "3rdparty/boringssl/*",
+        "3rdparty/glaze/*",
+        "3rdparty/icu/*",
+        "3rdparty/leveldb/*",
         "3rdparty/pugixml/*",
         "3rdparty/stdexec/include/*",
+        "3rdparty/yaml-cpp/*",
+        "3rdparty/yaml-cpp-modules/*",
     )
 
     def config_options(self):
@@ -109,8 +115,6 @@ class CnetmodConan(ConanFile):
         if self.options.with_kafka and self.options.with_lz4:
             self.requires("lz4/[>=1.9 <2]")
 
-        if self.options.with_ssl:
-            self.requires("openssl/[>=1.1 <4]")
         if self.options.with_raft and self.options.with_leveldb:
             self.requires("leveldb/1.23")
         if self.options.with_mimalloc:
@@ -150,7 +154,7 @@ class CnetmodConan(ConanFile):
         deps.generate()
 
         tc = CMakeToolchain(self)
-        tc.variables["CNETMOD_USE_SYSTEM_DEPS"] = True
+        tc.variables["CNETMOD_DEPENDENCY_MODE"] = "conan"
         # Every Conan protocol option is explicit, so do not let CMake's
         # aggregate default silently re-enable an omitted protocol.
         tc.variables["CNETMOD_ENABLE_ALL_PROTOCOLS"] = False
@@ -195,16 +199,17 @@ class CnetmodConan(ConanFile):
         cmake.build(target="cnetmod_core")
 
     def package(self):
+        CMake(self).install()
         copy(self, "LICENSE*", self.source_folder, os.path.join(self.package_folder, "licenses"))
-        copy(self, "*.hpp", os.path.join(self.source_folder, "include"), os.path.join(self.package_folder, "include"))
-        copy(self, "*.cppm", os.path.join(self.source_folder, "src"), os.path.join(self.package_folder, "src"))
-        copy(self, "*.cppm", os.path.join(self.source_folder, "cmake", "modules"), os.path.join(self.package_folder, "cmake", "modules"))
-        copy(self, "*.lib", self.build_folder, os.path.join(self.package_folder, "lib"), keep_path=False)
-        copy(self, "*.a", self.build_folder, os.path.join(self.package_folder, "lib"), keep_path=False)
 
     def package_info(self):
         self.cpp_info.set_property("cmake_file_name", "cnetmod")
         self.cpp_info.set_property("cmake_target_name", "cnetmod::cnetmod_core")
         self.cpp_info.libs = ["cnetmod_core"]
+        if self.options.with_http:
+            self.cpp_info.libs.append("yaml-cpp")
+        if self.options.with_ssl:
+            self.cpp_info.libs.extend(["ssl", "crypto"])
+            self.cpp_info.libdirs.append("lib/cnetmod/boringssl")
         self.cpp_info.includedirs = ["include"]
         self.cpp_info.builddirs = ["cmake"]

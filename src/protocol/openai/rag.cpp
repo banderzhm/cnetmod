@@ -11,6 +11,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.task_group;
 import cnetmod.coro.cancel;
 import cnetmod.io.io_context;
+import cnetmod.json;
 import :foundation;
 import :messages;
 import :model;
@@ -20,6 +21,18 @@ import :filters;
 import :rag;
 
 namespace cnetmod::openai {
+
+namespace detail {
+    auto queries_schema() -> json;
+    auto routes_schema(const json& names) -> json;
+    auto scores_schema() -> json;
+    auto parse_queries(std::string_view text)
+        -> std::expected<std::vector<std::string>, std::error_code>;
+    auto parse_routes(std::string_view text)
+        -> std::expected<std::vector<std::string>, std::error_code>;
+    auto parse_scores(std::string_view text)
+        -> std::expected<std::vector<std::pair<std::size_t, double>>, std::error_code>;
+} // namespace detail
 
 functional_query_transformer::functional_query_transformer(
     query_transform_handler handler)
@@ -78,9 +91,7 @@ auto model_query_transformer::transform(retrieval_query query,
         instruction = "Write one short hypothetical passage that would directly answer " "the input. It will be embedded for retrieval, not shown as fact.";
         break;
     }
-    const json schema{{"type", "object"},
-        {"properties", {{"queries", {{"type", "array"}, {"items", {{"type", "string"}}}}}}},
-        {"required", {"queries"}}, {"additionalProperties", false}};
+    const auto schema = detail::queries_schema();
     chat_request request;
     request.model = options_.model;
     request.temperature = 0.0;
@@ -91,9 +102,9 @@ auto model_query_transformer::transform(retrieval_query query,
     request.messages = {message::system(instruction +
                             " Return only the requested structured result."),
         message::user(cnetmod::json::write_document(
-                          cnetmod::json::object({{"query", query.text},
-                              {"metadata", query.metadata}}))
-                          .value_or("{}"))};
+            cnetmod::json::object({{"query", query.text},
+                {"metadata", query.metadata}}))
+                .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return std::unexpected(
@@ -101,18 +112,12 @@ auto model_query_transformer::transform(retrieval_query query,
     if (response->choices.empty())
         co_return std::unexpected(
             "model query transformer returned no choices");
-    auto parsed_transformed = cnetmod::json::parse_document(
+    auto parsed_transformed = detail::parse_queries(
         response->choices.front().msg.content);
     if (!parsed_transformed)
         co_return std::unexpected(
             "model query transformer returned invalid JSON");
-    const auto& transformed = *parsed_transformed;
-    auto valid = validate_json_schema(transformed, schema);
-    if (!valid)
-        co_return std::unexpected(
-            "model query transformer response validation failed: " +
-            valid.error());
-    const auto& values = transformed["queries"].get_array();
+    const auto& values = *parsed_transformed;
     if (values.empty() || values.size() > maximum)
         co_return std::unexpected(std::format(
             "model query transformer returned {} queries; expected 1..{}",
@@ -129,10 +134,7 @@ auto model_query_transformer::transform(retrieval_query query,
     }
     for (const auto& value : values)
     {
-        if (!value.is_string())
-            co_return std::unexpected(
-                "model query transformer returned a non-string query");
-        auto text = value.get<std::string>();
+        auto text = value;
         const auto first = text.find_first_not_of(" \t\r\n");
         const auto last = text.find_last_not_of(" \t\r\n");
         if (first == std::string::npos)
@@ -294,10 +296,7 @@ auto model_query_router::route(const retrieval_query& query,
                 {"description", candidate.description}}));
         names.get_array().emplace_back(candidate.name);
     }
-    const json schema{{"type", "object"},
-        {"properties",
-            {{"routes", {{"type", "array"}, {"items", {{"type", "string"}, {"enum", names}}}, {"uniqueItems", true}}}}},
-        {"required", {"routes"}}, {"additionalProperties", false}};
+    const auto schema = detail::routes_schema(names);
     chat_request request;
     if (!options_.model.empty())
         request.model = options_.model;
@@ -309,31 +308,23 @@ auto model_query_router::route(const retrieval_query& query,
     request.messages = {message::system(
                             "Select every retriever relevant to the query. " "Return only the requested structured result."),
         message::user(cnetmod::json::write_document(cnetmod::json::object(
-                          {{"query", query.text},
-                              {"query_metadata", query.metadata},
-                              {"retrievers", candidates}}))
-                          .value_or("{}"))};
+                                                        {{"query", query.text},
+                                                            {"query_metadata", query.metadata},
+                                                            {"retrievers", candidates}}))
+                .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return fallback("model query routing failed: " + response.error());
     if (response->choices.empty())
         co_return fallback("model query router returned no choices");
-    auto parsed_selection = cnetmod::json::parse_document(
+    auto parsed_selection = detail::parse_routes(
         response->choices.front().msg.content);
     if (!parsed_selection)
         co_return fallback("model query router returned invalid JSON");
-    const auto& selection = *parsed_selection;
-    auto valid = validate_json_schema(selection, schema);
-    if (!valid)
-        co_return fallback(
-            "model query router response validation failed: " +
-            valid.error());
-
     std::vector<retriever*> result;
     std::set<std::string, std::less<>> selected_names;
-    for (const auto& name : selection["routes"].get_array())
+    for (const auto& value : *parsed_selection)
     {
-        const auto value = name.get<std::string>();
         if (!selected_names.insert(value).second)
             co_return fallback(
                 "model query router selected a retriever more than once");
@@ -433,21 +424,9 @@ auto chat_scoring_model::score(std::string query,
         const auto& candidate = documents[index];
         candidates.get_array().push_back(cnetmod::json::object(
             {{"index", index}, {"id", candidate.id},
-                {"content", candidate.page_content.substr(
-                                0, options_.max_document_characters)}}));
+                {"content", candidate.page_content.substr(0, options_.max_document_characters)}}));
     }
-    const json schema{{"type", "object"},
-        {"properties",
-            {{"scores",
-                {{"type", "array"},
-                    {"items",
-                        {{"type", "object"},
-                            {"properties",
-                                {{"index", {{"type", "integer"}}},
-                                    {"score", {{"type", "number"}, {"minimum", 0.0}, {"maximum", 1.0}}}}},
-                            {"required", {"index", "score"}},
-                            {"additionalProperties", false}}}}}}},
-        {"required", {"scores"}}, {"additionalProperties", false}};
+    const auto schema = detail::scores_schema();
     chat_request request;
     if (!options_.model.empty())
         request.model = options_.model;
@@ -459,35 +438,27 @@ auto chat_scoring_model::score(std::string query,
     request.messages = {message::system(
                             "Score every candidate's relevance to the query " "from 0 to 1. Return each index exactly once."),
         message::user(cnetmod::json::write_document(cnetmod::json::object(
-                          {{"query", query}, {"candidates", candidates}}))
-                          .value_or("{}"))};
+                                                        {{"query", query}, {"candidates", candidates}}))
+                .value_or("{}"))};
     auto response = co_await model_.invoke(std::move(request), config);
     if (!response)
         co_return std::unexpected("document scoring failed: " +
             response.error());
     if (response->choices.empty())
         co_return std::unexpected("document scoring returned no choices");
-    auto parsed_result = cnetmod::json::parse_document(
+    auto parsed_result = detail::parse_scores(
         response->choices.front().msg.content);
     if (!parsed_result)
         co_return std::unexpected("document scoring returned invalid JSON");
-    const auto& result = *parsed_result;
-    auto valid = validate_json_schema(result, schema);
-    if (!valid)
-        co_return std::unexpected(
-            "document scoring response validation failed: " + valid.error());
-
     std::vector<float> scores(documents.size());
     std::vector<bool> assigned(documents.size(), false);
-    for (const auto& item : result["scores"].get_array())
+    for (const auto& [index, value] : *parsed_result)
     {
-        const auto index = item["index"].as<std::size_t>();
-        const auto value = item["score"].as<float>();
         if (index >= documents.size() || assigned[index] ||
             !std::isfinite(value) || value < 0.0F || value > 1.0F)
             co_return std::unexpected(
                 "document scoring returned invalid index or score");
-        scores[index] = value;
+        scores[index] = static_cast<float>(value);
         assigned[index] = true;
     }
     if (!std::ranges::all_of(assigned, std::identity{}))

@@ -112,6 +112,12 @@ macro(cnetmod_configure_icu)
         if(TARGET ICU::uc AND TARGET ICU::i18n)
             set(CNETMOD_HAS_ICU ON)
         else()
+            if(CNETMOD_DEPENDENCY_MODE STREQUAL "system" AND UNIX AND NOT APPLE)
+                message(STATUS "Install the missing ICU development package:")
+                message(STATUS "  Arch:   sudo pacman -S --needed icu")
+                message(STATUS "  Ubuntu: sudo apt install libicu-dev")
+                message(STATUS "  CentOS: sudo dnf install libicu-devel")
+            endif()
             message(FATAL_ERROR
                 "CNETMOD_ENABLE_POSTGRESQL=ON requires ICU uc and i18n for complete RFC 4013 SASLprep. "
                 "Install ICU with the selected package manager or disable PostgreSQL explicitly.")

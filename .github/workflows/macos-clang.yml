@@ -30,7 +30,7 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         submodules: recursive
 
@@ -101,7 +101,7 @@ jobs:
         echo "macOS SDK path: ${SDKROOT}"
 
     - name: Set up Python interoperability runtime
-      uses: actions/setup-python@v5
+      uses: actions/setup-python@v6
       with:
         python-version: '3.12'
         cache: 'pip'
@@ -148,6 +148,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} \
           -DCMAKE_CXX_FLAGS="-isysroot ${SDKROOT} -stdlib=libc++" \
           -DCMAKE_OSX_SYSROOT="${SDKROOT}" \
+          -DCNETMOD_DEPENDENCY_MODE=system \
           -DCMAKE_PREFIX_PATH="${ICU_PREFIX}" \
           -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \
           -DLIBCXX_INCLUDE_DIRS="${LIBCXX_INCLUDE}" \
@@ -203,6 +204,7 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.sdk-path.outputs.SDKROOT }} -stdlib=libc++" \
           -DCMAKE_OSX_SYSROOT="${{ steps.sdk-path.outputs.SDKROOT }}" \
+          -DCNETMOD_DEPENDENCY_MODE=system \
           -DLIBCXX_MODULE_DIRS="${{ steps.llvm-paths.outputs.LIBCXX_MODULES }}" \
           -DLIBCXX_INCLUDE_DIRS="${{ steps.llvm-paths.outputs.LIBCXX_INCLUDE }}" \
           -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF \

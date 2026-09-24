@@ -226,7 +226,7 @@ cd cnetmod
 git submodule update --init --recursive
 
 # 构建
-cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
+cmake -B build -DCNETMOD_DEPENDENCY_MODE=system -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
 
 # 显式构建全部 cnetmod 目标
@@ -244,6 +244,7 @@ mode 安装受支持的第三方依赖：
 ```bash
 cmake -B build-vcpkg \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DCNETMOD_DEPENDENCY_MODE=vcpkg \
   -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build-vcpkg --target cnetmod_build_all
 ```
@@ -264,15 +265,19 @@ set VCPKG_DOWNLOADS=%USERPROFILE%\.cache\vcpkg\downloads
 
 cmake -S . -B build-vcpkg-vs2026 -G"Visual Studio 18 2026" ^
   -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
+  -DCNETMOD_DEPENDENCY_MODE=vcpkg ^
   -DVCPKG_TARGET_TRIPLET=x64-windows-vs2026 ^
   -DVCPKG_OVERLAY_TRIPLETS=cmake/vcpkg-triplets
 
 cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 ```
 
-cnetmod 会先复用当前 toolchain 或宿主项目暴露的依赖，再回退到已有的
-`3rdparty` 副本。`pugixml` 在本仓库里保持为正常 Git submodule；包管理器
-构建应优先使用 package target，只在没有系统包时回退到该 submodule。
+每个构建目录只能选择一种依赖模式：`system` 优先读取已安装的系统依赖，
+缺失时使用已有的固定 `3rdparty` 子模块；Linux 上若仍缺少可选库，配置时
+会显示 Arch、Ubuntu、CentOS 的安装命令。`vcpkg`、`conan` 分别要求对应
+工具链，并从包目标取得托管依赖。
+BoringSSL、Glaze 和 YAML C++23 模块门面在三种模式下都仍使用固定版本的
+源码。切换模式时请新建构建目录。
 
 ### 使用 Conan 构建
 

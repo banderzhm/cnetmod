@@ -31,24 +31,7 @@
 #   From source: https://github.com/microsoft/mimalloc
 #
 function(cnetmod_use_mimalloc)
-    # Prefer the active package toolchain. Some IDE integrations install a
-    # manifest into <build>/vcpkg_installed but do not append that prefix to
-    # CMAKE_PREFIX_PATH, so plain find_package() incorrectly falls back to
-    # the system allocator even though mimalloc is present.
     find_package(mimalloc CONFIG QUIET)
-    if(NOT mimalloc_FOUND)
-        file(GLOB _cnetmod_mimalloc_vcpkg_configs
-            "${CMAKE_BINARY_DIR}/vcpkg_installed/*/share/mimalloc/mimalloc-config.cmake")
-        list(LENGTH _cnetmod_mimalloc_vcpkg_configs _cnetmod_mimalloc_config_count)
-        if(_cnetmod_mimalloc_config_count GREATER 0)
-            list(GET _cnetmod_mimalloc_vcpkg_configs 0 _cnetmod_mimalloc_config)
-            include("${_cnetmod_mimalloc_config}")
-            if(TARGET mimalloc)
-                set(mimalloc_FOUND TRUE)
-                get_filename_component(mimalloc_DIR "${_cnetmod_mimalloc_config}" DIRECTORY)
-            endif()
-        endif()
-    endif()
     
     if(mimalloc_FOUND)
         message(STATUS "Found mimalloc: ${mimalloc_DIR}")
@@ -78,7 +61,7 @@ function(cnetmod_use_mimalloc)
         
         message(STATUS "Configured to use mimalloc allocator")
         
-    else()
+    elseif(CNETMOD_DEPENDENCY_MODE STREQUAL "system")
         # Try to find mimalloc library directly (fallback for systems without CMake config)
         find_library(MIMALLOC_LIBRARY NAMES mimalloc)
         find_path(MIMALLOC_INCLUDE_DIR NAMES mimalloc.h)
@@ -101,19 +84,11 @@ function(cnetmod_use_mimalloc)
             
         else()
             message(STATUS "mimalloc not found, using system allocator")
-            message(STATUS "  Install mimalloc for better performance:")
-            if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-                message(STATUS "    Ubuntu/Debian: sudo apt install libmimalloc-dev")
-                message(STATUS "    Arch Linux: sudo pacman -S mimalloc")
-            elseif(APPLE)
-                message(STATUS "    macOS: brew install mimalloc")
-            elseif(WIN32)
-                message(STATUS "    Windows: vcpkg install mimalloc")
-            endif()
-            message(STATUS "    From source: https://github.com/microsoft/mimalloc")
-            
             set(CNETMOD_USING_MIMALLOC FALSE CACHE BOOL "Using mimalloc allocator" FORCE)
         endif()
+    else()
+        message(STATUS "mimalloc package unavailable; using system allocator")
+        set(CNETMOD_USING_MIMALLOC FALSE CACHE BOOL "Using mimalloc allocator" FORCE)
     endif()
 endfunction()
 

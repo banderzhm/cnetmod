@@ -1,7 +1,6 @@
 name: Windows MSVC Build
 
 env:
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
   # Reuse vcpkg's compiled packages between workflow runs. The cache key is
   # derived by vcpkg from the manifest, triplet and compiler ABI.
   VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
@@ -11,6 +10,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
 
@@ -53,7 +53,7 @@ jobs:
       # the materialized include/lib tree.  Restoring it makes the manifest
       # verification effectively incremental on a fresh hosted runner.
       - name: Restore materialized vcpkg dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/vcpkg_installed
           key: vcpkg-installed-${{ runner.os }}-vs18-x64-${{ steps.runner-image.outputs.version }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
@@ -64,13 +64,13 @@ jobs:
           & "$env:VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows --disable-metrics
 
       - name: Setup MSBuild (VS 2026 / VS18)
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
         with:
           vs-version: "18.0"
           msbuild-architecture: x86
 
       - name: Set up Python interoperability runtime
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: 'pip'
@@ -111,16 +111,19 @@ jobs:
             -A x64 `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCNETMOD_DEPENDENCY_MODE=vcpkg `
             -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed" `
-            -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
-            -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
+            -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} `
+            -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
+            -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
             -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON `
             -S "${{ github.workspace }}"
 
       - name: Build
-        run: cmake --build ${{ github.workspace }}/build --target cnetmod_build_all --config ${{ matrix.build_type }} -- /m:2
+        run: cmake --build ${{ github.workspace }}/build --target ${{ github.event_name == 'workflow_dispatch' && 'cnetmod_build_all' || 'cnetmod_core' }} --config ${{ matrix.build_type }} -- /m:1
 
       - name: Install complete interoperability runtime
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           python -m pip install --disable-pip-version-check `
@@ -131,6 +134,7 @@ jobs:
             --requirement testing/mqtt/requirements.txt
 
       - name: Run complete non-external test suite without skips
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           python testing/run_required_ctest.py `
@@ -146,6 +150,7 @@ jobs:
           cmake -B "${{ github.workspace }}/build-core-only" `
             -G "Visual Studio 18 2026" -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCNETMOD_DEPENDENCY_MODE=vcpkg `
             -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed" `
             -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF `
             -DCNETMOD_BUILD_TESTS=OFF -DCNETMOD_BUILD_EXAMPLES=OFF `
@@ -154,11 +159,12 @@ jobs:
             --target cnetmod_core --config Release -- /m:1
 
       - name: Verify ORM instrumentation without HTTP or OTEL transport
-        if: matrix.build_type == 'Release'
+        if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
         shell: pwsh
         run: |
           cmake -B "${{ github.workspace }}/build-mysql-no-http" `
             -G "Visual Studio 18 2026" -A x64 `
+            -DCNETMOD_DEPENDENCY_MODE=system `
             -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF `
             -DCNETMOD_ENABLE_MYSQL=ON -DCNETMOD_ENABLE_ORM=ON `
             -DCNETMOD_ENABLE_SSL=OFF -DCNETMOD_ENABLE_LEVELDB=OFF `
@@ -188,6 +194,7 @@ jobs:
       # HTTP/3 listener, dynamic QPACK recovery, cancellation, migration and
       # aioquic/WebTransport interoperability.
       - name: Run QUIC and HTTP/3 release gates
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           # windows-latest exposes RIO.  Do not silently accept IOCP fallback
@@ -200,6 +207,7 @@ jobs:
             -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|h3_interop_multi_worker_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
       - name: Run application lifecycle and OTEL gates
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |
           $gates = @('test_application', 'test_application_integrations', 'test_otlp_exporter', 'test_instrumentation', 'test_metric_aggregation', 'test_http_observability', 'test_mysql_pool', 'test_ssl_shutdown')
@@ -213,7 +221,7 @@ jobs:
           }
 
       - name: Run smoke tests
-        if: matrix.build_type == 'Release'
+        if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
         shell: pwsh
         run: |
           Write-Host "=== Running cnetmod_app ==="

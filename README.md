@@ -262,7 +262,7 @@ export PATH="/usr/local/opt/llvm/bin:$PATH"      # Intel Mac
 
 The repository supports three common build paths:
 
-- **Submodule/local build**: best for developing this repository with the Git submodules under `3rdparty`.
+- **System CMake build** (`system`): native CMake using installed libraries and the pinned Git submodules under `3rdparty`.
 - **vcpkg manifest build**: lets vcpkg own the dependencies; on Windows + VS 2026 use the included `x64-windows-vs2026` overlay triplet.
 - **Conan build/package**: supports Conan-based distribution and reuse; `conan create` validates recipe export, isolated build, and packaging.
 
@@ -275,7 +275,7 @@ cd cnetmod
 git submodule update --init --recursive
 
 # Build
-cmake -B build -DCNETMOD_BUILD_EXAMPLES=ON
+cmake -B build -DCNETMOD_DEPENDENCY_MODE=system -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build
 
 # Build every cnetmod target explicitly
@@ -293,6 +293,7 @@ install the supported third-party dependencies:
 ```bash
 cmake -B build-vcpkg \
   -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DCNETMOD_DEPENDENCY_MODE=vcpkg \
   -DCNETMOD_BUILD_EXAMPLES=ON
 cmake --build build-vcpkg --target cnetmod_build_all
 ```
@@ -313,17 +314,20 @@ set VCPKG_DOWNLOADS=%USERPROFILE%\.cache\vcpkg\downloads
 
 cmake -S . -B build-vcpkg-vs2026 -G"Visual Studio 18 2026" ^
   -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%/scripts/buildsystems/vcpkg.cmake ^
+  -DCNETMOD_DEPENDENCY_MODE=vcpkg ^
   -DVCPKG_TARGET_TRIPLET=x64-windows-vs2026 ^
   -DVCPKG_OVERLAY_TRIPLETS=cmake/vcpkg-triplets
 
 cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 ```
 
-cnetmod first reuses dependencies exposed by the active toolchain or parent
-project, then falls back to bundled `3rdparty` copies when they exist. `pugixml`
-is kept as a normal Git submodule; package-manager builds should prefer the
-package target and only fall back to that submodule when no system package is
-available.
+Choose exactly one dependency mode per build directory. `system` checks locally
+installed libraries and falls back to pinned submodules where available; on
+Linux it prints Arch, Ubuntu, and CentOS installation commands for missing
+optional libraries. `vcpkg` and `conan` require their
+own toolchain and use package targets for managed dependencies. BoringSSL,
+Glaze, and the YAML C++23 module facade remain pinned source dependencies in
+all three modes. Use a fresh build directory when changing modes.
 
 ### Build with Conan
 

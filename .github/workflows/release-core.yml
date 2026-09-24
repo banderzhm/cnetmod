@@ -25,7 +25,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           ref: ${{ env.RELEASE_TAG }}
@@ -44,7 +44,7 @@ jobs:
         run: '"version=$env:ImageVersion" >> $env:GITHUB_OUTPUT'
 
       - name: Restore materialized vcpkg dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ${{ github.workspace }}/vcpkg_installed
           key: vcpkg-installed-${{ runner.os }}-vs18-x64-${{ steps.runner-image.outputs.version }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
@@ -55,7 +55,7 @@ jobs:
           & "$env:VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows --disable-metrics
 
       - name: Setup MSBuild (VS 2026 / VS18)
-        uses: microsoft/setup-msbuild@v2
+        uses: microsoft/setup-msbuild@v3
         with:
           vs-version: "18.0"
           msbuild-architecture: x86
@@ -66,6 +66,7 @@ jobs:
           cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" `
             -G "Visual Studio 18 2026" -A x64 `
             -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
+            -DCNETMOD_DEPENDENCY_MODE=vcpkg `
             -DCNETMOD_BUILD_TESTS=OFF `
             -DCNETMOD_BUILD_BENCH=OFF `
             -DCNETMOD_BUILD_EXAMPLES=OFF
@@ -101,7 +102,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           ref: ${{ env.RELEASE_TAG }}
@@ -126,6 +127,7 @@ jobs:
           cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCNETMOD_DEPENDENCY_MODE=system \
             -DCMAKE_C_COMPILER=clang-22 \
             -DCMAKE_CXX_COMPILER=clang++-22 \
             -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-22/share/libc++/v1 \
@@ -163,7 +165,7 @@ jobs:
     runs-on: macos-14
     steps:
       - name: Checkout tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           submodules: recursive
           ref: ${{ env.RELEASE_TAG }}
@@ -180,6 +182,7 @@ jobs:
           cmake -S "${{ github.workspace }}" -B "${{ github.workspace }}/build" \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DCNETMOD_DEPENDENCY_MODE=system \
             -DCMAKE_C_COMPILER="${LLVM_PREFIX}/bin/clang" \
             -DCMAKE_CXX_COMPILER="${LLVM_PREFIX}/bin/clang++" \
             -DCMAKE_CXX_FLAGS="-isysroot ${SDKROOT} -stdlib=libc++" \

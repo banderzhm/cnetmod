@@ -54,6 +54,13 @@ endif()
 # Memory Allocator Optimization: Use mimalloc if available
 # ==============================================================================
 option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
+set(CNETMOD_DEPENDENCY_MODE "system" CACHE STRING
+    "Dependency source: system, vcpkg, or conan")
+set_property(CACHE CNETMOD_DEPENDENCY_MODE PROPERTY STRINGS system vcpkg conan)
+if(NOT CNETMOD_DEPENDENCY_MODE MATCHES "^(system|vcpkg|conan)$")
+    message(FATAL_ERROR
+        "CNETMOD_DEPENDENCY_MODE must be system, vcpkg, or conan")
+endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/Mimalloc.cmake)
 if(CNETMOD_USE_MIMALLOC)
     cnetmod_use_mimalloc()
@@ -129,10 +136,8 @@ endif()
 # ==============================================================================
 # Third-party Library Configuration
 # ==============================================================================
-option(CNETMOD_USE_SYSTEM_DEPS
-    "Prefer dependencies provided by the active toolchain/package manager before bundled 3rdparty copies"
-    ON)
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/ThirdPartyDependencies.cmake)
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/dependencies/${CNETMOD_DEPENDENCY_MODE}.cmake)
 cnetmod_configure_third_party_dependencies()
 
 # QUIC requires BoringSSL's QUIC API (SSL_QUIC_METHOD with
@@ -315,14 +320,6 @@ if(MSVC)
     set_source_files_properties(
         "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/http/client/http_client.cpp"
         PROPERTIES COMPILE_OPTIONS "/Od;/Ob0"
-    )
-
-    # The RAG implementation imports the native Glaze document graph and
-    # instantiates several coroutine state machines. Give that translation unit
-    # a larger compiler heap on MSVC without increasing memory use elsewhere.
-    set_source_files_properties(
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/protocol/openai/rag.cpp"
-        PROPERTIES COMPILE_OPTIONS "/Zm200"
     )
 endif()
 
