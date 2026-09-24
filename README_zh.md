@@ -217,6 +217,9 @@ export PATH="/usr/local/opt/llvm/bin:$PATH"      # Intel Mac
 - **vcpkg manifest 构建**：适合让 vcpkg 统一安装依赖，Windows + VS 2026 推荐使用仓库自带的 `x64-windows-vs2026` overlay triplet。
 - **Conan 构建/打包**：适合通过 Conan 分发和复用，`conan create` 可验证 recipe 的导出、隔离构建和打包流程。
 
+GitHub Actions 在推送和拉取请求时构建 Windows、Linux、macOS 的
+`cnetmod_core`；完整测试和互操作验证由手动触发工作流执行。
+
 ```bash
 # 克隆仓库
 git clone https://github.com/banderzhm/cnetmod.git

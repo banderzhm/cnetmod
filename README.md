@@ -266,6 +266,10 @@ The repository supports three common build paths:
 - **vcpkg manifest build**: lets vcpkg own the dependencies; on Windows + VS 2026 use the included `x64-windows-vs2026` overlay triplet.
 - **Conan build/package**: supports Conan-based distribution and reuse; `conan create` validates recipe export, isolated build, and packaging.
 
+On push and pull requests, GitHub Actions builds `cnetmod_core` on Windows,
+Linux, and macOS. Run a workflow manually for its full test and interoperability
+gates; this keeps the everyday core build separate from the heavier test suite.
+
 ```bash
 # Clone the repository
 git clone https://github.com/banderzhm/cnetmod.git

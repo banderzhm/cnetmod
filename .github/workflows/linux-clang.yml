@@ -148,17 +148,19 @@ jobs:
           -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-${{ matrix.clang_version }}/include/c++/v1 \
           -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
           -DCNETMOD_USE_LIBKQUEUE=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
-          -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
-          -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -S ${{ github.workspace }}
       env:
         CC: clang-${{ matrix.clang_version }}
         CXX: clang++-${{ matrix.clang_version }}
 
     - name: Build
-      run: cmake --build ${{ github.workspace }}/build --parallel 2
+      run: cmake --build ${{ github.workspace }}/build --target ${{ github.event_name == 'workflow_dispatch' && 'cnetmod_build_all' || 'cnetmod_core' }} --parallel 2
 
     - name: Install complete interoperability runtime
+      if: github.event_name == 'workflow_dispatch'
       run: |
         python -m pip install --disable-pip-version-check \
           --requirement testing/mail/requirements.txt \
@@ -168,6 +170,7 @@ jobs:
           --requirement testing/mqtt/requirements.txt
 
     - name: Run complete non-external test suite without skips
+      if: github.event_name == 'workflow_dispatch'
       run: |
         python testing/run_required_ctest.py \
           --test-dir "${{ github.workspace }}/build" \
@@ -194,7 +197,7 @@ jobs:
           --target cnetmod_core --parallel 2
 
     - name: Configure minimal PostgreSQL feature probe
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       run: |
         cmake -B ${{ github.workspace }}/build-postgresql-minimal \
           -G "Ninja" \
@@ -217,7 +220,7 @@ jobs:
           -S ${{ github.workspace }}
 
     - name: Build and test minimal PostgreSQL feature probe
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       run: |
         cmake --build ${{ github.workspace }}/build-postgresql-minimal \
           --target postgresql_interoperability_driver test_task test_orm_json_result_map \
@@ -227,12 +230,14 @@ jobs:
           -R '^(test_task|test_orm_json_result_map)$'
 
     - name: Run QUIC and HTTP/3 release gates
+      if: github.event_name == 'workflow_dispatch'
       run: |
         ctest --test-dir "${{ github.workspace }}/build" \
           --output-on-failure --timeout 180 \
           -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
     - name: Run application lifecycle and OTEL gates
+      if: github.event_name == 'workflow_dispatch'
       run: |
         set -euo pipefail
         for gate in test_application test_application_integrations test_otlp_exporter test_instrumentation test_metric_aggregation test_http_observability test_http_disabled_overhead test_mysql_pool test_ssl_shutdown; do
@@ -242,6 +247,7 @@ jobs:
 
     # The database gate never silently skips in CI.
     - name: Run real MySQL application lifecycle
+      if: github.event_name == 'workflow_dispatch'
       env:
         CNETMOD_MYSQL_INTEGRATION: '1'
         CNETMOD_MYSQL_TEST_USER: cnetmod_test
@@ -253,7 +259,7 @@ jobs:
         ctest --test-dir "${{ github.workspace }}/build" --output-on-failure --no-tests=error --timeout 30 -R '^test_application_mysql_live$'
 
     - name: Run real MySQL sharding lifecycle
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       env:
         CNETMOD_MYSQL_ROOT_PASSWORD: disposable-root-password
       run: |
@@ -262,6 +268,7 @@ jobs:
           "${{ github.workspace }}/build/testing/tests/test_application_mysql_sharding_live"
 
     - name: Run isolated Redis application lifecycle
+      if: github.event_name == 'workflow_dispatch'
       env:
         CNETMOD_REDIS_INTEGRATION: '1'
       run: |
@@ -295,14 +302,14 @@ jobs:
         timeout 30 "${{ github.workspace }}/build/testing/tests/test_application_redis_live"
 
     - name: Run isolated Redis Cluster lifecycle
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       run: |
         cmake --build "${{ github.workspace }}/build" --target test_application_redis_cluster_live --parallel 2
         bash testing/redis/run_cluster_ci.sh \
           "${{ github.workspace }}/build/testing/tests/test_application_redis_cluster_live"
 
     - name: Run real PostgreSQL and MongoDB interoperability
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       run: |
         set -euo pipefail
         python -m pip install --requirement testing/database/requirements.txt
@@ -331,7 +338,7 @@ jobs:
         done
 
     - name: Run smoke tests
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       run: |
         echo "=== Running cnetmod_app ==="
         ${{ github.workspace }}/build/cnetmod_app || true

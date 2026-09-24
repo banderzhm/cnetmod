@@ -5,6 +5,7 @@ on:
     branches: [ "main", "master" ]
   pull_request:
     branches: [ "main", "master" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -153,17 +154,19 @@ jobs:
           -DLIBCXX_MODULE_DIRS="${LIBCXX_MODULES}" \
           -DLIBCXX_INCLUDE_DIRS="${LIBCXX_INCLUDE}" \
           -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
-          -DCNETMOD_BUILD_EXAMPLES=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
-          -DCNETMOD_BUILD_BENCH=${{ matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
+          -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -S ${{ github.workspace }}
       env:
         CC: ${{ steps.llvm-paths.outputs.LLVM_PREFIX }}/bin/clang
         CXX: ${{ steps.llvm-paths.outputs.LLVM_PREFIX }}/bin/clang++
 
     - name: Build
-      run: cmake --build ${{ github.workspace }}/build --parallel $(sysctl -n hw.ncpu)
+      run: cmake --build ${{ github.workspace }}/build --target ${{ github.event_name == 'workflow_dispatch' && 'cnetmod_build_all' || 'cnetmod_core' }} --parallel 2
 
     - name: Install complete interoperability runtime
+      if: github.event_name == 'workflow_dispatch'
       run: |
         python -m pip install --disable-pip-version-check \
           --requirement testing/mail/requirements.txt \
@@ -173,6 +176,7 @@ jobs:
           --requirement testing/mqtt/requirements.txt
 
     - name: Run complete non-external test suite without skips
+      if: github.event_name == 'workflow_dispatch'
       run: |
         PYTHON_EXECUTABLE="$(command -v python)"
         CTEST_EXECUTABLE="$(command -v ctest)"
@@ -214,6 +218,7 @@ jobs:
           --target cnetmod_core --parallel $(sysctl -n hw.ncpu)
 
     - name: Run QUIC and HTTP/3 release gates
+      if: github.event_name == 'workflow_dispatch'
       run: |
         CTEST_COMMAND=("$(command -v ctest)")
         if [[ "${{ matrix.os }}" == "macos-15" ]]; then
@@ -224,6 +229,7 @@ jobs:
           -R '^(test_concurrent_containers|test_udp_batch|test_quic_frame|test_quic_packet|test_quic_early_data|test_http3_qpack|test_http3_frame|h3_interop_release_gate|http_client_http3_end_to_end|http_client_http3_dynamic_qpack_end_to_end|http3_connection_migration)$'
 
     - name: Run application lifecycle and OTEL gates
+      if: github.event_name == 'workflow_dispatch'
       run: |
         set -euo pipefail
         CTEST_COMMAND=("$(command -v ctest)")
@@ -249,7 +255,7 @@ jobs:
         fi
 
     - name: Run smoke tests
-      if: matrix.build_type == 'Release'
+      if: github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release'
       run: |
         echo "=== Running cnetmod_app ==="
         ${{ github.workspace }}/build/cnetmod_app || true
