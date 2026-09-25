@@ -146,7 +146,7 @@ auto file::stat(const std::filesystem::path& path)
     if (!::GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &data))
     {
         int err = static_cast<int>(::GetLastError());
-        return std::unexpected(make_error_code(from_native_error(err)));
+        return std::unexpected(std::error_code{err, std::system_category()});
     }
 
     file_stat st{};
@@ -160,7 +160,7 @@ auto file::stat(const std::filesystem::path& path)
     };
 
     if (::stat(path.c_str(), &s) != 0)
-        return std::unexpected(make_error_code(from_native_error(errno)));
+        return std::unexpected(std::error_code{errno, std::generic_category()});
 
     file_stat st{};
     st.size = static_cast<std::uint64_t>(s.st_size);

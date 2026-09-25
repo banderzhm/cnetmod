@@ -183,9 +183,10 @@ public:
     /**
      * @brief Adds routes that capture the host-owned application runtime.
      *
-     * The configurer runs after the runtime is constructed but before build()
-     * returns. Handlers may capture the runtime by reference for their entire
-     * host lifetime; no raw io_context is exposed.
+     * The configurer runs after managed-service factories and auto-configuration
+     * have registered their services, but before build() returns. Handlers may
+     * capture the runtime by reference for their entire host lifetime; no raw
+     * io_context is exposed.
      */
     auto routes(runtime_route_configurer configurer) -> application_builder&;
 

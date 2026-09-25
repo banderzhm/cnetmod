@@ -79,25 +79,6 @@ public:
                     std::make_error_code(std::errc::invalid_argument));
             }
         }
-        for (auto& configure_routes : runtime_route_configurers)
-        {
-            if (!preparation_error)
-                break;
-            try
-            {
-                configure_routes(business_routes, runtime_facade);
-            }
-            catch (const std::bad_alloc&)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::not_enough_memory));
-            }
-            catch (...)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-            }
-        }
         application_service_context factory_context{*io, telemetry, supervisor,
             this->configuration, runtime_facade};
         for (auto& factory : service_factories)
@@ -143,6 +124,25 @@ public:
                 preparation_error = std::unexpected(
                     std::make_error_code(std::errc::not_supported));
 #endif
+        }
+        for (auto& configure_routes : runtime_route_configurers)
+        {
+            if (!preparation_error)
+                break;
+            try
+            {
+                configure_routes(business_routes, runtime_facade);
+            }
+            catch (const std::bad_alloc&)
+            {
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::not_enough_memory));
+            }
+            catch (...)
+            {
+                preparation_error = std::unexpected(
+                    std::make_error_code(std::errc::invalid_argument));
+            }
         }
         this->services.freeze();
         if (preparation_error)

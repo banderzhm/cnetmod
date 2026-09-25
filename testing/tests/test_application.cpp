@@ -1775,6 +1775,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     std::optional<std::expected<void, std::error_code>> file_closed;
     std::optional<std::expected<std::string, std::error_code>> file_read;
     std::optional<std::expected<void, std::error_code>> file_removed;
+    std::optional<std::expected<cnetmod::file_stat, std::error_code>> missing_stat;
     std::optional<std::expected<void, std::error_code>> directory_rejected;
     std::thread::id event_loop_thread;
     std::thread::id cpu_thread;
@@ -1812,6 +1813,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
             file_path, file_cancellation);
         file_removed = co_await runtime.files().remove(
             file_path, file_cancellation);
+        missing_stat = co_await runtime.files().stat(file_path);
         auto removed_again = co_await runtime.files().remove(file_path);
         ASSERT_TRUE(removed_again.has_value());
         directory_rejected = co_await runtime.files().remove(directory_path);
@@ -1845,6 +1847,9 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_EQ(file_read->value(), std::string{"payload"});
     ASSERT_TRUE(file_removed.has_value());
     ASSERT_TRUE(file_removed->has_value());
+    ASSERT_TRUE(missing_stat.has_value());
+    ASSERT_FALSE(missing_stat->has_value());
+    ASSERT_TRUE(missing_stat->error() == std::errc::no_such_file_or_directory);
     ASSERT_TRUE(directory_rejected.has_value());
     ASSERT_FALSE(directory_rejected->has_value());
     ASSERT_TRUE(std::filesystem::is_directory(directory_path));
@@ -2246,6 +2251,34 @@ TEST(application_configuration_validates_and_exposes_jwt_security)
                                 })
                             .build();
     ASSERT_FALSE(invalid_idle.has_value());
+}
+
+TEST(application_builder_runtime_routes_follow_service_factories)
+{
+    bool factory_ran = false;
+    bool route_saw_service = false;
+    auto events = std::make_shared<std::vector<std::string>>();
+    auto host = application::application_builder{"runtime-route-order"}
+                    .service_factory([&](application::application_service_context&)
+                        -> std::expected<std::shared_ptr<application::managed_service>,
+                            std::error_code>
+                    {
+                        factory_ran = true;
+                        return std::shared_ptr<application::managed_service>{
+                            std::make_shared<fake_service>(
+                                application::service_key{"test", "route-order"},
+                                std::vector<application::service_key>{},
+                                application::service_requirement::required, events)};
+                    })
+                    .routes(application::runtime_route_configurer{
+                        [&](cnetmod::http::router&,
+                            application::application_runtime&)
+                        {
+                            route_saw_service = factory_ran;
+                        }})
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    ASSERT_TRUE(route_saw_service);
 }
 
 TEST(application_configuration_reads_jwt_yaml_lifetimes)
