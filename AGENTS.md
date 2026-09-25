@@ -7138,9 +7138,11 @@ srv.use(cors({
 **签名**: `auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn`
 
 ```cpp
+enum class jwt_auth_mode { required, optional, skip };
 struct jwt_auth_options {
     std::function<bool(std::string_view token)> verify;
     std::vector<std::string> skip_paths;
+    std::function<jwt_auth_mode(const http::request_context&)> mode_for;
     std::string header_name = "Authorization";
     std::string token_prefix = "Bearer ";
     std::function<task<std::expected<void, jwt_auth_failure>>(
@@ -7150,7 +7152,7 @@ struct jwt_auth_options {
 };
 ```
 
-**行为**: 检查 `skip_paths` → 提取 `Authorization` 头 → 去除 `Bearer ` 前缀 → 调用 `verify(token)` → 失败返回 401。
+**行为**: `mode_for` 可按完整请求选择必须认证、可选认证或跳过；未设置时沿用 `skip_paths`（命中即跳过，否则必须认证）。可选认证下，无令牌、格式错误、验签失败或异步回调返回 401 均按匿名继续；其他错误（如 Redis 故障导致的 503）仍拒绝请求。成功认证时正常绑定身份。
 需要异步验签或查询当前用户时，设置 `authenticate_async`；它优先于同步 `verify`，
 并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message}` 拒绝请求；
 `on_failure` 可输出应用自己的错误响应格式。不设置新字段时保持原有同步行为。
@@ -7900,6 +7902,14 @@ auto handler = [](request_context& ctx) -> task<void> {
 
 ### SSE (Server-Sent Events)
 
+**标准入口先选清楚：** 注册时就确定是 SSE 的独立端点，用
+`router::sse_get()` / `router::sse_post()`；同一端点在请求期间根据参数选择 JSON
+或 SSE，用 `request_context::with_sse()` 包住整段流式处理。两种入口都会启动
+`max_duration` 总时长看门狗。不要在普通 `get/post` handler 中仅调用
+`sse_begin()` / `sse_send()`，也不要只自行构造 `sse_stream`：这些底层写法仍有
+**默认 5 秒的单次写超时**，但**不会启动总时长看门狗**。普通
+`request_timeout` 只是 handler 返回后的软检测，不能代替 SSE 的总时限。
+
 #### `request_context::sse_begin`
 **签名**: `auto sse_begin(int status_code = status::ok) -> task<bool>`
 
@@ -7995,7 +8005,9 @@ HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`
 上下文的生命周期。`router::sse_get()` 和 `router::sse_post()` 会为每个请求创建独立流对象，
 并在内部复用 `request_context::with_sse()`；它们适用于注册时即可确定为 SSE 的独立端点。
 运行时才决定是否流式的同路径接口必须使用 `with_sse()`，不要只构造 `sse_stream`，否则
-没有结构化的总时限看门狗。Application 的 recover 中间件发现 SSE 已
+没有结构化的总时限看门狗。业务封装（例如仅把 `delta/done/error` 映射到
+`request_context::sse_send()` 的 writer）也必须在 `with_sse()` 的 handler 内使用；
+封装帧格式不等于接入流生命周期管理。Application 的 recover 中间件发现 SSE 已
 提交后不会再尝试普通 JSON 响应，而是尽力写出具名 `error` 帧和终止帧；业务可在异常前
 自行写出更具体的错误契约。
 
@@ -8028,14 +8040,14 @@ import cnetmod.protocol.http;
 using namespace cnetmod::http;
 
 r.get("/events", [](request_context& ctx) -> task<void> {
-    co_await ctx.sse_begin();
-    co_await ctx.sse_heartbeat();
-    for (int i = 0; i < 5; ++i) {
-        auto ok = co_await ctx.sse_send(
-            std::format("message {}", i), "update");
-        if (!ok) break;
-    }
-    co_await ctx.sse_done();
+    co_await ctx.with_sse([](request_context&, sse_stream& stream) -> task<void> {
+        if (!co_await stream.heartbeat()) co_return;
+        for (int i = 0; i < 5; ++i) {
+            if (!co_await stream.send(std::format("message {}", i), "update"))
+                co_return;
+        }
+        (void)co_await stream.finish();
+    });
 });
 ```
 
@@ -8957,6 +8969,15 @@ auto reloaded = co_await runtime.reconfigure_chat_model(
 Application 的 SSE 接口直接在同一个 routes 配置器中使用 `router::sse_get()` 或
 `router::sse_post()` 声明。框架按请求注入 `sse_stream&`，业务只序列化事件 payload；
 SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责：
+
+如果同一路由按请求参数在普通 JSON 与 SSE 间切换，保持普通 `get/post` 路由，
+在完成参数校验和资源检查、确认要流式响应后调用
+`request_context::with_sse(handler, options)`；把整个模型调用与事件写出放进
+handler 内，业务自己的事件 writer 也应在其中构造和使用。只调用
+`sse_begin()` / `sse_send()` 虽仍有默认 5 秒单次写超时，**没有**
+`max_duration` 总时长看门狗；普通 `request_timeout` 也只是软检测。
+`with_sse()` 使用传入的 `sse_stream_options`（省略时为 120 秒／5 秒）；
+不要假定 Application 为独立 SSE 路由注入的 `http.sse` 配置会自动应用到动态入口。
 
 ```cpp
 builder.routes([](http::router& routes) {

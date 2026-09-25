@@ -245,6 +245,15 @@ Application 的 SSE 接口直接在同一个 routes 配置器中使用 `router::
 `router::sse_post()` 声明。框架按请求注入 `sse_stream&`，业务只序列化事件 payload；
 SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责：
 
+如果同一路由按请求参数在普通 JSON 与 SSE 间切换，保持普通 `get/post` 路由，
+在完成参数校验和资源检查、确认要流式响应后调用
+`request_context::with_sse(handler, options)`；把整个模型调用与事件写出放进
+handler 内，业务自己的事件 writer 也应在其中构造和使用。只调用
+`sse_begin()` / `sse_send()` 虽仍有默认 5 秒单次写超时，**没有**
+`max_duration` 总时长看门狗；普通 `request_timeout` 也只是软检测。
+`with_sse()` 使用传入的 `sse_stream_options`（省略时为 120 秒／5 秒）；
+不要假定 Application 为独立 SSE 路由注入的 `http.sse` 配置会自动应用到动态入口。
+
 ```cpp
 builder.routes([](http::router& routes) {
     routes.sse_post("/chat", [](http::request_context& request,

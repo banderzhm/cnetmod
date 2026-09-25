@@ -10,7 +10,8 @@ import cnetmod.protocol.http.middleware.jwt_auth;
 namespace {
 
 auto invoke(cnetmod::jwt_auth_options options,
-    std::string_view path, std::string_view authorization)
+    std::string_view path, std::string_view authorization,
+    std::string_view method = "GET")
     -> std::pair<bool, int>
 {
     auto io = cnetmod::make_io_context();
@@ -19,7 +20,7 @@ auto invoke(cnetmod::jwt_auth_options options,
     cnetmod::http::header_map headers;
     if (!authorization.empty())
         headers["Authorization"] = std::string{authorization};
-    cnetmod::http::request_context request{*io, peer, "GET", path,
+    cnetmod::http::request_context request{*io, peer, method, path,
         headers, {}, response, {}};
     bool next_called = false;
     auto middleware = cnetmod::jwt_auth(std::move(options));
@@ -147,6 +148,66 @@ TEST(jwt_auth_rejects_empty_bearer_token)
         "/private", "Bearer ");
     ASSERT_FALSE(allowed);
     ASSERT_EQ(status, cnetmod::http::status::unauthorized);
+}
+
+TEST(jwt_auth_optional_accepts_missing_and_invalid_credentials)
+{
+    int verified = 0;
+    cnetmod::jwt_auth_options options{
+        .mode_for = [](const cnetmod::http::request_context& request)
+        {
+            return request.method() == "GET"
+                ? cnetmod::jwt_auth_mode::optional
+                : cnetmod::jwt_auth_mode::required;
+        },
+        .authenticate_async = [&verified](cnetmod::http::request_context&,
+                                  std::string_view) -> cnetmod::task<
+            std::expected<void, cnetmod::jwt_auth_failure>>
+        {
+            ++verified;
+            co_return std::unexpected(cnetmod::jwt_auth_failure{});
+        },
+    };
+    ASSERT_TRUE(invoke(options, "/shared", {}).first);
+    ASSERT_TRUE(invoke(options, "/shared", "Basic abc").first);
+    ASSERT_TRUE(invoke(options, "/shared", "Bearer ").first);
+    ASSERT_TRUE(invoke(options, "/shared", "Bearer bad").first);
+    ASSERT_EQ(verified, 1);
+    const auto [allowed, status] = invoke(options, "/shared", {}, "DELETE");
+    ASSERT_FALSE(allowed);
+    ASSERT_EQ(status, cnetmod::http::status::unauthorized);
+}
+
+TEST(jwt_auth_optional_propagates_service_failure)
+{
+    auto [allowed, status] = invoke({
+        .mode_for = [](const cnetmod::http::request_context&)
+        {
+            return cnetmod::jwt_auth_mode::optional;
+        },
+        .authenticate_async = [](cnetmod::http::request_context&,
+                                  std::string_view) -> cnetmod::task<
+            std::expected<void, cnetmod::jwt_auth_failure>>
+        {
+            co_return std::unexpected(cnetmod::jwt_auth_failure{
+                .status = cnetmod::http::status::service_unavailable,
+                .message = "session service unavailable"});
+        },
+    }, "/shared", "Bearer good");
+    ASSERT_FALSE(allowed);
+    ASSERT_EQ(status, cnetmod::http::status::service_unavailable);
+}
+
+TEST(jwt_auth_request_policy_can_skip_verification)
+{
+    auto [allowed, status] = invoke({
+        .mode_for = [](const cnetmod::http::request_context&)
+        {
+            return cnetmod::jwt_auth_mode::skip;
+        },
+    }, "/health", {});
+    ASSERT_TRUE(allowed);
+    ASSERT_EQ(status, cnetmod::http::status::ok);
 }
 
 RUN_TESTS()

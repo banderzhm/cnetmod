@@ -18,6 +18,13 @@ export struct jwt_auth_failure
     std::string message = "invalid or expired token";
 };
 
+export enum class jwt_auth_mode
+{
+    required,
+    optional,
+    skip,
+};
+
 export struct jwt_auth_options
 {
     /// Token verification function: returns true if valid
@@ -25,6 +32,11 @@ export struct jwt_auth_options
 
     /// Paths to skip authentication (exact match or prefix match path + "/")
     std::vector<std::string> skip_paths;
+
+    /// Per-request policy. Takes precedence over skip_paths when provided.
+    /// Optional authentication ignores absent/malformed credentials and 401;
+    /// other authenticator failures (notably infrastructure errors) are rejected.
+    std::function<jwt_auth_mode(const http::request_context&)> mode_for;
 
     /// Request header to read token from (default: Authorization)
     std::string header_name = "Authorization";
@@ -57,17 +69,24 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
                 ctx.json(failure.status, default_body);
         };
 
-        const auto path = ctx.path();
-        const auto is_public = std::ranges::any_of(opts.skip_paths,
-            [path](const std::string& prefix)
-            {
-                return path == prefix ||
-                    (!prefix.empty() && prefix != "/" &&
-                        path.starts_with(prefix) &&
-                        path.size() > prefix.size() &&
-                        path[prefix.size()] == '/');
-            });
-        if (is_public)
+        const auto mode = [&opts, &ctx]
+        {
+            if (opts.mode_for)
+                return opts.mode_for(ctx);
+            const auto path = ctx.path();
+            return std::ranges::any_of(opts.skip_paths,
+                       [path](const std::string& prefix)
+                       {
+                           return path == prefix ||
+                               (!prefix.empty() && prefix != "/" &&
+                                   path.starts_with(prefix) &&
+                                   path.size() > prefix.size() &&
+                                   path[prefix.size()] == '/');
+                       })
+                ? jwt_auth_mode::skip
+                : jwt_auth_mode::required;
+        }();
+        if (mode == jwt_auth_mode::skip)
         {
             co_await next();
             co_return;
@@ -76,6 +95,11 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         const auto authorization = ctx.get_header(opts.header_name);
         if (authorization.empty())
         {
+            if (mode == jwt_auth_mode::optional)
+            {
+                co_await next();
+                co_return;
+            }
             reject({.message = "missing authorization header"},
                 R"({"error":"missing authorization header"})");
             co_return;
@@ -84,6 +108,11 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         if (!opts.token_prefix.empty() &&
             !authorization.starts_with(opts.token_prefix))
         {
+            if (mode == jwt_auth_mode::optional)
+            {
+                co_await next();
+                co_return;
+            }
             reject({.message = "invalid authorization format"},
                 R"({"error":"invalid authorization format"})");
             co_return;
@@ -93,6 +122,11 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
             opts.token_prefix.size());
         if (token.empty())
         {
+            if (mode == jwt_auth_mode::optional)
+            {
+                co_await next();
+                co_return;
+            }
             reject({.message = "invalid authorization format"},
                 R"({"error":"invalid authorization format"})");
             co_return;
@@ -105,6 +139,12 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
             auto result = co_await opts.authenticate_async(ctx, owned_token);
             if (!result)
             {
+                if (mode == jwt_auth_mode::optional &&
+                    result.error().status == http::status::unauthorized)
+                {
+                    co_await next();
+                    co_return;
+                }
                 reject(std::move(result.error()),
                     R"({"error":"invalid or expired token"})");
                 co_return;
@@ -112,6 +152,11 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         }
         else if (!opts.verify || !opts.verify(token))
         {
+            if (mode == jwt_auth_mode::optional)
+            {
+                co_await next();
+                co_return;
+            }
             reject({.message = "invalid or expired token"},
                 R"({"error":"invalid or expired token"})");
             co_return;

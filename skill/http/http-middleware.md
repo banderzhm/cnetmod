@@ -115,9 +115,11 @@ srv.use(cors({
 **签名**: `auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn`
 
 ```cpp
+enum class jwt_auth_mode { required, optional, skip };
 struct jwt_auth_options {
     std::function<bool(std::string_view token)> verify;
     std::vector<std::string> skip_paths;
+    std::function<jwt_auth_mode(const http::request_context&)> mode_for;
     std::string header_name = "Authorization";
     std::string token_prefix = "Bearer ";
     std::function<task<std::expected<void, jwt_auth_failure>>(
@@ -127,7 +129,7 @@ struct jwt_auth_options {
 };
 ```
 
-**行为**: 检查 `skip_paths` → 提取 `Authorization` 头 → 去除 `Bearer ` 前缀 → 调用 `verify(token)` → 失败返回 401。
+**行为**: `mode_for` 可按完整请求选择必须认证、可选认证或跳过；未设置时沿用 `skip_paths`（命中即跳过，否则必须认证）。可选认证下，无令牌、格式错误、验签失败或异步回调返回 401 均按匿名继续；其他错误（如 Redis 故障导致的 503）仍拒绝请求。成功认证时正常绑定身份。
 需要异步验签或查询当前用户时，设置 `authenticate_async`；它优先于同步 `verify`，
 并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message}` 拒绝请求；
 `on_failure` 可输出应用自己的错误响应格式。不设置新字段时保持原有同步行为。

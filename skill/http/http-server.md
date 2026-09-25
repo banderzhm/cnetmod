@@ -280,6 +280,14 @@ auto handler = [](request_context& ctx) -> task<void> {
 
 ### SSE (Server-Sent Events)
 
+**标准入口先选清楚：** 注册时就确定是 SSE 的独立端点，用
+`router::sse_get()` / `router::sse_post()`；同一端点在请求期间根据参数选择 JSON
+或 SSE，用 `request_context::with_sse()` 包住整段流式处理。两种入口都会启动
+`max_duration` 总时长看门狗。不要在普通 `get/post` handler 中仅调用
+`sse_begin()` / `sse_send()`，也不要只自行构造 `sse_stream`：这些底层写法仍有
+**默认 5 秒的单次写超时**，但**不会启动总时长看门狗**。普通
+`request_timeout` 只是 handler 返回后的软检测，不能代替 SSE 的总时限。
+
 #### `request_context::sse_begin`
 **签名**: `auto sse_begin(int status_code = status::ok) -> task<bool>`
 
@@ -375,7 +383,9 @@ HTTP 响应。`callback(event)` 借用流对象，不能超过 route handler、`
 上下文的生命周期。`router::sse_get()` 和 `router::sse_post()` 会为每个请求创建独立流对象，
 并在内部复用 `request_context::with_sse()`；它们适用于注册时即可确定为 SSE 的独立端点。
 运行时才决定是否流式的同路径接口必须使用 `with_sse()`，不要只构造 `sse_stream`，否则
-没有结构化的总时限看门狗。Application 的 recover 中间件发现 SSE 已
+没有结构化的总时限看门狗。业务封装（例如仅把 `delta/done/error` 映射到
+`request_context::sse_send()` 的 writer）也必须在 `with_sse()` 的 handler 内使用；
+封装帧格式不等于接入流生命周期管理。Application 的 recover 中间件发现 SSE 已
 提交后不会再尝试普通 JSON 响应，而是尽力写出具名 `error` 帧和终止帧；业务可在异常前
 自行写出更具体的错误契约。
 
@@ -408,14 +418,14 @@ import cnetmod.protocol.http;
 using namespace cnetmod::http;
 
 r.get("/events", [](request_context& ctx) -> task<void> {
-    co_await ctx.sse_begin();
-    co_await ctx.sse_heartbeat();
-    for (int i = 0; i < 5; ++i) {
-        auto ok = co_await ctx.sse_send(
-            std::format("message {}", i), "update");
-        if (!ok) break;
-    }
-    co_await ctx.sse_done();
+    co_await ctx.with_sse([](request_context&, sse_stream& stream) -> task<void> {
+        if (!co_await stream.heartbeat()) co_return;
+        for (int i = 0; i < 5; ++i) {
+            if (!co_await stream.send(std::format("message {}", i), "update"))
+                co_return;
+        }
+        (void)co_await stream.finish();
+    });
 });
 ```
 
