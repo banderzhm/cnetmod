@@ -657,6 +657,132 @@ TEST(redis_template_cancellation_discards_partial_connection_and_recovers)
     ASSERT_TRUE(recovered);
 }
 
+TEST(redis_template_unreachable_pool_respects_pool_timeout)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto reserved = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(reserved);
+    ASSERT_TRUE(reserved->bind(cnetmod::endpoint{
+        cnetmod::ipv4_address::loopback(), 0}));
+    auto endpoint = reserved->local_endpoint();
+    ASSERT_TRUE(endpoint);
+    auto params = pool_parameters(endpoint->port());
+    params.connect_timeout = std::chrono::milliseconds{25};
+    params.pool_timeout = std::chrono::milliseconds{50};
+    params.retry_interval = std::chrono::milliseconds{10};
+    cnetmod::redis::connection_pool pool{*io, params};
+    cnetmod::redis::redis_template redis{pool};
+    bool timed_out = false;
+    bool explicit_timed_out = false;
+    bool within_budget = false;
+    bool finished = false;
+    bool exercised = false;
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        finished = true;
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        const auto start = std::chrono::steady_clock::now();
+        auto result = co_await redis.get("unreachable");
+        const auto elapsed = std::chrono::steady_clock::now() - start;
+        timed_out = !result && result.error() == std::errc::timed_out;
+        within_budget = elapsed < std::chrono::milliseconds{500};
+        cnetmod::cancel_token token;
+        auto explicit_result = co_await redis.get("unreachable", token);
+        explicit_timed_out = !explicit_result &&
+            explicit_result.error() == std::errc::timed_out;
+        co_await pool.cancel();
+        exercised = true;
+    };
+    auto watchdog = [&]() -> cnetmod::task<void>
+    {
+        co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{500});
+        pool.request_stop();
+        while (!finished || !exercised)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, exercise());
+    cnetmod::spawn(*io, watchdog());
+    io->run();
+    ASSERT_TRUE(timed_out);
+    ASSERT_TRUE(explicit_timed_out);
+    ASSERT_TRUE(within_budget);
+}
+
+TEST(redis_template_silent_server_respects_operation_timeout)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener);
+    ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+        cnetmod::ipv4_address::loopback(), 0}));
+    ASSERT_TRUE(listener->listen());
+    auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint);
+    cnetmod::redis::connection_pool pool{*io, pool_parameters(endpoint->port())};
+    cnetmod::redis::redis_template redis{pool,
+        {.operation_timeout = std::chrono::milliseconds{40}}};
+    const auto expected = command({"GET", "silent"});
+    bool timed_out = false;
+    bool server_closed = false;
+    bool run_finished = false;
+    bool server_finished = false;
+    cnetmod::socket* active_peer = nullptr;
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto peer = co_await cnetmod::async_accept(*io, *listener);
+        if (peer)
+        {
+            active_peer = &*peer;
+            if (co_await read_request(*io, *peer, expected.payload()))
+            {
+                char byte{};
+                auto closed = co_await cnetmod::async_read(*io, *peer,
+                    cnetmod::mutable_buffer{&byte, 1});
+                server_closed = !closed || *closed == 0U;
+            }
+            active_peer = nullptr;
+        }
+        server_finished = true;
+    };
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        run_finished = true;
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto result = co_await redis.get("silent");
+        timed_out = !result && result.error() == std::errc::timed_out;
+        co_await pool.cancel();
+    };
+    auto watchdog = [&]() -> cnetmod::task<void>
+    {
+        co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{500});
+        if (active_peer)
+            active_peer->close();
+        pool.request_stop();
+        while (!run_finished || !server_finished)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, exercise());
+    cnetmod::spawn(*io, watchdog());
+    io->run();
+    ASSERT_TRUE(timed_out);
+    ASSERT_TRUE(server_closed);
+}
+
 TEST(redis_template_scan_limit_fails_before_returning_partial_results)
 {
     cnetmod::net_init network;

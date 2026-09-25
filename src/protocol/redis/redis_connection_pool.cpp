@@ -173,8 +173,7 @@ auto connection_pool::async_get_connection()
     -> task<std::expected<pooled_connection, std::error_code>>
 {
     cancel_token token;
-    co_return co_await with_timeout(ctx_, params_.pool_timeout,
-        async_get_connection(token), token);
+    co_return co_await async_get_connection(token);
 }
 
 auto connection_pool::async_get_connection(cnetmod::deadline value)
@@ -188,6 +187,13 @@ auto connection_pool::async_get_connection(cnetmod::deadline value)
 }
 
 auto connection_pool::async_get_connection(cancel_token& token)
+    -> task<std::expected<pooled_connection, std::error_code>>
+{
+    co_return co_await with_timeout(ctx_, params_.pool_timeout,
+        async_get_connection_impl(token), token);
+}
+
+auto connection_pool::async_get_connection_impl(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
     co_await mtx_.lock();
@@ -394,6 +400,11 @@ auto connection_pool::checked_out_count() const noexcept -> std::size_t
 auto connection_pool::pending_maintenance() const noexcept -> int
 {
     return maintenance_.count();
+}
+
+auto connection_pool::execution_context() noexcept -> io_context&
+{
+    return ctx_;
 }
 
 auto connection_pool::make_connect_options() const -> connect_options

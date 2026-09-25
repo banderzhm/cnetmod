@@ -80,9 +80,12 @@ public:
      * @brief Returns maintenance operations whose completion is still owned by the pool.
      */
     [[nodiscard]] auto pending_maintenance() const noexcept -> int;
+    [[nodiscard]] auto execution_context() noexcept -> io_context&;
 
 private:
     friend class pooled_connection;
+    auto async_get_connection_impl(cancel_token& token)
+        -> task<std::expected<pooled_connection, std::error_code>>;
     io_context& ctx_;
     pool_params params_;
     std::deque<conn_node> conns_;

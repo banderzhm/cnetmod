@@ -116,7 +116,10 @@ template <class T> struct table_meta
     {
         std::vector<const field_mapping<T>*> result;
         for (auto& field : fields)
-            if (!field.col.is_pk())
+            if (!field.col.is_pk() &&
+                !has_flag(field.col.flags, col_flag::tenant_id) &&
+                !(has_flag(field.col.flags, col_flag::fill_insert) &&
+                    !has_flag(field.col.flags, col_flag::fill_insert_update)))
                 result.push_back(&field);
         return result;
     }

@@ -139,6 +139,7 @@ if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_HTTP)
 endif()
 if(CNETMOD_ENABLE_MYSQL AND CNETMOD_ENABLE_ORM)
     list(APPEND TEST_SOURCES test_application_mysql_sharding_live.cpp)
+    list(APPEND TEST_SOURCES test_orm_tenant_live.cpp)
 endif()
 if(CNETMOD_ENABLE_MYSQL)
     list(APPEND TEST_SOURCES test_mysql_pool.cpp)
@@ -281,6 +282,10 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME json_backend_boundary
         COMMAND Python3::Interpreter
             "${PROJECT_SOURCE_DIR}/tools/check_json_boundary.py")
+endif()
+if(TARGET test_orm_tenant_live)
+    set_tests_properties(test_orm_tenant_live PROPERTIES
+        TIMEOUT 45 SKIP_RETURN_CODE 77 LABELS "integration;mysql;orm;tenant")
 endif()
 if(Python3_Interpreter_FOUND AND CNETMOD_ENABLE_MAIL)
     add_executable(smtp_bench_server

@@ -145,7 +145,21 @@ export auto async_file_write_all(io_context& ctx,
 export auto async_file_write_all(io_context& ctx,
     const filesystem::path& path, std::string_view content, cancel_token& token)
     -> task<expected<void, error_code>>;
+export enum class file_write_durability : std::uint8_t { buffered, flushed };
+export auto async_file_write_all(io_context& ctx,
+    const filesystem::path& path, std::string_view content,
+    file_write_durability durability)
+    -> task<expected<void, error_code>>;
+export auto async_file_write_all(io_context& ctx,
+    const filesystem::path& path, std::string_view content,
+    file_write_durability durability, cancel_token& token)
+    -> task<expected<void, error_code>>;
 ```
+
+普通 `write_all` 只保证完整写入并关闭；存档等需要改名前刷文件内容时，
+传 `file_write_durability::flushed`，框架在关闭前执行 fsync/FlushFileBuffers。
+这不包含改名后目录元数据的持久化保证。Application 的 `files().write_all`
+提供相同的 durability 重载。
 
 #### `async_file_close()`
 **签名**:

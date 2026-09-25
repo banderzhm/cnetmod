@@ -500,6 +500,12 @@ export auto async_file_write(io_context& ctx, file& f, const_buffer buf,
 
 /// Write a string to a file, create or truncate (open → write → close).
 /// Usage: co_await async_file_write_all(ctx, "out.txt", content);
+export enum class file_write_durability : std::uint8_t
+{
+    buffered,
+    flushed,
+};
+
 export auto async_file_write_all(io_context& ctx,
     const std::filesystem::path& path, std::string_view content)
     -> task<std::expected<void, std::error_code>>;
@@ -510,6 +516,17 @@ export auto async_file_write_all(io_context& ctx,
 export auto async_file_write_all(io_context& ctx,
     const std::filesystem::path& path, std::string_view content,
     cancel_token& token)
+    -> task<std::expected<void, std::error_code>>;
+
+/// Flushes the written file before closing when durability is `flushed`.
+export auto async_file_write_all(io_context& ctx,
+    const std::filesystem::path& path, std::string_view content,
+    file_write_durability durability)
+    -> task<std::expected<void, std::error_code>>;
+
+export auto async_file_write_all(io_context& ctx,
+    const std::filesystem::path& path, std::string_view content,
+    file_write_durability durability, cancel_token& token)
     -> task<std::expected<void, std::error_code>>;
 
 export using file_io_result =

@@ -44,6 +44,16 @@ CNETMOD_MODEL(runtime_repository_record, "runtime_repository_records",
     CNETMOD_FIELD(id, "id", bigint, PK),
     CNETMOD_FIELD(value, "value", varchar))
 
+struct runtime_tenant_record
+{
+    std::int64_t id{};
+    std::int64_t tenant_id{};
+};
+
+CNETMOD_MODEL(runtime_tenant_record, "runtime_tenant_records",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID))
+
 struct runtime_record_summary
 {
     std::int64_t id{};
@@ -1745,6 +1755,53 @@ TEST(application_builder_validates_before_creating_host)
     ASSERT_FALSE(host.has_value());
 }
 
+#if defined(CNETMOD_HAS_ORM) && \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+TEST(application_runtime_saas_switch_requires_a_request_tenant_snapshot)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::thread_pool cpu_pool{1};
+    cnetmod::observability::telemetry_hub telemetry{*io,
+        {.export_traces = false, .export_metrics = false,
+            .export_logs = false}};
+    application::task_supervisor supervisor{*io};
+    application::service_registry services;
+    application::application_configuration configuration;
+    std::stop_source stopping;
+    application::application_runtime runtime{*io, cpu_pool, supervisor,
+        telemetry, services, stopping.get_token(), configuration};
+    runtime.require_tenant_scope(true);
+
+    auto plain = runtime.repository<runtime_tenant_record>();
+    ASSERT_FALSE(plain.has_value());
+    ASSERT_EQ(plain.error(), std::make_error_code(std::errc::permission_denied));
+
+    cnetmod::socket peer;
+    cnetmod::http::header_map headers;
+    cnetmod::http::response response;
+    cnetmod::http::request_context request{*io, peer, "GET", "/", headers,
+        {}, response, {}};
+    auto absent = runtime.repository<runtime_tenant_record>(request);
+    ASSERT_FALSE(absent.has_value());
+    ASSERT_EQ(absent.error(), std::make_error_code(std::errc::permission_denied));
+
+    request.scope().bind(std::make_shared<cnetmod::orm::tenant_scope>(
+        cnetmod::orm::tenant_scope::self(10)));
+    auto bound = runtime.repository<runtime_tenant_record>(request);
+    ASSERT_FALSE(bound.has_value());
+    ASSERT_EQ(bound.error(),
+        std::make_error_code(std::errc::no_such_file_or_directory));
+
+    runtime.require_tenant_scope(false);
+    auto standalone = runtime.repository<runtime_tenant_record>();
+    ASSERT_FALSE(standalone.has_value());
+    ASSERT_EQ(standalone.error(),
+        std::make_error_code(std::errc::no_such_file_or_directory));
+}
+#endif
+
 TEST(application_runtime_supervises_tasks_and_offloads_json)
 {
     cnetmod::net_init network;
@@ -1772,6 +1829,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     std::optional<std::expected<std::string, std::error_code>> dumped;
     std::optional<std::expected<void, std::error_code>> file_written;
     std::optional<std::expected<void, std::error_code>> file_flushed;
+    std::optional<std::expected<void, std::error_code>> durable_written;
     std::optional<std::expected<void, std::error_code>> file_closed;
     std::optional<std::expected<std::string, std::error_code>> file_read;
     std::optional<std::expected<void, std::error_code>> file_removed;
@@ -1809,6 +1867,8 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
             file_flushed = co_await runtime.files().flush(*opened);
             file_closed = co_await runtime.files().close(*opened);
         }
+        durable_written = co_await runtime.files().write_all(file_path,
+            "payload", cnetmod::file_write_durability::flushed);
         file_read = co_await runtime.files().read_all(
             file_path, file_cancellation);
         file_removed = co_await runtime.files().remove(
@@ -1840,6 +1900,8 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     ASSERT_TRUE(file_written->has_value());
     ASSERT_TRUE(file_flushed.has_value());
     ASSERT_TRUE(file_flushed->has_value());
+    ASSERT_TRUE(durable_written.has_value());
+    ASSERT_TRUE(durable_written->has_value());
     ASSERT_TRUE(file_closed.has_value());
     ASSERT_TRUE(file_closed->has_value());
     ASSERT_TRUE(file_read.has_value());

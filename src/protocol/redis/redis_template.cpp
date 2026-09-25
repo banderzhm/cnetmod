@@ -423,7 +423,8 @@ auto pipeline_builder::size() const noexcept -> std::size_t
 redis_template::redis_template(connection_pool& pool, template_options options,
     instrumentation::trace_context parent,
     instrumentation::span_exporter spans, io_context* timer_context)
-    : pool_(pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)), timer_context_(timer_context)
+    : pool_(pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)),
+      timer_context_(timer_context ? timer_context : &pool.execution_context())
 {
 }
 
@@ -639,8 +640,12 @@ auto redis_template::execute(pipeline_builder& builder,
         complete_scopes(scopes, nullptr, lease.error());
         co_return std::unexpected(lease.error());
     }
-    auto exchanged = co_await lease->get().exchange(builder.batch_, cancellation,
+    auto exchange = lease->get().exchange(builder.batch_, cancellation,
         options_.response_byte_limit);
+    auto exchanged = options_.operation_timeout > std::chrono::steady_clock::duration::zero()
+        ? co_await with_timeout(*timer_context_, options_.operation_timeout,
+              std::move(exchange), cancellation)
+        : co_await std::move(exchange);
     if (!exchanged)
     {
         complete_scopes(scopes, nullptr, exchanged.error());

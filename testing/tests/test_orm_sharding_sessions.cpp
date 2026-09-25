@@ -44,6 +44,30 @@ CNETMOD_MODEL(policy_order, "policy_orders",
     CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID),
     CNETMOD_FIELD(deleted, "deleted", tinyint, LOGIC_DELETE))
 
+struct scoped_order
+{
+    std::int64_t id{};
+    std::int64_t tenant_id{};
+    std::int64_t department_id{};
+    std::string description;
+};
+
+CNETMOD_MODEL(scoped_order, "scoped_orders",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(tenant_id, "tenant_id", bigint, TENANT_ID),
+    CNETMOD_FIELD(department_id, "department_id", bigint, DATA_PARTITION),
+    CNETMOD_FIELD(description, "description", varchar))
+
+struct untagged_partition_order
+{
+    std::int64_t id{};
+    std::int64_t department_id{};
+};
+
+CNETMOD_MODEL(untagged_partition_order, "untagged_partition_orders",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(department_id, "department_id", bigint, DATA_PARTITION))
+
 struct versioned_order
 {
     std::int64_t id{};
@@ -60,11 +84,13 @@ struct filled_order
 {
     std::int64_t id{};
     orm::calendar_datetime created_at{};
+    orm::calendar_datetime updated_at{};
 };
 
 CNETMOD_MODEL(filled_order, "filled_orders",
     CNETMOD_FIELD(id, "id", bigint, PK),
-    CNETMOD_FIELD(created_at, "created_at", datetime, FILL_INSERT))
+    CNETMOD_FIELD(created_at, "created_at", datetime, FILL_INSERT),
+    CNETMOD_FIELD(updated_at, "updated_at", datetime, FILL_INSERT_UPDATE))
 
 struct recording_session_client
 {
@@ -1460,6 +1486,8 @@ TEST(orm_automatic_pipeline_controls_model_stage_policies)
     auto inserted_with_fill = cnetmod::sync_wait(enabled_orders.insert(with_fill));
     ASSERT_TRUE(inserted_with_fill.ok());
     ASSERT_TRUE(with_fill.created_at.year > 2000U);
+    ASSERT_EQ(with_fill.created_at.to_string(),
+        with_fill.updated_at.to_string());
 
     orm::database_session unlocked{client, orm::sql_dialect::mysql};
     orm::mapper<versioned_order, decltype(unlocked)> unlocked_orders{unlocked};
@@ -1481,6 +1509,212 @@ TEST(orm_automatic_pipeline_controls_model_stage_policies)
     client.response = {};
     auto zero_rows = cnetmod::sync_wait(unlocked_orders.update_by_id(model));
     ASSERT_TRUE(zero_rows.ok());
+}
+
+TEST(orm_strict_tenant_scope_intersects_department_and_preserves_or)
+{
+    auto tenant = std::make_shared<const orm::tenant_scope>(
+        orm::tenant_scope{10, {10, 11, 12}, {10}});
+    auto departments = std::make_shared<const orm::data_permission_scope>(
+        orm::data_permission_scope{.partition_ids = {100, 101}});
+    auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
+        orm::automatic_interceptor_options{.data_permission = departments,
+            .tenant_scope_required = true, .tenant = tenant});
+    ASSERT_TRUE(chain.has_value());
+    auto selected = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM scoped_orders WHERE description = {} OR description = {} ORDER BY id LIMIT {}",
+            {orm::param_value::from_string("a"),
+                orm::param_value::from_string("b"),
+                orm::param_value::from_int(5)}});
+    ASSERT_TRUE(selected.has_value());
+    if (!selected)
+        return;
+    ASSERT_TRUE(selected->sql.contains("tenant_id IN"));
+    ASSERT_TRUE(selected->sql.contains("department_id IN"));
+    ASSERT_TRUE(selected->sql.contains("( description = {} OR description = {}"));
+    ASSERT_EQ(selected->parameters.size(), 8U);
+    ASSERT_EQ(selected->parameters[0].int_val, 100);
+    ASSERT_EQ(selected->parameters[1].int_val, 101);
+    ASSERT_EQ(selected->parameters[2].str_val, "a");
+    ASSERT_EQ(selected->parameters[3].str_val, "b");
+    ASSERT_EQ(selected->parameters[4].int_val, 10);
+    ASSERT_EQ(selected->parameters[5].int_val, 11);
+    ASSERT_EQ(selected->parameters[6].int_val, 12);
+    ASSERT_EQ(selected->parameters[7].int_val, 5);
+
+    auto updated = (*chain)->apply(orm::sql_operation::update,
+        {"UPDATE scoped_orders SET description = {} WHERE id = {} OR id = {}",
+            {orm::param_value::from_string("renamed"),
+                orm::param_value::from_int(1),
+                orm::param_value::from_int(20)}});
+    ASSERT_TRUE(updated.has_value());
+    if (updated)
+    {
+        ASSERT_EQ(updated->parameters.size(), 6U);
+        ASSERT_EQ(updated->parameters[0].str_val, "renamed");
+        ASSERT_EQ(updated->parameters[1].int_val, 100);
+        ASSERT_EQ(updated->parameters[2].int_val, 101);
+        ASSERT_EQ(updated->parameters[3].int_val, 1);
+        ASSERT_EQ(updated->parameters[4].int_val, 20);
+        ASSERT_EQ(updated->parameters[5].int_val, 10);
+    }
+}
+
+TEST(orm_strict_tenant_scope_rejects_missing_cross_tenant_and_unsafe_sql)
+{
+    auto missing = orm::make_automatic_interceptor_chain<scoped_order>(
+        orm::automatic_interceptor_options{.tenant_scope_required = true});
+    ASSERT_TRUE(missing.has_value());
+    auto denied = (*missing)->apply(orm::sql_operation::query,
+        {"SELECT * FROM scoped_orders", {}});
+    ASSERT_FALSE(denied.has_value());
+
+    auto tenant = std::make_shared<const orm::tenant_scope>(
+        orm::tenant_scope::self(10));
+    auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
+        orm::automatic_interceptor_options{.tenant_scope_required = true,
+            .tenant = tenant});
+    ASSERT_TRUE(chain.has_value());
+    auto cross_insert = (*chain)->apply(orm::sql_operation::insert,
+        {"INSERT INTO scoped_orders (id, tenant_id, department_id, description) VALUES ({}, {}, {}, {})",
+            {orm::param_value::from_int(1), orm::param_value::from_int(11),
+                orm::param_value::from_int(100),
+                orm::param_value::from_string("bad")}});
+    ASSERT_FALSE(cross_insert.has_value());
+    auto valid_insert = (*chain)->apply(orm::sql_operation::insert,
+        {"INSERT INTO scoped_orders (id, tenant_id, department_id, description) VALUES ({}, {}, {}, {})",
+            {orm::param_value::from_int(1), orm::param_value::from_int(10),
+                orm::param_value::from_int(100),
+                orm::param_value::from_string("good")}});
+    ASSERT_TRUE(valid_insert.has_value());
+    auto change_tenant = (*chain)->apply(orm::sql_operation::update,
+        {"UPDATE scoped_orders SET tenant_id = {} WHERE id = {}",
+            {orm::param_value::from_int(11), orm::param_value::from_int(1)}});
+    ASSERT_FALSE(change_tenant.has_value());
+    auto nested = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT (SELECT description FROM scoped_orders LIMIT 1) FROM scoped_orders", {}});
+    ASSERT_FALSE(nested.has_value());
+    auto joined = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM scoped_orders JOIN foreign_orders ON foreign_orders.id = scoped_orders.id", {}});
+    ASSERT_FALSE(joined.has_value());
+    auto upsert = (*chain)->apply(orm::sql_operation::insert,
+        {"INSERT INTO scoped_orders (id, tenant_id) VALUES ({}, {}) ON DUPLICATE KEY UPDATE description = 'bad'",
+            {orm::param_value::from_int(1), orm::param_value::from_int(10)}});
+    ASSERT_FALSE(upsert.has_value());
+    auto transaction = (*chain)->apply(orm::sql_operation::execute,
+        {"START TRANSACTION", {}});
+    ASSERT_TRUE(transaction.has_value());
+    auto disguised = (*chain)->apply(orm::sql_operation::execute,
+        {"BEGIN SELECT * FROM scoped_orders", {}});
+    ASSERT_FALSE(disguised.has_value());
+}
+
+TEST(orm_strict_tenant_scope_numbers_postgresql_parameters)
+{
+    auto tenant = std::make_shared<const orm::tenant_scope>(
+        orm::tenant_scope{10, {10, 11}, {10}});
+    auto departments = std::make_shared<const orm::data_permission_scope>(
+        orm::data_permission_scope{.partition_ids = {100}});
+    auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
+        orm::automatic_interceptor_options{.data_permission = departments,
+            .tenant_scope_required = true, .tenant = tenant,
+            .dialect = orm::sql_dialect::postgresql});
+    ASSERT_TRUE(chain.has_value());
+    auto selected = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM scoped_orders WHERE id = $1 OR id = $2 ORDER BY id",
+            {orm::param_value::from_int(1),
+                orm::param_value::from_int(2)}});
+    ASSERT_TRUE(selected.has_value());
+    if (selected)
+    {
+        ASSERT_TRUE(selected->sql.contains("tenant_id IN ($3, $4)"));
+        ASSERT_TRUE(selected->sql.contains("department_id IN ($5)"));
+        ASSERT_EQ(selected->parameters.size(), 5U);
+        ASSERT_EQ(selected->parameters[4].int_val, 100);
+    }
+}
+
+TEST(orm_strict_tenant_chain_owns_an_immutable_scope_snapshot)
+{
+    auto source = std::make_shared<orm::tenant_scope>(
+        orm::tenant_scope::self(10));
+    auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
+        orm::automatic_interceptor_options{.tenant_scope_required = true,
+            .tenant = source});
+    ASSERT_TRUE(chain.has_value());
+    source->readable_tenant_ids = {20};
+    source->writable_tenant_ids = {20};
+    auto selected = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM scoped_orders", {}});
+    ASSERT_TRUE(selected.has_value());
+    if (selected)
+    {
+        ASSERT_EQ(selected->parameters.size(), 1U);
+        ASSERT_EQ(selected->parameters[0].int_val, 10);
+    }
+}
+
+TEST(orm_strict_tenant_scope_uses_the_routed_physical_table)
+{
+    recording_session_client client;
+    orm::database_session session{client, std::string{"scoped_orders_07"},
+        orm::sql_dialect::mysql};
+    orm::mapper<scoped_order, decltype(session)> orders{session};
+    orm::automatic_interceptor_options options;
+    options.tenant_scope_required = true;
+    options.tenant = std::make_shared<const orm::tenant_scope>(
+        orm::tenant_scope::self(10));
+    options.data_permission =
+        std::make_shared<const orm::data_permission_scope>(
+            orm::data_permission_scope{.partition_ids = {100}});
+    ASSERT_TRUE(orders.configure(options).has_value());
+    auto selected = cnetmod::sync_wait(orders.select_list());
+    ASSERT_TRUE(selected.ok());
+    ASSERT_TRUE(client.last_sql.contains("scoped_orders_07"));
+    ASSERT_TRUE(client.last_sql.contains("tenant_id IN"));
+    ASSERT_TRUE(client.last_sql.contains("department_id IN"));
+}
+
+TEST(orm_strict_scopes_can_read_a_subtree_but_write_only_one_department)
+{
+    auto tenant = std::make_shared<const orm::tenant_scope>(
+        orm::tenant_scope{10, {10, 11}, {10}});
+    orm::data_permission_scope departments;
+    departments.partition_ids = {100, 101};
+    departments.writable_partition_ids = std::vector<std::int64_t>{100};
+    auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
+        orm::automatic_interceptor_options{
+            .data_permission =
+                std::make_shared<const orm::data_permission_scope>(departments),
+            .tenant_scope_required = true, .tenant = tenant});
+    ASSERT_TRUE(chain.has_value());
+    auto read = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM scoped_orders", {}});
+    auto write = (*chain)->apply(orm::sql_operation::update,
+        {"UPDATE scoped_orders SET description = {} WHERE id = {}",
+            {orm::param_value::from_string("new"),
+                orm::param_value::from_int(1)}});
+    ASSERT_TRUE(read.has_value());
+    ASSERT_TRUE(write.has_value());
+    if (read && write)
+    {
+        ASSERT_TRUE(read->sql.contains("department_id IN ({}, {})"));
+        ASSERT_TRUE(write->sql.contains("department_id IN ({})"));
+        ASSERT_EQ(write->parameters[1].int_val, 100);
+    }
+}
+
+TEST(orm_strict_saas_rejects_data_scope_models_without_tenant_column)
+{
+    auto chain = orm::make_automatic_interceptor_chain<untagged_partition_order>(
+        orm::automatic_interceptor_options{
+            .tenant_scope_required = true,
+            .tenant = std::make_shared<const orm::tenant_scope>(
+                orm::tenant_scope::self(10))});
+    ASSERT_TRUE(chain.has_value());
+    auto query = (*chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM untagged_partition_orders", {}});
+    ASSERT_FALSE(query.has_value());
 }
 
 RUN_TESTS()

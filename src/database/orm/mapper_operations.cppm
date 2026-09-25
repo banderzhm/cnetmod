@@ -237,12 +237,16 @@ namespace detail {
         auto enable_automatic_interceptors(automatic_interceptor_options options = {})
             -> std::expected<void, std::string>
         {
+            options.dialect = dialect_;
+            options.mapped_table = std::string{table_name<T>()};
             auto chain = make_automatic_interceptor_chain<T>(options);
             if (!chain)
                 return std::unexpected(chain.error());
             interceptors_ = *chain;
             field_fill_enabled_ = options.field_fill;
             optimistic_lock_enabled_ = options.optimistic_lock;
+            scoped_keys_immutable_ = options.tenant_scope_required ||
+                static_cast<bool>(options.tenant);
             return {};
         }
 
@@ -778,6 +782,8 @@ namespace detail {
      */
         template <Model T> auto upsert(T& model) -> task<model_result<T>>
         {
+            if (field_fill_enabled_)
+                global_auto_fill_interceptor().template fill_insert_fields<T>(model);
             const auto& meta = model_traits<T>::meta();
             const auto* primary_key = meta.pk();
             const auto fields = meta.insertable_fields();
@@ -908,7 +914,7 @@ namespace detail {
         {
             if (field_fill_enabled_)
                 global_auto_fill_interceptor().template fill_update_fields<T>(model);
-            auto result = co_await update(static_cast<const T&>(model));
+            auto result = co_await update_sql(static_cast<const T&>(model));
             if (optimistic_lock_enabled_ && result.ok() && result.affected_rows != 0)
             {
                 const auto& meta = model_traits<T>::meta();
@@ -931,12 +937,28 @@ namespace detail {
 
         template <Model T> auto update(const T& model) -> task<model_result<T>>
         {
+            if (!field_fill_enabled_)
+                co_return co_await update_sql(model);
+            auto filled = model;
+            global_auto_fill_interceptor().template fill_update_fields<T>(filled);
+            co_return co_await update_sql(filled);
+        }
+
+    private:
+        template <Model T> auto update_sql(const T& model) -> task<model_result<T>>
+        {
             const auto& meta = model_traits<T>::meta();
             const auto* primary_key = meta.pk();
             if (!primary_key)
                 co_return failure<T>("model has no primary key");
 
-            const auto fields = meta.updatable_fields();
+            auto fields = meta.updatable_fields();
+            if (scoped_keys_immutable_)
+                std::erase_if(fields, [](const auto* field)
+                    {
+                        return has_flag(field->col.flags, col_flag::data_partition) ||
+                            has_flag(field->col.flags, col_flag::data_owner);
+                    });
             if (fields.empty())
                 co_return failure<T>("model has no updatable fields");
 
@@ -1007,6 +1029,8 @@ namespace detail {
             }
             co_return result;
         }
+
+    public:
 
         /**
      * @brief Inserts a missing model or updates the row identified by its key.
@@ -1351,7 +1375,10 @@ namespace detail {
                 co_return failure<T>("update has no assignments",
                     std::make_error_code(std::errc::invalid_argument));
             }
-            auto [sql, parameters] = update.build_sql(table_name<T>(), dialect_config_);
+            auto filled = update;
+            if (field_fill_enabled_)
+                global_auto_fill_interceptor().template fill_update_wrapper<T>(filled);
+            auto [sql, parameters] = filled.build_sql(table_name<T>(), dialect_config_);
             if (dialect_config_.supports_returning)
                 sql += " RETURNING *";
             co_return map<T>(co_await execute_bound(std::move(sql), std::move(parameters)));
@@ -1846,13 +1873,19 @@ namespace detail {
         {
             while (!sql.empty() && std::isspace(static_cast<unsigned char>(sql.front())))
                 sql.remove_prefix(1);
-            if (sql.starts_with("SELECT") || sql.starts_with("WITH"))
+            const auto length = std::min<std::size_t>(sql.size(), 6);
+            std::array<char, 6> verb{};
+            for (std::size_t index = 0; index < length; ++index)
+                verb[index] = static_cast<char>(std::toupper(
+                    static_cast<unsigned char>(sql[index])));
+            const auto keyword = std::string_view{verb.data(), length};
+            if (keyword.starts_with("SELECT") || keyword.starts_with("WITH"))
                 return sql_operation::query;
-            if (sql.starts_with("INSERT"))
+            if (keyword.starts_with("INSERT"))
                 return sql_operation::insert;
-            if (sql.starts_with("UPDATE"))
+            if (keyword.starts_with("UPDATE"))
                 return sql_operation::update;
-            if (sql.starts_with("DELETE"))
+            if (keyword.starts_with("DELETE"))
                 return sql_operation::remove;
             return sql_operation::execute;
         }
@@ -1989,6 +2022,7 @@ namespace detail {
         std::shared_ptr<const interceptor_chain> interceptors_;
         bool field_fill_enabled_ = true;
         bool optimistic_lock_enabled_ = true;
+        bool scoped_keys_immutable_ = false;
     };
 
 } // namespace detail

@@ -3,6 +3,8 @@ export module cnetmod.orm.multi_tenant;
 import std;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.model_metadata;
+import cnetmod.orm.interceptor_chain;
+import cnetmod.orm.sql_dialect;
 
 namespace cnetmod::orm {
 
@@ -10,7 +12,38 @@ namespace cnetmod::orm {
 // Multi-tenant field flag
 // =============================================================================
 
-export constexpr col_flag TENANT_ID = static_cast<col_flag>(0x40);
+export constexpr col_flag TENANT_ID = col_flag::tenant_id;
+
+/**
+ * Request-owned authorization snapshot. The caller resolves tenant ancestry;
+ * the ORM enforces the exact read/write sets on every mapped statement.
+ * Empty sets deny access. `tenant_id` is the default target of an INSERT that
+ * omits the tenant column and must itself be in writable_tenant_ids.
+ */
+export struct tenant_scope
+{
+    std::int64_t tenant_id{};
+    std::vector<std::int64_t> readable_tenant_ids;
+    std::vector<std::int64_t> writable_tenant_ids;
+
+    [[nodiscard]] static auto self(std::int64_t id) -> tenant_scope
+    {
+        return {id, {id}, {id}};
+    }
+};
+
+/** Strict, fail-closed SQL policy for a single tenant-mapped table. */
+export auto apply_tenant_scope(sql_operation operation,
+    intercepted_statement statement, std::string_view table,
+    std::string_view tenant_column, const tenant_scope& scope,
+    sql_dialect dialect)
+    -> std::expected<intercepted_statement, std::string>;
+
+/** Validates one bound INSERT column against an exact authorized ID set. */
+export auto validate_bound_insert_column(intercepted_statement statement,
+    std::string_view table, std::string_view column,
+    const std::vector<std::int64_t>& allowed_ids, sql_dialect dialect)
+    -> std::expected<intercepted_statement, std::string>;
 
 // =============================================================================
 // tenant_context — Thread-local tenant context

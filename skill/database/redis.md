@@ -359,7 +359,11 @@ batch.get("42").exists("43").incr("revision");
 auto replies = co_await cache.execute(batch);
 ```
 
-公开操作提供无令牌便利重载以及 `cancel_token&` 重载。需要超时时，在所属
+公开操作提供无令牌便利重载以及 `cancel_token&` 重载。所有取连接路径（包括
+`redis_template` 便利重载）均受连接池的 `pool_timeout` 约束；Redis 断线时等待
+可用连接不会无限挂起。模板的 `template_options.operation_timeout` 默认 5 秒，
+限制每次 RESP 命令的完整写入与响应；即使连接成功后服务端不回包也会超时并
+丢弃该连接。设置为零可关闭命令级限制。若需要更短的请求级总预算，在所属
 `io_context` 上用 `with_timeout` / `with_deadline` 包装带令牌重载；取消会传到连接获取
 及完整 RESP exchange。任何未完整 exchange 都关闭连接，池只重新发布
 `is_reusable()` 为真的 lease。

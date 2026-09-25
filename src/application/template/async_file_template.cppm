@@ -9,6 +9,7 @@ import cnetmod.core.file;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
+import cnetmod.executor.async_op;
 
 namespace cnetmod::application {
 
@@ -122,6 +123,16 @@ public:
      */
     [[nodiscard]] auto write_all(std::filesystem::path path,
         std::string content, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Writes and flushes the file before closing; directory metadata is not synced.
+    [[nodiscard]] auto write_all(std::filesystem::path path,
+        std::string content, file_write_durability durability)
+        -> task<std::expected<void, std::error_code>>;
+
+    [[nodiscard]] auto write_all(std::filesystem::path path,
+        std::string content, file_write_durability durability,
+        cancel_token& cancellation)
         -> task<std::expected<void, std::error_code>>;
 
     /**

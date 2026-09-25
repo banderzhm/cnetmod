@@ -5,6 +5,7 @@
 import std;
 import cnetmod.json;
 import cnetmod.orm;
+import cnetmod.orm.automatic_field_fill;
 import cnetmod.orm.database_session;
 import cnetmod.io.io_context;
 import cnetmod.core.net_init;
@@ -48,6 +49,18 @@ CNETMOD_MODEL(orm_crud_user, "users",
     CNETMOD_FIELD(id, "id", bigint, PK | AUTO_INC),
     CNETMOD_FIELD(name, "name", varchar),
     CNETMOD_FIELD(status, "status", int_))
+
+struct orm_timestamp_record
+{
+    std::int64_t id{};
+    orm::calendar_datetime created_at{};
+    orm::calendar_datetime updated_at{};
+};
+
+CNETMOD_MODEL(orm_timestamp_record, "timestamp_records",
+    CNETMOD_FIELD(id, "id", bigint, PK),
+    CNETMOD_FIELD(created_at, "created_at", datetime, FILL_INSERT),
+    CNETMOD_FIELD(updated_at, "updated_at", datetime, FILL_INSERT_UPDATE))
 
 struct orm_soft_deleted_record
 {
@@ -299,6 +312,47 @@ template <> struct xml_object_graph_binder<::orm_json_user_graph>
 };
 
 } // namespace cnetmod::orm
+
+TEST(orm_timestamp_fill_preserves_explicit_insert_and_excludes_created_at_from_updates)
+{
+    orm::auto_fill_interceptor fill;
+    fill.register_from_metadata<orm_timestamp_record>();
+
+    orm_timestamp_record row;
+    row.created_at = {2020, 2, 3, 4, 5, 6, 0};
+    fill.fill_insert_fields(row);
+    ASSERT_EQ(row.created_at.year, 2020);
+    ASSERT_TRUE(row.updated_at.year > 2000);
+
+    orm_timestamp_record generated;
+    fill.fill_insert_fields(generated);
+    ASSERT_TRUE(generated.created_at.year > 2000);
+    ASSERT_EQ(generated.created_at.to_string(), generated.updated_at.to_string());
+
+    const auto fields = orm::model_traits<orm_timestamp_record>::meta().updatable_fields();
+    ASSERT_TRUE(std::ranges::none_of(fields, [](const auto* field) {
+        return field->col.column_name == "created_at";
+    }));
+    ASSERT_TRUE(std::ranges::any_of(fields, [](const auto* field) {
+        return field->col.column_name == "updated_at";
+    }));
+
+    orm::update_wrapper<orm_timestamp_record> update;
+    update.set(&orm_timestamp_record::id, 1).eq(&orm_timestamp_record::id, 1);
+    fill.fill_update_wrapper(update);
+    auto [sql, parameters] = update.build_sql();
+    ASSERT_TRUE(sql.find("`updated_at`") != std::string::npos);
+    ASSERT_TRUE(sql.find("`created_at`") == std::string::npos);
+
+    const orm::calendar_datetime explicit_time{2021, 1, 2, 3, 4, 5, 0};
+    orm::update_wrapper<orm_timestamp_record> explicit_update;
+    explicit_update.set(&orm_timestamp_record::updated_at, explicit_time)
+        .eq(&orm_timestamp_record::id, 1);
+    fill.fill_update_wrapper(explicit_update);
+    auto [explicit_sql, explicit_parameters] = explicit_update.build_sql();
+    ASSERT_EQ(explicit_parameters.size(), 2U);
+    ASSERT_EQ(explicit_parameters.front().datetime_val.year, 2021);
+}
 
 TEST(orm_models_reuse_metadata_with_the_framework_json_codec)
 {
@@ -847,6 +901,36 @@ TEST(orm_logical_delete_supports_nullable_datetime_markers)
         rejected = true;
     }
     ASSERT_TRUE(rejected);
+}
+
+TEST(orm_automatic_logical_delete_policy_is_model_scoped)
+{
+    orm::logical_delete_config nullable;
+    nullable.field_name = "deleted_at";
+    nullable.mode = orm::logical_delete_mode::nullable_datetime;
+    nullable.touch_fields = {{"updated_at",
+        orm::logical_delete_touch_value::current_timestamp}};
+    auto nullable_chain = orm::make_automatic_interceptor_chain<orm_soft_deleted_record>(
+        {.logical_delete_policy = nullable});
+    ASSERT_TRUE(nullable_chain);
+    auto selected = (*nullable_chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM `soft_deleted_records` WHERE `id` = {}",
+            {orm::param_value::from_int(7)}});
+    ASSERT_TRUE(selected);
+    ASSERT_TRUE(selected->sql.contains("`deleted_at` IS NULL"));
+    auto removed = (*nullable_chain)->apply(orm::sql_operation::remove,
+        {"DELETE FROM `soft_deleted_records` WHERE `id` = {}",
+            {orm::param_value::from_int(7)}});
+    ASSERT_TRUE(removed);
+    ASSERT_TRUE(removed->sql.contains("`deleted_at` = CURRENT_TIMESTAMP"));
+
+    auto default_chain = orm::make_automatic_interceptor_chain<orm_soft_deleted_record>();
+    ASSERT_TRUE(default_chain);
+    auto default_query = (*default_chain)->apply(orm::sql_operation::query,
+        {"SELECT * FROM `soft_deleted_records` WHERE `id` = {}",
+            {orm::param_value::from_int(7)}});
+    ASSERT_TRUE(default_query);
+    ASSERT_TRUE(!default_query->sql.contains("`deleted_at` IS NULL"));
 }
 
 TEST(orm_error_spans_report_only_valid_database_codes)

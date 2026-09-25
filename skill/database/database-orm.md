@@ -173,6 +173,35 @@ if (!page.ok())
 
 ## Query and update wrappers
 
+自动逻辑删除默认使用 `deleted = 0/1`。同一应用存在可空 `deleted_at`
+模型时，构建该模型仓储要在 `automatic_interceptor_options.logical_delete_policy`
+中传入 `field_name = "deleted_at"`、`mode = nullable_datetime`，并按需指定
+`touch_fields`；策略在拦截链创建时固定，不会改动其他模型。复杂 JOIN/XML
+查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。
+`nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
+若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
+`calendar_datetime` 参数的选择性更新完成软删除。
+
+`FILL_INSERT` 与 `FILL_INSERT_UPDATE` 直接从模型元数据读取；普通仓储请求
+不会反复修改全局注册表。自定义填充配置可按表名和字段名在启动期注册。普通 ORM
+实体写入自动填充，同一次写入的多个时间戳字段使用同一个时间值。插入时只填
+默认空值，不覆盖调用方显式给出的历史时间；`FILL_INSERT` 字段不会出现在
+按实体更新或原生 upsert 的 UPDATE 列清单中。可变实体更新会回填实体；const
+实体与批量 const 更新会填充副本，不修改调用方对象。`update_wrapper` 会自动补上
+`FILL_INSERT_UPDATE` 字段，但显式 `.set()` 的时间值优先（适合一次业务操作
+必须写入多列相同时间）。XML 写入不参与实体自动填充，仍须显式绑定时间参数。
+
+在模型里给 `created_at` 标 `FILL_INSERT`，给 `updated_at` 标
+`FILL_INSERT_UPDATE`；字段类型用 `calendar_datetime`。`save()` / `insert()`
+的空时间由 ORM 填入 UTC 墙钟时间，导入数据时预先设置的非空时间会保留。
+`update_by_id()`、`upsert()` 和 `update_wrapper` 都遵守上述规则；如果一次
+更新还要同步写 `deleted_at`、`last_message_at` 等业务时间，先生成一个
+`calendar_datetime`，通过 `.set()` 将同一值传给相关列，不依赖分别生成的
+时间戳。XML 的 `INSERT`/`UPDATE`/定制 upsert 必须自行绑定该时间值；
+自动填充不会解析或改写 XML SQL。真实 MySQL 回归见
+`testing/tests/test_orm_tenant_live.cpp` 的
+`mysql_live_system_chart_chat_timestamp_fill`。
+
 `query_wrapper<T>` accepts column names and type-safe member pointers. Prefer member pointers in application code:
 
 ```cpp
@@ -501,6 +530,55 @@ data-scope object. The request repository owns a scope snapshot instead of
 using thread-local state, so coroutine suspension cannot leak another user's
 policy. A restricted scope with no visible partitions or owner denies every
 row.
+
+### SaaS tenant and organization hierarchies
+
+SaaS mode is explicit. Call `runtime.require_tenant_scope(true)` before
+serving requests, mark exactly one model column `TENANT_ID`, and bind a
+`tenant_scope` to each authenticated request. The runtime copies it into the
+repository's frozen policy chain. Missing tenant scope rejects operations on
+tenant models; it never means “all tenants.” Leave the runtime switch off for
+a single-tenant application. The legacy `tenant_guard` is thread-local and
+must not be used as a SaaS request policy.
+In strict SaaS mode, models marked `DATA_PARTITION` or `DATA_OWNER` must also
+declare a tenant column; otherwise the ORM rejects them instead of applying
+only one half of the isolation policy.
+Create tenant columns as non-nullable database columns and index the tenant
+and partition keys used by filtered queries. Pre-authentication lookups must
+first resolve a tenant from a trusted host or tenant identifier and bind a
+narrow scope; the ORM cannot infer a tenant from an unauthenticated user ID.
+
+```cpp
+runtime.require_tenant_scope(true);
+request.scope().bind(std::make_shared<cnetmod::orm::tenant_scope>(
+    cnetmod::orm::tenant_scope{
+        .tenant_id = current_tenant,
+        .readable_tenant_ids = authorized_tenant_tree,
+        .writable_tenant_ids = authorized_write_tenants,
+    }));
+auto orders = runtime.repository<order>(request, "primary");
+```
+
+The application/IAM layer resolves parent–child tenant and department IDs
+from its own hierarchy and grants; the ORM does not assume a particular
+tenant or organization table. Pass the authorized tenant IDs in
+`tenant_scope` and the authorized department IDs in
+`data_permission_scope::partition_ids`. The policies are intersected, not
+unioned, so a parent tenant cannot see an unauthorized department in a child
+tenant. Use distinct read and write tenant sets; when department write rights
+differ, set `data_permission_scope::writable_partition_ids` as well (an empty
+vector denies writes). INSERT must target a writable
+tenant and the tenant column is immutable on UPDATE. In strict mode, INSERT
+also validates marked `DATA_PARTITION` (and enabled `DATA_OWNER`) columns
+against the request scope. Empty sets deny access.
+
+Strict mode accepts single-table parameterized typed CRUD and XML statements,
+including dynamic `WHERE`, `OR`, sorting and paging. SQL constructs that cannot
+be safely scoped by this policy (cross-table JOIN/UNION, nested SELECT,
+INSERT SELECT, upsert, or raw mutation of the tenant column) fail closed.
+Transactions preserve the same scope snapshot. Do not route arbitrary SQL or
+schema maintenance through a tenant-scoped repository. Only a separately
+controlled maintenance path may run unscoped SQL.
 
 ## Upsert semantics
 

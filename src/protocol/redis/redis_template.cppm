@@ -112,6 +112,9 @@ struct template_options
     std::size_t scan_page = 128;
     std::size_t scan_limit = 100000;
     std::size_t response_byte_limit = 4U * 1024U * 1024U;
+    /// Maximum time for one wire exchange; zero disables this limit.
+    std::chrono::steady_clock::duration operation_timeout =
+        std::chrono::seconds{5};
 };
 
 /**

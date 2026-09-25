@@ -7,6 +7,7 @@ import cnetmod.orm.multi_tenant;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.automatic_field_fill;
 import cnetmod.orm.data_permission;
+import cnetmod.orm.sql_dialect;
 
 namespace cnetmod::orm {
 
@@ -21,6 +22,14 @@ export struct automatic_interceptor_options
     bool field_fill = true;
     bool optimistic_lock = true;
     std::shared_ptr<const data_permission_scope> data_permission;
+    // Strict mode is opt-in for existing applications. When required, a
+    // missing request snapshot rejects every operation on tenant models.
+    bool tenant_scope_required = false;
+    std::shared_ptr<const tenant_scope> tenant;
+    sql_dialect dialect = sql_dialect::mysql;
+    std::string mapped_table;
+    /// Overrides the default logical-delete representation for this model.
+    std::optional<logical_delete_config> logical_delete_policy;
 };
 
 /**
@@ -34,14 +43,49 @@ auto make_automatic_interceptor_chain(
     automatic_interceptor_options options = {})
     -> std::expected<std::shared_ptr<const interceptor_chain>, std::string>
 {
+    if (options.tenant)
+        options.tenant = std::make_shared<const tenant_scope>(*options.tenant);
+    if (options.data_permission)
+        options.data_permission =
+            std::make_shared<const data_permission_scope>(*options.data_permission);
     auto chain = std::make_shared<interceptor_chain>();
     if (options.multi_tenant)
     {
         auto added = chain->add("multi_tenant", 100,
-            [](sql_operation operation, intercepted_statement statement)
+            [options](sql_operation operation, intercepted_statement statement)
                 -> std::expected<intercepted_statement, std::string>
             {
                 auto& policy = global_multi_tenant_interceptor();
+                if (options.tenant_scope_required || options.tenant)
+                {
+                    const auto& metadata = model_traits<T>::meta();
+                    const column_def* tenant_column = nullptr;
+                    for (const auto& field : metadata.fields)
+                    {
+                        if (!has_flag(field.col.flags, col_flag::tenant_id) &&
+                            field.col.column_name != "tenant_id")
+                            continue;
+                        if (tenant_column)
+                            return std::unexpected("model has multiple tenant columns");
+                        tenant_column = &field.col;
+                    }
+                    if (!tenant_column)
+                    {
+                        for (const auto& field : metadata.fields)
+                            if (has_flag(field.col.flags, col_flag::data_partition) ||
+                                has_flag(field.col.flags, col_flag::data_owner))
+                                return std::unexpected(
+                                    "strict SaaS data-scope model requires a tenant column");
+                        return statement;
+                    }
+                    if (!options.tenant)
+                        return std::unexpected("tenant scope is required");
+                    return apply_tenant_scope(operation, std::move(statement),
+                        options.mapped_table.empty() ? metadata.table_name
+                            : std::string_view{options.mapped_table},
+                        tenant_column->column_name,
+                        *options.tenant, options.dialect);
+                }
                 switch (operation)
                 {
                 case sql_operation::insert:
@@ -64,11 +108,13 @@ auto make_automatic_interceptor_chain(
     }
     if (options.logical_delete)
     {
+        logical_delete_interceptor policy{options.logical_delete_policy.value_or(
+            global_logical_delete_interceptor().config())};
         auto added = chain->add("logical_delete", 200,
-            [](sql_operation operation, intercepted_statement statement)
+            [policy = std::move(policy)](sql_operation operation,
+                intercepted_statement statement)
                 -> std::expected<intercepted_statement, std::string>
             {
-                auto& policy = global_logical_delete_interceptor();
                 if (operation == sql_operation::query)
                     statement.sql = policy.template inject_select_condition<T>(
                         std::move(statement.sql));
@@ -82,7 +128,10 @@ auto make_automatic_interceptor_chain(
     }
     if (options.data_permission)
     {
-        auto policy = data_permission_interceptor<T>{*options.data_permission};
+        auto policy = data_permission_interceptor<T>{
+            *options.data_permission, options.dialect,
+            options.tenant_scope_required || static_cast<bool>(options.tenant),
+            options.mapped_table};
         auto added = chain->add("data_permission", 150,
             [policy = std::move(policy)](sql_operation operation,
                 intercepted_statement statement) mutable
@@ -123,8 +172,6 @@ auto make_automatic_interceptor_chain(
         if (!added)
             return std::unexpected(added.error());
     }
-    if (options.field_fill)
-        global_auto_fill_interceptor().template register_from_metadata<T>();
     auto frozen = chain->freeze();
     if (!frozen)
         return std::unexpected(frozen.error());

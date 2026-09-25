@@ -42,6 +42,7 @@ import cnetmod.application.mysql_orm;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.data_permission;
+import cnetmod.orm.multi_tenant;
 #endif
 #if defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL) && defined(CNETMOD_HAS_ORM)
 import cnetmod.application.postgresql;
@@ -49,6 +50,7 @@ import cnetmod.application.postgresql_orm;
 import cnetmod.orm.automatic_interceptors;
 import cnetmod.orm.model_metadata;
 import cnetmod.orm.data_permission;
+import cnetmod.orm.multi_tenant;
 #endif
 
 namespace cnetmod::application {
@@ -107,6 +109,16 @@ public:
 
     application_runtime(const application_runtime&) = delete;
     auto operator=(const application_runtime&) -> application_runtime& = delete;
+
+#if defined(CNETMOD_HAS_ORM) && \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+    /** Enable before serving requests; false preserves single-tenant behavior. */
+    void require_tenant_scope(bool enabled) noexcept
+    {
+        tenant_scope_required_.store(enabled, std::memory_order_release);
+    }
+#endif
 
     /**
      * @brief Registers a uniquely named, cancellable background operation.
@@ -243,6 +255,20 @@ public:
         database_provider provider = database_provider::automatic)
         -> std::expected<managed_repository<T>, std::error_code>
     {
+        if (tenant_scope_required_.load(std::memory_order_acquire))
+        {
+            interceptors.multi_tenant = true;
+            interceptors.tenant_scope_required = true;
+            if (!interceptors.tenant)
+            {
+                for (const auto& field : orm::model_traits<T>::meta().fields)
+                    if (orm::has_flag(field.col.flags,
+                            orm::col_flag::tenant_id) ||
+                        field.col.column_name == "tenant_id")
+                        return std::unexpected(std::make_error_code(
+                            std::errc::permission_denied));
+            }
+        }
     #if defined(CNETMOD_HAS_PROTOCOL_MYSQL)
         auto* mysql = services_.find<mysql_service>(instance);
         const bool mysql_available = mysql != nullptr;
@@ -314,6 +340,10 @@ public:
         database_provider provider = database_provider::automatic)
         -> std::expected<managed_repository<T>, std::error_code>
     {
+        if (const auto* tenant =
+                request.scope().template find<orm::tenant_scope>())
+            interceptors.tenant =
+                std::make_shared<const orm::tenant_scope>(*tenant);
         if (const auto* scope =
                 request.scope().template find<orm::data_permission_scope>())
             interceptors.data_permission =
@@ -380,6 +410,11 @@ private:
     async_file_template files_;
     rest_template rest_;
     json_template json_;
+#if defined(CNETMOD_HAS_ORM) && \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
+        defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
+    std::atomic<bool> tenant_scope_required_{false};
+#endif
 };
 
 } // namespace cnetmod::application

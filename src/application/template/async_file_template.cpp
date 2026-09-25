@@ -93,6 +93,21 @@ auto async_file_template::write_all(std::filesystem::path path, std::string cont
     co_return co_await async_file_write_all(io_, path, content, cancellation);
 }
 
+auto async_file_template::write_all(std::filesystem::path path, std::string content,
+    file_write_durability durability)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_write_all(io_, path, content, durability);
+}
+
+auto async_file_template::write_all(std::filesystem::path path, std::string content,
+    file_write_durability durability, cancel_token& cancellation)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_write_all(io_, path, content, durability,
+        cancellation);
+}
+
 auto async_file_template::remove(std::filesystem::path path)
     -> task<std::expected<void, std::error_code>>
 {

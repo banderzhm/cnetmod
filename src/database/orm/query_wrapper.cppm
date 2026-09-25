@@ -1197,6 +1197,21 @@ public:
         return !set_fields_.empty();
     }
 
+    [[nodiscard]] auto has_assignment(std::string_view column) const noexcept -> bool
+    {
+        return std::ranges::any_of(set_fields_, [column](const auto& assignment) {
+            return assignment.column == column;
+        });
+    }
+
+    /** @brief Adds an automatic assignment without replacing a caller's value. */
+    auto set_if_absent(std::string_view column, param_value value) -> update_wrapper&
+    {
+        if (!has_assignment(column))
+            set_assignment(column, std::move(value), update_value_kind::bound);
+        return *this;
+    }
+
 private:
     void set_assignment(std::string_view column, param_value value,
         update_value_kind kind)

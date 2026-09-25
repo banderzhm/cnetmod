@@ -408,6 +408,14 @@ auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
     std::string_view content)
     -> task<std::expected<void, std::error_code>>
 {
+    co_return co_await async_file_write_all(ctx, path, content,
+        file_write_durability::buffered);
+}
+
+auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
+    std::string_view content, file_write_durability durability)
+    -> task<std::expected<void, std::error_code>>
+{
     auto handle = co_await async_file_open(ctx, path,
         open_mode::write | open_mode::create | open_mode::truncate);
     if (!handle)
@@ -436,6 +444,15 @@ auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
         }
     }
 
+    if (durability == file_write_durability::flushed)
+    {
+        auto flushed = co_await async_file_flush(ctx, *handle);
+        if (!flushed)
+        {
+            (void)co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(flushed.error());
+        }
+    }
     auto closed = co_await async_file_close(ctx, *handle);
     if (!closed)
         co_return std::unexpected(closed.error());
@@ -444,6 +461,15 @@ auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
 
 auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
     std::string_view content, cancel_token& token)
+    -> task<std::expected<void, std::error_code>>
+{
+    co_return co_await async_file_write_all(ctx, path, content,
+        file_write_durability::buffered, token);
+}
+
+auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
+    std::string_view content, file_write_durability durability,
+    cancel_token& token)
     -> task<std::expected<void, std::error_code>>
 {
     auto handle = co_await async_file_open(ctx, path,
@@ -469,6 +495,15 @@ auto async_file_write_all(io_context& ctx, const std::filesystem::path& path,
                 std::make_error_code(std::errc::io_error));
         }
         written += *result;
+    }
+    if (durability == file_write_durability::flushed)
+    {
+        auto flushed = co_await async_file_flush(ctx, *handle, token);
+        if (!flushed)
+        {
+            (void)co_await async_file_close(ctx, *handle);
+            co_return std::unexpected(flushed.error());
+        }
     }
     auto closed = co_await async_file_close(ctx, *handle);
     if (!closed)

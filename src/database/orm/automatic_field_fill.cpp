@@ -4,6 +4,33 @@ import std;
 
 namespace cnetmod::orm {
 
+auto auto_fill_interceptor::is_unset(const param_value& value) noexcept -> bool
+{
+    switch (value.kind)
+    {
+    case param_value::kind_t::null_kind:
+        return true;
+    case param_value::kind_t::int64_kind:
+        return value.int_val == 0;
+    case param_value::kind_t::uint64_kind:
+        return value.uint_val == 0;
+    case param_value::kind_t::double_kind:
+        return value.double_val == 0.0;
+    case param_value::kind_t::datetime_kind:
+        return value.datetime_val.year == 0;
+    case param_value::kind_t::date_kind:
+        return value.date_val.year == 0;
+    case param_value::kind_t::time_kind:
+        return value.time_val.hours == 0 && value.time_val.minutes == 0 &&
+            value.time_val.seconds == 0 && value.time_val.microsecond == 0;
+    case param_value::kind_t::string_kind:
+    case param_value::kind_t::blob_kind:
+        return value.str_val.empty();
+    default:
+        return false;
+    }
+}
+
 auto auto_fill_interceptor::param_to_field_value(const param_value& pv)
     -> field_value
 {
