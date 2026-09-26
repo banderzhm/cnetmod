@@ -542,10 +542,36 @@ export struct match_result
     std::optional<request_body_stream_options> request_stream;
 };
 
+/**
+ * @brief A request that matched no route.
+ *
+ * status is 404 when the path is unknown and 405 when the path exists for
+ * other methods; allowed lists those methods (the server has already set the
+ * Allow header).
+ */
+export struct unmatched_request
+{
+    int status = status::not_found;
+    std::vector<http_method> allowed;
+};
+
+/// Writes the response for an unmatched request in the application envelope.
+export using unmatched_handler_fn =
+    std::function<task<void>(request_context&, const unmatched_request&)>;
+
 export class router
 {
 public:
     router() = default;
+
+    /**
+     * @brief Installs the response writer for 404 / 405.
+     *
+     * The default writes plain-text bodies. The Allow header of a 405 is always
+     * set by the server before the handler runs.
+     */
+    void on_unmatched(unmatched_handler_fn handler);
+    [[nodiscard]] auto unmatched_handler() const noexcept -> const unmatched_handler_fn&;
 
     /**
      * Route registration. Metadata declared here is exposed to middleware
@@ -656,6 +682,7 @@ private:
         const std::vector<std::string_view>& parts,
         route_params& out) -> bool;
     std::vector<route_entry> entries_;
+    unmatched_handler_fn unmatched_;
     sse_stream_options sse_defaults_{};
     std::vector<std::size_t> static_exact_indices_;
     std::unordered_map<std::string, std::vector<std::size_t>> exact_index_;

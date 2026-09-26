@@ -417,9 +417,17 @@ namespace detail {
     auto unmatched_route_handler(const router& routes, std::string_view path)
         -> handler_fn
     {
-        const auto methods = routes.allowed_methods(path);
+        auto methods = routes.allowed_methods(path);
+        const auto& custom = routes.unmatched_handler();
         if (methods.empty())
-            return not_found_handler;
+        {
+            if (!custom)
+                return not_found_handler;
+            return [&custom](request_context& context) -> task<void>
+            {
+                co_await custom(context, unmatched_request{.status = status::not_found});
+            };
+        }
 
         std::string allow;
         for (const auto method : methods)
@@ -428,9 +436,16 @@ namespace detail {
                 allow += ", ";
             allow += method_to_string(method);
         }
-        return [allow = std::move(allow)](request_context& context) -> task<void>
+        return [allow = std::move(allow), methods = std::move(methods), &custom](
+                   request_context& context) -> task<void>
         {
             context.resp().set_header("Allow", allow);
+            if (custom)
+            {
+                co_await custom(context, unmatched_request{
+                    .status = status::method_not_allowed, .allowed = methods});
+                co_return;
+            }
             context.text(status::method_not_allowed,
                 "405 Method Not Allowed");
             co_return;

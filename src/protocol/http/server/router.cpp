@@ -604,6 +604,16 @@ auto request_context::io_ctx() noexcept -> io_context&
     return ctx_;
 }
 
+void router::on_unmatched(unmatched_handler_fn handler)
+{
+    unmatched_ = std::move(handler);
+}
+
+auto router::unmatched_handler() const noexcept -> const unmatched_handler_fn&
+{
+    return unmatched_;
+}
+
 auto request_context::raw_socket() noexcept -> socket&
 {
     return sock_;

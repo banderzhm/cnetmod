@@ -7966,6 +7966,17 @@ auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 服务器会区分“路径不存在”和“方法不匹配”：没有任何模式匹配时返回 `404`；路径模式存在但
 当前方法未注册时自动返回 `405 Method Not Allowed`，并生成 `Allow` 响应头。业务控制器不应
 为同一路径补一个手写的兜底路由。`router::allowed_methods(path)` 可用于测试或自定义调度。
+默认的 404/405 响应体是纯文本；应用用 `router::on_unmatched(handler)` 输出自己的错误响应格式，
+handler 收到 `unmatched_request{status, allowed}`，405 的 `Allow` 头已由服务器设置：
+
+```cpp
+routes.on_unmatched([](request_context& request, const unmatched_request& unmatched)
+    -> task<void> {
+    respond_error(request, unmatched.status == status::not_found
+        ? error_code::route_not_found : error_code::method_not_allowed);
+    co_return;
+});
+```
 
 ```cpp
 routes.get("/orders/:id", read_order, endpoint_metadata{

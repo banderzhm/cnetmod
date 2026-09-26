@@ -82,6 +82,23 @@ TEST(router_distinguishes_method_mismatch_from_unknown_path)
     ASSERT_EQ(method_to_string(allowed[1]), std::string_view{"PATCH"});
 }
 
+TEST(router_keeps_the_application_unmatched_handler)
+{
+    router r;
+    ASSERT_FALSE(static_cast<bool>(r.unmatched_handler()));
+    int observed = 0;
+    r.on_unmatched([&observed](request_context&, const unmatched_request& unmatched)
+        -> cnetmod::task<void>
+    {
+        observed = unmatched.status;
+        co_return;
+    });
+    ASSERT_TRUE(static_cast<bool>(r.unmatched_handler()));
+    auto moved = std::move(r);
+    ASSERT_TRUE(static_cast<bool>(moved.unmatched_handler()));
+    (void)observed;
+}
+
 TEST(router_any_route_has_no_method_mismatch)
 {
     router r;
