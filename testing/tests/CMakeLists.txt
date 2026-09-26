@@ -47,6 +47,7 @@ set(TEST_SOURCES
     http_client_test.cpp
     test_http_ip_filter.cpp
     test_http_jwt_auth.cpp
+    test_http_rate_limiter.cpp
     test_http_authorization.cpp
     test_http2_hpack.cpp
     test_http2_stream.cpp

@@ -25,8 +25,9 @@ cnetmod/
 │   ├── executor/           # 执行器（async_op, scheduler, pool）
 │   ├── protocol/           # 协议模块（http, mqtt, grpc, redis, mysql...）
 │   ├── database/           # 数据库通用模块
-│   ├── security/           # 安全模块
 │   ├── utils/              # 工具模块
+│   │   ├── json/           # Glaze-only JSON 门面（模块名仍为 cnetmod.json）
+│   │   └── security/       # JWT 与口令哈希（模块名仍为 cnetmod.security.*）
 │   ├── core.cppm           # core 聚合模块
 │   ├── coro.cppm           # coro 聚合模块
 │   ├── io.cppm             # io 聚合模块
@@ -39,7 +40,6 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # Glaze-only JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）

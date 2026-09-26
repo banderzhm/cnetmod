@@ -97,6 +97,7 @@
 | 我想… | 看这个文件 |
 |-------|-----------|
 | JWT 签发、验证、过期检查 | [security-jwt.md](security/security-jwt.md) |
+| 口令哈希、校验与升级策略 | [security-password.md](security/security-password.md) |
 
 ## CMake 协议开关
 

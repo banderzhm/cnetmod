@@ -127,6 +127,10 @@ auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
 `endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
 
+服务器会区分“路径不存在”和“方法不匹配”：没有任何模式匹配时返回 `404`；路径模式存在但
+当前方法未注册时自动返回 `405 Method Not Allowed`，并生成 `Allow` 响应头。业务控制器不应
+为同一路径补一个手写的兜底路由。`router::allowed_methods(path)` 可用于测试或自定义调度。
+
 ```cpp
 routes.get("/orders/:id", read_order, endpoint_metadata{
     required_permissions{.all_of = {"orders:read"}}, endpoint_name{"orders.read"}});

@@ -3,14 +3,14 @@
 > `cnetmod.json` is a Glaze-only C++23 module. It exposes Glaze's native typed codec and dynamic document without an intermediate DOM or a switchable backend layer.
 
 **import**: `import cnetmod.json;`
-**sources**: `src/json/json.cppm`, `src/json/json.cpp`
+**sources**: `src/utils/json/json.cppm`, `src/utils/json/json.cpp`
 
 ## Design contract
 
 1. Glaze is the only JSON engine. There is no backend registry, virtual JSON interface, structural validator, or conversion through another DOM.
 2. `document` is `glz::generic_u64`, preserving unsigned 64-bit integers in dynamic JSON.
 3. `parse<T>()` and `write<T>()` invoke Glaze directly for ordinary C++ types. Registered ORM records use their existing field metadata to produce Glaze's native document so database temporal and identifier wire forms remain stable.
-4. Only `src/json/json.cppm` and `src/json/json.cpp` may include Glaze headers or spell `glz::*` names. Other framework code imports `cnetmod.json`.
+4. Only `src/utils/json/json.cppm` and `src/utils/json/json.cpp` may include Glaze headers or spell `glz::*` names. Other framework code imports `cnetmod.json`.
 5. Glaze headers are placed in the module's global module fragment. Consumers import the compiled module rather than including Glaze themselves.
 6. The bundled Glaze headers are installed because the public module interface owns a native Glaze document type.
 

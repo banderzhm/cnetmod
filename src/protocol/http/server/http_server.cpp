@@ -414,6 +414,29 @@ namespace detail {
         co_return;
     }
 
+    auto unmatched_route_handler(const router& routes, std::string_view path)
+        -> handler_fn
+    {
+        const auto methods = routes.allowed_methods(path);
+        if (methods.empty())
+            return not_found_handler;
+
+        std::string allow;
+        for (const auto method : methods)
+        {
+            if (!allow.empty())
+                allow += ", ";
+            allow += method_to_string(method);
+        }
+        return [allow = std::move(allow)](request_context& context) -> task<void>
+        {
+            context.resp().set_header("Allow", allow);
+            context.text(status::method_not_allowed,
+                "405 Method Not Allowed");
+            co_return;
+        };
+    }
+
 } // namespace detail
 
 auto save_upload(upload_options opts) -> handler_fn
@@ -893,10 +916,7 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
         }
         else
         {
-            route = [](request_context& context) -> task<void>
-            {
-                return detail::not_found_handler(context);
-            };
+            route = detail::unmatched_route_handler(router_, path);
         }
         std::string buffered_body;
         if (request.body_stream && (!match || !match->request_stream))
@@ -1113,10 +1133,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
         }
         else
         {
-            handler = [](request_context& ctx) -> task<void>
-            {
-                return detail::not_found_handler(ctx);
-            };
+            handler = detail::unmatched_route_handler(router_, path);
         }
 
         if (mr && mr->request_stream)
@@ -1313,10 +1330,7 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         }
         else
         {
-            handler = [](request_context& ctx) -> task<void>
-            {
-                return detail::not_found_handler(ctx);
-            };
+            handler = detail::unmatched_route_handler(router_, path);
         }
 
         if (mr && mr->request_stream)

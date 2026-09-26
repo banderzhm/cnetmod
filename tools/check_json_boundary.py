@@ -12,8 +12,8 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE_ROOTS = ("src", "include", "testing", "examples")
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cppm", ".ixx"}
 GLAZE_MODULE_FILES = {
-    pathlib.Path("src/json/json.cppm"),
-    pathlib.Path("src/json/json.cpp"),
+    pathlib.Path("src/utils/json/json.cppm"),
+    pathlib.Path("src/utils/json/json.cpp"),
 }
 
 

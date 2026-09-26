@@ -604,6 +604,18 @@ public:
         -> std::optional<match_result>;
 
     /**
+     * @brief Returns methods whose route pattern matches path.
+     *
+     * An empty result means the resource path is unknown. A non-empty result
+     * after match() failed means the server must return 405 and emit these
+     * methods in the Allow response header. Routes registered with any()
+     * accept every method and therefore never appear here after a failed
+     * match.
+     */
+    [[nodiscard]] auto allowed_methods(std::string_view path) const
+        -> std::vector<http_method>;
+
+    /**
      * @brief Returns every registered endpoint in registration order.
      *
      * Intended for API documentation and startup policy audits.

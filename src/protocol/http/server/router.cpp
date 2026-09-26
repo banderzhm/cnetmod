@@ -737,8 +737,7 @@ auto router::add_sse(http_method m, std::string_view p, sse_handler_fn f,
     if (selected.max_duration <= std::chrono::milliseconds::zero() ||
         selected.write_timeout <= std::chrono::milliseconds::zero())
         throw std::invalid_argument("SSE timeouts must be positive");
-    return add(m, p,
-        [handler = std::move(f), selected](request_context& request) -> task<void>
+    return add(m, p, [handler = std::move(f), selected](request_context& request) -> task<void>
         {
             co_await request.with_sse(handler, selected);
         },
@@ -902,6 +901,25 @@ auto router::match(http_method m, std::string_view p) const
     if (best)
         return matched(*best, std::move(bp));
     return {};
+}
+
+auto router::allowed_methods(std::string_view p) const
+    -> std::vector<http_method>
+{
+    const auto parts = detail::split_path(p);
+    std::vector<http_method> result;
+    result.reserve(4);
+    for (const auto& entry : entries_)
+    {
+        if (!entry.method)
+            continue;
+        route_params ignored;
+        if (!try_match(entry.segments, parts, ignored) ||
+            std::ranges::find(result, *entry.method) != result.end())
+            continue;
+        result.push_back(*entry.method);
+    }
+    return result;
 }
 
 auto router::endpoints() const -> std::vector<std::shared_ptr<const endpoint>>

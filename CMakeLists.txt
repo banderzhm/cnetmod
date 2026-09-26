@@ -280,9 +280,12 @@ if(NOT CNETMOD_ENABLE_SSL)
         list(FILTER ${source_list_variable} EXCLUDE REGEX
             "[/\\]utils[/\\]hmac_sha256\\.(cppm|ixx|cpp)$")
     endforeach()
-    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.(cppm|ixx)$")
-    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
-    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX
+        "[/\\]security(\\.cppm|[/\\].*\\.(cppm|ixx))$")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX
+        "[/\\]security[/\\].*\\.cpp$")
+    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX
+        "[/\\]security[/\\].*\\.cpp$")
 endif()
 
 # HTTP/3 modules live under src/protocol/http/v3/ and depend on QUIC primitives

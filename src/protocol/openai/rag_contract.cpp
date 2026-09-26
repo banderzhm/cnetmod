@@ -1,9 +1,5 @@
 /// cnetmod.protocol.openai:rag — typed model response contracts
 
-module;
-
-#include <glaze/json/read.hpp>
-
 module cnetmod.protocol.openai;
 
 import std;

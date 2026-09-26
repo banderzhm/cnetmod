@@ -12,6 +12,12 @@ struct rate_limiter_options
     std::chrono::seconds entry_ttl{300};
 };
 
+/**
+ * Create one process-local limiter state shared by every copy of the returned
+ * middleware. Installing that middleware once on a multi-event-loop server
+ * therefore enforces one global budget per key, not one budget per loop.
+ * Separate calls to rate_limiter() intentionally create independent budgets.
+ */
 [[nodiscard]] auto rate_limiter(rate_limiter_options opts = {})
     -> http::middleware_fn;
 } // namespace cnetmod

@@ -44,6 +44,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 - `skill/protocols/socks5.md`
 - `skill/protocols/websocket.md`
 - `skill/security/security-jwt.md`
+- `skill/security/security-password.md`
 
 <!-- BEGIN SOURCE: skill/SKILL.md -->
 # Source: `skill/SKILL.md`
@@ -147,6 +148,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | 我想… | 看这个文件 |
 |-------|-----------|
 | JWT 签发、验证、过期检查 | [security-jwt.md](security/security-jwt.md) |
+| 口令哈希、校验与升级策略 | [security-password.md](security/security-password.md) |
 
 ## CMake 协议开关
 
@@ -7419,6 +7421,11 @@ struct rate_limiter_options {
 
 默认按 IP 限流；自定义 `key_fn` 可按用户/API Key 限流。
 
+每次调用 `rate_limiter()` 创建一个独立的进程内状态；返回的中间件及其所有副本共享该状态。
+因此把同一个中间件实例安装到多事件循环 HTTP 服务器时，同一 key 使用的是**全进程统一令牌桶**，
+不是每个事件循环各一份配额。内部按 key 分片同步，可从不同事件循环并发调用。若需要分路由独立
+配额，应分别创建中间件实例；若需要跨进程全局配额，应使用 Redis 等外部原子计数方案。
+
 ```cpp
 srv.use(rate_limiter({.rate = 100.0, .burst = 200.0}));
 ```
@@ -7941,6 +7948,10 @@ auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 
 路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
 `endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
+
+服务器会区分“路径不存在”和“方法不匹配”：没有任何模式匹配时返回 `404`；路径模式存在但
+当前方法未注册时自动返回 `405 Method Not Allowed`，并生成 `Allow` 响应头。业务控制器不应
+为同一路径补一个手写的兜底路由。`router::allowed_methods(path)` 可用于测试或自定义调度。
 
 ```cpp
 routes.get("/orders/:id", read_order, endpoint_metadata{
@@ -9929,8 +9940,9 @@ cnetmod/
 │   ├── executor/           # 执行器（async_op, scheduler, pool）
 │   ├── protocol/           # 协议模块（http, mqtt, grpc, redis, mysql...）
 │   ├── database/           # 数据库通用模块
-│   ├── security/           # 安全模块
 │   ├── utils/              # 工具模块
+│   │   ├── json/           # Glaze-only JSON 门面（模块名仍为 cnetmod.json）
+│   │   └── security/       # JWT 与口令哈希（模块名仍为 cnetmod.security.*）
 │   ├── core.cppm           # core 聚合模块
 │   ├── coro.cppm           # coro 聚合模块
 │   ├── io.cppm             # io 聚合模块
@@ -9943,7 +9955,6 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # Glaze-only JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
@@ -10299,14 +10310,14 @@ bool skip(std::size_t n) noexcept;
 > `cnetmod.json` is a Glaze-only C++23 module. It exposes Glaze's native typed codec and dynamic document without an intermediate DOM or a switchable backend layer.
 
 **import**: `import cnetmod.json;`
-**sources**: `src/json/json.cppm`, `src/json/json.cpp`
+**sources**: `src/utils/json/json.cppm`, `src/utils/json/json.cpp`
 
 ## Design contract
 
 1. Glaze is the only JSON engine. There is no backend registry, virtual JSON interface, structural validator, or conversion through another DOM.
 2. `document` is `glz::generic_u64`, preserving unsigned 64-bit integers in dynamic JSON.
 3. `parse<T>()` and `write<T>()` invoke Glaze directly for ordinary C++ types. Registered ORM records use their existing field metadata to produce Glaze's native document so database temporal and identifier wire forms remain stable.
-4. Only `src/json/json.cppm` and `src/json/json.cpp` may include Glaze headers or spell `glz::*` names. Other framework code imports `cnetmod.json`.
+4. Only `src/utils/json/json.cppm` and `src/utils/json/json.cpp` may include Glaze headers or spell `glz::*` names. Other framework code imports `cnetmod.json`.
 5. Glaze headers are placed in the module's global module fragment. Consumers import the compiled module rather than including Glaze themselves.
 6. The bundled Glaze headers are installed because the public module interface owns a native Glaze document type.
 
@@ -17308,6 +17319,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 
 > 协程原生 JWT 模块，使用 `cnetmod.json` 与框架 HMAC-SHA256，CPU 密集操作卸载到 cnetmod 线程池。
 > 模块: `import cnetmod.security.jwt;`
+> 源码位于 `src/utils/security/`；目录归属不改变公开模块名。
 
 ## 核心原则
 
@@ -17536,3 +17548,83 @@ auto jwt_middleware(cnetmod::thread_pool& pool, std::string_view secret)
 JWT 模块位于 `cnetmod_core` 静态库中，无需额外 CMake 开关。
 JWT 的 JSON 与密码学实现只依赖框架门面，不向下游公开第三方 JSON/JWT 类型。
 <!-- END SOURCE: skill/security/security-jwt.md -->
+
+<!-- BEGIN SOURCE: skill/security/security-password.md -->
+# Source: `skill/security/security-password.md`
+
+# 口令哈希
+
+> 使用 BoringSSL 的 PBKDF2-HMAC-SHA256 提供随机盐、常量时间校验和哈希策略升级检测。
+> 模块：`import cnetmod.security.password;`，也可使用聚合模块 `import cnetmod.security;`。
+> 源码位于 `src/utils/security/`；目录归属不改变公开模块名。
+
+## 核心原则
+
+- 业务不得自行实现或复制口令派生、编码解析和常量时间比较。
+- 请求协程中使用线程池重载，避免 PBKDF2 阻塞事件循环。
+- 编码包含算法、迭代次数、盐和派生摘要，可直接持久化到密码字段。
+- 每次哈希都从 CSPRNG 生成新盐；同一口令的两次结果应不同。
+- Argon2 不由 BoringSSL 提供。框架不自行实现密码算法；引入经过审计的提供者后才能新增该枚举值。
+
+## API
+
+```cpp
+enum class password_hash_algorithm
+{
+    pbkdf2_sha256,
+};
+
+struct password_hash_options
+{
+    password_hash_algorithm algorithm = password_hash_algorithm::pbkdf2_sha256;
+    std::uint32_t iterations = 210000;
+    std::size_t salt_bytes = 16;
+    std::size_t digest_bytes = 32;
+};
+
+auto hash_password(std::string_view password,
+    password_hash_options options = {})
+    -> std::expected<std::string, std::error_code>;
+auto verify_password(std::string_view password,
+    std::string_view encoded) noexcept -> bool;
+auto password_hash_needs_rehash(std::string_view encoded,
+    password_hash_options options = {}) noexcept -> bool;
+
+auto hash_password(thread_pool& pool, io_context& request_loop,
+    std::string password, password_hash_options options = {})
+    -> task<std::expected<std::string, std::error_code>>;
+auto verify_password(thread_pool& pool, io_context& request_loop,
+    std::string password, std::string encoded) -> task<bool>;
+```
+
+同步重载用于 CPU 工作线程、离线工具或测试。HTTP handler 必须使用异步重载，并把当前请求所在的事件循环作为 `request_loop`；多事件循环应用中不要传控制循环。
+
+## 示例
+
+```cpp
+import std;
+import cnetmod.security.password;
+
+auto create_password(cnetmod::thread_pool& cpu,
+    cnetmod::io_context& request_loop, std::string password)
+    -> cnetmod::task<std::expected<std::string, std::error_code>>
+{
+    co_return co_await cnetmod::security::hash_password(
+        cpu, request_loop, std::move(password));
+}
+
+auto authenticate(cnetmod::thread_pool& cpu,
+    cnetmod::io_context& request_loop, std::string password,
+    std::string stored_hash) -> cnetmod::task<bool>
+{
+    co_return co_await cnetmod::security::verify_password(
+        cpu, request_loop, std::move(password), std::move(stored_hash));
+}
+```
+
+登录成功后可调用 `password_hash_needs_rehash()`。返回 `true` 时，用当前策略重新哈希并更新数据库，实现无停机迭代次数升级。
+
+## CMake
+
+口令哈希依赖框架的 BoringSSL 密码学提供者，需要 `CNETMOD_ENABLE_SSL=ON`。关闭 SSL 时不会导出 `cnetmod.security`、`cnetmod.security.jwt` 或 `cnetmod.security.password`。
+<!-- END SOURCE: skill/security/security-password.md -->
