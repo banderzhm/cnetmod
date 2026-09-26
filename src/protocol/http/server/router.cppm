@@ -366,6 +366,8 @@ public:
     [[nodiscard]] auto trace_state() const noexcept -> std::string_view;
     void set_trace_context(std::string trace_id, std::string span_id,
         std::uint8_t flags, std::string state = {});
+    /// TCP peer endpoint as "address:port" for access logs and tracing; it is
+    /// the proxy when one is in front. Use resolve_client_ip() for identity.
     [[nodiscard]] auto client_address() const -> std::string;
 
 private:
