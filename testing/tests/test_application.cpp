@@ -75,6 +75,13 @@ static_assert(std::same_as<decltype(std::declval<const application::repository_f
                                    runtime_repository_record>&>()
                                    .shared()),
     application::managed_repository<runtime_repository_record>&>);
+static_assert(std::same_as<decltype(std::declval<const application::repository_factory<
+                                   runtime_repository_record>&>()
+                                   .make_repository()),
+    std::expected<application::managed_repository<runtime_repository_record>,
+        std::error_code>>);
+static_assert(!std::is_copy_constructible_v<
+    application::managed_repository<runtime_repository_record>>);
 
 [[maybe_unused]] auto managed_repository_surface_compile_probe(
     application::managed_repository<runtime_repository_record>& records)

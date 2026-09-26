@@ -144,6 +144,21 @@ public:
     }
 
     /**
+     * @brief Creates a repository owned by the caller, with the configured
+     *        policies and the shared data source.
+     *
+     * Use it for components that hold their repository by value (mappers,
+     * domain services); the connection pool and interceptor chain cache are
+     * shared, only the handle is new. In strict SaaS mode tenant models are
+     * rejected with permission_denied; use for_request() for those.
+     */
+    [[nodiscard]] auto make_repository() const
+        -> std::expected<managed_repository<T>, std::error_code>
+    {
+        return make(options_.policies);
+    }
+
+    /**
      * @brief Creates a repository bound to the request's tenant and data scope.
      *
      * The repository owns snapshots of both scopes. When authentication bound

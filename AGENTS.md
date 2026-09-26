@@ -3249,6 +3249,15 @@ cnetmod::application::add_repository<user_record>(context.components,
 
 Automatic provider selection succeeds only when exactly one supported provider owns the requested instance.
 
+`managed_repository<T>` is move-only. The registered component is the shared
+instance; a component that owns its repository by value (a mapper or domain
+service) takes a new handle over the same data source and policies:
+
+```cpp
+auto& factory = resolver.get<cnetmod::application::repository_factory<user_record>>();
+auto owned = factory.make_repository();   // std::expected<managed_repository<T>, error_code>
+```
+
 `repository_factory<T>::create(services, configuration, options)` is the same
 factory without the component container. Each repository builds its policy
 chain once and reuses it for every operation.
