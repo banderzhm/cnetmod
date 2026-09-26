@@ -181,6 +181,9 @@ options.section<llm_options>("llm", /*required=*/true)
 - `T` 为可默认构造、可由 cnetmod.json（Glaze）映射的聚合类型；缺省的键取成员默认值，
   嵌套映射逐层合并；未知键报出完整路径（空对象成员视为 map，接受任意键）。
 - 未被任何模块声明的应用配置节使 `build()` 在 `options` 阶段失败。
+- 注册阶段按配置决定注册什么（例如每个供应商一个组件）时，用
+  `context.options.current<T>("name")` 读取已绑定的快照；类型不符或未声明时构建在
+  `registration` 阶段失败。需要感知重载的组件仍应注入 `options_monitor<T>`。
 - 组件通过 `options_monitor<T>`（名为配置节名）读取：`current()` 返回线程安全的不可变快照，
   `on_change()` 返回 RAII `options_subscription`。
 - `reload_configuration()` 先校验所有变更的配置节，全部通过后才发布；`runtime_safe`

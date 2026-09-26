@@ -282,6 +282,69 @@ TEST(options_sections_apply_defaults_overrides_and_validation)
                         ->beta);
 }
 
+TEST(options_sections_drive_conditional_registration)
+{
+    temporary_configuration file{R"({"pricing":{"regions":["cn","eu"]}})"};
+    auto host = application::application_builder{"options-registration"}
+                    .configuration_file(file.path())
+                    .configure(quiet)
+                    .add_module(application::make_module("regions",
+                        {.configure_options = [](application::options_registry& options)
+                            {
+                                options.section<pricing_options>("pricing");
+                                options.section<feature_flags>("features");
+                            },
+                            .register_components =
+                                [](application::registration_context& context)
+                                -> std::expected<void, std::string>
+                            {
+                                const auto pricing =
+                                    context.options.current<pricing_options>("pricing");
+                                for (const auto& region : pricing->regions)
+                                    context.components.instance(
+                                        std::make_shared<clock_source>(), region);
+                                return {};
+                            }}))
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (host)
+    {
+        ASSERT_TRUE(host->components().find<clock_source>("cn") != nullptr);
+        ASSERT_TRUE(host->components().find<clock_source>("eu") != nullptr);
+    }
+
+    auto mistyped = application::application_builder{"options-registration-type"}
+                        .configuration_file(file.path())
+                        .configure(quiet)
+                        .add_module(application::make_module("regions",
+                            {.configure_options = [](application::options_registry& options)
+                                { options.section<pricing_options>("pricing"); },
+                                .register_components =
+                                    [](application::registration_context& context)
+                                    -> std::expected<void, std::string>
+                                {
+                                    (void)context.options.current<feature_flags>("pricing");
+                                    return {};
+                                }}))
+                        .build();
+    ASSERT_FALSE(mistyped.has_value());
+    if (!mistyped)
+        ASSERT_TRUE(mistyped.error().phase == application::build_phase::registration);
+
+    auto undeclared = application::application_builder{"options-registration-missing"}
+                          .configure(quiet)
+                          .add_module(application::make_module("regions",
+                              {.register_components =
+                                      [](application::registration_context& context)
+                                      -> std::expected<void, std::string>
+                                  {
+                                      (void)context.options.current<pricing_options>("pricing");
+                                      return {};
+                                  }}))
+                          .build();
+    ASSERT_FALSE(undeclared.has_value());
+}
+
 TEST(options_sections_report_unknown_keys_unclaimed_sections_and_failures)
 {
     const auto build = [](std::string_view content, bool required = false)

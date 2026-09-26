@@ -36,6 +36,10 @@ export struct registration_context
 {
     component_collection& components;
     const application_configuration& configuration;
+    /// Bound options sections (declared in configure_options). Modules read
+    /// them to decide what to register, e.g. one component per configured
+    /// provider: `context.options.current<llm_options>("llm")`.
+    const options_registry& options;
     /// Registers a lifecycle-managed service owned by this application.
     std::function<void(std::shared_ptr<managed_service>)> manage;
 };

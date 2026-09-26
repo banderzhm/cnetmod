@@ -319,6 +319,15 @@ public:
         components.instance(monitor_, name_);
     }
 
+    /**
+     * @brief Bound monitor; null until bind() succeeded.
+     */
+    [[nodiscard]] auto monitor() const noexcept
+        -> const std::shared_ptr<options_monitor<T>>&
+    {
+        return monitor_;
+    }
+
     options_validator<T> validator_;
     options_reload reload_ = options_reload::restart_required;
 
@@ -399,6 +408,39 @@ public:
         auto& reference = *declared;
         sections_.push_back(std::move(declared));
         return options_section_builder<T>{reference};
+    }
+
+    /**
+     * @brief Returns the current value of a bound section.
+     *
+     * Intended for the registration phase, where modules register components
+     * conditionally on configuration. Components that must observe reloads
+     * resolve options_monitor<T> instead of keeping this snapshot.
+     *
+     * @throws std::out_of_range when the section is not declared
+     * @throws std::logic_error when T differs from the declared type or the
+     *         section is not bound yet
+     */
+    template <class T>
+    [[nodiscard]] auto current(std::string_view name) const
+        -> std::shared_ptr<const T>
+    {
+        for (const auto& section : sections_)
+        {
+            if (section->name() != name)
+                continue;
+            const auto* typed =
+                dynamic_cast<const typed_options_section<T>*>(section.get());
+            if (typed == nullptr)
+                throw std::logic_error(std::format(
+                    "options section '{}' is declared with a different type", name));
+            if (!typed->monitor())
+                throw std::logic_error(
+                    std::format("options section '{}' is not bound yet", name));
+            return typed->monitor()->current();
+        }
+        throw std::out_of_range(
+            std::format("options section '{}' is not declared", name));
     }
 
     /**

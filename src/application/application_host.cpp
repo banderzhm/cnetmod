@@ -239,7 +239,7 @@ public:
         collection.borrow(telemetry);
         options.register_components(collection);
 
-        registration_context context{collection, configuration,
+        registration_context context{collection, configuration, options,
             [this](std::shared_ptr<managed_service> service)
             {
                 if (!service)
