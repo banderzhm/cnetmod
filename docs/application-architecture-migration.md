@@ -42,6 +42,7 @@ workarounds are no longer needed.
 |---|---|
 | `repository<T>(instance, policies, provider)` | `add_repository<T>(components, {.instance, .policies, .provider})`, inject `managed_repository<T>` |
 | `repository<T>(request, ...)` | inject `repository_factory<T>`, call `for_request(request)` |
+| a repository moved into a component by value | inject `repository_factory<T>`, call `make_repository()` (`managed_repository<T>` is move-only) |
 | `require_tenant_scope(bool)` | configuration `orm.tenant_scope_required` (frozen at build) |
 | `redis(instance, options)` | inject `redis_service` by instance name, call `make_template(options)` |
 | `chat_model(instance, options)` | inject `chat_model_service`, call `make_template(options)`; or `add_chat_model()` |
@@ -62,6 +63,9 @@ New: `runtime.executor()` returns `execution_context` (event loop, CPU pool,
   `options` phase with the section name as path.
 - `${NAME:-default}` and the `$${` escape are supported.
 - `orm.tenant_scope_required` is a new key.
+- Modules that register components conditionally on configuration read the
+  bound section in `register_components()` through
+  `context.options.current<T>("name")`.
 
 ## HTTP authentication and authorization
 
