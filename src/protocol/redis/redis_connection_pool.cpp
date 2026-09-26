@@ -353,7 +353,10 @@ auto connection_pool::cancel() -> task<void>
         clear_idle_bit(node.index);
         node.maintenance_cancellation.cancel();
         if (auto handle = std::exchange(node.task_waiting, {}))
-            ctx_.post(handle);
+        {
+            node.task_completion.coroutine = handle;
+            ctx_.post_node_raw(&node.task_completion);
+        }
     }
     mtx_.unlock();
     co_await maintenance_.wait();
@@ -521,6 +524,7 @@ auto connection_pool::connection_task(conn_node& node) -> task<void>
                 void await_suspend(std::coroutine_handle<> handle) noexcept
                 {
                     node.task_waiting = handle;
+                    node.task_completion.coroutine = handle;
                 }
 
                 void await_resume() noexcept {}
@@ -721,7 +725,10 @@ auto connection_pool::release_connection(conn_node& node) -> bool
     else
         node.maintenance_cancellation.cancel();
     if (auto handle = std::exchange(node.task_waiting, {}))
-        ctx_.post(handle);
+    {
+        node.task_completion.coroutine = handle;
+        ctx_.post_node_raw(&node.task_completion);
+    }
     return true;
 }
 

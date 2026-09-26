@@ -968,9 +968,13 @@ namespace {
             else
                 return std::forward<Function>(function)();
         }
-        catch (const configuration_failure& failure)
+        catch (configuration_failure& failure)
         {
-            return std::unexpected(failure.error);
+            // The failure object already owns every diagnostic string. Moving
+            // it keeps this handler allocation-free, which matters when the
+            // original failure is observed while allocation itself is being
+            // fault-injected.
+            return std::unexpected(std::move(failure.error));
         }
         catch (const std::bad_alloc&)
         {

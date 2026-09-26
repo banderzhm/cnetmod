@@ -17,17 +17,38 @@ GLAZE_MODULE_FILES = {
 }
 
 
-def main() -> int:
-    violations: list[str] = []
-    tracked = subprocess.run(
+def source_files() -> list[pathlib.Path]:
+    """Return repository sources even when a Windows worktree is built in WSL.
+
+    Git writes an absolute Windows ``gitdir`` into the worktree's ``.git``
+    file. Linux Git cannot resolve that path, so build-time boundary checks
+    must not depend exclusively on ``git ls-files``.
+    """
+    listed = subprocess.run(
         ["git", "ls-files", "-z", "--", *SOURCE_ROOTS],
         cwd=ROOT,
-        check=True,
+        check=False,
         capture_output=True,
-    ).stdout.decode("utf-8").split("\0")
-    for name in tracked:
-        relative = pathlib.Path(name)
-        if not name or relative.suffix.lower() not in SOURCE_SUFFIXES:
+    )
+    if listed.returncode == 0:
+        return [
+            pathlib.Path(name)
+            for name in listed.stdout.decode("utf-8").split("\0")
+            if name
+        ]
+
+    return sorted(
+        path.relative_to(ROOT)
+        for source_root in SOURCE_ROOTS
+        for path in (ROOT / source_root).rglob("*")
+        if path.is_file()
+    )
+
+
+def main() -> int:
+    violations: list[str] = []
+    for relative in source_files():
+        if relative.suffix.lower() not in SOURCE_SUFFIXES:
             continue
         path = ROOT / relative
         if not path.is_file():

@@ -83,8 +83,14 @@ TEST(authorization_enforces_permissions_declared_on_the_endpoint)
 TEST(authorization_supports_wildcard_and_any_of_requirements)
 {
     const http::endpoint_metadata any{http::required_permissions{
-        .any_of = {"orders:write", "orders:*"}}};
+        .any_of = {"orders:write", "orders:read"}}};
     ASSERT_TRUE(invoke({}, any, reader()).reached);
+
+    const auto wildcard = http::authorization_principal{
+        .subject = "8", .permissions = {"orders:*"}};
+    const http::endpoint_metadata reads{http::required_permissions{
+        .all_of = {"orders:read"}}};
+    ASSERT_TRUE(invoke({}, reads, wildcard).reached);
     ASSERT_TRUE(http::permission_matches("orders:*", "orders:read"));
     ASSERT_FALSE(http::permission_matches("orders:read", "orders:write"));
 }

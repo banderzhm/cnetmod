@@ -44,6 +44,7 @@ import cnetmod.application.service_lifecycle;
 import cnetmod.application.service_registry;
 import cnetmod.application.host;
 import cnetmod.application.configuration;
+import cnetmod.application.modules;
 #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
 import cnetmod.protocol.mysql;
 #endif

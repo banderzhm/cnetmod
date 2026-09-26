@@ -179,27 +179,29 @@ TEST(host_reload_preparation_failure_preserves_configuration_and_sampling)
             std::filesystem::remove(path, ignored);
         }
     } cleanup{path};
-    {
-        std::ofstream output{path};
-        output << R"({"observability":{"sampling_ratio":0.25},"health":{"interval_ms":1234},"services":{"dependency":{"type":"custom","enabled":false,"recovery":{"budget_ms":4567}}}})";
-        ASSERT_TRUE(output.good());
-    }
     unsigned failures = 0;
     unsigned successes = 0;
     for (std::size_t allocation = 0; allocation != 256; ++allocation)
     {
+        {
+            std::ofstream output{path};
+            output << R"({"observability":{"sampling_ratio":0.75},"health":{"interval_ms":8765},"services":{"dependency":{"type":"custom","enabled":false,"recovery":{"budget_ms":9876}}}})";
+            ASSERT_TRUE(output.good());
+        }
         auto host = app::application_builder{"reload-transaction"}
             .configuration_file(path)
             .configure([](app::application_configuration& config)
                 {
                     config.logging.manage_lifecycle = false;
                     config.management.enabled = false;
-                    config.observability.sampling_ratio = 0.75;
-                    config.health.interval = std::chrono::milliseconds{8765};
-                    config.services.at("dependency").recovery.budget = std::chrono::milliseconds{9876};
                 })
             .build();
         ASSERT_TRUE(host.has_value());
+        {
+            std::ofstream output{path};
+            output << R"({"observability":{"sampling_ratio":0.25},"health":{"interval_ms":1234},"services":{"dependency":{"type":"custom","enabled":false,"recovery":{"budget_ms":4567}}}})";
+            ASSERT_TRUE(output.good());
+        }
         fail_after = allocation;
         const auto result = host->reload_configuration();
         fail_after.reset();
