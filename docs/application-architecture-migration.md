@@ -45,7 +45,7 @@ workarounds are no longer needed.
 | a repository moved into a component by value | inject `repository_factory<T>`, call `make_repository()` (`managed_repository<T>` is move-only) |
 | `require_tenant_scope(bool)` | configuration `orm.tenant_scope_required` (frozen at build) |
 | `redis(instance, options)` | inject `redis_service` by instance name, call `make_template(options)` |
-| `chat_model(instance, options)` | inject `chat_model_service`, call `make_template(options)`; or `add_chat_model()` |
+| `chat_model(instance, options)` | inject `chat_model_service`, call `make_template(options)`; explicitly opt into multi-instance routing/fallback with `add_chat_model()` |
 | `reconfigure_chat_model(...)` | `chat_model_service::reconfigure(...)` |
 | `sign_jwt(...)` / `verify_jwt(...)` | `security::sign_jwt/verify_jwt(executor.cpu_pool(), executor.event_loop(), ...)` |
 | constructor parameter `service_registry&` | removed |

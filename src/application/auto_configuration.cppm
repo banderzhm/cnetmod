@@ -16,7 +16,10 @@ namespace cnetmod::application {
 
 export struct auto_configuration_context
 {
+    /// Control-plane loop used for lifecycle and management operations.
     io_context& io;
+    /// Business loops. In single-loop mode this contains only `io`.
+    std::span<io_context* const> event_loops;
     observability::telemetry_hub& telemetry;
     task_supervisor& supervisor;
     service_registry& services;
@@ -25,7 +28,20 @@ export struct auto_configuration_context
 
 export using service_auto_configurator = std::function<
     std::expected<void, std::error_code>(const configured_service&,
-        auto_configuration_context&)>;
+    auto_configuration_context&)>;
+
+/** Declares how an integration participates in a multi-loop application. */
+export enum class integration_loop_mode
+{
+    /** Rejected when more than one application event loop is configured. */
+    single_loop_only,
+    /** One independent transport/pool is created for every event loop. */
+    loop_local,
+    /** One owner loop is used and continuations are marshalled explicitly. */
+    owned,
+    /** The integration is intrinsically safe for concurrent loop access. */
+    shared,
+};
 
 /**
  * @brief Validates that a service configuration contains only allowed keys.
@@ -55,7 +71,9 @@ public:
     /**
      * @brief Registers one configurator by integration type.
      */
-    void add(std::string name, service_auto_configurator configurator);
+    void add(std::string name, service_auto_configurator configurator,
+        integration_loop_mode loop_mode =
+            integration_loop_mode::single_loop_only);
 
     /**
      * @brief Applies configurators for all explicitly enabled services.
@@ -64,9 +82,16 @@ public:
         auto_configuration_context& context) const
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto contains(std::string_view name) const noexcept -> bool;
+    [[nodiscard]] auto supports_multiple_event_loops(
+        std::string_view name) const noexcept -> bool;
 
 private:
-    std::map<std::string, service_auto_configurator, std::less<>> configurators_;
+    struct registration
+    {
+        service_auto_configurator configure;
+        integration_loop_mode loop_mode;
+    };
+    std::map<std::string, registration, std::less<>> configurators_;
 };
 
 /**

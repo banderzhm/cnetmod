@@ -198,7 +198,10 @@ if (!page.ok())
 模型时，构建该模型仓储要在 `automatic_interceptor_options.logical_delete_policy`
 中传入 `field_name = "deleted_at"`、`mode = nullable_datetime`，并按需指定
 `touch_fields`；策略在拦截链创建时固定，不会改动其他模型。复杂 JOIN/XML
-查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。
+查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。若 XML
+语句需要自己维护带表别名的逻辑删除谓词，在该 `<select>` / `<update>` 等语句上声明
+`logicalDelete="false"`；这只跳过当前语句的逻辑删除拦截器，租户、数据权限和 SQL
+安全拦截仍然生效。属性省略或设为 `true` 时沿用仓储策略；其他值在装载 XML 时拒绝。
 `nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
 若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
 `calendar_datetime` 参数的选择性更新完成软删除。

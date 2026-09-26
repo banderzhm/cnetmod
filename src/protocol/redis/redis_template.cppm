@@ -209,6 +209,11 @@ public:
         instrumentation::trace_context parent = {},
         instrumentation::span_exporter spans = {},
         io_context* timer_context = nullptr);
+    explicit redis_template(sharded_connection_pool& pool,
+        template_options options = {},
+        instrumentation::trace_context parent = {},
+        instrumentation::span_exporter spans = {},
+        io_context* fallback_timer_context = nullptr);
 
     /**
      * @brief Attempts one immediate atomic lock acquisition.
@@ -444,11 +449,16 @@ public:
 
 private:
     friend class distributed_lock;
-    connection_pool& pool_;
+    connection_pool* pool_{};
+    sharded_connection_pool* sharded_pool_{};
     template_options options_;
     instrumentation::trace_context parent_;
     instrumentation::span_exporter spans_;
     io_context* timer_context_ = nullptr;
+
+    [[nodiscard]] auto acquire(cancel_token& cancellation)
+        -> task<std::expected<pooled_connection, std::error_code>>;
+    [[nodiscard]] auto timer_context() const noexcept -> io_context*;
 
     [[nodiscard]] auto physical_key(std::string_view key) const -> std::string;
     [[nodiscard]] auto effective_ttl(ttl_seconds ttl) const noexcept

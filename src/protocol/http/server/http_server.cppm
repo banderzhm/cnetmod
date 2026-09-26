@@ -131,7 +131,7 @@ public:
      * listening.
      */
     [[nodiscard]] auto local_endpoint()
-        -> std::expected<endpoint, std::error_code>;
+        -> std::expected<cnetmod::endpoint, std::error_code>;
 
     /// Set router
     void set_router(router r);

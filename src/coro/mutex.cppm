@@ -5,6 +5,7 @@ module;
 export module cnetmod.coro.mutex;
 
 import std;
+import cnetmod.io.io_context;
 
 namespace cnetmod {
 
@@ -39,6 +40,7 @@ export class async_mutex
     struct waiter_node
     {
         std::coroutine_handle<> handle{};
+        io_context* event_loop = nullptr;
         waiter_node* next = nullptr;
     };
 

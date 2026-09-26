@@ -423,9 +423,38 @@ auto pipeline_builder::size() const noexcept -> std::size_t
 redis_template::redis_template(connection_pool& pool, template_options options,
     instrumentation::trace_context parent,
     instrumentation::span_exporter spans, io_context* timer_context)
-    : pool_(pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)),
+    : pool_(&pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)),
       timer_context_(timer_context ? timer_context : &pool.execution_context())
 {
+}
+
+redis_template::redis_template(sharded_connection_pool& pool,
+    template_options options, instrumentation::trace_context parent,
+    instrumentation::span_exporter spans, io_context* fallback_timer_context)
+    : sharded_pool_(&pool), options_(std::move(options)),
+      parent_(std::move(parent)), spans_(std::move(spans)),
+      timer_context_(fallback_timer_context)
+{
+}
+
+auto redis_template::acquire(cancel_token& cancellation)
+    -> task<std::expected<pooled_connection, std::error_code>>
+{
+    if (pool_)
+        co_return co_await pool_->async_get_connection(cancellation);
+    auto* current = io_context::current();
+    if (current == nullptr)
+        co_return co_await sharded_pool_->async_get_connection(cancellation);
+    co_return co_await sharded_pool_->async_get_connection(
+        *current, cancellation);
+}
+
+auto redis_template::timer_context() const noexcept -> io_context*
+{
+    if (sharded_pool_)
+        if (auto* current = io_context::current())
+            return current;
+    return timer_context_;
 }
 
 auto redis_template::try_lock(std::string_view key,
@@ -479,7 +508,7 @@ auto redis_template::lock(std::string_view key,
     if (key.empty() || !valid_lock_options(options))
         co_return std::unexpected(invalid_argument());
     if (options.wait_timeout > std::chrono::milliseconds::zero() &&
-        !timer_context_)
+        !timer_context())
         co_return std::unexpected(
             std::make_error_code(std::errc::operation_not_supported));
 
@@ -512,7 +541,7 @@ auto redis_template::lock(std::string_view key,
         delay = std::max(std::chrono::milliseconds{1},
             std::min(delay, remaining));
         auto waited = co_await async_timer_wait(
-            *timer_context_, delay, cancellation);
+            *timer_context(), delay, cancellation);
         if (!waited)
             co_return std::unexpected(waited.error());
     }
@@ -634,7 +663,7 @@ auto redis_template::execute(pipeline_builder& builder,
         }
     }
 
-    auto lease = co_await pool_.async_get_connection(cancellation);
+    auto lease = co_await acquire(cancellation);
     if (!lease)
     {
         complete_scopes(scopes, nullptr, lease.error());
@@ -643,7 +672,7 @@ auto redis_template::execute(pipeline_builder& builder,
     auto exchange = lease->get().exchange(builder.batch_, cancellation,
         options_.response_byte_limit);
     auto exchanged = options_.operation_timeout > std::chrono::steady_clock::duration::zero()
-        ? co_await with_timeout(*timer_context_, options_.operation_timeout,
+        ? co_await with_timeout(*timer_context(), options_.operation_timeout,
               std::move(exchange), cancellation)
         : co_await std::move(exchange);
     if (!exchanged)

@@ -13,6 +13,7 @@ import cnetmod.application.managed_service;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.service_registry;
 import cnetmod.io.io_context;
+import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.protocol.mysql;
 
@@ -24,7 +25,14 @@ public:
     mysql_service(io_context& io, mysql::pool_params options,
         std::string instance, service_requirement requirement,
         recovery_policy recovery);
-    [[nodiscard]] auto pool() noexcept -> mysql::connection_pool&;
+    mysql_service(io_context& control, std::span<io_context* const> event_loops,
+        mysql::pool_params options, std::string instance,
+        service_requirement requirement, recovery_policy recovery);
+    [[nodiscard]] auto pool() -> mysql::connection_pool&;
+    [[nodiscard]] auto acquire()
+        -> task<std::expected<mysql::pooled_connection, std::error_code>>;
+    [[nodiscard]] auto acquire(cancel_token& cancellation)
+        -> task<std::expected<mysql::pooled_connection, std::error_code>>;
     [[nodiscard]] auto key() const -> service_key override;
     [[nodiscard]] auto requirement() const noexcept
         -> service_requirement override;
@@ -38,7 +46,9 @@ public:
 
 private:
     io_context& io_;
-    mysql::connection_pool pool_;
+    std::unique_ptr<mysql::connection_pool> pool_;
+    std::unique_ptr<mysql::sharded_connection_pool> sharded_pool_;
+    std::vector<io_context*> event_loops_;
     std::string instance_;
     service_requirement requirement_;
     recovery_policy recovery_;

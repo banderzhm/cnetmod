@@ -67,6 +67,9 @@ public:
      */
     rest_template(io_context& io, observability::telemetry_hub& telemetry,
         rest_template_options options = {});
+    rest_template(std::span<io_context* const> event_loops,
+        observability::telemetry_hub& telemetry,
+        rest_template_options options = {});
 
     /**
      * @brief Binds a template with protocol-client options only.
@@ -182,7 +185,15 @@ private:
         std::string_view url, std::string body,
         const rest_request_options& options) const -> http::request;
 
-    http::client_pool clients_;
+    struct client_pool_shard
+    {
+        io_context* io{};
+        std::unique_ptr<http::client_pool> clients;
+    };
+
+    [[nodiscard]] auto clients() noexcept -> http::client_pool&;
+
+    std::vector<client_pool_shard> client_shards_;
     observability::telemetry_hub& telemetry_;
     http::header_map default_headers_;
 };

@@ -6,7 +6,8 @@ namespace cnetmod::application {
 chat_model_template::chat_model_template(chat_model_pool& models,
     chat_model_template_options options,
     std::shared_ptr<striped_async_mutex<std::string>> session_gates)
-    : models_(models), options_(std::move(options)), session_gates_(session_gates ? std::move(session_gates) : std::make_shared<striped_async_mutex<std::string>>())
+    : models_(models), event_loop_(models.event_loop()),
+      options_(std::move(options)), session_gates_(session_gates ? std::move(session_gates) : std::make_shared<striped_async_mutex<std::string>>())
 {
 }
 
@@ -15,7 +16,19 @@ auto chat_model_template::invoke(ai::chat_request request,
     -> task<std::expected<ai::chat_response, std::string>>
 {
     // Own the configuration before the first suspension point.
-    const ai::run_config configuration = borrowed;
+    auto configuration = ai::run_config{borrowed};
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &event_loop_)
+        co_return co_await resume_on(*caller, starts_on(event_loop_,
+            invoke_local(std::move(request), std::move(configuration))));
+    co_return co_await invoke_local(
+        std::move(request), std::move(configuration));
+}
+
+auto chat_model_template::invoke_local(ai::chat_request request,
+    ai::run_config configuration)
+    -> task<std::expected<ai::chat_response, std::string>>
+{
     if (configuration.is_cancelled())
         co_return std::unexpected("model invocation cancelled");
     auto lease = co_await models_.acquire(configuration.cancellation);
@@ -38,7 +51,30 @@ auto chat_model_template::stream(ai::chat_request request,
     -> task<std::expected<ai::chat_response, std::string>>
 {
     // Own the configuration before the first suspension point.
-    const ai::run_config configuration = borrowed;
+    auto configuration = ai::run_config{borrowed};
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &event_loop_)
+    {
+        auto return_handler = [caller, owner = &event_loop_,
+                                  handler = std::move(handler)](
+                                  const ai::chat_chunk& chunk) mutable
+            -> task<bool>
+        {
+            co_return co_await resume_on(*owner,
+                starts_on(*caller, handler(chunk)));
+        };
+        co_return co_await resume_on(*caller, starts_on(event_loop_,
+            stream_local(std::move(request), std::move(return_handler),
+                std::move(configuration))));
+    }
+    co_return co_await stream_local(std::move(request), std::move(handler),
+        std::move(configuration));
+}
+
+auto chat_model_template::stream_local(ai::chat_request request,
+    ai::chat_model::stream_handler handler, ai::run_config configuration)
+    -> task<std::expected<ai::chat_response, std::string>>
+{
     if (configuration.is_cancelled())
         co_return std::unexpected("model stream cancelled");
     auto lease = co_await models_.acquire(configuration.cancellation);

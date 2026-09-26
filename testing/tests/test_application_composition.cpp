@@ -5,6 +5,8 @@ import cnetmod.json;
 import cnetmod.application;
 import cnetmod.core;
 import cnetmod.coro.task;
+import cnetmod.coro.spawn;
+import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 
 namespace application = cnetmod::application;
@@ -74,6 +76,8 @@ void clear_variable(const char* name)
 #endif
 }
 
+} // namespace
+
 struct pricing_options
 {
     std::string currency{"CNY"};
@@ -86,6 +90,20 @@ struct feature_flags
 {
     bool beta = false;
 };
+
+struct nested_rule
+{
+    std::string name;
+    bool enabled = true;
+    std::vector<std::string> tags{"default"};
+};
+
+struct nested_options
+{
+    std::vector<nested_rule> rules;
+};
+
+namespace {
 
 struct clock_source
 {
@@ -280,6 +298,41 @@ TEST(options_sections_apply_defaults_overrides_and_validation)
                         .get<application::options_monitor<feature_flags>>("features")
                         .current()
                         ->beta);
+}
+
+TEST(options_sections_apply_defaults_inside_array_elements)
+{
+    temporary_configuration file{R"({"nested":{"rules":[{"name":"alpha"}]}})"};
+    auto host = application::application_builder{"nested-options"}
+                    .configuration_file(file.path())
+                    .configure(quiet)
+                    .add_module(application::make_module("nested",
+                        {.configure_options = [](application::options_registry& options)
+                            { options.section<nested_options>("nested"); }}))
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (host)
+    {
+        const auto current = host->components()
+                                 .get<application::options_monitor<nested_options>>(
+                                     "nested")
+                                 .current();
+        ASSERT_EQ(current->rules.size(), std::size_t{1});
+        ASSERT_TRUE(current->rules[0].enabled);
+        ASSERT_TRUE(current->rules[0].tags ==
+            std::vector<std::string>{"default"});
+    }
+
+    temporary_configuration unknown{
+        R"({"nested":{"rules":[{"name":"alpha","unexpected":true}]}})"};
+    auto rejected = application::application_builder{"nested-options-unknown"}
+                        .configuration_file(unknown.path())
+                        .configure(quiet)
+                        .add_module(application::make_module("nested",
+                            {.configure_options = [](application::options_registry& options)
+                                { options.section<nested_options>("nested"); }}))
+                        .build();
+    ASSERT_FALSE(rejected.has_value());
 }
 
 TEST(options_sections_drive_conditional_registration)
@@ -691,6 +744,76 @@ TEST(build_errors_describe_phase_component_and_path)
         ASSERT_EQ(unsupported.error().path, "services.primary.type");
         ASSERT_EQ(unsupported.error().code, std::make_error_code(std::errc::not_supported));
     }
+}
+
+TEST(component_container_builds_one_instance_per_event_loop)
+{
+    struct loop_identity_interface
+    {
+        virtual ~loop_identity_interface() = default;
+        [[nodiscard]] virtual auto owner() const noexcept
+            -> cnetmod::io_context* = 0;
+    };
+    struct loop_identity final : loop_identity_interface
+    {
+        explicit loop_identity(cnetmod::io_context& value) noexcept
+            : event_loop(&value)
+        {
+        }
+
+        cnetmod::io_context* event_loop;
+
+        [[nodiscard]] auto owner() const noexcept
+            -> cnetmod::io_context* override
+        {
+            return event_loop;
+        }
+    };
+
+    auto first = cnetmod::make_io_context();
+    auto second = cnetmod::make_io_context();
+    std::array<cnetmod::io_context*, 2> loops{first.get(), second.get()};
+    application::component_collection registrations;
+    registrations.event_loop<loop_identity>(
+        [](application::component_resolver&, cnetmod::io_context& event_loop)
+        {
+            return loop_identity{event_loop};
+        });
+    registrations.event_loop_alias<loop_identity_interface, loop_identity>();
+    auto built = application::component_container::build(
+        std::move(registrations), {}, loops);
+    ASSERT_TRUE(built.has_value());
+    ASSERT_EQ((*built)->constructed(), std::size_t{4});
+
+    loop_identity* first_value = nullptr;
+    loop_identity* second_value = nullptr;
+    loop_identity_interface* first_alias = nullptr;
+    loop_identity_interface* second_alias = nullptr;
+    auto resolve = [&](cnetmod::io_context& event_loop,
+                       loop_identity*& destination,
+                       loop_identity_interface*& alias) -> cnetmod::task<void>
+    {
+        destination = (*built)->find<loop_identity>();
+        alias = (*built)->find<loop_identity_interface>();
+        event_loop.stop();
+        co_return;
+    };
+    cnetmod::spawn(*first, resolve(*first, first_value, first_alias));
+    first->run();
+    cnetmod::spawn(*second, resolve(*second, second_value, second_alias));
+    second->run();
+
+    ASSERT_TRUE(first_value != nullptr);
+    ASSERT_TRUE(second_value != nullptr);
+    ASSERT_TRUE(first_value != second_value);
+    ASSERT_TRUE(first_value->event_loop == first.get());
+    ASSERT_TRUE(second_value->event_loop == second.get());
+    ASSERT_TRUE(first_alias == first_value);
+    ASSERT_TRUE(second_alias == second_value);
+    ASSERT_TRUE(first_alias->owner() == first.get());
+    ASSERT_TRUE(second_alias->owner() == second.get());
+    ASSERT_TRUE((*built)->find<loop_identity>() == nullptr);
+    ASSERT_TRUE((*built)->find<loop_identity_interface>() == nullptr);
 }
 
 RUN_TESTS()

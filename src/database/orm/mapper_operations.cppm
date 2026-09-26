@@ -172,6 +172,13 @@ namespace detail {
 
         auto execute(parameterized_query query) -> task<query_result>
         {
+            co_return co_await execute(std::move(query), {});
+        }
+
+        auto execute(parameterized_query query,
+            statement_interceptor_options interceptor_options)
+            -> task<query_result>
+        {
             // Every protocol adapter accepts the ORM's common parameter object.
             // PostgreSQL sends it as a bound extended query; MySQL renders it with
             // its connection charset/escaping rules before COM_QUERY.  Keeping
@@ -179,7 +186,7 @@ namespace detail {
             // in repositories and dialect-specific client knowledge here.
             const auto operation = classify_operation(query.query);
             auto statement = prepare_statement(std::move(query.query),
-                std::move(query.args), operation);
+                std::move(query.args), operation, interceptor_options);
             if (!statement)
             {
                 query_result rejected;
@@ -1880,13 +1887,15 @@ namespace detail {
         }
 
         [[nodiscard]] auto prepare_statement(std::string sql,
-            std::vector<param_value> parameters, sql_operation operation) const
+            std::vector<param_value> parameters, sql_operation operation,
+            statement_interceptor_options interceptor_options = {}) const
             -> std::expected<parameterized_query, std::string>
         {
             if (interceptors_ && !interceptors_->empty())
             {
                 auto intercepted = interceptors_->apply(operation,
-                    intercepted_statement{std::move(sql), std::move(parameters)});
+                    intercepted_statement{std::move(sql), std::move(parameters)},
+                    interceptor_options);
                 if (!intercepted)
                     return std::unexpected(intercepted.error());
                 sql = std::move(intercepted->sql);

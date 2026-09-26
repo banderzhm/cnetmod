@@ -49,7 +49,11 @@ void async_wait_group::done() noexcept
     for (auto* waiter = waiters; waiter;)
     {
         auto* next = waiter->next;
-        waiter->handle.resume();
+        if (waiter->event_loop &&
+            !waiter->event_loop->running_in_this_thread())
+            waiter->event_loop->post(waiter->handle);
+        else
+            waiter->handle.resume();
         waiter = next;
     }
 }
@@ -68,6 +72,7 @@ auto async_wait_group::wait_awaitable::await_suspend(
     std::coroutine_handle<> handle) noexcept -> std::coroutine_handle<>
 {
     node_.handle = handle;
+    node_.event_loop = io_context::current();
     node_.next = nullptr;
     auto_lock guard(wg_.lock_);
     if (wg_.count_.load(std::memory_order_acquire) <= 0)

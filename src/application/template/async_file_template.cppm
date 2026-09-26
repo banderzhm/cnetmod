@@ -149,6 +149,7 @@ public:
         -> task<std::expected<void, std::error_code>>;
 
 private:
+    [[nodiscard]] auto event_loop() const noexcept -> io_context&;
     io_context& io_;
 };
 

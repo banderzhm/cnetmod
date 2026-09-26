@@ -84,6 +84,9 @@ export struct crash_dump_configuration
  */
 export struct execution_configuration
 {
+    /// Business HTTP event loops. Values above one explicitly enable
+    /// connection-affine multi-loop execution.
+    unsigned io_threads = 1;
     unsigned cpu_threads = std::max(1U, std::thread::hardware_concurrency());
 
     auto operator==(const execution_configuration&) const -> bool = default;

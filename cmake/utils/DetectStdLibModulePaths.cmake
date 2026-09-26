@@ -106,10 +106,10 @@ function(detect_stdlib_module_paths)
                 message(STATUS "LLVM libunwind library path: ${LLVM_UNWIND_PATH}")
 
                 add_compile_options(
-                    -stdlib=libc++
-                    -nostdinc++
-                    -isystem ${STDLIB_INCLUDE_DIRS}
-                    -isysroot ${MACOS_SDK_PATH}
+                    "$<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>"
+                    "$<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>"
+                    "$<$<COMPILE_LANGUAGE:CXX>:-isystem${STDLIB_INCLUDE_DIRS}>"
+                    "$<$<COMPILE_LANGUAGE:CXX>:-isysroot${MACOS_SDK_PATH}>"
                 )
                 # macOS link options: Specify LLVM libc++ path to avoid conflicts with system libc++
                 add_link_options(
@@ -122,9 +122,9 @@ function(detect_stdlib_module_paths)
             else()
                 # Linux
                 add_compile_options(
-                    -stdlib=libc++
-                    -nostdinc++
-                    -isystem ${STDLIB_INCLUDE_DIRS}
+                    "$<$<COMPILE_LANGUAGE:CXX>:-stdlib=libc++>"
+                    "$<$<COMPILE_LANGUAGE:CXX>:-nostdinc++>"
+                    "$<$<COMPILE_LANGUAGE:CXX>:-isystem${STDLIB_INCLUDE_DIRS}>"
                 )
                 add_link_options(-stdlib=libc++)
             endif()

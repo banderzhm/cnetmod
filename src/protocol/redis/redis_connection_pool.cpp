@@ -763,55 +763,92 @@ void connection_pool::dispatch_return(void* argument) noexcept
 auto sharded_connection_pool::async_get_connection(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    const auto primary =
-        next_shard_.fetch_add(1, std::memory_order_relaxed) % shards_.size();
-    if (auto conn = try_borrow_immediate(primary))
-        co_return std::move(*conn);
-    co_return co_await shards_[select_wait_shard(primary)]->async_get_connection(
-        token);
+    auto* current = io_context::current();
+    if (current == nullptr)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::operation_not_permitted));
+    if (std::ranges::all_of(shard_ctxs_,
+            [current](auto* shard) { return shard == current; }))
+    {
+        const auto primary = next_shard_.fetch_add(
+            1, std::memory_order_relaxed) % shards_.size();
+        if (auto connection = try_borrow_immediate(primary))
+            co_return std::move(*connection);
+        co_return co_await shards_[select_wait_shard(primary)]
+            ->async_get_connection(token);
+    }
+    co_return co_await async_get_connection(*current, token);
 }
 
 auto sharded_connection_pool::async_get_connection(cnetmod::deadline value)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    const auto primary =
-        next_shard_.fetch_add(1, std::memory_order_relaxed) % shards_.size();
-    if (auto conn = try_borrow_immediate(primary))
-        co_return std::move(*conn);
-    co_return co_await shards_[select_wait_shard(primary)]
-        ->async_get_connection(value);
+    auto* current = io_context::current();
+    if (current == nullptr)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::operation_not_permitted));
+    if (std::ranges::all_of(shard_ctxs_,
+            [current](auto* shard) { return shard == current; }))
+    {
+        const auto primary = next_shard_.fetch_add(
+            1, std::memory_order_relaxed) % shards_.size();
+        if (auto connection = try_borrow_immediate(primary))
+            co_return std::move(*connection);
+        co_return co_await shards_[select_wait_shard(primary)]
+            ->async_get_connection(value);
+    }
+    const auto found = shard_by_ctx_.find(current);
+    if (found == shard_by_ctx_.end())
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    co_return co_await shards_[found->second]->async_get_connection(value);
 }
 
 auto sharded_connection_pool::async_get_connection()
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    const auto primary =
-        next_shard_.fetch_add(1, std::memory_order_relaxed) % shards_.size();
-    if (auto conn = try_borrow_immediate(primary))
-        co_return std::move(*conn);
-    co_return co_await shards_[select_wait_shard(primary)]
-        ->async_get_connection();
+    auto* current = io_context::current();
+    if (current == nullptr)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::operation_not_permitted));
+    if (std::ranges::all_of(shard_ctxs_,
+            [current](auto* shard) { return shard == current; }))
+    {
+        const auto primary = next_shard_.fetch_add(
+            1, std::memory_order_relaxed) % shards_.size();
+        if (auto connection = try_borrow_immediate(primary))
+            co_return std::move(*connection);
+        co_return co_await shards_[select_wait_shard(primary)]
+            ->async_get_connection();
+    }
+    co_return co_await async_get_connection(*current);
 }
 
 auto sharded_connection_pool::async_get_connection(io_context& io)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    const auto primary = get_shard_index(io);
-    if (auto conn = try_borrow_immediate(primary))
+    const auto found = shard_by_ctx_.find(&io);
+    if (found == shard_by_ctx_.end())
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    const auto local = found->second;
+    if (auto conn = shards_[local]->try_get_connection())
         co_return std::move(*conn);
-    co_return co_await shards_[select_wait_shard(primary)]
-        ->async_get_connection();
+    co_return co_await shards_[local]->async_get_connection();
 }
 
 auto sharded_connection_pool::async_get_connection(io_context& io,
     cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    const auto primary = get_shard_index(io);
-    if (auto conn = try_borrow_immediate(primary))
+    const auto found = shard_by_ctx_.find(&io);
+    if (found == shard_by_ctx_.end())
+        co_return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
+    const auto local = found->second;
+    if (auto conn = shards_[local]->try_get_connection())
         co_return std::move(*conn);
-    co_return co_await shards_[select_wait_shard(primary)]->async_get_connection(
-        token);
+    co_return co_await shards_[local]->async_get_connection(token);
 }
 
 sharded_connection_pool::sharded_connection_pool(io_context& ctx,
@@ -840,15 +877,70 @@ sharded_connection_pool::sharded_connection_pool(
 
 auto sharded_connection_pool::async_run() -> task<void>
 {
-    for (std::size_t i = 0; i < shards_.size(); ++i)
-        spawn(*shard_ctxs_[i], shards_[i]->async_run());
-    co_return;
+    if (run_active_.exchange(true, std::memory_order_acq_rel))
+        throw std::logic_error{"redis sharded pool is already running"};
+    struct run_guard
+    {
+        std::atomic<bool>& active;
+        ~run_guard() { active.store(false, std::memory_order_release); }
+    } guard{run_active_};
+
+    async_wait_group workers;
+    std::vector<std::exception_ptr> failures(shards_.size());
+    for (std::size_t index = 0; index < shards_.size(); ++index)
+    {
+        struct completion
+        {
+            async_wait_group& workers;
+            explicit completion(async_wait_group& value) : workers(value) {}
+            ~completion() { workers.done(); }
+        };
+        workers.add();
+        auto done = std::make_shared<completion>(workers);
+        spawn_guarded(*shard_ctxs_[index], shards_[index]->async_run(),
+            [this, index, &failures, done](std::exception_ptr failure) noexcept
+            {
+                failures[index] = std::move(failure);
+                request_stop();
+            });
+    }
+    co_await workers.wait();
+    for (const auto& failure : failures)
+        if (failure)
+            std::rethrow_exception(failure);
+}
+
+void sharded_connection_pool::request_stop() noexcept
+{
+    for (auto& shard : shards_)
+        shard->request_stop();
 }
 
 auto sharded_connection_pool::cancel() -> task<void>
 {
-    for (auto& shard : shards_)
-        co_await shard->cancel();
+    request_stop();
+    async_wait_group workers;
+    std::vector<std::exception_ptr> failures(shards_.size());
+    for (std::size_t index = 0; index < shards_.size(); ++index)
+    {
+        struct completion
+        {
+            async_wait_group& workers;
+            explicit completion(async_wait_group& value) : workers(value) {}
+            ~completion() { workers.done(); }
+        };
+        workers.add();
+        auto done = std::make_shared<completion>(workers);
+        spawn_guarded(*shard_ctxs_[index], shards_[index]->cancel(),
+            [index, &failures, done](std::exception_ptr failure) noexcept
+            {
+                failures[index] = std::move(failure);
+            });
+    }
+    co_await workers.wait();
+    for (const auto& failure : failures)
+        if (failure)
+            std::rethrow_exception(failure);
 }
 
 auto sharded_connection_pool::size() const noexcept -> std::size_t
@@ -867,16 +959,17 @@ auto sharded_connection_pool::idle_count() const noexcept -> std::size_t
     return total;
 }
 
+auto sharded_connection_pool::checked_out_count() const noexcept -> std::size_t
+{
+    std::size_t total = 0;
+    for (const auto& shard : shards_)
+        total += shard->checked_out_count();
+    return total;
+}
+
 auto sharded_connection_pool::shard_count() const noexcept -> std::size_t
 {
     return shards_.size();
-}
-
-auto sharded_connection_pool::get_shard_index(io_context& io) -> std::size_t
-{
-    if (auto it = shard_by_ctx_.find(&io); it != shard_by_ctx_.end())
-        return it->second;
-    return next_shard_.fetch_add(1, std::memory_order_relaxed) % shards_.size();
 }
 
 auto sharded_connection_pool::try_borrow_immediate(std::size_t primary)
@@ -927,16 +1020,23 @@ void sharded_connection_pool::init_shards(
     if (contexts.empty())
         throw std::invalid_argument(
             "sharded_connection_pool has no valid io_context");
-    const auto initial = (base_params_.initial_size + count - 1) / count;
-    const auto maximum = (base_params_.max_size + count - 1) / count;
+    if (base_params_.max_size < count)
+        throw std::invalid_argument(
+            "sharded_connection_pool max_size must cover every shard");
+    const auto initial_per_shard = base_params_.initial_size / count;
+    const auto initial_remainder = base_params_.initial_size % count;
+    const auto maximum_per_shard = base_params_.max_size / count;
+    const auto maximum_remainder = base_params_.max_size % count;
     shards_.reserve(count);
     shard_ctxs_.reserve(count);
     for (std::size_t i = 0; i < count; ++i)
     {
         auto* ctx = contexts[i % contexts.size()];
         auto params = base_params_;
-        params.initial_size = initial;
-        params.max_size = maximum;
+        params.initial_size = initial_per_shard +
+            (i < initial_remainder ? std::size_t{1} : std::size_t{0});
+        params.max_size = maximum_per_shard +
+            (i < maximum_remainder ? std::size_t{1} : std::size_t{0});
         shard_ctxs_.push_back(ctx);
         shards_.push_back(
             std::make_unique<connection_pool>(*ctx, std::move(params)));

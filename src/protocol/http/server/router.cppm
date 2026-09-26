@@ -186,8 +186,9 @@ export struct allow_anonymous
 /**
  * @brief Declares that credentials are optional for a route.
  *
- * A valid credential binds the principal; an absent or invalid credential
- * continues anonymously. Infrastructure failures are still rejected.
+ * A valid credential binds the principal and an absent credential continues
+ * anonymously. Presented invalid credentials are rejected by default; the
+ * authentication middleware may explicitly opt into anonymous fallback.
  */
 export struct optional_authentication
 {

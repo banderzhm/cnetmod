@@ -6,6 +6,7 @@ export module cnetmod.orm.xml_statement_executor;
 import std;
 import cnetmod.coro.task;
 import cnetmod.orm.dynamic_sql;
+import cnetmod.orm.interceptor_chain;
 import cnetmod.orm.model_reflection;
 import cnetmod.orm.sql_dialect;
 import cnetmod.orm.sql_parameters;
@@ -60,6 +61,10 @@ private:
             failure.error_msg = std::move(statement.error());
             co_return failure;
         }
+        if (!registry_->statement_logical_delete(statement_id))
+            co_return co_await session_->execute(
+                std::move(*statement),
+                statement_interceptor_options{.logical_delete = false});
         co_return co_await session_->execute(std::move(*statement));
     }
 

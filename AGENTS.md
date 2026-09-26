@@ -2422,6 +2422,37 @@ API instead of repeating `system_clock::now()` conversions in each adapter.
 
 > C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token，全部非阻塞、零堆分配设计。
 
+`channel`、`async_mutex`、`async_shared_mutex`、`async_semaphore` 与
+`async_wait_group` 支持跨事件循环唤醒：等待节点记录挂起时的
+`io_context::current()`，由其他线程/循环完成或释放时，会把 continuation 投递回等待者所属
+循环。不要在自定义同步原语里直接对外部循环的 coroutine handle 调用 `resume()`。
+
+## 事件循环恢复契约
+
+- `task<T>`、返回值和异常传播不绑定线程；事件循环归属由所等待的 awaitable 决定。
+- cnetmod 自带 socket、timer、文件 I/O 和上述协程同步原语会在其所属/等待者循环恢复。
+- `starts_on(loop, task)` 只决定任务从哪个循环开始，不能保证第三方 awaitable 完成后仍在该循环。
+- 第三方 awaitable、自定义回调桥或线程池可能从任意线程完成时，必须保存调用处的
+  `io_context::current()`，并用 `resume_on(*caller, operation)` 发布返回值或异常。
+- HTTP handler、SSE writer、数据库连接和循环本地组件在每次访问前都必须已经回到其 owner loop；
+  禁止从外部线程直接 `coroutine_handle::resume()`。
+
+```cpp
+auto invoke_on_owner(io_context& owner, task<int> operation)
+    -> task<int>
+{
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &owner)
+        co_return co_await resume_on(*caller,
+            starts_on(owner, std::move(operation)));
+    co_return co_await std::move(operation);
+}
+```
+
+Application 的 `offload()` 已自动捕获并返回调用者循环，不要在它外面重复套
+`resume_on()`。只有直接使用第三方 awaitable、`pool_post_awaitable` 或自行实现跨线程
+完成源时，调用方才负责显式恢复。
+
 **import**: `import cnetmod.coro.task;` / `import cnetmod.coro.channel;` / `import cnetmod.coro.mutex;` 等子模块
 **源码**: `src/coro/task.cppm`, `spawn.cppm`, `channel.cppm`, `mutex.cppm`, `shared_mutex.cppm`, `semaphore.cppm`, `wait_group.cppm`, `cancel.cppm`
 
@@ -2772,6 +2803,8 @@ public:
         unsigned workers = std::thread::hardware_concurrency(),
         unsigned pool_threads = std::thread::hardware_concurrency(),
         thread_affinity_options affinity = {});
+    server_context(unsigned workers, thread_pool& pool,
+        thread_affinity_options affinity = {});
 
     [[nodiscard]] auto accept_io() noexcept -> io_context&;
     [[nodiscard]] auto next_worker_io() noexcept -> io_context&;
@@ -2788,6 +2821,10 @@ public:
     void stop();
 };
 ```
+
+第二个构造函数借用调用方已有的 CPU pool；`server_context` 不负责停止它。
+Application 使用该重载，确保整个进程只有 `application.cpu_threads` 配置的一套
+CPU 执行器。独立服务器需要自主管理 CPU pool 时使用第一个构造函数。
 
 ## `blocking_invoke`
 
@@ -3363,7 +3400,10 @@ if (!page.ok())
 模型时，构建该模型仓储要在 `automatic_interceptor_options.logical_delete_policy`
 中传入 `field_name = "deleted_at"`、`mode = nullable_datetime`，并按需指定
 `touch_fields`；策略在拦截链创建时固定，不会改动其他模型。复杂 JOIN/XML
-查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。
+查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。若 XML
+语句需要自己维护带表别名的逻辑删除谓词，在该 `<select>` / `<update>` 等语句上声明
+`logicalDelete="false"`；这只跳过当前语句的逻辑删除拦截器，租户、数据权限和 SQL
+安全拦截仍然生效。属性省略或设为 `true` 时沿用仓储策略；其他值在装载 XML 时拒绝。
 `nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
 若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
 `calendar_datetime` 参数的选择性更新完成软删除。
@@ -9067,7 +9107,8 @@ options.section<llm_options>("llm", /*required=*/true)
 ```
 
 - `T` 为可默认构造、可由 cnetmod.json（Glaze）映射的聚合类型；缺省的键取成员默认值，
-  嵌套映射逐层合并；未知键报出完整路径（空对象成员视为 map，接受任意键）。
+  包括数组元素中聚合类型的默认成员；嵌套映射逐层合并。未知键会递归拒绝（包括数组
+  元素内的未知键）；空对象成员视为 map，接受任意键。
 - 未被任何模块声明的应用配置节使 `build()` 在 `options` 阶段失败。
 - 注册阶段按配置决定注册什么（例如每个供应商一个组件）时，用
   `context.options.current<T>("name")` 读取已绑定的快照；类型不符或未声明时构建在
@@ -9076,9 +9117,50 @@ options.section<llm_options>("llm", /*required=*/true)
   `on_change()` 返回 RAII `options_subscription`。
 - `reload_configuration()` 先校验所有变更的配置节，全部通过后才发布；`runtime_safe`
   配置节原子替换快照并通知订阅者，`restart_required`（默认）只把结果标记为需要重启。
+  builder 的应用名与 `configure()` 显式覆盖会按原顺序重新应用到候选配置，保持与首次
+  构建相同的配置优先级。
 
 环境变量引用支持 `${NAME}`、`${NAME:-default}` 与转义 `$${`；空值视为未设置。无默认值
 的缺失变量是带路径的配置错误。`expand_environment_references()` 公开同一规则。
+
+## 多事件循环与资源归属
+
+`application.io_threads` 配置业务 HTTP 事件循环数量，默认 `1`；也可由
+`CNETMOD_IO_THREADS` 提供环境层值。大于 `1` 时，Host 使用一个控制循环负责生命周期、
+健康检查和管理端点，并使用指定数量的业务循环承载连接。连接一旦分配给业务循环，handler、
+响应和 SSE 写入在整个连接生命周期内都留在该循环：
+`server_context` 复用 Application 的 CPU pool，不会额外创建隐藏执行器；
+`application.cpu_threads` 始终是整个进程唯一的 CPU offload 线程预算。
+
+```yaml
+application:
+  io_threads: 4
+  cpu_threads: 8
+```
+
+自动配置集成必须通过 `integration_loop_mode` 显式声明归属：
+
+| 模式 | 约束 |
+|---|---|
+| `loop_local` | 控制循环和每个业务循环各持有一个 client/pool shard；调用按 `io_context::current()` 选本地实例 |
+| `owned` | 单实例固定在 owner loop；请求、结果及流式回调显式往返切换 |
+| `shared` | 实现本身允许所有循环并发访问 |
+| `single_loop_only` | `io_threads > 1` 时在 registration 阶段拒绝构建，不做不安全降级 |
+
+内置 HTTP client、MySQL、PostgreSQL、Redis/Redis Cluster 使用 `loop_local`；OpenAI
+使用 `owned`，流式 chunk 会先回到请求循环才调用 handler。SQL/Redis 的
+`minimum_size`、`maximum_size` 是整个应用的总量，按商和余数分配到各 shard；
+最大连接数小于循环数会拒绝配置，不能让某个循环借用另一循环的连接。
+
+组件也必须声明作用域：无状态或内部已同步的对象用 `singleton<T>()`；含循环绑定状态的对象
+用 `event_loop<T>()`，容器会为控制/业务循环分别提前构造，并在调用处按当前循环解析。
+实现通过接口暴露时使用 `event_loop_alias<Interface, Implementation>()`；普通
+`alias()` 只用于 singleton，不能把循环本地对象降级成进程单例。
+singleton 不得隐式依赖 event-loop component，这种歧义会在构建期报错。
+
+跨线程释放 `async_mutex`、`async_shared_mutex`、`async_semaphore`、
+`async_wait_group` 或 `channel` 时，框架会把等待协程投递回其原事件循环，不会在释放者线程
+直接恢复。自定义异步原语也必须保存等待者的 loop 并遵守相同规则。
 
 ## 执行与 Runtime
 
@@ -9087,15 +9169,31 @@ options.section<llm_options>("llm", /*required=*/true)
 `compression()`、`cancellation()`、`tasks()`、`telemetry()` 与 `configuration()`。
 仓储、Redis、Chat Model 等集成以组件方式注入，新增集成不会修改 runtime 接口。
 
-`runtime.executor()` 返回 `execution_context`：非拥有地提供 Host 事件循环与 CPU 池，
+`runtime.executor()` 返回 `execution_context`：非拥有地提供事件循环与 CPU 池，
 供需要执行上下文的协议层组件使用（计时器、`ai::resilient_chat_model` 等装饰器、显式
-超时 `with_timeout()`、`sleep()`）。调用方不得 run、stop 或 restart 该事件循环。JWT
-签发与验签直接调用 `security::sign_jwt/verify_jwt(executor.cpu_pool(), executor.event_loop(), ...)`。
+超时 `with_timeout()`、`sleep()`）。调用方不得 run、stop 或 restart 事件循环。
+`event_loop()` 在事件循环线程内返回 `io_context::current()`，在普通线程或 CPU pool 上才
+回退到控制循环；`control_event_loop()` 始终返回控制循环。`post()`、`sleep()` 和
+`with_timeout()` 在调用时捕获同样的当前循环规则。
+
+JWT 签发与验签必须在离开 handler 循环前取得恢复点：
+
+```cpp
+auto& executor = runtime.executor();
+auto result = co_await security::verify_jwt(executor.cpu_pool(),
+    executor.event_loop(), token, secret);
+```
+
+上述调用在 request handler 中会回到 socket 所属业务循环；禁止改用
+`control_event_loop()`。如果已经运行到 CPU pool、`io_context::current()` 为 null，必须在
+离开业务循环前显式保存引用，不能指望 `event_loop()` 还原已经丢失的调用上下文。
 
 Route 中优先使用 `offload()` 包装一段纯 CPU callable：它会在 Application CPU 池运行，
-无论正常返回还是抛异常，等待方都会恢复到当前 Application 事件循环。只有算法必须跨
+无论正常返回还是抛异常，等待方都会恢复到发起调用的事件循环。只有算法必须跨
 多个异步步骤持续驻留 CPU 池时才成对使用 `schedule_on_cpu()` 与
-`resume_to_event_loop()`；切回事件循环前不得读写 `request_context`：
+`resume_to_event_loop(captured_loop)`；必须在离开前保存
+`auto* captured_loop = io_context::current()`，切回之前不得读写 `request_context`。
+无参数 `resume_to_event_loop()` 只返回控制循环，不适合多循环 request handler：
 
 ```cpp
 auto compose(application::composition_context& context)
@@ -9226,23 +9324,22 @@ auto scoped = factory.for_request(request);   // 绑定请求的租户与数据�
 ## Chat Model
 
 启用 Chat Model provider 自动装配后，`chat_model_service` 按实例名注入；
-`make_template(options)` 返回的 `chat_model_template` 实现 `ai::chat_model`。多实例（多
-key、多供应商）用 `add_chat_model()` 组合成一个 `ai::chat_model` 组件：
+`make_template(options)` 返回的 `chat_model_template` 实现 `ai::chat_model`。cnetmod 负责
+provider 客户端、连接池、生命周期、Telemetry，以及 `routed_chat_model`、
+`resilient_chat_model`、`governed_chat_model` 等通用机制。`add_chat_model()` 可把多个
+托管实例组合成一个组件，但多实例行为必须显式开启：两个以上实例必须设置 `routing`；
+跨实例失败切换还必须设置 `fallback_to_remaining_instances = true` 并提供 `resilience`。
 
 ```cpp
 application::add_chat_model(context.components, "assistant",
     {.instances = {"deepseek-key-1", "deepseek-key-2"},
      .routing = application::chat_model_routing::round_robin,
      .resilience = cnetmod::ai::resilient_model_options{.max_attempts_per_model = 2},
-     .governance = cnetmod::ai::governed_model_options{.max_concurrency = 16},
-     .template_options = {.request = {.model = "deepseek-chat"}}});
-
-auto& model = context.components.get<cnetmod::ai::chat_model>("assistant");
+     .fallback_to_remaining_instances = true});
 ```
 
-由内到外依次为：每个实例重试后按声明顺序故障转移到其余实例（首个流式分片交付后不再重试，
-避免重复或拼接输出）；`round_robin` 按调用轮换起始实例，`ordered` 总从第一个实例开始；
-`governance` 施加并发隔离、熔断与限流。任一实例缺失都会让 `build()` 在 `resolution` 阶段失败。
+缺失实例或省略多实例路由都会让 `build()` 在 `resolution` 阶段失败。流式切换遵守
+`resilient_chat_model` 的边界：首个分片交付后不再重试，避免重复或拼接输出。
 
 每个 managed provider 拥有固定容量连接池，一次 invoke/stream 独占一个 lease 到终态，避免
 keep-alive 响应交错。文本重载复制 `chat_model_template_options::request`，按 system、默认
@@ -9476,6 +9573,12 @@ HTTP client 的 `connect_timeout_ms`、`request_timeout_ms` 和 OpenAI 的
 Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
 不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
+
+Redis 单机连接池支持 `connect_timeout_ms`、`pool_timeout_ms`、
+`retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
+1～86400000 毫秒的整数。缓存等可降级依赖应把 `pool_timeout_ms` 配置得明显短于
+请求预算；鉴权会话可使用独立 Redis 实例和更严格的可用性策略，避免两类流量共享同一
+故障等待边界。集群模式目前不使用连接池，因此这些连接池超时字段只对单机模式生效。
 
 MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`、
 `tls_ca_file`，以及 `connect_timeout_ms`、`pool_timeout_ms`、
@@ -9790,10 +9893,10 @@ host 在现有清理截止时间内重试仍登记的服务，退避从 1ms 增�
 业务模块应继续通过构造函数依赖明确接口，不要把 `service_registry` 当作全局 Service Locator。
 # JWT operations
 
-`application_runtime::sign_jwt(options, secret)` and
-`application_runtime::verify_jwt(token, secret)` use the managed CPU executor
-and resume on the application event loop. The application retains ownership of
-the secret and passes it only at the call site.
+JWT 使用 `security::sign_jwt/verify_jwt(executor.cpu_pool(),
+executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在循环内求值，确保 CPU
+计算结束后回到请求循环；需要生命周期控制循环时才显式使用 `control_event_loop()`。
+密钥由应用持有，只在调用点传入框架。
 <!-- END SOURCE: skill/infra/application.md -->
 
 <!-- BEGIN SOURCE: skill/infra/architecture.md -->
@@ -14686,8 +14789,9 @@ struct chat_response {
 #### `chat_model_template` — provider-neutral Application 大模型门面
 
 Application 项目启用 OpenAI 自动装配后，注入 `chat_model_service`（按实例名）并调用
-`make_template(options)`，或用 `application::add_chat_model()` 把多个实例组合成一个
-`ai::chat_model` 组件；不要在 route 中自行创建或连接 `openai::client`。Application 仅
+`make_template(options)`；不要在 route 中自行创建或连接 `openai::client`。应用可以显式
+调用 `add_chat_model()` 组合多个实例，但必须声明多实例路由，并单独开启跨实例 fallback；
+只配置多个实例不会隐式启用轮询或换 key。Application 仅
 依赖 `cnetmod.ai` 的 provider-neutral 合约；`openai_service` 作为 adapter 管理多个
 client 和固定容量连接池，未来 Claude、Gemini 与本地模型实现相同的
 `chat_model_service` 即可复用模板、会话和路由代码。`chat_model_template` 实现

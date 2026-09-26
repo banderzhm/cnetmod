@@ -41,6 +41,89 @@ namespace {
         return options;
     }
 
+    class application_event_loops
+    {
+    public:
+        application_event_loops(unsigned workers, thread_pool& cpu_pool)
+        {
+            if (workers <= 1)
+            {
+                single_ = make_io_context();
+                worker_views_.push_back(single_.get());
+            }
+            else
+            {
+                multi_ = std::make_unique<server_context>(workers, cpu_pool);
+                worker_views_ = multi_->worker_ios();
+                all_views_.push_back(&multi_->accept_io());
+            }
+            all_views_.insert(all_views_.end(), worker_views_.begin(),
+                worker_views_.end());
+        }
+
+        [[nodiscard]] auto control() noexcept -> io_context&
+        {
+            return multi_ ? multi_->accept_io() : *single_;
+        }
+
+        [[nodiscard]] auto workers() -> std::vector<io_context*>
+        {
+            return worker_views_;
+        }
+
+        [[nodiscard]] auto all() -> std::vector<io_context*>
+        {
+            return all_views_;
+        }
+
+        [[nodiscard]] auto worker_span() const noexcept
+            -> std::span<io_context* const>
+        {
+            return worker_views_;
+        }
+
+        [[nodiscard]] auto all_span() const noexcept
+            -> std::span<io_context* const>
+        {
+            return all_views_;
+        }
+
+        [[nodiscard]] auto make_business_server()
+            -> std::unique_ptr<http::server>
+        {
+            if (multi_)
+                return std::make_unique<http::server>(*multi_);
+            return std::make_unique<http::server>(*single_);
+        }
+
+        void run()
+        {
+            if (multi_)
+                multi_->run();
+            else
+                single_->run();
+        }
+
+        void stop() noexcept
+        {
+            if (multi_)
+                multi_->stop();
+            else
+                single_->stop();
+        }
+
+        void restart_control()
+        {
+            control().restart();
+        }
+
+    private:
+        std::unique_ptr<io_context> single_;
+        std::unique_ptr<server_context> multi_;
+        std::vector<io_context*> worker_views_;
+        std::vector<io_context*> all_views_;
+    };
+
 } // namespace
 
 class application_host::implementation
@@ -50,8 +133,10 @@ public:
         service_registry services,
         std::vector<std::shared_ptr<application_module>> modules,
         bool auto_configuration,
-        std::optional<std::filesystem::path> configuration_file)
-        : configuration(std::move(configuration)), network(), io(make_io_context()), cpu_pool(this->configuration.execution.cpu_threads), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), runtime_facade(*io, cpu_pool, supervisor, telemetry, runtime_stop_source.get_token(), this->configuration), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), configuration_file(std::move(configuration_file)), modules(std::move(modules)), auto_configuration(auto_configuration)
+        std::optional<std::filesystem::path> configuration_file,
+        std::string builder_name,
+        std::vector<configuration_customizer> customizers)
+        : configuration(std::move(configuration)), network(), cpu_pool(this->configuration.execution.cpu_threads), loops(this->configuration.execution.io_threads, cpu_pool), telemetry(loops.control(), exporter_options(this->configuration.observability)), business_server(loops.make_business_server()), management_server(loops.control()), services(std::move(services)), health(this->configuration.health), supervisor(loops.control()), runtime_facade(loops.control(), loops.all_span(), cpu_pool, supervisor, telemetry, runtime_stop_source.get_token(), this->configuration), lifecycle(loops.control(), telemetry, this->services, supervisor, health, this->configuration.lifecycle), configuration_file(std::move(configuration_file)), builder_name(std::move(builder_name)), customizers(std::move(customizers)), modules(std::move(modules)), auto_configuration(auto_configuration)
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
         business_routes.sse_defaults({
@@ -107,7 +192,7 @@ public:
             [this](std::type_index type, std::string_view name)
             {
                 return services.find_shared(type, name);
-            });
+            }, loops.all_span());
         if (!built)
             return std::unexpected(built.error());
         components = std::move(*built);
@@ -154,8 +239,9 @@ public:
     auto register_components(std::vector<managed_service_factory> service_factories,
         component_collection& collection) -> std::expected<void, build_error>
     {
-        application_service_context factory_context{*io, telemetry, supervisor,
-            configuration, runtime_facade};
+        auto event_loops = loops.all();
+        application_service_context factory_context{loops.control(), event_loops,
+            telemetry, supervisor, configuration, runtime_facade};
         for (auto& factory : service_factories)
         {
             std::expected<std::shared_ptr<managed_service>, std::error_code> service;
@@ -189,8 +275,8 @@ public:
         if (auto_configuration)
         {
             register_builtin_auto_configurations(auto_configurations);
-            auto_configuration_context context{*io, telemetry, supervisor,
-                services, business_routes};
+            auto_configuration_context context{loops.control(), event_loops,
+                telemetry, supervisor, services, business_routes};
             for (const auto& [binding, service] : configuration.services)
             {
                 if (!service.enabled)
@@ -204,6 +290,19 @@ public:
                             "integration '{}' is not compiled into this cnetmod build",
                             service.name),
                         .code = std::make_error_code(std::errc::not_supported)});
+                if (event_loops.size() > 1 &&
+                    !auto_configurations.supports_multiple_event_loops(
+                        service.name))
+                    return std::unexpected(build_error{
+                        .phase = build_phase::registration,
+                        .component = std::format("{}:{}", service.name,
+                            service.instance),
+                        .path = std::format("services.{}.type", binding),
+                        .message = std::format(
+                            "integration '{}' is not safe with application.io_threads > 1",
+                            service.name),
+                        .code = std::make_error_code(
+                            std::errc::not_supported)});
             }
             if (auto applied = auto_configurations.apply(configuration, context);
                 !applied)
@@ -368,23 +467,23 @@ public:
     void install_application_middleware()
     {
         if (configuration.http.recover_exceptions)
-            business_server.use(recover());
-        business_server.use(shutdown.track_middleware());
+            business_server->use(recover());
+        business_server->use(shutdown.track_middleware());
         if (configuration.http.request_ids)
-            business_server.use(request_id());
+            business_server->use(request_id());
         if (auto options = telemetry.server_tracing(); options.on_end)
-            business_server.use(http::tracing::tracing_middleware(
+            business_server->use(http::tracing::tracing_middleware(
                 std::move(options)));
         if (auto middleware = observability::server_metrics(telemetry.measurements()))
-            business_server.use(std::move(middleware));
+            business_server->use(std::move(middleware));
         if (configuration.http.request_timeout)
-            business_server.use(
+            business_server->use(
                 request_timeout(*configuration.http.request_timeout));
         for (auto& middleware : business_middlewares)
-            business_server.use(std::move(middleware));
+            business_server->use(std::move(middleware));
         business_middlewares.clear();
         if (configuration.http.access_logging)
-            business_server.use(access_log({
+            business_server->use(access_log({
                 .lv = configuration.logging.level,
                 .format = access_log_format::brief,
                 .dump = access_log_dump::error_only,
@@ -430,7 +529,7 @@ public:
         while (!token.is_cancelled())
         {
             const auto policy = health.policy();
-            service_context context{*io, telemetry, supervisor, token,
+            service_context context{loops.control(), telemetry, supervisor, token,
                 deadline::after(policy.timeout)};
             co_await health.refresh(context);
             for (const auto& snapshot : health.snapshots())
@@ -453,7 +552,7 @@ public:
                 }
             }
             telemetry.refresh_exporter_metrics();
-            auto waited = co_await async_timer_wait(*io,
+            auto waited = co_await async_timer_wait(loops.control(),
                 policy.interval, token);
             if (!waited && !token.is_cancelled())
                 co_return std::unexpected(waited.error());
@@ -468,7 +567,7 @@ public:
     {
         try
         {
-            co_await post_awaitable{*io};
+            co_await post_awaitable{loops.control()};
             co_await run_lifecycle();
             co_return;
         }
@@ -491,11 +590,11 @@ public:
             deadline::after(configuration.lifecycle.total_stop_timeout));
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
-        business_server.stop();
+        business_server->stop();
         management_server.stop();
         // Exceptional cleanup cannot wait for another normal drain phase.
         shutdown.cancel_requests();
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         try
         {
@@ -510,7 +609,7 @@ public:
         }
         supervisor.request_stop();
         telemetry.abort();
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         complete();
     }
@@ -543,10 +642,10 @@ public:
             configuration.lifecycle.total_stop_timeout);
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
-        business_server.stop();
+        business_server->stop();
         management_server.stop();
         shutdown.cancel_requests();
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         co_await std::move(finish_task);
     }
@@ -575,7 +674,7 @@ public:
             co_return;
         }
 
-        auto business_listening = business_server.listen(
+        auto business_listening = business_server->listen(
             configuration.http.address, configuration.http.port);
         if (!business_listening)
         {
@@ -591,9 +690,9 @@ public:
         if (configuration.management.enabled &&
             configuration.management.same_port)
             install_management_routes(business_routes);
-        business_server.set_max_connections(
+        business_server->set_max_connections(
             configuration.http.max_connections);
-        business_server.set_router(std::move(business_routes));
+        business_server->set_router(std::move(business_routes));
 
         if (configuration.management.enabled &&
             !configuration.management.same_port)
@@ -608,7 +707,7 @@ public:
             {
                 run_error = listening.error();
                 shutdown_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
-                business_server.stop();
+                business_server->stop();
                 co_await stop_modules();
                 (void)co_await lifecycle.stop(shutdown_cleanup_deadline());
                 co_await std::move(finish_task);
@@ -626,7 +725,7 @@ public:
             shutdown.install();
         state.store(application_state::running, std::memory_order_release);
         health.mark_running();
-        const auto registered = supervise_listener("application-business-http", business_server);
+        const auto registered = supervise_listener("application-business-http", *business_server);
         if (!registered)
         {
             co_await rollback_registration(registered.error());
@@ -656,7 +755,7 @@ public:
 
         auto sleeper = [this](auto duration)
         {
-            return async_sleep(*io, duration);
+            return async_sleep(loops.control(), duration);
         };
         co_await shutdown.wait_for_signal(sleeper);
         const auto stop_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
@@ -665,7 +764,7 @@ public:
         runtime_stop_source.request_stop();
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
-        business_server.stop();
+        business_server->stop();
         management_server.stop();
         const auto drained = co_await shutdown.drain(sleeper,
             std::min(configuration.lifecycle.http_drain_timeout,
@@ -675,7 +774,7 @@ public:
             if (!run_error)
                 run_error = std::make_error_code(std::errc::timed_out);
             shutdown.cancel_requests();
-            business_server.abort_connections();
+            business_server->abort_connections();
             management_server.abort_connections();
         }
         if (shutdown.in_flight() != 0)
@@ -721,7 +820,7 @@ public:
                     run_error = std::make_error_code(std::errc::timed_out);
                 co_return;
             }
-            const auto waited = co_await async_timer_wait(*io,
+            const auto waited = co_await async_timer_wait(loops.control(),
                 std::min(cleanup_deadline.remaining(),
                     std::chrono::duration_cast<deadline::duration>(std::chrono::milliseconds{1})));
             if (!waited)
@@ -775,7 +874,7 @@ public:
                 break;
             try
             {
-                const auto waited = co_await async_timer_wait(*io,
+                const auto waited = co_await async_timer_wait(loops.control(),
                     std::min(cleanup_deadline.remaining(),
                         std::chrono::duration_cast<deadline::duration>(retry_delay)));
                 if (!waited)
@@ -824,7 +923,7 @@ public:
          * both directions prevents an exporter targeting this host from making
          * shutdown wait for its own otherwise-idle collector connection.
          */
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         // Telemetry may have used this application's HTTP endpoint as its
         // collector. Its client closes during shutdown, so the corresponding
@@ -844,7 +943,7 @@ public:
         try
         {
             while (!telemetry.try_settle_shutdown() ||
-                business_server.active_connections() != 0 ||
+                business_server->active_connections() != 0 ||
                 management_server.active_connections() != 0)
             {
                 const auto remaining = connection_deadline.remaining();
@@ -854,7 +953,7 @@ public:
                         run_error = std::make_error_code(std::errc::timed_out);
                     if (!connections_aborted)
                     {
-                        business_server.abort_connections();
+                        business_server->abort_connections();
                         management_server.abort_connections();
                         connections_aborted = true;
                         connection_deadline = shutdown_deadline.constrain(
@@ -863,7 +962,7 @@ public:
                     }
                     break;
                 }
-                const auto waited = co_await async_timer_wait(*io,
+                const auto waited = co_await async_timer_wait(loops.control(),
                     std::min(remaining, std::chrono::duration_cast<deadline::duration>(std::chrono::milliseconds{1})));
                 if (!waited)
                 {
@@ -927,22 +1026,22 @@ public:
         telemetry.close();
         shutdown.uninstall();
         const bool retained = !telemetry.try_settle_shutdown() || lifecycle.active_service_count() != 0 ||
-            business_server.active_connections() != 0 || management_server.active_connections() != 0;
+            business_server->active_connections() != 0 || management_server.active_connections() != 0;
         if (!retained)
             cpu_pool.request_stop();
         if (retained && !run_error)
             run_error = std::make_error_code(std::errc::timed_out);
         state.store(retained ? application_state::cleanup_failed : application_state::stopped,
             std::memory_order_release);
-        io->stop();
+        loops.stop();
     }
 
     application_configuration configuration;
     net_init network;
-    std::unique_ptr<io_context> io;
     thread_pool cpu_pool;
+    application_event_loops loops;
     observability::telemetry_hub telemetry;
-    http::server business_server;
+    std::unique_ptr<http::server> business_server;
     http::server management_server;
     service_registry services;
     health_registry health;
@@ -955,6 +1054,8 @@ public:
     shutdown_handler shutdown;
     auto_configuration_registry auto_configurations;
     std::optional<std::filesystem::path> configuration_file;
+    std::string builder_name;
+    std::vector<configuration_customizer> customizers;
     options_registry options;
     std::vector<std::shared_ptr<application_module>> modules;
     bool auto_configuration = false;
@@ -1013,7 +1114,7 @@ auto application_host::run() -> std::expected<void, std::error_code>
         return std::unexpected(
             std::make_error_code(std::errc::operation_not_permitted));
     implementation_->root_task.handle().resume();
-    implementation_->io->run();
+    implementation_->loops.run();
     if (!implementation_->root_task.handle().done())
     {
         implementation_->state.store(application_state::cleanup_failed, std::memory_order_release);
@@ -1056,9 +1157,9 @@ auto application_host::retry_cleanup(std::chrono::milliseconds timeout)
         host.shutdown_deadline = deadline::after(timeout);
         host.cleanup_reserve = std::chrono::duration_cast<deadline::duration>(timeout) / 5;
         host.root_task = std::move(retry);
-        host.io->restart();
+        host.loops.restart_control();
         host.root_task.handle().resume();
-        host.io->run();
+        host.loops.control().run();
         if (!host.root_task.handle().done())
         {
             host.state.store(application_state::cleanup_failed, std::memory_order_release);
@@ -1100,6 +1201,11 @@ auto application_host::reload_configuration()
         auto candidate = load_configuration(implementation_->configuration_file);
         if (!candidate)
             return std::unexpected(candidate.error());
+        candidate->name = implementation_->builder_name;
+        for (const auto& customizer : implementation_->customizers)
+            customizer(*candidate);
+        if (auto valid = validate_configuration(*candidate); !valid)
+            return std::unexpected(valid.error());
         std::vector<std::pair<service_key, recovery_policy>> recovery_updates;
         concurrent_containers::exclusive_latch_guard lock{
             implementation_->configuration_latch};
@@ -1311,7 +1417,8 @@ auto application_builder::build()
         }
         application_host host{std::make_unique<application_host::implementation>(
             std::move(*loaded), std::move(registry), std::move(modules_),
-            auto_configuration_, configuration_file_)};
+            auto_configuration_, configuration_file_, name_,
+            std::move(customizers_))};
         if (auto prepared = host.implementation_->prepare(
                 std::move(service_factories_));
             !prepared)

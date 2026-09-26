@@ -364,10 +364,11 @@ namespace {
     {
         constexpr std::string_view path = "application";
         require_known(item, path,
-            {"name", "install_signal_handlers", "cpu_threads"});
+            {"name", "install_signal_handlers", "io_threads", "cpu_threads"});
         assign(item, path, "name", result.name);
         assign(item, path, "install_signal_handlers",
             result.install_signal_handlers);
+        assign(item, path, "io_threads", result.execution.io_threads);
         assign(item, path, "cpu_threads", result.execution.cpu_threads);
     }
 
@@ -725,6 +726,9 @@ namespace {
         if (auto parsed = environment_unsigned<unsigned>(
                 "CNETMOD_CPU_THREADS", 1U, 1024U))
             result.execution.cpu_threads = *parsed;
+        if (auto parsed = environment_unsigned<unsigned>(
+                "CNETMOD_IO_THREADS", 1U, 1024U))
+            result.execution.io_threads = *parsed;
         if (auto value = environment("CNETMOD_HTTP_ADDRESS"))
             result.http.address = std::move(*value);
         if (auto parsed = environment_unsigned<unsigned>(
@@ -829,6 +833,8 @@ namespace {
             fail("crash_dump.directory", "must not be empty");
         if (value.execution.cpu_threads == 0U || value.execution.cpu_threads > 1024U)
             fail("application.cpu_threads", "expected a value in [1, 1024]");
+        if (value.execution.io_threads == 0U || value.execution.io_threads > 1024U)
+            fail("application.io_threads", "expected a value in [1, 1024]");
         if (value.http.address.empty())
             fail("http.address", "must not be empty");
         if (value.http.port == 0U)

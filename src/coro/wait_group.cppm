@@ -20,6 +20,7 @@ module;
 export module cnetmod.coro.wait_group;
 
 import std;
+import cnetmod.io.io_context;
 
 namespace cnetmod {
 
@@ -56,6 +57,7 @@ export class async_wait_group
     struct waiter_node
     {
         std::coroutine_handle<> handle{};
+        io_context* event_loop = nullptr;
         waiter_node* next = nullptr;
     };
 

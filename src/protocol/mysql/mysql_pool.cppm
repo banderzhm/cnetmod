@@ -225,6 +225,7 @@ public:
     auto cancel() -> task<void>;
     auto size() const noexcept -> std::size_t;
     auto idle_count() const noexcept -> std::size_t;
+    auto checked_out_count() const noexcept -> std::size_t;
     auto shard_count() const noexcept -> std::size_t;
 
 private:
@@ -235,7 +236,6 @@ private:
     std::unordered_map<io_context*, std::size_t> shard_by_ctx_;
     std::atomic<std::size_t> next_shard_{0};
     io_context* fallback_ctx_ = nullptr;
-    auto get_shard_index(io_context& io) -> std::size_t;
     auto try_borrow_immediate(std::size_t primary_idx)
         -> std::expected<pooled_connection, std::error_code>;
     auto select_wait_shard(std::size_t preferred_idx) -> std::size_t;

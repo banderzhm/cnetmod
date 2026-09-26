@@ -205,6 +205,10 @@ openai_service::openai_service(io_context& io,
 auto openai_service::current_client()
     -> task<std::shared_ptr<openai::client>>
 {
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &io_)
+        throw std::logic_error{
+            "OpenAI client handle cannot cross its owning event loop"};
     co_await generation_gate_.lock();
     async_lock_guard guard{generation_gate_, std::adopt_lock};
     co_return generation_->clients.front();
@@ -236,6 +240,10 @@ auto openai_service::reconfigure(chat_model_reconfiguration configuration,
     cancel_token* cancellation)
     -> task<std::expected<void, std::error_code>>
 {
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &io_)
+        co_return co_await resume_on(*caller, starts_on(io_,
+            reconfigure(std::move(configuration), cancellation)));
     auto parsed = parse_openai_settings(configuration.properties);
     if (!parsed)
         co_return std::unexpected(parsed.error());

@@ -2,6 +2,37 @@
 
 > C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token，全部非阻塞、零堆分配设计。
 
+`channel`、`async_mutex`、`async_shared_mutex`、`async_semaphore` 与
+`async_wait_group` 支持跨事件循环唤醒：等待节点记录挂起时的
+`io_context::current()`，由其他线程/循环完成或释放时，会把 continuation 投递回等待者所属
+循环。不要在自定义同步原语里直接对外部循环的 coroutine handle 调用 `resume()`。
+
+## 事件循环恢复契约
+
+- `task<T>`、返回值和异常传播不绑定线程；事件循环归属由所等待的 awaitable 决定。
+- cnetmod 自带 socket、timer、文件 I/O 和上述协程同步原语会在其所属/等待者循环恢复。
+- `starts_on(loop, task)` 只决定任务从哪个循环开始，不能保证第三方 awaitable 完成后仍在该循环。
+- 第三方 awaitable、自定义回调桥或线程池可能从任意线程完成时，必须保存调用处的
+  `io_context::current()`，并用 `resume_on(*caller, operation)` 发布返回值或异常。
+- HTTP handler、SSE writer、数据库连接和循环本地组件在每次访问前都必须已经回到其 owner loop；
+  禁止从外部线程直接 `coroutine_handle::resume()`。
+
+```cpp
+auto invoke_on_owner(io_context& owner, task<int> operation)
+    -> task<int>
+{
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &owner)
+        co_return co_await resume_on(*caller,
+            starts_on(owner, std::move(operation)));
+    co_return co_await std::move(operation);
+}
+```
+
+Application 的 `offload()` 已自动捕获并返回调用者循环，不要在它外面重复套
+`resume_on()`。只有直接使用第三方 awaitable、`pool_post_awaitable` 或自行实现跨线程
+完成源时，调用方才负责显式恢复。
+
 **import**: `import cnetmod.coro.task;` / `import cnetmod.coro.channel;` / `import cnetmod.coro.mutex;` 等子模块
 **源码**: `src/coro/task.cppm`, `spawn.cppm`, `channel.cppm`, `mutex.cppm`, `shared_mutex.cppm`, `semaphore.cppm`, `wait_group.cppm`, `cancel.cppm`
 

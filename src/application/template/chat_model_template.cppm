@@ -13,6 +13,7 @@ import cnetmod.ai;
 import cnetmod.application.chat_model_pool;
 import cnetmod.coro.striped_mutex;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 
 namespace cnetmod::application {
 
@@ -107,10 +108,18 @@ public:
         chat_conversation_options options = {}) -> chat_conversation;
 
 private:
+    auto invoke_local(ai::chat_request request,
+        ai::run_config configuration)
+        -> task<std::expected<ai::chat_response, std::string>>;
+    auto stream_local(ai::chat_request request,
+        ai::chat_model::stream_handler handler,
+        ai::run_config configuration)
+        -> task<std::expected<ai::chat_response, std::string>>;
     [[nodiscard]] auto make_request(std::string input,
         std::vector<ai::message> history = {}) const -> ai::chat_request;
 
     chat_model_pool& models_;
+    io_context& event_loop_;
     chat_model_template_options options_;
     std::shared_ptr<striped_async_mutex<std::string>> session_gates_;
 

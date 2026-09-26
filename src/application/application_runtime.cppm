@@ -30,7 +30,7 @@ import cnetmod.protocol.http.middleware.compress;
 namespace cnetmod::application {
 
 /**
- * @brief Non-owning handle to the host event loop and CPU pool.
+ * @brief Non-owning handle to the caller/control event loop and CPU pool.
  *
  * Protocol-level components that need an execution context (timers,
  * decorators such as ai::resilient_chat_model, explicit timeouts) receive this
@@ -40,17 +40,36 @@ namespace cnetmod::application {
 export class execution_context
 {
 public:
-    execution_context(io_context& event_loop, thread_pool& cpu_pool) noexcept
-        : event_loop_(&event_loop), cpu_pool_(&cpu_pool)
+    execution_context(io_context& control_event_loop,
+        thread_pool& cpu_pool) noexcept
+        : control_event_loop_(&control_event_loop), cpu_pool_(&cpu_pool)
     {
     }
 
     /**
-     * @brief The application event loop that owns managed services.
+     * @brief Returns the calling event loop, falling back to the control loop.
+     *
+     * Request code may pass this reference to an offloaded operation before
+     * suspension and will then resume on the socket-owning worker. On a CPU
+     * pool or ordinary thread there is no current loop, so the control loop is
+     * returned. Capture the loop before leaving an event-loop thread.
      */
     [[nodiscard]] auto event_loop() const noexcept -> io_context&
     {
-        return *event_loop_;
+        if (auto* current = io_context::current())
+            return *current;
+        return *control_event_loop_;
+    }
+
+    /**
+     * @brief Returns the host control loop regardless of the calling thread.
+     *
+     * Managed-service ownership and application lifecycle code use this
+     * explicit accessor. Request handlers normally use event_loop().
+     */
+    [[nodiscard]] auto control_event_loop() const noexcept -> io_context&
+    {
+        return *control_event_loop_;
     }
 
     /**
@@ -62,21 +81,21 @@ public:
     }
 
     /**
-     * @brief Resumes the awaiting coroutine on the application event loop.
+     * @brief Resumes on the caller loop, or the control loop when none exists.
      */
     [[nodiscard]] auto post() const noexcept -> post_awaitable
     {
-        return post_awaitable{*event_loop_};
+        return post_awaitable{event_loop()};
     }
 
     /**
-     * @brief Cancellable sleep on the application event loop.
+     * @brief Cancellable sleep on the caller/control event loop.
      */
     [[nodiscard]] auto sleep(std::chrono::steady_clock::duration duration,
         cancel_token& cancellation) const
         -> task<std::expected<void, std::error_code>>
     {
-        return async_timer_wait(*event_loop_, duration, cancellation);
+        return async_timer_wait(event_loop(), duration, cancellation);
     }
 
     /**
@@ -91,12 +110,12 @@ public:
         cancel_token& cancellation) const
         -> task<std::expected<T, std::error_code>>
     {
-        return cnetmod::with_timeout(*event_loop_, timeout, std::move(operation),
+        return cnetmod::with_timeout(event_loop(), timeout, std::move(operation),
             cancellation);
     }
 
 private:
-    io_context* event_loop_;
+    io_context* control_event_loop_;
     thread_pool* cpu_pool_;
 };
 
@@ -117,11 +136,17 @@ public:
      * Application hosts construct this object after all referenced components.
      * Callers must preserve those components for the facade lifetime.
      */
+    application_runtime(io_context& io,
+        std::span<io_context* const> event_loops, thread_pool& cpu_pool,
+        task_supervisor& supervisor,
+        observability::telemetry_hub& telemetry,
+        std::stop_token cancellation,
+        const application_configuration& configuration);
     application_runtime(io_context& io, thread_pool& cpu_pool,
         task_supervisor& supervisor,
         observability::telemetry_hub& telemetry,
         std::stop_token cancellation,
-        const application_configuration& configuration) noexcept;
+        const application_configuration& configuration);
 
     application_runtime(const application_runtime&) = delete;
     auto operator=(const application_runtime&) -> application_runtime& = delete;
@@ -150,16 +175,19 @@ public:
         if (stop_requested())
             throw std::system_error(
                 std::make_error_code(std::errc::operation_canceled));
+        auto* caller = io_context::current();
+        if (caller == nullptr)
+            caller = &io_;
         if constexpr (std::is_void_v<
                           std::invoke_result_t<std::decay_t<Function>>>)
         {
-            co_await blocking_invoke(cpu_pool_, io_,
+            co_await blocking_invoke(cpu_pool_, *caller,
                 std::decay_t<Function>(std::forward<Function>(function)));
             co_return;
         }
         else
         {
-            co_return co_await blocking_invoke(cpu_pool_, io_,
+            co_return co_await blocking_invoke(cpu_pool_, *caller,
                 std::decay_t<Function>(std::forward<Function>(function)));
         }
     }
@@ -178,6 +206,15 @@ public:
      * @brief Resumes the awaiting coroutine on the application event loop.
      */
     [[nodiscard]] auto resume_to_event_loop() noexcept -> post_awaitable;
+
+    /**
+     * @brief Resumes on an explicitly captured event loop.
+     *
+     * Capture `io_context::current()` before leaving an HTTP worker. This
+     * overload is required when schedule_on_cpu() is used in multi-loop mode.
+     */
+    [[nodiscard]] auto resume_to_event_loop(io_context& event_loop) noexcept
+        -> post_awaitable;
 
     /**
      * @brief Returns the host execution handle for protocol-level components.

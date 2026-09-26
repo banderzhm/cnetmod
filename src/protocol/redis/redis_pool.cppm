@@ -143,6 +143,8 @@ public:
         -> sharded_connection_pool& = delete;
 
     auto async_run() -> task<void>;
+    /** Thread-safe stop request for every loop-local shard. */
+    void request_stop() noexcept;
     auto async_get_connection()
         -> task<std::expected<pooled_connection, std::error_code>>;
     auto async_get_connection(cancel_token& token)
@@ -156,17 +158,18 @@ public:
     auto cancel() -> task<void>;
     [[nodiscard]] auto size() const noexcept -> std::size_t;
     [[nodiscard]] auto idle_count() const noexcept -> std::size_t;
+    [[nodiscard]] auto checked_out_count() const noexcept -> std::size_t;
     [[nodiscard]] auto shard_count() const noexcept -> std::size_t;
 
 private:
     pool_params base_params_;
+    std::atomic<bool> run_active_{false};
     std::vector<std::unique_ptr<connection_pool>> shards_;
     std::vector<io_context*> shard_ctxs_;
     std::unordered_map<io_context*, std::size_t> shard_by_ctx_;
     std::atomic<std::size_t> next_shard_{0};
     io_context* fallback_ctx_ = nullptr;
 
-    auto get_shard_index(io_context& io) -> std::size_t;
     auto try_borrow_immediate(std::size_t primary_index)
         -> std::expected<pooled_connection, std::error_code>;
     auto select_wait_shard(std::size_t preferred_index) -> std::size_t;

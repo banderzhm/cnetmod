@@ -90,6 +90,9 @@ public:
      */
     auto close() -> task<void>;
 
+    /** Event loop that owns the pool and every leased model. */
+    [[nodiscard]] auto event_loop() noexcept -> io_context& { return io_; }
+
 private:
     io_context& io_;
     async_mutex state_gate_;

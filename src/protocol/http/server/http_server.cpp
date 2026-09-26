@@ -573,7 +573,7 @@ auto server::listen(std::string_view host, std::uint16_t port,
         return std::unexpected(addr_r.error());
 
     acc_ = std::make_unique<tcp::acceptor>(ctx_);
-    auto ep = endpoint{*addr_r, port};
+    auto ep = cnetmod::endpoint{*addr_r, port};
     opts.reuse_address = true;
     auto r = acc_->open(ep, opts);
     if (!r)
@@ -585,7 +585,7 @@ auto server::listen(std::string_view host, std::uint16_t port,
 }
 
 auto server::local_endpoint()
-    -> std::expected<endpoint, std::error_code>
+    -> std::expected<cnetmod::endpoint, std::error_code>
 {
     if (!acc_)
         return std::unexpected(make_error_code(errc::bad_descriptor));
@@ -633,9 +633,10 @@ void server::abort_connections() noexcept
     connections_aborted_ = true;
     for (auto* connection = connections_; connection; connection = connection->next)
     {
+        // Cancellation adapters marshal kernel cancellation to the operation's
+        // owning io_context. Do not close a worker-owned socket from the accept
+        // or control loop: IOCP and io_uring registrations are loop-affine.
         connection->cancellation.cancel();
-        connection->client.shutdown_both();
-        connection->client.close();
     }
 }
 

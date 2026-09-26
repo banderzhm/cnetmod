@@ -147,7 +147,10 @@ export using configuration_customizer =
  */
 export struct application_service_context
 {
+    /// Control-plane loop used for lifecycle and management operations.
     io_context& io;
+    /// Business loops. In single-loop mode this contains only `io`.
+    std::span<io_context* const> event_loops;
     observability::telemetry_hub& telemetry;
     task_supervisor& supervisor;
     const application_configuration& configuration;

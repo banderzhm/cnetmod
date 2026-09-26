@@ -626,6 +626,60 @@ TEST(xml_mapper_registry_rejects_ambiguous_select_result_binding)
     ASSERT_FALSE(loaded.has_value());
 }
 
+TEST(xml_mapper_registry_supports_statement_logical_delete_control)
+{
+    orm::mapper_registry registry;
+    const auto loaded = registry.load_xml(R"(
+        <mapper namespace="ArchiveMapper">
+          <select id="automatic">SELECT * FROM archive</select>
+          <select id="qualified" logicalDelete="false">
+            SELECT * FROM archive a WHERE a.deleted_at IS NULL
+          </select>
+        </mapper>)");
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_TRUE(registry.statement_logical_delete("ArchiveMapper.automatic"));
+    ASSERT_FALSE(registry.statement_logical_delete("ArchiveMapper.qualified"));
+
+    orm::mapper_registry invalid;
+    ASSERT_FALSE(invalid.load_xml(R"(
+        <mapper namespace="BrokenMapper">
+          <select id="find" logicalDelete="sometimes">SELECT 1</select>
+        </mapper>)"));
+}
+
+TEST(xml_mapper_statement_can_own_qualified_logical_delete_predicate)
+{
+    orm::mapper_registry registry;
+    ASSERT_TRUE(registry.load_xml(R"(
+        <mapper namespace="ArchiveMapper">
+          <select id="find" logicalDelete="false">
+            SELECT a.id, a.deleted_at FROM soft_deleted_records a
+            WHERE a.deleted_at IS NULL
+          </select>
+        </mapper>)"));
+
+    orm::logical_delete_config deleted_at;
+    deleted_at.field_name = "deleted_at";
+    deleted_at.mode = orm::logical_delete_mode::nullable_datetime;
+    orm::automatic_interceptor_options options;
+    options.logical_delete_policy = std::move(deleted_at);
+    auto interceptors = orm::make_automatic_interceptor_chain<
+        orm_soft_deleted_record>(std::move(options));
+    ASSERT_TRUE(interceptors.has_value());
+    if (!interceptors)
+        return;
+
+    mysql_style_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql,
+        *interceptors};
+    orm::mapper<orm_soft_deleted_record, decltype(session)> records{session};
+    const auto result = cnetmod::sync_wait(records.select_xml(
+        registry, "ArchiveMapper.find", orm::param_context{}));
+    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(client.last_sql.contains("a.deleted_at IS NULL"));
+    ASSERT_FALSE(client.last_sql.contains("`deleted_at` IS NULL"));
+}
+
 TEST(dynamic_sql_foreach_binds_iteration_index_as_a_parameter)
 {
     auto statement = orm::parse_xml(R"(
@@ -1714,6 +1768,28 @@ TEST(mysql_sharded_scoped_workload_joins_on_success_and_exception)
         ASSERT_TRUE(completed);
         ASSERT_EQ(propagated, fail);
     }
+}
+
+TEST(mysql_sharded_pool_rejects_an_unknown_event_loop)
+{
+    auto owner = cnetmod::make_io_context();
+    auto outsider = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    options.max_size = 2;
+    cnetmod::mysql::sharded_connection_pool pool{
+        std::vector<cnetmod::io_context*>{owner.get()}, options};
+    std::error_code observed;
+    auto acquire = [&]() -> cnetmod::task<void>
+    {
+        auto connection = co_await pool.async_get_connection(*outsider);
+        if (!connection)
+            observed = connection.error();
+        outsider->stop();
+    };
+    cnetmod::spawn(*outsider, acquire());
+    outsider->run();
+    ASSERT_EQ(observed, std::make_error_code(std::errc::invalid_argument));
 }
 
 TEST(mysql_sharded_stop_joins_two_event_loop_threads)

@@ -19,6 +19,7 @@ export module cnetmod.application.components;
 
 import std;
 import cnetmod.application.diagnostics;
+import cnetmod.io.io_context;
 
 namespace cnetmod::application {
 
@@ -86,6 +87,12 @@ namespace detail {
 export class component_resolver;
 export class component_container;
 
+export enum class component_scope
+{
+    singleton,
+    event_loop,
+};
+
 /**
  * @brief Ordered set of component registrations contributed by modules.
  *
@@ -119,10 +126,43 @@ public:
             .type = std::type_index{typeid(T)},
             .name = std::move(name),
             .display = detail::type_name<T>(),
-            .create = [factory = std::move(factory)](component_resolver& resolver) mutable
+            .scope = component_scope::singleton,
+            .create = [factory = std::move(factory)](component_resolver& resolver,
+                          io_context*) mutable
                 -> std::shared_ptr<void>
             {
                 return detail::to_shared<T>(std::invoke(factory, resolver));
+            },
+        });
+        return *this;
+    }
+
+    /** Registers one eagerly constructed instance per application event loop. */
+    template <class T, class Factory>
+    requires std::invocable<Factory&, component_resolver&, io_context&>
+    auto event_loop(Factory factory) -> component_collection&
+    {
+        return event_loop<T>(std::string{}, std::move(factory));
+    }
+
+    /** Registers a named, event-loop-local component. */
+    template <class T, class Factory>
+    requires std::invocable<Factory&, component_resolver&, io_context&>
+    auto event_loop(std::string name, Factory factory) -> component_collection&
+    {
+        registrations_.push_back(registration{
+            .type = std::type_index{typeid(T)},
+            .name = std::move(name),
+            .display = detail::type_name<T>(),
+            .scope = component_scope::event_loop,
+            .create = [factory = std::move(factory)](component_resolver& resolver,
+                          io_context* event_loop) mutable -> std::shared_ptr<void>
+            {
+                if (event_loop == nullptr)
+                    throw std::logic_error{
+                        "event-loop component factory has no event loop"};
+                return detail::to_shared<T>(
+                    std::invoke(factory, resolver, *event_loop));
             },
         });
         return *this;
@@ -141,7 +181,8 @@ public:
             .type = std::type_index{typeid(T)},
             .name = std::move(name),
             .display = detail::type_name<T>(),
-            .create = [value = std::move(value)](component_resolver&)
+            .scope = component_scope::singleton,
+            .create = [value = std::move(value)](component_resolver&, io_context*)
                 -> std::shared_ptr<void> { return value; },
         });
         return *this;
@@ -168,6 +209,17 @@ public:
         -> component_collection&;
 
     /**
+     * @brief Exposes an event-loop-local implementation under an interface.
+     *
+     * The alias is resolved independently for every event loop and therefore
+     * preserves the implementation's thread affinity.
+     */
+    template <class Interface, class Implementation>
+    requires std::derived_from<Implementation, Interface>
+    auto event_loop_alias(std::string name = {},
+        std::string implementation_name = {}) -> component_collection&;
+
+    /**
      * @brief Reports whether a registration exists for the binding.
      */
     template <class T>
@@ -192,7 +244,8 @@ private:
         std::type_index type;
         std::string name;
         std::string_view display;
-        std::function<std::shared_ptr<void>(component_resolver&)> create;
+        component_scope scope = component_scope::singleton;
+        std::function<std::shared_ptr<void>(component_resolver&, io_context*)> create;
     };
 
     std::vector<registration> registrations_;
@@ -244,8 +297,9 @@ public:
     }
 
 private:
-    explicit component_resolver(component_container& container) noexcept
-        : container_(&container)
+    explicit component_resolver(component_container& container,
+        io_context* event_loop = nullptr) noexcept
+        : container_(&container), event_loop_(event_loop)
     {
     }
 
@@ -253,6 +307,7 @@ private:
         std::string_view display, bool required) -> std::shared_ptr<void>;
 
     component_container* container_;
+    io_context* event_loop_;
 
     friend class component_container;
 };
@@ -266,8 +321,30 @@ auto component_collection::alias(std::string name,
         .type = std::type_index{typeid(Interface)},
         .name = std::move(name),
         .display = detail::type_name<Interface>(),
+        .scope = component_scope::singleton,
         .create = [implementation_name = std::move(implementation_name)](
-                      component_resolver& resolver) -> std::shared_ptr<void>
+                      component_resolver& resolver, io_context*) -> std::shared_ptr<void>
+        {
+            std::shared_ptr<Interface> resolved =
+                resolver.shared<Implementation>(implementation_name);
+            return resolved;
+        },
+    });
+    return *this;
+}
+
+template <class Interface, class Implementation>
+requires std::derived_from<Implementation, Interface>
+auto component_collection::event_loop_alias(std::string name,
+    std::string implementation_name) -> component_collection&
+{
+    registrations_.push_back(registration{
+        .type = std::type_index{typeid(Interface)},
+        .name = std::move(name),
+        .display = detail::type_name<Interface>(),
+        .scope = component_scope::event_loop,
+        .create = [implementation_name = std::move(implementation_name)](
+                      component_resolver& resolver, io_context*) -> std::shared_ptr<void>
         {
             std::shared_ptr<Interface> resolved =
                 resolver.shared<Implementation>(implementation_name);
@@ -295,7 +372,8 @@ public:
      * @brief Constructs every registration eagerly in dependency order.
      */
     [[nodiscard]] static auto build(component_collection collection,
-        component_fallback fallback = {})
+        component_fallback fallback = {},
+        std::span<io_context* const> event_loops = {})
         -> std::expected<std::unique_ptr<component_container>, build_error>;
 
     component_container(const component_container&) = delete;
@@ -361,16 +439,21 @@ private:
         }
     };
 
-    explicit component_container(component_fallback fallback);
+    explicit component_container(component_fallback fallback,
+        std::span<io_context* const> event_loops);
 
     [[nodiscard]] auto lookup(std::type_index type, std::string_view name) const
         -> std::shared_ptr<void>;
     [[nodiscard]] auto resolve(std::type_index type, std::string_view name,
-        std::string_view display, bool required) -> std::shared_ptr<void>;
+        std::string_view display, bool required,
+        io_context* event_loop = nullptr) -> std::shared_ptr<void>;
 
     std::vector<component_collection::registration> registrations_;
     std::unordered_map<key, std::size_t, key_hash> index_;
     std::unordered_map<key, std::shared_ptr<void>, key_hash> instances_;
+    std::unordered_map<key, std::vector<std::shared_ptr<void>>, key_hash>
+        event_loop_instances_;
+    std::vector<io_context*> event_loops_;
     std::vector<std::shared_ptr<void>> creation_order_;
     std::vector<std::string> resolving_;
     component_fallback fallback_;

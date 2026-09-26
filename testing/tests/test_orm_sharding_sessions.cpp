@@ -670,6 +670,15 @@ TEST(orm_interceptor_chain_orders_and_freezes_registration)
     ASSERT_EQ(order.size(), 2U);
     ASSERT_EQ(order[0], "early");
     ASSERT_EQ(order[1], "late");
+
+    order.clear();
+    auto filtered = chain.apply(orm::sql_operation::query,
+        {"SELECT 1", {}},
+        orm::statement_interceptor_options{.logical_delete = false});
+    ASSERT_TRUE(filtered);
+    ASSERT_EQ(order.size(), 2U);
+    ASSERT_EQ(order[0], "early");
+    ASSERT_EQ(order[1], "late");
 }
 
 TEST(orm_interceptor_chain_rewrites_typed_sql_before_protocol_client)

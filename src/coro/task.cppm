@@ -287,6 +287,50 @@ auto starts_on(io_context& context, task<T> operation) -> task<T>
 }
 
 // =============================================================================
+// resume_on -- return a task continuation to an explicit event loop
+// =============================================================================
+
+/// Awaits @p operation wherever it completes, then publishes its value or
+/// exception on @p context. This does not alter the operation's internal
+/// scheduling and therefore avoids adding executor state to every task frame.
+export template <typename T>
+auto resume_on(io_context& context, task<T> operation) -> task<T>
+{
+    std::exception_ptr failure;
+    if constexpr (std::is_void_v<T>)
+    {
+        try
+        {
+            co_await std::move(operation);
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        co_await post_awaitable{context};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return;
+    }
+    else
+    {
+        std::optional<T> value;
+        try
+        {
+            value.emplace(co_await std::move(operation));
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        co_await post_awaitable{context};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return std::move(*value);
+    }
+}
+
+// =============================================================================
 // sync_wait — Synchronously wait for coroutine completion
 // =============================================================================
 

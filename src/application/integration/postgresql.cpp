@@ -7,6 +7,21 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 
 namespace cnetmod::application {
+
+struct postgresql_service::pool_shard
+{
+    pool_shard(io_context& event_loop,
+        const postgresql::connection_pool_options& options)
+        : event_loop(&event_loop), pool(event_loop, options)
+    {
+    }
+
+    io_context* event_loop;
+    postgresql::connection_pool pool;
+};
+
+postgresql_service::~postgresql_service() = default;
+
 namespace {
 
     /**
@@ -27,13 +42,52 @@ namespace {
 postgresql_service::postgresql_service(io_context& io,
     postgresql::connection_pool_options options, std::string instance,
     service_requirement requirement, recovery_policy recovery)
-    : pool_(io, std::move(options)), instance_(std::move(instance)), requirement_(requirement), recovery_(recovery)
+    : instance_(std::move(instance)), requirement_(requirement),
+      recovery_(recovery)
 {
+    pools_.push_back(std::make_unique<pool_shard>(io, options));
 }
 
-auto postgresql_service::pool() noexcept -> postgresql::connection_pool&
+postgresql_service::postgresql_service(
+    std::span<io_context* const> event_loops,
+    postgresql::connection_pool_options options, std::string instance,
+    service_requirement requirement, recovery_policy recovery)
+    : instance_(std::move(instance)), requirement_(requirement),
+      recovery_(recovery)
 {
-    return pool_;
+    if (event_loops.empty() ||
+        options.maximum_connections < event_loops.size())
+        throw std::invalid_argument{
+            "PostgreSQL maximum_connections must cover every event loop"};
+    pools_.reserve(event_loops.size());
+    const auto minimum_quotient =
+        options.minimum_connections / event_loops.size();
+    const auto minimum_remainder =
+        options.minimum_connections % event_loops.size();
+    const auto maximum_quotient =
+        options.maximum_connections / event_loops.size();
+    const auto maximum_remainder =
+        options.maximum_connections % event_loops.size();
+    for (std::size_t index = 0; index < event_loops.size(); ++index)
+    {
+        auto shard_options = options;
+        shard_options.minimum_connections = minimum_quotient +
+            (index < minimum_remainder ? 1U : 0U);
+        shard_options.maximum_connections = maximum_quotient +
+            (index < maximum_remainder ? 1U : 0U);
+        pools_.push_back(
+            std::make_unique<pool_shard>(*event_loops[index], shard_options));
+    }
+}
+
+auto postgresql_service::pool() -> postgresql::connection_pool&
+{
+    auto* current = io_context::current();
+    for (auto& shard : pools_)
+        if (shard->event_loop == current)
+            return shard->pool;
+    throw std::logic_error{
+        "PostgreSQL pool requested outside an owning event loop"};
 }
 
 auto postgresql_service::key() const -> service_key
@@ -58,12 +112,19 @@ auto postgresql_service::start(service_context& context)
         co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
     if (context.operation_deadline.expired())
         co_return std::unexpected(std::make_error_code(std::errc::timed_out));
-    if (started_ && !pool_.background_error())
+    if (started_ && std::ranges::none_of(pools_, [](const auto& shard)
+            { return static_cast<bool>(shard->pool.background_error()); }))
         co_return {};
-    const auto result = co_await with_deadline(context.io, context.operation_deadline,
-        pool_.warm_up(context.cancellation), context.cancellation);
-    if (!result)
-        co_return std::unexpected(result.error());
+    for (auto& shard : pools_)
+    {
+        auto result = co_await with_deadline(context.io,
+            context.operation_deadline,
+            resume_on(context.io, starts_on(*shard->event_loop,
+                shard->pool.warm_up(context.cancellation))),
+            context.cancellation);
+        if (!result)
+            co_return std::unexpected(result.error());
+    }
     started_ = true;
     co_return {};
 }
@@ -71,12 +132,19 @@ auto postgresql_service::start(service_context& context)
 auto postgresql_service::stop(service_context& context)
     -> task<std::expected<void, std::error_code>>
 {
-    if (!started_ && pool_.size() == 0)
+    if (!started_ && std::ranges::all_of(pools_, [](const auto& shard)
+            { return shard->pool.size() == 0; }))
         co_return {};
-    auto result = co_await with_deadline(context.io, context.operation_deadline,
-        pool_.close(context.cancellation), context.cancellation);
-    if (!result)
-        co_return std::unexpected(result.error());
+    for (auto& shard : pools_)
+    {
+        auto result = co_await with_deadline(context.io,
+            context.operation_deadline,
+            resume_on(context.io, starts_on(*shard->event_loop,
+                shard->pool.close(context.cancellation))),
+            context.cancellation);
+        if (!result)
+            co_return std::unexpected(result.error());
+    }
     started_ = false;
     co_return {};
 }
@@ -85,20 +153,33 @@ auto postgresql_service::probe(service_context& context) -> task<health_report>
 {
     if (!started_)
         co_return health_report{.status = service_health::down, .message = "postgresql pool stopped"};
-    if (const auto failure = pool_.background_error())
-        co_return health_report{.status = service_health::down,
-            .message = "postgresql background reconnect failed",
-            .error = failure};
-    auto connection = co_await with_deadline(context.io, context.operation_deadline,
-        pool_.acquire(context.cancellation), context.cancellation);
-    if (!connection)
-        co_return health_report{.status = service_health::down,
-            .message = "postgresql connection unavailable",
-            .error = connection.error()};
-    auto result = co_await with_deadline(context.io, context.operation_deadline,
-        probe_connection(connection->get(), context.cancellation), context.cancellation);
-    if (!result)
-        connection->discard();
+    std::expected<void, std::error_code> result;
+    for (auto& shard : pools_)
+    {
+        if (const auto failure = shard->pool.background_error())
+            co_return health_report{.status = service_health::down,
+                .message = "postgresql background reconnect failed",
+                .error = failure};
+        auto probe = [&]() -> task<std::expected<void, std::error_code>>
+        {
+            auto connection = co_await shard->pool.acquire(
+                context.cancellation);
+            if (!connection)
+                co_return std::unexpected(connection.error());
+            auto checked = co_await probe_connection(connection->get(),
+                context.cancellation);
+            if (!checked)
+                connection->discard();
+            co_return checked;
+        };
+        result = co_await with_deadline(context.io,
+            context.operation_deadline,
+            resume_on(context.io,
+                starts_on(*shard->event_loop, probe())),
+            context.cancellation);
+        if (!result)
+            break;
+    }
     co_return health_report{
         .status = result ? service_health::up : service_health::down,
         .message = result ? "postgresql query succeeded" : "postgresql query failed",
@@ -139,9 +220,19 @@ auto auto_configure_postgresql(const configured_service& configuration,
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }
-    auto service = std::make_shared<postgresql_service>(context.io,
-        std::move(options), configuration.instance,
-        configuration.requirement, configuration.recovery);
+    if (context.event_loops.size() > 1 &&
+        options.maximum_connections < context.event_loops.size())
+        return std::unexpected(std::make_error_code(
+            std::errc::invalid_argument));
+    std::shared_ptr<postgresql_service> service;
+    if (context.event_loops.size() > 1)
+        service = std::make_shared<postgresql_service>(context.event_loops,
+            std::move(options), configuration.instance,
+            configuration.requirement, configuration.recovery);
+    else
+        service = std::make_shared<postgresql_service>(context.io,
+            std::move(options), configuration.instance,
+            configuration.requirement, configuration.recovery);
     return context.services.add_managed_named<postgresql_service>(
         configuration.instance, std::move(service));
 }

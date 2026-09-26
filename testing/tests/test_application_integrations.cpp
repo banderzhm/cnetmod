@@ -1312,7 +1312,7 @@ TEST(application_runtime_resolves_named_chat_model_template)
         nullptr);
 }
 
-TEST(application_chat_model_composition_is_resolved_at_build_time)
+TEST(application_chat_model_composition_requires_explicit_multi_instance_policy)
 {
     const auto configure = [](application::application_configuration& config)
     {
@@ -1326,44 +1326,42 @@ TEST(application_chat_model_composition_is_resolved_at_build_time)
             config.services.emplace(instance, std::move(service));
         }
     };
-    auto host = application::application_builder{"openai-composition"}
-                    .enable_auto_configuration()
-                    .configure(configure)
-                    .add_module(application::make_module("llm",
-                        {.register_components = [](application::registration_context& context)
-                                -> std::expected<void, std::string>
-                            {
-                                application::add_chat_model(context.components, "assistant",
-                                    {.instances = {"key-a", "key-b"},
-                                        .routing = application::chat_model_routing::round_robin,
-                                        .resilience = cnetmod::ai::resilient_model_options{
-                                            .max_attempts_per_model = 1}});
-                                return {};
-                            }}))
-                    .build();
-    ASSERT_TRUE(host.has_value());
-    if (!host)
-        return;
-    ASSERT_TRUE(host->components().find<cnetmod::ai::chat_model>("assistant") != nullptr);
 
-    auto missing = application::application_builder{"openai-composition-missing"}
-                       .enable_auto_configuration()
-                       .configure(configure)
-                       .add_module(application::make_module("llm",
-                           {.register_components = [](application::registration_context& context)
-                                   -> std::expected<void, std::string>
-                               {
-                                   application::add_chat_model(context.components, "assistant",
-                                       {.instances = {"key-a", "absent"}});
-                                   return {};
-                               }}))
-                       .build();
-    ASSERT_FALSE(missing.has_value());
-    if (!missing)
-    {
-        ASSERT_TRUE(missing.error().phase == application::build_phase::resolution);
-        ASSERT_TRUE(missing.error().component.contains("assistant"));
-    }
+    auto implicit = application::application_builder{"openai-composition-implicit"}
+                        .enable_auto_configuration()
+                        .configure(configure)
+                        .add_module(application::make_module("llm",
+                            {.register_components = [](application::registration_context& context)
+                                    -> std::expected<void, std::string>
+                                {
+                                    application::add_chat_model(context.components,
+                                        "assistant", {.instances = {"key-a", "key-b"}});
+                                    return {};
+                                }}))
+                        .build();
+    ASSERT_FALSE(implicit.has_value());
+
+    auto explicit_policy = application::application_builder{"openai-composition"}
+                               .enable_auto_configuration()
+                               .configure(configure)
+                               .add_module(application::make_module("llm",
+                                   {.register_components = [](application::registration_context& context)
+                                           -> std::expected<void, std::string>
+                                       {
+                                           application::add_chat_model(context.components,
+                                               "assistant",
+                                               {.instances = {"key-a", "key-b"},
+                                                   .routing = application::chat_model_routing::round_robin,
+                                                   .resilience = cnetmod::ai::resilient_model_options{
+                                                       .max_attempts_per_model = 1},
+                                                   .fallback_to_remaining_instances = true});
+                                           return {};
+                                       }}))
+                               .build();
+    ASSERT_TRUE(explicit_policy.has_value());
+    if (explicit_policy)
+        ASSERT_TRUE(explicit_policy->components().find<cnetmod::ai::chat_model>(
+                        "assistant") != nullptr);
 }
 
 TEST(application_chat_model_service_rejects_invalid_reconfiguration)
@@ -1524,7 +1522,7 @@ TEST(application_openai_rejects_invalid_pool_size)
                     .build();
     ASSERT_FALSE(host.has_value());
     if (!host)
-        ASSERT_EQ(host.error(),
+        ASSERT_EQ(host.error().code,
             std::make_error_code(std::errc::invalid_argument));
 }
 
@@ -1565,6 +1563,53 @@ TEST(application_openai_listener_is_optional_and_configuration_is_idempotent)
 #endif
 
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
+TEST(application_redis_configuration_accepts_transport_and_pool_timeouts)
+{
+    auto host = application::application_builder{"redis-timeout-configuration"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service redis{
+                                .name = "redis",
+                                .instance = "cache",
+                                .enabled = true,
+                                .requirement = application::service_requirement::optional,
+                            };
+                            redis.properties["connect_timeout_ms"] = 750;
+                            redis.properties["pool_timeout_ms"] = 125;
+                            redis.properties["retry_interval_ms"] = 1'000;
+                            redis.properties["ping_interval_ms"] = 5'000;
+                            redis.properties["ping_timeout_ms"] = 500;
+                            value.services.emplace("redis", std::move(redis));
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (host)
+        ASSERT_TRUE(host->services().find<application::redis_service>(
+                        "cache") != nullptr);
+}
+
+TEST(application_redis_configuration_rejects_invalid_pool_timeout)
+{
+    auto host = application::application_builder{"redis-invalid-pool-timeout"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service redis{
+                                .name = "redis",
+                                .enabled = true,
+                            };
+                            redis.properties["pool_timeout_ms"] = 0;
+                            value.services.emplace("redis", std::move(redis));
+                        })
+                    .build();
+    ASSERT_FALSE(host.has_value());
+}
+
 TEST(application_auto_configuration_registers_redis_cluster_mode)
 {
     auto host = application::application_builder{"redis-cluster-configuration"}

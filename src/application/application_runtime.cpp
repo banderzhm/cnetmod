@@ -6,11 +6,23 @@ import cnetmod.protocol.http.middleware.compress;
 
 namespace cnetmod::application {
 
+application_runtime::application_runtime(io_context& io,
+    std::span<io_context* const> event_loops, thread_pool& cpu_pool,
+    task_supervisor& supervisor, observability::telemetry_hub& telemetry,
+    std::stop_token cancellation,
+    const application_configuration& configuration)
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), configuration_(configuration), executor_(io, cpu_pool), files_(io), rest_(event_loops, telemetry), json_(io, cpu_pool)
+{
+}
+
 application_runtime::application_runtime(io_context& io, thread_pool& cpu_pool,
     task_supervisor& supervisor, observability::telemetry_hub& telemetry,
     std::stop_token cancellation,
-    const application_configuration& configuration) noexcept
-    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), configuration_(configuration), executor_(io, cpu_pool), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
+    const application_configuration& configuration)
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry),
+      cancellation_(cancellation), configuration_(configuration),
+      executor_(io, cpu_pool), files_(io), rest_(io, telemetry),
+      json_(io, cpu_pool)
 {
 }
 
@@ -60,6 +72,12 @@ auto application_runtime::schedule_on_cpu() noexcept -> pool_post_awaitable
 auto application_runtime::resume_to_event_loop() noexcept -> post_awaitable
 {
     return post_awaitable{io_};
+}
+
+auto application_runtime::resume_to_event_loop(io_context& event_loop) noexcept
+    -> post_awaitable
+{
+    return post_awaitable{event_loop};
 }
 
 auto application_runtime::compression(compress_options options)

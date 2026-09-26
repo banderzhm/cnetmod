@@ -23,7 +23,7 @@ auto make_mysql_session_gateway(mysql_service& service)
         [&service]()
             -> task<std::expected<mysql::pooled_connection, std::string>>
         {
-            auto connection = co_await service.pool().async_get_connection();
+            auto connection = co_await service.acquire();
             if (!connection)
                 co_return std::unexpected(connection.error().message());
             co_return std::move(*connection);
@@ -59,7 +59,7 @@ auto make_mysql_sharded_session_gateway(service_registry& services,
             const auto found = pools.find(std::string{instance});
             if (found == pools.end())
                 co_return std::unexpected("mysql shard is not registered");
-            auto connection = co_await found->second->pool().async_get_connection();
+            auto connection = co_await found->second->acquire();
             if (!connection)
                 co_return std::unexpected(connection.error().message());
             co_return std::move(*connection);
@@ -110,8 +110,7 @@ auto auto_configure_mysql_sharding(
                     const auto found = pools.find(std::string{instance});
                     if (found == pools.end())
                         co_return std::unexpected("mysql shard is not registered");
-                    auto connection = co_await found->second->pool()
-                                          .async_get_connection();
+                    auto connection = co_await found->second->acquire();
                     if (!connection)
                         co_return std::unexpected(connection.error().message());
                     co_return std::move(*connection);

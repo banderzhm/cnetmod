@@ -22,8 +22,14 @@ auto composed_chat_model::create(service_registry& services,
 {
     if (composition.instances.empty())
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    if (composition.instances.size() > 1 && !composition.routing)
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    if (composition.fallback_to_remaining_instances && !composition.resilience)
+        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+
     std::shared_ptr<composed_chat_model> model{new composed_chat_model()};
-    model->routing_ = composition.routing;
+    model->event_loop_ = &executor.event_loop();
+    model->routing_ = composition.routing.value_or(chat_model_routing::ordered);
     model->instances_ = composition.instances;
 
     for (const auto& instance : composition.instances)
@@ -41,19 +47,22 @@ auto composed_chat_model::create(service_registry& services,
     const auto count = model->templates_.size();
     if (composition.resilience)
     {
-        // One resilient candidate per starting instance; its fallbacks are the
-        // remaining instances in declaration order, wrapping around.
-        for (std::size_t start = 0; start < count; ++start)
+        const auto candidate_count = model->routing_ == chat_model_routing::ordered
+            ? std::size_t{1}
+            : count;
+        for (std::size_t start = 0; start < candidate_count; ++start)
         {
             std::vector<ai::chat_model*> fallbacks;
-            fallbacks.reserve(count - 1);
-            for (std::size_t offset = 1; offset < count; ++offset)
-                fallbacks.push_back(model->templates_[(start + offset) % count].get());
+            if (composition.fallback_to_remaining_instances)
+            {
+                fallbacks.reserve(count - 1);
+                for (std::size_t offset = 1; offset < count; ++offset)
+                    fallbacks.push_back(
+                        model->templates_[(start + offset) % count].get());
+            }
             model->candidates_.push_back(std::make_unique<ai::resilient_chat_model>(
                 executor.event_loop(), *model->templates_[start],
                 std::move(fallbacks), *composition.resilience));
-            if (composition.routing == chat_model_routing::ordered)
-                break;
         }
     }
 
@@ -66,8 +75,6 @@ auto composed_chat_model::create(service_registry& services,
     }
     else
     {
-        // The model outlives its router; capture a raw pointer to avoid a
-        // reference cycle through the shared owner.
         auto* self = model.get();
         model->router_ = std::make_unique<ai::functional_chat_model_router>(
             [self](const ai::chat_request&, const ai::run_config&)
@@ -105,7 +112,11 @@ auto composed_chat_model::invoke(ai::chat_request request,
     const ai::run_config& config)
     -> task<std::expected<ai::chat_response, std::string>>
 {
-    const ai::run_config owned = config;
+    auto owned = ai::run_config{config};
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != event_loop_)
+        co_return co_await resume_on(*caller, starts_on(*event_loop_,
+            top_->invoke(std::move(request), owned)));
     co_return co_await top_->invoke(std::move(request), owned);
 }
 
@@ -113,7 +124,22 @@ auto composed_chat_model::stream(ai::chat_request request,
     stream_handler handler, const ai::run_config& config)
     -> task<std::expected<ai::chat_response, std::string>>
 {
-    const ai::run_config owned = config;
+    auto owned = ai::run_config{config};
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != event_loop_)
+    {
+        auto return_handler = [caller, owner = event_loop_,
+                                  handler = std::move(handler)](
+                                  const ai::chat_chunk& chunk) mutable
+            -> task<bool>
+        {
+            co_return co_await resume_on(*owner,
+                starts_on(*caller, handler(chunk)));
+        };
+        co_return co_await resume_on(*caller, starts_on(*event_loop_,
+            top_->stream(std::move(request), std::move(return_handler),
+                owned)));
+    }
     co_return co_await top_->stream(std::move(request), std::move(handler), owned);
 }
 

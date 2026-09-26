@@ -19,6 +19,7 @@ import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.observability.otlp;
+import cnetmod.security.jwt;
 #ifdef CNETMOD_HAS_ORM
 import cnetmod.orm;
 #endif
@@ -1833,6 +1834,7 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     application::application_runtime runtime{*io, cpu_pool, supervisor,
         telemetry, stopping.get_token(), configuration};
     ASSERT_EQ(&runtime.executor().event_loop(), io.get());
+    ASSERT_EQ(&runtime.executor().control_event_loop(), io.get());
     ASSERT_EQ(&runtime.executor().cpu_pool(), &cpu_pool);
     bool background_ran = false;
     auto accepted = runtime.spawn_managed("runtime-test",
@@ -2208,22 +2210,184 @@ TEST(application_builder_executes_ordered_business_middleware)
     ASSERT_TRUE(events == std::vector<std::string>({"first-enter", "second-enter", "route", "second-exit", "first-exit"}));
 }
 
+TEST(application_host_distributes_connections_and_restores_worker_affinity)
+{
+    cnetmod::net_init network;
+    auto reservation = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(reservation.has_value());
+    ASSERT_TRUE(reservation->bind(
+                               {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    const auto endpoint = reservation->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    std::atomic<cnetmod::io_context*> first_worker{nullptr};
+    std::atomic<bool> second_worker_seen{false};
+    std::atomic<bool> affinity_preserved{true};
+    auto host = application::application_builder{"multi-loop-http"}
+                    .configure([&endpoint](
+                                   application::application_configuration& value)
+                        {
+                            value.http.address = "127.0.0.1";
+                            value.http.port = endpoint->port();
+                            value.http.access_logging = false;
+                            value.logging.manage_lifecycle = false;
+                            value.install_signal_handlers = false;
+                            value.management.enabled = false;
+                            value.observability.tracing = false;
+                            value.observability.metrics = false;
+                            value.observability.logs = false;
+                            value.execution.io_threads = 2;
+                        })
+                    .add_module(application::make_module("worker-affinity",
+                        {.compose = [&](application::composition_context& context)
+                                -> std::expected<void, std::string>
+                            {
+                                auto* runtime = &context.runtime;
+                                context.routes.get("/worker",
+                                    [&, runtime](cnetmod::http::request_context& request)
+                                        -> cnetmod::task<void>
+                                    {
+                                        auto* before = cnetmod::io_context::current();
+                                        auto* expected = static_cast<cnetmod::io_context*>(nullptr);
+                                        if (!first_worker.compare_exchange_strong(
+                                                expected, before,
+                                                std::memory_order_acq_rel) &&
+                                            expected != before)
+                                            second_worker_seen.store(true,
+                                                std::memory_order_release);
+                                        auto& executor = runtime->executor();
+                                        if (&executor.event_loop() != before ||
+                                            &executor.control_event_loop() == before)
+                                            affinity_preserved.store(false,
+                                                std::memory_order_release);
+                                        co_await executor.post();
+                                        if (cnetmod::io_context::current() != before)
+                                            affinity_preserved.store(false,
+                                                std::memory_order_release);
+                                        cnetmod::cancel_token timer_cancellation;
+                                        auto slept = co_await executor.sleep(
+                                            std::chrono::milliseconds{1},
+                                            timer_cancellation);
+                                        if (!slept ||
+                                            cnetmod::io_context::current() != before)
+                                            affinity_preserved.store(false,
+                                                std::memory_order_release);
+                                        cnetmod::security::jwt_sign_options jwt;
+                                        jwt.issuer = "multi-loop-test";
+                                        jwt.subject = "worker";
+                                        const auto token = co_await
+                                            cnetmod::security::sign_jwt(
+                                                executor.cpu_pool(),
+                                                executor.event_loop(), jwt,
+                                                "multi-loop-test-secret");
+                                        if (!token ||
+                                            cnetmod::io_context::current() != before)
+                                            affinity_preserved.store(false,
+                                                std::memory_order_release);
+                                        if (token)
+                                        {
+                                            const auto claims = co_await
+                                                cnetmod::security::verify_jwt(
+                                                    executor.cpu_pool(),
+                                                    executor.event_loop(),
+                                                    *token,
+                                                    "multi-loop-test-secret");
+                                            if (!claims ||
+                                                claims->subject != "worker" ||
+                                                cnetmod::io_context::current() != before)
+                                                affinity_preserved.store(false,
+                                                    std::memory_order_release);
+                                        }
+                                        const auto value = co_await runtime->offload(
+                                            [] { return 42; });
+                                        if (value != 42 ||
+                                            cnetmod::io_context::current() != before)
+                                            affinity_preserved.store(false,
+                                                std::memory_order_release);
+                                        request.text(cnetmod::http::status::ok, "ok");
+                                        co_return;
+                                    },
+                                    cnetmod::http::endpoint_metadata{
+                                        cnetmod::http::allow_anonymous{}});
+                                return {};
+                            }}))
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    reservation->close();
+
+    std::optional<std::expected<void, std::error_code>> completed;
+    std::jthread runner([&] { completed = host->run(); });
+    const auto startup_timeout = std::chrono::steady_clock::now() +
+        std::chrono::seconds{2};
+    while (host->state() == application::application_state::built ||
+        host->state() == application::application_state::starting)
+    {
+        if (std::chrono::steady_clock::now() >= startup_timeout)
+            break;
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    }
+
+    std::size_t successes = 0;
+    if (host->state() == application::application_state::running)
+    {
+        auto io = cnetmod::make_io_context();
+        auto requests = [&]() -> cnetmod::task<void>
+        {
+            cnetmod::observability::otlp_http_options telemetry_options;
+            telemetry_options.export_traces = false;
+            telemetry_options.export_metrics = false;
+            telemetry_options.export_logs = false;
+            cnetmod::observability::telemetry_hub telemetry{
+                *io, std::move(telemetry_options)};
+            application::rest_template rest{*io, telemetry,
+                application::rest_template_options{
+                    .client = {.request_timeout =
+                                   std::chrono::milliseconds{500},
+                        .keep_alive = false}}};
+            for (std::size_t index = 0; index < 8; ++index)
+            {
+                auto response = co_await rest.get(std::format(
+                    "http://127.0.0.1:{}/worker", endpoint->port()));
+                if (response && response->status_code() == 200 &&
+                    response->body() == "ok")
+                    ++successes;
+            }
+            io->stop();
+        };
+        cnetmod::spawn(*io, requests());
+        io->run();
+    }
+    host->request_stop();
+    runner.join();
+
+    ASSERT_TRUE(completed.has_value() && completed->has_value());
+    ASSERT_EQ(successes, std::size_t{8});
+    ASSERT_TRUE(second_worker_seen.load(std::memory_order_acquire));
+    ASSERT_TRUE(affinity_preserved.load(std::memory_order_acquire));
+}
+
 TEST(application_configuration_precedence_and_redaction)
 {
     const auto path = std::filesystem::temp_directory_path() /
         "cnetmod-application-test.json";
     {
         std::ofstream output{path};
-        output << R"({"application":{"name":"json-name","cpu_threads":3},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080,"sse":{"max_duration_ms":45000,"write_timeout_ms":2500}},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
+        output << R"({"application":{"name":"json-name","cpu_threads":3,"io_threads":2},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080,"sse":{"max_duration_ms":45000,"write_timeout_ms":2500}},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
     }
 #ifdef _WIN32
     _putenv_s("CNETMOD_HTTP_PORT", "18081");
     _putenv_s("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS", "false");
     _putenv_s("CNETMOD_CPU_THREADS", "4");
+    _putenv_s("CNETMOD_IO_THREADS", "4");
 #else
     setenv("CNETMOD_HTTP_PORT", "18081", 1);
     setenv("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS", "false", 1);
     setenv("CNETMOD_CPU_THREADS", "4", 1);
+    setenv("CNETMOD_IO_THREADS", "4", 1);
 #endif
     auto host = application::application_builder{"builder-name"}
                     .configuration_file(path)
@@ -2233,6 +2397,7 @@ TEST(application_configuration_precedence_and_redaction)
                             value.logging.manage_lifecycle = false;
                             value.management.enabled = false;
                             value.execution.cpu_threads = 5;
+                            value.execution.io_threads = 6;
                             value.observability.otlp.capture_framework_logs = true;
                         })
                     .build();
@@ -2240,10 +2405,12 @@ TEST(application_configuration_precedence_and_redaction)
     _putenv_s("CNETMOD_HTTP_PORT", "");
     _putenv_s("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS", "");
     _putenv_s("CNETMOD_CPU_THREADS", "");
+    _putenv_s("CNETMOD_IO_THREADS", "");
 #else
     unsetenv("CNETMOD_HTTP_PORT");
     unsetenv("CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS");
     unsetenv("CNETMOD_CPU_THREADS");
+    unsetenv("CNETMOD_IO_THREADS");
 #endif
     std::filesystem::remove(path);
     ASSERT_TRUE(host.has_value());
@@ -2254,6 +2421,7 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_EQ(host->configuration().http.sse_write_timeout,
         std::chrono::milliseconds{2500});
     ASSERT_EQ(host->configuration().execution.cpu_threads, 5U);
+    ASSERT_EQ(host->configuration().execution.io_threads, 6U);
     ASSERT_EQ(host->configuration().crash_dump.directory,
         std::filesystem::path{"application-crashes"});
     ASSERT_TRUE(host->configuration().observability.otlp.capture_framework_logs);

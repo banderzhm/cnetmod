@@ -228,7 +228,7 @@ namespace detail {
                 return std::unexpected(known.error());
             overlay(merged, *provided);
         }
-        auto decoded = cnetmod::json::from_document<T>(merged);
+        auto decoded = cnetmod::json::from_document_with_defaults<T>(merged);
         if (!decoded)
             return std::unexpected(configuration_error{
                 .code = decoded.error(),

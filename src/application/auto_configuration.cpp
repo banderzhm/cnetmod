@@ -54,12 +54,13 @@ auto pool_size_properties_are_valid(const cnetmod::json::document& properties,
 }
 
 void auto_configuration_registry::add(std::string name,
-    service_auto_configurator configurator)
+    service_auto_configurator configurator, integration_loop_mode loop_mode)
 {
     if (name.empty() || !configurator)
         throw std::invalid_argument("invalid service auto-configurator");
-    if (!configurators_.emplace(std::move(name),
-                           std::move(configurator))
+    if (!configurators_.emplace(std::move(name), registration{
+                           .configure = std::move(configurator),
+                           .loop_mode = loop_mode})
             .second)
         throw std::logic_error("service auto-configurator already exists");
 }
@@ -78,7 +79,12 @@ auto auto_configuration_registry::apply(
         if (found == configurators_.end())
             return std::unexpected(
                 std::make_error_code(std::errc::not_supported));
-        auto result = found->second(service, context);
+        if (context.event_loops.size() > 1 &&
+            found->second.loop_mode ==
+                integration_loop_mode::single_loop_only)
+            return std::unexpected(
+                std::make_error_code(std::errc::not_supported));
+        auto result = found->second.configure(service, context);
         if (!result)
             return result;
     }
@@ -89,6 +95,14 @@ auto auto_configuration_registry::contains(std::string_view name) const noexcept
     -> bool
 {
     return configurators_.contains(name);
+}
+
+auto auto_configuration_registry::supports_multiple_event_loops(
+    std::string_view name) const noexcept -> bool
+{
+    const auto found = configurators_.find(name);
+    return found != configurators_.end() &&
+        found->second.loop_mode != integration_loop_mode::single_loop_only;
 }
 
 } // namespace cnetmod::application

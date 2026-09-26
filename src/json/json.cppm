@@ -213,6 +213,13 @@ struct lenient_read_options : glz::opts
     bool validate_trailing_whitespace = true;
 };
 
+struct defaulted_read_options : glz::opts
+{
+    bool error_on_unknown_keys = true;
+    bool error_on_missing_keys = false;
+    bool validate_trailing_whitespace = true;
+};
+
 struct write_options : glz::opts
 {
     bool skip_null_members = true;
@@ -318,6 +325,32 @@ struct lenient_codec
         -> std::expected<std::string, std::error_code>
     {
         return default_codec::encode(value);
+    }
+};
+
+/**
+ * @brief Strict-key codec that preserves C++ defaults for omitted members.
+ *
+ * Intended for typed configuration binding after the document shape has been
+ * validated. Unknown keys still fail recursively, including inside arrays.
+ */
+struct defaulted_codec
+{
+    template <typename T>
+    [[nodiscard]] static auto decode(std::string_view input)
+        -> std::expected<T, std::error_code>
+    {
+        if constexpr (detail::document_mapped<T>)
+            return default_codec::decode<T>(input);
+        else
+        {
+            T result{};
+            const auto error =
+                glz::read<detail::defaulted_read_options{}>(result, input);
+            if (error)
+                return std::unexpected(detail::read_error(error));
+            return result;
+        }
     }
 };
 
@@ -428,6 +461,22 @@ template <typename T>
             return std::unexpected(encoded.error());
         return default_codec::decode<T>(*encoded);
     }
+}
+
+/**
+ * @brief Converts a document into a default-constructed T.
+ *
+ * Omitted members retain their C++ default member values; unknown members are
+ * rejected recursively.
+ */
+template <typename T>
+[[nodiscard]] auto from_document_with_defaults(const document& source)
+    -> std::expected<T, std::error_code>
+{
+    auto encoded = write_document(source);
+    if (!encoded)
+        return std::unexpected(encoded.error());
+    return defaulted_codec::decode<T>(*encoded);
 }
 
 } // namespace cnetmod::json

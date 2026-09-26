@@ -120,8 +120,9 @@ struct chat_response {
 #### `chat_model_template` — provider-neutral Application 大模型门面
 
 Application 项目启用 OpenAI 自动装配后，注入 `chat_model_service`（按实例名）并调用
-`make_template(options)`，或用 `application::add_chat_model()` 把多个实例组合成一个
-`ai::chat_model` 组件；不要在 route 中自行创建或连接 `openai::client`。Application 仅
+`make_template(options)`；不要在 route 中自行创建或连接 `openai::client`。应用可以显式
+调用 `add_chat_model()` 组合多个实例，但必须声明多实例路由，并单独开启跨实例 fallback；
+只配置多个实例不会隐式启用轮询或换 key。Application 仅
 依赖 `cnetmod.ai` 的 provider-neutral 合约；`openai_service` 作为 adapter 管理多个
 client 和固定容量连接池，未来 Claude、Gemini 与本地模型实现相同的
 `chat_model_service` 即可复用模板、会话和路由代码。`chat_model_template` 实现
