@@ -150,8 +150,10 @@ struct jwt_auth_options {
 的 503）始终拒绝。成功认证时正常绑定身份。
 
 需要异步验签或查询当前用户时，设置 `authenticate_async`；它优先于同步 `verify`，
-并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message}` 拒绝请求；
-`on_failure` 可输出应用自己的错误响应格式。
+并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message, reason}` 拒绝请求；
+`on_failure` 可输出应用自己的错误响应格式，按 `reason`（`missing_credentials`、
+`malformed_credentials`、`invalid_credentials`、`expired_credentials`、`unavailable`）
+映射到应用错误码，不要匹配 `message` 文本。中间件自身产生的缺失/格式错误会带上对应 reason。
 
 ```cpp
 router.post("/login", login, http::endpoint_metadata{http::allow_anonymous{}});

@@ -140,6 +140,46 @@ TEST(jwt_auth_uses_application_failure_response)
     ASSERT_EQ(message, "principal unavailable");
 }
 
+TEST(jwt_auth_reports_a_machine_readable_failure_reason)
+{
+    std::vector<cnetmod::jwt_auth_reason> reasons;
+    const auto capture = [&reasons](cnetmod::http::request_context& request,
+                             const cnetmod::jwt_auth_failure& failure)
+    {
+        reasons.push_back(failure.reason);
+        request.json(failure.status, R"({})");
+    };
+    (void)invoke({.verify = [](std::string_view) { return true; },
+                     .on_failure = capture},
+        "/private", {});
+    (void)invoke({.verify = [](std::string_view) { return true; },
+                     .on_failure = capture},
+        "/private", "Basic abc");
+    (void)invoke({.verify = [](std::string_view) { return true; },
+                     .on_failure = capture},
+        "/private", "Bearer ");
+    (void)invoke({.authenticate_async = [](cnetmod::http::request_context&,
+                                            std::string_view)
+                      -> cnetmod::task<std::expected<void, cnetmod::jwt_auth_failure>>
+                  {
+                      co_return std::unexpected(cnetmod::jwt_auth_failure{
+                          .message = "token expired",
+                          .reason = cnetmod::jwt_auth_reason::expired_credentials});
+                  },
+                     .on_failure = capture},
+        "/private", "Bearer stale");
+    (void)invoke({.verify = [](std::string_view) { return false; },
+                     .on_failure = capture},
+        "/private", "Bearer bad");
+    ASSERT_TRUE(reasons == std::vector<cnetmod::jwt_auth_reason>({
+        cnetmod::jwt_auth_reason::missing_credentials,
+        cnetmod::jwt_auth_reason::malformed_credentials,
+        cnetmod::jwt_auth_reason::malformed_credentials,
+        cnetmod::jwt_auth_reason::expired_credentials,
+        cnetmod::jwt_auth_reason::invalid_credentials,
+    }));
+}
+
 TEST(jwt_auth_skips_anonymous_endpoints_before_authentication)
 {
     int calls = 0;

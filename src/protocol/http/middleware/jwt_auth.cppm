@@ -22,10 +22,31 @@ import cnetmod.protocol.http;
 
 namespace cnetmod {
 
+/**
+ * @brief Machine-readable cause of an authentication failure.
+ *
+ * Applications map it to their own error codes instead of matching message
+ * text. Authenticators set it on the failures they return.
+ */
+export enum class jwt_auth_reason
+{
+    /// No credential was presented on a route that requires one.
+    missing_credentials,
+    /// The header does not carry the expected prefix or token.
+    malformed_credentials,
+    /// The token or the session it references is not valid.
+    invalid_credentials,
+    /// The token is well formed but past its expiry.
+    expired_credentials,
+    /// Verification could not complete (session store, principal source).
+    unavailable,
+};
+
 export struct jwt_auth_failure
 {
     int status = http::status::unauthorized;
     std::string message = "invalid or expired token";
+    jwt_auth_reason reason = jwt_auth_reason::invalid_credentials;
 };
 
 export enum class jwt_auth_mode
@@ -137,7 +158,8 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
                 co_await next();
                 co_return;
             }
-            reject({.message = "missing authorization header"},
+            reject({.message = "missing authorization header",
+                       .reason = jwt_auth_reason::missing_credentials},
                 R"({"error":"missing authorization header"})");
             co_return;
         }
@@ -150,7 +172,8 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
                 co_await next();
                 co_return;
             }
-            reject({.message = "invalid authorization format"},
+            reject({.message = "invalid authorization format",
+                       .reason = jwt_auth_reason::malformed_credentials},
                 R"({"error":"invalid authorization format"})");
             co_return;
         }
@@ -164,7 +187,8 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
                 co_await next();
                 co_return;
             }
-            reject({.message = "invalid authorization format"},
+            reject({.message = "invalid authorization format",
+                       .reason = jwt_auth_reason::malformed_credentials},
                 R"({"error":"invalid authorization format"})");
             co_return;
         }
