@@ -90,6 +90,13 @@ auto authorize(authorization_options options) -> middleware_fn
         throw std::invalid_argument("authorization requires an authenticator");
     return [options = std::move(options)](request_context& context, next_fn next) -> task<void>
     {
+        const auto reject = [&options, &context](int status, std::string_view code)
+        {
+            if (options.on_failure)
+                options.on_failure(context, status, code);
+            else
+                context.json(status, std::format(R"({{"code":"{}"}})", code));
+        };
         const auto* endpoint = context.endpoint();
         if (endpoint == nullptr && !options.authorize_unmatched)
         {
@@ -121,18 +128,16 @@ auto authorize(authorization_options options) -> middleware_fn
             }
             if (principal.error().code ==
                 authorization_error_code::verifier_failure)
-                context.json(status::service_unavailable,
-                    R"({"code":"AUTHENTICATION_UNAVAILABLE"})");
+                reject(status::service_unavailable, "AUTHENTICATION_UNAVAILABLE");
             else
-                context.json(status::unauthorized,
-                    R"({"code":"UNAUTHENTICATED"})");
+                reject(status::unauthorized, "UNAUTHENTICATED");
             co_return;
         }
         if (options.on_authenticated)
             options.on_authenticated(context, *principal);
         if (requirement && !is_authorized(*principal, *requirement))
         {
-            context.json(status::forbidden, R"({"code":"FORBIDDEN"})");
+            reject(status::forbidden, "FORBIDDEN");
             co_return;
         }
         co_await next();

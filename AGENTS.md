@@ -7326,6 +7326,7 @@ struct authorization_options {
     authorization_requirement_resolver requirement_for; // 可选覆盖
     authenticated_principal_sink on_authenticated;
     bool authorize_unmatched = false;
+    std::function<void(request_context&, int status, std::string_view code)> on_failure;
 };
 ```
 
@@ -7333,7 +7334,9 @@ struct authorization_options {
 （如 `iot:device:*`）；`requirement_for` 仅用于动态覆盖。`allow_anonymous` 端点直接放行；
 `optional_authentication` 且未声明权限的端点允许匿名；未匹配路由默认放行（404），
 `authorize_unmatched = true` 时强制认证。认证失败返回 401，`verifier_failure` 返回 503，
-权限不足返回 403。`authenticate` 为空时 `authorize()` 抛出 `std::invalid_argument`。
+权限不足返回 403。`on_failure` 可输出应用自己的错误响应格式，收到状态码与稳定错误码
+（`UNAUTHENTICATED`、`FORBIDDEN`、`AUTHENTICATION_UNAVAILABLE`）。`authenticate` 为空时
+`authorize()` 抛出 `std::invalid_argument`。
 
 ```cpp
 router.get("/devices", list_devices, http::endpoint_metadata{

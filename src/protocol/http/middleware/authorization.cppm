@@ -59,6 +59,10 @@ struct authorization_options
     authenticated_principal_sink on_authenticated;
     /// Requests matching no route pass through so the router answers 404.
     bool authorize_unmatched = false;
+    /// Optional application response envelope. Receives 401, 403 or 503 and a
+    /// stable code: UNAUTHENTICATED, FORBIDDEN or AUTHENTICATION_UNAVAILABLE.
+    std::function<void(request_context&, int status, std::string_view code)>
+        on_failure;
 };
 
 /**

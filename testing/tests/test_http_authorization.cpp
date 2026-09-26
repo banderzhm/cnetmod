@@ -141,6 +141,26 @@ TEST(authorization_requirement_override_takes_precedence)
     ASSERT_EQ(denied.status, http::status::forbidden);
 }
 
+TEST(authorization_uses_the_application_failure_envelope)
+{
+    int observed_status = 0;
+    std::string observed_code;
+    const http::endpoint_metadata writes{
+        http::required_permissions{.all_of = {"orders:write"}}};
+    const auto denied = invoke({.on_failure = [&](http::request_context& request,
+                                                int status, std::string_view code)
+                                   {
+                                       observed_status = status;
+                                       observed_code = std::string{code};
+                                       request.json(status, R"({"custom":true})");
+                                   }},
+        writes, reader());
+    ASSERT_FALSE(denied.reached);
+    ASSERT_EQ(denied.status, http::status::forbidden);
+    ASSERT_EQ(observed_status, http::status::forbidden);
+    ASSERT_EQ(observed_code, "FORBIDDEN");
+}
+
 TEST(authorization_requires_an_authenticator)
 {
     bool rejected = false;
