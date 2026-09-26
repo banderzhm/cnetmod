@@ -609,6 +609,12 @@ auto request_context::raw_socket() noexcept -> socket&
     return sock_;
 }
 
+auto request_context::peer_address() const -> std::string
+{
+    auto remote = sock_.remote_endpoint();
+    return remote ? remote->address().to_string() : std::string{};
+}
+
 void request_context::drain_available_body_chunks() const
 {
     if (!body_stream_ || body_stream_drained_)

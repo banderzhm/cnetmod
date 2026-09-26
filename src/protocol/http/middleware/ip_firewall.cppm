@@ -92,6 +92,10 @@ export struct ip_firewall_options
 
     /// Response status code when banned
     int banned_status = http::status::forbidden;
+
+    /// Proxies (addresses or CIDRs) whose forwarding headers identify the
+    /// client; forwarding headers from any other peer are ignored.
+    std::vector<std::string> trusted_proxies;
 };
 
 // =============================================================================

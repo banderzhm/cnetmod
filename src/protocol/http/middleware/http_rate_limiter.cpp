@@ -64,8 +64,13 @@ namespace {
             });
         if (!decision.first)
         {
-            const auto seconds = static_cast<int>(std::ceil(decision.second));
+            const auto seconds = std::max(1, static_cast<int>(std::ceil(decision.second)));
             ctx.resp().set_header("Retry-After", std::to_string(seconds));
+            if (opts.on_limited)
+            {
+                opts.on_limited(ctx, std::chrono::seconds{seconds});
+                co_return;
+            }
             ctx.json(
                 http::status::too_many_requests,
                 std::format(
@@ -80,9 +85,9 @@ namespace {
 auto rate_limiter(rate_limiter_options opts) -> http::middleware_fn
 {
     if (!opts.key_fn)
-        opts.key_fn = [](http::request_context& ctx)
+        opts.key_fn = [proxies = opts.trusted_proxies](http::request_context& ctx)
         {
-            return http::resolve_client_ip(ctx, "global");
+            return http::resolve_client_ip(ctx, proxies);
         };
     auto state = std::make_shared<rate_limiter_state>();
     return [opts = std::move(opts), state = std::move(state)](

@@ -8,8 +8,18 @@ struct rate_limiter_options
 {
     double rate = 10.0;
     double burst = 20.0;
+    /// Bucket key. Defaults to the client address resolved through
+    /// trusted_proxies; forwarding headers from other peers are ignored.
     std::function<std::string(http::request_context&)> key_fn;
     std::chrono::seconds entry_ttl{300};
+    /// Proxies (addresses or CIDRs) whose forwarding headers are honored by
+    /// the default key.
+    std::vector<std::string> trusted_proxies;
+    /// Writes the rejection in the application's response envelope. The
+    /// middleware has already set Retry-After; the default writes a small
+    /// JSON body with status 429.
+    std::function<void(http::request_context&, std::chrono::seconds retry_after)>
+        on_limited;
 };
 
 /**

@@ -19,7 +19,7 @@ auto ip_firewall::check_middleware() -> http::middleware_fn
 {
     return [this](http::request_context& ctx, http::next_fn next) -> task<void>
     {
-        auto ip = http::resolve_client_ip(ctx);
+        auto ip = http::resolve_client_ip(ctx, opts_.trusted_proxies);
         if (co_await is_banned(ip))
         {
             logger::warn{"firewall blocked banned IP: {}", ip};
@@ -56,7 +56,7 @@ auto ip_firewall::track_middleware() -> http::middleware_fn
                 break;
             }
         }
-        co_await add_violation(http::resolve_client_ip(ctx), weight);
+        co_await add_violation(http::resolve_client_ip(ctx, opts_.trusted_proxies), weight);
     };
 }
 

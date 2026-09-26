@@ -308,6 +308,9 @@ public:
     [[nodiscard]] auto resp() noexcept -> response&;
     [[nodiscard]] auto io_ctx() noexcept -> io_context&;
     [[nodiscard]] auto raw_socket() noexcept -> socket&;
+    /// IP address of the TCP peer (the proxy when one is in front); empty
+    /// when the socket has no peer. Use resolve_client_ip() for the client.
+    [[nodiscard]] auto peer_address() const -> std::string;
     /// Request-scoped budget. Nested services should constrain and forward it
     /// instead of starting independent relative timeouts.
     [[nodiscard]] auto request_deadline() const noexcept -> const cnetmod::deadline&;

@@ -68,4 +68,46 @@ TEST(rate_limiter_shares_one_process_wide_budget_across_event_loops)
         loop_count * requests_per_loop - burst);
 }
 
+TEST(rate_limiter_ignores_spoofed_forwarding_headers_and_uses_the_envelope)
+{
+    int limited_calls = 0;
+    std::chrono::seconds observed{};
+    auto limiter = cnetmod::rate_limiter({
+        .rate = 0.000001,
+        .burst = 1.0,
+        .on_limited = [&](cnetmod::http::request_context& context,
+                          std::chrono::seconds retry_after)
+        {
+            ++limited_calls;
+            observed = retry_after;
+            context.json(cnetmod::http::status::too_many_requests, R"({"custom":true})");
+        },
+    });
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket peer;
+    int admitted = 0;
+    for (const auto* spoofed : {"1.1.1.1", "2.2.2.2"})
+    {
+        cnetmod::http::response response;
+        cnetmod::http::header_map headers{{"X-Forwarded-For", spoofed}};
+        cnetmod::http::request_context context{*io, peer, "GET", "/limited",
+            headers, {}, response, {}};
+        cnetmod::sync_wait(limiter(context,
+            [&]() -> cnetmod::task<void>
+            {
+                ++admitted;
+                co_return;
+            }));
+        if (response.status_code() == cnetmod::http::status::too_many_requests)
+        {
+            ASSERT_EQ(std::string{response.body()}, std::string{R"({"custom":true})"});
+            ASSERT_FALSE(response.get_header("Retry-After").empty());
+        }
+    }
+    // A different spoofed X-Forwarded-For must not buy a fresh bucket.
+    ASSERT_EQ(admitted, 1);
+    ASSERT_EQ(limited_calls, 1);
+    ASSERT_TRUE(observed >= std::chrono::seconds{1});
+}
+
 RUN_TESTS()

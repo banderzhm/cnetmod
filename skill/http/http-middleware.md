@@ -229,10 +229,21 @@ struct rate_limiter_options {
     double burst = 20.0;             // 突发容量
     std::function<std::string(http::request_context&)> key_fn;
     std::chrono::seconds entry_ttl{300};
+    std::vector<std::string> trusted_proxies;   // 可信代理（地址或 CIDR）
+    std::function<void(http::request_context&, std::chrono::seconds)> on_limited;
 };
 ```
 
-默认按 IP 限流；自定义 `key_fn` 可按用户/API Key 限流。
+默认按客户端地址限流；自定义 `key_fn` 可按用户/API Key 限流。拒绝时总会设置
+`Retry-After`；`on_limited` 输出应用自己的错误响应格式，缺省为 429 + 小 JSON。
+
+**客户端地址**：`http::resolve_client_ip(ctx, trusted_proxies)` 默认取 TCP 对端地址
+（`request_context::peer_address()`），**忽略** `X-Forwarded-For` / `X-Real-IP`。只有对端
+属于 `trusted_proxies` 时才从右向左解析 `X-Forwarded-For`，第一个非可信代理的地址即客户端，
+左侧由客户端自填的部分一律忽略。`rate_limiter`、`ip_filter`、`ip_firewall` 统一使用这条规则；
+部署在反向代理之后必须把代理地址配置进 `trusted_proxies`，否则所有请求都会按代理地址计。
+纯函数 `http::resolve_forwarded_client_ip(peer, xff, x_real_ip, trusted)` 与
+`http::ip_matches(address, cidr)` 可直接复用。
 
 每次调用 `rate_limiter()` 创建一个独立的进程内状态；返回的中间件及其所有副本共享该状态。
 因此把同一个中间件实例安装到多事件循环 HTTP 服务器时，同一 key 使用的是**全进程统一令牌桶**，
@@ -384,7 +395,8 @@ class ip_firewall {
 ```cpp
 struct ip_firewall_options {
     int max_violations = 10;
-    std::chrono::seconds violation_window{300};
+    std::chrono::seconds violation_window{300    std::vector<std::string> trusted_proxies;  // 同 rate_limiter：仅对可信代理解析转发头
+};
     std::chrono::seconds ban_duration{3600};
     bool track_4xx = true;
     bool track_5xx = false;
