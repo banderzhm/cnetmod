@@ -119,25 +119,28 @@ struct chat_response {
 
 #### `chat_model_template` — provider-neutral Application 大模型门面
 
-Application 项目启用 OpenAI 自动装配后，优先使用
-`application_runtime::chat_model(instance, options)`，不要在 route 中自行创建或连接
-`openai::client`。Application 仅依赖 `cnetmod.ai` 的 provider-neutral 合约；
-`openai_service` 作为 adapter 管理多个 client 和固定容量连接池，未来 Claude、Gemini
-与本地模型实现相同的 `chat_model_service` 即可复用模板、会话和路由代码：
+Application 项目启用 OpenAI 自动装配后，注入 `chat_model_service`（按实例名）并调用
+`make_template(options)`，或用 `application::add_chat_model()` 把多个实例组合成一个
+`ai::chat_model` 组件；不要在 route 中自行创建或连接 `openai::client`。Application 仅
+依赖 `cnetmod.ai` 的 provider-neutral 合约；`openai_service` 作为 adapter 管理多个
+client 和固定容量连接池，未来 Claude、Gemini 与本地模型实现相同的
+`chat_model_service` 即可复用模板、会话和路由代码。`chat_model_template` 实现
+`ai::chat_model`，因此 `routed_chat_model`、`resilient_chat_model`、
+`governed_chat_model` 可以直接装饰托管模型（`resilient_chat_model` 所需的事件循环来自
+`application_runtime::executor().event_loop()`）：
 
 ```cpp
-auto model = runtime.chat_model("assistant",
+auto& service = components.get<application::chat_model_service>("assistant");
+auto model = service.make_template(
     {.request = {.model = "gpt-4o-mini", .temperature = 0.2},
         .system_prompt = "Answer with verified facts."});
-if (!model)
-    co_return;
 
 ai::run_config run{
     .metadata = {{"tenant", "acme"}},
     .cancellation = &cancellation,
     .trace_parent = parent,
 };
-auto response = co_await model->invoke("Summarize the incident", run);
+auto response = co_await model.invoke("Summarize the incident", run);
 ```
 
 | 方法 | 说明 |
@@ -154,7 +157,7 @@ auto response = co_await model->invoke("Summarize the incident", run);
 session 不共享消息且可以并行。成功响应才原子追加 user/assistant 两条记录；store 始终是
 唯一真相，不维护内存影子快照。
 
-`application_runtime::reconfigure_chat_model()` 是 provider-neutral 热重载入口。
+`chat_model_service::reconfigure()` 是 provider-neutral 热重载入口。
 调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
 `base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
 建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时

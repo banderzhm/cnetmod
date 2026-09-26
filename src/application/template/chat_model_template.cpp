@@ -11,9 +11,11 @@ chat_model_template::chat_model_template(chat_model_pool& models,
 }
 
 auto chat_model_template::invoke(ai::chat_request request,
-    ai::run_config configuration)
+    const ai::run_config& borrowed)
     -> task<std::expected<ai::chat_response, std::string>>
 {
+    // Own the configuration before the first suspension point.
+    const ai::run_config configuration = borrowed;
     if (configuration.is_cancelled())
         co_return std::unexpected("model invocation cancelled");
     auto lease = co_await models_.acquire(configuration.cancellation);
@@ -32,9 +34,11 @@ auto chat_model_template::invoke(std::string input,
 }
 
 auto chat_model_template::stream(ai::chat_request request,
-    ai::chat_model::stream_handler handler, ai::run_config configuration)
+    ai::chat_model::stream_handler handler, const ai::run_config& borrowed)
     -> task<std::expected<ai::chat_response, std::string>>
 {
+    // Own the configuration before the first suspension point.
+    const ai::run_config configuration = borrowed;
     if (configuration.is_cancelled())
         co_return std::unexpected("model stream cancelled");
     auto lease = co_await models_.acquire(configuration.cancellation);

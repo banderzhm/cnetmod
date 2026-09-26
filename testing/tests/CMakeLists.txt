@@ -14,6 +14,7 @@ set(TEST_SOURCES
     test_json_template.cpp
     test_application.cpp
     test_application_integrations.cpp
+    test_application_composition.cpp
     test_deadline.cpp
     test_task_group.cpp
     test_task.cpp
@@ -46,6 +47,7 @@ set(TEST_SOURCES
     http_client_test.cpp
     test_http_ip_filter.cpp
     test_http_jwt_auth.cpp
+    test_http_authorization.cpp
     test_http2_hpack.cpp
     test_http2_stream.cpp
     test_dns.cpp
@@ -97,7 +99,8 @@ if(NOT CNETMOD_ENABLE_HTTP)
     list(FILTER TEST_SOURCES EXCLUDE REGEX
         "^(test_http|test_tfb|test_metrics)")
     list(REMOVE_ITEM TEST_SOURCES test_application.cpp
-        test_application_integrations.cpp test_otlp_exporter.cpp http_client_test.cpp)
+        test_application_integrations.cpp test_application_composition.cpp
+        test_otlp_exporter.cpp http_client_test.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_DNS)
     list(REMOVE_ITEM TEST_SOURCES test_dns.cpp)

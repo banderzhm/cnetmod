@@ -250,6 +250,38 @@ namespace detail {
             return {};
         }
 
+        /**
+         * @brief Installs the standard chain, reusing a caller-owned cache slot.
+         *
+         * Repositories own one slot per policy set. The first operation builds
+         * the chain for this session's dialect; later operations reuse the
+         * frozen chain instead of rebuilding tenant, logical-delete, SQL-safety
+         * and data-permission policies on every statement (Flyweight).
+         */
+        template <Model T>
+        auto enable_automatic_interceptors(automatic_interceptor_options options,
+            interceptor_chain_cache& cache)
+            -> std::expected<void, std::string>
+        {
+            auto chain = cache.load();
+            if (!chain)
+            {
+                auto flags = options;
+                flags.dialect = dialect_;
+                flags.mapped_table = std::string{table_name<T>()};
+                auto built = make_automatic_interceptor_chain<T>(flags);
+                if (!built)
+                    return std::unexpected(built.error());
+                chain = cache.publish(std::move(*built));
+            }
+            interceptors_ = std::move(chain);
+            field_fill_enabled_ = options.field_fill;
+            optimistic_lock_enabled_ = options.optimistic_lock;
+            scoped_keys_immutable_ = options.tenant_scope_required ||
+                static_cast<bool>(options.tenant);
+            return {};
+        }
+
     public:
         // Long-lived units of work need an explicit lifecycle because their
         // repositories may suspend between individual commands. Keep the dialect
@@ -2051,6 +2083,15 @@ namespace detail {
         {
             return operations(session).template enable_automatic_interceptors<T>(
                 options);
+        }
+
+        template <Model T, class Session>
+        static auto configure(Session& session,
+            automatic_interceptor_options options,
+            interceptor_chain_cache& cache)
+        {
+            return operations(session).template enable_automatic_interceptors<T>(
+                std::move(options), cache);
         }
 
         template <Model T, class Session>

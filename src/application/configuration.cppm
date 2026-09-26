@@ -169,6 +169,9 @@ export struct orm_sharding_configuration
 export struct orm_configuration
 {
     orm_sharding_configuration sharding;
+    /// Strict SaaS mode: repositories of tenant models reject operations that
+    /// have no request tenant scope. Frozen at build time.
+    bool tenant_scope_required = false;
 
     auto operator==(const orm_configuration&) const -> bool = default;
 };
@@ -218,6 +221,27 @@ export struct application_configuration
     security_configuration security;
     bool install_signal_handlers = true;
     std::map<std::string, configured_service, std::less<>> services;
+    /// Application-defined top-level sections, captured verbatim after
+    /// environment expansion. Every section must be claimed by a registered
+    /// options section, otherwise the application build fails.
+    std::map<std::string, cnetmod::json::document, std::less<>> sections;
+};
+
+/**
+ * @brief Structured configuration failure with the offending document path.
+ */
+export struct configuration_error
+{
+    std::error_code code = std::make_error_code(std::errc::invalid_argument);
+    /// Dotted document path, for example "http.sse.max_duration_ms", or
+    /// "env:NAME" for environment overlays. Empty for whole-file failures.
+    std::string path;
+    std::string message;
+
+    /**
+     * @brief Returns "path: message" suitable for logs and terminal output.
+     */
+    [[nodiscard]] auto describe() const -> std::string;
 };
 
 /**
@@ -228,24 +252,27 @@ export struct configuration_reload_result
     bool applied = false;
     bool restart_required = false;
     std::vector<std::string> changed;
+    /// Application sections whose content differs from the active snapshot.
+    /// The options registry classifies and publishes them.
+    std::vector<std::string> changed_sections;
 };
 
 /**
- * @brief Loads defaults, JSON, and environment configuration layers.
- * @param file Optional JSON configuration path.
+ * @brief Loads defaults, YAML/JSON, and environment configuration layers.
+ * @param file Optional YAML (.yaml/.yml) or JSON configuration path.
  * @return Validated configuration or a parsing, validation, or resource error.
  * Propagating allocation failures are translated to not_enough_memory.
  */
 export [[nodiscard]] auto load_configuration(
     const std::optional<std::filesystem::path>& file)
-    -> std::expected<application_configuration, std::error_code>;
+    -> std::expected<application_configuration, configuration_error>;
 
 /**
  * @brief Validates all cross-field and value constraints before startup.
  */
 export [[nodiscard]] auto validate_configuration(
     const application_configuration& configuration)
-    -> std::expected<void, std::error_code>;
+    -> std::expected<void, configuration_error>;
 
 /**
  * @brief Applies hot-reloadable fields and classifies restart-only changes.
@@ -256,7 +283,16 @@ export [[nodiscard]] auto validate_configuration(
 export [[nodiscard]] auto reload_safe_configuration(
     application_configuration& active,
     const application_configuration& candidate)
-    -> std::expected<configuration_reload_result, std::error_code>;
+    -> std::expected<configuration_reload_result, configuration_error>;
+
+/**
+ * @brief Expands ${NAME} and ${NAME:-default} references in one string.
+ *
+ * "$${" produces a literal "${". A missing variable without a default is an
+ * error naming the variable; an empty value counts as missing.
+ */
+export [[nodiscard]] auto expand_environment_references(std::string_view source)
+    -> std::expected<std::string, configuration_error>;
 
 /**
  * @brief Returns a recursively redacted copy suitable for diagnostics.

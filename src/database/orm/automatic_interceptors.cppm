@@ -8,8 +8,47 @@ import cnetmod.orm.model_metadata;
 import cnetmod.orm.automatic_field_fill;
 import cnetmod.orm.data_permission;
 import cnetmod.orm.sql_dialect;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::orm {
+
+/**
+ * @brief Publishes one frozen interceptor chain to every operation of a repository.
+ *
+ * The first operation builds the chain; concurrent first operations may each
+ * build one, and the first published chain wins so all operations share it.
+ * Uses the cnetmod reader/writer latch instead of std::atomic<std::shared_ptr>,
+ * which is not available on every supported standard library.
+ */
+export class interceptor_chain_cache
+{
+public:
+    interceptor_chain_cache() = default;
+    interceptor_chain_cache(const interceptor_chain_cache&) = delete;
+    auto operator=(const interceptor_chain_cache&) -> interceptor_chain_cache& = delete;
+
+    [[nodiscard]] auto load() const -> std::shared_ptr<const interceptor_chain>
+    {
+        concurrent_containers::shared_latch_guard guard{latch_};
+        return chain_;
+    }
+
+    /**
+     * @brief Publishes `candidate` unless a chain exists; returns the winner.
+     */
+    [[nodiscard]] auto publish(std::shared_ptr<const interceptor_chain> candidate)
+        -> std::shared_ptr<const interceptor_chain>
+    {
+        concurrent_containers::exclusive_latch_guard guard{latch_};
+        if (!chain_)
+            chain_ = std::move(candidate);
+        return chain_;
+    }
+
+private:
+    mutable concurrent_containers::atomic_rw_latch latch_;
+    std::shared_ptr<const interceptor_chain> chain_;
+};
 
 /**
  * @brief Selects the built-in ORM policies installed by the default chain.

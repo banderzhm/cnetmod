@@ -165,6 +165,19 @@ public:
     }
 
     /**
+     * @brief Type-erased lookup used by the component container.
+     *
+     * Returns an owning reference so resolved components can share the
+     * registry's lifetime guarantee. Null when the binding is absent.
+     */
+    [[nodiscard]] auto find_shared(std::type_index type,
+        std::string_view instance) const -> std::shared_ptr<void>
+    {
+        const auto found = services_.find(binding_key{type, std::string{instance}});
+        return found == services_.end() ? nullptr : found->second;
+    }
+
+    /**
      * @brief Returns a named service or an error when the binding is absent.
      */
     template <class Service>

@@ -77,7 +77,7 @@ srv.use(cors());
 srv.use(request_id());
 srv.use(body_limit(2 * 1024 * 1024));
 srv.use(compress());
-srv.use(jwt_auth({.verify = my_verify, .skip_paths = {"/", "/login"}}));
+srv.use(jwt_auth({.verify = my_verify}));  // 公开路由用 endpoint_metadata 声明
 srv.set_router(std::move(r));
 ```
 
@@ -116,10 +116,12 @@ srv.use(cors({
 
 ```cpp
 enum class jwt_auth_mode { required, optional, skip };
+enum class invalid_optional_credentials { reject, continue_anonymous };
 struct jwt_auth_options {
     std::function<bool(std::string_view token)> verify;
-    std::vector<std::string> skip_paths;
-    std::function<jwt_auth_mode(const http::request_context&)> mode_for;
+    std::function<jwt_auth_mode(const http::request_context&)> mode_for;  // 可选覆盖
+    jwt_auth_mode unmatched = jwt_auth_mode::skip;
+    invalid_optional_credentials invalid_optional = invalid_optional_credentials::reject;
     std::string header_name = "Authorization";
     std::string token_prefix = "Bearer ";
     std::function<task<std::expected<void, jwt_auth_failure>>(
@@ -129,17 +131,38 @@ struct jwt_auth_options {
 };
 ```
 
-**行为**: `mode_for` 可按完整请求选择必须认证、可选认证或跳过；未设置时沿用 `skip_paths`（命中即跳过，否则必须认证）。可选认证下，无令牌、格式错误、验签失败或异步回调返回 401 均按匿名继续；其他错误（如 Redis 故障导致的 503）仍拒绝请求。成功认证时正常绑定身份。
+**行为**: 是否需要凭据在注册路由时用端点元数据声明，路由器先匹配路由，中间件再通过
+`request_context::endpoint()` 读取（`endpoint_authentication_mode()` 公开同一规则）：
+
+| 匹配到的端点 | 模式 |
+|---|---|
+| 声明 `http::allow_anonymous` | `skip`：不解析凭据 |
+| 声明 `http::optional_authentication` | `optional` |
+| 未声明认证元数据 | `required` |
+| 没有匹配任何路由 | `unmatched`，默认 `skip`，让路由器返回 404 |
+
+策略按方法区分，同一路径的 `GET` 可以匿名、`DELETE` 可以要求认证。`mode_for` 仅在需要
+按完整请求动态决定时覆盖上述规则。
+
+可选认证下，**没有**凭据按匿名继续；**携带**的凭据格式错误、验签失败或回调返回 401 时
+默认拒绝（401），避免客户端静默丢失身份——例如带过期令牌的写请求被当作匿名写入。
+`invalid_optional = continue_anonymous` 恢复按匿名继续。非 401 的失败（如 Redis 故障导致
+的 503）始终拒绝。成功认证时正常绑定身份。
+
 需要异步验签或查询当前用户时，设置 `authenticate_async`；它优先于同步 `verify`，
 并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message}` 拒绝请求；
-`on_failure` 可输出应用自己的错误响应格式。不设置新字段时保持原有同步行为。
+`on_failure` 可输出应用自己的错误响应格式。
 
 ```cpp
+router.post("/login", login, http::endpoint_metadata{http::allow_anonymous{}});
+router.get("/articles/:id", read_article,
+    http::endpoint_metadata{http::optional_authentication{}});
+router.del("/articles/:id", remove_article);   // 需要认证
+
 srv.use(jwt_auth({
     .verify = [](std::string_view token) {
         return token == "my-secret-key";
     },
-    .skip_paths = {"/", "/login", "/register"},
 }));
 ```
 
@@ -161,16 +184,23 @@ struct authorization_requirement {
 };
 
 struct authorization_options {
-    principal_authenticator authenticate;
-    authorization_requirement_resolver requirement_for;
+    principal_authenticator authenticate;               // 必填
+    authorization_requirement_resolver requirement_for; // 可选覆盖
     authenticated_principal_sink on_authenticated;
-    std::function<bool(const request_context&)> skip;
+    bool authorize_unmatched = false;
 };
 ```
 
-支持通配符权限匹配（如 `iot:device:*`）。
+权限要求默认读取端点上的 `http::required_permissions{all_of, any_of}`，支持通配符
+（如 `iot:device:*`）；`requirement_for` 仅用于动态覆盖。`allow_anonymous` 端点直接放行；
+`optional_authentication` 且未声明权限的端点允许匿名；未匹配路由默认放行（404），
+`authorize_unmatched = true` 时强制认证。认证失败返回 401，`verifier_failure` 返回 503，
+权限不足返回 403。`authenticate` 为空时 `authorize()` 抛出 `std::invalid_argument`。
 
 ```cpp
+router.get("/devices", list_devices, http::endpoint_metadata{
+    http::required_permissions{.all_of = {"iot:device:read"}}});
+
 srv.use(authorize({
     .authenticate = [](request_context& ctx)
         -> std::expected<authorization_principal, authorization_error> {
@@ -180,10 +210,6 @@ srv.use(authorize({
                 .code = authorization_error_code::unauthenticated});
         return authorization_principal{.subject = "user1",
             .permissions = {"iot:device:read", "iot:device:write"}};
-    },
-    .requirement_for = [](const request_context& ctx)
-        -> std::optional<authorization_requirement> {
-        return authorization_requirement{.all_of = {"iot:device:read"}};
     },
 }));
 ```

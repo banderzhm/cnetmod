@@ -4,9 +4,12 @@
 export module cnetmod.application.host;
 
 import std;
+import cnetmod.application.components;
 import cnetmod.application.configuration;
+import cnetmod.application.diagnostics;
 import cnetmod.application.health_registry;
 import cnetmod.application.managed_service;
+import cnetmod.application.modules;
 import cnetmod.application.service_registry;
 import cnetmod.application.service_lifecycle;
 import cnetmod.application.task_supervisor;
@@ -34,8 +37,9 @@ export enum class application_state
 /**
  * @brief Owns and runs the complete application lifecycle.
  *
- * The host coordinates service startup, readiness, HTTP draining, supervised
- * tasks, reverse-order shutdown, and telemetry flushing.
+ * The host coordinates service startup, module start hooks, readiness, HTTP
+ * draining, supervised tasks, module stop hooks, reverse-order shutdown, and
+ * telemetry flushing.
  */
 export class application_host
 {
@@ -57,6 +61,7 @@ public:
      * @brief Retries retained cleanup after run() has returned cleanup_failed.
      * @param timeout Positive budget for this cleanup attempt.
      * @return Success when cleanup settled, independently of the original run error.
+     *
      * Call exclusively on the owning thread. Services must cooperate with
      * cancellation; this does not forcibly terminate suspended operations.
      */
@@ -70,10 +75,13 @@ public:
 
     /**
      * @brief Reloads the configured file and applies runtime-safe changes.
-     * @return The applied changes and whether other changes require a restart.
+     *
+     * Framework settings and application sections are validated completely
+     * before anything is published. Runtime-safe options sections are
+     * republished; other changed sections are reported as requiring restart.
      */
     [[nodiscard]] auto reload_configuration()
-        -> std::expected<configuration_reload_result, std::error_code>;
+        -> std::expected<configuration_reload_result, configuration_error>;
 
     /**
      * @brief Returns the current lifecycle state.
@@ -93,9 +101,14 @@ public:
         -> application_configuration;
 
     /**
-     * @brief Returns the frozen service registry owned by this host.
+     * @brief Returns the frozen managed-service registry owned by this host.
      */
     [[nodiscard]] auto services() noexcept -> service_registry&;
+
+    /**
+     * @brief Returns the immutable component container built from modules.
+     */
+    [[nodiscard]] auto components() const noexcept -> const component_container&;
 
     /**
      * @brief Returns the cached health registry owned by this host.
@@ -114,18 +127,14 @@ public:
 
 private:
     class implementation;
+
     explicit application_host(std::unique_ptr<implementation> implementation);
+
     std::unique_ptr<implementation> implementation_;
 
     friend class application_builder;
 };
 
-export using route_configurer = std::function<void(http::router&)>;
-export using runtime_route_configurer =
-    std::function<void(http::router&, application_runtime&)>;
-export using application_middleware = http::middleware_fn;
-export using runtime_middleware_factory =
-    std::function<application_middleware(application_runtime&)>;
 export using configuration_customizer =
     std::function<void(application_configuration&)>;
 
@@ -133,9 +142,8 @@ export using configuration_customizer =
  * @brief Exposes build-time infrastructure to custom managed-service factories.
  *
  * The context is valid only while application_builder::build() is composing
- * the host. It avoids publishing mutable runtime internals after registry
- * freeze while still allowing services to bind to the host event loop and
- * telemetry root.
+ * the host. It lets infrastructure services bind to the host event loop and
+ * telemetry root; business features use modules instead.
  */
 export struct application_service_context
 {
@@ -153,8 +161,10 @@ export using managed_service_factory = std::function<std::expected<
 /**
  * @brief Builds a validated application composition root.
  *
- * Configuration precedence is defaults, JSON, environment, then explicit
- * customizers. No network listener or managed service is started by build().
+ * Configuration precedence is defaults, YAML/JSON, environment, then explicit
+ * customizers. build() runs every composition phase (configuration, options,
+ * registration, validation, resolution, composition) and reports the first
+ * failure as a build_error. No listener or managed service starts in build().
  */
 export class application_builder
 {
@@ -165,7 +175,7 @@ public:
     explicit application_builder(std::string name);
 
     /**
-     * @brief Selects a JSON, YAML, or YML configuration file.
+     * @brief Selects a YAML (.yaml/.yml) or JSON configuration file.
      */
     auto configuration_file(std::filesystem::path path)
         -> application_builder&;
@@ -176,77 +186,54 @@ public:
     auto configure(configuration_customizer customizer) -> application_builder&;
 
     /**
-     * @brief Adds business routes to the application HTTP router.
-     */
-    auto routes(route_configurer configurer) -> application_builder&;
-
-    /**
-     * @brief Adds routes that capture the host-owned application runtime.
-     *
-     * The configurer runs after managed-service factories and auto-configuration
-     * have registered their services, but before build() returns. Handlers may
-     * capture the runtime by reference for their entire host lifetime; no raw
-     * io_context is exposed.
-     */
-    auto routes(runtime_route_configurer configurer) -> application_builder&;
-
-    /**
-     * @brief Adds business-server middleware in registration order.
-     *
-     * Framework recovery, shutdown tracking, request identity, tracing,
-     * metrics, and timeout middleware run outside application middleware.
-     * Access logging runs inside application middleware. Management endpoints
-     * are intentionally unaffected.
-     */
-    auto middleware(application_middleware value) -> application_builder&;
-
-    /**
-     * @brief Adds middleware composed from the host-owned runtime.
-     *
-     * The factory runs during build after runtime construction and before any
-     * listener starts. Returning an empty middleware fails the build.
-     */
-    auto runtime_middleware(runtime_middleware_factory factory)
-        -> application_builder&;
-
-    /**
-     * @brief Registers a custom managed service.
+     * @brief Registers an infrastructure managed service.
      */
     auto service(std::shared_ptr<managed_service> service)
         -> application_builder&;
 
     /**
-     * @brief Registers a factory evaluated after configuration validation.
+     * @brief Registers an infrastructure service factory.
      *
-     * Factories receive the host-owned event loop, telemetry root, supervisor,
-     * and immutable configuration. A null service or factory error fails
-     * build() before the registry is frozen.
+     * Factories run in the registration phase with the host event loop,
+     * telemetry root, supervisor and immutable configuration.
      */
     auto service_factory(managed_service_factory factory)
         -> application_builder&;
 
     /**
-     * @brief Enables opt-in auto-configuration for explicitly enabled services.
+     * @brief Enables auto-configuration of explicitly enabled services.
      */
     auto enable_auto_configuration() noexcept -> application_builder&;
 
     /**
-     * @brief Parses, validates, composes, and freezes the application.
-     * @return A ready-to-run host or a validation/registration error.
+     * @brief Adds a module. Modules run in registration order.
      */
-    [[nodiscard]] auto build()
-        -> std::expected<application_host, std::error_code>;
+    auto add_module(std::shared_ptr<application_module> value)
+        -> application_builder&;
+
+    /**
+     * @brief Constructs and adds a module of type M.
+     */
+    template <class M, class... Arguments>
+    requires std::derived_from<M, application_module>
+    auto add_module(Arguments&&... arguments) -> application_builder&
+    {
+        return add_module(
+            std::make_shared<M>(std::forward<Arguments>(arguments)...));
+    }
+
+    /**
+     * @brief Parses, validates, composes, and freezes the application.
+     */
+    [[nodiscard]] auto build() -> std::expected<application_host, build_error>;
 
 private:
     std::string name_;
     std::optional<std::filesystem::path> configuration_file_;
     std::vector<configuration_customizer> customizers_;
-    std::vector<route_configurer> route_configurers_;
-    std::vector<runtime_route_configurer> runtime_route_configurers_;
-    std::vector<application_middleware> middlewares_;
-    std::vector<runtime_middleware_factory> runtime_middleware_factories_;
     std::vector<std::shared_ptr<managed_service>> services_;
     std::vector<managed_service_factory> service_factories_;
+    std::vector<std::shared_ptr<application_module>> modules_;
     bool auto_configuration_ = false;
 };
 

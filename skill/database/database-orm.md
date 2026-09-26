@@ -52,29 +52,41 @@ Model fields support scalar values, enums, UUIDs, calendar date/time values and 
 
 ## Application entry point
 
-Resolve a repository after the application host has been built and its managed services have been registered:
+Repositories are application components. A module registers them with
+`add_repository<T>()`; the data source is resolved while the application is
+built, so a missing or ambiguous data source fails `build()` in the
+`resolution` phase instead of the first request:
 
 ```cpp
-auto users = host->runtime().repository<user_record>("primary");
-if (!users)
-    return EXIT_FAILURE;
+auto register_components(cnetmod::application::registration_context& context)
+    -> std::expected<void, std::string> override
+{
+    cnetmod::application::add_repository<user_record>(context.components,
+        {.instance = "primary"});
+    return {};
+}
 
-auto result = co_await users->get_by_id(
-    cnetmod::orm::param_value::from_int(42));
+// Constructor injection in another component factory:
+auto& users = resolver.get<cnetmod::application::managed_repository<user_record>>();
+auto result = co_await users.get_by_id(cnetmod::orm::param_value::from_int(42));
 if (result.is_err())
     co_return;
-
 auto user = result.first();
 ```
 
 When a MySQL and PostgreSQL service deliberately use the same instance name, specify the provider:
 
 ```cpp
-auto users = host->runtime().repository<user_record>("primary", {},
-    cnetmod::application::database_provider::postgresql);
+cnetmod::application::add_repository<user_record>(context.components,
+    {.instance = "primary",
+     .provider = cnetmod::application::database_provider::postgresql});
 ```
 
 Automatic provider selection succeeds only when exactly one supported provider owns the requested instance.
+
+`repository_factory<T>::create(services, configuration, options)` is the same
+factory without the component container. Each repository builds its policy
+chain once and reuses it for every operation.
 
 ## Repository API
 
@@ -523,7 +535,8 @@ The framework does not accept arbitrary SQL expressions in logical-delete touch 
 Per-request row visibility is an automatic interceptor policy. Mark the model
 partition and owner columns with `DATA_PARTITION` and `DATA_OWNER`, bind one
 `data_permission_scope` in the HTTP request scope during authentication, then
-resolve the repository with `runtime.repository<T>(request, "primary")`.
+resolve the repository with `repository_factory<T>::for_request(request)`
+(inject `repository_factory<T>`, registered by `add_repository<T>()`).
 Typed CRUD, XML statements, projections and transactions all pass through the
 same frozen chain. Service and Mapper code do not receive, resolve or bind a
 data-scope object. The request repository owns a scope snapshot instead of
@@ -533,12 +546,14 @@ row.
 
 ### SaaS tenant and organization hierarchies
 
-SaaS mode is explicit. Call `runtime.require_tenant_scope(true)` before
-serving requests, mark exactly one model column `TENANT_ID`, and bind a
-`tenant_scope` to each authenticated request. The runtime copies it into the
-repository's frozen policy chain. Missing tenant scope rejects operations on
-tenant models; it never means “all tenants.” Leave the runtime switch off for
-a single-tenant application. The legacy `tenant_guard` is thread-local and
+SaaS mode is explicit. Set `orm.tenant_scope_required: true` in the
+application configuration (frozen at build time), mark exactly one model column
+`TENANT_ID`, and bind a `tenant_scope` to each authenticated request.
+`repository_factory<T>::for_request()` copies it into the repository's frozen
+policy chain. Missing tenant scope returns `permission_denied` for tenant
+models; it never means “all tenants,” and strict mode offers no process-wide
+`shared()` repository for tenant models. Leave the switch off for a
+single-tenant application. The legacy `tenant_guard` is thread-local and
 must not be used as a SaaS request policy.
 In strict SaaS mode, models marked `DATA_PARTITION` or `DATA_OWNER` must also
 declare a tenant column; otherwise the ORM rejects them instead of applying
@@ -549,14 +564,14 @@ first resolve a tenant from a trusted host or tenant identifier and bind a
 narrow scope; the ORM cannot infer a tenant from an unauthenticated user ID.
 
 ```cpp
-runtime.require_tenant_scope(true);
+// application.yaml: orm: { tenant_scope_required: true }
 request.scope().bind(std::make_shared<cnetmod::orm::tenant_scope>(
     cnetmod::orm::tenant_scope{
         .tenant_id = current_tenant,
         .readable_tenant_ids = authorized_tenant_tree,
         .writable_tenant_ids = authorized_write_tenants,
     }));
-auto orders = runtime.repository<order>(request, "primary");
+auto orders = order_repositories.for_request(request);   // repository_factory<order>&
 ```
 
 The application/IAM layer resolves parent–child tenant and department IDs

@@ -241,8 +241,11 @@ TEST(application_shutdown_aborts_incomplete_http_body_before_destruction)
                              value.lifecycle.total_stop_timeout = total_stop_timeout;
                              value.lifecycle.service_stop_timeout = std::chrono::milliseconds{200};
                          })
-                     .routes([&](cnetmod::http::router& routes)
-                         {
+                     .add_module(cnetmod::application::make_module("routes",
+                         {.compose = [&](cnetmod::application::composition_context& composition)
+                                 -> std::expected<void, std::string>
+                             {
+                                 auto& routes = composition.routes;
                              routes.get("/ready", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
                                  {
                                      entered.store(true);
@@ -254,7 +257,8 @@ TEST(application_shutdown_aborts_incomplete_http_body_before_destruction)
                                      incomplete_handler_entered.store(true);
                                      (void)co_await request.read_full_body();
                                  });
-                         })
+                                 return {};
+                             }}))
                      .build();
     ASSERT_TRUE(built.has_value());
     reservation->close();
@@ -348,8 +352,11 @@ TEST(application_preserves_request_drain_timeout_after_handler_settles)
                              value.lifecycle.http_drain_timeout = std::chrono::milliseconds{200};
                              value.lifecycle.service_stop_timeout = std::chrono::seconds{1};
                          })
-                     .routes([&](cnetmod::http::router& routes)
-                         {
+                     .add_module(cnetmod::application::make_module("routes",
+                         {.compose = [&](cnetmod::application::composition_context& composition)
+                                 -> std::expected<void, std::string>
+                             {
+                                 auto& routes = composition.routes;
                              routes.get("/slow", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
                                  {
                                      host->request_stop();
@@ -358,7 +365,8 @@ TEST(application_preserves_request_drain_timeout_after_handler_settles)
                                      events->push_back("handler-settled");
                                      request.text(cnetmod::http::status::ok, "settled");
                                  });
-                         })
+                                 return {};
+                             }}))
                      .service(service)
                      .build();
     ASSERT_TRUE(built.has_value());

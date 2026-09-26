@@ -55,6 +55,32 @@ namespace {
         cnetmod::json::document& document_;
     };
 
+    /**
+     * @brief Internal control-flow carrier converted to configuration_error at
+     *        the public boundary. It never escapes this translation unit.
+     */
+    struct configuration_failure
+    {
+        configuration_error error;
+    };
+
+    [[noreturn]] void fail(std::string path, std::string message,
+        std::errc code = std::errc::invalid_argument)
+    {
+        throw configuration_failure{configuration_error{
+            .code = std::make_error_code(code),
+            .path = std::move(path),
+            .message = std::move(message)}};
+    }
+
+    [[nodiscard]] auto join(std::string_view parent, std::string_view key)
+        -> std::string
+    {
+        if (parent.empty())
+            return std::string{key};
+        return std::format("{}.{}", parent, key);
+    }
+
     auto environment(std::string_view name) -> std::optional<std::string>
     {
         const auto owned = std::string{name};
@@ -65,80 +91,119 @@ namespace {
     }
 
     auto read_document(const std::filesystem::path& path)
-        -> std::expected<cnetmod::json::document, std::error_code>
+        -> cnetmod::json::document
     {
         const auto extension = path.extension().string();
+        const auto location = path.string();
 #if defined(CNETMOD_HAS_YAML_CONFIGURATION)
         if (extension == ".yaml" || extension == ".yml")
-            return load_yaml_configuration_document(path);
+        {
+            auto loaded = load_yaml_configuration_document(path);
+            if (!loaded)
+                fail({}, std::format("cannot load YAML configuration '{}': {}",
+                             location, loaded.error().message()),
+                    std::errc::invalid_argument);
+            if (!loaded->is_object())
+                fail({}, std::format(
+                             "configuration '{}' must contain a mapping at the root",
+                             location));
+            return std::move(*loaded);
+        }
 #else
         if (extension == ".yaml" || extension == ".yml")
-            return std::unexpected(
-                std::make_error_code(std::errc::not_supported));
+            fail({}, std::format(
+                         "configuration '{}' is YAML but YAML support was not built",
+                         location),
+                std::errc::not_supported);
 #endif
         std::ifstream input{path, std::ios::binary};
         if (!input)
-            return std::unexpected(
-                std::make_error_code(std::errc::no_such_file_or_directory));
-        try
-        {
-            const std::string text{std::istreambuf_iterator<char>{input},
-                std::istreambuf_iterator<char>{}};
-            auto parsed = cnetmod::json::parse_document(text);
-            if (!parsed)
-                return std::unexpected(parsed.error());
-            auto result = std::move(*parsed);
-            const document_cleanup cleanup{result};
-            if (!result.is_object())
-                return std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-            return result;
-        }
-        catch (const std::bad_alloc&)
-        {
-            return std::unexpected(
-                std::make_error_code(std::errc::not_enough_memory));
-        }
-        catch (...)
-        {
-            return std::unexpected(
-                std::make_error_code(std::errc::invalid_argument));
-        }
+            fail({}, std::format("configuration file '{}' cannot be opened",
+                         location),
+                std::errc::no_such_file_or_directory);
+        const std::string text{std::istreambuf_iterator<char>{input},
+            std::istreambuf_iterator<char>{}};
+        auto parsed = cnetmod::json::parse_document(text);
+        if (!parsed)
+            fail({}, std::format("configuration '{}' is not valid JSON: {}",
+                         location, parsed.error().message()));
+        if (!parsed->is_object())
+            fail({}, std::format(
+                         "configuration '{}' must contain an object at the root",
+                         location));
+        return std::move(*parsed);
     }
 
-    auto keys_are_known(const cnetmod::json::document& object,
-        std::initializer_list<std::string_view> allowed) -> bool
+    void require_object(const cnetmod::json::document& value,
+        std::string_view path)
     {
-        if (!object.is_object())
-            return false;
+        if (!value.is_object())
+            fail(std::string{path}, "expected a mapping");
+    }
+
+    void require_known(const cnetmod::json::document& object,
+        std::string_view path, std::initializer_list<std::string_view> allowed)
+    {
+        require_object(object, path);
         for (const auto& [key, unused] : object.get_object())
         {
             (void)unused;
             if (std::ranges::find(allowed, key) == allowed.end())
-                return false;
+                fail(join(path, key), "unknown key");
         }
-        return true;
+    }
+
+    [[nodiscard]] auto type_name(const cnetmod::json::document& value)
+        -> std::string_view
+    {
+        if (value.is_object())
+            return "mapping";
+        if (value.is_array())
+            return "sequence";
+        if (value.is_string())
+            return "string";
+        if (value.is_boolean())
+            return "boolean";
+        if (value.is_null())
+            return "null";
+        return "number";
     }
 
     template <class Value>
-    void assign(const cnetmod::json::document& object, std::string_view key,
-        Value& destination)
+    void assign(const cnetmod::json::document& object, std::string_view path,
+        std::string_view key, Value& destination)
     {
-        if (const auto* found = cnetmod::json::find(object, key))
-        {
-            auto decoded = cnetmod::json::from_document<Value>(*found);
-            if (!decoded)
-                throw std::invalid_argument("invalid configuration value");
-            destination = std::move(*decoded);
-        }
+        const auto* found = cnetmod::json::find(object, key);
+        if (found == nullptr)
+            return;
+        auto decoded = cnetmod::json::from_document<Value>(*found);
+        if (!decoded)
+            fail(join(path, key), std::format("invalid value of type {}",
+                                      type_name(*found)));
+        destination = std::move(*decoded);
     }
 
-    void assign_duration(const cnetmod::json::document& object, std::string_view key,
+    void assign_duration(const cnetmod::json::document& object,
+        std::string_view path, std::string_view key,
         std::chrono::milliseconds& destination)
     {
-        if (const auto* found = cnetmod::json::find(object, key))
-            destination = std::chrono::milliseconds{
-                found->as<std::int64_t>()};
+        const auto* found = cnetmod::json::find(object, key);
+        if (found == nullptr)
+            return;
+        if (!found->is_int64() && !found->is_uint64())
+            fail(join(path, key), std::format(
+                                      "expected an integer number of milliseconds, got {}",
+                                      type_name(*found)));
+        destination = std::chrono::milliseconds{found->as<std::int64_t>()};
+    }
+
+    [[nodiscard]] auto string_value(const cnetmod::json::document& value,
+        std::string_view path) -> std::string
+    {
+        if (!value.is_string())
+            fail(std::string{path},
+                std::format("expected a string, got {}", type_name(value)));
+        return value.get<std::string>();
     }
 
     auto parse_log_level(std::string_view value)
@@ -194,382 +259,483 @@ namespace {
         return result;
     }
 
-    auto expand_string(std::string source)
-        -> std::expected<std::string, std::error_code>
+    [[nodiscard]] auto valid_variable_name(std::string_view name) noexcept -> bool
     {
-        auto begin = source.find("${");
-        while (begin != std::string::npos)
-        {
-            const auto end = source.find('}', begin + 2U);
-            if (end == std::string::npos)
-                return std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-            const auto value = environment(
-                source.substr(begin + 2U, end - begin - 2U));
-            if (!value)
-                return std::unexpected(
-                    std::make_error_code(std::errc::no_such_file_or_directory));
-            source.replace(begin, end - begin + 1U, *value);
-            begin = source.find("${", begin + value->size());
-        }
-        return source;
+        if (name.empty())
+            return false;
+        const auto first = static_cast<unsigned char>(name.front());
+        if (!(std::isalpha(first) || first == '_'))
+            return false;
+        return std::ranges::all_of(name, [](const char character)
+            {
+                const auto byte = static_cast<unsigned char>(character);
+                return std::isalnum(byte) || byte == '_';
+            });
     }
 
-    auto expand_environment(cnetmod::json::document& value)
-        -> std::expected<void, std::error_code>
+    /**
+     * @brief Expands references in one string; failures carry the document path.
+     */
+    auto expand_string(std::string_view source, std::string_view path)
+        -> std::string
+    {
+        std::string result;
+        result.reserve(source.size());
+        std::size_t position = 0;
+        while (position < source.size())
+        {
+            const auto marker = source.find('$', position);
+            if (marker == std::string_view::npos)
+            {
+                result.append(source.substr(position));
+                break;
+            }
+            result.append(source.substr(position, marker - position));
+            // "$${" is an escaped literal "${".
+            if (source.substr(marker).starts_with("$${"))
+            {
+                result.append("${");
+                position = marker + 3U;
+                continue;
+            }
+            if (!source.substr(marker).starts_with("${"))
+            {
+                result.push_back('$');
+                position = marker + 1U;
+                continue;
+            }
+            const auto close = source.find('}', marker + 2U);
+            if (close == std::string_view::npos)
+                fail(std::string{path}, "unterminated ${...} reference");
+            const auto reference = source.substr(marker + 2U, close - marker - 2U);
+            const auto separator = reference.find(":-");
+            const auto name = separator == std::string_view::npos
+                ? reference
+                : reference.substr(0, separator);
+            if (!valid_variable_name(name))
+                fail(std::string{path},
+                    std::format("invalid environment variable name '{}'", name));
+            if (auto value = environment(name))
+                result.append(*value);
+            else if (separator != std::string_view::npos)
+                result.append(reference.substr(separator + 2U));
+            else
+                fail(std::string{path},
+                    std::format("environment variable '{}' is not set and has "
+                                "no ${{{}:-default}}",
+                        name, name),
+                    std::errc::no_such_file_or_directory);
+            position = close + 1U;
+        }
+        return result;
+    }
+
+    /**
+     * @brief Expands every string in a document tree without recursion limits
+     *        beyond the document depth itself.
+     */
+    void expand_tree(cnetmod::json::document& value, std::string_view path)
     {
         if (value.is_string())
         {
-            auto expanded = expand_string(value.get<std::string>());
-            if (!expanded)
-                return std::unexpected(expanded.error());
-            value = std::move(*expanded);
+            value = expand_string(value.get<std::string>(), path);
+            return;
         }
-        else if (value.is_object())
+        if (value.is_object())
         {
             for (auto& [key, child] : value.get_object())
-            {
-                (void)key;
-                auto expanded = expand_environment(child);
-                if (!expanded)
-                    return expanded;
-            }
+                expand_tree(child, join(path, key));
+            return;
         }
-        else if (value.is_array())
+        if (value.is_array())
+        {
+            std::size_t index = 0;
             for (auto& child : value.get_array())
-            {
-                auto expanded = expand_environment(child);
-                if (!expanded)
-                    return expanded;
-            }
-        return {};
+                expand_tree(child, std::format("{}[{}]", path, index++));
+        }
     }
 
-    auto apply_document(application_configuration& result,
-        const cnetmod::json::document& root) -> bool
+    constexpr std::array<std::string_view, 11> framework_sections{"application",
+        "logging", "http", "management", "observability", "crash_dump",
+        "lifecycle", "health", "orm", "security", "services"};
+
+    void apply_application(application_configuration& result,
+        const cnetmod::json::document& item)
     {
-        if (!keys_are_known(root, {"application", "logging", "http", "management", "observability", "crash_dump", "lifecycle", "health", "orm", "security", "services"}))
-            return false;
-        try
+        constexpr std::string_view path = "application";
+        require_known(item, path,
+            {"name", "install_signal_handlers", "cpu_threads"});
+        assign(item, path, "name", result.name);
+        assign(item, path, "install_signal_handlers",
+            result.install_signal_handlers);
+        assign(item, path, "cpu_threads", result.execution.cpu_threads);
+    }
+
+    void apply_logging(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "logging";
+        require_known(item, path, {"manage_lifecycle", "level", "format"});
+        assign(item, path, "manage_lifecycle", result.logging.manage_lifecycle);
+        if (const auto* level = cnetmod::json::find(item, "level"))
         {
-            if (const auto* item = cnetmod::json::find(root, "application"))
-            {
-                if (!keys_are_known(*item,
-                        {"name", "install_signal_handlers", "cpu_threads"}))
-                    return false;
-                assign(*item, "name", result.name);
-                assign(*item, "install_signal_handlers",
-                    result.install_signal_handlers);
-                assign(*item, "cpu_threads", result.execution.cpu_threads);
-            }
-            if (const auto* item = cnetmod::json::find(root, "logging"))
-            {
-                if (!keys_are_known(*item,
-                        {"manage_lifecycle", "level", "format"}))
-                    return false;
-                assign(*item, "manage_lifecycle",
-                    result.logging.manage_lifecycle);
-                if (const auto* level = cnetmod::json::find(*item, "level"))
-                {
-                    const auto parsed = parse_log_level(
-                        level->get<std::string>());
-                    if (!parsed)
-                        return false;
-                    result.logging.level = *parsed;
-                }
-                if (const auto* format = cnetmod::json::find(*item, "format"))
-                {
-                    const auto name = format->get<std::string>();
-                    if (name != "text" && name != "json")
-                        return false;
-                    result.logging.format = name == "json"
-                        ? logger::output_format::json
-                        : logger::output_format::text;
-                }
-            }
-            if (const auto* item = cnetmod::json::find(root, "http"))
-            {
-                if (!keys_are_known(*item, {"address", "port", "max_connections", "request_timeout_ms", "sse", "request_ids", "access_logging", "recover_exceptions"}))
-                    return false;
-                assign(*item, "address", result.http.address);
-                assign(*item, "port", result.http.port);
-                assign(*item, "max_connections", result.http.max_connections);
-                if (const auto* timeout = cnetmod::json::find(
-                        *item, "request_timeout_ms"))
-                    result.http.request_timeout = std::chrono::milliseconds{
-                        timeout->as<std::int64_t>()};
-                if (const auto* sse = cnetmod::json::find(*item, "sse"))
-                {
-                    if (!keys_are_known(*sse,
-                            {"max_duration_ms", "write_timeout_ms"}))
-                        return false;
-                    assign_duration(*sse, "max_duration_ms",
-                        result.http.sse_max_duration);
-                    assign_duration(*sse, "write_timeout_ms",
-                        result.http.sse_write_timeout);
-                }
-                assign(*item, "request_ids", result.http.request_ids);
-                assign(*item, "access_logging", result.http.access_logging);
-                assign(*item, "recover_exceptions",
-                    result.http.recover_exceptions);
-            }
-            if (const auto* item = cnetmod::json::find(root, "management"))
-            {
-                if (!keys_are_known(*item, {"enabled", "address", "port", "same_port", "live_path", "ready_path", "health_path", "metrics_path"}))
-                    return false;
-                assign(*item, "enabled", result.management.enabled);
-                assign(*item, "address", result.management.address);
-                assign(*item, "port", result.management.port);
-                assign(*item, "same_port", result.management.same_port);
-                assign(*item, "live_path", result.management.live_path);
-                assign(*item, "ready_path", result.management.ready_path);
-                assign(*item, "health_path", result.management.health_path);
-                assign(*item, "metrics_path", result.management.metrics_path);
-            }
-            if (const auto* item = cnetmod::json::find(root, "observability"))
-            {
-                if (!keys_are_known(*item, {"tracing", "metrics", "logs", "sampling_ratio", "otlp"}))
-                    return false;
-                assign(*item, "tracing", result.observability.tracing);
-                assign(*item, "metrics", result.observability.metrics);
-                assign(*item, "logs", result.observability.logs);
-                assign(*item, "sampling_ratio",
-                    result.observability.sampling_ratio);
-                if (const auto* otlp = cnetmod::json::find(*item, "otlp"))
-                {
-                    if (!keys_are_known(*otlp, {"traces_endpoint", "metrics_endpoint", "logs_endpoint", "service_name", "service_version", "service_namespace", "service_instance_id", "deployment_environment", "resource_attributes", "headers", "queue_capacity", "max_batch_size", "request_timeout_ms", "max_attempts", "initial_retry_delay_ms", "max_retry_delay_ms", "max_metric_instruments", "max_metric_attribute_sets", "capture_framework_logs"}))
-                        return false;
-                    assign(*otlp, "traces_endpoint",
-                        result.observability.otlp.endpoint);
-                    assign(*otlp, "metrics_endpoint",
-                        result.observability.otlp.metrics_endpoint);
-                    assign(*otlp, "logs_endpoint",
-                        result.observability.otlp.logs_endpoint);
-                    assign(*otlp, "service_name",
-                        result.observability.otlp.service_name);
-                    assign(*otlp, "service_version",
-                        result.observability.otlp.service_version);
-                    assign(*otlp, "service_namespace",
-                        result.observability.otlp.service_namespace);
-                    assign(*otlp, "service_instance_id",
-                        result.observability.otlp.service_instance_id);
-                    assign(*otlp, "deployment_environment",
-                        result.observability.otlp.deployment_environment);
-                    assign(*otlp, "resource_attributes",
-                        result.observability.otlp.resource_attributes);
-                    assign(*otlp, "headers", result.observability.otlp.headers);
-                    assign(*otlp, "queue_capacity",
-                        result.observability.otlp.queue_capacity);
-                    assign(*otlp, "max_batch_size",
-                        result.observability.otlp.max_batch_size);
-                    assign(*otlp, "max_metric_instruments",
-                        result.observability.otlp.max_metric_instruments);
-                    assign(*otlp, "max_metric_attribute_sets",
-                        result.observability.otlp.max_metric_attribute_sets);
-                    assign(*otlp, "capture_framework_logs",
-                        result.observability.otlp.capture_framework_logs);
-                    assign_duration(*otlp, "request_timeout_ms",
-                        result.observability.otlp.request_timeout);
-                    assign(*otlp, "max_attempts",
-                        result.observability.otlp.max_attempts);
-                    assign_duration(*otlp, "initial_retry_delay_ms",
-                        result.observability.otlp.initial_retry_delay);
-                    assign_duration(*otlp, "max_retry_delay_ms",
-                        result.observability.otlp.max_retry_delay);
-                }
-            }
-            if (const auto* item = cnetmod::json::find(root, "crash_dump"))
-            {
-                if (!keys_are_known(*item, {"directory"}))
-                    return false;
-                assign(*item, "directory", result.crash_dump.directory);
-            }
-            if (const auto* item = cnetmod::json::find(root, "lifecycle"))
-            {
-                if (!keys_are_known(*item, {"service_start_timeout_ms", "total_start_timeout_ms", "service_stop_timeout_ms", "total_stop_timeout_ms", "http_drain_timeout_ms", "telemetry_flush_timeout_ms"}))
-                    return false;
-                assign_duration(*item, "service_start_timeout_ms",
-                    result.lifecycle.service_start_timeout);
-                assign_duration(*item, "total_start_timeout_ms",
-                    result.lifecycle.total_start_timeout);
-                assign_duration(*item, "service_stop_timeout_ms",
-                    result.lifecycle.service_stop_timeout);
-                assign_duration(*item, "total_stop_timeout_ms",
-                    result.lifecycle.total_stop_timeout);
-                assign_duration(*item, "http_drain_timeout_ms",
-                    result.lifecycle.http_drain_timeout);
-                assign_duration(*item, "telemetry_flush_timeout_ms",
-                    result.lifecycle.telemetry_flush_timeout);
-            }
-            if (const auto* item = cnetmod::json::find(root, "health"))
-            {
-                if (!keys_are_known(*item, {"interval_ms", "timeout_ms", "failures_before_down", "successes_before_up"}))
-                    return false;
-                assign_duration(*item, "interval_ms", result.health.interval);
-                assign_duration(*item, "timeout_ms", result.health.timeout);
-                assign(*item, "failures_before_down",
-                    result.health.failures_before_down);
-                assign(*item, "successes_before_up",
-                    result.health.successes_before_up);
-            }
-            if (const auto* item = cnetmod::json::find(root, "orm"))
-            {
-                if (!keys_are_known(*item, {"sharding"}))
-                    return false;
-                if (const auto* sharding = cnetmod::json::find(
-                        *item, "sharding"))
-                {
-                    if (!keys_are_known(*sharding, {"enabled", "topologies"}))
-                        return false;
-                    assign(*sharding, "enabled", result.orm.sharding.enabled);
-                    if (const auto* topologies = cnetmod::json::find(
-                            *sharding, "topologies"))
-                    {
-                        if (!topologies->is_object())
-                            return false;
-                        for (const auto& [topology_name, topology_value] :
-                            topologies->get_object())
-                        {
-                            if (!topology_value.is_object() ||
-                                !keys_are_known(topology_value,
-                                    {"logical_table", "table_count", "databases",
-                                        "scatter_gather", "distributed_transactions"}))
-                                return false;
-                            orm_shard_topology_configuration configured;
-                            configured.logical_table = topology_name;
-                            assign(topology_value, "logical_table",
-                                configured.logical_table);
-                            if (const auto* count = cnetmod::json::find(
-                                    topology_value, "table_count"))
-                            {
-                                if (!count->is_uint64() && !count->is_int64())
-                                    return false;
-                                const auto raw = count->as<std::int64_t>();
-                                if (raw <= 0 || static_cast<std::uint64_t>(raw) > std::numeric_limits<std::size_t>::max())
-                                    return false;
-                                configured.table_count =
-                                    static_cast<std::size_t>(raw);
-                            }
-                            assign(topology_value, "databases",
-                                configured.databases);
-                            assign(topology_value, "scatter_gather",
-                                configured.scatter_gather);
-                            assign(topology_value, "distributed_transactions",
-                                configured.distributed_transactions);
-                            result.orm.sharding.topologies.insert_or_assign(
-                                topology_name, std::move(configured));
-                        }
-                    }
-                }
-            }
-            if (const auto* item = cnetmod::json::find(root, "security"))
-            {
-                if (!keys_are_known(*item, {"jwt"}))
-                    return false;
-                if (const auto* jwt = cnetmod::json::find(*item, "jwt"))
-                {
-                    if (!keys_are_known(*jwt, {"enabled", "issuer", "secret",
-                            "expires_in_seconds", "session_idle_seconds"}))
-                        return false;
-                    assign(*jwt, "enabled", result.security.jwt.enabled);
-                    assign(*jwt, "issuer", result.security.jwt.issuer);
-                    assign(*jwt, "secret", result.security.jwt.secret);
-                    assign(*jwt, "expires_in_seconds",
-                        result.security.jwt.expires_in_seconds);
-                    assign(*jwt, "session_idle_seconds",
-                        result.security.jwt.session_idle_seconds);
-                }
-            }
-            if (const auto* item = cnetmod::json::find(root, "services"))
-            {
-                if (!item->is_object())
-                    return false;
-                for (const auto& [name, value] : item->get_object())
-                {
-                    if (!value.is_object())
-                        return false;
-                    configured_service service{.name = name};
-                    assign(value, "type", service.name);
-                    assign(value, "enabled", service.enabled);
-                    assign(value, "instance", service.instance);
-                    if (const auto* required = cnetmod::json::find(
-                            value, "required"))
-                        service.requirement = required->get<bool>()
-                            ? service_requirement::required
-                            : service_requirement::optional;
-                    if (const auto* recovery = cnetmod::json::find(
-                            value, "recovery"))
-                    {
-                        if (!keys_are_known(*recovery, {"initial_delay_ms", "maximum_delay_ms", "budget_ms", "multiplier", "jitter"}))
-                            return false;
-                        assign_duration(*recovery, "initial_delay_ms",
-                            service.recovery.initial_delay);
-                        assign_duration(*recovery, "maximum_delay_ms",
-                            service.recovery.maximum_delay);
-                        assign_duration(*recovery, "budget_ms",
-                            service.recovery.budget);
-                        assign(*recovery, "multiplier",
-                            service.recovery.multiplier);
-                        assign(*recovery, "jitter", service.recovery.jitter);
-                    }
-                    for (const auto& [key, property] : value.get_object())
-                    {
-                        if (key != "enabled" && key != "type" && key != "instance" &&
-                            key != "required" && key != "recovery")
-                            service.properties[key] = property;
-                    }
-                    result.services.insert_or_assign(name, std::move(service));
-                }
-            }
-            return true;
+            const auto text = string_value(*level, "logging.level");
+            const auto parsed = parse_log_level(text);
+            if (!parsed)
+                fail("logging.level", std::format(
+                                          "unknown level '{}' (expected trace, debug, "
+                                          "info, warn, error, critical or off)",
+                                          text));
+            result.logging.level = *parsed;
         }
-        catch (const std::bad_alloc&)
+        if (const auto* format = cnetmod::json::find(item, "format"))
         {
-            throw;
-        }
-        catch (...)
-        {
-            return false;
+            const auto name = string_value(*format, "logging.format");
+            if (name != "text" && name != "json")
+                fail("logging.format",
+                    std::format("unknown format '{}' (expected text or json)", name));
+            result.logging.format = name == "json"
+                ? logger::output_format::json
+                : logger::output_format::text;
         }
     }
 
-    auto apply_process_environment(application_configuration& result)
-        -> std::expected<void, std::error_code>
+    void apply_http(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "http";
+        require_known(item, path, {"address", "port", "max_connections",
+                                      "request_timeout_ms", "sse", "request_ids",
+                                      "access_logging", "recover_exceptions"});
+        assign(item, path, "address", result.http.address);
+        assign(item, path, "port", result.http.port);
+        assign(item, path, "max_connections", result.http.max_connections);
+        if (cnetmod::json::find(item, "request_timeout_ms") != nullptr)
+        {
+            std::chrono::milliseconds timeout{};
+            assign_duration(item, path, "request_timeout_ms", timeout);
+            result.http.request_timeout = timeout;
+        }
+        if (const auto* sse = cnetmod::json::find(item, "sse"))
+        {
+            constexpr std::string_view sse_path = "http.sse";
+            require_known(*sse, sse_path,
+                {"max_duration_ms", "write_timeout_ms"});
+            assign_duration(*sse, sse_path, "max_duration_ms",
+                result.http.sse_max_duration);
+            assign_duration(*sse, sse_path, "write_timeout_ms",
+                result.http.sse_write_timeout);
+        }
+        assign(item, path, "request_ids", result.http.request_ids);
+        assign(item, path, "access_logging", result.http.access_logging);
+        assign(item, path, "recover_exceptions", result.http.recover_exceptions);
+    }
+
+    void apply_management(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "management";
+        require_known(item, path, {"enabled", "address", "port", "same_port",
+                                      "live_path", "ready_path", "health_path",
+                                      "metrics_path"});
+        assign(item, path, "enabled", result.management.enabled);
+        assign(item, path, "address", result.management.address);
+        assign(item, path, "port", result.management.port);
+        assign(item, path, "same_port", result.management.same_port);
+        assign(item, path, "live_path", result.management.live_path);
+        assign(item, path, "ready_path", result.management.ready_path);
+        assign(item, path, "health_path", result.management.health_path);
+        assign(item, path, "metrics_path", result.management.metrics_path);
+    }
+
+    void apply_observability(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "observability";
+        require_known(item, path,
+            {"tracing", "metrics", "logs", "sampling_ratio", "otlp"});
+        assign(item, path, "tracing", result.observability.tracing);
+        assign(item, path, "metrics", result.observability.metrics);
+        assign(item, path, "logs", result.observability.logs);
+        assign(item, path, "sampling_ratio", result.observability.sampling_ratio);
+        const auto* otlp = cnetmod::json::find(item, "otlp");
+        if (otlp == nullptr)
+            return;
+        constexpr std::string_view otlp_path = "observability.otlp";
+        require_known(*otlp, otlp_path,
+            {"traces_endpoint", "metrics_endpoint", "logs_endpoint",
+                "service_name", "service_version", "service_namespace",
+                "service_instance_id", "deployment_environment",
+                "resource_attributes", "headers", "queue_capacity",
+                "max_batch_size", "request_timeout_ms", "max_attempts",
+                "initial_retry_delay_ms", "max_retry_delay_ms",
+                "max_metric_instruments", "max_metric_attribute_sets",
+                "capture_framework_logs"});
+        auto& options = result.observability.otlp;
+        assign(*otlp, otlp_path, "traces_endpoint", options.endpoint);
+        assign(*otlp, otlp_path, "metrics_endpoint", options.metrics_endpoint);
+        assign(*otlp, otlp_path, "logs_endpoint", options.logs_endpoint);
+        assign(*otlp, otlp_path, "service_name", options.service_name);
+        assign(*otlp, otlp_path, "service_version", options.service_version);
+        assign(*otlp, otlp_path, "service_namespace", options.service_namespace);
+        assign(*otlp, otlp_path, "service_instance_id",
+            options.service_instance_id);
+        assign(*otlp, otlp_path, "deployment_environment",
+            options.deployment_environment);
+        assign(*otlp, otlp_path, "resource_attributes",
+            options.resource_attributes);
+        assign(*otlp, otlp_path, "headers", options.headers);
+        assign(*otlp, otlp_path, "queue_capacity", options.queue_capacity);
+        assign(*otlp, otlp_path, "max_batch_size", options.max_batch_size);
+        assign(*otlp, otlp_path, "max_metric_instruments",
+            options.max_metric_instruments);
+        assign(*otlp, otlp_path, "max_metric_attribute_sets",
+            options.max_metric_attribute_sets);
+        assign(*otlp, otlp_path, "capture_framework_logs",
+            options.capture_framework_logs);
+        assign_duration(*otlp, otlp_path, "request_timeout_ms",
+            options.request_timeout);
+        assign(*otlp, otlp_path, "max_attempts", options.max_attempts);
+        assign_duration(*otlp, otlp_path, "initial_retry_delay_ms",
+            options.initial_retry_delay);
+        assign_duration(*otlp, otlp_path, "max_retry_delay_ms",
+            options.max_retry_delay);
+    }
+
+    void apply_lifecycle(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "lifecycle";
+        require_known(item, path,
+            {"service_start_timeout_ms", "total_start_timeout_ms",
+                "service_stop_timeout_ms", "total_stop_timeout_ms",
+                "http_drain_timeout_ms", "telemetry_flush_timeout_ms"});
+        auto& lifecycle = result.lifecycle;
+        assign_duration(item, path, "service_start_timeout_ms",
+            lifecycle.service_start_timeout);
+        assign_duration(item, path, "total_start_timeout_ms",
+            lifecycle.total_start_timeout);
+        assign_duration(item, path, "service_stop_timeout_ms",
+            lifecycle.service_stop_timeout);
+        assign_duration(item, path, "total_stop_timeout_ms",
+            lifecycle.total_stop_timeout);
+        assign_duration(item, path, "http_drain_timeout_ms",
+            lifecycle.http_drain_timeout);
+        assign_duration(item, path, "telemetry_flush_timeout_ms",
+            lifecycle.telemetry_flush_timeout);
+    }
+
+    void apply_health(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "health";
+        require_known(item, path, {"interval_ms", "timeout_ms",
+                                      "failures_before_down", "successes_before_up"});
+        assign_duration(item, path, "interval_ms", result.health.interval);
+        assign_duration(item, path, "timeout_ms", result.health.timeout);
+        assign(item, path, "failures_before_down",
+            result.health.failures_before_down);
+        assign(item, path, "successes_before_up",
+            result.health.successes_before_up);
+    }
+
+    void apply_orm(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        constexpr std::string_view path = "orm";
+        require_known(item, path, {"sharding", "tenant_scope_required"});
+        assign(item, path, "tenant_scope_required",
+            result.orm.tenant_scope_required);
+        const auto* sharding = cnetmod::json::find(item, "sharding");
+        if (sharding == nullptr)
+            return;
+        constexpr std::string_view sharding_path = "orm.sharding";
+        require_known(*sharding, sharding_path, {"enabled", "topologies"});
+        assign(*sharding, sharding_path, "enabled", result.orm.sharding.enabled);
+        const auto* topologies = cnetmod::json::find(*sharding, "topologies");
+        if (topologies == nullptr)
+            return;
+        require_object(*topologies, "orm.sharding.topologies");
+        for (const auto& [topology_name, topology_value] :
+            topologies->get_object())
+        {
+            const auto topology_path =
+                std::format("orm.sharding.topologies.{}", topology_name);
+            require_known(topology_value, topology_path,
+                {"logical_table", "table_count", "databases", "scatter_gather",
+                    "distributed_transactions"});
+            orm_shard_topology_configuration configured;
+            configured.logical_table = topology_name;
+            assign(topology_value, topology_path, "logical_table",
+                configured.logical_table);
+            if (const auto* count = cnetmod::json::find(
+                    topology_value, "table_count"))
+            {
+                const auto count_path = join(topology_path, "table_count");
+                if (!count->is_uint64() && !count->is_int64())
+                    fail(count_path, "expected a positive integer");
+                const auto raw = count->as<std::int64_t>();
+                if (raw <= 0 ||
+                    static_cast<std::uint64_t>(raw) >
+                        std::numeric_limits<std::size_t>::max())
+                    fail(count_path, "expected a positive integer");
+                configured.table_count = static_cast<std::size_t>(raw);
+            }
+            assign(topology_value, topology_path, "databases",
+                configured.databases);
+            assign(topology_value, topology_path, "scatter_gather",
+                configured.scatter_gather);
+            assign(topology_value, topology_path, "distributed_transactions",
+                configured.distributed_transactions);
+            result.orm.sharding.topologies.insert_or_assign(
+                topology_name, std::move(configured));
+        }
+    }
+
+    void apply_security(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        require_known(item, "security", {"jwt"});
+        const auto* jwt = cnetmod::json::find(item, "jwt");
+        if (jwt == nullptr)
+            return;
+        constexpr std::string_view path = "security.jwt";
+        require_known(*jwt, path, {"enabled", "issuer", "secret",
+                                      "expires_in_seconds", "session_idle_seconds"});
+        auto& configured = result.security.jwt;
+        assign(*jwt, path, "enabled", configured.enabled);
+        assign(*jwt, path, "issuer", configured.issuer);
+        assign(*jwt, path, "secret", configured.secret);
+        assign(*jwt, path, "expires_in_seconds", configured.expires_in_seconds);
+        assign(*jwt, path, "session_idle_seconds",
+            configured.session_idle_seconds);
+    }
+
+    void apply_services(application_configuration& result,
+        const cnetmod::json::document& item)
+    {
+        require_object(item, "services");
+        for (const auto& [name, value] : item.get_object())
+        {
+            const auto path = join("services", name);
+            require_object(value, path);
+            configured_service service{.name = name};
+            assign(value, path, "type", service.name);
+            assign(value, path, "enabled", service.enabled);
+            assign(value, path, "instance", service.instance);
+            if (const auto* required = cnetmod::json::find(value, "required"))
+            {
+                if (!required->is_boolean())
+                    fail(join(path, "required"), "expected a boolean");
+                service.requirement = required->get<bool>()
+                    ? service_requirement::required
+                    : service_requirement::optional;
+            }
+            if (const auto* recovery = cnetmod::json::find(value, "recovery"))
+            {
+                const auto recovery_path = join(path, "recovery");
+                require_known(*recovery, recovery_path,
+                    {"initial_delay_ms", "maximum_delay_ms", "budget_ms",
+                        "multiplier", "jitter"});
+                assign_duration(*recovery, recovery_path, "initial_delay_ms",
+                    service.recovery.initial_delay);
+                assign_duration(*recovery, recovery_path, "maximum_delay_ms",
+                    service.recovery.maximum_delay);
+                assign_duration(*recovery, recovery_path, "budget_ms",
+                    service.recovery.budget);
+                assign(*recovery, recovery_path, "multiplier",
+                    service.recovery.multiplier);
+                assign(*recovery, recovery_path, "jitter",
+                    service.recovery.jitter);
+            }
+            for (const auto& [key, property] : value.get_object())
+            {
+                if (key != "enabled" && key != "type" && key != "instance" &&
+                    key != "required" && key != "recovery")
+                    service.properties[key] = property;
+            }
+            result.services.insert_or_assign(name, std::move(service));
+        }
+    }
+
+    /**
+     * @brief Applies one parsed document. Framework sections are validated
+     *        strictly; every other top-level key is captured as an
+     *        application section and claimed later by the options registry.
+     */
+    void apply_document(application_configuration& result,
+        const cnetmod::json::document& root)
+    {
+        require_object(root, {});
+        for (const auto& [key, value] : root.get_object())
+        {
+            if (key == "application")
+                apply_application(result, value);
+            else if (key == "logging")
+                apply_logging(result, value);
+            else if (key == "http")
+                apply_http(result, value);
+            else if (key == "management")
+                apply_management(result, value);
+            else if (key == "observability")
+                apply_observability(result, value);
+            else if (key == "crash_dump")
+            {
+                require_known(value, "crash_dump", {"directory"});
+                assign(value, "crash_dump", "directory",
+                    result.crash_dump.directory);
+            }
+            else if (key == "lifecycle")
+                apply_lifecycle(result, value);
+            else if (key == "health")
+                apply_health(result, value);
+            else if (key == "orm")
+                apply_orm(result, value);
+            else if (key == "security")
+                apply_security(result, value);
+            else if (key == "services")
+                apply_services(result, value);
+            else
+                result.sections.insert_or_assign(key, value);
+        }
+    }
+
+    template <class Unsigned>
+    [[nodiscard]] auto environment_unsigned(std::string_view name,
+        Unsigned minimum, Unsigned maximum) -> std::optional<Unsigned>
+    {
+        auto value = environment(name);
+        if (!value)
+            return std::nullopt;
+        Unsigned parsed{};
+        const auto [end, error] = std::from_chars(value->data(),
+            value->data() + value->size(), parsed);
+        if (error != std::errc{} || end != value->data() + value->size() ||
+            parsed < minimum || parsed > maximum)
+            fail(std::format("env:{}", name),
+                std::format("expected an integer in [{}, {}], got '{}'",
+                    minimum, maximum, *value));
+        return parsed;
+    }
+
+    void apply_process_environment(application_configuration& result)
     {
         if (auto value = environment("CNETMOD_APPLICATION_NAME"))
             result.name = std::move(*value);
-        if (auto value = environment("CNETMOD_CPU_THREADS"))
-        {
-            unsigned int parsed{};
-            const auto [end, error] = std::from_chars(value->data(),
-                value->data() + value->size(), parsed);
-            if (error == std::errc{} && end == value->data() + value->size() &&
-                parsed > 0U && parsed <= 1024U)
-                result.execution.cpu_threads = parsed;
-            else
-                return std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-        }
+        if (auto parsed = environment_unsigned<unsigned>(
+                "CNETMOD_CPU_THREADS", 1U, 1024U))
+            result.execution.cpu_threads = *parsed;
         if (auto value = environment("CNETMOD_HTTP_ADDRESS"))
             result.http.address = std::move(*value);
-        if (auto value = environment("CNETMOD_HTTP_PORT"))
-        {
-            unsigned int parsed{};
-            const auto [end, error] = std::from_chars(value->data(),
-                value->data() + value->size(), parsed);
-            if (error == std::errc{} && end == value->data() + value->size() &&
-                parsed > 0U && parsed <= 65535U)
-                result.http.port = static_cast<std::uint16_t>(parsed);
-            else
-                return std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-        }
+        if (auto parsed = environment_unsigned<unsigned>(
+                "CNETMOD_HTTP_PORT", 1U, 65535U))
+            result.http.port = static_cast<std::uint16_t>(*parsed);
         if (auto value = environment("CNETMOD_LOG_LEVEL"))
         {
             const auto level = parse_log_level(*value);
             if (!level)
-                return std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
+                fail("env:CNETMOD_LOG_LEVEL",
+                    std::format("unknown level '{}'", *value));
             result.logging.level = *level;
         }
         if (auto value = environment("OTEL_EXPORTER_OTLP_TRACES_ENDPOINT"))
@@ -598,11 +764,10 @@ namespace {
         {
             const auto enabled = parse_boolean(*value);
             if (!enabled)
-                return std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
+                fail("env:CNETMOD_OTLP_CAPTURE_FRAMEWORK_LOGS",
+                    std::format("expected true/false/1/0, got '{}'", *value));
             result.observability.otlp.capture_framework_logs = *enabled;
         }
-        return {};
     }
 
     auto nested_property(const cnetmod::json::document& root,
@@ -624,7 +789,211 @@ namespace {
         return current;
     }
 
+    [[nodiscard]] auto positive_duration(std::chrono::milliseconds duration) noexcept
+        -> bool
+    {
+        const auto horizon = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::duration::max() / 2);
+        return duration.count() > 0 && duration <= horizon;
+    }
+
+    void require_positive(std::chrono::milliseconds value, std::string path)
+    {
+        if (!positive_duration(value))
+            fail(std::move(path), "expected a positive duration");
+    }
+
+    [[nodiscard]] auto valid_identifier(std::string_view identifier) noexcept
+        -> bool
+    {
+        if (identifier.empty() || identifier.size() > 63)
+            return false;
+        const auto first = static_cast<unsigned char>(identifier.front());
+        if (!(std::isalpha(first) || first == '_'))
+            return false;
+        return std::ranges::all_of(identifier, [](const char character)
+            {
+                const auto byte = static_cast<unsigned char>(character);
+                return std::isalnum(byte) || byte == '_';
+            });
+    }
+
+    /**
+     * @brief Throwing validation core shared by load and reload.
+     */
+    void check_configuration(const application_configuration& value)
+    {
+        if (value.name.empty())
+            fail("application.name", "must not be empty");
+        if (value.crash_dump.directory.empty())
+            fail("crash_dump.directory", "must not be empty");
+        if (value.execution.cpu_threads == 0U || value.execution.cpu_threads > 1024U)
+            fail("application.cpu_threads", "expected a value in [1, 1024]");
+        if (value.http.address.empty())
+            fail("http.address", "must not be empty");
+        if (value.http.port == 0U)
+            fail("http.port", "must be in [1, 65535]");
+        if (value.http.request_timeout)
+            require_positive(*value.http.request_timeout, "http.request_timeout_ms");
+        require_positive(value.http.sse_max_duration, "http.sse.max_duration_ms");
+        require_positive(value.http.sse_write_timeout, "http.sse.write_timeout_ms");
+        const auto ratio = value.observability.sampling_ratio;
+        if (!std::isfinite(ratio) || ratio < 0.0 || ratio > 1.0)
+            fail("observability.sampling_ratio", "expected a value in [0, 1]");
+        const auto& lifecycle = value.lifecycle;
+        require_positive(lifecycle.service_start_timeout,
+            "lifecycle.service_start_timeout_ms");
+        require_positive(lifecycle.total_start_timeout,
+            "lifecycle.total_start_timeout_ms");
+        require_positive(lifecycle.service_stop_timeout,
+            "lifecycle.service_stop_timeout_ms");
+        require_positive(lifecycle.total_stop_timeout,
+            "lifecycle.total_stop_timeout_ms");
+        require_positive(lifecycle.http_drain_timeout,
+            "lifecycle.http_drain_timeout_ms");
+        require_positive(lifecycle.telemetry_flush_timeout,
+            "lifecycle.telemetry_flush_timeout_ms");
+        require_positive(value.health.interval, "health.interval_ms");
+        require_positive(value.health.timeout, "health.timeout_ms");
+        if (value.health.failures_before_down == 0U)
+            fail("health.failures_before_down", "must be positive");
+        if (value.health.successes_before_up == 0U)
+            fail("health.successes_before_up", "must be positive");
+        const auto& otlp = value.observability.otlp;
+        if (otlp.queue_capacity < 2U)
+            fail("observability.otlp.queue_capacity", "must be at least 2");
+        if (otlp.max_metric_instruments == 0U)
+            fail("observability.otlp.max_metric_instruments", "must be positive");
+        if (otlp.max_batch_size == 0U || otlp.max_batch_size > otlp.queue_capacity)
+            fail("observability.otlp.max_batch_size",
+                "must be positive and not exceed queue_capacity");
+        if (otlp.max_attempts == 0U)
+            fail("observability.otlp.max_attempts", "must be positive");
+        require_positive(otlp.request_timeout,
+            "observability.otlp.request_timeout_ms");
+        if (otlp.initial_retry_delay.count() < 0)
+            fail("observability.otlp.initial_retry_delay_ms",
+                "must not be negative");
+        if (otlp.max_retry_delay < otlp.initial_retry_delay)
+            fail("observability.otlp.max_retry_delay_ms",
+                "must not be shorter than initial_retry_delay_ms");
+        if (value.management.enabled && value.management.address.empty())
+            fail("management.address", "must not be empty when enabled");
+        if (value.management.enabled && value.management.port == 0U)
+            fail("management.port", "must be in [1, 65535] when enabled");
+        const auto& jwt = value.security.jwt;
+        if (jwt.enabled)
+        {
+            if (jwt.issuer.empty())
+                fail("security.jwt.issuer", "must not be empty when enabled");
+            if (jwt.secret.size() < 32U)
+                fail("security.jwt.secret",
+                    "must contain at least 32 bytes when enabled");
+            if (jwt.expires_in_seconds <= 0 || jwt.expires_in_seconds > 2592000)
+                fail("security.jwt.expires_in_seconds",
+                    "expected a value in [1, 2592000]");
+            if (jwt.session_idle_seconds <= 0 ||
+                jwt.session_idle_seconds > jwt.expires_in_seconds)
+                fail("security.jwt.session_idle_seconds",
+                    "expected a value in [1, expires_in_seconds]");
+        }
+        std::unordered_set<service_key, service_key_hash> service_keys;
+        for (const auto& [name, service] : value.services)
+        {
+            const auto path = join("services", name);
+            if (name.empty())
+                fail("services", "service names must not be empty");
+            if (service.name.empty())
+                fail(join(path, "type"), "must not be empty");
+            if (service.instance.empty())
+                fail(join(path, "instance"), "must not be empty");
+            if (!valid_recovery_policy(service.recovery) ||
+                !positive_duration(service.recovery.budget))
+                fail(join(path, "recovery"), "invalid recovery policy");
+            if (!service_keys.emplace(service_key{service.name, service.instance})
+                     .second)
+                fail(path,
+                    std::format("duplicate service {}:{}", service.name,
+                        service.instance),
+                    std::errc::file_exists);
+        }
+        if (value.orm.sharding.enabled && value.orm.sharding.topologies.empty())
+            fail("orm.sharding.topologies", "must not be empty when enabled");
+        for (const auto& [name, topology] : value.orm.sharding.topologies)
+        {
+            const auto path = std::format("orm.sharding.topologies.{}", name);
+            if (topology.logical_table.empty() || topology.table_count == 0 ||
+                topology.databases.empty())
+                fail(path, "logical_table, table_count and databases are required");
+            const auto suffix_width = std::max<std::size_t>(2,
+                std::to_string(topology.table_count - 1).size());
+            if (!valid_identifier(topology.logical_table) ||
+                topology.logical_table.size() + 1 + suffix_width > 63)
+                fail(join(path, "logical_table"),
+                    "must be a SQL identifier short enough for shard suffixes");
+            std::unordered_set<std::string> databases;
+            for (const auto& database : topology.databases)
+            {
+                if (database.empty() || !databases.emplace(database).second)
+                    fail(join(path, "databases"),
+                        "entries must be non-empty and unique");
+            }
+        }
+        for (const auto& [name, unused] : value.sections)
+        {
+            (void)unused;
+            if (std::ranges::find(framework_sections, name) !=
+                framework_sections.end())
+                fail(name, "reserved framework section name");
+        }
+    }
+
+    template <class Function>
+    auto guarded(Function&& function)
+        -> std::expected<std::invoke_result_t<Function>, configuration_error>
+    {
+        try
+        {
+            if constexpr (std::is_void_v<std::invoke_result_t<Function>>)
+            {
+                std::forward<Function>(function)();
+                return {};
+            }
+            else
+                return std::forward<Function>(function)();
+        }
+        catch (const configuration_failure& failure)
+        {
+            return std::unexpected(failure.error);
+        }
+        catch (const std::bad_alloc&)
+        {
+            return std::unexpected(configuration_error{
+                .code = std::make_error_code(std::errc::not_enough_memory),
+                .message = "out of memory while processing configuration"});
+        }
+        catch (const std::exception& error)
+        {
+            return std::unexpected(configuration_error{
+                .code = std::make_error_code(std::errc::io_error),
+                .message = error.what()});
+        }
+    }
+
 } // namespace
+
+auto configuration_error::describe() const -> std::string
+{
+    if (path.empty())
+        return message;
+    return std::format("{}: {}", path, message);
+}
+
+auto expand_environment_references(std::string_view source)
+    -> std::expected<std::string, configuration_error>
+{
+    return guarded([source] { return expand_string(source, {}); });
+}
 
 auto configured_service::string_property(std::string_view path) const
     -> std::expected<std::optional<std::string>, std::error_code>
@@ -689,145 +1058,31 @@ void configured_service::set_property(std::string name, bool value)
 }
 
 auto load_configuration(const std::optional<std::filesystem::path>& file)
-    -> std::expected<application_configuration, std::error_code>
-try
+    -> std::expected<application_configuration, configuration_error>
 {
-    application_configuration result;
-    if (file)
-    {
-        auto document = read_document(*file);
-        if (!document)
-            return std::unexpected(document.error());
-        const document_cleanup cleanup{*document};
-        auto expanded = expand_environment(*document);
-        if (!expanded)
-            return std::unexpected(expanded.error());
-        if (!apply_document(result, *document))
-            return std::unexpected(
-                std::make_error_code(std::errc::invalid_argument));
-    }
-    auto environment_applied = apply_process_environment(result);
-    if (!environment_applied)
-        return std::unexpected(environment_applied.error());
-    if (result.observability.otlp.service_name.empty() ||
-        result.observability.otlp.service_name == "cnetmod")
-        result.observability.otlp.service_name = result.name;
-    auto validation = validate_configuration(result);
-    if (!validation)
-        return std::unexpected(validation.error());
-    return result;
-}
-catch (const std::bad_alloc&)
-{
-    return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
-}
-catch (...)
-{
-    return std::unexpected(std::make_error_code(std::errc::io_error));
+    return guarded([&file]
+        {
+            application_configuration result;
+            if (file)
+            {
+                auto document = read_document(*file);
+                const document_cleanup cleanup{document};
+                expand_tree(document, {});
+                apply_document(result, document);
+            }
+            apply_process_environment(result);
+            if (result.observability.otlp.service_name.empty() ||
+                result.observability.otlp.service_name == "cnetmod")
+                result.observability.otlp.service_name = result.name;
+            check_configuration(result);
+            return result;
+        });
 }
 
 auto validate_configuration(const application_configuration& value)
-    -> std::expected<void, std::error_code>
+    -> std::expected<void, configuration_error>
 {
-    const auto positive = [](auto duration)
-    {
-        const auto horizon = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::duration::max() / 2);
-        return duration.count() > 0 && duration <= horizon;
-    };
-    if (value.name.empty() || value.crash_dump.directory.empty() ||
-        value.execution.cpu_threads == 0U || value.execution.cpu_threads > 1024U ||
-        value.http.address.empty() ||
-        value.http.port == 0U ||
-        (value.http.request_timeout && !positive(*value.http.request_timeout)) ||
-        !positive(value.http.sse_max_duration) ||
-        !positive(value.http.sse_write_timeout) ||
-        !std::isfinite(value.observability.sampling_ratio) || value.observability.sampling_ratio < 0.0 ||
-        value.observability.sampling_ratio > 1.0 ||
-        !positive(value.lifecycle.service_start_timeout) ||
-        !positive(value.lifecycle.total_start_timeout) ||
-        !positive(value.lifecycle.service_stop_timeout) ||
-        !positive(value.lifecycle.total_stop_timeout) ||
-        !positive(value.lifecycle.http_drain_timeout) ||
-        !positive(value.lifecycle.telemetry_flush_timeout) ||
-        !positive(value.health.interval) || !positive(value.health.timeout) ||
-        value.health.failures_before_down == 0U ||
-        value.health.successes_before_up == 0U ||
-        value.observability.otlp.queue_capacity < 2U ||
-        value.observability.otlp.max_metric_instruments == 0U ||
-        value.observability.otlp.max_batch_size == 0U ||
-        value.observability.otlp.max_batch_size >
-            value.observability.otlp.queue_capacity ||
-        value.observability.otlp.max_attempts == 0U ||
-        !positive(value.observability.otlp.request_timeout) ||
-        value.observability.otlp.initial_retry_delay.count() < 0 ||
-        value.observability.otlp.max_retry_delay <
-            value.observability.otlp.initial_retry_delay)
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    if (value.management.enabled &&
-        (value.management.address.empty() || value.management.port == 0U))
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    if (value.security.jwt.enabled &&
-        (value.security.jwt.issuer.empty() ||
-            value.security.jwt.secret.size() < 32U ||
-            value.security.jwt.expires_in_seconds <= 0 ||
-            value.security.jwt.expires_in_seconds > 2592000 ||
-            value.security.jwt.session_idle_seconds <= 0 ||
-            value.security.jwt.session_idle_seconds >
-                value.security.jwt.expires_in_seconds))
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    for (const auto& [name, service] : value.services)
-    {
-        if (name.empty() || service.name.empty() || service.instance.empty() ||
-            !valid_recovery_policy(service.recovery) ||
-            !positive(service.recovery.budget))
-            return std::unexpected(
-                std::make_error_code(std::errc::invalid_argument));
-    }
-    if (value.orm.sharding.enabled && value.orm.sharding.topologies.empty())
-        return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-    const auto valid_identifier = [](std::string_view identifier)
-    {
-        if (identifier.empty() || identifier.size() > 63)
-            return false;
-        const auto first = static_cast<unsigned char>(identifier.front());
-        if (!(std::isalpha(first) || first == '_'))
-            return false;
-        return std::ranges::all_of(identifier, [](const char character)
-            {
-                const auto byte = static_cast<unsigned char>(character);
-                return std::isalnum(byte) || byte == '_';
-            });
-    };
-    for (const auto& [name, topology] : value.orm.sharding.topologies)
-    {
-        if (name.empty() || topology.logical_table.empty() ||
-            topology.table_count == 0 || topology.databases.empty())
-            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-        const auto suffix_width = std::max<std::size_t>(2,
-            std::to_string(topology.table_count - 1).size());
-        if (!valid_identifier(topology.logical_table) ||
-            topology.logical_table.size() + 1 + suffix_width > 63)
-            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-        std::unordered_set<std::string> databases;
-        for (const auto& database : topology.databases)
-        {
-            if (database.empty() || !databases.emplace(database).second)
-                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
-        }
-    }
-    std::unordered_set<service_key, service_key_hash> service_keys;
-    for (const auto& [binding, service] : value.services)
-    {
-        (void)binding;
-        if (!service_keys.emplace(service_key{service.name, service.instance}).second)
-            return std::unexpected(
-                std::make_error_code(std::errc::file_exists));
-    }
-    return {};
+    return guarded([&value] { check_configuration(value); });
 }
 
 static auto prepare_configuration_reload(application_configuration& active,
@@ -904,6 +1159,22 @@ static auto prepare_configuration_reload(application_configuration& active,
                 std::format("services.{}.recovery", binding));
         }
     }
+    for (const auto& [name, section] : candidate.sections)
+    {
+        const auto found = active.sections.find(name);
+        if (found == active.sections.end() ||
+            !cnetmod::json::equivalent(found->second, section))
+            result.changed_sections.push_back(name);
+    }
+    for (const auto& [name, unused] : active.sections)
+    {
+        (void)unused;
+        if (!candidate.sections.contains(name))
+            result.changed_sections.push_back(name);
+    }
+    // Section publication is decided by the options registry; the snapshot
+    // always tracks the candidate so a later reload compares against it.
+    active.sections = candidate.sections;
     result.applied = !result.changed.empty();
     result.restart_required = active.name != candidate.name ||
         active.execution != candidate.execution ||
@@ -964,27 +1235,18 @@ static auto prepare_configuration_reload(application_configuration& active,
 
 auto reload_safe_configuration(application_configuration& active,
     const application_configuration& candidate)
-    -> std::expected<configuration_reload_result, std::error_code>
+    -> std::expected<configuration_reload_result, configuration_error>
 {
-    try
-    {
-        if (auto valid = validate_configuration(candidate); !valid)
-            return std::unexpected(valid.error());
-        auto staged = active;
-        auto result = prepare_configuration_reload(staged, candidate);
-        static_assert(std::is_nothrow_move_assignable_v<application_configuration>);
-        static_assert(std::is_nothrow_move_constructible_v<configuration_reload_result>);
-        active = std::move(staged);
-        return result;
-    }
-    catch (const std::bad_alloc&)
-    {
-        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
-    }
-    catch (...)
-    {
-        return std::unexpected(std::make_error_code(std::errc::io_error));
-    }
+    return guarded([&active, &candidate]
+        {
+            check_configuration(candidate);
+            auto staged = active;
+            auto result = prepare_configuration_reload(staged, candidate);
+            static_assert(std::is_nothrow_move_assignable_v<application_configuration>);
+            static_assert(std::is_nothrow_move_constructible_v<configuration_reload_result>);
+            active = std::move(staged);
+            return result;
+        });
 }
 
 auto redact_configuration(const cnetmod::json::document& value) -> cnetmod::json::document

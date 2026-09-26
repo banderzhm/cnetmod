@@ -1772,8 +1772,11 @@ TEST(application_orchestration_failure_cancels_a_pending_handler)
                             configuration.observability.logs = false;
                             configuration.health.interval = std::chrono::hours{1};
                         })
-                    .routes([&](cnetmod::http::router& routes)
-                        {
+                    .add_module(cnetmod::application::make_module("routes",
+                         {.compose = [&](cnetmod::application::composition_context& composition)
+                                 -> std::expected<void, std::string>
+                             {
+                                 auto& routes = composition.routes;
                             routes.get("/pending", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
                                 {
                                     co_await injected_wait{request.cancellation_token()};
@@ -1783,7 +1786,8 @@ TEST(application_orchestration_failure_cancels_a_pending_handler)
                                     cancelled = request.cancellation_token().is_cancelled();
                                     resource->handler_finished = true;
                                 });
-                        })
+                                 return {};
+                             }}))
                     .service(resource)
                     .build();
     ASSERT_TRUE(host.has_value());

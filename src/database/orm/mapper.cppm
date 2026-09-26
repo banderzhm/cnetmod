@@ -4,6 +4,7 @@ import std;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.orm.automatic_interceptors;
+import cnetmod.orm.interceptor_chain;
 import cnetmod.orm.database_session;
 import cnetmod.orm.mapper_operations;
 import cnetmod.orm.model_metadata;
@@ -41,6 +42,17 @@ public:
     {
         return detail::mapper_session_access::template configure<T>(
             *session_, options);
+    }
+
+    /**
+     * @brief Installs policies from a repository-owned chain cache.
+     */
+    auto configure(automatic_interceptor_options options,
+        interceptor_chain_cache& cache)
+        -> std::expected<void, std::string>
+    {
+        return detail::mapper_session_access::template configure<T>(
+            *session_, std::move(options), cache);
     }
 
     /**

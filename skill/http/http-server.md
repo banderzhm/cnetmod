@@ -112,16 +112,26 @@ auto main() -> int {
 #### `router::get / post / put / del / patch / any`
 **签名**:
 ```cpp
-auto get(std::string_view pattern, handler_fn fn) -> router&;
-auto post(std::string_view pattern, handler_fn fn) -> router&;
-auto put(std::string_view pattern, handler_fn fn) -> router&;
-auto del(std::string_view pattern, handler_fn fn) -> router&;
-auto patch(std::string_view pattern, handler_fn fn) -> router&;
-auto any(std::string_view pattern, handler_fn fn) -> router&;
+auto get(std::string_view pattern, handler_fn fn,
+    endpoint_metadata metadata = {}) -> router&;
+// post / put / del / patch / any 同形；stream_* 与 sse_* 的元数据参数位于选项之后
+auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 ```
 **参数**:
 - `pattern` — 路由模式，支持 `:name` 命名参数和 `*filepath` 通配符
 - `fn` — 处理函数 `std::function<task<void>(request_context&)>`
+- `metadata` — 端点策略，按类型存取（同类型后加覆盖先加）。标准类型：
+  `allow_anonymous`、`optional_authentication`、`required_permissions{all_of, any_of}`、
+  `endpoint_name{"orders.list"}`；应用可添加任意自定义类型
+
+路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
+`endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
+
+```cpp
+routes.get("/orders/:id", read_order, endpoint_metadata{
+    required_permissions{.all_of = {"orders:read"}}, endpoint_name{"orders.read"}});
+routes.post("/login", login, endpoint_metadata{allow_anonymous{}});
+```
 
 **路由模式说明**:
 | 模式 | 示例路径 | 说明 |

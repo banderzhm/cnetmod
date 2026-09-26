@@ -1299,16 +1299,74 @@ TEST(application_runtime_resolves_named_chat_model_template)
     if (!host)
         return;
 
-    auto model_api = host->runtime().chat_model("assistant");
-    ASSERT_TRUE(model_api.has_value());
-    auto missing = host->runtime().chat_model("missing");
-    ASSERT_FALSE(missing.has_value());
-    if (!missing)
-        ASSERT_EQ(missing.error(),
-            std::make_error_code(std::errc::no_such_file_or_directory));
+    auto* model_service =
+        host->components().find<application::chat_model_service>("assistant");
+    ASSERT_TRUE(model_service != nullptr);
+    if (model_service != nullptr)
+    {
+        auto model_api = model_service->make_template();
+        cnetmod::ai::chat_model& contract = model_api;
+        (void)contract;
+    }
+    ASSERT_TRUE(host->components().find<application::chat_model_service>("missing") ==
+        nullptr);
 }
 
-TEST(application_runtime_rejects_invalid_chat_model_reconfiguration)
+TEST(application_chat_model_composition_is_resolved_at_build_time)
+{
+    const auto configure = [](application::application_configuration& config)
+    {
+        config.logging.manage_lifecycle = false;
+        config.management.enabled = false;
+        for (const auto* instance : {"key-a", "key-b"})
+        {
+            application::configured_service service{
+                .name = "openai", .instance = instance, .enabled = true};
+            service.properties["api_key"] = "test";
+            config.services.emplace(instance, std::move(service));
+        }
+    };
+    auto host = application::application_builder{"openai-composition"}
+                    .enable_auto_configuration()
+                    .configure(configure)
+                    .add_module(application::make_module("llm",
+                        {.register_components = [](application::registration_context& context)
+                                -> std::expected<void, std::string>
+                            {
+                                application::add_chat_model(context.components, "assistant",
+                                    {.instances = {"key-a", "key-b"},
+                                        .routing = application::chat_model_routing::round_robin,
+                                        .resilience = cnetmod::ai::resilient_model_options{
+                                            .max_attempts_per_model = 1}});
+                                return {};
+                            }}))
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    ASSERT_TRUE(host->components().find<cnetmod::ai::chat_model>("assistant") != nullptr);
+
+    auto missing = application::application_builder{"openai-composition-missing"}
+                       .enable_auto_configuration()
+                       .configure(configure)
+                       .add_module(application::make_module("llm",
+                           {.register_components = [](application::registration_context& context)
+                                   -> std::expected<void, std::string>
+                               {
+                                   application::add_chat_model(context.components, "assistant",
+                                       {.instances = {"key-a", "absent"}});
+                                   return {};
+                               }}))
+                       .build();
+    ASSERT_FALSE(missing.has_value());
+    if (!missing)
+    {
+        ASSERT_TRUE(missing.error().phase == application::build_phase::resolution);
+        ASSERT_TRUE(missing.error().component.contains("assistant"));
+    }
+}
+
+TEST(application_chat_model_service_rejects_invalid_reconfiguration)
 {
     auto host = application::application_builder{"openai-reconfigure"}
                     .enable_auto_configuration()
@@ -1331,21 +1389,17 @@ TEST(application_runtime_rejects_invalid_chat_model_reconfiguration)
     application::chat_model_reconfiguration invalid;
     invalid.properties["api_key"] = "test";
     invalid.properties["pool_size"] = 0;
-    auto rejected = cnetmod::sync_wait(
-        host->runtime().reconfigure_chat_model("assistant", std::move(invalid)));
+    auto* service = host->services().find<application::chat_model_service>("assistant");
+    ASSERT_TRUE(service != nullptr);
+    if (service == nullptr)
+        return;
+    auto rejected = cnetmod::sync_wait(service->reconfigure(std::move(invalid)));
     ASSERT_FALSE(rejected.has_value());
     if (!rejected)
         ASSERT_EQ(rejected.error(),
             std::make_error_code(std::errc::invalid_argument));
-
-    application::chat_model_reconfiguration missing;
-    missing.properties["api_key"] = "test";
-    auto absent = cnetmod::sync_wait(
-        host->runtime().reconfigure_chat_model("missing", std::move(missing)));
-    ASSERT_FALSE(absent.has_value());
-    if (!absent)
-        ASSERT_EQ(absent.error(),
-            std::make_error_code(std::errc::no_such_file_or_directory));
+    ASSERT_TRUE(host->services().find<application::chat_model_service>("missing") ==
+        nullptr);
 }
 
 TEST(application_openai_reconfiguration_commits_only_connected_generation)

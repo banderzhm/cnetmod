@@ -299,14 +299,16 @@ Application 的 PostgreSQL 健康探测使用同一个 deadline 获取连接并�
 ### ORM 集成
 
 PostgreSQL 只提供协议客户端、连接池、方言和结果适配器。Application
-通过统一的 `repository<T>` 绑定 PostgreSQL `session_gateway`，因此业务
-代码不依赖任何 PostgreSQL 专属的模型 Session 或结果类型。
+通过统一的仓储组件 `managed_repository<T>` 绑定 PostgreSQL `session_gateway`，
+因此业务代码不依赖任何 PostgreSQL 专属的模型 Session 或结果类型。
 
 ```cpp
-auto users = runtime.repository<User>(
-    "primary", {}, application::database_provider::postgresql);
-auto user = co_await users->save(User{.name = "Alice", .email = "alice@example.com"});
-auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
+application::add_repository<User>(context.components,
+    {.instance = "primary", .provider = application::database_provider::postgresql});
+
+auto& users = resolver.get<application::managed_repository<User>>();
+auto user = co_await users.save(User{.name = "Alice", .email = "alice@example.com"});
+auto page = co_await users.page(1, 20, query_wrapper<User>{}.eq(&User::status, 1));
 ```
 
 连接租约的普通归还保持同步快速路径；状态锁竞争时，归还通知存放在池的稳定槽位中，

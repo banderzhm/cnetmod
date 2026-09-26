@@ -19,7 +19,7 @@ TEST(configuration_reload_allocation_failure_preserves_active_snapshot)
         if (!result)
         {
             ++failures;
-            ASSERT_EQ(result.error(), std::make_error_code(std::errc::not_enough_memory));
+            ASSERT_EQ(result.error().code, std::make_error_code(std::errc::not_enough_memory));
             ASSERT_EQ(active.observability.sampling_ratio, original.observability.sampling_ratio);
             ASSERT_TRUE(active.health.interval == original.health.interval);
             ASSERT_TRUE(active.services.at("service").recovery.budget == original.services.at("service").recovery.budget);
@@ -41,7 +41,7 @@ TEST(configuration_reload_allocation_failure_preserves_active_snapshot)
     candidate.observability.sampling_ratio = std::numeric_limits<double>::quiet_NaN();
     auto rejected = application::reload_safe_configuration(active, candidate);
     ASSERT_FALSE(rejected.has_value());
-    ASSERT_EQ(rejected.error(), std::make_error_code(std::errc::invalid_argument));
+    ASSERT_EQ(rejected.error().code, std::make_error_code(std::errc::invalid_argument));
     ASSERT_EQ(active.observability.sampling_ratio, original.observability.sampling_ratio);
 }
 
@@ -130,7 +130,7 @@ TEST(configuration_default_loading_reports_allocation_failure)
         else
         {
             ++failures;
-            ASSERT_TRUE(result.error() == std::errc::not_enough_memory);
+            ASSERT_TRUE(result.error().code == std::errc::not_enough_memory);
         }
     }
     ASSERT_TRUE(failures > 0);

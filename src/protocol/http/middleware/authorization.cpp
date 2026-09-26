@@ -71,33 +71,65 @@ auto is_authorized(const authorization_principal& principal,
             matches_any(principal.permissions, requirement.any_of));
 }
 
+auto declared_requirement(const request_context& context)
+    -> std::optional<authorization_requirement>
+{
+    const auto* endpoint = context.endpoint();
+    if (endpoint == nullptr)
+        return std::nullopt;
+    const auto* declared = endpoint->metadata.find<required_permissions>();
+    if (declared == nullptr)
+        return std::nullopt;
+    return authorization_requirement{
+        .all_of = declared->all_of, .any_of = declared->any_of};
+}
+
 auto authorize(authorization_options options) -> middleware_fn
 {
+    if (!options.authenticate)
+        throw std::invalid_argument("authorization requires an authenticator");
     return [options = std::move(options)](request_context& context, next_fn next) -> task<void>
     {
-        if (options.skip && options.skip(context))
+        const auto* endpoint = context.endpoint();
+        if (endpoint == nullptr && !options.authorize_unmatched)
         {
             co_await next();
             co_return;
         }
-        if (!options.authenticate || !options.requirement_for)
+        if (endpoint != nullptr &&
+            endpoint->metadata.contains<allow_anonymous>())
         {
-            context.json(status::internal_server_error,
-                R"({"code":"AUTHORIZATION_NOT_CONFIGURED"})");
+            co_await next();
             co_return;
         }
 
+        const auto requirement = options.requirement_for
+            ? options.requirement_for(context)
+            : declared_requirement(context);
         auto principal = options.authenticate(context);
         if (!principal)
         {
-            context.json(status::unauthorized, R"({"code":"UNAUTHENTICATED"})");
+            const bool anonymous_allowed = endpoint != nullptr &&
+                endpoint->metadata.contains<optional_authentication>() &&
+                !requirement &&
+                principal.error().code ==
+                    authorization_error_code::unauthenticated;
+            if (anonymous_allowed)
+            {
+                co_await next();
+                co_return;
+            }
+            if (principal.error().code ==
+                authorization_error_code::verifier_failure)
+                context.json(status::service_unavailable,
+                    R"({"code":"AUTHENTICATION_UNAVAILABLE"})");
+            else
+                context.json(status::unauthorized,
+                    R"({"code":"UNAUTHENTICATED"})");
             co_return;
         }
         if (options.on_authenticated)
-        {
             options.on_authenticated(context, *principal);
-        }
-        const auto requirement = options.requirement_for(context);
         if (requirement && !is_authorized(*principal, *requirement))
         {
             context.json(status::forbidden, R"({"code":"FORBIDDEN"})");

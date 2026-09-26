@@ -43,13 +43,29 @@ using authorization_requirement_resolver = std::function<
 using authenticated_principal_sink = std::function<void(
     request_context&, const authorization_principal&)>;
 
+/**
+ * @brief Route-aware authorization.
+ *
+ * Policy is read from the matched endpoint: allow_anonymous bypasses the
+ * middleware, required_permissions supplies the requirement and
+ * optional_authentication admits anonymous callers when the route declares no
+ * permission. requirement_for may override the declared requirement.
+ */
 struct authorization_options
 {
     principal_authenticator authenticate;
+    /// Optional override of the requirement declared on the endpoint.
     authorization_requirement_resolver requirement_for;
     authenticated_principal_sink on_authenticated;
-    std::function<bool(const request_context&)> skip;
+    /// Requests matching no route pass through so the router answers 404.
+    bool authorize_unmatched = false;
 };
+
+/**
+ * @brief Returns the requirement declared through http::required_permissions.
+ */
+[[nodiscard]] auto declared_requirement(const request_context& context)
+    -> std::optional<authorization_requirement>;
 
 [[nodiscard]] auto permission_matches(std::string_view granted,
     std::string_view required) noexcept -> bool;

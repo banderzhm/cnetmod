@@ -8,6 +8,11 @@ module;
 export module cnetmod.application;
 
 export import cnetmod.application.configuration;
+export import cnetmod.application.diagnostics;
+export import cnetmod.application.components;
+export import cnetmod.application.options;
+export import cnetmod.application.modules;
+export import cnetmod.application.data;
 export import cnetmod.application.managed_service;
 export import cnetmod.application.recovery_policy;
 export import cnetmod.application.service_registry;
@@ -56,6 +61,7 @@ export import cnetmod.ai;
 export import cnetmod.application.chat_model_pool;
 export import cnetmod.application.chat_model_service;
 export import cnetmod.application.chat_model_template;
+export import cnetmod.application.chat_model_composition;
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
 export import cnetmod.application.openai;

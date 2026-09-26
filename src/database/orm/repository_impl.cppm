@@ -4,6 +4,7 @@ import std;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.orm.automatic_interceptors;
+import cnetmod.orm.interceptor_chain;
 import cnetmod.orm.database_session;
 import cnetmod.orm.mapper;
 import cnetmod.orm.model_metadata;
@@ -51,8 +52,9 @@ class repository_impl
 {
 public:
     explicit repository_impl(Gateway& gateway,
-        automatic_interceptor_options interceptors = {}) noexcept
-        : gateway_(&gateway), interceptors_(interceptors)
+        automatic_interceptor_options interceptors = {})
+        : gateway_(&gateway), interceptors_(interceptors),
+          chain_cache_(std::make_shared<interceptor_chain_cache>())
     {
     }
 
@@ -675,7 +677,7 @@ private:
     auto configure(Session& session) const -> std::expected<void, std::string>
     {
         mapper<T, Session> models{session};
-        return models.configure(interceptors_);
+        return models.configure(interceptors_, *chain_cache_);
     }
 
     template <typename Operation>
@@ -776,6 +778,10 @@ private:
 
     Gateway* gateway_;
     automatic_interceptor_options interceptors_;
+    // The policy chain depends only on T, the options and the gateway dialect,
+    // all fixed for this repository, so it is built once and shared by every
+    // operation. Held by pointer to keep the repository movable.
+    std::shared_ptr<interceptor_chain_cache> chain_cache_;
 };
 
 } // namespace cnetmod::orm

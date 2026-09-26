@@ -41,7 +41,7 @@ TEST(application_rejects_invalid_pool_capacity_without_normalization)
             auto result = build(std::move(properties));
             ASSERT_FALSE(result.has_value());
             if (!result)
-                ASSERT_EQ(result.error(), std::make_error_code(std::errc::invalid_argument));
+                ASSERT_EQ(result.error().code, std::make_error_code(std::errc::invalid_argument));
         };
         for (const auto* field : {"minimum_size", "maximum_size"})
             for (const auto& invalid : invalid_values)

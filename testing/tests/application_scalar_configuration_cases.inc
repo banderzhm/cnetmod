@@ -12,7 +12,7 @@ TEST(application_builder_rejects_nonfinite_sampling)
             .build();
         ASSERT_FALSE(host.has_value());
         if (!host)
-            ASSERT_EQ(host.error(), std::make_error_code(std::errc::invalid_argument));
+            ASSERT_EQ(host.error().code, std::make_error_code(std::errc::invalid_argument));
     }
     for (const auto ratio : {0.0, 0.5, 1.0})
     {

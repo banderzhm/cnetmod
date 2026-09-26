@@ -1,24 +1,16 @@
 module cnetmod.application.runtime;
 
+import std;
 import cnetmod.coro.cancel;
 import cnetmod.protocol.http.middleware.compress;
-#ifdef CNETMOD_HAS_SSL
-import cnetmod.security.jwt;
-#endif
-#ifdef CNETMOD_HAS_CHAT_MODEL
-import cnetmod.application.chat_model_service;
-#endif
-#ifdef CNETMOD_HAS_PROTOCOL_REDIS
-import cnetmod.application.redis;
-#endif
 
 namespace cnetmod::application {
 
 application_runtime::application_runtime(io_context& io, thread_pool& cpu_pool,
     task_supervisor& supervisor, observability::telemetry_hub& telemetry,
-    service_registry& services, std::stop_token cancellation,
+    std::stop_token cancellation,
     const application_configuration& configuration) noexcept
-    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), services_(services), cancellation_(cancellation), configuration_(configuration), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
+    : io_(io), cpu_pool_(cpu_pool), supervisor_(supervisor), telemetry_(telemetry), cancellation_(cancellation), configuration_(configuration), executor_(io, cpu_pool), files_(io), rest_(io, telemetry), json_(io, cpu_pool)
 {
 }
 
@@ -32,6 +24,11 @@ auto application_runtime::spawn_managed(std::string name,
             std::make_error_code(std::errc::operation_canceled));
     return supervisor_.supervise(std::move(name), std::move(operation),
         recovery, required, std::move(stop_request), recovery_deadline);
+}
+
+auto application_runtime::executor() noexcept -> execution_context&
+{
+    return executor_;
 }
 
 auto application_runtime::files() noexcept -> async_file_template&
@@ -54,61 +51,6 @@ auto application_runtime::configuration() const noexcept
 {
     return configuration_;
 }
-
-#ifdef CNETMOD_HAS_SSL
-auto application_runtime::sign_jwt(const security::jwt_sign_options& options,
-    std::string_view secret)
-    -> task<std::expected<std::string, std::string>>
-{
-    co_return co_await security::sign_jwt(cpu_pool_, io_, options, secret);
-}
-
-auto application_runtime::verify_jwt(std::string_view token,
-    std::string_view secret)
-    -> task<std::expected<security::jwt_claims, std::string>>
-{
-    co_return co_await security::verify_jwt(cpu_pool_, io_, token, secret);
-}
-#endif
-
-#ifdef CNETMOD_HAS_PROTOCOL_REDIS
-auto application_runtime::redis(std::string_view instance,
-    redis::template_options options)
-    -> std::expected<redis::redis_template, std::error_code>
-{
-    auto service = services_.require<redis_service>(instance);
-    if (!service)
-        return std::unexpected(service.error());
-    return service->get().make_template(std::move(options));
-}
-#endif
-
-#ifdef CNETMOD_HAS_CHAT_MODEL
-auto application_runtime::chat_model(std::string_view instance,
-    chat_model_template_options options)
-    -> std::expected<chat_model_template, std::error_code>
-{
-    auto service = services_.require<chat_model_service>(instance);
-    if (!service)
-        return std::unexpected(service.error());
-    return service->get().make_template(std::move(options));
-}
-
-auto application_runtime::reconfigure_chat_model(std::string_view instance,
-    chat_model_reconfiguration configuration, cancel_token* cancellation)
-    -> task<std::expected<void, std::error_code>>
-{
-    if (stop_requested() ||
-        (cancellation && cancellation->is_cancelled()))
-        co_return std::unexpected(
-            std::make_error_code(std::errc::operation_canceled));
-    auto service = services_.require<chat_model_service>(instance);
-    if (!service)
-        co_return std::unexpected(service.error());
-    co_return co_await service->get().reconfigure(
-        std::move(configuration), cancellation);
-}
-#endif
 
 auto application_runtime::schedule_on_cpu() noexcept -> pool_post_awaitable
 {

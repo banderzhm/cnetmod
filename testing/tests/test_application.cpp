@@ -64,10 +64,17 @@ CNETMOD_PROJECTION(runtime_record_summary,
     CNETMOD_FIELD(id, "id", bigint),
     CNETMOD_FIELD(summary, "summary", varchar))
 
-static_assert(std::same_as<decltype(std::declval<application::application_runtime&>()
-                                   .repository<runtime_repository_record>()),
-    std::expected<application::managed_repository<runtime_repository_record>,
+static_assert(std::same_as<decltype(application::repository_factory<
+                                   runtime_repository_record>::create(
+                                   std::declval<application::service_registry&>(),
+                                   std::declval<const application::application_configuration&>(),
+                                   application::repository_options{})),
+    std::expected<application::repository_factory<runtime_repository_record>,
         std::error_code>>);
+static_assert(std::same_as<decltype(std::declval<const application::repository_factory<
+                                   runtime_repository_record>&>()
+                                   .shared()),
+    application::managed_repository<runtime_repository_record>&>);
 
 [[maybe_unused]] auto managed_repository_surface_compile_probe(
     application::managed_repository<runtime_repository_record>& records)
@@ -705,13 +712,17 @@ TEST(application_rejects_invalid_custom_service_policy_without_partial_registrat
     bool routes_configured = false;
     auto built = application::application_builder{"invalid-custom-policy"}
                      .service(service)
-                     .routes([&](cnetmod::http::router&)
-                         {
-                             routes_configured = true;
-                         })
+                     .add_module(application::make_module("routes",
+                         {.compose = [&](application::composition_context&)
+                                 -> std::expected<void, std::string>
+                             {
+                                 routes_configured = true;
+                                 return {};
+                             }}))
                      .build();
     ASSERT_FALSE(built.has_value());
-    ASSERT_EQ(built.error(), std::make_error_code(std::errc::invalid_argument));
+    ASSERT_EQ(built.error().code, std::make_error_code(std::errc::invalid_argument));
+    ASSERT_TRUE(built.error().phase == application::build_phase::registration);
     ASSERT_FALSE(routes_configured);
     ASSERT_TRUE(events->empty());
     service->recovery_options = {};
@@ -1758,47 +1769,46 @@ TEST(application_builder_validates_before_creating_host)
 #if defined(CNETMOD_HAS_ORM) && \
     (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
         defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
-TEST(application_runtime_saas_switch_requires_a_request_tenant_snapshot)
+TEST(repository_factory_resolves_its_data_source_at_build_time)
 {
-    cnetmod::net_init network;
-    auto io = cnetmod::make_io_context();
-    cnetmod::thread_pool cpu_pool{1};
-    cnetmod::observability::telemetry_hub telemetry{*io,
-        {.export_traces = false, .export_metrics = false,
-            .export_logs = false}};
-    application::task_supervisor supervisor{*io};
     application::service_registry services;
     application::application_configuration configuration;
-    std::stop_source stopping;
-    application::application_runtime runtime{*io, cpu_pool, supervisor,
-        telemetry, services, stopping.get_token(), configuration};
-    runtime.require_tenant_scope(true);
+    configuration.orm.tenant_scope_required = true;
 
-    auto plain = runtime.repository<runtime_tenant_record>();
-    ASSERT_FALSE(plain.has_value());
-    ASSERT_EQ(plain.error(), std::make_error_code(std::errc::permission_denied));
-
-    cnetmod::socket peer;
-    cnetmod::http::header_map headers;
-    cnetmod::http::response response;
-    cnetmod::http::request_context request{*io, peer, "GET", "/", headers,
-        {}, response, {}};
-    auto absent = runtime.repository<runtime_tenant_record>(request);
-    ASSERT_FALSE(absent.has_value());
-    ASSERT_EQ(absent.error(), std::make_error_code(std::errc::permission_denied));
-
-    request.scope().bind(std::make_shared<cnetmod::orm::tenant_scope>(
-        cnetmod::orm::tenant_scope::self(10)));
-    auto bound = runtime.repository<runtime_tenant_record>(request);
-    ASSERT_FALSE(bound.has_value());
-    ASSERT_EQ(bound.error(),
+    auto missing = application::repository_factory<runtime_tenant_record>::create(
+        services, configuration, {.instance = "primary"});
+    ASSERT_FALSE(missing.has_value());
+    ASSERT_EQ(missing.error(),
         std::make_error_code(std::errc::no_such_file_or_directory));
 
-    runtime.require_tenant_scope(false);
-    auto standalone = runtime.repository<runtime_tenant_record>();
+    configuration.orm.tenant_scope_required = false;
+    auto standalone = application::repository_factory<runtime_repository_record>::create(
+        services, configuration, {});
     ASSERT_FALSE(standalone.has_value());
     ASSERT_EQ(standalone.error(),
         std::make_error_code(std::errc::no_such_file_or_directory));
+}
+
+TEST(repository_registration_fails_the_build_without_a_data_source)
+{
+    auto host = application::application_builder{"repository-without-source"}
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                        })
+                    .add_module(application::make_module("records",
+                        {.register_components = [](application::registration_context& context)
+                                -> std::expected<void, std::string>
+                            {
+                                application::add_repository<runtime_repository_record>(
+                                    context.components, {.instance = "primary"});
+                                return {};
+                            }}))
+                    .build();
+    ASSERT_FALSE(host.has_value());
+    ASSERT_TRUE(host.error().phase == application::build_phase::resolution);
+    ASSERT_TRUE(host.error().message.contains("primary"));
 }
 #endif
 
@@ -1814,7 +1824,9 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
     application::application_configuration configuration;
     std::stop_source stopping;
     application::application_runtime runtime{*io, cpu_pool, supervisor,
-        telemetry, services, stopping.get_token(), configuration};
+        telemetry, stopping.get_token(), configuration};
+    ASSERT_EQ(&runtime.executor().event_loop(), io.get());
+    ASSERT_EQ(&runtime.executor().cpu_pool(), &cpu_pool);
     bool background_ran = false;
     auto accepted = runtime.spawn_managed("runtime-test",
         [&](cnetmod::cancel_token& token)
@@ -1931,65 +1943,89 @@ TEST(application_runtime_supervises_tasks_and_offloads_json)
         std::make_error_code(std::errc::operation_canceled));
 }
 
-TEST(application_builder_runtime_routes_receive_host_runtime)
+TEST(application_modules_compose_with_the_host_runtime_and_components)
 {
     application::application_runtime* observed = nullptr;
-    auto host = application::application_builder{"runtime-routes"}
-                    .routes(application::runtime_route_configurer{
-                        [&observed](cnetmod::http::router& routes,
-                            application::application_runtime& runtime)
-                        {
-                            observed = &runtime;
-                            routes.get("/runtime",
-                                [](cnetmod::http::request_context& context)
-                                    -> cnetmod::task<void>
-                                {
-                                    context.text(cnetmod::http::status::ok, "ok");
-                                    co_return;
-                                });
-                        }})
-                    .build();
-    ASSERT_TRUE(host.has_value());
-    ASSERT_EQ(observed, &host->runtime());
-}
-
-TEST(application_builder_runtime_middleware_uses_host_runtime)
-{
-    application::application_runtime* observed = nullptr;
-    auto host = application::application_builder{"runtime-middleware"}
-                    .runtime_middleware(application::runtime_middleware_factory{
-                        [&observed](application::application_runtime& runtime)
-                        {
-                            observed = &runtime;
-                            return runtime.compression({
-                                .min_size = 128,
-                                .max_concurrency = 2,
-                            });
-                        }})
-                    .build();
-    ASSERT_TRUE(host.has_value());
-    ASSERT_EQ(observed, &host->runtime());
-
-    auto rejected = application::application_builder{"invalid-runtime-middleware"}
-                        .runtime_middleware(application::runtime_middleware_factory{
-                            [](application::application_runtime&)
+    const application::component_container* observed_components = nullptr;
+    auto host = application::application_builder{"module-composition"}
+                    .add_module(application::make_module("runtime-routes",
+                        {.compose = [&](application::composition_context& context)
+                                -> std::expected<void, std::string>
                             {
-                                return application::application_middleware{};
-                            }})
+                                observed = &context.runtime;
+                                observed_components = &context.components;
+                                context.routes.get("/runtime",
+                                    [](cnetmod::http::request_context& request)
+                                        -> cnetmod::task<void>
+                                    {
+                                        request.text(cnetmod::http::status::ok, "ok");
+                                        co_return;
+                                    },
+                                    cnetmod::http::endpoint_metadata{
+                                        cnetmod::http::allow_anonymous{}});
+                                context.middleware.push_back(context.runtime.compression({
+                                    .min_size = 128,
+                                    .max_concurrency = 2,
+                                }));
+                                return {};
+                            }}))
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (!host)
+        return;
+    ASSERT_EQ(observed, &host->runtime());
+    ASSERT_EQ(observed_components, &host->components());
+    ASSERT_EQ(&host->components().get<application::application_runtime>(),
+        &host->runtime());
+
+    auto rejected = application::application_builder{"empty-module-middleware"}
+                        .add_module(application::make_module("broken",
+                            {.compose = [](application::composition_context& context)
+                                    -> std::expected<void, std::string>
+                                {
+                                    context.middleware.push_back({});
+                                    return {};
+                                }}))
                         .build();
     ASSERT_FALSE(rejected.has_value());
+    ASSERT_TRUE(rejected.error().phase == application::build_phase::composition);
+
+    auto failed = application::application_builder{"failing-module"}
+                      .add_module(application::make_module("failing",
+                          {.compose = [](application::composition_context&)
+                                  -> std::expected<void, std::string>
+                              {
+                                  return std::unexpected(std::string{"route table rejected"});
+                              }}))
+                      .build();
+    ASSERT_FALSE(failed.has_value());
+    ASSERT_EQ(failed.error().component, "failing");
+    ASSERT_EQ(failed.error().message, "route table rejected");
 
     bool empty_rejected = false;
     try
     {
-        application::application_builder{"empty-runtime-middleware"}
-            .runtime_middleware(application::runtime_middleware_factory{});
+        application::application_builder{"empty-module"}.add_module(
+            std::shared_ptr<application::application_module>{});
     }
     catch (const std::invalid_argument&)
     {
         empty_rejected = true;
     }
     ASSERT_TRUE(empty_rejected);
+
+    bool duplicate_rejected = false;
+    try
+    {
+        application::application_builder{"duplicate-module"}
+            .add_module(application::make_module("same", {}))
+            .add_module(application::make_module("same", {}));
+    }
+    catch (const std::logic_error&)
+    {
+        duplicate_rejected = true;
+    }
+    ASSERT_TRUE(duplicate_rejected);
 }
 
 TEST(application_builder_composes_host_owned_service_factories_before_freeze)
@@ -2079,26 +2115,30 @@ TEST(application_builder_executes_ordered_business_middleware)
                             value.observability.metrics = false;
                             value.observability.logs = false;
                         })
-                    .routes([&events](cnetmod::http::router& routes)
-                        {
-                            routes.get("/middleware-order",
-                                [&events](cnetmod::http::request_context& request)
-                                    -> cnetmod::task<void>
-                                {
-                                    events.push_back("route");
-                                    const auto headers_ok =
-                                        request.get_header("X-Template") == "request" &&
-                                        request.get_header("X-Default") == "present" &&
-                                        request.get_header("X-Request") == "present";
-                                    request.text(headers_ok
-                                            ? cnetmod::http::status::ok
-                                            : cnetmod::http::status::bad_request,
-                                        headers_ok ? "ok" : "missing headers");
-                                    co_return;
-                                });
-                        })
-                    .middleware(first)
-                    .middleware(second)
+                    .add_module(application::make_module("middleware-order",
+                        {.compose = [&events, first, second](
+                                        application::composition_context& context)
+                                -> std::expected<void, std::string>
+                            {
+                                context.routes.get("/middleware-order",
+                                    [&events](cnetmod::http::request_context& request)
+                                        -> cnetmod::task<void>
+                                    {
+                                        events.push_back("route");
+                                        const auto headers_ok =
+                                            request.get_header("X-Template") == "request" &&
+                                            request.get_header("X-Default") == "present" &&
+                                            request.get_header("X-Request") == "present";
+                                        request.text(headers_ok
+                                                ? cnetmod::http::status::ok
+                                                : cnetmod::http::status::bad_request,
+                                            headers_ok ? "ok" : "missing headers");
+                                        co_return;
+                                    });
+                                context.middleware.push_back(first);
+                                context.middleware.push_back(second);
+                                return {};
+                            }}))
                     .build();
 
     ASSERT_TRUE(host.has_value());
@@ -2159,18 +2199,6 @@ TEST(application_builder_executes_ordered_business_middleware)
     ASSERT_TRUE(response_ok);
     ASSERT_TRUE(failed_client_discarded);
     ASSERT_TRUE(events == std::vector<std::string>({"first-enter", "second-enter", "route", "second-exit", "first-exit"}));
-
-    bool rejected = false;
-    try
-    {
-        application::application_builder{"empty-middleware"}
-            .middleware(application::application_middleware{});
-    }
-    catch (const std::invalid_argument&)
-    {
-        rejected = true;
-    }
-    ASSERT_TRUE(rejected);
 }
 
 TEST(application_configuration_precedence_and_redaction)
@@ -2315,7 +2343,7 @@ TEST(application_configuration_validates_and_exposes_jwt_security)
     ASSERT_FALSE(invalid_idle.has_value());
 }
 
-TEST(application_builder_runtime_routes_follow_service_factories)
+TEST(application_module_composition_follows_service_factories)
 {
     bool factory_ran = false;
     bool route_saw_service = false;
@@ -2332,12 +2360,15 @@ TEST(application_builder_runtime_routes_follow_service_factories)
                                 std::vector<application::service_key>{},
                                 application::service_requirement::required, events)};
                     })
-                    .routes(application::runtime_route_configurer{
-                        [&](cnetmod::http::router&,
-                            application::application_runtime&)
-                        {
-                            route_saw_service = factory_ran;
-                        }})
+                    .add_module(application::make_module("route-order",
+                        {.compose = [&](application::composition_context& context)
+                                -> std::expected<void, std::string>
+                            {
+                                route_saw_service = factory_ran &&
+                                    context.components.find<application::service_registry>() !=
+                                        nullptr;
+                                return {};
+                            }}))
                     .build();
     ASSERT_TRUE(host.has_value());
     ASSERT_TRUE(route_saw_service);
