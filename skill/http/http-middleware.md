@@ -395,12 +395,12 @@ class ip_firewall {
 ```cpp
 struct ip_firewall_options {
     int max_violations = 10;
-    std::chrono::seconds violation_window{300    std::vector<std::string> trusted_proxies;  // 同 rate_limiter：仅对可信代理解析转发头
-};
+    std::chrono::seconds violation_window{300};
     std::chrono::seconds ban_duration{3600};
     bool track_4xx = true;
     bool track_5xx = false;
     bool track_rate_limit = true;
+    std::vector<std::string> trusted_proxies;  // 同 rate_limiter：仅对可信代理解析转发头
 };
 ```
 

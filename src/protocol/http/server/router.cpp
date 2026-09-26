@@ -609,7 +609,7 @@ void router::on_unmatched(unmatched_handler_fn handler)
     unmatched_ = std::move(handler);
 }
 
-auto router::unmatched_handler() const noexcept -> const unmatched_handler_fn&
+auto router::unmatched_handler() const -> unmatched_handler_fn
 {
     return unmatched_;
 }
@@ -778,7 +778,7 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     auto canonical = detail::canonical_from_segments(segs);
     auto described = std::make_shared<endpoint>();
     described->method = m;
-    described->pattern = canonical;
+    described->pattern = std::string{p};
     if (const auto* name = metadata.find<endpoint_name>())
         described->name = name->value;
     described->metadata = std::move(metadata);

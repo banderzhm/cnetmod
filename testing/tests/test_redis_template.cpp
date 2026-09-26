@@ -417,6 +417,11 @@ TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
     steps.push_back({command({"GET", "app:missing"}), {"$-1\r\n"}});
     steps.push_back({command({"GET", "app:large"}),
         {large_wire.substr(0, 6300), large_wire.substr(6300)}});
+    steps.push_back({command({"GETEX", "app:session", "EX", "9"}),
+        {"$6\r\nactive\r\n"}});
+    steps.push_back({command({"EVAL", "return 1", "2", "app:old", "app:new",
+                                "payload", "9"}),
+        {":1\r\n"}});
     steps.push_back({command({"SET", "app:value", "saved", "EX", "9"}),
         {"+OK\r\n"}});
     steps.push_back({command({"DEL", "app:value"}), {":1\r\n"}});
@@ -500,6 +505,12 @@ TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
     {
         auto missing = co_await redis.get("missing");
         auto loaded = co_await redis.get("large");
+        auto touched = co_await redis.getex(
+            "session", std::chrono::seconds{9});
+        const std::vector<std::string> script_keys{"old", "new"};
+        const std::vector<std::string> script_arguments{"payload", "9"};
+        auto scripted = co_await redis.eval_integer(
+            "return 1", script_keys, script_arguments);
         auto saved = co_await redis.set("value", "saved");
         auto deleted = co_await redis.del("value");
         auto present = co_await redis.exists("value");
@@ -524,7 +535,8 @@ TEST(redis_template_normalizes_values_collections_scans_pipeline_and_spans)
         auto piped = co_await redis.execute(batch);
 
         exercise_ok = missing && !*missing && loaded && *loaded &&
-            **loaded == large && saved && deleted && *deleted && present &&
+            **loaded == large && touched && *touched && **touched == "active" &&
+            scripted && *scripted == 1 && saved && deleted && *deleted && present &&
             !*present && incremented && *incremented == 5 && expired &&
             *expired && remaining && *remaining &&
             **remaining == std::chrono::milliseconds{-1} && values &&

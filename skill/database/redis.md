@@ -353,6 +353,7 @@ redis::redis_template cache{pool, {
 
 auto order = co_await cache.get_as<order_record>("42");
 auto saved = co_await cache.set_as("42", value);
+auto active = co_await cache.getex("session:abc", std::chrono::minutes{30});
 
 auto batch = cache.pipeline();
 batch.get("42").exists("43").incr("revision");
@@ -369,6 +370,8 @@ auto replies = co_await cache.execute(batch);
 `is_reusable()` 为真的 lease。
 
 - `get` / `hget` 将 Redis nil 映射为成功的 `std::optional{}`，不映射成错误。
+- `getex(key, ttl)` 使用 Redis 6.2+ 的单条 `GETEX key EX seconds` 原子读取并续期；
+  不要用 Pipeline 的 `GET` + `EXPIRE` 冒充相同语义。
 - `mget` 保持与输入逐位对应，内部消化 RESP aggregate 根节点。
 - `hgetall` 同时规范化 RESP2 array 和 RESP3 map。
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
@@ -377,6 +380,9 @@ auto replies = co_await cache.execute(batch);
 - `json_codec` 是 `get_as` / `set_as` 的 Glaze-only 默认 JSON codec；Redis 模块只通过 `cnetmod.json` 解析和序列化。若业务需要非 JSON 值编码，可显式传入 Redis 值 codec，但这不会替换框架 JSON 引擎。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
+- `eval_integer(script, keys, args)` 用于必须在 Redis 内原子完成的业务状态转换。
+  `keys` 是逻辑键，模板会统一添加命名空间；`args` 原样传入。脚本必须返回整数，
+  且 Cluster 下所有键必须使用同一 hash tag。业务脚本属于应用层，不应塞进 cnetmod。
 
 Application 的 `redis_service::make_template(options, parent)` 自动复用服务连接池及
 Telemetry Hub 的 span exporter；调用方只显式传递当前协程的 trace parent。

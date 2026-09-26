@@ -84,8 +84,6 @@ namespace {
     {
         client = strip_ipv6_brackets(client);
         pattern = strip_ipv6_brackets(pattern);
-        if (client == pattern)
-            return true;
         const auto slash = pattern.find('/');
         if (slash == std::string_view::npos)
         {
@@ -122,6 +120,16 @@ auto ip_matches(std::string_view address, std::string_view pattern) -> bool
 }
 
 namespace {
+    auto normalized_address(std::string_view address)
+        -> std::optional<std::string>
+    {
+        address = strip_ipv6_brackets(address);
+        if (parse_address<4>(address, AF_INET) ||
+            parse_address<16>(address, AF_INET6))
+            return std::string{address};
+        return std::nullopt;
+    }
+
     auto trusted(std::string_view address, std::span<const std::string> proxies)
         -> bool
     {
@@ -137,16 +145,17 @@ auto resolve_forwarded_client_ip(std::string_view peer_address,
     std::string_view x_forwarded_for, std::string_view x_real_ip,
     std::span<const std::string> trusted_proxies) -> std::string
 {
-    peer_address = trim(peer_address);
-    if (peer_address.empty())
+    const auto peer = normalized_address(peer_address);
+    if (!peer)
         return "unknown";
-    if (!trusted(peer_address, trusted_proxies))
-        return std::string{peer_address};
+    if (!trusted(*peer, trusted_proxies))
+        return *peer;
 
     // Walk right to left: every hop appended by a trusted proxy is skipped,
     // the first untrusted hop is the client. Entries left of it are
     // client-supplied and ignored.
     std::string_view remaining = x_forwarded_for;
+    std::optional<std::string> furthest;
     while (!remaining.empty())
     {
         const auto comma = remaining.rfind(',');
@@ -156,14 +165,18 @@ auto resolve_forwarded_client_ip(std::string_view peer_address,
         remaining = comma == std::string_view::npos
             ? std::string_view{}
             : remaining.substr(0, comma);
-        if (hop.empty())
-            continue;
-        if (!trusted(hop, trusted_proxies))
-            return std::string{strip_ipv6_brackets(hop)};
+        const auto normalized = normalized_address(hop);
+        if (!normalized)
+            return *peer;
+        furthest = *normalized;
+        if (!trusted(*normalized, trusted_proxies))
+            return *normalized;
     }
-    if (const auto real = trim(x_real_ip); !real.empty())
-        return std::string{strip_ipv6_brackets(real)};
-    return std::string{peer_address};
+    if (furthest)
+        return *furthest;
+    if (const auto real = normalized_address(x_real_ip))
+        return *real;
+    return *peer;
 }
 
 auto resolve_client_ip(const request_context& request,

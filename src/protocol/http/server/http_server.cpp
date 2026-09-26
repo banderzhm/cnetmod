@@ -418,12 +418,13 @@ namespace detail {
         -> handler_fn
     {
         auto methods = routes.allowed_methods(path);
-        const auto& custom = routes.unmatched_handler();
+        auto custom = routes.unmatched_handler();
         if (methods.empty())
         {
             if (!custom)
                 return not_found_handler;
-            return [&custom](request_context& context) -> task<void>
+            return [custom = std::move(custom)](
+                       request_context& context) -> task<void>
             {
                 co_await custom(context, unmatched_request{.status = status::not_found});
             };
@@ -436,7 +437,8 @@ namespace detail {
                 allow += ", ";
             allow += method_to_string(method);
         }
-        return [allow = std::move(allow), methods = std::move(methods), &custom](
+        return [allow = std::move(allow), methods = std::move(methods),
+                   custom = std::move(custom)](
                    request_context& context) -> task<void>
         {
             context.resp().set_header("Allow", allow);

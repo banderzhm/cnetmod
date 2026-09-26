@@ -571,7 +571,7 @@ public:
      * set by the server before the handler runs.
      */
     void on_unmatched(unmatched_handler_fn handler);
-    [[nodiscard]] auto unmatched_handler() const noexcept -> const unmatched_handler_fn&;
+    [[nodiscard]] auto unmatched_handler() const -> unmatched_handler_fn;
 
     /**
      * Route registration. Metadata declared here is exposed to middleware

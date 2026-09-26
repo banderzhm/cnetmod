@@ -708,6 +708,60 @@ auto redis_template::get(std::string_view key, cancel_token& cancellation)
     co_return optional_string(*response);
 }
 
+auto redis_template::getex(std::string_view key, ttl_seconds ttl)
+    -> task<std::expected<std::optional<std::string>, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await getex(key, ttl, cancellation);
+}
+
+auto redis_template::getex(std::string_view key, ttl_seconds ttl,
+    cancel_token& cancellation)
+    -> task<std::expected<std::optional<std::string>, std::error_code>>
+{
+    if (key.empty() || ttl <= ttl_seconds::zero())
+        co_return std::unexpected(invalid_argument());
+    auto response = co_await execute_one({"GETEX", physical_key(key), "EX",
+                                             std::to_string(ttl.count())},
+        cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    co_return optional_string(*response);
+}
+
+auto redis_template::eval_integer(std::string_view script,
+    std::span<const std::string> keys,
+    std::span<const std::string> arguments)
+    -> task<std::expected<std::int64_t, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await eval_integer(script, keys, arguments, cancellation);
+}
+
+auto redis_template::eval_integer(std::string_view script,
+    std::span<const std::string> keys,
+    std::span<const std::string> arguments, cancel_token& cancellation)
+    -> task<std::expected<std::int64_t, std::error_code>>
+{
+    if (script.empty() || std::ranges::any_of(keys,
+                              [](const std::string& key) { return key.empty(); }))
+        co_return std::unexpected(invalid_argument());
+
+    std::vector<std::string> command;
+    command.reserve(3U + keys.size() + arguments.size());
+    command.emplace_back("EVAL");
+    command.emplace_back(script);
+    command.push_back(std::to_string(keys.size()));
+    for (const auto& key : keys)
+        command.push_back(physical_key(key));
+    command.insert(command.end(), arguments.begin(), arguments.end());
+
+    auto response = co_await execute_one(std::move(command), cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    co_return integer(*response);
+}
+
 auto redis_template::set(std::string_view key, std::string_view value,
     ttl_seconds ttl) -> task<std::expected<void, std::error_code>>
 {

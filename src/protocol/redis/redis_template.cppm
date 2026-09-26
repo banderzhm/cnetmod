@@ -256,6 +256,17 @@ public:
         -> task<std::expected<std::optional<std::string>, std::error_code>>;
 
     /**
+     * @brief Atomically reads one value and resets its expiration.
+     *
+     * Requires Redis 6.2 or newer. A missing key remains a successful nullopt.
+     */
+    [[nodiscard]] auto getex(std::string_view key, ttl_seconds ttl)
+        -> task<std::expected<std::optional<std::string>, std::error_code>>;
+    [[nodiscard]] auto getex(std::string_view key, ttl_seconds ttl,
+        cancel_token& cancellation)
+        -> task<std::expected<std::optional<std::string>, std::error_code>>;
+
+    /**
      * @brief Stores one value using an explicit or configured default TTL.
      */
     [[nodiscard]] auto set(std::string_view key, std::string_view value,
@@ -403,6 +414,23 @@ public:
     [[nodiscard]] auto execute(pipeline_builder& builder,
         cancel_token& cancellation)
         -> task<std::expected<std::vector<pipeline_reply>, std::error_code>>;
+
+    /**
+     * @brief Runs a Lua script and parses its scalar integer result.
+     *
+     * Keys are logical template keys and are namespace-prefixed exactly once;
+     * arguments are passed unchanged. Redis Cluster scripts must keep all keys
+     * in the same hash slot.
+     */
+    [[nodiscard]] auto eval_integer(std::string_view script,
+        std::span<const std::string> keys,
+        std::span<const std::string> arguments = {})
+        -> task<std::expected<std::int64_t, std::error_code>>;
+    [[nodiscard]] auto eval_integer(std::string_view script,
+        std::span<const std::string> keys,
+        std::span<const std::string> arguments,
+        cancel_token& cancellation)
+        -> task<std::expected<std::int64_t, std::error_code>>;
 
     template <typename T, typename Codec = json_codec>
     [[nodiscard]] auto get_as(std::string_view key)

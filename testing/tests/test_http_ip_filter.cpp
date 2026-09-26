@@ -62,9 +62,21 @@ TEST(forwarded_client_is_the_first_untrusted_hop_from_the_right) {
     ASSERT_EQ(resolve_forwarded_client_ip("10.0.0.2", "", "203.0.113.9", proxies),
         std::string{"203.0.113.9"});
     ASSERT_EQ(resolve_forwarded_client_ip("10.0.0.2", "10.1.1.1", "", proxies),
-        std::string{"10.0.0.2"});
+        std::string{"10.1.1.1"});
     ASSERT_EQ(resolve_forwarded_client_ip("10.0.0.2", "[2001:db8::7]", "", proxies),
         std::string{"2001:db8::7"});
+}
+
+TEST(forwarded_client_resolution_rejects_malformed_addresses) {
+    const std::vector<std::string> proxies{"10.0.0.0/8"};
+    ASSERT_EQ(resolve_forwarded_client_ip("not-an-address", "203.0.113.5", "", proxies),
+        std::string{"unknown"});
+    ASSERT_EQ(resolve_forwarded_client_ip("10.0.0.2",
+                  "203.0.113.5, malformed", "", proxies),
+        std::string{"10.0.0.2"});
+    ASSERT_EQ(resolve_forwarded_client_ip("10.0.0.2", "", "malformed", proxies),
+        std::string{"10.0.0.2"});
+    ASSERT_FALSE(ip_matches("malformed", "malformed"));
 }
 
 TEST(ip_filter_does_not_let_clients_choose_their_address) {
