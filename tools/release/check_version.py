@@ -4,7 +4,6 @@ import json
 import pathlib
 import re
 import sys
-import tomllib
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -23,9 +22,17 @@ vcpkg = json.loads((ROOT / "vcpkg.json").read_text(encoding="utf-8"))
 if vcpkg.get("version") != version:
     fail(f"vcpkg.json has {vcpkg.get('version')!r}, expected {version!r}")
 
-with (ROOT / "bindings/rust/cnetmod/Cargo.toml").open("rb") as source:
-    cargo = tomllib.load(source)
-if cargo.get("package", {}).get("version") != version:
+cargo_toml = (ROOT / "bindings/rust/cnetmod/Cargo.toml").read_text(
+    encoding="utf-8"
+)
+cargo_package = cargo_toml.split("[package]", 1)
+cargo_version = None
+if len(cargo_package) == 2:
+    package_body = cargo_package[1].split("\n[", 1)[0]
+    match = re.search(r'^version\s*=\s*"([^"]+)"\s*$', package_body, re.MULTILINE)
+    if match:
+        cargo_version = match.group(1)
+if cargo_version != version:
     fail("Rust package version does not match VERSION")
 
 python_test = (ROOT / "bindings/python/test_cnetmod_native.py").read_text(
