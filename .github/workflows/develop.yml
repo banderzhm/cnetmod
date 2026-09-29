@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: develop-${{ github.ref }}-${{ matrix.profile }}
+  group: develop-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
