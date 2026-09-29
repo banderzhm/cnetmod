@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import pathlib
-import subprocess
 import sys
 
 
@@ -19,19 +18,14 @@ GLAZE_MODULE_FILES = {
 
 def main() -> int:
     violations: list[str] = []
-    tracked = subprocess.run(
-        ["git", "ls-files", "-z", "--", *SOURCE_ROOTS],
-        cwd=ROOT,
-        check=True,
-        capture_output=True,
-    ).stdout.decode("utf-8").split("\0")
-    for name in tracked:
-        relative = pathlib.Path(name)
-        if not name or relative.suffix.lower() not in SOURCE_SUFFIXES:
-            continue
-        path = ROOT / relative
-        if not path.is_file():
-            continue
+    source_files = sorted(
+        path
+        for root in SOURCE_ROOTS
+        for path in (ROOT / root).rglob("*")
+        if path.is_file() and path.suffix.lower() in SOURCE_SUFFIXES
+    )
+    for path in source_files:
+        relative = path.relative_to(ROOT)
         text = path.read_text(encoding="utf-8", errors="replace")
         if "nlohmann" in text:
             violations.append(f"{relative}: nlohmann bypasses cnetmod.json")

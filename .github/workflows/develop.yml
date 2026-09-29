@@ -87,4 +87,12 @@ jobs:
 
       - name: Test
         if: matrix.profile != 'core'
-        run: ctest --test-dir "build-${{ matrix.profile }}" --output-on-failure -j2
+        shell: bash
+        run: |
+          # Develop covers deterministic in-process behavior. Real-service
+          # interoperability and the allocator fault-injection suite remain
+          # release gates in the full platform workflows.
+          python3 testing/run_required_ctest.py \
+            --test-dir "build-${{ matrix.profile }}" \
+            --output-on-failure --timeout 180 -j2 \
+            -E '^(test_http_disabled_overhead|test_application_mysql_live|test_application_mysql_sharding_live|test_orm_tenant_live|test_application_redis_live|test_application_redis_cluster_live|python_amqp091_interoperability|python_amqp10_interoperability|python_kafka_interoperability|python_postgresql_interoperability|python_mongodb_interoperability|python_mongodb_production_example_e2e)$'
