@@ -26,6 +26,7 @@
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
 | 使用 Glaze-only JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
 | 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
+| 下载、发布和消费预构建 SDK | [distribution.md](infra/distribution.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
 | 了解代码风格、clang-format、命名规范 | [code-style.md](infra/code-style.md) |
 | 接入 OpenTelemetry、链路追踪和指标 | [observability.md](infra/observability.md) |

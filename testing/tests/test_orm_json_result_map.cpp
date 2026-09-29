@@ -1,6 +1,6 @@
 #include "test_framework.hpp"
-#include <cnetmod/orm.hpp>
 #include <cnetmod/json.hpp>
+#include <cnetmod/orm.hpp>
 
 import std;
 import cnetmod.json;
@@ -330,12 +330,14 @@ TEST(orm_timestamp_fill_preserves_explicit_insert_and_excludes_created_at_from_u
     ASSERT_EQ(generated.created_at.to_string(), generated.updated_at.to_string());
 
     const auto fields = orm::model_traits<orm_timestamp_record>::meta().updatable_fields();
-    ASSERT_TRUE(std::ranges::none_of(fields, [](const auto* field) {
-        return field->col.column_name == "created_at";
-    }));
-    ASSERT_TRUE(std::ranges::any_of(fields, [](const auto* field) {
-        return field->col.column_name == "updated_at";
-    }));
+    ASSERT_TRUE(std::ranges::none_of(fields, [](const auto* field)
+        {
+            return field->col.column_name == "created_at";
+        }));
+    ASSERT_TRUE(std::ranges::any_of(fields, [](const auto* field)
+        {
+            return field->col.column_name == "updated_at";
+        }));
 
     orm::update_wrapper<orm_timestamp_record> update;
     update.set(&orm_timestamp_record::id, 1).eq(&orm_timestamp_record::id, 1);
@@ -626,6 +628,60 @@ TEST(xml_mapper_registry_rejects_ambiguous_select_result_binding)
     ASSERT_FALSE(loaded.has_value());
 }
 
+TEST(xml_mapper_registry_supports_statement_logical_delete_control)
+{
+    orm::mapper_registry registry;
+    const auto loaded = registry.load_xml(R"(
+        <mapper namespace="ArchiveMapper">
+          <select id="automatic">SELECT * FROM archive</select>
+          <select id="qualified" logicalDelete="false">
+            SELECT * FROM archive a WHERE a.deleted_at IS NULL
+          </select>
+        </mapper>)");
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_TRUE(registry.statement_logical_delete("ArchiveMapper.automatic"));
+    ASSERT_FALSE(registry.statement_logical_delete("ArchiveMapper.qualified"));
+
+    orm::mapper_registry invalid;
+    ASSERT_FALSE(invalid.load_xml(R"(
+        <mapper namespace="BrokenMapper">
+          <select id="find" logicalDelete="sometimes">SELECT 1</select>
+        </mapper>)"));
+}
+
+TEST(xml_mapper_statement_can_own_qualified_logical_delete_predicate)
+{
+    orm::mapper_registry registry;
+    ASSERT_TRUE(registry.load_xml(R"(
+        <mapper namespace="ArchiveMapper">
+          <select id="find" logicalDelete="false">
+            SELECT a.id, a.deleted_at FROM soft_deleted_records a
+            WHERE a.deleted_at IS NULL
+          </select>
+        </mapper>)"));
+
+    orm::logical_delete_config deleted_at;
+    deleted_at.field_name = "deleted_at";
+    deleted_at.mode = orm::logical_delete_mode::nullable_datetime;
+    orm::automatic_interceptor_options options;
+    options.logical_delete_policy = std::move(deleted_at);
+    auto interceptors = orm::make_automatic_interceptor_chain<
+        orm_soft_deleted_record>(std::move(options));
+    ASSERT_TRUE(interceptors.has_value());
+    if (!interceptors)
+        return;
+
+    mysql_style_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql,
+        *interceptors};
+    orm::mapper<orm_soft_deleted_record, decltype(session)> records{session};
+    const auto result = cnetmod::sync_wait(records.select_xml(
+        registry, "ArchiveMapper.find", orm::param_context{}));
+    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(client.last_sql.contains("a.deleted_at IS NULL"));
+    ASSERT_FALSE(client.last_sql.contains("`deleted_at` IS NULL"));
+}
+
 TEST(dynamic_sql_foreach_binds_iteration_index_as_a_parameter)
 {
     auto statement = orm::parse_xml(R"(
@@ -913,22 +969,16 @@ TEST(orm_automatic_logical_delete_policy_is_model_scoped)
     auto nullable_chain = orm::make_automatic_interceptor_chain<orm_soft_deleted_record>(
         {.logical_delete_policy = nullable});
     ASSERT_TRUE(nullable_chain);
-    auto selected = (*nullable_chain)->apply(orm::sql_operation::query,
-        {"SELECT * FROM `soft_deleted_records` WHERE `id` = {}",
-            {orm::param_value::from_int(7)}});
+    auto selected = (*nullable_chain)->apply(orm::sql_operation::query, {"SELECT * FROM `soft_deleted_records` WHERE `id` = {}", {orm::param_value::from_int(7)}});
     ASSERT_TRUE(selected);
     ASSERT_TRUE(selected->sql.contains("`deleted_at` IS NULL"));
-    auto removed = (*nullable_chain)->apply(orm::sql_operation::remove,
-        {"DELETE FROM `soft_deleted_records` WHERE `id` = {}",
-            {orm::param_value::from_int(7)}});
+    auto removed = (*nullable_chain)->apply(orm::sql_operation::remove, {"DELETE FROM `soft_deleted_records` WHERE `id` = {}", {orm::param_value::from_int(7)}});
     ASSERT_TRUE(removed);
     ASSERT_TRUE(removed->sql.contains("`deleted_at` = CURRENT_TIMESTAMP"));
 
     auto default_chain = orm::make_automatic_interceptor_chain<orm_soft_deleted_record>();
     ASSERT_TRUE(default_chain);
-    auto default_query = (*default_chain)->apply(orm::sql_operation::query,
-        {"SELECT * FROM `soft_deleted_records` WHERE `id` = {}",
-            {orm::param_value::from_int(7)}});
+    auto default_query = (*default_chain)->apply(orm::sql_operation::query, {"SELECT * FROM `soft_deleted_records` WHERE `id` = {}", {orm::param_value::from_int(7)}});
     ASSERT_TRUE(default_query);
     ASSERT_TRUE(!default_query->sql.contains("`deleted_at` IS NULL"));
 }

@@ -73,7 +73,25 @@ if(@CNETMOD_HAS_BROTLI@)
     endif()
 endif()
 if(@CNETMOD_HAS_ICU@)
-    find_dependency(ICU COMPONENTS uc i18n)
+    if(@CNETMOD_BUNDLED_ICU@)
+        if(NOT TARGET ICU::uc)
+            add_library(ICU::uc SHARED IMPORTED)
+            set_target_properties(ICU::uc PROPERTIES
+                IMPORTED_IMPLIB "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuuc.lib"
+                IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuuc78.dll"
+                INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+        endif()
+        if(NOT TARGET ICU::i18n)
+            add_library(ICU::i18n SHARED IMPORTED)
+            set_target_properties(ICU::i18n PROPERTIES
+                IMPORTED_IMPLIB "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuin.lib"
+                IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuin78.dll"
+                INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+                INTERFACE_LINK_LIBRARIES ICU::uc)
+        endif()
+    else()
+        find_dependency(ICU COMPONENTS uc i18n)
+    endif()
 endif()
 if(@CNETMOD_HAS_PUGIXML@)
     if("@CNETMOD_PUGIXML_TARGET@" STREQUAL "pugixml-static")
@@ -100,6 +118,25 @@ if(@CNETMOD_HAS_LZ4@)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/cnetmodTargets.cmake")
+
+set(cnetmod_SUPPORTED_COMPONENTS "@CNETMOD_PACKAGE_COMPONENTS@")
+foreach(_cnetmod_component IN LISTS cnetmod_SUPPORTED_COMPONENTS)
+    set(cnetmod_${_cnetmod_component}_FOUND TRUE)
+    if(NOT TARGET cnetmod::${_cnetmod_component})
+        add_library(cnetmod::${_cnetmod_component} ALIAS
+            cnetmod::cnetmod_core)
+    endif()
+endforeach()
+if(NOT TARGET cnetmod::all)
+    add_library(cnetmod::all ALIAS cnetmod::cnetmod_core)
+endif()
+foreach(_cnetmod_component IN LISTS cnetmod_FIND_COMPONENTS)
+    if(NOT _cnetmod_component IN_LIST cnetmod_SUPPORTED_COMPONENTS)
+        set(cnetmod_${_cnetmod_component}_FOUND FALSE)
+        set(cnetmod_NOT_FOUND_MESSAGE
+            "Unsupported cnetmod component '${_cnetmod_component}'. Available components: ${cnetmod_SUPPORTED_COMPONENTS}")
+    endif()
+endforeach()
 
 # libc++ owns the std/std.compat module fragments.  The installed std.cppm
 # interfaces keep those relative includes and therefore consume them directly

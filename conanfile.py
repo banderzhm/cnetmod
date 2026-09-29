@@ -2,13 +2,12 @@ from conan import ConanFile
 from conan.errors import ConanInvalidConfiguration
 from conan.tools.build import check_min_cppstd
 from conan.tools.cmake import CMake, CMakeToolchain, CMakeDeps, cmake_layout
-from conan.tools.files import copy
+from conan.tools.files import copy, load
 import os
 
 
 class CnetmodConan(ConanFile):
     name = "cnetmod"
-    version = "2.0.0"
     description = "Cross-platform asynchronous network library with C++23 modules"
     homepage = "https://github.com/banderzhm/cnetmod"
     license = "MIT"
@@ -79,6 +78,7 @@ class CnetmodConan(ConanFile):
     }
 
     exports_sources = (
+        "VERSION",
         "CMakeLists.txt",
         "cmake/*",
         "include/*",
@@ -92,6 +92,9 @@ class CnetmodConan(ConanFile):
         "3rdparty/yaml-cpp/*",
         "3rdparty/yaml-cpp-modules/*",
     )
+
+    def set_version(self):
+        self.version = load(self, os.path.join(self.recipe_folder, "VERSION")).strip()
 
     def config_options(self):
         if self.settings.os == "Windows":

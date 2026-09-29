@@ -1,5 +1,6 @@
 module;
 #include <cnetmod/config.hpp>
+#include <cnetmod/version.hpp>
 module cnetmod.protocol.mongodb;
 
 import std;
@@ -329,7 +330,7 @@ auto connection::connect_impl(connection_options options, cancel_token* transpor
     operating_system = "unknown";
 #endif
     bson_document client_metadata{
-        {"driver", bson_document{{"name", "cnetmod"}, {"version", "2.0.0"}}},
+        {"driver", bson_document{{"name", "cnetmod"}, {"version", CNETMOD_VERSION_STRING}}},
         {"os", bson_document{{"type", std::move(operating_system)}}},
         {"application", bson_document{{"name", "cnetmod"}}}};
     bson_document hello{{"hello", std::int32_t{1}}, {"helloOk", true},

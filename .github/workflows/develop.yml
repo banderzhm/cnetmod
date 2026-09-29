@@ -1,0 +1,90 @@
+name: Develop feature completeness
+
+on:
+  push:
+    branches: [develop]
+  pull_request:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: develop-${{ github.ref }}-${{ matrix.profile }}
+  cancel-in-progress: true
+
+jobs:
+  linux-small-platform:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [core, backend, complete]
+
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+
+      - name: Install Clang 22 and build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget ninja-build libicu-dev liburing-dev
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22 all
+          sudo apt-get install -y libc++-22-dev libc++abi-22-dev
+          wget -q https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-x86_64.sh
+          chmod +x cmake-4.1.2-linux-x86_64.sh
+          sudo ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local
+
+      - name: Check version contract
+        run: python3 tools/release/check_version.py
+
+      - name: Select feature profile
+        id: profile
+        shell: bash
+        run: |
+          case "${{ matrix.profile }}" in
+            core)
+              echo 'options=-DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF -DCNETMOD_ENABLE_SSL=OFF' >> "$GITHUB_OUTPUT"
+              ;;
+            backend)
+              echo 'options=-DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_HTTP=ON -DCNETMOD_ENABLE_MYSQL=ON -DCNETMOD_ENABLE_REDIS=ON -DCNETMOD_ENABLE_OPENAI=ON -DCNETMOD_ENABLE_ORM=ON' >> "$GITHUB_OUTPUT"
+              ;;
+            complete)
+              echo 'options=-DCNETMOD_ENABLE_ALL_PROTOCOLS=ON -DCNETMOD_ENABLE_ORM=ON -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON' >> "$GITHUB_OUTPUT"
+              ;;
+          esac
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B "build-${{ matrix.profile }}" -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-22 \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-22/share/libc++/v1 \
+            -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-22/include/c++/v1 \
+            -DCNETMOD_DEPENDENCY_MODE=system \
+            -DCNETMOD_BUILD_TESTS=ON \
+            -DCNETMOD_BUILD_BENCH=OFF \
+            -DCNETMOD_BUILD_EXAMPLES=OFF \
+            -DCNETMOD_BUILD_C_API=OFF \
+            -DCNETMOD_BUILD_PYTHON_BINDINGS=OFF \
+            ${{ steps.profile.outputs.options }}
+
+      - name: Build
+        shell: bash
+        run: |
+          if [[ "${{ matrix.profile }}" == core ]]; then
+            cmake --build "build-${{ matrix.profile }}" --target cnetmod_core --parallel 2
+          else
+            cmake --build "build-${{ matrix.profile }}" --parallel 2
+          fi
+
+      - name: Test
+        if: matrix.profile != 'core'
+        run: ctest --test-dir "build-${{ matrix.profile }}" --output-on-failure -j2

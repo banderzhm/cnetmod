@@ -14,6 +14,7 @@
 #endif
 
 #include <cnetmod/c_api.h>
+#include <cnetmod/version.hpp>
 
 #include <atomic>
 #include <chrono>
@@ -218,7 +219,7 @@ auto request(PyObject*, PyObject* args, PyObject* keywords) -> PyObject*
 
 auto version(PyObject*, PyObject*) -> PyObject*
 {
-    return PyUnicode_FromString("2.0.0");
+    return PyUnicode_FromString(CNETMOD_VERSION_STRING);
 }
 
 PyMethodDef methods[]{

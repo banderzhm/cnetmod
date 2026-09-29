@@ -1,0 +1,301 @@
+name: Release cnetmod SDK
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing immutable version tag
+        required: true
+        default: v2.1.0
+
+permissions:
+  contents: read
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 1
+
+      - id: version
+        name: Validate immutable version identity
+        shell: bash
+        run: |
+          python3 tools/release/check_version.py
+          version="$(tr -d '\r\n' < VERSION)"
+          test "${RELEASE_TAG}" = "v${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+
+  windows-sdk:
+    needs: validate
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install CMake 4.2.3
+        run: choco install cmake --version=4.2.3 -y --force
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v3
+        with:
+          vs-version: "18.0"
+          msbuild-architecture: x64
+
+      - name: Configure SDK
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G "Visual Studio 18 2026" -A x64 `
+            -DCNETMOD_DEPENDENCY_MODE=system `
+            -DCNETMOD_USE_SYSTEM_DEPS=OFF `
+            -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON `
+            -DCNETMOD_ENABLE_ORM=ON `
+            -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON `
+            -DCNETMOD_USE_MIMALLOC=OFF `
+            -DCNETMOD_BUILD_TESTS=OFF `
+            -DCNETMOD_BUILD_BENCH=OFF `
+            -DCNETMOD_BUILD_EXAMPLES=OFF `
+            -DCNETMOD_BUILD_PYTHON_BINDINGS=OFF `
+            -DCNETMOD_DISTRIBUTION_CONFIGURATION=Release `
+            -DCNETMOD_DISTRIBUTION_TARGET_ID=windows-x86_64-msvc-v145-md-release
+
+      - name: Build and install SDK
+        shell: pwsh
+        run: |
+          cmake --build build --target cnetmod_core cnetmod_c --config Release -- /m:1
+          cmake --install build --config Release --prefix package
+
+      - name: Clean consumer gate
+        shell: pwsh
+        run: |
+          cmake -S testing/package_consumer -B consumer `
+            -G "Visual Studio 18 2026" -A x64 `
+            "-DCMAKE_PREFIX_PATH=$pwd/package"
+          cmake --build consumer --config Release -- /m:1
+          $env:PATH = "$pwd/package/bin;$env:PATH"
+          & ./consumer/Release/cnetmod_package_consumer.exe
+
+      - name: Archive SDK
+        shell: pwsh
+        run: |
+          $asset = "cnetmod-sdk-${{ needs.validate.outputs.version }}-windows-x86_64-msvc-v145-md-release.zip"
+          Push-Location package
+          cmake -E tar cf "../$asset" --format=zip -- .
+          Pop-Location
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-windows
+          path: cnetmod-sdk-*.zip
+          if-no-files-found: error
+
+  linux-sdk:
+    needs: validate
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install Clang 22 and build dependencies
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget ninja-build libicu-dev liburing-dev zlib1g-dev libzstd-dev libbrotli-dev liblz4-dev
+          wget -q https://apt.llvm.org/llvm.sh
+          chmod +x llvm.sh
+          sudo ./llvm.sh 22 all
+          sudo apt-get install -y libc++-22-dev libc++abi-22-dev
+          wget -q https://github.com/Kitware/CMake/releases/download/v4.1.2/cmake-4.1.2-linux-x86_64.sh
+          chmod +x cmake-4.1.2-linux-x86_64.sh
+          sudo ./cmake-4.1.2-linux-x86_64.sh --skip-license --prefix=/usr/local
+
+      - name: Configure SDK
+        shell: bash
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER=clang-22 \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DLIBCXX_MODULE_DIRS=/usr/lib/llvm-22/share/libc++/v1 \
+            -DLIBCXX_INCLUDE_DIRS=/usr/lib/llvm-22/include/c++/v1 \
+            -DCNETMOD_DEPENDENCY_MODE=system \
+            -DCNETMOD_USE_SYSTEM_DEPS=ON \
+            -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
+            -DCNETMOD_ENABLE_ORM=ON \
+            -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
+            -DCNETMOD_USE_MIMALLOC=OFF \
+            -DCNETMOD_BUILD_TESTS=OFF \
+            -DCNETMOD_BUILD_BENCH=OFF \
+            -DCNETMOD_BUILD_EXAMPLES=OFF \
+            -DCNETMOD_BUILD_PYTHON_BINDINGS=OFF \
+            -DCNETMOD_DISTRIBUTION_CONFIGURATION=Release \
+            -DCNETMOD_DISTRIBUTION_PLATFORM_BASELINE=glibc2.35 \
+            -DCNETMOD_DISTRIBUTION_TARGET_ID=linux-x86_64-clang22-libcxx22-glibc2.35-release
+
+      - name: Build and install SDK
+        run: |
+          cmake --build build --target cnetmod_core cnetmod_c --parallel 2
+          cmake --install build --prefix package
+
+      - name: Clean consumer gate
+        run: |
+          cmake -S testing/package_consumer -B consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER=clang++-22 \
+            -DCMAKE_PREFIX_PATH="$PWD/package"
+          cmake --build consumer --parallel 2
+          ./consumer/cnetmod_package_consumer
+
+      - name: Archive SDK
+        shell: bash
+        run: |
+          asset="cnetmod-sdk-${{ needs.validate.outputs.version }}-linux-x86_64-clang22-libcxx22-glibc2.35-release.zip"
+          (cd package && cmake -E tar cf "../${asset}" --format=zip -- .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-linux
+          path: cnetmod-sdk-*.zip
+          if-no-files-found: error
+
+  macos-sdk:
+    needs: validate
+    runs-on: macos-14
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install LLVM and dependencies
+        run: brew install icu4c llvm@21 ninja cmake zlib zstd brotli lz4
+
+      - name: Configure SDK
+        shell: bash
+        run: |
+          llvm="$(brew --prefix llvm@21)"
+          icu="$(brew --prefix icu4c)"
+          libcxx_modules="$(find "${llvm}" -name std.cppm -exec dirname {} \; | head -1)"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_C_COMPILER="${llvm}/bin/clang" \
+            -DCMAKE_CXX_COMPILER="${llvm}/bin/clang++" \
+            -DCMAKE_PREFIX_PATH="${icu};$(brew --prefix zlib);$(brew --prefix zstd);$(brew --prefix brotli);$(brew --prefix lz4)" \
+            -DLIBCXX_MODULE_DIRS="${libcxx_modules}" \
+            -DLIBCXX_INCLUDE_DIRS="${llvm}/include/c++/v1" \
+            -DCNETMOD_DEPENDENCY_MODE=system \
+            -DCNETMOD_USE_SYSTEM_DEPS=ON \
+            -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
+            -DCNETMOD_ENABLE_ORM=ON \
+            -DCNETMOD_ENABLE_BORINGSSL_QUIC=ON \
+            -DCNETMOD_USE_MIMALLOC=OFF \
+            -DCNETMOD_BUILD_TESTS=OFF \
+            -DCNETMOD_BUILD_BENCH=OFF \
+            -DCNETMOD_BUILD_EXAMPLES=OFF \
+            -DCNETMOD_BUILD_PYTHON_BINDINGS=OFF \
+            -DCNETMOD_DISTRIBUTION_CONFIGURATION=Release \
+            -DCNETMOD_DISTRIBUTION_PLATFORM_BASELINE=macos14 \
+            -DCNETMOD_DISTRIBUTION_TARGET_ID=macos-arm64-clang21-libcxx-macos14-release
+
+      - name: Build and install SDK
+        run: |
+          cmake --build build --target cnetmod_core cnetmod_c --parallel 2
+          cmake --install build --prefix package
+
+      - name: Clean consumer gate
+        shell: bash
+        run: |
+          llvm="$(brew --prefix llvm@21)"
+          cmake -S testing/package_consumer -B consumer -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_COMPILER="${llvm}/bin/clang++" \
+            -DCMAKE_PREFIX_PATH="$PWD/package;$(brew --prefix icu4c);$(brew --prefix zlib);$(brew --prefix zstd);$(brew --prefix brotli);$(brew --prefix lz4)"
+          cmake --build consumer --parallel 2
+          ./consumer/cnetmod_package_consumer
+
+      - name: Archive SDK
+        shell: bash
+        run: |
+          asset="cnetmod-sdk-${{ needs.validate.outputs.version }}-macos-arm64-clang21-libcxx-macos14-release.zip"
+          (cd package && cmake -E tar cf "../${asset}" --format=zip -- .)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdk-macos
+          path: cnetmod-sdk-*.zip
+          if-no-files-found: error
+
+  publish:
+    needs: [validate, windows-sdk, linux-sdk, macos-sdk]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: sdk-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate catalog and checksums
+        shell: bash
+        run: |
+          release_sha="$(git rev-parse HEAD)"
+          python3 tools/release/generate_catalog.py \
+            --version "${{ needs.validate.outputs.version }}" \
+            --git-sha "${release_sha}" \
+            --output "release-assets/cnetmod-release-${{ needs.validate.outputs.version }}.json" \
+            release-assets/cnetmod-sdk-*.zip
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: release-assets
+          format: spdx-json
+          output-file: release-assets/cnetmod-sdk-${{ needs.validate.outputs.version }}.spdx.json
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: release-assets/*
+
+      - name: Publish immutable release candidate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists; published assets are never overwritten" >&2
+            exit 1
+          fi
+          gh release create "${RELEASE_TAG}" --draft \
+            --repo "${GITHUB_REPOSITORY}" \
+            --title "cnetmod ${RELEASE_TAG}" \
+            --generate-notes
+          gh release upload "${RELEASE_TAG}" release-assets/* \
+            --repo "${GITHUB_REPOSITORY}"
+          gh release edit "${RELEASE_TAG}" --draft=false \
+            --repo "${GITHUB_REPOSITORY}"

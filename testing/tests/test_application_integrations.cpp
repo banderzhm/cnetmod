@@ -1511,6 +1511,53 @@ TEST(application_openai_listener_is_optional_and_configuration_is_idempotent)
 #endif
 
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
+TEST(application_redis_configuration_accepts_transport_and_pool_timeouts)
+{
+    auto host = application::application_builder{"redis-timeout-configuration"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service redis{
+                                .name = "redis",
+                                .instance = "cache",
+                                .enabled = true,
+                                .requirement = application::service_requirement::optional,
+                            };
+                            redis.properties["connect_timeout_ms"] = 750;
+                            redis.properties["pool_timeout_ms"] = 125;
+                            redis.properties["retry_interval_ms"] = 1'000;
+                            redis.properties["ping_interval_ms"] = 5'000;
+                            redis.properties["ping_timeout_ms"] = 500;
+                            value.services.emplace("redis", std::move(redis));
+                        })
+                    .build();
+    ASSERT_TRUE(host.has_value());
+    if (host)
+        ASSERT_TRUE(host->services().find<application::redis_service>(
+                        "cache") != nullptr);
+}
+
+TEST(application_redis_configuration_rejects_invalid_pool_timeout)
+{
+    auto host = application::application_builder{"redis-invalid-pool-timeout"}
+                    .enable_auto_configuration()
+                    .configure([](application::application_configuration& value)
+                        {
+                            value.logging.manage_lifecycle = false;
+                            value.management.enabled = false;
+                            application::configured_service redis{
+                                .name = "redis",
+                                .enabled = true,
+                            };
+                            redis.properties["pool_timeout_ms"] = 0;
+                            value.services.emplace("redis", std::move(redis));
+                        })
+                    .build();
+    ASSERT_FALSE(host.has_value());
+}
+
 TEST(application_auto_configuration_registers_redis_cluster_mode)
 {
     auto host = application::application_builder{"redis-cluster-configuration"}

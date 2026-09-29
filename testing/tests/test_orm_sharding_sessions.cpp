@@ -670,6 +670,15 @@ TEST(orm_interceptor_chain_orders_and_freezes_registration)
     ASSERT_EQ(order.size(), 2U);
     ASSERT_EQ(order[0], "early");
     ASSERT_EQ(order[1], "late");
+
+    order.clear();
+    auto filtered = chain.apply(orm::sql_operation::query,
+        {"SELECT 1", {}},
+        orm::statement_interceptor_options{.logical_delete = false});
+    ASSERT_TRUE(filtered);
+    ASSERT_EQ(order.size(), 2U);
+    ASSERT_EQ(order[0], "early");
+    ASSERT_EQ(order[1], "late");
 }
 
 TEST(orm_interceptor_chain_rewrites_typed_sql_before_protocol_client)
@@ -694,6 +703,35 @@ TEST(orm_interceptor_chain_rewrites_typed_sql_before_protocol_client)
     ASSERT_TRUE(result.ok());
     ASSERT_EQ(client.last_sql,
         "SELECT * FROM `tenant_orders` WHERE `id` = {}");
+}
+
+TEST(orm_statement_options_filter_by_policy_kind_not_display_name)
+{
+    orm::interceptor_chain chain;
+    std::size_t logical_calls{};
+    std::size_t custom_calls{};
+    ASSERT_TRUE(chain.add("renamed-policy", 10, [&logical_calls](orm::sql_operation, orm::intercepted_statement statement) -> std::expected<orm::intercepted_statement, std::string>
+        {
+            ++logical_calls;
+            return statement;
+        },
+        orm::interceptor_kind::logical_delete));
+    ASSERT_TRUE(chain.add("logical_delete", 20,
+        [&custom_calls](orm::sql_operation,
+            orm::intercepted_statement statement)
+            -> std::expected<orm::intercepted_statement, std::string>
+        {
+            ++custom_calls;
+            return statement;
+        }));
+    ASSERT_TRUE(chain.freeze());
+
+    const auto result = chain.apply(orm::sql_operation::query,
+        {"SELECT 1", {}},
+        orm::statement_interceptor_options{.logical_delete = false});
+    ASSERT_TRUE(result);
+    ASSERT_EQ(logical_calls, 0U);
+    ASSERT_EQ(custom_calls, 1U);
 }
 
 TEST(orm_interceptor_chain_rejection_short_circuits_protocol_client)
@@ -1519,7 +1557,8 @@ TEST(orm_strict_tenant_scope_intersects_department_and_preserves_or)
         orm::data_permission_scope{.partition_ids = {100, 101}});
     auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
         orm::automatic_interceptor_options{.data_permission = departments,
-            .tenant_scope_required = true, .tenant = tenant});
+            .tenant_scope_required = true,
+            .tenant = tenant});
     ASSERT_TRUE(chain.has_value());
     auto selected = (*chain)->apply(orm::sql_operation::query,
         {"SELECT * FROM scoped_orders WHERE description = {} OR description = {} ORDER BY id LIMIT {}",
@@ -1617,7 +1656,8 @@ TEST(orm_strict_tenant_scope_numbers_postgresql_parameters)
         orm::data_permission_scope{.partition_ids = {100}});
     auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
         orm::automatic_interceptor_options{.data_permission = departments,
-            .tenant_scope_required = true, .tenant = tenant,
+            .tenant_scope_required = true,
+            .tenant = tenant,
             .dialect = orm::sql_dialect::postgresql});
     ASSERT_TRUE(chain.has_value());
     auto selected = (*chain)->apply(orm::sql_operation::query,
@@ -1686,7 +1726,8 @@ TEST(orm_strict_scopes_can_read_a_subtree_but_write_only_one_department)
         orm::automatic_interceptor_options{
             .data_permission =
                 std::make_shared<const orm::data_permission_scope>(departments),
-            .tenant_scope_required = true, .tenant = tenant});
+            .tenant_scope_required = true,
+            .tenant = tenant});
     ASSERT_TRUE(chain.has_value());
     auto read = (*chain)->apply(orm::sql_operation::query,
         {"SELECT * FROM scoped_orders", {}});

@@ -8,6 +8,7 @@ macro(cnetmod_configure_icu)
         set(_cnetmod_icu_source "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/icu/icu4c/source")
         if(CNETMOD_USE_ICU_SUBMODULE AND WIN32
            AND EXISTS "${_cnetmod_icu_source}/allinone/allinone.sln")
+            set(CNETMOD_BUNDLED_ICU ON)
             # ICU ships maintained Visual Studio projects rather than a CMake
             # project. Build just the two libraries PostgreSQL requires and
             # expose them as normal imported CMake targets.
@@ -106,6 +107,8 @@ macro(cnetmod_configure_icu)
             # icuuc/icuin which carry a Debug suffix.  Remember its location so
             # each Windows executable can receive the complete runtime set.
             set(CNETMOD_BUNDLED_ICU_RUNTIME_DIR "${_cnetmod_icu_source}/../bin64")
+            set(CNETMOD_BUNDLED_ICU_LIBRARY_DIR "${_cnetmod_icu_source}/../lib64")
+            set(CNETMOD_BUNDLED_ICU_INCLUDE_DIR "${_cnetmod_icu_source}/common")
         else()
             find_package(ICU COMPONENTS uc i18n QUIET)
         endif()

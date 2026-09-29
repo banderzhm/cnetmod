@@ -444,6 +444,12 @@ Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
 不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
 
+Redis 单机连接池支持 `connect_timeout_ms`、`pool_timeout_ms`、
+`retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
+1～86400000 毫秒的整数。缓存等可降级依赖应把 `pool_timeout_ms` 配置得明显短于
+请求预算；鉴权会话可使用独立 Redis 实例和更严格的可用性策略，避免两类流量共享同一
+故障等待边界。集群模式目前不使用连接池，因此这些连接池超时字段只对单机模式生效。
+
 MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`、
 `tls_ca_file`，以及 `connect_timeout_ms`、`pool_timeout_ms`、
 `retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是

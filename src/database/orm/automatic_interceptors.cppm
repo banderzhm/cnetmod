@@ -51,9 +51,7 @@ auto make_automatic_interceptor_chain(
     auto chain = std::make_shared<interceptor_chain>();
     if (options.multi_tenant)
     {
-        auto added = chain->add("multi_tenant", 100,
-            [options](sql_operation operation, intercepted_statement statement)
-                -> std::expected<intercepted_statement, std::string>
+        auto added = chain->add("multi_tenant", 100, [options](sql_operation operation, intercepted_statement statement) -> std::expected<intercepted_statement, std::string>
             {
                 auto& policy = global_multi_tenant_interceptor();
                 if (options.tenant_scope_required || options.tenant)
@@ -82,7 +80,7 @@ auto make_automatic_interceptor_chain(
                         return std::unexpected("tenant scope is required");
                     return apply_tenant_scope(operation, std::move(statement),
                         options.mapped_table.empty() ? metadata.table_name
-                            : std::string_view{options.mapped_table},
+                                                     : std::string_view{options.mapped_table},
                         tenant_column->column_name,
                         *options.tenant, options.dialect);
                 }
@@ -102,7 +100,8 @@ auto make_automatic_interceptor_chain(
                     break;
                 }
                 return statement;
-            });
+            },
+            interceptor_kind::tenant_isolation);
         if (!added)
             return std::unexpected(added.error());
     }
@@ -110,10 +109,7 @@ auto make_automatic_interceptor_chain(
     {
         logical_delete_interceptor policy{options.logical_delete_policy.value_or(
             global_logical_delete_interceptor().config())};
-        auto added = chain->add("logical_delete", 200,
-            [policy = std::move(policy)](sql_operation operation,
-                intercepted_statement statement)
-                -> std::expected<intercepted_statement, std::string>
+        auto added = chain->add("logical_delete", 200, [policy = std::move(policy)](sql_operation operation, intercepted_statement statement) -> std::expected<intercepted_statement, std::string>
             {
                 if (operation == sql_operation::query)
                     statement.sql = policy.template inject_select_condition<T>(
@@ -122,7 +118,8 @@ auto make_automatic_interceptor_chain(
                     statement.sql = policy.template transform_delete_to_update<T>(
                         std::move(statement.sql));
                 return statement;
-            });
+            },
+            interceptor_kind::logical_delete);
         if (!added)
             return std::unexpected(added.error());
     }
@@ -132,28 +129,22 @@ auto make_automatic_interceptor_chain(
             *options.data_permission, options.dialect,
             options.tenant_scope_required || static_cast<bool>(options.tenant),
             options.mapped_table};
-        auto added = chain->add("data_permission", 150,
-            [policy = std::move(policy)](sql_operation operation,
-                intercepted_statement statement) mutable
-                -> std::expected<intercepted_statement, std::string>
+        auto added = chain->add("data_permission", 150, [policy = std::move(policy)](sql_operation operation, intercepted_statement statement) mutable -> std::expected<intercepted_statement, std::string>
             {
                 return policy.apply(operation, std::move(statement));
-            });
+            },
+            interceptor_kind::data_permission);
         if (!added)
             return std::unexpected(added.error());
     }
     if (options.sql_safety)
     {
-        auto added = chain->add("sql_safety", 1000,
-            [](sql_operation operation, intercepted_statement statement)
-                -> std::expected<intercepted_statement, std::string>
+        auto added = chain->add("sql_safety", 1000, [](sql_operation operation, intercepted_statement statement) -> std::expected<intercepted_statement, std::string>
             {
                 std::string_view sql = statement.sql;
-                while (!sql.empty() && std::isspace(
-                    static_cast<unsigned char>(sql.front())))
+                while (!sql.empty() && std::isspace(static_cast<unsigned char>(sql.front())))
                     sql.remove_prefix(1);
-                while (!sql.empty() && std::isspace(
-                    static_cast<unsigned char>(sql.back())))
+                while (!sql.empty() && std::isspace(static_cast<unsigned char>(sql.back())))
                     sql.remove_suffix(1);
                 if (sql.ends_with(';'))
                     sql.remove_suffix(1);
@@ -168,7 +159,8 @@ auto make_automatic_interceptor_chain(
                         "unbounded UPDATE/DELETE rejected by ORM SQL safety policy");
                 }
                 return statement;
-            });
+            },
+            interceptor_kind::sql_safety);
         if (!added)
             return std::unexpected(added.error());
     }

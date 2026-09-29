@@ -2,9 +2,9 @@ name: Linux Clang/LLVM Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches: [ "main", "release/**" ]
   pull_request:
-    branches: [ "main", "master" ]
+    branches: [ "main", "release/**" ]
   workflow_dispatch:
 
 permissions:
