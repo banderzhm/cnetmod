@@ -8,25 +8,144 @@ import :foundation;
 
 namespace cnetmod::openai::detail {
 
+namespace {
+
+    [[nodiscard]] auto contract_error(cnetmod::json::errc value)
+        -> std::unexpected<std::error_code>
+    {
+        return std::unexpected(cnetmod::json::make_error_code(value));
+    }
+
+    [[nodiscard]] auto string_array_member(
+        const cnetmod::json::document& source, std::string_view name)
+        -> std::expected<std::vector<std::string>, std::error_code>
+    {
+        if (!source.is_object())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+        const auto* values = cnetmod::json::find(source, name);
+        if (values == nullptr)
+            return contract_error(cnetmod::json::errc::missing_field);
+        if (source.size() != 1U)
+            return contract_error(cnetmod::json::errc::unknown_field);
+        if (!values->is_array())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+
+        std::vector<std::string> result;
+        result.reserve(values->size());
+        for (const auto& value : values->get_array())
+        {
+            if (!value.is_string())
+                return contract_error(cnetmod::json::errc::type_mismatch);
+            result.push_back(value.get<std::string>());
+        }
+        return result;
+    }
+
+} // namespace
+
 struct queries_response
 {
     std::vector<std::string> queries;
+
+    [[nodiscard]] static auto from_document(
+        const cnetmod::json::document& source)
+        -> std::expected<queries_response, std::error_code>
+    {
+        auto values = string_array_member(source, "queries");
+        if (!values)
+            return std::unexpected(values.error());
+        return queries_response{.queries = std::move(*values)};
+    }
 };
 
 struct routes_response
 {
     std::vector<std::string> routes;
+
+    [[nodiscard]] static auto from_document(
+        const cnetmod::json::document& source)
+        -> std::expected<routes_response, std::error_code>
+    {
+        auto values = string_array_member(source, "routes");
+        if (!values)
+            return std::unexpected(values.error());
+        return routes_response{.routes = std::move(*values)};
+    }
 };
 
 struct scored_document
 {
     std::size_t index = 0;
     double score = 0.0;
+
+    [[nodiscard]] static auto from_document(
+        const cnetmod::json::document& source)
+        -> std::expected<scored_document, std::error_code>
+    {
+        if (!source.is_object())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+        const auto* index_value = cnetmod::json::find(source, "index");
+        const auto* score_value = cnetmod::json::find(source, "score");
+        if (index_value == nullptr || score_value == nullptr)
+            return contract_error(cnetmod::json::errc::missing_field);
+        if (source.size() != 2U)
+            return contract_error(cnetmod::json::errc::unknown_field);
+        if ((!index_value->holds<std::uint64_t>() &&
+                !index_value->holds<std::int64_t>()) ||
+            !score_value->is_number())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+
+        std::uint64_t index{};
+        if (index_value->holds<std::uint64_t>())
+            index = index_value->get<std::uint64_t>();
+        else
+        {
+            const auto signed_index = index_value->get<std::int64_t>();
+            if (signed_index < 0)
+                return contract_error(cnetmod::json::errc::type_mismatch);
+            index = static_cast<std::uint64_t>(signed_index);
+        }
+        if (index > std::numeric_limits<std::size_t>::max())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+
+        const auto score = score_value->as<double>();
+        if (!std::isfinite(score) || score < 0.0 || score > 1.0)
+            return contract_error(cnetmod::json::errc::type_mismatch);
+        return scored_document{
+            .index = static_cast<std::size_t>(index),
+            .score = score};
+    }
 };
 
 struct scores_response
 {
     std::vector<scored_document> scores;
+
+    [[nodiscard]] static auto from_document(
+        const cnetmod::json::document& source)
+        -> std::expected<scores_response, std::error_code>
+    {
+        if (!source.is_object())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+        const auto* values = cnetmod::json::find(source, "scores");
+        if (values == nullptr)
+            return contract_error(cnetmod::json::errc::missing_field);
+        if (source.size() != 1U)
+            return contract_error(cnetmod::json::errc::unknown_field);
+        if (!values->is_array())
+            return contract_error(cnetmod::json::errc::type_mismatch);
+
+        scores_response result;
+        result.scores.reserve(values->size());
+        for (const auto& value : values->get_array())
+        {
+            auto score = scored_document::from_document(value);
+            if (!score)
+                return std::unexpected(score.error());
+            result.scores.push_back(std::move(*score));
+        }
+        return result;
+    }
 };
 
 auto queries_schema() -> json
@@ -90,30 +209,39 @@ auto scores_schema() -> json
 auto parse_queries(std::string_view text)
     -> std::expected<std::vector<std::string>, std::error_code>
 {
-    auto parsed = cnetmod::json::parse<queries_response>(text);
-    if (!parsed)
-        return std::unexpected(parsed.error());
-    return std::move(parsed->queries);
+    auto document = cnetmod::json::parse_document(text);
+    if (!document)
+        return std::unexpected(document.error());
+    auto response = queries_response::from_document(*document);
+    if (!response)
+        return std::unexpected(response.error());
+    return std::move(response->queries);
 }
 
 auto parse_routes(std::string_view text)
     -> std::expected<std::vector<std::string>, std::error_code>
 {
-    auto parsed = cnetmod::json::parse<routes_response>(text);
-    if (!parsed)
-        return std::unexpected(parsed.error());
-    return std::move(parsed->routes);
+    auto document = cnetmod::json::parse_document(text);
+    if (!document)
+        return std::unexpected(document.error());
+    auto response = routes_response::from_document(*document);
+    if (!response)
+        return std::unexpected(response.error());
+    return std::move(response->routes);
 }
 
 auto parse_scores(std::string_view text)
     -> std::expected<std::vector<std::pair<std::size_t, double>>, std::error_code>
 {
-    auto parsed = cnetmod::json::parse<scores_response>(text);
-    if (!parsed)
-        return std::unexpected(parsed.error());
+    auto document = cnetmod::json::parse_document(text);
+    if (!document)
+        return std::unexpected(document.error());
+    auto response = scores_response::from_document(*document);
+    if (!response)
+        return std::unexpected(response.error());
     std::vector<std::pair<std::size_t, double>> result;
-    result.reserve(parsed->scores.size());
-    for (const auto& item : parsed->scores)
+    result.reserve(response->scores.size());
+    for (const auto& item : response->scores)
         result.emplace_back(item.index, item.score);
     return result;
 }
