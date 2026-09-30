@@ -16,6 +16,10 @@ permissions:
 env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -187,29 +191,36 @@ jobs:
       - name: Install LLVM and dependencies
         run: brew install icu4c llvm@21 ninja cmake zlib zstd brotli lz4
 
-      - name: Resolve macOS SDK
-        id: macos-sdk
+      - name: Resolve macOS toolchain
+        id: macos-toolchain
         shell: bash
         run: |
+          llvm="$(brew --prefix llvm@21)"
           sdkroot="$(xcrun --show-sdk-path)"
+          libcxx_modules="${llvm}/share/libc++/v1"
+          libcxx_include="${llvm}/include/c++/v1"
           test -f "${sdkroot}/usr/include/time.h"
+          test -f "${libcxx_modules}/std.cppm"
+          test -f "${libcxx_modules}/std.compat.cppm"
+          test -f "${libcxx_include}/__config"
+          echo "llvm=${llvm}" >> "$GITHUB_OUTPUT"
           echo "sdkroot=${sdkroot}" >> "$GITHUB_OUTPUT"
+          echo "libcxx_modules=${libcxx_modules}" >> "$GITHUB_OUTPUT"
+          echo "libcxx_include=${libcxx_include}" >> "$GITHUB_OUTPUT"
 
       - name: Configure SDK
         shell: bash
         run: |
-          llvm="$(brew --prefix llvm@21)"
           icu="$(brew --prefix icu4c)"
-          libcxx_modules="$(find "${llvm}" -name std.cppm -exec dirname {} \; | head -1)"
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_C_COMPILER="${llvm}/bin/clang" \
-            -DCMAKE_CXX_COMPILER="${llvm}/bin/clang++" \
-            -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.macos-sdk.outputs.sdkroot }} -stdlib=libc++" \
-            -DCMAKE_OSX_SYSROOT="${{ steps.macos-sdk.outputs.sdkroot }}" \
+            -DCMAKE_C_COMPILER="${{ steps.macos-toolchain.outputs.llvm }}/bin/clang" \
+            -DCMAKE_CXX_COMPILER="${{ steps.macos-toolchain.outputs.llvm }}/bin/clang++" \
+            -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.macos-toolchain.outputs.sdkroot }} -stdlib=libc++" \
+            -DCMAKE_OSX_SYSROOT="${{ steps.macos-toolchain.outputs.sdkroot }}" \
             -DCMAKE_PREFIX_PATH="${icu};$(brew --prefix zlib);$(brew --prefix zstd);$(brew --prefix brotli);$(brew --prefix lz4)" \
-            -DLIBCXX_MODULE_DIRS="${libcxx_modules}" \
-            -DLIBCXX_INCLUDE_DIRS="${llvm}/include/c++/v1" \
+            -DLIBCXX_MODULE_DIRS="${{ steps.macos-toolchain.outputs.libcxx_modules }}" \
+            -DLIBCXX_INCLUDE_DIRS="${{ steps.macos-toolchain.outputs.libcxx_include }}" \
             -DCNETMOD_DEPENDENCY_MODE=system \
             -DCNETMOD_USE_SYSTEM_DEPS=ON \
             -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
@@ -232,12 +243,11 @@ jobs:
       - name: Clean consumer gate
         shell: bash
         run: |
-          llvm="$(brew --prefix llvm@21)"
           cmake -S testing/package_consumer -B consumer -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_COMPILER="${llvm}/bin/clang++" \
-            -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.macos-sdk.outputs.sdkroot }} -stdlib=libc++" \
-            -DCMAKE_OSX_SYSROOT="${{ steps.macos-sdk.outputs.sdkroot }}" \
+            -DCMAKE_CXX_COMPILER="${{ steps.macos-toolchain.outputs.llvm }}/bin/clang++" \
+            -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.macos-toolchain.outputs.sdkroot }} -stdlib=libc++" \
+            -DCMAKE_OSX_SYSROOT="${{ steps.macos-toolchain.outputs.sdkroot }}" \
             -DCMAKE_PREFIX_PATH="$PWD/package;$(brew --prefix icu4c);$(brew --prefix zlib);$(brew --prefix zstd);$(brew --prefix brotli);$(brew --prefix lz4)"
           cmake --build consumer --parallel 2
           ./consumer/cnetmod_package_consumer
