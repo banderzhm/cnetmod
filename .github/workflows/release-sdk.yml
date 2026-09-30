@@ -59,6 +59,11 @@ jobs:
           vs-version: "18.0"
           msbuild-architecture: x64
 
+      - name: Setup MSVC command-line environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Configure SDK
         shell: pwsh
         run: |
@@ -85,12 +90,14 @@ jobs:
       - name: Clean consumer gate
         shell: pwsh
         run: |
+          ninja --version
           cmake -S testing/package_consumer -B consumer `
-            -G "Visual Studio 18 2026" -A x64 `
+            -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
             "-DCMAKE_PREFIX_PATH=$pwd/package"
-          cmake --build consumer --config Release -- /m:1
+          cmake --build consumer --parallel 1
           $env:PATH = "$pwd/package/bin;$env:PATH"
-          & ./consumer/Release/cnetmod_package_consumer.exe
+          & ./consumer/cnetmod_package_consumer.exe
 
       - name: Archive SDK
         shell: pwsh
