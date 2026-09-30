@@ -187,6 +187,14 @@ jobs:
       - name: Install LLVM and dependencies
         run: brew install icu4c llvm@21 ninja cmake zlib zstd brotli lz4
 
+      - name: Resolve macOS SDK
+        id: macos-sdk
+        shell: bash
+        run: |
+          sdkroot="$(xcrun --show-sdk-path)"
+          test -f "${sdkroot}/usr/include/time.h"
+          echo "sdkroot=${sdkroot}" >> "$GITHUB_OUTPUT"
+
       - name: Configure SDK
         shell: bash
         run: |
@@ -197,6 +205,8 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_C_COMPILER="${llvm}/bin/clang" \
             -DCMAKE_CXX_COMPILER="${llvm}/bin/clang++" \
+            -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.macos-sdk.outputs.sdkroot }} -stdlib=libc++" \
+            -DCMAKE_OSX_SYSROOT="${{ steps.macos-sdk.outputs.sdkroot }}" \
             -DCMAKE_PREFIX_PATH="${icu};$(brew --prefix zlib);$(brew --prefix zstd);$(brew --prefix brotli);$(brew --prefix lz4)" \
             -DLIBCXX_MODULE_DIRS="${libcxx_modules}" \
             -DLIBCXX_INCLUDE_DIRS="${llvm}/include/c++/v1" \
@@ -226,6 +236,8 @@ jobs:
           cmake -S testing/package_consumer -B consumer -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_CXX_COMPILER="${llvm}/bin/clang++" \
+            -DCMAKE_CXX_FLAGS="-isysroot ${{ steps.macos-sdk.outputs.sdkroot }} -stdlib=libc++" \
+            -DCMAKE_OSX_SYSROOT="${{ steps.macos-sdk.outputs.sdkroot }}" \
             -DCMAKE_PREFIX_PATH="$PWD/package;$(brew --prefix icu4c);$(brew --prefix zlib);$(brew --prefix zstd);$(brew --prefix brotli);$(brew --prefix lz4)"
           cmake --build consumer --parallel 2
           ./consumer/cnetmod_package_consumer
