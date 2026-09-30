@@ -210,23 +210,18 @@ endfunction()
 ]]
 function(cnetmod_link_selected_stdlib TARGET_NAME)
     if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
-        # These options are part of the module ABI and must reach installed
-        # consumers. Directory-level add_compile_options() only affects this
-        # build tree and otherwise lets Clang mix libstdc++ wrapper headers
-        # with the exported libc++ std module.
-        target_compile_options(${TARGET_NAME} PUBLIC
-            "$<INSTALL_INTERFACE:-stdlib=libc++>"
-            "$<INSTALL_INTERFACE:-nostdinc++>"
-            "$<INSTALL_INTERFACE:-isystem>"
-            "$<INSTALL_INTERFACE:${STDLIB_INCLUDE_DIRS}>")
-        target_link_options(${TARGET_NAME} PUBLIC
-            "$<INSTALL_INTERFACE:-stdlib=libc++>")
+        # Build-tree flags are applied globally above. Installed consumers
+        # resolve their own matching headers and runtimes in
+        # cnetmodConfig.cmake; never bake producer-machine paths into the SDK.
         if(APPLE)
             # A Homebrew libc++ must use the matching Homebrew libunwind.
             # Linking libc++abi directly on Darwin can mix it with the ABI
             # runtime supplied by macOS and break exception propagation across
-            # C++ module boundaries.
-            target_link_libraries(${TARGET_NAME} PUBLIC c++ unwind)
+            # C++ module boundaries. Installed consumers resolve both runtimes
+            # from their own compiler in cnetmodConfig.cmake.
+            target_link_libraries(${TARGET_NAME} PUBLIC
+                "$<BUILD_INTERFACE:c++>"
+                "$<BUILD_INTERFACE:unwind>")
         else()
             target_link_libraries(${TARGET_NAME} PUBLIC c++ c++abi)
         endif()
@@ -254,7 +249,7 @@ function(configure_cxx_modules)
     if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
         # Linux/macOS: libc++ standard library modules
         target_include_directories(${CFG_TARGET} SYSTEM PUBLIC
-            ${STDLIB_INCLUDE_DIRS}
+            "$<BUILD_INTERFACE:${STDLIB_INCLUDE_DIRS}>"
         )
         target_sources(${CFG_TARGET} PUBLIC
             FILE_SET cxx_modules TYPE CXX_MODULES
