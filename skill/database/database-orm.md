@@ -177,10 +177,16 @@ if (!page.ok())
 模型时，构建该模型仓储要在 `automatic_interceptor_options.logical_delete_policy`
 中传入 `field_name = "deleted_at"`、`mode = nullable_datetime`，并按需指定
 `touch_fields`；策略在拦截链创建时固定，不会改动其他模型。复杂 JOIN/XML
-查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。
-`nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
-若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
-`calendar_datetime` 参数的选择性更新完成软删除。
+查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。若 XML
+语句需要自己维护带表别名的逻辑删除谓词，在该 `<select>` / `<update>` 等语句上声明
+`logicalDelete="false"`；这只跳过当前语句的逻辑删除拦截器，租户、数据权限和 SQL
+安全拦截仍然生效。属性省略或设为 `true` 时沿用仓储策略；其他值在装载 XML 时拒绝。
+自动 DELETE 转 UPDATE 默认使用应用侧 UTC 时钟：`nullable_datetime` 的删除标记和
+任意模式下的时间型 `touch_fields` 都绑定同一次采样得到的参数，不依赖数据库会话时区，
+且保证同一操作的多个时间字段一致。只有明确管理了数据库会话时区、确实希望
+使用数据库时钟时，才把 `time_source` 设为
+`logical_delete_time_source::database_session`；该模式生成 `CURRENT_TIMESTAMP`、
+`CURRENT_DATE` 或 `CURRENT_TIME`。
 
 `FILL_INSERT` 与 `FILL_INSERT_UPDATE` 直接从模型元数据读取；普通仓储请求
 不会反复修改全局注册表。自定义填充配置可按表名和字段名在启动期注册。普通 ORM

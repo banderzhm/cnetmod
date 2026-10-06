@@ -111,6 +111,15 @@ auto mapper_registry::statement_result_map(std::string_view id) const
     return {};
 }
 
+auto mapper_registry::statement_logical_delete(std::string_view id) const
+    -> bool
+{
+    if (auto* stmt = find_statement(id);
+        stmt && stmt->has_attr("logicalDelete"))
+        return stmt->attr("logicalDelete") == "true";
+    return true;
+}
+
 auto mapper_registry::find_result_map(std::string_view id) const
     -> const result_map_def*
 {
@@ -190,6 +199,14 @@ auto mapper_registry::load_mapper_node(std::unique_ptr<xml_node> root)
         else if (tag == "select" || tag == "insert" || tag == "update" ||
             tag == "delete")
         {
+            if (child.element->has_attr("logicalDelete"))
+            {
+                const auto logical_delete = child.element->attr("logicalDelete");
+                if (logical_delete != "true" && logical_delete != "false")
+                    return std::unexpected(std::format(
+                        "<{} id='{}'> logicalDelete must be true or false",
+                        tag, id));
+            }
             if (tag == "select" && child.element->has_attr("resultMap") &&
                 child.element->has_attr("resultType"))
             {

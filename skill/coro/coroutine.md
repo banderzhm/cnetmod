@@ -26,6 +26,8 @@
 export template <typename T> class task;       // 协程返回类型（不可拷贝，可移动）
 export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待，不驱动 io_context
 export void sync_wait(task<void> t);
+export template <typename T>
+auto resume_on(io_context& target, task<T> operation) -> task<T>;
 ```
 
 ```cpp
@@ -49,7 +51,10 @@ int main() {
 
 `sync_wait()` 也不是第三方协程库或阻塞 API 的桥接器。接入阻塞函数时使用
 `thread_pool`、`spawn_on` 或 `blocking_invoke`；接入其他协程库提供的 awaitable
-时使用 `from_awaitable`。执行域切换、返回目标 `io_context` 及生命周期要求见
+时使用 `from_awaitable`。若第三方 awaitable 可能在任意线程完成，用
+`resume_on(request_io, operation)` 显式保证成功返回和异常处理都回到请求所属的
+`io_context`；不要把 Application 控制循环误当成请求循环。执行域切换、返回目标
+`io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
 
 ---

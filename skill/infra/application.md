@@ -444,6 +444,12 @@ Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
 不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
 
+Redis 单机连接池支持 `connect_timeout_ms`、`pool_timeout_ms`、
+`retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
+1～86400000 毫秒的整数。缓存等可降级依赖应把 `pool_timeout_ms` 配置得明显短于
+请求预算；鉴权会话可使用独立 Redis 实例和更严格的可用性策略，避免两类流量共享同一
+故障等待边界。集群模式目前不使用连接池，因此这些连接池超时字段只对单机模式生效。
+
 MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`、
 `tls_ca_file`，以及 `connect_timeout_ms`、`pool_timeout_ms`、
 `retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
@@ -658,6 +664,12 @@ required 服务同一故障周期耗尽预算后不重复派发或通知停机�
 ## 运行期更新
 
 `reload_configuration()` 只原位更新日志级别、OTEL 采样率、健康策略和恢复策略。监听地址、端口、中间件、线程、连接参数、凭据、OTLP 出口或队列参数变化会设置 `restart_required`，不会偷偷重建连接。
+
+配置加载保留错误所属的 error category：JSON 语法错误返回
+`cnetmod::json::errc::parse_failed`，文件不存在返回
+`std::errc::no_such_file_or_directory`，根节点不是对象或字段值非法才返回
+`std::errc::invalid_argument`。调用方不得把所有 `invalid_argument` 翻译成“JSON
+语法错误”，也不得丢弃 JSON 模块提供的精确错误身份。
 
 底层 `reload_safe_configuration(active, candidate)` 返回
 `std::expected<configuration_reload_result, std::error_code>`。它先校验候选并在私有副本中

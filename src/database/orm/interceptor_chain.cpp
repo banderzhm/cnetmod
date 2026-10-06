@@ -70,12 +70,22 @@ auto interceptor_chain::apply(sql_operation operation,
     intercepted_statement statement) const
     -> std::expected<intercepted_statement, std::string>
 {
+    return apply(operation, std::move(statement), {});
+}
+
+auto interceptor_chain::apply(sql_operation operation,
+    intercepted_statement statement,
+    statement_interceptor_options options) const
+    -> std::expected<intercepted_statement, std::string>
+{
     if (!implementation_)
         return std::unexpected("interceptor chain is unavailable");
     if (!implementation_->is_frozen)
         return std::unexpected("interceptor chain must be frozen before use");
     for (const auto& entry : implementation_->entries)
     {
+        if (!options.logical_delete && entry.name == "logical_delete")
+            continue;
         auto next = entry.function(operation, std::move(statement));
         if (!next)
             return std::unexpected(std::format("interceptor '{}': {}",

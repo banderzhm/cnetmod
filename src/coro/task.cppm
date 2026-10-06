@@ -287,6 +287,50 @@ auto starts_on(io_context& context, task<T> operation) -> task<T>
 }
 
 // =============================================================================
+// resume_on -- restore an awaited task's continuation to an event loop
+// =============================================================================
+
+/// Await @p operation and resume its caller on @p context, including when the
+/// operation fails. This is the explicit bridge for third-party awaitables
+/// whose completion thread is not controlled by cnetmod.
+export template <typename T>
+auto resume_on(io_context& context, task<T> operation) -> task<T>
+{
+    std::exception_ptr failure;
+    if constexpr (std::is_void_v<T>)
+    {
+        try
+        {
+            co_await std::move(operation);
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        co_await post_awaitable{context};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return;
+    }
+    else
+    {
+        std::optional<T> result;
+        try
+        {
+            result.emplace(co_await std::move(operation));
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        co_await post_awaitable{context};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return std::move(*result);
+    }
+}
+
+// =============================================================================
 // sync_wait — Synchronously wait for coroutine completion
 // =============================================================================
 

@@ -366,12 +366,28 @@ template <typename T>
 
 /**
  * @brief Parses directly into T while allowing unknown object members.
+ *
+ * Missing non-optional members remain an error. Model fields that are absent
+ * on the wire with std::optional instead of relying on default construction.
+ */
+template <typename T>
+[[nodiscard]] auto parse_allow_unknown(std::string_view input)
+    -> std::expected<T, std::error_code>
+{
+    return lenient_codec::decode<T>(input);
+}
+
+/**
+ * @brief Compatibility spelling for parse_allow_unknown().
+ *
+ * The older name is intentionally retained, but its policy only relaxes
+ * unknown members; it never makes required members optional.
  */
 template <typename T>
 [[nodiscard]] auto parse_lenient(std::string_view input)
     -> std::expected<T, std::error_code>
 {
-    return lenient_codec::decode<T>(input);
+    return parse_allow_unknown<T>(input);
 }
 
 /**

@@ -26,6 +26,14 @@ struct intercepted_statement
     std::vector<param_value> parameters;
 };
 
+/**
+ * @brief Per-statement controls that cannot disable isolation or SQL safety.
+ */
+struct statement_interceptor_options
+{
+    bool logical_delete = true;
+};
+
 using sql_interceptor_function = std::function<
     std::expected<intercepted_statement, std::string>(
         sql_operation, intercepted_statement)>;
@@ -56,6 +64,9 @@ public:
     [[nodiscard]] auto empty() const noexcept -> bool;
 
     auto apply(sql_operation operation, intercepted_statement statement) const
+        -> std::expected<intercepted_statement, std::string>;
+    auto apply(sql_operation operation, intercepted_statement statement,
+        statement_interceptor_options options) const
         -> std::expected<intercepted_statement, std::string>;
 
 private:

@@ -3528,4 +3528,85 @@ TEST(openai_stream_cancellation_interrupts_read_and_discards_connection)
     ASSERT_TRUE(peer_closed);
 }
 
+TEST(openai_non_stream_eof_invalidates_connection_and_next_call_reconnects)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    if (!listener || !endpoint)
+        return;
+
+    bool first_invalidated = false;
+    bool second_succeeded = false;
+
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto stale = co_await cnetmod::async_accept(*io, *listener);
+        if (!stale)
+            co_return;
+        std::array<std::byte, 8192> request{};
+        (void)co_await cnetmod::async_read(*io, *stale,
+            cnetmod::mutable_buffer{request.data(), request.size()});
+        stale->close();
+
+        auto fresh = co_await cnetmod::async_accept(*io, *listener);
+        if (!fresh)
+            co_return;
+        (void)co_await cnetmod::async_read(*io, *fresh,
+            cnetmod::mutable_buffer{request.data(), request.size()});
+        constexpr std::string_view body =
+            R"({"id":"chat-1","object":"chat.completion","created":1,"model":"fixture","choices":[{"index":0,"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}})";
+        const auto response = std::format(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
+            body.size(), body);
+        (void)co_await cnetmod::async_write_all(*io, *fresh,
+            cnetmod::const_buffer{response.data(), response.size()});
+    };
+
+    auto consumer = [&]() -> cnetmod::task<void>
+    {
+        openai::client api{*io};
+        const openai::connect_options options{
+            .api_base = std::format("http://127.0.0.1:{}/v1",
+                endpoint->port()),
+            .api_key = "fixture",
+            .timeout_seconds = 2,
+        };
+        auto connected = co_await api.connect(options);
+        ASSERT_TRUE(connected.has_value());
+        if (!connected)
+        {
+            io->stop();
+            co_return;
+        }
+
+        const auto request = []
+        {
+            return openai::chat_request{
+                .model = "fixture",
+                .messages = {openai::message::user("hello")}};
+        };
+        const auto failed = co_await api.chat(request());
+        first_invalidated = !failed && !api.is_connected();
+        const auto recovered = co_await api.chat(request());
+        second_succeeded = recovered.has_value() &&
+            recovered->content() == "recovered";
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, consumer());
+    io->run();
+    ASSERT_TRUE(first_invalidated);
+    ASSERT_TRUE(second_succeeded);
+}
+
 RUN_TESTS()

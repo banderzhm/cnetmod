@@ -225,7 +225,7 @@ auto auto_configure_redis(const configured_service& configuration,
     auto_configuration_context& context)
     -> std::expected<void, std::error_code>
 {
-    if (!properties_are_known(configuration.properties, {"mode", "host", "port", "seeds", "username", "password", "database", "minimum_size", "maximum_size", "tls", "tls_verify", "tls_ca_file", "tls_cert_file", "tls_key_file", "tls_sni"}))
+    if (!properties_are_known(configuration.properties, {"mode", "host", "port", "seeds", "username", "password", "database", "minimum_size", "maximum_size", "connect_timeout_ms", "pool_timeout_ms", "retry_interval_ms", "ping_interval_ms", "ping_timeout_ms", "tls", "tls_verify", "tls_ca_file", "tls_cert_file", "tls_key_file", "tls_sni"}))
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
     if (!integer_property_in_range(configuration.properties, "port", 1, 65535))
@@ -234,6 +234,15 @@ auto auto_configure_redis(const configured_service& configuration,
         configuration.properties, "mode", std::string{"standalone"});
     if (mode != "standalone" && mode != "cluster")
         return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+    constexpr auto maximum_timeout_ms = std::int64_t{86'400'000};
+    for (const auto name : {"connect_timeout_ms", "pool_timeout_ms",
+             "retry_interval_ms", "ping_interval_ms", "ping_timeout_ms"})
+    {
+        if (!integer_property_in_range(configuration.properties, name, 1,
+                maximum_timeout_ms))
+            return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+    }
     if (mode == "cluster")
     {
         try
@@ -242,6 +251,11 @@ auto auto_configure_redis(const configured_service& configuration,
             if (value.contains("host") || value.contains("port") ||
                 value.contains("minimum_size") ||
                 value.contains("maximum_size") ||
+                value.contains("connect_timeout_ms") ||
+                value.contains("pool_timeout_ms") ||
+                value.contains("retry_interval_ms") ||
+                value.contains("ping_interval_ms") ||
+                value.contains("ping_timeout_ms") ||
                 cnetmod::json::value_or(value, "database", 0U) != 0U ||
                 !value.contains("seeds") || !value["seeds"].is_array() ||
                 value["seeds"].empty())
@@ -307,6 +321,19 @@ auto auto_configure_redis(const configured_service& configuration,
             "tls_cert_file", options.tls_cert_file);
         options.tls_key_file = cnetmod::json::value_or(value, "tls_key_file", options.tls_key_file);
         options.tls_sni = cnetmod::json::value_or(value, "tls_sni", options.tls_sni);
+        const auto duration = [&value](std::string_view name,
+                                  std::chrono::steady_clock::duration fallback)
+        {
+            if (!value.contains(name))
+                return fallback;
+            return std::chrono::duration_cast<std::chrono::steady_clock::duration>(
+                std::chrono::milliseconds{value.at(name).as<std::int64_t>()});
+        };
+        options.connect_timeout = duration("connect_timeout_ms", options.connect_timeout);
+        options.pool_timeout = duration("pool_timeout_ms", options.pool_timeout);
+        options.retry_interval = duration("retry_interval_ms", options.retry_interval);
+        options.ping_interval = duration("ping_interval_ms", options.ping_interval);
+        options.ping_timeout = duration("ping_timeout_ms", options.ping_timeout);
     }
     catch (...)
     {

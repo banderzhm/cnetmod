@@ -120,7 +120,7 @@ auto make_automatic_interceptor_chain(
                         std::move(statement.sql));
                 else if (operation == sql_operation::remove)
                     statement.sql = policy.template transform_delete_to_update<T>(
-                        std::move(statement.sql));
+                        std::move(statement.sql), statement.parameters);
                 return statement;
             });
         if (!added)

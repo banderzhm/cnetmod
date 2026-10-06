@@ -81,6 +81,35 @@ static auto completes_after_external_resume() -> task<int>
     co_return 7;
 }
 
+static auto fails_after_external_resume() -> task<int>
+{
+    co_await delayed_resume_awaitable{};
+    throw std::runtime_error("external failure");
+    co_return 0;
+}
+
+static auto records_resume_on_continuation(io_context& context,
+    std::thread::id& continuation_thread) -> task<int>
+{
+    const auto result = co_await resume_on(
+        context, completes_after_external_resume());
+    continuation_thread = std::this_thread::get_id();
+    co_return result;
+}
+
+static auto catches_resume_on_failure(io_context& context,
+    std::thread::id& catch_thread) -> task<void>
+{
+    try
+    {
+        (void)co_await resume_on(context, fails_after_external_resume());
+    }
+    catch (const std::runtime_error&)
+    {
+        catch_thread = std::this_thread::get_id();
+    }
+}
+
 static auto records_execution_thread(std::thread::id& execution_thread) -> task<int>
 {
     execution_thread = std::this_thread::get_id();
@@ -200,6 +229,29 @@ TEST(starts_on_starts_task_on_target_io_context)
     runner.join();
     ASSERT_EQ(result, 9);
     ASSERT_EQ(execution_thread, context_thread);
+}
+
+TEST(resume_on_restores_success_and_failure_to_target_io_context)
+{
+    auto context = make_io_context();
+    std::thread::id context_thread;
+    std::thread runner{[&]
+        {
+            context_thread = std::this_thread::get_id();
+            context->run();
+        }};
+
+    std::thread::id continuation_thread;
+    ASSERT_EQ(sync_wait(records_resume_on_continuation(
+                  *context, continuation_thread)),
+        7);
+    std::thread::id catch_thread;
+    sync_wait(catches_resume_on_failure(*context, catch_thread));
+
+    context->stop();
+    runner.join();
+    ASSERT_EQ(continuation_thread, context_thread);
+    ASSERT_EQ(catch_thread, context_thread);
 }
 
 TEST(io_scheduler_schedule_resumes_on_target_io_context)

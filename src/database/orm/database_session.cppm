@@ -73,6 +73,14 @@ public:
         return operations_type::execute(std::move(statement));
     }
 
+    auto execute(parameterized_query statement,
+        statement_interceptor_options interceptor_options)
+        -> task<query_result>
+    {
+        return operations_type::execute(
+            std::move(statement), interceptor_options);
+    }
+
     auto query(std::string_view sql,
         const instrumentation::trace_context& parent,
         const instrumentation::span_exporter& on_end,

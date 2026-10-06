@@ -2446,6 +2446,8 @@ API instead of repeating `system_clock::now()` conversions in each adapter.
 export template <typename T> class task;       // 协程返回类型（不可拷贝，可移动）
 export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待，不驱动 io_context
 export void sync_wait(task<void> t);
+export template <typename T>
+auto resume_on(io_context& target, task<T> operation) -> task<T>;
 ```
 
 ```cpp
@@ -2469,7 +2471,10 @@ int main() {
 
 `sync_wait()` 也不是第三方协程库或阻塞 API 的桥接器。接入阻塞函数时使用
 `thread_pool`、`spawn_on` 或 `blocking_invoke`；接入其他协程库提供的 awaitable
-时使用 `from_awaitable`。执行域切换、返回目标 `io_context` 及生命周期要求见
+时使用 `from_awaitable`。若第三方 awaitable 可能在任意线程完成，用
+`resume_on(request_io, operation)` 显式保证成功返回和异常处理都回到请求所属的
+`io_context`；不要把 Application 控制循环误当成请求循环。执行域切换、返回目标
+`io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
 
 ---
@@ -3342,10 +3347,16 @@ if (!page.ok())
 模型时，构建该模型仓储要在 `automatic_interceptor_options.logical_delete_policy`
 中传入 `field_name = "deleted_at"`、`mode = nullable_datetime`，并按需指定
 `touch_fields`；策略在拦截链创建时固定，不会改动其他模型。复杂 JOIN/XML
-查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。
-`nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
-若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
-`calendar_datetime` 参数的选择性更新完成软删除。
+查询仍须核对 SQL 中的别名与删除条件，不能依赖字符串注入代替 SQL 语义。若 XML
+语句需要自己维护带表别名的逻辑删除谓词，在该 `<select>` / `<update>` 等语句上声明
+`logicalDelete="false"`；这只跳过当前语句的逻辑删除拦截器，租户、数据权限和 SQL
+安全拦截仍然生效。属性省略或设为 `true` 时沿用仓储策略；其他值在装载 XML 时拒绝。
+自动 DELETE 转 UPDATE 默认使用应用侧 UTC 时钟：`nullable_datetime` 的删除标记和
+任意模式下的时间型 `touch_fields` 都绑定同一次采样得到的参数，不依赖数据库会话时区，
+且保证同一操作的多个时间字段一致。只有明确管理了数据库会话时区、确实希望
+使用数据库时钟时，才把 `time_source` 设为
+`logical_delete_time_source::database_session`；该模式生成 `CURRENT_TIMESTAMP`、
+`CURRENT_DATE` 或 `CURRENT_TIME`。
 
 `FILL_INSERT` 与 `FILL_INSERT_UPDATE` 直接从模型元数据读取；普通仓储请求
 不会反复修改全局注册表。自定义填充配置可按表名和字段名在启动期注册。普通 ORM
@@ -9265,6 +9276,12 @@ Redis、MySQL、PostgreSQL、MongoDB、Kafka、MQTT、AMQP 0-9-1 和 AMQP 1.0
 的独立 `port` 属性同样在转换前检查，必须为 1～65535 的整数；缺省保持协议默认端口。
 不能依赖无符号转换后的端口值做合法性判断，否则 65537 等值可能回绕为另一个端口。
 
+Redis 单机连接池支持 `connect_timeout_ms`、`pool_timeout_ms`、
+`retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
+1～86400000 毫秒的整数。缓存等可降级依赖应把 `pool_timeout_ms` 配置得明显短于
+请求预算；鉴权会话可使用独立 Redis 实例和更严格的可用性策略，避免两类流量共享同一
+故障等待边界。集群模式目前不使用连接池，因此这些连接池超时字段只对单机模式生效。
+
 MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`、
 `tls_ca_file`，以及 `connect_timeout_ms`、`pool_timeout_ms`、
 `retry_interval_ms`、`ping_interval_ms`、`ping_timeout_ms`。所有显式超时必须是
@@ -9479,6 +9496,12 @@ required 服务同一故障周期耗尽预算后不重复派发或通知停机�
 ## 运行期更新
 
 `reload_configuration()` 只原位更新日志级别、OTEL 采样率、健康策略和恢复策略。监听地址、端口、中间件、线程、连接参数、凭据、OTLP 出口或队列参数变化会设置 `restart_required`，不会偷偷重建连接。
+
+配置加载保留错误所属的 error category：JSON 语法错误返回
+`cnetmod::json::errc::parse_failed`，文件不存在返回
+`std::errc::no_such_file_or_directory`，根节点不是对象或字段值非法才返回
+`std::errc::invalid_argument`。调用方不得把所有 `invalid_argument` 翻译成“JSON
+语法错误”，也不得丢弃 JSON 模块提供的精确错误身份。
 
 底层 `reload_safe_configuration(active, candidate)` 返回
 `std::expected<configuration_reload_result, std::error_code>`。它先校验候选并在私有副本中
@@ -10053,7 +10076,10 @@ auto decoded = cnetmod::json::parse<user_view>(*encoded);
 ```
 
 The default policy rejects unknown fields and missing required fields.
-Use `parse_lenient<T>()` when unknown object members are acceptable and
+Use `parse_allow_unknown<T>()` when unknown object members are acceptable;
+`parse_lenient<T>()` is its compatibility spelling. Both still reject missing
+required fields. Fields that may be absent on the wire must be modeled with
+`std::optional`, so schema mistakes are not silently replaced with C++ defaults. Use
 `write_explicit_nulls<T>()` when nullable members must remain on the wire.
 Both are fixed Glaze policies; the public parse/write API has no pluggable
 backend or caller-supplied JSON codec.
@@ -14511,8 +14537,10 @@ session 不共享消息且可以并行。成功响应才原子追加 user/assist
 `application_runtime::reconfigure_chat_model()` 是 provider-neutral 热重载入口。
 调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
 `base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
-建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时
-旧 generation 不变；成功发布后，在途请求继续持有旧客户端，新请求只获取新客户端。
+建立并验证全部新连接，验证完成立即关闭探测连接，再通过连接池 generation swap 一次
+发布。运行期按 lease 惰性重连，避免启动到首个请求之间被网关回收的空闲 socket 形成
+一整池假活连接。配置非法或任一连接失败时旧 generation 不变；成功发布后，在途请求继续
+持有旧客户端，新请求只获取新客户端。
 `chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型
@@ -14786,6 +14814,9 @@ auto cancellable = co_await client.chat_stream_async(req, callback, cancellation
 避免未消费的增量污染下一次请求。
 每次流式网络读取受 `connect_options::timeout_seconds` 限制；调用方取消、
 读取超时、写入失败和解析失败都会关闭连接，后续请求通过自动重连获得干净会话。
+非流式读取的 EOF 和传输错误也会立即关闭本地 socket，不能仅凭 native handle 仍打开就把
+连接视为可复用。框架不会在请求可能已经写入后偷偷重放 POST；需要重试时应在
+`resilient_chat_model` 层配置，并且流式调用只允许在尚未交付任何 chunk 时重试。
 
 ### 场景：Runnable 与结构化输出
 

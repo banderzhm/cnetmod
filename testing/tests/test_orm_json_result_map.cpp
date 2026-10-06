@@ -626,6 +626,60 @@ TEST(xml_mapper_registry_rejects_ambiguous_select_result_binding)
     ASSERT_FALSE(loaded.has_value());
 }
 
+TEST(xml_mapper_registry_supports_statement_logical_delete_control)
+{
+    orm::mapper_registry registry;
+    const auto loaded = registry.load_xml(R"(
+        <mapper namespace="ArchiveMapper">
+          <select id="automatic">SELECT * FROM archive</select>
+          <select id="qualified" logicalDelete="false">
+            SELECT * FROM archive a WHERE a.deleted_at IS NULL
+          </select>
+        </mapper>)");
+    ASSERT_TRUE(loaded.has_value());
+    ASSERT_TRUE(registry.statement_logical_delete("ArchiveMapper.automatic"));
+    ASSERT_FALSE(registry.statement_logical_delete("ArchiveMapper.qualified"));
+
+    orm::mapper_registry invalid;
+    ASSERT_FALSE(invalid.load_xml(R"(
+        <mapper namespace="BrokenMapper">
+          <select id="find" logicalDelete="sometimes">SELECT 1</select>
+        </mapper>)"));
+}
+
+TEST(xml_mapper_statement_can_own_qualified_logical_delete_predicate)
+{
+    orm::mapper_registry registry;
+    ASSERT_TRUE(registry.load_xml(R"(
+        <mapper namespace="ArchiveMapper">
+          <select id="find" logicalDelete="false">
+            SELECT a.id, a.deleted_at FROM soft_deleted_records a
+            WHERE a.deleted_at IS NULL
+          </select>
+        </mapper>)"));
+
+    orm::logical_delete_config deleted_at;
+    deleted_at.field_name = "deleted_at";
+    deleted_at.mode = orm::logical_delete_mode::nullable_datetime;
+    orm::automatic_interceptor_options options;
+    options.logical_delete_policy = std::move(deleted_at);
+    auto interceptors = orm::make_automatic_interceptor_chain<
+        orm_soft_deleted_record>(std::move(options));
+    ASSERT_TRUE(interceptors.has_value());
+    if (!interceptors)
+        return;
+
+    mysql_style_orm_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql,
+        *interceptors};
+    orm::mapper<orm_soft_deleted_record, decltype(session)> records{session};
+    const auto result = cnetmod::sync_wait(records.select_xml(
+        registry, "ArchiveMapper.find", orm::param_context{}));
+    ASSERT_TRUE(result.ok());
+    ASSERT_TRUE(client.last_sql.contains("a.deleted_at IS NULL"));
+    ASSERT_FALSE(client.last_sql.contains("`deleted_at` IS NULL"));
+}
+
 TEST(dynamic_sql_foreach_binds_iteration_index_as_a_parameter)
 {
     auto statement = orm::parse_xml(R"(
@@ -885,10 +939,21 @@ TEST(orm_logical_delete_supports_nullable_datetime_markers)
     ASSERT_EQ(selected,
         "SELECT * FROM `soft_deleted_records` WHERE `deleted_at` IS NULL AND `id` = 7 ORDER BY `id`");
 
+    std::vector<orm::param_value> delete_parameters;
     const auto removed = interceptor.transform_delete_to_update<orm_soft_deleted_record>(
-        "DELETE FROM `soft_deleted_records` WHERE `id` = 7");
+        "DELETE FROM `soft_deleted_records` WHERE `id` = 7",
+        delete_parameters);
     ASSERT_EQ(removed,
-        "UPDATE `soft_deleted_records` SET `deleted_at` = CURRENT_TIMESTAMP, `updated_at` = CURRENT_TIMESTAMP, `archive_date` = CURRENT_DATE WHERE `id` = 7");
+        "UPDATE `soft_deleted_records` SET `deleted_at` = {}, `updated_at` = {}, `archive_date` = {} WHERE `id` = 7");
+    ASSERT_EQ(delete_parameters.size(), 3U);
+    ASSERT_TRUE(delete_parameters[0].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_TRUE(delete_parameters[1].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_TRUE(delete_parameters[2].kind ==
+        orm::param_value::kind_t::date_kind);
+    ASSERT_EQ(delete_parameters[0].datetime_val.to_string(),
+        delete_parameters[1].datetime_val.to_string());
 
     config.field_name = "deleted_at` = NULL WHERE 1=1 --";
     bool rejected = false;
@@ -922,7 +987,43 @@ TEST(orm_automatic_logical_delete_policy_is_model_scoped)
         {"DELETE FROM `soft_deleted_records` WHERE `id` = {}",
             {orm::param_value::from_int(7)}});
     ASSERT_TRUE(removed);
-    ASSERT_TRUE(removed->sql.contains("`deleted_at` = CURRENT_TIMESTAMP"));
+    ASSERT_TRUE(removed->sql.contains("`deleted_at` = {}"));
+    ASSERT_EQ(removed->parameters.size(), 3U);
+    ASSERT_TRUE(removed->parameters[0].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_TRUE(removed->parameters[1].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_EQ(removed->parameters[2].int_val, 7);
+
+    nullable.time_source = orm::logical_delete_time_source::database_session;
+    auto database_clock_chain =
+        orm::make_automatic_interceptor_chain<orm_soft_deleted_record>(
+            {.logical_delete_policy = nullable});
+    ASSERT_TRUE(database_clock_chain);
+    auto database_clock_removed = (*database_clock_chain)->apply(
+        orm::sql_operation::remove,
+        {"DELETE FROM `soft_deleted_records` WHERE `id` = {}",
+            {orm::param_value::from_int(7)}});
+    ASSERT_TRUE(database_clock_removed);
+    ASSERT_TRUE(database_clock_removed->sql.contains(
+        "`deleted_at` = CURRENT_TIMESTAMP"));
+    ASSERT_EQ(database_clock_removed->parameters.size(), 1U);
+
+    orm::logical_delete_config value_marker;
+    value_marker.field_name = "status";
+    value_marker.touch_fields = {{"updated_at",
+        orm::logical_delete_touch_value::current_timestamp}};
+    orm::logical_delete_interceptor value_interceptor{value_marker};
+    std::vector value_parameters{orm::param_value::from_int(7)};
+    const auto value_removed =
+        value_interceptor.transform_delete_to_update<orm_crud_user>(
+            "DELETE FROM `users` WHERE `id` = {}", value_parameters);
+    ASSERT_EQ(value_removed,
+        "UPDATE `users` SET `status` = 1, `updated_at` = {} WHERE `id` = {}");
+    ASSERT_EQ(value_parameters.size(), 2U);
+    ASSERT_TRUE(value_parameters[0].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_EQ(value_parameters[1].int_val, 7);
 
     auto default_chain = orm::make_automatic_interceptor_chain<orm_soft_deleted_record>();
     ASSERT_TRUE(default_chain);

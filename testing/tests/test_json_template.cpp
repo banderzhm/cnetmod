@@ -128,9 +128,21 @@ TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
     ASSERT_EQ(unknown.error(),
         cnetmod::json::make_error_code(cnetmod::json::errc::unknown_field));
 
-    const auto lenient = cnetmod::json::parse_lenient<sample_document>(
+    const auto lenient = cnetmod::json::parse_allow_unknown<sample_document>(
         R"({"name":"orders","count":7,"extra":true})");
     ASSERT_TRUE(lenient.has_value());
+
+    const auto lenient_missing =
+        cnetmod::json::parse_allow_unknown<sample_document>(
+            R"({"name":"orders","extra":true})");
+    ASSERT_FALSE(lenient_missing.has_value());
+    ASSERT_EQ(lenient_missing.error(),
+        cnetmod::json::make_error_code(cnetmod::json::errc::missing_field));
+
+    const auto compatibility_name =
+        cnetmod::json::parse_lenient<sample_document>(
+            R"({"name":"orders","count":7,"extra":true})");
+    ASSERT_TRUE(compatibility_name.has_value());
 
     const auto missing = cnetmod::json::parse<sample_document>(
         R"({"name":"orders"})");
