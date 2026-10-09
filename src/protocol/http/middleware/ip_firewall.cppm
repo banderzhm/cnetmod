@@ -6,8 +6,8 @@
  * Automatically tracks IP violations (high-frequency requests, excessive
  * 4xx/5xx, path scanning, etc.), automatically adds IP to blacklist when
  * threshold exceeded, auto-unban after ban period expires. Uses cache_store
- * interface for state storage, seamlessly switchable between memory_cache /
- * redis_cache.
+ * interface for state storage, switchable between the HTTP-local memory cache
+ * and independently linked cache adapters such as the Redis integration.
  *
  * Usage example:
  *   import cnetmod.protocol.http.middleware.ip_firewall;
@@ -51,9 +51,11 @@
 export module cnetmod.protocol.http.middleware.ip_firewall;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.core.log;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.middleware.cache_store; // Only need abstract interface, avoid heavy dependencies like redis
 
 namespace cnetmod {

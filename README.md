@@ -278,15 +278,20 @@ cd cnetmod
 # Initialize submodules (required for third-party dependencies)
 git submodule update --init --recursive
 
-# Build
-cmake -B build -DCNETMOD_DEPENDENCY_MODE=system -DCNETMOD_BUILD_EXAMPLES=ON
-cmake --build build
+# Build the lean SDK core (protocols and auxiliary targets are opt-in)
+cmake -B build -DCNETMOD_DEPENDENCY_MODE=system
+cmake --build build --target cnetmod_core
 
-# Build every cnetmod target explicitly
-cmake --build build --target cnetmod_build_all
+# Configure the framework maintainer's complete validation build explicitly
+cmake -B build-full -DCNETMOD_DEPENDENCY_MODE=system \
+  -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
+  -DCNETMOD_BUILD_TESTS=ON \
+  -DCNETMOD_BUILD_EXAMPLES=ON \
+  -DCNETMOD_BUILD_BENCH=ON
+cmake --build build-full --target cnetmod_build_all
 
 # Visual Studio generators with C++ modules: use single-node MSBuild
-cmake --build build --target cnetmod_build_all --config Debug
+cmake --build build-full --target cnetmod_build_all --config Debug -- /m:1
 ```
 
 ### Build with vcpkg

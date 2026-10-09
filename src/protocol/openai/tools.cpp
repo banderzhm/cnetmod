@@ -10,7 +10,7 @@ import std;
 import cnetmod.coro.task;
 import :foundation;
 import :tool_contracts;
-import :model;
+import :run;
 import :prompt;
 import :tools;
 import cnetmod.json;

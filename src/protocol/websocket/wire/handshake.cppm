@@ -3,7 +3,6 @@
 export module cnetmod.protocol.websocket:handshake;
 import std; // HTTP upgrade API declarations
 import :types;
-import cnetmod.protocol.http;
 
 namespace cnetmod::ws {
 export auto generate_sec_key() -> std::string;

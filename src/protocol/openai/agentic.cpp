@@ -21,7 +21,7 @@ import cnetmod.coro.bridge;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.json;
-import :model;
+import :run;
 import :prompt;
 import :checkpoint;
 import :agentic;

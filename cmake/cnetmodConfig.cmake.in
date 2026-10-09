@@ -73,7 +73,31 @@ if(@CNETMOD_HAS_BROTLI@)
     endif()
 endif()
 if(@CNETMOD_HAS_ICU@)
-    find_dependency(ICU COMPONENTS uc i18n)
+    if(@CNETMOD_USING_BUNDLED_ICU@)
+        if(NOT TARGET ICU::uc)
+            add_library(ICU::uc SHARED IMPORTED)
+            set_target_properties(ICU::uc PROPERTIES
+                IMPORTED_IMPLIB
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuuc.lib"
+                IMPORTED_LOCATION
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuuc78.dll"
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+        endif()
+        if(NOT TARGET ICU::i18n)
+            add_library(ICU::i18n SHARED IMPORTED)
+            set_target_properties(ICU::i18n PROPERTIES
+                IMPORTED_IMPLIB
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuin.lib"
+                IMPORTED_LOCATION
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuin78.dll"
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+                INTERFACE_LINK_LIBRARIES ICU::uc)
+        endif()
+    else()
+        find_dependency(ICU COMPONENTS uc i18n)
+    endif()
 endif()
 if(@CNETMOD_HAS_PUGIXML@)
     if("@CNETMOD_PUGIXML_TARGET@" STREQUAL "pugixml-static")
@@ -101,6 +125,15 @@ endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/cnetmodTargets.cmake")
 
+# Build-tree and installed-package spelling stay consistent.  The historical
+# exported target remains available for compatibility.
+if(TARGET cnetmod::cnetmod_core AND NOT TARGET cnetmod::core)
+    add_library(cnetmod::core ALIAS cnetmod::cnetmod_core)
+endif()
+if(TARGET cnetmod::cnetmod_core AND NOT TARGET cnetmod::all)
+    add_library(cnetmod::all ALIAS cnetmod::cnetmod_core)
+endif()
+
 # libc++ owns the std/std.compat module fragments.  The installed std.cppm
 # interfaces keep those relative includes and therefore consume them directly
 # from the matching local Clang installation.
@@ -127,11 +160,11 @@ if(UNIX)
         message(FATAL_ERROR
             "cnetmod requires the libc++ module directory matching the consumer compiler")
     endif()
-    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+    set_property(TARGET cnetmod::runtime APPEND PROPERTY
         INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_libcxx_module_dir}")
-    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+    set_property(TARGET cnetmod::runtime APPEND PROPERTY
         INTERFACE_COMPILE_OPTIONS "-stdlib=libc++;-nostdinc++")
-    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+    set_property(TARGET cnetmod::runtime APPEND PROPERTY
         INTERFACE_LINK_OPTIONS "-stdlib=libc++")
 endif()
 
@@ -148,7 +181,7 @@ if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
 
     if(EXISTS "${_cnetmod_msvc_modules}/std.ixx" AND
        EXISTS "${_cnetmod_msvc_modules}/std.compat.ixx")
-        target_sources(cnetmod::cnetmod_core INTERFACE
+        target_sources(cnetmod::runtime INTERFACE
             FILE_SET cxx_std_modules TYPE CXX_MODULES
             BASE_DIRS "${_cnetmod_msvc_modules}"
             FILES

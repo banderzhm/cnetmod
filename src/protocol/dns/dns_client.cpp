@@ -5,6 +5,8 @@ module;
 module cnetmod.protocol.dns.client;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.core.buffer;
 import cnetmod.core.error;
 import cnetmod.core.address;
@@ -14,7 +16,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.udp;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.dns.types;
 import cnetmod.protocol.dns.codec;
 #ifdef CNETMOD_HAS_SSL

@@ -17,8 +17,10 @@ module;
 module cnetmod.protocol.http.middleware.ip_filter;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.core.log;
 
 namespace cnetmod {

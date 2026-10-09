@@ -61,7 +61,7 @@ option(CNETMOD_ENABLE_ORM
 
 option(CNETMOD_ENABLE_ALL_PROTOCOLS
     "Default value for individual CNETMOD_ENABLE_<PROTOCOL> options"
-    ON)
+    OFF)
 
 foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
     option(CNETMOD_ENABLE_${protocol}

@@ -100,6 +100,10 @@
 
 ## CMake 协议开关
 
+所有协议开关默认关闭；只启用应用实际使用的协议。测试、benchmark、示例、C API 与
+Python Binding 也默认关闭。只有框架维护者的完整验证构建才显式设置
+`CNETMOD_ENABLE_ALL_PROTOCOLS=ON` 和相应的 `CNETMOD_BUILD_*` 开关。
+
 | 开关 | 协议 | 依赖 |
 |------|------|------|
 | `-DCNETMOD_ENABLE_HTTP=ON` | HTTP/1.1 + HTTP/2 | 无 |

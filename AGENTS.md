@@ -150,6 +150,10 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 
 ## CMake 协议开关
 
+所有协议开关默认关闭；只启用应用实际使用的协议。测试、benchmark、示例、C API 与
+Python Binding 也默认关闭。只有框架维护者的完整验证构建才显式设置
+`CNETMOD_ENABLE_ALL_PROTOCOLS=ON` 和相应的 `CNETMOD_BUILD_*` 开关。
+
 | 开关 | 协议 | 依赖 |
 |------|------|------|
 | `-DCNETMOD_ENABLE_HTTP=ON` | HTTP/1.1 + HTTP/2 | 无 |
@@ -7521,8 +7525,11 @@ srv.use(ip_filter({
 ### 14. cache_store — 缓存存储
 
 抽象接口 `cache::cache_store`，具体实现：
-- `memory_cache` — 内存 LRU 缓存
-- `redis_cache` — Redis 后端（需 `CNETMOD_HAS_PROTOCOL_REDIS`）
+
+- `memory_cache` — HTTP 组件自带的内存 LRU 缓存。
+- `redis_cache` — 独立 Redis 中间件适配器，不属于 HTTP 核心。必须同时启用
+  HTTP 与 Redis，并显式链接 `cnetmod::http_redis_cache`、导入
+  `cnetmod.integration.http.redis_cache`。
 
 ```cpp
 class memory_cache : public cache_store {
@@ -7542,6 +7549,20 @@ Per-route 缓存：`cacheable()`, `cache_put()`, `cache_evict()`, `cache_evict_g
 ```cpp
 cache::memory_cache store({.max_entries = 10000});
 srv.use(cache::make_cache_middleware(store, {.ttl = std::chrono::seconds{60}}));
+```
+
+Redis 后端：
+
+```cmake
+target_link_libraries(my_service PRIVATE cnetmod::http_redis_cache)
+```
+
+```cpp
+import cnetmod.integration.http.redis_cache;
+
+cnetmod::cache::redis_cache store(redis_client,
+    {.key_prefix = "http-cache:"});
+srv.use(cnetmod::cache::make_cache_middleware(store));
 ```
 
 ### 15. health_check — 健康检查
@@ -7732,6 +7753,7 @@ ignored and never changes the database or Redis operation outcome.
 > 高性能异步 HTTP/HTTPS 服务器栈，支持 HTTP/1.1、HTTP/2、HTTP/3、路由、中间件、SSE、Swagger 与文件上传。
 
 **import**: `import cnetmod.protocol.http;`
+
 **CMake**: `-DCNETMOD_ENABLE_HTTP=ON`
 **源码**: `src/protocol/http/`
 
@@ -9622,7 +9644,7 @@ the secret and passes it only at the call site.
 | 版本 | 2.0.0（`CNETMOD_VERSION_STRING "2.0.0"`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
-| 库类型 | 静态库 `cnetmod_core`（别名 `cnetmod::core`） |
+| 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
 | 描述 | Cross-platform asynchronous network library with C++23 modules |
 
 ## 目录结构
@@ -9679,6 +9701,34 @@ executor (异步执行器)
 protocol (协议实现)
 ```
 
+## 二进制组件边界
+
+构建不再把所有实现塞进一个巨大归档。按职责生成并导出以下 CMake target：
+
+- `cnetmod::runtime`：core、coro、io、executor、JSON、安全与基础观测能力。
+- `cnetmod::orm`：通用 ORM；仅在 `CNETMOD_ENABLE_ORM=ON` 时存在。
+- `cnetmod::<protocol>`：每个已启用协议各自一个静态组件，例如
+  `cnetmod::http`、`cnetmod::redis`、`cnetmod::mysql`。
+- `cnetmod::application`：Application 组合与自动配置层。
+- `cnetmod::http_redis_cache`：Redis 驱动的 HTTP 缓存中间件适配器；仅在
+  HTTP 与 Redis 同时启用时存在。
+- `cnetmod::core` / `cnetmod::all`：兼容旧工程的一次性聚合入口，自身只含
+  极小 facade，不再复制组件实现。
+
+应用应链接实际使用的最小组件。特别是 Redis 协议并不是 HTTP 的隐式依赖，
+HTTP 的内存缓存也不需要 Redis。只有明确使用 Redis 缓存后端时才链接：
+
+```cmake
+target_link_libraries(my_service PRIVATE cnetmod::http_redis_cache)
+```
+
+```cpp
+import cnetmod.integration.http.redis_cache;
+```
+
+`CNETMOD_USE_SYSTEM_DEPS=OFF` 表示严格使用仓库内置依赖；可选压缩库在仓库
+没有对应源码时保持关闭，不得从 Conda、系统目录或包管理器静默捡取。
+
 ### core 层（11 个子模块）
 
 `error` → `buffer` → `buffer_pool` → `address` → `socket` → `net_init` → `file` → `serial_port` → `log` → `dns` → `crash_dump`
@@ -9724,9 +9774,15 @@ HTTP、WebSocket、gRPC、MQTT、Redis、MySQL、PostgreSQL、MongoDB、Kafka、
 所有协议通过 `cmake/Protocols.cmake` 统一注册，每个协议对应一个 CMake option：
 
 ```cmake
--DCNETMOD_ENABLE_ALL_PROTOCOLS=ON|OFF   # 全部协议的默认值
+-DCNETMOD_ENABLE_ALL_PROTOCOLS=ON|OFF   # 各协议开关的默认值，默认 OFF
 -DCNETMOD_ENABLE_ORM=ON|OFF             # SQL ORM 和 XML mapper 支持
 ```
+
+仓库默认配置只构建核心运行时和 ORM，不隐式启用全部协议，也不构建测试、
+benchmark、示例、C API 或 Python Binding。应用必须按实际需求显式开启协议；框架自身的
+完整验证构建则显式传入 `CNETMOD_ENABLE_ALL_PROTOCOLS=ON` 和对应的构建开关。
+这条边界避免普通 SDK 构建无意间生成数百个 IFC/OBJ，并避免 MSVC 编译仅供框架
+维护者使用的重模板测试。
 
 ### 18 个协议开关一览
 
@@ -9760,7 +9816,8 @@ CMake 会自动验证依赖关系：若启用了某协议但未启用其依赖�
 cmake -B build -G Ninja \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON
+    -DCNETMOD_ENABLE_HTTP=ON \
+    -DCNETMOD_ENABLE_OPENAI=ON
 
 # 构建
 cmake --build build
@@ -9770,6 +9827,17 @@ ctest --test-dir build
 
 # 安装
 cmake --install build --prefix install
+```
+
+需要维护者完整验证时，必须显式配置：
+
+```bash
+cmake -B build-full -G Ninja \
+    -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
+    -DCNETMOD_BUILD_TESTS=ON \
+    -DCNETMOD_BUILD_EXAMPLES=ON \
+    -DCNETMOD_BUILD_BENCH=ON
+cmake --build build-full --target cnetmod_build_all
 ```
 
 MSVC 构建使用 `rebuild_install.bat` 脚本。
@@ -10151,6 +10219,21 @@ export module cnetmod.core.buffer;
 ```cpp
 export module cnetmod.protocol.http:server;
 ```
+
+分区只用于同一主模块内部的编译边界；应用仍导入公开聚合模块。不要把每个类型或设计模式
+机械拆成独立分区。MSVC 会为每个模块接口单元单独扫描和生成 IFC，过细拆分可能让全量
+构建并行峰值上升，即使增量依赖图看起来更小。
+
+新增分区前必须同时满足：
+
+1. 它是稳定的职责边界，并被多个内部单元复用；
+2. 能切断一个实测的高扇入或重传递依赖；
+3. 保持原聚合模块的 `export import` 兼容性；
+4. 用完整干净构建比较耗时和峰值内存，并跑相关行为测试。
+
+优先拆出轻量、高扇入的契约；低扇入且共享同一批重依赖的类型应留在一个接口单元中。
+例如 OpenAI 只把运行生命周期契约拆为 `:run`，而不是把路由、韧性、治理、图像和审核
+各拆一个分区。
 
 ### 聚合模块
 
@@ -10578,15 +10661,24 @@ ctest --test-dir build -R test_my_feature
 
 > 通过一个 Telemetry Hub 低侵入地统一 Trace、Metric、Log、W3C 上下文传播和有界 OTLP/HTTP 导出。
 
-**import**: `import cnetmod.observability;`
+**import**: `import cnetmod.observability;`（兼容总入口）或仅使用 Hub 时
+`import cnetmod.observability.telemetry;`
 
-**源码**: `src/application/monitoring/telemetry.cppm`、`src/application/monitoring/otlp/otlp_http_exporter.cppm`、`src/application/monitoring/integration/http_client.cppm`
+**源码**: `src/application/monitoring/observability.cppm`、
+`src/application/monitoring/telemetry.cppm`、
+`src/application/monitoring/otlp/otlp_http_exporter.cppm`、
+`src/application/monitoring/integration/http_client.cppm`
 
 监控源码统一归属 `src/application/monitoring/`：`core/` 放协议无关的上下文、
 操作结果和指标契约，`otlp/` 放编码与投递，`integration/` 放协议观测适配器。
 目录归属不改变模块依赖方向：协议只依赖中立契约，不导入 Application Host 或 OTLP。
 模块名保留 `cnetmod.instrumentation.*` / `cnetmod.observability.*`，避免目录整理
 同时改变调用方 API。HTTP 关闭时 CMake 仍编译 `monitoring/core/`。
+`cnetmod.observability` 继续导出 telemetry 与 messaging，保持既有调用方兼容；
+框架内部只导入 `cnetmod.observability.telemetry`，避免生命周期和配置模块因使用
+`telemetry_hub` 而连带依赖 Kafka、MQTT、AMQP 与 WebSocket。需要消息上下文传播时
+应显式导入 `cnetmod.observability.messaging`。
+`tools/check_observability_dependencies.py` 会拒绝 Application 内部重新导入兼容总入口。
 
 ## 核心原则
 
@@ -10777,12 +10869,28 @@ Host 在最终连接收尾阶段也检查此状态，使用已有剩余预算，
 # Windows 构建与 bundled ICU
 
 使用 Visual Studio 的 CMake generator 构建；Debug 与 Release 必须分别构建，不能混用产物。
+默认配置是轻量 SDK 核心，不开启协议、测试、示例、benchmark、C API 或 Python Binding。
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64
-cmake --build build --config Debug --target cnetmod_build_all
-cmake --build build --config Release --target cnetmod_build_all
+cmake --build build --config Release --target cnetmod_core -- /m:1
 ```
+
+框架维护者需要完整验证时必须显式开启，并继续使用单 MSBuild 节点：
+
+```powershell
+cmake -S . -B build-full -G "Visual Studio 18 2026" -A x64 `
+  -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON `
+  -DCNETMOD_BUILD_TESTS=ON `
+  -DCNETMOD_BUILD_EXAMPLES=ON `
+  -DCNETMOD_BUILD_BENCH=ON
+cmake --build build-full --config Release --target cnetmod_build_all -- /m:1
+```
+
+OpenAI 测试源在非 MSVC 平台保持单目标；MSVC 配置会把它编译为七个测试分片，限制
+单个 `cl.exe` 同时持有的 Glaze/OpenAI 模板语义图。不要为了恢复单一测试可执行文件而
+移除分片，也不要用 `/Zm` 掩盖编译器堆耗尽。若新增重模板测试，应优先放入语义对应的
+分片；单个测试翻译单元接近数千行时必须继续拆分。
 
 ## PostgreSQL 的 ICU 依赖
 
@@ -14400,6 +14508,21 @@ opts.persistence = {
 ---
 
 ## Part 1: OpenAI
+
+### 模块依赖边界
+
+应用代码继续只导入公开聚合模块：
+
+```cpp
+import cnetmod.protocol.openai;
+```
+
+`cnetmod.protocol.openai:model` 保留既有公开类型与源码兼容性。OpenAI 模块内部将高扇入、
+轻量的运行生命周期契约单独放在 `:run`；只需要 `run_config`、listener 或 `run_scope` 的
+Agent 工作流、加载器、规划器和工具单元必须直接导入 `:run`。真正使用聊天、向量、图像、
+审核或模型治理能力的单元才导入 `:model`。不要为理论纯度继续把低扇入模型类型拆成大量
+接口分区；MSVC 会为每个模块单元重复扫描依赖，并提高并行构建内存。这两个分区是框架
+内部编译边界，不是应用侧的新入口。
 
 ### 场景导航
 

@@ -4,7 +4,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from check_observability_dependencies import module_graph, parse_unit, violations
+from check_observability_dependencies import (
+    broad_openai_model_imports,
+    broad_observability_imports,
+    module_graph,
+    parse_unit,
+    violations,
+)
 
 
 class DependencyTests(unittest.TestCase):
@@ -49,6 +55,31 @@ class DependencyTests(unittest.TestCase):
             'cnetmod.observability.http': {'cnetmod.protocol.http'},
             'cnetmod.protocol.http': {'cnetmod.observability_free'},
         }), [])
+
+    def test_application_must_import_narrow_observability_module(self):
+        graph = {
+            'cnetmod.application.runtime': {'cnetmod.observability'},
+            'cnetmod.application.host': {'cnetmod.observability.telemetry'},
+            'cnetmod.observability': {'cnetmod.observability.telemetry'},
+        }
+        self.assertEqual(broad_observability_imports(graph),
+                         ['cnetmod.application.runtime'])
+
+    def test_openai_internals_must_import_narrow_model_partition(self):
+        graph = {
+            'cnetmod.protocol.openai': {'cnetmod.protocol.openai:model'},
+            'cnetmod.protocol.openai:model': {
+                'cnetmod.protocol.openai:run',
+            },
+            'cnetmod.protocol.openai:agentic': {
+                'cnetmod.protocol.openai:model',
+            },
+            'cnetmod.protocol.openai:service': {
+                'cnetmod.protocol.openai:model',
+            },
+        }
+        self.assertEqual(broad_openai_model_imports(graph),
+                         ['cnetmod.protocol.openai:agentic'])
 
     def test_implementation_edges_are_merged(self):
         with tempfile.TemporaryDirectory() as directory:

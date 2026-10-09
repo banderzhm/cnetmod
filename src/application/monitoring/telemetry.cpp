@@ -1,4 +1,4 @@
-module cnetmod.observability;
+module cnetmod.observability.telemetry;
 
 import std;
 import cnetmod.instrumentation.metric;

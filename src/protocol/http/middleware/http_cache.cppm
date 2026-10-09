@@ -8,12 +8,11 @@ export module cnetmod.protocol.http.middleware.cache;
 export import cnetmod.protocol.http.middleware.cache_store;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.coro.shared_mutex;
-#ifdef CNETMOD_HAS_PROTOCOL_REDIS
-import cnetmod.protocol.redis;
-#endif
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod::cache {
 
@@ -50,30 +49,6 @@ private:
     std::unordered_map<std::string, cache_entry> map_;
     std::list<std::string> lru_;
 };
-
-#ifdef CNETMOD_HAS_PROTOCOL_REDIS
-struct redis_cache_options
-{
-    std::string key_prefix;
-};
-
-class redis_cache : public cache_store
-{
-public:
-    explicit redis_cache(redis::client& client,
-        redis_cache_options opts = {}) noexcept;
-    auto get(std::string_view key) -> task<std::optional<std::string>> override;
-    auto set(std::string_view key, std::string_view value,
-        std::chrono::seconds ttl) -> task<bool> override;
-    auto del(std::string_view key) -> task<bool> override;
-    auto exists(std::string_view key) -> task<bool> override;
-
-private:
-    auto full_key(std::string_view key) const -> std::string;
-    redis::client& client_;
-    redis_cache_options opts_;
-};
-#endif
 
 class cache_group_registry
 {

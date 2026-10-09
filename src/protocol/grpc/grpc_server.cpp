@@ -5,8 +5,10 @@ module;
 module cnetmod.protocol.grpc.server;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.codec;
 import cnetmod.protocol.grpc.governance.server_policy;

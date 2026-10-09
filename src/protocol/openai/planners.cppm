@@ -8,7 +8,7 @@ export module cnetmod.protocol.openai:planners;
 
 import std;
 import cnetmod.coro.task;
-import :model;
+import :run;
 import :agentic;
 
 namespace cnetmod::openai {

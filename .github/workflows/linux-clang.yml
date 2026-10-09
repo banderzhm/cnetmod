@@ -151,7 +151,7 @@ jobs:
           -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
-          -S ${{ github.workspace }}
+          -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON -DCNETMOD_ENABLE_ORM=ON -DCNETMOD_BUILD_C_API=ON -DCNETMOD_BUILD_PYTHON_BINDINGS=ON -S ${{ github.workspace }}
       env:
         CC: clang-${{ matrix.clang_version }}
         CXX: clang++-${{ matrix.clang_version }}

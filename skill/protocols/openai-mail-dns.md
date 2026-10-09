@@ -21,6 +21,21 @@
 
 ## Part 1: OpenAI
 
+### 模块依赖边界
+
+应用代码继续只导入公开聚合模块：
+
+```cpp
+import cnetmod.protocol.openai;
+```
+
+`cnetmod.protocol.openai:model` 保留既有公开类型与源码兼容性。OpenAI 模块内部将高扇入、
+轻量的运行生命周期契约单独放在 `:run`；只需要 `run_config`、listener 或 `run_scope` 的
+Agent 工作流、加载器、规划器和工具单元必须直接导入 `:run`。真正使用聊天、向量、图像、
+审核或模型治理能力的单元才导入 `:model`。不要为理论纯度继续把低扇入模型类型拆成大量
+接口分区；MSVC 会为每个模块单元重复扫描依赖，并提高并行构建内存。这两个分区是框架
+内部编译边界，不是应用侧的新入口。
+
 ### 场景导航
 
 - 我要调用 Chat Completions → [看这里](#场景chat-completions)

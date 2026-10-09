@@ -1,10 +1,5 @@
 name: Windows MSVC Build
 
-env:
-  # Reuse vcpkg's compiled packages between workflow runs. The cache key is
-  # derived by vcpkg from the manifest, triplet and compiler ABI.
-  VCPKG_BINARY_SOURCES: "clear;x-gha,readwrite"
-
 on:
   push:
     branches: [ "main", "master" ]
@@ -38,30 +33,6 @@ jobs:
         run: |
           choco install cmake --version=4.2.3 -y --force
           cmake --version
-
-      - name: Setup vcpkg binary cache
-        uses: lukka/run-vcpkg@v11
-        with:
-          runVcpkgInstall: false
-
-      - name: Identify runner toolchain image
-        id: runner-image
-        shell: pwsh
-        run: '"version=$env:ImageVersion" >> $env:GITHUB_OUTPUT'
-
-      # The binary cache avoids recompiling ports, while this cache also keeps
-      # the materialized include/lib tree.  Restoring it makes the manifest
-      # verification effectively incremental on a fresh hosted runner.
-      - name: Restore materialized vcpkg dependencies
-        uses: actions/cache@v5
-        with:
-          path: ${{ github.workspace }}/vcpkg_installed
-          key: vcpkg-installed-${{ runner.os }}-vs18-x64-${{ steps.runner-image.outputs.version }}-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json') }}
-
-      - name: Install manifest dependencies
-        shell: pwsh
-        run: |
-          & "$env:VCPKG_ROOT/vcpkg.exe" install --triplet x64-windows --disable-metrics
 
       - name: Setup MSBuild (VS 2026 / VS18)
         uses: microsoft/setup-msbuild@v3
@@ -110,9 +81,12 @@ jobs:
             -G "Visual Studio 18 2026" `
             -A x64 `
             -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DCNETMOD_DEPENDENCY_MODE=vcpkg `
-            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed" `
+            -DCNETMOD_DEPENDENCY_MODE=system `
+            -DCNETMOD_USE_SYSTEM_DEPS=OFF `
+            -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON `
+            -DCNETMOD_ENABLE_ORM=ON `
+            -DCNETMOD_BUILD_C_API=ON `
+            -DCNETMOD_BUILD_PYTHON_BINDINGS=ON `
             -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} `
             -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
             -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} `
@@ -149,9 +123,8 @@ jobs:
         run: |
           cmake -B "${{ github.workspace }}/build-core-only" `
             -G "Visual Studio 18 2026" -A x64 `
-            -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" `
-            -DCNETMOD_DEPENDENCY_MODE=vcpkg `
-            -DVCPKG_INSTALLED_DIR="${{ github.workspace }}/vcpkg_installed" `
+            -DCNETMOD_DEPENDENCY_MODE=system `
+            -DCNETMOD_USE_SYSTEM_DEPS=OFF `
             -DCNETMOD_ENABLE_ALL_PROTOCOLS=OFF -DCNETMOD_ENABLE_ORM=OFF `
             -DCNETMOD_BUILD_TESTS=OFF -DCNETMOD_BUILD_EXAMPLES=OFF `
             -S "${{ github.workspace }}"

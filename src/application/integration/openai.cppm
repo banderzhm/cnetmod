@@ -21,7 +21,7 @@ import cnetmod.coro.task_group;
 import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
 import cnetmod.io.io_context;
-import cnetmod.observability;
+import cnetmod.observability.telemetry;
 import cnetmod.observability.openai;
 import cnetmod.protocol.openai;
 

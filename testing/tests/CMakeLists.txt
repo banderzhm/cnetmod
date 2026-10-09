@@ -195,6 +195,99 @@ foreach(test_src ${TEST_SOURCES})
     endif()
 endforeach()
 
+# MSVC's module frontend retains the imported Glaze/OpenAI semantic graph while
+# compiling a translation unit.  The complete OpenAI suite is intentionally
+# kept in one source file for shared fixtures, but compiling all 90+ cases in a
+# single cl.exe process can exceed 40 GiB.  Build bounded preprocessor shards on
+# MSVC so each process sees only one bounded group.  Clang/GCC keep the single
+# target to avoid multiplying total build work on toolchains without this peak.
+if(MSVC AND TARGET test_openai)
+    target_compile_definitions(test_openai PRIVATE
+        CNETMOD_OPENAI_TEST_GROUP=1)
+    set(_cnetmod_openai_test_shards
+        retrieval
+        runtime
+        memory
+        agentic
+        ingestion
+        transport
+        import
+        model
+        agent_tools
+        tool_search
+        skill_loader
+        retrieval_store
+        telemetry_events
+        telemetry_scopes
+        resilience
+        memory_trim
+        service
+        mcp_client
+        mcp_tools
+        parsers
+        evaluation)
+    foreach(_index RANGE 0 20)
+        math(EXPR _group "${_index} + 2")
+        list(GET _cnetmod_openai_test_shards ${_index} _suffix)
+        set(_target "test_openai_${_suffix}")
+        add_executable(${_target} test_openai.cpp)
+        target_link_libraries(${_target} PRIVATE cnetmod_core)
+        target_include_directories(${_target} PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR})
+        target_compile_definitions(${_target} PRIVATE
+            CNETMOD_OPENAI_TEST_GROUP=${_group})
+        set_property(TARGET ${_target} PROPERTY
+            CXX_MODULE_GENERATION_MODE "SEPARATE")
+        add_test(NAME ${_target} COMMAND ${_target})
+        list(APPEND CNETMOD_TEST_TARGETS ${_target})
+    endforeach()
+    unset(_cnetmod_openai_test_shards)
+    unset(_index)
+    unset(_group)
+    unset(_suffix)
+    unset(_target)
+endif()
+
+# One dependency root lets Visual Studio evaluate the module graph once while
+# validating the public HTTP aggregate, its partitions, middleware,
+# observability adapters, and protocol consumers. Passing many --target values
+# makes CMake invoke MSBuild repeatedly and rescans the complete module graph.
+set(_cnetmod_http_arch_test_candidates
+    test_http_types
+    test_http_tracing
+    test_http_observability
+    test_http_disabled_overhead
+    test_otlp_exporter
+    test_http_request
+    test_http_response
+    test_http_compress
+    test_http_parser
+    test_http_router
+    test_http_sse
+    test_http_swagger
+    test_http_utils
+    http_client_test
+    test_http_ip_filter
+    test_http_jwt_auth
+    test_grpc
+    test_openai
+    test_openai_import
+    test_openai_model
+    test_openai_resilience)
+set(_cnetmod_http_arch_test_targets)
+foreach(_target IN LISTS _cnetmod_http_arch_test_candidates)
+    if(TARGET ${_target})
+        list(APPEND _cnetmod_http_arch_test_targets ${_target})
+    endif()
+endforeach()
+if(_cnetmod_http_arch_test_targets)
+    add_custom_target(cnetmod_http_arch_tests
+        DEPENDS ${_cnetmod_http_arch_test_targets})
+endif()
+unset(_cnetmod_http_arch_test_candidates)
+unset(_cnetmod_http_arch_test_targets)
+unset(_target)
+
 if(TARGET test_application_redis_live)
     set_tests_properties(test_application_redis_live PROPERTIES
         TIMEOUT 30 SKIP_RETURN_CODE 77 LABELS "integration;redis")

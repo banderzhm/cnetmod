@@ -10,6 +10,7 @@ import std;
 import cnetmod.coro.task;
 import :chat;
 import :messages;
+import :run;
 import :model;
 import :prompt;
 import :evaluation;

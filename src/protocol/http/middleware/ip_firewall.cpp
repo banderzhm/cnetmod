@@ -5,8 +5,10 @@ module;
 module cnetmod.protocol.http.middleware.ip_firewall;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.middleware.cache_store;
 
 namespace cnetmod {

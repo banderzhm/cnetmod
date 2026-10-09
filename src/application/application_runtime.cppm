@@ -8,6 +8,8 @@ module;
 export module cnetmod.application.runtime;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.application.async_file_template;
 import cnetmod.application.configuration;
 import cnetmod.application.rest_template;
@@ -22,8 +24,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.executor.pool;
 import cnetmod.io.io_context;
-import cnetmod.observability;
-import cnetmod.protocol.http;
+import cnetmod.observability.telemetry;
 import cnetmod.protocol.http.middleware.compress;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.security.jwt;
