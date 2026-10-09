@@ -24,6 +24,25 @@ TEST(deadline_constrains_child_budget)
     ASSERT_TRUE(unlimited.constrain(parent).at_time() == parent.at_time());
 }
 
+TEST(maximum_relative_deadline_is_unlimited)
+{
+    const auto unlimited = deadline::after(
+        std::chrono::steady_clock::duration::max());
+    ASSERT_TRUE(unlimited.is_unlimited());
+
+    auto context = make_io_context();
+    cancel_token token;
+    auto operation = []() -> task<std::expected<int, std::error_code>>
+    {
+        co_return 42;
+    };
+    auto result = sync_wait(with_timeout(*context,
+        std::chrono::steady_clock::duration::max(), operation(), token));
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(*result, 42);
+    ASSERT_FALSE(token.is_cancelled());
+}
+
 TEST(cancel_token_retains_first_cancellation_cause)
 {
     cancel_token caller;

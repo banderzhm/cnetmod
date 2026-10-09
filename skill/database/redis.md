@@ -368,6 +368,11 @@ auto replies = co_await cache.execute(batch);
 及完整 RESP exchange。任何未完整 exchange 都关闭连接，池只重新发布
 `is_reusable()` 为真的 lease。
 
+直接构造 `pool_params` 时，可将 `pool_timeout` 设为
+`std::chrono::steady_clock::duration::max()` 以明确关闭取连接看门狗；该值主要用于
+底层生命周期与锁竞争测试。连接外部 Redis 的生产配置应保留有限超时，避免故障时
+请求无限等待。
+
 - `get` / `hget` 将 Redis nil 映射为成功的 `std::optional{}`，不映射成错误。
 - `mget` 保持与输入逐位对应，内部消化 RESP aggregate 根节点。
 - `hgetall` 同时规范化 RESP2 array 和 RESP3 map。

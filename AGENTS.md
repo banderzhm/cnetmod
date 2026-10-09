@@ -2930,7 +2930,7 @@ auto result = co_await cnetmod::with_deadline(ctx, db_deadline,
     operation(token), token);
 ```
 
-`with_deadline()` 与 `with_timeout()` 只包装可取消的 `task<std::expected<T, std::error_code>>`。超时会触发传入的 `cancel_token`，并返回 `std::errc::timed_out`；调用方显式取消仍为 `std::errc::operation_canceled`。底层 I/O 必须遵守 token，才能真正中止读写。
+`with_deadline()` 与 `with_timeout()` 只包装可取消的 `task<std::expected<T, std::error_code>>`。超时会触发传入的 `cancel_token`，并返回 `std::errc::timed_out`；调用方显式取消仍为 `std::errc::operation_canceled`。底层 I/O 必须遵守 token，才能真正中止读写。`deadline::after(std::chrono::steady_clock::duration::max())` 明确定义为无限 deadline，不执行可能溢出的时间点加法，也不创建超时看门狗。
 
 ### `with_timeout` — 超时包装
 
@@ -2943,7 +2943,7 @@ auto with_timeout(io_context& ctx, std::chrono::steady_clock::duration timeout,
     -> task<std::expected<T, std::error_code>>;
 ```
 
-超时后通过 `cancel_token` 取消被包装的操作，返回 `std::errc::timed_out`。内部并行启动定时器和操作任务，任一完成即取消另一方；调用方显式取消则仍返回 `std::errc::operation_canceled`。
+超时后通过 `cancel_token` 取消被包装的操作，返回 `std::errc::timed_out`。内部并行启动定时器和操作任务，任一完成即取消另一方；调用方显式取消则仍返回 `std::errc::operation_canceled`。传入 `std::chrono::steady_clock::duration::max()` 时直接执行操作，不启动定时器；这适合明确需要无界等待的底层测试或内部编排，面向外部依赖的生产路径仍应配置有限预算。
 
 ---
 
@@ -6052,6 +6052,11 @@ auto replies = co_await cache.execute(batch);
 `io_context` 上用 `with_timeout` / `with_deadline` 包装带令牌重载；取消会传到连接获取
 及完整 RESP exchange。任何未完整 exchange 都关闭连接，池只重新发布
 `is_reusable()` 为真的 lease。
+
+直接构造 `pool_params` 时，可将 `pool_timeout` 设为
+`std::chrono::steady_clock::duration::max()` 以明确关闭取连接看门狗；该值主要用于
+底层生命周期与锁竞争测试。连接外部 Redis 的生产配置应保留有限超时，避免故障时
+请求无限等待。
 
 - `get` / `hget` 将 Redis nil 映射为成功的 `std::optional{}`，不映射成错误。
 - `mget` 保持与输入逐位对应，内部消化 RESP aggregate 根节点。

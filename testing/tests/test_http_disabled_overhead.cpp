@@ -183,6 +183,15 @@ auto measure(Operation operation) -> allocation_totals
     return totals;
 }
 
+template <typename T>
+void poll_until_done(cnetmod::io_context& io, cnetmod::task<T>& operation,
+    unsigned max_polls = 8)
+{
+    for (unsigned poll = 0; poll < max_polls && !operation.handle().done();
+        ++poll)
+        io.poll();
+}
+
 } // namespace
 
 void* operator new(std::size_t size)
@@ -1329,7 +1338,11 @@ TEST(redis_waiter_foreign_cancellation_races_pool_stop)
         stopping.handle().resume();
         io->poll();
         cancelling.join();
-        io->poll();
+        // The waiter completion cancels its pool-timeout watchdog. On IOCP
+        // those are two independent completion batches, so a single poll is
+        // not a completion contract.
+        poll_until_done(*io, pending);
+        poll_until_done(*io, stopping);
         ASSERT_TRUE(stopping.handle().done());
         stopping.handle().promise().result();
         ASSERT_TRUE(pending.handle().done());
@@ -1367,7 +1380,10 @@ TEST(redis_waiter_cancellation_and_stop_schedule_without_allocation)
         fail_after.reset();
         ASSERT_EQ(totals.calls, 0U);
         ASSERT_EQ(totals.bytes, 0U);
-        io->poll();
+        // Redis acquisition owns a pool-timeout watchdog even when the caller
+        // supplies a token. Drain the bounded completion chain instead of
+        // assuming the waiter and watchdog share one platform batch.
+        poll_until_done(*io, pending);
         ASSERT_TRUE(pending.handle().done());
         auto result = pending.handle().promise().result();
         ASSERT_FALSE(result.has_value());

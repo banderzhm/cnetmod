@@ -14,7 +14,13 @@ static void verify_redis_contended_return(bool stop_before_dispatch)
     ASSERT_TRUE(listener->bind({cnetmod::ipv4_address::loopback(), 0}).has_value());
     ASSERT_TRUE(listener->listen().has_value());
     cnetmod::redis::connection_pool pool{*io,
-        {.host = "127.0.0.1", .port = listener->local_endpoint()->port(), .resp3 = false, .initial_size = 1, .max_size = 3, .ping_interval = std::chrono::hours{1}}};
+        {.host = "127.0.0.1",
+            .port = listener->local_endpoint()->port(),
+            .resp3 = false,
+            .initial_size = 1,
+            .max_size = 3,
+            .pool_timeout = std::chrono::steady_clock::duration::max(),
+            .ping_interval = std::chrono::hours{1}}};
     auto run = pool.async_run();
     run.handle().resume();
     cnetmod::cancel_token first_token;

@@ -28,7 +28,13 @@ public:
 
     [[nodiscard]] static auto after(duration value) noexcept -> deadline
     {
-        return deadline{clock::now() + value};
+        if (value == duration::max())
+            return deadline{};
+        const auto now = clock::now();
+        if (value > duration::zero() &&
+            now.time_since_epoch() > duration::max() - value)
+            return deadline{};
+        return deadline{now + value};
     }
 
     [[nodiscard]] static constexpr auto at(time_point value) noexcept -> deadline
@@ -218,8 +224,7 @@ auto with_timeout(io_context& ctx,
     cancel_token& op_token)
     -> task<std::expected<T, std::error_code>>
 {
-    co_return co_await with_deadline(ctx, deadline::after(timeout),
-        std::move(op), op_token);
+    return with_deadline(ctx, deadline::after(timeout), std::move(op), op_token);
 }
 
 /// Add an absolute deadline to a cancellable I/O operation. The deadline is
