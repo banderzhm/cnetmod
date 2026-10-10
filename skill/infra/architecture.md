@@ -25,7 +25,7 @@ cnetmod/
 │   ├── executor/           # 执行器（async_op, scheduler, pool）
 │   ├── protocol/           # 协议模块（http, mqtt, grpc, redis, mysql...）
 │   ├── database/           # 数据库通用模块
-│   ├── utils/              # 通用工具与安全能力（security/JWT）
+│   ├── utils/              # 通用工具、JSON 与安全能力
 │   ├── core.cppm           # core 聚合模块
 │   ├── coro.cppm           # coro 聚合模块
 │   ├── io.cppm             # io 聚合模块
