@@ -382,7 +382,7 @@ endmacro()
 cnetmod_extract_component(CNETMOD_MONITORING_CORE
     "[/\\\\]src[/\\\\]application[/\\\\]monitoring[/\\\\]core[/\\\\]")
 cnetmod_extract_component(CNETMOD_HTTP_REDIS_CACHE
-    "[/\\\\]src[/\\\\]integration[/\\\\]http_redis_cache\\.(cppm|ixx|cpp)$")
+    "[/\\\\]src[/\\\\]protocol[/\\\\]http[/\\\\]middleware[/\\\\]redis_cache\\.(cppm|ixx|cpp)$")
 cnetmod_extract_component(CNETMOD_ORM
     "[/\\\\]src[/\\\\]database[/\\\\]orm[/\\\\]")
 
