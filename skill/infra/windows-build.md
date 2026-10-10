@@ -20,7 +20,7 @@ cmake --build build-full --config Release --target cnetmod_build_all -- /m:1
 ```
 
 OpenAI 测试源在非 MSVC 平台保持单目标；MSVC 配置会把它编译为七个测试分片，限制
-单个 `cl.exe` 同时持有的 Glaze/OpenAI 模板语义图。不要为了恢复单一测试可执行文件而
+单个 `cl.exe` 同时持有的 JSON/OpenAI 模板语义图。不要为了恢复单一测试可执行文件而
 移除分片，也不要用 `/Zm` 掩盖编译器堆耗尽。若新增重模板测试，应优先放入语义对应的
 分片；单个测试翻译单元接近数千行时必须继续拆分。
 

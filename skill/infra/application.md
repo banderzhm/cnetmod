@@ -27,10 +27,12 @@ optional 组件的单组件超时只触发降级与恢复，不能由共享计�
 
 ```cpp
 #include <cnetmod/config.hpp>
+#include <cnetmod/json.hpp>
 
 import std;
 import cnetmod.application;
 import cnetmod.core.log;
+import cnetmod.json;
 
 namespace application = cnetmod::application;
 namespace http = cnetmod::http;
@@ -39,6 +41,9 @@ struct order_options
 {
     int page_size = 20;
 };
+
+CNETMOD_JSON(order_options,
+    CNETMOD_JSON_FIELD(page_size))
 
 class order_catalog
 {

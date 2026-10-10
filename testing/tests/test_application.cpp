@@ -2447,7 +2447,7 @@ TEST(application_configuration_preserves_json_parse_error_identity)
     const auto loaded = application::load_configuration(path);
     std::filesystem::remove(path);
     ASSERT_FALSE(loaded.has_value());
-    ASSERT_EQ(loaded.error(),
+    ASSERT_EQ(loaded.error().code,
         cnetmod::json::make_error_code(cnetmod::json::errc::parse_failed));
 }
 

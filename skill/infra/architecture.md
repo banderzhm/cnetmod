@@ -25,9 +25,7 @@ cnetmod/
 │   ├── executor/           # 执行器（async_op, scheduler, pool）
 │   ├── protocol/           # 协议模块（http, mqtt, grpc, redis, mysql...）
 │   ├── database/           # 数据库通用模块
-│   ├── utils/              # 工具模块
-│   │   ├── json/           # Glaze-only JSON 门面（模块名仍为 cnetmod.json）
-│   │   └── security/       # JWT 与口令哈希（模块名仍为 cnetmod.security.*）
+│   ├── utils/              # 通用工具、JSON 与安全能力
 │   ├── core.cppm           # core 聚合模块
 │   ├── coro.cppm           # coro 聚合模块
 │   ├── io.cppm             # io 聚合模块
@@ -40,6 +38,7 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
+│   ├── json/               # Backend-neutral JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
@@ -212,7 +211,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 
 | 依赖 | 目录 | 用途 |
 |------|------|------|
-| Glaze | `3rdparty/glaze` | `cnetmod.json` private parsing backend |
+| nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
 | spdlog | `3rdparty/spdlog` | 日志后端 |

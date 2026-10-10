@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify that direct Glaze use stays inside the cnetmod.json module."""
+"""Verify that JSON backend details stay behind the cnetmod.json facade."""
 
 from __future__ import annotations
 
@@ -11,10 +11,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 SOURCE_ROOTS = ("src", "include", "testing", "examples")
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hpp", ".cppm", ".ixx"}
-GLAZE_MODULE_FILES = {
-    pathlib.Path("src/utils/json/json.cppm"),
-    pathlib.Path("src/utils/json/json.cpp"),
-}
+BACKEND_IMPLEMENTATION = pathlib.Path("src/utils/json/json.cpp")
 
 
 def source_files() -> list[pathlib.Path]:
@@ -54,14 +51,15 @@ def main() -> int:
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8", errors="replace")
-        if "nlohmann" in text:
-            violations.append(f"{relative}: nlohmann bypasses cnetmod.json")
-        if relative not in GLAZE_MODULE_FILES and (
-            "#include <glaze/" in text or "glz::" in text
+        if relative != BACKEND_IMPLEMENTATION and (
+            "#include <nlohmann/" in text or "import nlohmann.json" in text or
+            "nlohmann::" in text
         ):
             violations.append(
-                f"{relative}: direct Glaze use belongs in cnetmod.json"
+                f"{relative}: nlohmann/json is private to {BACKEND_IMPLEMENTATION}"
             )
+        if "#include <glaze/" in text or "glz::" in text:
+            violations.append(f"{relative}: Glaze is not a cnetmod JSON backend")
 
     if violations:
         print("JSON abstraction boundary violations:", file=sys.stderr)

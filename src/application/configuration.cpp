@@ -73,6 +73,15 @@ namespace {
             .message = std::move(message)}};
     }
 
+    [[noreturn]] void fail(std::string path, std::string message,
+        std::error_code code)
+    {
+        throw configuration_failure{configuration_error{
+            .code = code,
+            .path = std::move(path),
+            .message = std::move(message)}};
+    }
+
     [[nodiscard]] auto join(std::string_view parent, std::string_view key)
         -> std::string
     {
@@ -102,7 +111,7 @@ namespace {
             if (!loaded)
                 fail({}, std::format("cannot load YAML configuration '{}': {}",
                              location, loaded.error().message()),
-                    std::errc::invalid_argument);
+                    loaded.error());
             if (!loaded->is_object())
                 fail({}, std::format(
                              "configuration '{}' must contain a mapping at the root",
@@ -126,7 +135,8 @@ namespace {
         auto parsed = cnetmod::json::parse_document(text);
         if (!parsed)
             fail({}, std::format("configuration '{}' is not valid JSON: {}",
-                         location, parsed.error().message()));
+                         location, parsed.error().message()),
+                parsed.error());
         if (!parsed->is_object())
             fail({}, std::format(
                          "configuration '{}' must contain an object at the root",

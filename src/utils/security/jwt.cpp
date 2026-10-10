@@ -240,7 +240,8 @@ auto verify_jwt_sync(std::string_view token, std::string_view secret)
         {
             if (!scope->is_string())
                 return std::unexpected("JWT scope claim must be a string");
-            std::string_view remaining = scope->get<std::string>();
+            const auto scope_value = scope->get<std::string>();
+            std::string_view remaining{scope_value};
             while (!remaining.empty())
             {
                 const auto separator = remaining.find(' ');

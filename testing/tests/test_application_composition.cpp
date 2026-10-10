@@ -103,6 +103,55 @@ struct nested_options
     std::vector<nested_rule> rules;
 };
 
+template <>
+struct cnetmod::json::document_traits<pricing_options>
+{
+    static constexpr auto fields()
+    {
+        return std::tuple{
+            cnetmod::json::field("currency", &pricing_options::currency),
+            cnetmod::json::field("max_items", &pricing_options::max_items),
+            cnetmod::json::field("regions", &pricing_options::regions),
+            cnetmod::json::field("limits", &pricing_options::limits),
+        };
+    }
+};
+
+template <>
+struct cnetmod::json::document_traits<feature_flags>
+{
+    static constexpr auto fields()
+    {
+        return std::tuple{
+            cnetmod::json::field("beta", &feature_flags::beta),
+        };
+    }
+};
+
+template <>
+struct cnetmod::json::document_traits<nested_rule>
+{
+    static constexpr auto fields()
+    {
+        return std::tuple{
+            cnetmod::json::field("name", &nested_rule::name),
+            cnetmod::json::field("enabled", &nested_rule::enabled),
+            cnetmod::json::field("tags", &nested_rule::tags),
+        };
+    }
+};
+
+template <>
+struct cnetmod::json::document_traits<nested_options>
+{
+    static constexpr auto fields()
+    {
+        return std::tuple{
+            cnetmod::json::field("rules", &nested_options::rules),
+        };
+    }
+};
+
 namespace {
 
 struct clock_source

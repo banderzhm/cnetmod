@@ -1,9 +1,11 @@
 #include <cnetmod/config.hpp>
+#include <cnetmod/json.hpp>
 
 import std;
 import cnetmod.application;
 import cnetmod.core.log;
 import cnetmod.coro.task;
+import cnetmod.json;
 import cnetmod.protocol.http;
 
 namespace application = cnetmod::application;
@@ -85,6 +87,9 @@ public:
 };
 
 } // namespace
+
+CNETMOD_JSON(order_options,
+    CNETMOD_JSON_FIELD(page_size))
 
 auto main() -> int
 {

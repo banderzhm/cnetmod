@@ -229,7 +229,9 @@ if (!page.ok())
 `testing/tests/test_orm_tenant_live.cpp` 的
 `mysql_live_system_chart_chat_timestamp_fill`。
 
-`query_wrapper<T>` accepts column names and type-safe member pointers. Prefer member pointers in application code:
+`query_wrapper<T>` uses type-safe member pointers for model-backed application
+queries. The member type is checked against the supplied value at compile time,
+so an integer field cannot accidentally be compared with a string:
 
 ```cpp
 cnetmod::orm::query_wrapper<user_record> query;
@@ -240,6 +242,17 @@ query.eq(&user_record::name, "Ada")
 
 auto rows = co_await users->list(query);
 ```
+
+When a column truly is selected at runtime (for example, a validated reporting
+dimension), make that loss of static safety explicit with `runtime_column`:
+
+```cpp
+query.eq(cnetmod::orm::runtime_column{validated_column_name}, value);
+```
+
+The legacy bare-string overloads are deprecated. Do not use them in ordinary
+Mapper or Repository code. XML statements remain the appropriate API when the
+shape of the SQL itself is dynamic.
 
 It supports comparisons, `LIKE`, `IN`, ranges, null/boolean predicates, nested groups, structured subqueries, joins, projection, grouping, aggregates, ordering and limits. Values are always bound parameters; arbitrary trailing SQL is not part of the API.
 

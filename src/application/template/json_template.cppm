@@ -18,7 +18,7 @@ export namespace cnetmod::application {
 /**
  * @brief Offloads typed JSON work to the application-managed CPU pool.
  *
- * Every operation uses the framework's Glaze-only JSON module. Completion is
+ * Every operation uses the framework's JSON module. Completion is
  * always resumed on the application event loop.
  */
 class json_template
