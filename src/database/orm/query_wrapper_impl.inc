@@ -93,46 +93,49 @@ export namespace query_wrapper_detail {
 // -- LIKE / NULL / boolean --------------------------------------------------
 
 template <Model T>
-auto query_wrapper<T>::like(std::string_view column, std::string_view pattern)
+auto query_wrapper<T>::like(runtime_column column, std::string_view pattern)
     -> query_wrapper&
 {
-    add_condition(column, compare_op::like, param_value::from_string(std::string(pattern)));
+    add_condition(column.name, compare_op::like,
+        param_value::from_string(std::string(pattern)));
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::not_like(std::string_view column, std::string_view pattern)
+auto query_wrapper<T>::not_like(runtime_column column, std::string_view pattern)
     -> query_wrapper&
 {
-    add_condition(column, compare_op::not_like, param_value::from_string(std::string(pattern)));
+    add_condition(column.name, compare_op::not_like,
+        param_value::from_string(std::string(pattern)));
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::is_null(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::is_null(runtime_column column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_null, std::vector<param_value>{});
+    add_condition(column.name, compare_op::is_null, std::vector<param_value>{});
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::is_not_null(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::is_not_null(runtime_column column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_not_null, std::vector<param_value>{});
+    add_condition(column.name, compare_op::is_not_null,
+        std::vector<param_value>{});
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::is_true(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::is_true(runtime_column column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_true, std::vector<param_value>{});
+    add_condition(column.name, compare_op::is_true, std::vector<param_value>{});
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::is_false(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::is_false(runtime_column column) -> query_wrapper&
 {
-    add_condition(column, compare_op::is_false, std::vector<param_value>{});
+    add_condition(column.name, compare_op::is_false, std::vector<param_value>{});
     return *this;
 }
 
@@ -148,21 +151,21 @@ auto query_wrapper<T>::raw(std::string_view raw_sql) -> query_wrapper&
 // -- LIKE helpers -----------------------------------------------------------
 
 template <Model T>
-auto query_wrapper<T>::starts_with(std::string_view column, std::string_view prefix)
+auto query_wrapper<T>::starts_with(runtime_column column, std::string_view prefix)
     -> query_wrapper&
 {
     return like(column, std::format("{}%", prefix));
 }
 
 template <Model T>
-auto query_wrapper<T>::ends_with(std::string_view column, std::string_view suffix)
+auto query_wrapper<T>::ends_with(runtime_column column, std::string_view suffix)
     -> query_wrapper&
 {
     return like(column, std::format("%{}", suffix));
 }
 
 template <Model T>
-auto query_wrapper<T>::contains(std::string_view column, std::string_view substring)
+auto query_wrapper<T>::contains(runtime_column column, std::string_view substring)
     -> query_wrapper&
 {
     return like(column, std::format("%{}%", substring));
@@ -209,16 +212,16 @@ auto query_wrapper<T>::or_(const query_wrapper& nested) -> query_wrapper&
 // -- ORDER BY ---------------------------------------------------------------
 
 template <Model T>
-auto query_wrapper<T>::order_by_asc(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::order_by_asc(runtime_column column) -> query_wrapper&
 {
-    order_by_.push_back({std::string(column), order_dir::asc});
+    order_by_.push_back({std::string(column.name), order_dir::asc});
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::order_by_desc(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::order_by_desc(runtime_column column) -> query_wrapper&
 {
-    order_by_.push_back({std::string(column), order_dir::desc});
+    order_by_.push_back({std::string(column.name), order_dir::desc});
     return *this;
 }
 
@@ -241,30 +244,30 @@ auto query_wrapper<T>::offset(std::int64_t count) -> query_wrapper&
 // -- SELECT columns ---------------------------------------------------------
 
 template <Model T>
-auto query_wrapper<T>::select(std::initializer_list<std::string_view> columns)
+auto query_wrapper<T>::select(std::span<const runtime_column> columns)
     -> query_wrapper&
 {
     select_columns_.clear();
     for (auto col : columns)
-        select_columns_.push_back(std::string(col));
+        select_columns_.push_back(std::string(col.name));
     return *this;
 }
 
 // -- GROUP BY / HAVING ------------------------------------------------------
 
 template <Model T>
-auto query_wrapper<T>::group_by(std::string_view column) -> query_wrapper&
+auto query_wrapper<T>::group_by(runtime_column column) -> query_wrapper&
 {
-    group_by_.push_back(std::string(column));
+    group_by_.push_back(std::string(column.name));
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::group_by(std::initializer_list<std::string_view> columns)
+auto query_wrapper<T>::group_by(std::span<const runtime_column> columns)
     -> query_wrapper&
 {
     for (auto col : columns)
-        group_by_.push_back(std::string(col));
+        group_by_.push_back(std::string(col.name));
     return *this;
 }
 
@@ -316,43 +319,43 @@ auto query_wrapper<T>::full_outer_join(std::string_view table, std::string_view 
 // -- Aggregate SELECT -------------------------------------------------------
 
 template <Model T>
-auto query_wrapper<T>::select_aggregate(aggregate_func func, std::string_view column,
+auto query_wrapper<T>::select_aggregate(aggregate_func func, runtime_column column,
     std::string_view alias) -> query_wrapper&
 {
-    aggregate_columns_.push_back({func, std::string(column), std::string(alias)});
+    aggregate_columns_.push_back({func, std::string(column.name), std::string(alias)});
     return *this;
 }
 
 template <Model T>
-auto query_wrapper<T>::select_count(std::string_view column, std::string_view alias)
+auto query_wrapper<T>::select_count(runtime_column column, std::string_view alias)
     -> query_wrapper&
 {
     return select_aggregate(aggregate_func::count, column, alias);
 }
 
 template <Model T>
-auto query_wrapper<T>::select_sum(std::string_view column, std::string_view alias)
+auto query_wrapper<T>::select_sum(runtime_column column, std::string_view alias)
     -> query_wrapper&
 {
     return select_aggregate(aggregate_func::sum, column, alias);
 }
 
 template <Model T>
-auto query_wrapper<T>::select_avg(std::string_view column, std::string_view alias)
+auto query_wrapper<T>::select_avg(runtime_column column, std::string_view alias)
     -> query_wrapper&
 {
     return select_aggregate(aggregate_func::avg, column, alias);
 }
 
 template <Model T>
-auto query_wrapper<T>::select_min(std::string_view column, std::string_view alias)
+auto query_wrapper<T>::select_min(runtime_column column, std::string_view alias)
     -> query_wrapper&
 {
     return select_aggregate(aggregate_func::min, column, alias);
 }
 
 template <Model T>
-auto query_wrapper<T>::select_max(std::string_view column, std::string_view alias)
+auto query_wrapper<T>::select_max(runtime_column column, std::string_view alias)
     -> query_wrapper&
 {
     return select_aggregate(aggregate_func::max, column, alias);
@@ -968,13 +971,26 @@ auto query_wrapper<T>::build_where_clause(
                 break;
             switch (cond.op)
             {
-            case compare_op::eq_subquery: sql += " = ("; break;
-            case compare_op::ne_subquery: sql += " != ("; break;
-            case compare_op::gt_subquery: sql += " > ("; break;
-            case compare_op::ge_subquery: sql += " >= ("; break;
-            case compare_op::lt_subquery: sql += " < ("; break;
-            case compare_op::le_subquery: sql += " <= ("; break;
-            default: break;
+            case compare_op::eq_subquery:
+                sql += " = (";
+                break;
+            case compare_op::ne_subquery:
+                sql += " != (";
+                break;
+            case compare_op::gt_subquery:
+                sql += " > (";
+                break;
+            case compare_op::ge_subquery:
+                sql += " >= (";
+                break;
+            case compare_op::lt_subquery:
+                sql += " < (";
+                break;
+            case compare_op::le_subquery:
+                sql += " <= (";
+                break;
+            default:
+                break;
             }
             sql += render_subquery(*cond.nested_query) + ")";
             break;

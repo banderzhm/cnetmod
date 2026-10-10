@@ -306,7 +306,7 @@ namespace detail {
                 co_return failure<T>("model has no primary key");
 
             query_wrapper<T> query;
-            query.eq(primary_key->col.column_name, id);
+            query.eq(runtime_column{primary_key->col.column_name}, id);
             co_return co_await find_one(query, single_result_policy::first);
         }
 
@@ -320,7 +320,7 @@ namespace detail {
                     meta.table_name, column));
 
             query_wrapper<T> query;
-            query.eq(field->col.column_name, value);
+            query.eq(runtime_column{field->col.column_name}, value);
             co_return co_await find_one(query);
         }
 
@@ -570,7 +570,8 @@ namespace detail {
                 co_return failure<T>("model has no primary key");
 
             query_wrapper<T> query;
-            query.in(primary_key->col.column_name, normalize_values(ids));
+            query.in(runtime_column{primary_key->col.column_name},
+                normalize_values(ids));
             co_return co_await find(query);
         }
 
@@ -1038,7 +1039,6 @@ namespace detail {
         }
 
     public:
-
         /**
      * @brief Inserts a missing model or updates the row identified by its key.
      *
@@ -1179,7 +1179,7 @@ namespace detail {
                     meta.table_name, column));
 
             query_wrapper<T> query;
-            query.eq(field->col.column_name, value);
+            query.eq(runtime_column{field->col.column_name}, value);
             co_return co_await remove(query);
         }
 
@@ -1204,7 +1204,8 @@ namespace detail {
                 co_return failure<T>("model has no primary key");
 
             query_wrapper<T> query;
-            query.in(primary_key->col.column_name, normalize_values(ids));
+            query.in(runtime_column{primary_key->col.column_name},
+                normalize_values(ids));
             co_return co_await remove(query);
         }
 

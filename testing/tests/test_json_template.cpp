@@ -45,8 +45,8 @@ CNETMOD_JSON(cnetmod_test::aggregate_document,
     CNETMOD_JSON_FIELD(children),
     CNETMOD_JSON_FIELD(counters))
 
-using cnetmod_test::sample_document;
 using cnetmod_test::aggregate_document;
+using cnetmod_test::sample_document;
 
 TEST(framework_document_is_the_default_json_codec)
 {
@@ -98,9 +98,22 @@ TEST(framework_document_uses_native_parser_boundaries)
     ASSERT_TRUE(duplicate.has_value());
     ASSERT_EQ(duplicate->at("value").get<std::uint64_t>(), 2U);
 
+    const auto rejected_duplicate = cnetmod::json::parse_document(
+        R"({"outer":{"value":1,"value":2}})",
+        {.reject_duplicate_keys = true});
+    ASSERT_FALSE(rejected_duplicate.has_value());
+
+    const auto accepted_depth = cnetmod::json::parse_document(
+        R"({"outer":[]})", {.max_depth = 2});
+    ASSERT_TRUE(accepted_depth.has_value());
+    const auto rejected_depth = cnetmod::json::parse_document(
+        R"({"outer":[]})", {.max_depth = 1});
+    ASSERT_FALSE(rejected_depth.has_value());
+
     ASSERT_FALSE(cnetmod::json::parse_document("{}{}").has_value());
     ASSERT_FALSE(cnetmod::json::parse_document(
-        std::string(257, '[') + "0" + std::string(257, ']')).has_value());
+        std::string(257, '[') + "0" + std::string(257, ']'))
+            .has_value());
 }
 
 TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)

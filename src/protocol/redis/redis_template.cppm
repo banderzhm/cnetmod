@@ -118,7 +118,7 @@ struct template_options
 };
 
 /**
- * @brief Glaze-only JSON codec used by typed Redis template operations.
+ * @brief Framework JSON codec used by typed Redis template operations.
  */
 struct json_codec
 {

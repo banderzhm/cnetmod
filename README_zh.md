@@ -279,7 +279,7 @@ cmake --build build-vcpkg-vs2026 --config Release --target cnetmod_build_all
 缺失时使用已有的固定 `3rdparty` 子模块；Linux 上若仍缺少可选库，配置时
 会显示 Arch、Ubuntu、CentOS 的安装命令。`vcpkg`、`conan` 分别要求对应
 工具链，并从包目标取得托管依赖。
-BoringSSL、Glaze 和 YAML C++23 模块门面在三种模式下都仍使用固定版本的
+BoringSSL、nlohmann/json 和 YAML C++23 模块门面在三种模式下都仍使用固定版本的
 源码。切换模式时请新建构建目录。
 
 ### 使用 Conan 构建
@@ -318,7 +318,8 @@ conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 ```
 
 默认 Conan recipe 会从 ConanCenter 安装 `pugixml`、`leveldb` 等依赖；
-JSON 统一通过 `cnetmod.json` 使用，Glaze 只作为私有实现后端。
+JSON 统一通过后端隔离的 `cnetmod.json` 使用，其实现只在内部导入固定版本的
+官方 `nlohmann.json` 模块，业务代码不包含解析器头文件。
 `mimalloc` 默认启用；如需关闭可传
 `-o cnetmod/*:with_mimalloc=False`。`stdexec`
 默认使用 `3rdparty/stdexec`；如果你的 Conan remote 提供上游 `p2300` 包，可以开启

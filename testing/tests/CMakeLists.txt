@@ -195,7 +195,7 @@ foreach(test_src ${TEST_SOURCES})
     endif()
 endforeach()
 
-# MSVC's module frontend retains the imported Glaze/OpenAI semantic graph while
+# MSVC's module frontend retains the imported JSON/OpenAI semantic graph while
 # compiling a translation unit.  The complete OpenAI suite is intentionally
 # kept in one source file for shared fixtures, but compiling all 90+ cases in a
 # single cl.exe process can exceed 40 GiB.  Build bounded preprocessor shards on

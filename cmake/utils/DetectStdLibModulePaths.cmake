@@ -240,11 +240,12 @@ endfunction()
   Args:
     TARGET <target_name>
     MODULE_INTERFACE_FILES <list...>
+    DEPENDENCY_MODULE_INTERFACE_FILES <list...>
 ]]
 function(configure_cxx_modules)
     set(options)
     set(oneValueArgs TARGET)
-    set(multiValueArgs MODULE_INTERFACE_FILES)
+    set(multiValueArgs MODULE_INTERFACE_FILES DEPENDENCY_MODULE_INTERFACE_FILES)
     cmake_parse_arguments(CFG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     if(NOT CFG_TARGET)
@@ -261,6 +262,7 @@ function(configure_cxx_modules)
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${STDLIB_MODULE_DIRS}
             FILES
                 ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
                 ${STDLIB_MODULE_DIRS}/std.cppm
                 ${STDLIB_MODULE_DIRS}/std.compat.cppm
         )
@@ -273,6 +275,7 @@ function(configure_cxx_modules)
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
             FILES
                 ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
         )
     elseif(WIN32 AND STDLIB_MODULE_DIRS)
         # Windows non-MSVC toolchains: keep explicit standard-library modules.
@@ -281,6 +284,7 @@ function(configure_cxx_modules)
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR} ${STDLIB_MODULE_DIRS}
             FILES
                 ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
                 ${STDLIB_MODULE_DIRS}/std.ixx
                 ${STDLIB_MODULE_DIRS}/std.compat.ixx
         )
@@ -291,6 +295,7 @@ function(configure_cxx_modules)
             BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
             FILES
                 ${CFG_MODULE_INTERFACE_FILES}
+                ${CFG_DEPENDENCY_MODULE_INTERFACE_FILES}
         )
     endif()
 endfunction()

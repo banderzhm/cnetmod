@@ -501,14 +501,15 @@ elseif(CNETMOD_HAS_IO_URING)
 endif()
 
 cnetmod_link_stdexec(cnetmod_runtime)
-cnetmod_link_glaze(cnetmod_runtime)
+cnetmod_link_nlohmann_json(cnetmod_runtime)
 cnetmod_link_boringssl(cnetmod_runtime)
 cnetmod_link_selected_stdlib(cnetmod_runtime)
 cnetmod_link_mimalloc(cnetmod_runtime)
 
 configure_cxx_modules(
     TARGET cnetmod_runtime
-    MODULE_INTERFACE_FILES ${CNETMOD_RUNTIME_MODULE_INTERFACE_FILES})
+    MODULE_INTERFACE_FILES ${CNETMOD_RUNTIME_MODULE_INTERFACE_FILES}
+    DEPENDENCY_MODULE_INTERFACE_FILES ${CNETMOD_NLOHMANN_JSON_MODULE})
 
 set(CNETMOD_COMPONENT_TARGETS cnetmod_runtime)
 
@@ -774,7 +775,7 @@ if(TARGET cnetmod_c)
 endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
-install(DIRECTORY "${CNETMOD_GLAZE_SOURCE_DIR}/include/glaze"
+install(DIRECTORY "${CNETMOD_NLOHMANN_JSON_SOURCE_DIR}/include/nlohmann"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 # stdexec remains a private build-time implementation dependency.  It is not

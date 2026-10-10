@@ -56,8 +56,7 @@
     {                                                             \
         {#M, COL, ::cnetmod::orm::column_type::CT,                \
             ::cnetmod::orm::col_flag::none,                       \
-            ::cnetmod::orm::id_strategy::none,                    \
-            __builtin_offsetof(_cnetmod_model_type, M)},          \
+            ::cnetmod::orm::id_strategy::none},                   \
             [](auto& obj, const ::cnetmod::orm::field_value& v) { \
                 ::cnetmod::orm::detail::set_member(obj.M, v);     \
             },                                                    \
@@ -74,7 +73,11 @@
                     std::error_code> {                            \
                 return ::cnetmod::orm::detail::encode_json_member(\
                     obj.M);                                       \
-            }                                                     \
+            },                                                    \
+            ::cnetmod::orm::detail::member_pointer_type<          \
+                decltype(&_cnetmod_model_type::M)>(),              \
+            &::cnetmod::orm::detail::matches_member_pointer<       \
+                &_cnetmod_model_type::M>                           \
     }
 
 // CNETMOD_FIELD(member, "col_name", column_type_suffix, flags) - 4
@@ -82,8 +85,7 @@
     ::cnetmod::orm::field_mapping<_cnetmod_model_type>            \
     {                                                             \
         {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS,         \
-            ::cnetmod::orm::id_strategy::none,                    \
-            __builtin_offsetof(_cnetmod_model_type, M)},          \
+            ::cnetmod::orm::id_strategy::none},                   \
             [](auto& obj, const ::cnetmod::orm::field_value& v) { \
                 ::cnetmod::orm::detail::set_member(obj.M, v);     \
             },                                                    \
@@ -100,15 +102,18 @@
                     std::error_code> {                            \
                 return ::cnetmod::orm::detail::encode_json_member(\
                     obj.M);                                       \
-            }                                                     \
+            },                                                    \
+            ::cnetmod::orm::detail::member_pointer_type<          \
+                decltype(&_cnetmod_model_type::M)>(),              \
+            &::cnetmod::orm::detail::matches_member_pointer<       \
+                &_cnetmod_model_type::M>                           \
     }
 
 // CNETMOD_FIELD(member, "col_name", column_type_suffix, flags, strategy) - 5
 #define CNETMOD_FIELD_5(M, COL, CT, FLAGS, STRATEGY)                 \
     ::cnetmod::orm::field_mapping<_cnetmod_model_type>               \
     {                                                                \
-        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY,  \
-            __builtin_offsetof(_cnetmod_model_type, M)},             \
+        {#M, COL, ::cnetmod::orm::column_type::CT, FLAGS, STRATEGY}, \
             [](auto& obj, const ::cnetmod::orm::field_value& v) {    \
                 ::cnetmod::orm::detail::set_member(obj.M, v);        \
             },                                                       \
@@ -125,7 +130,11 @@
                     std::error_code> {                               \
                 return ::cnetmod::orm::detail::encode_json_member(   \
                     obj.M);                                          \
-            }                                                        \
+            },                                                       \
+            ::cnetmod::orm::detail::member_pointer_type<             \
+                decltype(&_cnetmod_model_type::M)>(),                 \
+            &::cnetmod::orm::detail::matches_member_pointer<          \
+                &_cnetmod_model_type::M>                              \
     }
 
 // Simplified: UUID_PK / SNOWFLAKE_PK used as 4th parameter of CNETMOD_FIELD

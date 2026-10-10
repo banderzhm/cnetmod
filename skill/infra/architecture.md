@@ -38,7 +38,7 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # Glaze-only JSON module facade
+│   ├── json/               # Backend-neutral JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
@@ -211,7 +211,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 
 | 依赖 | 目录 | 用途 |
 |------|------|------|
-| Glaze | `3rdparty/glaze` | `cnetmod.json` private parsing backend |
+| nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
 | spdlog | `3rdparty/spdlog` | 日志后端 |
