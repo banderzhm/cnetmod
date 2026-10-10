@@ -11,6 +11,7 @@ import cnetmod.coro.task;
 import :foundation;
 import :messages;
 import :chat;
+import :run;
 import :model;
 import :prompt;
 

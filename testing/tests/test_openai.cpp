@@ -20,11 +20,17 @@ import cnetmod.protocol.openai;
 import cnetmod.observability.openai;
 import cnetmod.json;
 
+#ifndef CNETMOD_OPENAI_TEST_GROUP
+#define CNETMOD_OPENAI_TEST_GROUP 0
+#endif
+
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 8
 TEST(openai_aggregate_import_preserves_narrow_std_format_visibility)
 {
     const auto formatted = std::format("openai-request-{}", 22);
     ASSERT_EQ(formatted, "openai-request-22");
 }
+#endif
 
 namespace openai = cnetmod::openai;
 
@@ -337,6 +343,7 @@ public:
 };
 } // namespace
 
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 1
 TEST(openai_prompt_template_formats_and_escapes)
 {
     openai::prompt_template prompt{"Hello {name}, use {{json}}."};
@@ -419,6 +426,8 @@ TEST(openai_structured_output_serializes_and_validates)
     ASSERT_FALSE(parser.parse(R"({"other":1})").has_value());
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 9
 TEST(openai_model_stream_supports_provider_neutral_backpressure)
 {
     scripted_model model;
@@ -587,6 +596,8 @@ TEST(openai_prompt_runnable_accepts_rich_prompt_context)
         std::string("Scopes: read;write;"));
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 10
 TEST(openai_agent_executes_validated_tool_loop)
 {
     scripted_model model;
@@ -797,6 +808,8 @@ TEST(openai_agent_refreshes_dynamic_tools_and_supports_immediate_return)
     ASSERT_EQ(result->intermediate_steps.size(), std::size_t{2});
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 11
 TEST(openai_contextual_tool_receives_invocation_configuration)
 {
     openai::tool_registry tools;
@@ -964,6 +977,8 @@ TEST(openai_agent_skill_reveals_instructions_resources_and_scoped_tools)
     ASSERT_EQ((*content)["content"].get<std::string>(), "Validate lifetime and cancellation.");
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 12
 TEST(openai_filesystem_skill_loader_preloads_bounded_resources_off_event_loop)
 {
     auto context = cnetmod::make_io_context();
@@ -988,6 +1003,8 @@ TEST(openai_filesystem_skill_loader_preloads_bounded_resources_off_event_loop)
         "protocols/openai-mail-dns.md"));
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 2
 TEST(openai_retrieval_chain_injects_ranked_context)
 {
     fixed_retriever retriever;
@@ -1199,6 +1216,8 @@ TEST(openai_citation_context_injector_preserves_source_provenance)
     ASSERT_FALSE(context.contains("private"));
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 13
 TEST(openai_scoring_reranker_orders_and_filters_documents)
 {
     openai::functional_scoring_model scoring{
@@ -1443,6 +1462,8 @@ TEST(openai_long_term_store_enforces_ttl_and_semantic_search)
     ASSERT_TRUE(*retained);
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 3
 TEST(openai_run_config_cancels_before_model_execution)
 {
     scripted_model model;
@@ -1599,6 +1620,8 @@ TEST(openai_lazy_notification_skips_disabled_and_isolates_factory_failure)
     ASSERT_EQ(delivered, 1U);
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 14
 TEST(openai_event_dispatch_borrows_complete_events_and_preserves_overrides)
 {
     openai::run_event event{.run_id = "explicit-run", .name = "model", .attributes = {{"tags", {"explicit-tag"}}, {"metadata", {{"tenant", "explicit"}}}}, .trace_parent = cnetmod::http::tracing::new_root_context(), .parent_operation_id = "explicit-parent"};
@@ -1798,6 +1821,8 @@ TEST(openai_telemetry_listener_exports_metrics_cost_and_correlated_spans)
         "gen_ai_client_spans_dropped_total"));
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 15
 TEST(openai_telemetry_preserves_nested_agent_model_hierarchy)
 {
     cnetmod::metrics::registry metrics;
@@ -1987,6 +2012,8 @@ TEST(openai_telemetry_exports_only_allowlisted_scalar_attributes)
     }
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 16
 TEST(openai_governed_model_opens_circuit_after_provider_failure)
 {
     failing_model provider;
@@ -2130,6 +2157,8 @@ TEST(openai_rejection_observation_preserves_results_and_stream_attributes)
     ASSERT_TRUE(listener.events[1].attributes.at("stream").get<bool>());
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 4
 TEST(openai_memory_persists_sessions_and_applies_windows)
 {
     openai::in_memory_chat_memory_store store;
@@ -2291,6 +2320,8 @@ TEST(openai_chat_record_store_supports_paging_count_and_classified_errors)
     ASSERT_TRUE(cleared.has_value());
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 17
 TEST(openai_trim_messages_is_reusable_without_persistence)
 {
     std::vector<openai::message> messages{
@@ -2425,6 +2456,8 @@ TEST(openai_moderation_guardrail_accepts_provider_neutral_model)
     ASSERT_EQ(model.last_request.input.front(), "unsafe input");
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 18
 TEST(openai_ai_service_composes_memory_retrieval_and_guardrails)
 {
     scripted_model model;
@@ -2583,6 +2616,8 @@ TEST(openai_service_method_maps_typed_request_and_response)
         std::string("Question: map this"));
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 5
 TEST(openai_agentic_runtime_executes_parallel_plan_and_checkpoints)
 {
     auto context = cnetmod::make_io_context();
@@ -2757,6 +2792,8 @@ TEST(openai_agentic_runtime_validates_and_resumes_human_input)
     ASSERT_TRUE(completed->state["approval"].get<bool>());
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 19
 TEST(openai_file_agentic_store_round_trips_suspended_checkpoint)
 {
     auto context = cnetmod::make_io_context();
@@ -2938,6 +2975,8 @@ TEST(openai_mcp_client_supports_resource_completion_logging_and_ping)
             expected_methods[index]);
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 20
 TEST(openai_mcp_tool_provider_filters_and_executes_remote_tools)
 {
     scripted_mcp_transport transport;
@@ -3019,6 +3058,8 @@ TEST(openai_mcp_stdio_transport_exchanges_json_rpc)
     ASSERT_EQ(inbound_calls, std::size_t{1});
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 6
 TEST(openai_ingestion_pipeline_splits_and_indexes_documents)
 {
     auto context = cnetmod::make_io_context();
@@ -3118,6 +3159,8 @@ TEST(openai_text_file_source_uses_async_file_io)
     ASSERT_EQ(loaded->front().metadata["extension"].get<std::string>(), ".cpp");
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 21
 TEST(openai_directory_document_source_filters_and_orders_files)
 {
     auto context = cnetmod::make_io_context();
@@ -3242,6 +3285,8 @@ TEST(openai_document_parser_registry_prefers_media_type_and_adapts_handlers)
     ASSERT_EQ(calls, std::size_t{1});
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 22
 TEST(openai_url_document_source_fetches_metadata_and_selects_parser)
 {
     scripted_document_fetcher fetcher;
@@ -3314,6 +3359,8 @@ TEST(openai_model_judge_uses_strict_schema_and_application_threshold)
     ASSERT_TRUE(model.last_request.response_schema_strict);
 }
 
+#endif
+#if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 7
 TEST(openai_stream_finishes_without_done_or_connection_close)
 {
     cnetmod::net_init network;
@@ -3527,5 +3574,87 @@ TEST(openai_stream_cancellation_interrupts_read_and_discards_connection)
     ASSERT_TRUE(cancelled);
     ASSERT_TRUE(peer_closed);
 }
+
+TEST(openai_non_stream_eof_invalidates_connection_and_next_call_reconnects)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(
+        cnetmod::address_family::ipv4, cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    if (!listener || !endpoint)
+        return;
+
+    bool first_invalidated = false;
+    bool second_succeeded = false;
+
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto stale = co_await cnetmod::async_accept(*io, *listener);
+        if (!stale)
+            co_return;
+        std::array<std::byte, 8192> request{};
+        (void)co_await cnetmod::async_read(*io, *stale,
+            cnetmod::mutable_buffer{request.data(), request.size()});
+        stale->close();
+
+        auto fresh = co_await cnetmod::async_accept(*io, *listener);
+        if (!fresh)
+            co_return;
+        (void)co_await cnetmod::async_read(*io, *fresh,
+            cnetmod::mutable_buffer{request.data(), request.size()});
+        constexpr std::string_view body =
+            R"({"id":"chat-1","object":"chat.completion","created":1,"model":"fixture","choices":[{"index":0,"message":{"role":"assistant","content":"recovered"},"finish_reason":"stop"}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}})";
+        const auto response = std::format(
+            "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: keep-alive\r\n\r\n{}",
+            body.size(), body);
+        (void)co_await cnetmod::async_write_all(*io, *fresh,
+            cnetmod::const_buffer{response.data(), response.size()});
+    };
+
+    auto consumer = [&]() -> cnetmod::task<void>
+    {
+        openai::client api{*io};
+        const openai::connect_options options{
+            .api_base = std::format("http://127.0.0.1:{}/v1",
+                endpoint->port()),
+            .api_key = "fixture",
+            .timeout_seconds = 2,
+        };
+        auto connected = co_await api.connect(options);
+        ASSERT_TRUE(connected.has_value());
+        if (!connected)
+        {
+            io->stop();
+            co_return;
+        }
+
+        const auto request = []
+        {
+            return openai::chat_request{
+                .model = "fixture",
+                .messages = {openai::message::user("hello")}};
+        };
+        const auto failed = co_await api.chat(request());
+        first_invalidated = !failed && !api.is_connected();
+        const auto recovered = co_await api.chat(request());
+        second_succeeded = recovered.has_value() &&
+            recovered->content() == "recovered";
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, consumer());
+    io->run();
+    ASSERT_TRUE(first_invalidated);
+    ASSERT_TRUE(second_succeeded);
+}
+#endif
 
 RUN_TESTS()

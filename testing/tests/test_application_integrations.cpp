@@ -1449,7 +1449,7 @@ TEST(application_openai_reconfiguration_commits_only_connected_generation)
     bool reconfigured = false;
     bool rejected = false;
     bool stayed_up = false;
-    bool snapshot_connected = false;
+    bool snapshot_is_lazy = false;
     auto accept_first = [&]() -> cnetmod::task<void>
     {
         auto accepted = co_await cnetmod::async_accept(*io, *first_listener);
@@ -1476,7 +1476,7 @@ TEST(application_openai_reconfiguration_commits_only_connected_generation)
         auto reload = co_await service.reconfigure(std::move(replacement));
         reconfigured = reload.has_value();
         auto snapshot = co_await service.current_client();
-        snapshot_connected = snapshot && snapshot->is_connected();
+        snapshot_is_lazy = snapshot && !snapshot->is_connected();
 
         application::chat_model_reconfiguration unavailable;
         unavailable.properties["base_url"] =
@@ -1498,7 +1498,7 @@ TEST(application_openai_reconfiguration_commits_only_connected_generation)
 
     ASSERT_TRUE(started);
     ASSERT_TRUE(reconfigured);
-    ASSERT_TRUE(snapshot_connected);
+    ASSERT_TRUE(snapshot_is_lazy);
     ASSERT_TRUE(rejected);
     ASSERT_TRUE(stayed_up);
 }

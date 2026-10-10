@@ -1,6 +1,7 @@
 export module cnetmod.orm.logical_delete;
 
 import std;
+import cnetmod.database.datetime;
 import cnetmod.orm.sql_parameters;
 import cnetmod.orm.model_metadata;
 
@@ -36,6 +37,19 @@ export enum class logical_delete_touch_value : std::uint8_t
 };
 
 /**
+ * @brief Selects who supplies logical-delete timestamps.
+ *
+ * application_utc binds a timezone-free UTC calendar value and is the safe
+ * default for DATETIME columns. database_session preserves database clock
+ * expressions for schemas whose session timezone is explicitly managed.
+ */
+export enum class logical_delete_time_source : std::uint8_t
+{
+    application_utc,
+    database_session,
+};
+
+/**
  * @brief Describes one additional assignment made by logical deletion.
  *
  * Field names are validated as SQL identifiers. Values are selected from a
@@ -51,8 +65,9 @@ export struct logical_delete_touch_field
 /**
  * @brief Configures logical-delete predicates and update assignments.
  *
- * `nullable_datetime` treats a null marker as active and writes the database
- * current timestamp when a row is deleted.
+ * `nullable_datetime` treats a null marker as active and binds one
+ * application-side UTC snapshot by default. Database clock expressions are
+ * opt-in through time_source.
  */
 export struct logical_delete_config
 {
@@ -61,6 +76,8 @@ export struct logical_delete_config
     param_value not_deleted_value =
         param_value::from_int(0); // Value when not deleted
     logical_delete_mode mode = logical_delete_mode::value;
+    logical_delete_time_source time_source =
+        logical_delete_time_source::application_utc;
     std::vector<logical_delete_touch_field> touch_fields;
     bool enabled = true; // Enable/disable logical delete globally
 };
@@ -122,11 +139,12 @@ public:
             config_.not_deleted_value, config_.mode);
     }
 
-    /// Transform DELETE to UPDATE for logical delete
+    /// Transform DELETE to a parameterized UPDATE for logical delete.
     /// Transforms: DELETE FROM users WHERE id = 1
     /// To:         UPDATE users SET deleted = 1 WHERE id = 1
     template <Model T>
-    auto transform_delete_to_update(std::string sql) const -> std::string
+    auto transform_delete_to_update(std::string sql,
+        std::vector<param_value>& parameters) const -> std::string
     {
         auto field = get_delete_field<T>();
         if (!field)
@@ -135,7 +153,7 @@ public:
         auto& meta = model_traits<T>::meta();
         return transform_delete_to_update_impl(std::move(sql), meta.table_name,
             *field, config_.deleted_value, config_.mode,
-            config_.touch_fields);
+            config_.time_source, config_.touch_fields, parameters);
     }
 
     /// Get configuration
@@ -158,7 +176,9 @@ private:
         std::string_view field,
         const param_value& deleted_value,
         logical_delete_mode mode,
-        std::span<const logical_delete_touch_field> touch_fields)
+        logical_delete_time_source time_source,
+        std::span<const logical_delete_touch_field> touch_fields,
+        std::vector<param_value>& parameters)
         -> std::string;
     logical_delete_config config_;
 };

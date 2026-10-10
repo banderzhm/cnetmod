@@ -29,12 +29,7 @@ macro(cnetmod_configure_third_party_dependencies)
     cnetmod_configure_provider_dependencies()
 endmacro()
 
-function(cnetmod_link_third_party_dependencies TARGET_NAME)
-    cnetmod_link_stdexec(${TARGET_NAME})
-    cnetmod_link_glaze(${TARGET_NAME})
-    cnetmod_link_yaml_cpp_modules(${TARGET_NAME})
-    cnetmod_link_pugixml(${TARGET_NAME})
-
+function(cnetmod_link_boringssl TARGET_NAME)
     # BoringSSL is the sole TLS provider and supplies the framework crypto API.
     if(BoringSSL_FOUND AND DEFINED BoringSSL_LIBRARIES)
         target_link_libraries(${TARGET_NAME} PRIVATE ${BoringSSL_LIBRARIES})
@@ -45,10 +40,26 @@ function(cnetmod_link_third_party_dependencies TARGET_NAME)
             # calls to legacy SSL*_ctrl symbols that BoringSSL does not export.
             # Put the selected provider ahead of incidental package-manager
             # include paths on every platform, especially Homebrew/macOS.
-            target_include_directories(${TARGET_NAME} BEFORE PRIVATE
-                ${BoringSSL_INCLUDE_DIRS})
+            # Public module interfaces expose BoringSSL-backed TLS types and
+            # protocol components compile their own crypto adapters.  The
+            # selected provider's headers therefore form part of the compile
+            # interface even though the libraries remain implementation links.
+            foreach(_cnetmod_boringssl_include IN LISTS BoringSSL_INCLUDE_DIRS)
+                target_include_directories(${TARGET_NAME} BEFORE PUBLIC
+                    $<BUILD_INTERFACE:${_cnetmod_boringssl_include}>)
+            endforeach()
+            target_include_directories(${TARGET_NAME} BEFORE PUBLIC
+                $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
         endif()
     endif()
+endfunction()
+
+function(cnetmod_link_third_party_dependencies TARGET_NAME)
+    cnetmod_link_stdexec(${TARGET_NAME})
+    cnetmod_link_glaze(${TARGET_NAME})
+    cnetmod_link_yaml_cpp_modules(${TARGET_NAME})
+    cnetmod_link_pugixml(${TARGET_NAME})
+    cnetmod_link_boringssl(${TARGET_NAME})
 
     cnetmod_link_zlib(${TARGET_NAME})
     cnetmod_link_zstd(${TARGET_NAME})

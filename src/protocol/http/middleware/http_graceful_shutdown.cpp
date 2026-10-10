@@ -11,8 +11,10 @@ module;
 module cnetmod.protocol.http.middleware.graceful_shutdown;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.coro.cancel;
 import cnetmod.io.io_context;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;

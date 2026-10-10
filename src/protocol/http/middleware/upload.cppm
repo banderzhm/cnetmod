@@ -1,7 +1,9 @@
 export module cnetmod.protocol.http.middleware.upload;
 
 import std;
+
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod {
 struct upload_config

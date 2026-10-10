@@ -21,6 +21,21 @@
 
 ## Part 1: OpenAI
 
+### 模块依赖边界
+
+应用代码继续只导入公开聚合模块：
+
+```cpp
+import cnetmod.protocol.openai;
+```
+
+`cnetmod.protocol.openai:model` 保留既有公开类型与源码兼容性。OpenAI 模块内部将高扇入、
+轻量的运行生命周期契约单独放在 `:run`；只需要 `run_config`、listener 或 `run_scope` 的
+Agent 工作流、加载器、规划器和工具单元必须直接导入 `:run`。真正使用聊天、向量、图像、
+审核或模型治理能力的单元才导入 `:model`。不要为理论纯度继续把低扇入模型类型拆成大量
+接口分区；MSVC 会为每个模块单元重复扫描依赖，并提高并行构建内存。这两个分区是框架
+内部编译边界，不是应用侧的新入口。
+
 ### 场景导航
 
 - 我要调用 Chat Completions → [看这里](#场景chat-completions)
@@ -161,8 +176,10 @@ session 不共享消息且可以并行。成功响应才原子追加 user/assist
 `chat_model_service::reconfigure()` 是 provider-neutral 热重载入口。
 调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
 `base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
-建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时
-旧 generation 不变；成功发布后，在途请求继续持有旧客户端，新请求只获取新客户端。
+建立并验证全部新连接，验证完成立即关闭探测连接，再通过连接池 generation swap 一次
+发布。运行期按 lease 惰性重连，避免启动到首个请求之间被网关回收的空闲 socket 形成
+一整池假活连接。配置非法或任一连接失败时旧 generation 不变；成功发布后，在途请求继续
+持有旧客户端，新请求只获取新客户端。
 `chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型
@@ -436,6 +453,9 @@ auto cancellable = co_await client.chat_stream_async(req, callback, cancellation
 避免未消费的增量污染下一次请求。
 每次流式网络读取受 `connect_options::timeout_seconds` 限制；调用方取消、
 读取超时、写入失败和解析失败都会关闭连接，后续请求通过自动重连获得干净会话。
+非流式读取的 EOF 和传输错误也会立即关闭本地 socket，不能仅凭 native handle 仍打开就把
+连接视为可复用。框架不会在请求可能已经写入后偷偷重放 POST；需要重试时应在
+`resilient_chat_model` 层配置，并且流式调用只允许在尚未交付任何 chunk 时重试。
 
 ### 场景：Runnable 与结构化输出
 

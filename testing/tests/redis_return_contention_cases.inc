@@ -19,7 +19,8 @@ TEST(redis_lease_return_resumes_maintenance_without_allocation)
             .port = listener->local_endpoint()->port(),
             .resp3 = false,
             .initial_size = 1,
-            .max_size = 1,
+            .max_size = 3,
+            .pool_timeout = std::chrono::steady_clock::duration::max(),
             .ping_interval = std::chrono::hours{1}}};
     auto run = pool.async_run();
     run.handle().resume();

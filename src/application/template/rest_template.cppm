@@ -4,11 +4,13 @@
 export module cnetmod.application.rest_template;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
-import cnetmod.observability;
-import cnetmod.protocol.http;
+import cnetmod.observability.telemetry;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.client.pool;
 import cnetmod.protocol.http.middleware.tracing;
 

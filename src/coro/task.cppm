@@ -287,12 +287,12 @@ auto starts_on(io_context& context, task<T> operation) -> task<T>
 }
 
 // =============================================================================
-// resume_on -- return a task continuation to an explicit event loop
+// resume_on -- restore an awaited task's continuation to an event loop
 // =============================================================================
 
-/// Awaits @p operation wherever it completes, then publishes its value or
-/// exception on @p context. This does not alter the operation's internal
-/// scheduling and therefore avoids adding executor state to every task frame.
+/// Await @p operation and resume its caller on @p context, including when the
+/// operation fails. This is the explicit bridge for third-party awaitables
+/// whose completion thread is not controlled by cnetmod.
 export template <typename T>
 auto resume_on(io_context& context, task<T> operation) -> task<T>
 {
@@ -314,10 +314,10 @@ auto resume_on(io_context& context, task<T> operation) -> task<T>
     }
     else
     {
-        std::optional<T> value;
+        std::optional<T> result;
         try
         {
-            value.emplace(co_await std::move(operation));
+            result.emplace(co_await std::move(operation));
         }
         catch (...)
         {
@@ -326,7 +326,7 @@ auto resume_on(io_context& context, task<T> operation) -> task<T>
         co_await post_awaitable{context};
         if (failure)
             std::rethrow_exception(failure);
-        co_return std::move(*value);
+        co_return std::move(*result);
     }
 }
 

@@ -4,6 +4,7 @@ option(CNETMOD_USE_ICU_SUBMODULE "Use the bundled ICU submodule when available" 
 
 macro(cnetmod_configure_icu)
     set(CNETMOD_HAS_ICU OFF)
+    set(CNETMOD_USING_BUNDLED_ICU OFF)
     if(CNETMOD_ENABLE_POSTGRESQL)
         set(_cnetmod_icu_source "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/icu/icu4c/source")
         if(CNETMOD_USE_ICU_SUBMODULE AND WIN32
@@ -106,6 +107,8 @@ macro(cnetmod_configure_icu)
             # icuuc/icuin which carry a Debug suffix.  Remember its location so
             # each Windows executable can receive the complete runtime set.
             set(CNETMOD_BUNDLED_ICU_RUNTIME_DIR "${_cnetmod_icu_source}/../bin64")
+            set(CNETMOD_BUNDLED_ICU_SOURCE_DIR "${_cnetmod_icu_source}")
+            set(CNETMOD_USING_BUNDLED_ICU ON)
         else()
             find_package(ICU COMPONENTS uc i18n QUIET)
         endif()

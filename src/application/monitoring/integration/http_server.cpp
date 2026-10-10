@@ -1,11 +1,12 @@
 module cnetmod.observability.http_server;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.instrumentation.error;
 import cnetmod.instrumentation.operation_result;
 import cnetmod.instrumentation.metric;
 import cnetmod.coro.task;
-import cnetmod.protocol.http;
 
 namespace cnetmod::observability {
 namespace {

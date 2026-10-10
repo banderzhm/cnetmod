@@ -189,7 +189,7 @@ auto connection_pool::async_get_connection(cnetmod::deadline value)
 auto connection_pool::async_get_connection(cancel_token& token)
     -> task<std::expected<pooled_connection, std::error_code>>
 {
-    co_return co_await with_timeout(ctx_, params_.pool_timeout,
+    return with_timeout(ctx_, params_.pool_timeout,
         async_get_connection_impl(token), token);
 }
 

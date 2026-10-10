@@ -3,11 +3,10 @@ module;
 module cnetmod.protocol.http.middleware.access_log;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
-#ifdef CNETMOD_HAS_PROTOCOL_WEBSOCKET
-import cnetmod.protocol.websocket;
-#endif
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.core.log;
 
 namespace cnetmod {
@@ -166,36 +165,4 @@ auto access_log(logger::level lv, std::source_location loc)
     return access_log(access_log_options{.lv = lv}, loc);
 }
 
-#ifdef CNETMOD_HAS_PROTOCOL_WEBSOCKET
-auto ws_access_log(ws::ws_handler_fn handler, logger::level lv,
-    std::source_location loc) -> ws::ws_handler_fn
-{
-    return [handler = std::move(handler), lv,
-               loc](ws::ws_context& ctx) -> task<void>
-    {
-        const auto path = std::string(ctx.path());
-        logger::detail::write_log(lv, std::format("WS+ {}", path), loc);
-        const auto start = std::chrono::steady_clock::now();
-        try
-        {
-            co_await handler(ctx);
-        }
-        catch (...)
-        {
-            const auto ms = std::chrono::duration<double, std::milli>(
-                std::chrono::steady_clock::now() - start)
-                                .count();
-            logger::detail::write_log(
-                logger::level::error,
-                std::format("WS! {} {:.2f}ms (exception)", path, ms), loc);
-            throw;
-        }
-        const auto ms = std::chrono::duration<double, std::milli>(
-            std::chrono::steady_clock::now() - start)
-                            .count();
-        logger::detail::write_log(lv, std::format("WS- {} {:.2f}ms", path, ms),
-            loc);
-    };
-}
-#endif
 } // namespace cnetmod

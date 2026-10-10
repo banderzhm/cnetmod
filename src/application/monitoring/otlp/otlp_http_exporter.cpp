@@ -1,6 +1,8 @@
 module cnetmod.observability.otlp;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.observability.export_response;
 import cnetmod.observability.export_retry;
 import cnetmod.instrumentation.metric_aggregation;
@@ -10,7 +12,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.utils.concurrent_containers.queue;
 import cnetmod.utils.charconv;
 

@@ -4,8 +4,9 @@
 export module cnetmod.observability.http_server;
 
 import std;
-import cnetmod.instrumentation.metric;
+
 import cnetmod.protocol.http;
+import cnetmod.instrumentation.metric;
 
 namespace cnetmod::observability {
 

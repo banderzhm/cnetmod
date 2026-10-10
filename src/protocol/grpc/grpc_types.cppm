@@ -5,7 +5,9 @@ module;
 export module cnetmod.protocol.grpc.types;
 
 import std;
+
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.middleware.tracing;
 
 namespace cnetmod::grpc {

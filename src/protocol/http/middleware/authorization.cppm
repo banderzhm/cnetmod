@@ -1,8 +1,10 @@
 export module cnetmod.protocol.http.middleware.authorization;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod::http {
 

@@ -7,11 +7,12 @@ module;
 export module cnetmod.protocol.openai:loaders;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
-import cnetmod.protocol.http;
-import :model;
+import :run;
 import :retrieval;
 import :ingestion;
 

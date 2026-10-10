@@ -11,7 +11,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.bridge;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
-import :model;
+import :run;
 import :tools;
 import :skills;
 import cnetmod.json;

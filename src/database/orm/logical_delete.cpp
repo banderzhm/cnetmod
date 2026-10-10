@@ -33,6 +33,33 @@ namespace {
         throw std::invalid_argument("invalid logical-delete touch value");
     }
 
+    auto utc_now() -> database::calendar_datetime
+    {
+        const auto seconds = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        auto value = database::datetime_from_unix_seconds(seconds);
+        if (!value)
+            throw std::range_error("current UTC time is outside database range");
+        return *value;
+    }
+
+    auto touch_parameter(logical_delete_touch_value value,
+        const database::calendar_datetime& now) -> param_value
+    {
+        switch (value)
+        {
+        case logical_delete_touch_value::current_timestamp:
+            return param_value::from_datetime(now);
+        case logical_delete_touch_value::current_date:
+            return param_value::from_date(
+                database::calendar_date{now.year, now.month, now.day});
+        case logical_delete_touch_value::current_time:
+            return param_value::from_time(database::clock_time{false, now.hour,
+                now.minute, now.second, now.microsecond});
+        }
+        throw std::invalid_argument("invalid logical-delete touch value");
+    }
+
     void validate_config(const logical_delete_config& config)
     {
         if (!valid_identifier(config.field_name))
@@ -89,22 +116,48 @@ auto logical_delete_interceptor::inject_select_condition_impl(
 auto logical_delete_interceptor::transform_delete_to_update_impl(
     std::string sql, std::string_view table_name, std::string_view field,
     const param_value& deleted_value, logical_delete_mode mode,
-    std::span<const logical_delete_touch_field> touch_fields) -> std::string
+    logical_delete_time_source time_source,
+    std::span<const logical_delete_touch_field> touch_fields,
+    std::vector<param_value>& parameters) -> std::string
 {
     if (!sql.starts_with("DELETE FROM") && !sql.starts_with("delete from"))
         return sql;
     const auto where_pos = sql.find(" WHERE ");
     const auto where_clause =
         where_pos == std::string::npos ? std::string{} : sql.substr(where_pos);
+    const auto application_time =
+        time_source == logical_delete_time_source::application_utc &&
+            (mode == logical_delete_mode::nullable_datetime ||
+                !touch_fields.empty())
+        ? std::optional{utc_now()}
+        : std::nullopt;
     const auto value = mode == logical_delete_mode::nullable_datetime
-        ? std::string{"CURRENT_TIMESTAMP"}
+        ? application_time ? std::string{"{}"}
+                           : std::string{"CURRENT_TIMESTAMP"}
         : deleted_value.kind == param_value::kind_t::int64_kind
         ? std::to_string(deleted_value.int_val)
         : "1";
     auto assignments = std::format("`{}` = {}", field, value);
+    std::vector<param_value> generated;
+    generated.reserve((application_time ? 1U : 0U) + touch_fields.size());
+    if (application_time && mode == logical_delete_mode::nullable_datetime)
+        generated.push_back(param_value::from_datetime(*application_time));
     for (const auto& touch : touch_fields)
-        assignments += std::format(", `{}` = {}", touch.field_name,
-            touch_value_sql(touch.value));
+    {
+        if (application_time)
+        {
+            assignments += std::format(", `{}` = {{}}", touch.field_name);
+            generated.push_back(touch_parameter(touch.value, *application_time));
+        }
+        else
+        {
+            assignments += std::format(", `{}` = {}", touch.field_name,
+                touch_value_sql(touch.value));
+        }
+    }
+    parameters.insert(parameters.begin(),
+        std::make_move_iterator(generated.begin()),
+        std::make_move_iterator(generated.end()));
     return std::format("UPDATE `{}` SET {}{}", table_name, assignments,
         where_clause);
 }

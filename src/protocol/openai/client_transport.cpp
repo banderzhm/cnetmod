@@ -7,6 +7,8 @@ module;
 module cnetmod.protocol.openai;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
@@ -16,7 +18,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -186,6 +188,10 @@ auto client::do_read_some() -> task<std::optional<std::string>>
     auto r = co_await do_read(mutable_buffer{buf.data(), buf.size()});
     if (!r || *r == 0)
     {
+        // A failed/EOF read makes a keep-alive exchange incomplete.  The
+        // native socket can still look open after a peer idle timeout, so it
+        // must never be returned to a model pool as reusable.
+        close();
         co_return std::nullopt;
     }
     co_return std::string(reinterpret_cast<const char*>(buf.data()), *r);
@@ -206,9 +212,15 @@ auto client::do_read_some(cancel_token& token)
         mutable_buffer{buf.data(), buf.size()}, token);
 #endif
     if (!read)
+    {
+        close();
         co_return std::unexpected(read.error());
+    }
     if (*read == 0)
+    {
+        close();
         co_return std::unexpected(make_error_code(errc::end_of_file));
+    }
     co_return std::string(reinterpret_cast<const char*>(buf.data()), *read);
 }
 

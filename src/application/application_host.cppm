@@ -5,6 +5,7 @@ export module cnetmod.application.host;
 
 import std;
 import cnetmod.application.components;
+import cnetmod.protocol.http;
 import cnetmod.application.configuration;
 import cnetmod.application.diagnostics;
 import cnetmod.application.health_registry;
@@ -16,8 +17,7 @@ import cnetmod.application.task_supervisor;
 import cnetmod.application.runtime;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
-import cnetmod.observability;
-import cnetmod.protocol.http;
+import cnetmod.observability.telemetry;
 
 namespace cnetmod::application {
 

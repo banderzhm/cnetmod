@@ -7,13 +7,14 @@ module;
 export module cnetmod.protocol.openai:mcp;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.coro.mutex;
 export import cnetmod.core.process;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
-import cnetmod.protocol.http;
 import :foundation;
 import :tools;
 import cnetmod.json;

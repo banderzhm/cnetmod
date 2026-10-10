@@ -5,10 +5,12 @@ module;
 export module cnetmod.protocol.websocket:connection;
 
 import std;
+
+import cnetmod.protocol.http;
 import :types;
 import :frame;
 import :handshake;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;

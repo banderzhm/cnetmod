@@ -439,8 +439,11 @@ srv.use(ip_filter({
 ### 14. cache_store — 缓存存储
 
 抽象接口 `cache::cache_store`，具体实现：
-- `memory_cache` — 内存 LRU 缓存
-- `redis_cache` — Redis 后端（需 `CNETMOD_HAS_PROTOCOL_REDIS`）
+
+- `memory_cache` — HTTP 组件自带的内存 LRU 缓存。
+- `redis_cache` — 独立 Redis 中间件适配器，不属于 HTTP 核心。必须同时启用
+  HTTP 与 Redis，并显式链接 `cnetmod::http_redis_cache`、导入
+  `cnetmod.integration.http.redis_cache`。
 
 ```cpp
 class memory_cache : public cache_store {
@@ -460,6 +463,20 @@ Per-route 缓存：`cacheable()`, `cache_put()`, `cache_evict()`, `cache_evict_g
 ```cpp
 cache::memory_cache store({.max_entries = 10000});
 srv.use(cache::make_cache_middleware(store, {.ttl = std::chrono::seconds{60}}));
+```
+
+Redis 后端：
+
+```cmake
+target_link_libraries(my_service PRIVATE cnetmod::http_redis_cache)
+```
+
+```cpp
+import cnetmod.integration.http.redis_cache;
+
+cnetmod::cache::redis_cache store(redis_client,
+    {.key_prefix = "http-cache:"});
+srv.use(cnetmod::cache::make_cache_middleware(store));
 ```
 
 ### 15. health_check — 健康检查

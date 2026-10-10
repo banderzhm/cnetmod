@@ -17,8 +17,10 @@
 export module cnetmod.protocol.http.middleware.jwt_auth;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod {
 

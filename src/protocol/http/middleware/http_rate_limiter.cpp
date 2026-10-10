@@ -1,8 +1,10 @@
 module cnetmod.protocol.http.middleware.rate_limiter;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.utils.concurrent_containers.striped_hash_map;
 
 namespace cnetmod {

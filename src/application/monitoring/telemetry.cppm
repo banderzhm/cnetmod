@@ -4,9 +4,7 @@
  * Applications pass lightweight adapters to protocol components while the
  * process owns one resource, bounded exporter, and metric registry.
  */
-export module cnetmod.observability;
-
-export import cnetmod.observability.messaging;
+export module cnetmod.observability.telemetry;
 
 import std;
 import cnetmod.instrumentation.metric;

@@ -72,7 +72,10 @@ auto decoded = cnetmod::json::parse<user_view>(*encoded);
 ```
 
 The default policy rejects unknown fields and missing required fields.
-Use `parse_lenient<T>()` when unknown object members are acceptable and
+Use `parse_allow_unknown<T>()` when unknown object members are acceptable;
+`parse_lenient<T>()` is its compatibility spelling. Both still reject missing
+required fields. Fields that may be absent on the wire must be modeled with
+`std::optional`, so schema mistakes are not silently replaced with C++ defaults. Use
 `write_explicit_nulls<T>()` when nullable members must remain on the wire.
 Both are fixed Glaze policies; the public parse/write API has no pluggable
 backend or caller-supplied JSON codec.

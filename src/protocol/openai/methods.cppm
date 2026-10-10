@@ -9,7 +9,7 @@ export module cnetmod.protocol.openai:methods;
 import std;
 import cnetmod.coro.task;
 import :chat;
-import :model;
+import :run;
 import :service;
 import :structured;
 

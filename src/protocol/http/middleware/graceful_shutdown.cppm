@@ -39,8 +39,10 @@ module;
 export module cnetmod.protocol.http.middleware.graceful_shutdown;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.core.log;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 

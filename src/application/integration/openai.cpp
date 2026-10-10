@@ -170,6 +170,14 @@ namespace {
             co_return std::unexpected(
                 std::make_error_code(std::errc::operation_canceled));
         }
+
+        // Startup/reconfiguration validates that every slot can establish a
+        // connection, but it must not publish a pool full of idle sockets.
+        // Proxies commonly reap those sockets before their first lease while
+        // the local descriptor still reports open.  Runtime requests connect
+        // lazily and failed reads invalidate their own connection.
+        for (auto& opened : generation.clients)
+            opened->close();
         co_return std::expected<void, std::error_code>{};
     }
 
@@ -310,6 +318,7 @@ auto openai_service::start(service_context& context)
     }
     if (auto reset = co_await model_pool_.reset(generation_->models); !reset)
         co_return std::unexpected(reset.error());
+    ready_ = true;
     co_return {};
 }
 
@@ -319,6 +328,7 @@ auto openai_service::stop(service_context& context)
     (void)context;
     co_await generation_gate_.lock();
     async_lock_guard guard{generation_gate_, std::adopt_lock};
+    ready_ = false;
     co_await model_pool_.close();
     for (auto& client : generation_->clients)
         client->close();
@@ -333,17 +343,20 @@ auto openai_service::probe(service_context& context) -> task<health_report>
             .status = service_health::degraded,
             .message = "openai generation reconfiguration in progress"};
     async_lock_guard guard{generation_gate_, std::adopt_lock};
+    if (!ready_)
+        co_return health_report{.status = service_health::down,
+            .message = "openai pool is not started"};
     const auto connected = static_cast<std::size_t>(std::ranges::count_if(
         generation_->clients, [](const auto& client)
         {
             return client->is_connected();
         }));
-    co_return health_report{.status = connected == generation_->clients.size()
-            ? service_health::up
-            : connected > 0 ? service_health::degraded
-                            : service_health::down,
-        .message = std::format("openai pool connections {}/{}", connected,
-            generation_->clients.size())};
+    // Connections are intentionally lazy and streaming exchanges close their
+    // socket after completion.  A disconnected idle slot is therefore not a
+    // health failure; start()/reconfigure() already validate reachability.
+    co_return health_report{.status = service_health::up,
+        .message = std::format("openai pool ready; active connections {}/{}",
+            connected, generation_->clients.size())};
 }
 
 auto auto_configure_openai(const configured_service& configuration,

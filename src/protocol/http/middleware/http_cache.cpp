@@ -5,12 +5,11 @@ module;
 module cnetmod.protocol.http.middleware.cache;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.coro.shared_mutex;
-#ifdef CNETMOD_HAS_PROTOCOL_REDIS
-import cnetmod.protocol.redis;
-#endif
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod::cache {
 
@@ -97,58 +96,6 @@ auto memory_cache::clear() -> task<void>
     map_.clear();
     lru_.clear();
 }
-
-#ifdef CNETMOD_HAS_PROTOCOL_REDIS
-redis_cache::redis_cache(redis::client& client,
-    redis_cache_options opts) noexcept
-    : client_(client), opts_(std::move(opts)) {}
-
-auto redis_cache::full_key(std::string_view key) const -> std::string
-{
-    return opts_.key_prefix + std::string(key);
-}
-
-auto redis_cache::get(std::string_view key)
-    -> task<std::optional<std::string>>
-{
-    redis::request req;
-    req.push("GET", full_key(key));
-    auto r = co_await client_.exec(req);
-    if (!r || r->empty() || r->front().is_null() || r->front().is_error())
-        co_return std::nullopt;
-    co_return std::string(redis::first_value(*r));
-}
-
-auto redis_cache::set(std::string_view key, std::string_view value,
-    std::chrono::seconds ttl) -> task<bool>
-{
-    auto fk = full_key(key);
-    auto val = std::string(value);
-    redis::request req;
-    if (ttl.count() > 0)
-        req.push("SET", fk, val, std::string("EX"), std::to_string(ttl.count()));
-    else
-        req.push("SET", fk, val);
-    auto r = co_await client_.exec(req);
-    co_return r.has_value() && redis::is_ok(*r);
-}
-
-auto redis_cache::del(std::string_view key) -> task<bool>
-{
-    redis::request req;
-    req.push("DEL", full_key(key));
-    auto r = co_await client_.exec(req);
-    co_return r && !r->empty() && redis::first_value(*r) != "0";
-}
-
-auto redis_cache::exists(std::string_view key) -> task<bool>
-{
-    redis::request req;
-    req.push("EXISTS", full_key(key));
-    auto r = co_await client_.exec(req);
-    co_return r && !r->empty() && redis::first_value(*r) != "0";
-}
-#endif
 
 auto cache_group_registry::add(std::string_view group, std::string_view key)
     -> task<void>

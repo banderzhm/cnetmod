@@ -1,7 +1,9 @@
 export module cnetmod.protocol.http.middleware.rate_limiter;
 
 import std;
+
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod {
 struct rate_limiter_options

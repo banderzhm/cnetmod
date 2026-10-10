@@ -2,14 +2,15 @@
 export module cnetmod.application.http_client;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.application.auto_configuration;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
-import cnetmod.observability;
+import cnetmod.observability.telemetry;
 import cnetmod.observability.http;
-import cnetmod.protocol.http;
 
 namespace cnetmod::application {
 

@@ -9,6 +9,7 @@ export module cnetmod.protocol.openai:guardrails;
 import std;
 import cnetmod.coro.task;
 import :messages;
+import :run;
 import :model;
 import :prompt;
 import :client;

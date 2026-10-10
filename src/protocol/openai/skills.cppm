@@ -10,7 +10,7 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
-import :model;
+import :run;
 import :tools;
 
 namespace cnetmod::openai {

@@ -8,6 +8,7 @@ export module cnetmod.protocol.openai:tool_search;
 
 import std;
 import cnetmod.coro.task;
+import :run;
 import :model;
 import :tools;
 

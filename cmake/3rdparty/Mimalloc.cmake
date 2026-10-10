@@ -31,7 +31,9 @@
 #   From source: https://github.com/microsoft/mimalloc
 #
 function(cnetmod_use_mimalloc)
-    find_package(mimalloc CONFIG QUIET)
+    if(CNETMOD_USE_SYSTEM_DEPS)
+        find_package(mimalloc CONFIG QUIET)
+    endif()
     
     if(mimalloc_FOUND)
         message(STATUS "Found mimalloc: ${mimalloc_DIR}")
@@ -61,7 +63,7 @@ function(cnetmod_use_mimalloc)
         
         message(STATUS "Configured to use mimalloc allocator")
         
-    elseif(CNETMOD_DEPENDENCY_MODE STREQUAL "system")
+    elseif(CNETMOD_DEPENDENCY_MODE STREQUAL "system" AND CNETMOD_USE_SYSTEM_DEPS)
         # Try to find mimalloc library directly (fallback for systems without CMake config)
         find_library(MIMALLOC_LIBRARY NAMES mimalloc)
         find_path(MIMALLOC_INCLUDE_DIR NAMES mimalloc.h)

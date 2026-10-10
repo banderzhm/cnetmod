@@ -7,13 +7,15 @@ module;
 module cnetmod.protocol.openai;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.coro.bridge;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.io.io_context;
-import :model;
+import :run;
 import :retrieval;
 import :ingestion;
 import :loaders;

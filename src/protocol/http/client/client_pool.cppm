@@ -1,8 +1,9 @@
 export module cnetmod.protocol.http.client.pool;
 
 import std;
-import cnetmod.io.io_context;
+
 import cnetmod.protocol.http;
+import cnetmod.io.io_context;
 
 export namespace cnetmod::http {
 /// Per-endpoint HTTP client reuse pool.  Connections remain owned by clients;

@@ -4,13 +4,14 @@
 export module cnetmod.application.auto_configuration;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.json;
 import cnetmod.application.configuration;
 import cnetmod.application.service_registry;
 import cnetmod.application.task_supervisor;
 import cnetmod.io.io_context;
-import cnetmod.observability;
-import cnetmod.protocol.http;
+import cnetmod.observability.telemetry;
 
 namespace cnetmod::application {
 

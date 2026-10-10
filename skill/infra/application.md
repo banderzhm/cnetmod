@@ -867,6 +867,12 @@ required 服务同一故障周期耗尽预算后不重复派发或通知停机�
 
 `reload_configuration()` 只原位更新日志级别、OTEL 采样率、健康策略和恢复策略。监听地址、端口、中间件、线程、连接参数、凭据、OTLP 出口或队列参数变化会设置 `restart_required`，不会偷偷重建连接。
 
+配置加载保留错误所属的 error category：JSON 语法错误返回
+`cnetmod::json::errc::parse_failed`，文件不存在返回
+`std::errc::no_such_file_or_directory`，根节点不是对象或字段值非法才返回
+`std::errc::invalid_argument`。调用方不得把所有 `invalid_argument` 翻译成“JSON
+语法错误”，也不得丢弃 JSON 模块提供的精确错误身份。
+
 底层 `reload_safe_configuration(active, candidate)` 返回
 `std::expected<configuration_reload_result, std::error_code>`。它先校验候选并在私有副本中
 准备变更清单，准备失败不修改 active；提交使用已静态验证的不抛异常移动赋值。

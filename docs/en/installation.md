@@ -217,8 +217,12 @@ Configure cnetmod with these CMake options:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `CNETMOD_BUILD_EXAMPLES` | `ON` | Build example programs |
+| `CNETMOD_ENABLE_ALL_PROTOCOLS` | `OFF` | Make every per-protocol option default to ON; applications should enable only what they use |
+| `CNETMOD_BUILD_C_API` | `OFF` | Build the stable C ABI library |
+| `CNETMOD_BUILD_PYTHON_BINDINGS` | `OFF` | Build the CPython extension |
+| `CNETMOD_BUILD_EXAMPLES` | `OFF` | Build example programs |
 | `CNETMOD_BUILD_TESTS` | `OFF` | Build unit tests |
+| `CNETMOD_BUILD_BENCH` | `OFF` | Build performance benchmarks |
 | `CNETMOD_ENABLE_SSL` | `ON` | Enable SSL/TLS support (requires OpenSSL) |
 | `LIBCXX_MODULE_DIRS` | Auto-detected | Path to standard library modules |
 | `LIBCXX_INCLUDE_DIRS` | Auto-detected | Path to standard library headers |

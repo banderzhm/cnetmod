@@ -1,7 +1,9 @@
 export module cnetmod.protocol.http.middleware.recover;
 
 import std;
+
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 export namespace cnetmod {
 struct recover_options

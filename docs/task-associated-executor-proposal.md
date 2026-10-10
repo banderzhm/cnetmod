@@ -2,8 +2,8 @@
 
 ## Status
 
-Design proposal only. The current `task<T>` promise and resumption behavior are
-unchanged.
+The opt-in `resume_on(io_context&, task<T>)` bridge is implemented. The current
+`task<T>` promise and its default resumption behavior remain unchanged.
 
 ## Problem statement
 
@@ -31,7 +31,7 @@ changing every task's ABI or scheduling semantics.
 
 ## Recommended experiment
 
-Introduce an opt-in wrapper rather than changing `task<T>`:
+The framework provides an opt-in wrapper rather than changing `task<T>`:
 
 ```cpp
 template <typename T>
