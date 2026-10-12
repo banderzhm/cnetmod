@@ -17,6 +17,7 @@ export import :model;
 export import :prompt;
 export import :runnable;
 export import :memory;
+export import :summarization;
 export import :memory_store;
 export import :long_term_store;
 export import :checkpoint;

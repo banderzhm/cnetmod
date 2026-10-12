@@ -73,7 +73,31 @@ namespace {
             characters += call.function.name.size() + call.function.arguments.size();
         return std::max<std::size_t>(1, (characters + 3) / 4);
     }
+
+    auto fallback_trim(std::vector<message>& messages,
+        const memory_options& options, compaction_result result = {})
+        -> compaction_result
+    {
+        result.window = trim_messages(messages, options);
+        result.fallback_trimmed = result.window.removed_messages > 0;
+        return result;
+    }
 } // namespace
+
+functional_conversation_summarizer::functional_conversation_summarizer(
+    conversation_summary_handler handler)
+    : handler_(std::move(handler))
+{
+    if (!handler_)
+        throw std::invalid_argument("conversation summary handler is required");
+}
+
+auto functional_conversation_summarizer::summarize(
+    conversation_summary_request request)
+    -> task<std::expected<std::string, std::string>>
+{
+    co_return co_await handler_(request);
+}
 
 auto make_error_code(chat_record_store_errc error) noexcept -> std::error_code
 {
@@ -150,9 +174,10 @@ auto trim_messages(std::vector<message>& messages,
             messages.size());
         if (index >= messages.size() - tail)
             return true;
-        return options.preserve_system_messages &&
-            (messages[index].role == "system" ||
-                messages[index].role == "developer");
+        return (options.preserve_system_messages &&
+                (messages[index].role == "system" ||
+                    messages[index].role == "developer")) ||
+            messages[index].name == conversation_summary_message_name;
     };
 
     while (!messages.empty() && over_limit())
@@ -188,6 +213,109 @@ auto trim_messages(std::vector<message>& messages,
     result.remaining_tokens = total_tokens();
     result.limit_satisfied = !over_limit();
     return result;
+}
+
+auto compact_messages(std::vector<message>& messages,
+    const memory_options& options, std::string_view session_id)
+    -> task<std::expected<compaction_result, std::string>>
+{
+    auto trimmed = messages;
+    const auto probe = trim_messages(trimmed, options);
+    if (probe.removed_messages == 0 && probe.limit_satisfied)
+        co_return compaction_result{.window = probe};
+
+    if (options.summarizer == nullptr)
+    {
+        messages = std::move(trimmed);
+        co_return compaction_result{
+            .fallback_trimmed = probe.removed_messages > 0,
+            .window = probe};
+    }
+
+    auto prefix = std::min(options.pinned_prefix_messages, messages.size());
+    if (options.preserve_system_messages)
+    {
+        while (prefix < messages.size() &&
+            (messages[prefix].role == "system" ||
+                messages[prefix].role == "developer"))
+            ++prefix;
+    }
+
+    const auto preserved_tail = std::max(options.preserved_tail_messages,
+        options.summary_preserved_messages);
+    auto summary_end = messages.size() > preserved_tail
+        ? messages.size() - preserved_tail
+        : std::size_t{0};
+
+    if (summary_end < messages.size() && messages[summary_end].role == "tool")
+    {
+        while (summary_end > prefix && messages[summary_end].role == "tool")
+            --summary_end;
+    }
+
+    if (options.preserve_system_messages)
+    {
+        for (auto index = prefix; index < summary_end; ++index)
+        {
+            if (messages[index].role == "system" ||
+                messages[index].role == "developer")
+            {
+                summary_end = index;
+                break;
+            }
+        }
+    }
+
+    if (summary_end <= prefix)
+    {
+        messages = std::move(trimmed);
+        co_return compaction_result{
+            .fallback_trimmed = probe.removed_messages > 0,
+            .window = probe};
+    }
+
+    std::size_t summarized_tokens = 0;
+    for (auto index = prefix; index < summary_end; ++index)
+        summarized_tokens += message_tokens(messages[index], options);
+
+    auto generated = co_await options.summarizer->summarize({
+        .session_id = session_id,
+        .messages = std::span<const message>{messages}.subspan(
+            prefix, summary_end - prefix),
+        .target_tokens = options.max_tokens,
+    });
+    if (!generated || generated->empty())
+    {
+        auto error = generated ? std::string("conversation summarizer returned empty content")
+                               : generated.error();
+        if (options.summary_failure == summary_failure_policy::return_error)
+            co_return std::unexpected(std::move(error));
+        compaction_result result;
+        result.summary_error = std::move(error);
+        co_return fallback_trim(messages, options, std::move(result));
+    }
+
+    message summary = message::model_output(options.summary_prefix + *generated);
+    summary.name = std::string(conversation_summary_message_name);
+    const auto summary_tokens = message_tokens(summary, options);
+
+    auto compacted = messages;
+    compacted.erase(compacted.begin() + static_cast<std::ptrdiff_t>(prefix),
+        compacted.begin() + static_cast<std::ptrdiff_t>(summary_end));
+    compacted.insert(compacted.begin() + static_cast<std::ptrdiff_t>(prefix),
+        std::move(summary));
+
+    auto window_options = options;
+    window_options.summarizer = nullptr;
+    const auto window = trim_messages(compacted, window_options);
+    messages = std::move(compacted);
+    co_return compaction_result{
+        .summary_applied = true,
+        .summarized_messages = summary_end - prefix,
+        .summarized_tokens = summarized_tokens,
+        .summary_tokens = summary_tokens,
+        .window = window,
+    };
 }
 
 auto in_memory_chat_memory_store::load(std::string session_id)
@@ -541,15 +669,29 @@ auto conversation_memory::load_locked()
     if (append_store_)
     {
         auto values = co_await append_store_->load_recent(
-            session_id_, options_.max_messages);
+            session_id_, options_.summarizer == nullptr ? options_.max_messages : 0);
         if (!values)
             co_return std::unexpected(values.error());
-        trim_messages(*values, options_);
+        auto compacted = co_await apply_window_locked(*values);
+        if (!compacted)
+            co_return std::unexpected(compacted.error());
         co_return values;
     }
     if (!store_)
         co_return local_messages_;
-    co_return co_await store_->load(session_id_);
+    auto values = co_await store_->load(session_id_);
+    if (!values)
+        co_return std::unexpected(values.error());
+    auto compacted = co_await apply_window_locked(*values);
+    if (!compacted)
+        co_return std::unexpected(compacted.error());
+    co_return values;
+}
+
+auto conversation_memory::apply_window_locked(std::vector<message>& values)
+    -> task<std::expected<compaction_result, std::string>>
+{
+    co_return co_await compact_messages(values, options_, session_id_);
 }
 
 auto conversation_memory::save_locked(std::vector<message> values)
@@ -595,7 +737,9 @@ auto conversation_memory::append(std::vector<message> values)
         co_return std::unexpected(current.error());
     current->insert(current->end(), std::make_move_iterator(values.begin()),
         std::make_move_iterator(values.end()));
-    trim_messages(*current, options_);
+    auto compacted = co_await apply_window_locked(*current);
+    if (!compacted)
+        co_return std::unexpected(compacted.error());
     co_return co_await save_locked(std::move(*current));
 }
 
@@ -604,7 +748,9 @@ auto conversation_memory::replace(std::vector<message> values)
 {
     co_await mutex_.lock();
     async_lock_guard guard(mutex_, std::adopt_lock);
-    trim_messages(values, options_);
+    auto compacted = co_await apply_window_locked(values);
+    if (!compacted)
+        co_return std::unexpected(compacted.error());
     co_return co_await save_locked(std::move(values));
 }
 

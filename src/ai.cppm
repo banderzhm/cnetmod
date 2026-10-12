@@ -37,6 +37,12 @@ using conversation_store = openai::append_only_chat_memory_store;
 using in_memory_conversation_store =
     openai::in_memory_append_only_chat_memory_store;
 using conversation_options = openai::memory_options;
+using conversation_summarizer = openai::conversation_summarizer;
+using functional_conversation_summarizer =
+    openai::functional_conversation_summarizer;
+using model_conversation_summarizer_options =
+    openai::model_conversation_summarizer_options;
+using model_conversation_summarizer = openai::model_conversation_summarizer;
 
 } // namespace cnetmod::ai
 #endif
