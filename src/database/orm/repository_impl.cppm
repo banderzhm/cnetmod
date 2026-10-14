@@ -66,11 +66,11 @@ public:
      * owned by the gateway; business services never handle sessions directly.
      */
     template <typename Result, class Operation>
-    auto transaction(Operation&& operation)
+    auto transaction(Operation operation)
         -> task<std::expected<Result, std::string>>
     {
         co_return co_await gateway_->template transaction<Result>(
-            [this, operation = std::forward<Operation>(operation)](
+            [this, operation = std::move(operation)](
                 auto& unit) mutable -> task<std::expected<Result, std::string>>
             {
                 configured_transaction transaction{unit, interceptors_};

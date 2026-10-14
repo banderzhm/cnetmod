@@ -36,18 +36,18 @@ public:
     }
 
     template <class T, class Operation>
-    auto read(Operation&& operation) -> task<std::expected<T, std::string>>
+    auto read(Operation operation) -> task<std::expected<T, std::string>>
     {
         auto lease = co_await acquire_lease();
         if (!lease)
             co_return std::unexpected(lease.error());
 
         session_type session{client_(*lease), dialect_};
-        co_return co_await std::forward<Operation>(operation)(session);
+        co_return co_await operation(session);
     }
 
     template <class T, class Operation>
-    auto write(Operation&& operation) -> task<std::expected<T, std::string>>
+    auto write(Operation operation) -> task<std::expected<T, std::string>>
     {
         auto lease = co_await acquire_lease();
         if (!lease)
@@ -68,7 +68,7 @@ public:
      * physical connection that owns its result stream.
      */
     template <Model T, class Operation>
-    auto cursor(Operation&& operation, query_wrapper<T> query = {},
+    auto cursor(Operation operation, query_wrapper<T> query = {},
         cursor_options options = {})
         -> task<std::expected<void, std::string>>
     {
@@ -81,7 +81,7 @@ public:
         auto stream = models.open_cursor(std::move(query), options);
         try
         {
-            co_return co_await std::forward<Operation>(operation)(stream);
+            co_return co_await operation(stream);
         }
         catch (const std::exception& error)
         {
@@ -100,7 +100,7 @@ public:
      * model-specific interceptors before selecting a protocol cursor.
      */
     template <Model T, class Operation>
-    auto stream(Operation&& operation)
+    auto stream(Operation operation)
         -> task<std::expected<void, std::string>>
     {
         auto lease = co_await acquire_lease();
@@ -110,7 +110,7 @@ public:
         session_type session{client_(*lease), dialect_};
         try
         {
-            co_return co_await std::forward<Operation>(operation)(session);
+            co_return co_await operation(session);
         }
         catch (const std::exception& error)
         {
@@ -129,7 +129,7 @@ public:
      * transaction. This is the only cross-model transaction entry point.
      */
     template <typename Result, class Operation>
-    auto transaction(Operation&& operation)
+    auto transaction(Operation operation)
         -> task<std::expected<Result, std::string>>
     {
         auto lease = co_await acquire_lease();

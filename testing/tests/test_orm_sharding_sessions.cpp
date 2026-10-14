@@ -891,6 +891,52 @@ TEST(orm_repository_transaction_shares_one_session_across_mappers)
     ASSERT_EQ(client.statements.size(), 4U);
 }
 
+TEST(orm_repository_void_transaction_shares_one_session_across_mappers)
+{
+    recording_session_client client;
+    using gateway_type = orm::session_gateway<recording_session_client,
+        std::monostate>;
+    gateway_type gateway{
+        orm::sql_dialect::mysql,
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        },
+        []() -> cnetmod::task<std::expected<std::monostate, std::string>>
+        {
+            co_return std::monostate{};
+        },
+        [&client](std::monostate&) -> recording_session_client&
+        {
+            return client;
+        }};
+
+    client.responses.push_back(routed_order_result({{7, "stored"}}));
+    client.responses.push_back({});
+    orm::repository<routed_order, gateway_type> orders{gateway};
+    auto pending = orders.transaction<void>(
+        [description = std::string{"created"}](auto& unit) mutable
+            -> cnetmod::task<std::expected<void, std::string>>
+        {
+            auto mapper = unit.template mapper<routed_order>();
+            auto loaded = co_await mapper.select_by_id(
+                orm::param_value::from_int(7));
+            if (loaded.is_err())
+                co_return std::unexpected(loaded.error_msg);
+            routed_order copy{8, std::move(description)};
+            auto inserted = co_await mapper.insert(copy);
+            if (inserted.is_err())
+                co_return std::unexpected(inserted.error_msg);
+            co_return std::expected<void, std::string>{};
+        });
+    auto result = cnetmod::sync_wait(std::move(pending));
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(client.statements.front(), "START TRANSACTION");
+    ASSERT_EQ(client.statements.back(), "COMMIT");
+    ASSERT_EQ(client.statements.size(), 4U);
+}
+
 TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
 {
     recording_session_client client;
