@@ -560,6 +560,85 @@ TEST(redis_pool_shutdown_drains_waiters_and_rejects_new_borrowers)
         ASSERT_TRUE(outcomes[index] == std::errc::operation_canceled);
 }
 
+TEST(redis_lazy_pool_services_a_borrower_queued_before_run)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(cnetmod::endpoint{
+                                   cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    connection_pool pool{*io,
+        {.host = "127.0.0.1",
+            .port = endpoint->port(),
+            .resp3 = false,
+            .initial_size = 0,
+            .max_size = 1,
+            .connect_timeout = std::chrono::milliseconds{250},
+            .pool_timeout = std::chrono::milliseconds{250},
+            .ping_interval = std::chrono::hours{1}}};
+    cnetmod::cancel_token borrower_token;
+    auto pending = pool.async_get_connection(borrower_token);
+    pending.handle().resume();
+    ASSERT_FALSE(pending.handle().done());
+    ASSERT_EQ(pool.waiter_count(), 1U);
+    ASSERT_EQ(pool.size(), 0U);
+
+    bool peer_connected = false;
+    bool peer_finished = false;
+    bool run_finished = false;
+    bool acquired = false;
+    auto server = [&]() -> cnetmod::task<void>
+    {
+        auto peer = co_await cnetmod::async_accept(*io, *listener);
+        if (peer)
+        {
+            peer_connected = true;
+            char byte{};
+            (void)co_await cnetmod::async_read(*io, *peer,
+                cnetmod::mutable_buffer{&byte, 1});
+        }
+        peer_finished = true;
+    };
+    auto runner = [&]() -> cnetmod::task<void>
+    {
+        co_await pool.async_run();
+        run_finished = true;
+    };
+    auto verify = [&]() -> cnetmod::task<void>
+    {
+        while (!pending.handle().done())
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        {
+            auto result = pending.handle().promise().result();
+            acquired = result.has_value() && result->get().is_open();
+        }
+        if (!acquired)
+            listener->close();
+        co_await pool.cancel();
+        while (!run_finished || !peer_finished)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+
+    cnetmod::spawn(*io, server());
+    cnetmod::spawn(*io, runner());
+    cnetmod::spawn(*io, verify());
+    io->run();
+
+    ASSERT_TRUE(acquired);
+    ASSERT_TRUE(peer_connected);
+    ASSERT_TRUE(peer_finished);
+    ASSERT_TRUE(run_finished);
+    ASSERT_EQ(pool.waiter_count(), 0U);
+}
+
 TEST(redis_pool_never_reissues_a_closed_returned_lease)
 {
     for (const bool queued_waiter : {false, true})

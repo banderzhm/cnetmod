@@ -136,6 +136,17 @@ auto connection_pool::async_run() -> task<void>
             !stop_requested_.load(std::memory_order_acquire);
             ++i)
             spawn_connection();
+        // A borrower may have queued while async_run() was still waiting to be
+        // dispatched.  In particular, a lazy pool (initial_size == 0) would
+        // otherwise never create its first connection because the borrower saw
+        // running_ == false and the startup path only created warm connections.
+        {
+            co_await mtx_.lock();
+            async_lock_guard guard(mtx_, std::adopt_lock);
+            if (running_ &&
+                !stop_requested_.load(std::memory_order_acquire))
+                create_connections_if_needed();
+        }
         const auto target = std::min(params_.initial_size, params_.max_size);
         if (target > 0)
         {
