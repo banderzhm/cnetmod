@@ -111,7 +111,9 @@ private:
         }
         catch (const std::exception& error)
         {
-            return std::unexpected(error.what());
+            return std::unexpected(std::format(
+                "failed to build XML statement '{}': {}", statement_id,
+                error.what()));
         }
     }
 

@@ -388,15 +388,20 @@ Build parameters with `param_context::set()`, `from_map()`, `from_model()`,
 
 | XML form | Behavior |
 |---|---|
-| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. |
+| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. A missing property fails statement construction before database execution. |
 | `#{name,jdbcType=...,javaType=...,typeHandler=...,mode=...,numericScale=...}` | Parses and preserves mapping metadata. The current protocol execution binds the value; custom `typeHandler` execution and OUT parameters are not implemented. |
 | `#{request.id}` | Reads a dotted property from a nested `param_context`. |
-| `${name}` | Inserts raw text. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
+| `${name}` | Inserts raw text and fails statement construction when the property is missing. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
 
 `param_context::set()` accepts values supported by `to_query_parameter`,
 including null, signed/unsigned integers, floating point, strings, blobs,
 calendar date/time values and optional values. A missing property resolves to
-null. Model overloads use `CNETMOD_MODEL` metadata to expose model fields.
+null inside dynamic expressions so optional conditions can test it. SQL
+placeholders are stricter: missing properties fail immediately, while an
+explicitly registered null remains a valid bound SQL `NULL`. Model overloads
+use `CNETMOD_MODEL` metadata to expose model fields. Mapper execution reports
+both the statement id and missing property name and does not contact the
+database when statement construction fails.
 
 ### Dynamic SQL elements
 

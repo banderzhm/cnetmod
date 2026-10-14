@@ -656,13 +656,17 @@ auto expr_evaluator::eval_binary(const ast_node& n,
     case token_type::ne:
         return expr_value::make_bool(!compare_eq(l, r));
     case token_type::lt:
-        return expr_value::make_bool(compare_ord(l, r) < 0);
+        return expr_value::make_bool(
+            !l.is_null() && !r.is_null() && compare_ord(l, r) < 0);
     case token_type::gt:
-        return expr_value::make_bool(compare_ord(l, r) > 0);
+        return expr_value::make_bool(
+            !l.is_null() && !r.is_null() && compare_ord(l, r) > 0);
     case token_type::le:
-        return expr_value::make_bool(compare_ord(l, r) <= 0);
+        return expr_value::make_bool(
+            !l.is_null() && !r.is_null() && compare_ord(l, r) <= 0);
     case token_type::ge:
-        return expr_value::make_bool(compare_ord(l, r) >= 0);
+        return expr_value::make_bool(
+            !l.is_null() && !r.is_null() && compare_ord(l, r) >= 0);
     default:
         return arithmetic(n.op, l, r);
     }

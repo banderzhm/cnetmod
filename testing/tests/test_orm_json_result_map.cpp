@@ -204,19 +204,23 @@ struct traced_database_client
 struct diagnostic_database_client
 {
     orm::query_result response;
+    std::size_t query_calls{};
 
     auto query(std::string_view) -> cnetmod::task<orm::query_result>
     {
+        ++query_calls;
         co_return response;
     }
 
     auto execute(std::string_view) -> cnetmod::task<orm::query_result>
     {
+        ++query_calls;
         co_return response;
     }
 
     auto execute(orm::parameterized_query) -> cnetmod::task<orm::query_result>
     {
+        ++query_calls;
         co_return response;
     }
 };
@@ -783,6 +787,10 @@ TEST(expression_engine_sequences_binary_operator_parsing_portably)
     ASSERT_EQ(orm::eval_expr("1 + 2 * 3", parameters).to_int(), 7);
     ASSERT_TRUE(orm::eval_expr("score == 7 or score < 0", parameters)
             .is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing < 0", parameters).is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing > 0", parameters).is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing <= 0", parameters).is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing >= 0", parameters).is_truthy());
 }
 
 TEST(dynamic_sql_binds_property_not_mybatis_placeholder_modifiers)
@@ -818,6 +826,63 @@ TEST(dynamic_sql_binds_property_not_mybatis_placeholder_modifiers)
     ASSERT_EQ(built.parameter_mappings.at(1).type_handler,
         "example::name_handler");
     ASSERT_EQ(built.parameter_mappings.at(1).mode, "IN");
+}
+
+TEST(dynamic_sql_rejects_missing_placeholder_parameters)
+{
+    auto bound = orm::parse_xml(R"(
+        <select>SELECT * FROM users WHERE id = #{missing}</select>)");
+    auto direct = orm::parse_xml(R"(
+        <select>SELECT * FROM ${missing}</select>)");
+    auto empty = orm::parse_xml(R"(
+        <select>SELECT * FROM users WHERE id = #{}</select>)");
+    ASSERT_TRUE(bound.has_value());
+    ASSERT_TRUE(direct.has_value());
+    ASSERT_TRUE(empty.has_value());
+
+    orm::dynamic_sql_processor processor{orm::format_options{}};
+    const orm::param_context parameters;
+    ASSERT_THROWS((void)processor.process(**bound, parameters, {}));
+    ASSERT_THROWS((void)processor.process(**direct, parameters, {}));
+    ASSERT_THROWS((void)processor.process(**empty, parameters, {}));
+}
+
+TEST(dynamic_sql_accepts_explicit_null_placeholder_parameters)
+{
+    auto statement = orm::parse_xml(R"(
+        <select>SELECT * FROM users WHERE deleted_at = #{deletedAt}</select>)");
+    ASSERT_TRUE(statement.has_value());
+
+    orm::param_context parameters;
+    parameters.set("deletedAt", orm::param_value::null());
+    orm::dynamic_sql_processor processor{orm::format_options{}};
+    const auto built = processor.process(**statement, parameters, {});
+
+    ASSERT_EQ(built.params.size(), 1U);
+    ASSERT_TRUE(built.params.front().kind ==
+        orm::param_value::kind_t::null_kind);
+}
+
+TEST(xml_mapper_reports_missing_placeholder_parameters_without_querying)
+{
+    orm::mapper_registry registry;
+    ASSERT_TRUE(registry.load_xml(R"(
+        <mapper namespace="UserMapper">
+          <select id="findById" resultType="orm_json_user">
+            SELECT id, name, status FROM users WHERE id = #{id}
+          </select>
+        </mapper>)"));
+
+    diagnostic_database_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<orm_json_user, decltype(session)> users{session};
+    const auto result = cnetmod::sync_wait(users.select_xml(
+        registry, "UserMapper.findById", orm::param_context{}));
+
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.error_msg.contains("UserMapper.findById"));
+    ASSERT_TRUE(result.error_msg.contains("missing parameter 'id'"));
+    ASSERT_EQ(client.query_calls, 0U);
 }
 
 TEST(xml_lazy_relation_coalesces_concurrent_first_loads)
