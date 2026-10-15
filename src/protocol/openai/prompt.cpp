@@ -13,6 +13,38 @@ import :prompt;
 import cnetmod.json;
 
 namespace cnetmod::openai {
+namespace {
+
+[[nodiscard]] auto numeric_value(const json& value) noexcept
+    -> std::optional<long double>
+{
+    if (value.is_int64())
+        return static_cast<long double>(value.get<std::int64_t>());
+    if (value.is_uint64())
+        return static_cast<long double>(value.get<std::uint64_t>());
+    if (value.is_double())
+        return static_cast<long double>(value.get<double>());
+    return std::nullopt;
+}
+
+[[nodiscard]] auto utf8_length(std::string_view value) noexcept -> std::size_t
+{
+    return static_cast<std::size_t>(std::ranges::count_if(value,
+        [](unsigned char byte) { return (byte & 0xC0U) != 0x80U; }));
+}
+
+[[nodiscard]] auto size_constraint(const json& schema,
+    std::string_view name) noexcept -> std::optional<std::size_t>
+{
+    if (!schema.contains(name)) return std::nullopt;
+    const auto parsed = numeric_value(schema[name]);
+    if (!parsed || *parsed < 0.0L ||
+        *parsed > static_cast<long double>(std::numeric_limits<std::size_t>::max()))
+        return std::nullopt;
+    return static_cast<std::size_t>(*parsed);
+}
+
+} // namespace
 
 prompt_section::prompt_section() = default;
 
@@ -86,6 +118,43 @@ auto validate_json_schema(const json& value, const json& schema,
     if (!type_matches)
         return std::unexpected(std::format("{}: expected type {}", path, type));
 
+    if (const auto number_value = numeric_value(value))
+    {
+        if (schema.contains("minimum"))
+            if (const auto boundary = numeric_value(schema["minimum"]);
+                boundary && *number_value < *boundary)
+                return std::unexpected(std::format(
+                    "{}: value is less than minimum", path));
+        if (schema.contains("maximum"))
+            if (const auto boundary = numeric_value(schema["maximum"]);
+                boundary && *number_value > *boundary)
+                return std::unexpected(std::format(
+                    "{}: value is greater than maximum", path));
+        if (schema.contains("exclusiveMinimum"))
+            if (const auto boundary = numeric_value(schema["exclusiveMinimum"]);
+                boundary && *number_value <= *boundary)
+                return std::unexpected(std::format(
+                    "{}: value is not greater than exclusiveMinimum", path));
+        if (schema.contains("exclusiveMaximum"))
+            if (const auto boundary = numeric_value(schema["exclusiveMaximum"]);
+                boundary && *number_value >= *boundary)
+                return std::unexpected(std::format(
+                    "{}: value is not less than exclusiveMaximum", path));
+    }
+
+    if (value.is_string())
+    {
+        const auto length = utf8_length(value.get<std::string>());
+        if (const auto minimum = size_constraint(schema, "minLength");
+            minimum && length < *minimum)
+            return std::unexpected(std::format(
+                "{}: string is shorter than minLength", path));
+        if (const auto maximum = size_constraint(schema, "maxLength");
+            maximum && length > *maximum)
+            return std::unexpected(std::format(
+                "{}: string is longer than maxLength", path));
+    }
+
     if (value.is_object())
     {
         if (schema.contains("required") && schema["required"].is_array())
@@ -118,6 +187,14 @@ auto validate_json_schema(const json& value, const json& schema,
     if (value.is_array() && schema.contains("items"))
     {
         const auto& elements = value.get_array();
+        if (const auto minimum = size_constraint(schema, "minItems");
+            minimum && elements.size() < *minimum)
+            return std::unexpected(std::format(
+                "{}: array has fewer items than minItems", path));
+        if (const auto maximum = size_constraint(schema, "maxItems");
+            maximum && elements.size() > *maximum)
+            return std::unexpected(std::format(
+                "{}: array has more items than maxItems", path));
         for (std::size_t index = 0; index < elements.size(); ++index)
         {
             auto nested = validate_json_schema(elements[index], schema["items"],

@@ -426,6 +426,27 @@ TEST(openai_structured_output_serializes_and_validates)
     ASSERT_FALSE(parser.parse(R"({"other":1})").has_value());
 }
 
+TEST(openai_json_schema_enforces_scalar_and_collection_bounds)
+{
+    const openai::json schema{{"type", "object"},
+        {"properties", {
+            {"score", {{"type", "integer"}, {"minimum", 1}, {"maximum", 5}}},
+            {"label", {{"type", "string"}, {"minLength", 2}, {"maxLength", 3}}},
+            {"items", {{"type", "array"}, {"minItems", 1}, {"maxItems", 2},
+                {"items", {{"type", "integer"}}}}}}},
+        {"required", {"score", "label", "items"}},
+        {"additionalProperties", false}};
+
+    openai::json_output_parser parser{schema};
+    ASSERT_TRUE(parser.parse(R"({"score":3,"label":"命理","items":[1,2]})").has_value());
+    ASSERT_FALSE(parser.parse(R"({"score":0,"label":"命理","items":[1]})").has_value());
+    ASSERT_FALSE(parser.parse(R"({"score":6,"label":"命理","items":[1]})").has_value());
+    ASSERT_FALSE(parser.parse(R"({"score":3,"label":"命","items":[1]})").has_value());
+    ASSERT_FALSE(parser.parse(R"({"score":3,"label":"命理学说","items":[1]})").has_value());
+    ASSERT_FALSE(parser.parse(R"({"score":3,"label":"命理","items":[]})").has_value());
+    ASSERT_FALSE(parser.parse(R"({"score":3,"label":"命理","items":[1,2,3]})").has_value());
+}
+
 #endif
 #if CNETMOD_OPENAI_TEST_GROUP == 0 || CNETMOD_OPENAI_TEST_GROUP == 9
 TEST(openai_model_stream_supports_provider_neutral_backpressure)
