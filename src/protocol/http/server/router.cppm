@@ -234,6 +234,10 @@ public:
         std::string_view uri, const header_map& headers,
         std::string_view body, response& resp, route_params params,
         std::shared_ptr<request_body_stream> body_stream = {});
+    request_context(io_context& ctx, socket& sock, std::string_view method,
+        std::string_view uri, std::span<const request_header_view> headers,
+        std::string_view body, response& resp, route_params params,
+        std::shared_ptr<request_body_stream> body_stream = {});
     [[nodiscard]] auto method() const noexcept -> std::string_view;
     [[nodiscard]] auto method_enum() const noexcept -> std::optional<http_method>;
     [[nodiscard]] auto path() const noexcept -> std::string_view;
@@ -391,6 +395,9 @@ private:
     route_params params_;
     const request_parser* parser_{};
     const header_map* headers_ptr_{};
+    std::span<const request_header_view> header_views_{};
+    mutable header_map materialized_headers_;
+    mutable bool header_views_materialized_{};
     std::string_view method_;
     mutable std::string body_storage_;
     mutable std::string_view body_;

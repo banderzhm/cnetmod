@@ -470,6 +470,15 @@ export struct case_insensitive_less
 export using header_map =
     cnetmod::flat_map<std::string, std::string, case_insensitive_less>;
 
+/// Non-owning request header used by protocol adapters. The referenced bytes
+/// must outlive request_context; headers() materializes ownership only when a
+/// caller explicitly asks for the complete map.
+export struct request_header_view
+{
+    std::string_view name;
+    std::string_view value;
+};
+
 // =============================================================================
 // Simple URL Structure
 // =============================================================================

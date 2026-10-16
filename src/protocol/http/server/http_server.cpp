@@ -1136,17 +1136,41 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
     {
         std::string_view method = "GET";
         std::string_view uri = "/";
-        header_map headers;
-        headers.reserve(request.headers.size());
-        for (auto& field : request.headers)
+        std::array<request_header_view, 32> inline_headers{};
+        std::vector<request_header_view> overflow_headers;
+        std::size_t header_count{};
+        auto add_header = [&](const v2::header_field& field)
+        {
+            const request_header_view view{field.name, field.value};
+            if (overflow_headers.empty() &&
+                header_count < inline_headers.size())
+            {
+                inline_headers[header_count++] = view;
+                return;
+            }
+            if (overflow_headers.empty())
+            {
+                overflow_headers.reserve(request.headers.size());
+                overflow_headers.insert(overflow_headers.end(),
+                    inline_headers.begin(),
+                    inline_headers.begin() +
+                        static_cast<std::ptrdiff_t>(header_count));
+            }
+            overflow_headers.push_back(view);
+        };
+        for (const auto& field : request.headers)
         {
             if (field.name == ":method")
                 method = field.value;
             else if (field.name == ":path")
                 uri = field.value;
             else if (!field.name.starts_with(':'))
-                headers[std::move(field.name)] = std::move(field.value);
+                add_header(field);
         }
+        const auto headers = overflow_headers.empty()
+            ? std::span<const request_header_view>{
+                  inline_headers.data(), header_count}
+            : std::span<const request_header_view>{overflow_headers};
         const auto query = uri.find('?');
         const auto path = query == std::string::npos
             ? std::string_view(uri)
@@ -1214,34 +1238,35 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
         if (request.body_stream && request.body_stream->error() == std::make_error_code(std::errc::message_size))
             output.set_status(status::payload_too_large);
         result.status = static_cast<std::uint32_t>(output.status_code());
-        result.body.assign(
-            reinterpret_cast<const std::byte*>(output.body().data()),
-            reinterpret_cast<const std::byte*>(output.body().data()) +
-                output.body().size());
+        result.body_text = output.take_body();
         result.body_source = output.take_body_source();
         // HTTP/2 owns this response until HPACK has encoded it, so reserve the
         // exact number of application headers before copying them.  The usual
         // response has Date, Server and Content-Length; growing from an empty
         // vector otherwise allocates repeatedly on every request.
-        result.headers.reserve(output.headers().size());
-        for (const auto& [name, value] : output.headers())
+        auto output_headers = output.take_headers();
+        result.headers.reserve(output_headers.size());
+        for (auto& [name, value] : output_headers)
         {
             std::string lowercase{name};
             for (auto& character : lowercase)
                 if (character >= 'A' && character <= 'Z')
                     character = static_cast<char>(character + ('a' - 'A'));
-            result.headers.push_back({std::move(lowercase), value});
+            result.headers.push_back(
+                {std::move(lowercase), std::move(value)});
         }
         if (const auto date = output.cached_date_header(); !date.empty())
             result.headers.push_back({"date", std::string{date}});
-        result.trailers.reserve(output.trailers().size());
-        for (const auto& [name, value] : output.trailers())
+        auto output_trailers = output.take_trailers();
+        result.trailers.reserve(output_trailers.size());
+        for (auto& [name, value] : output_trailers)
         {
             std::string lowercase{name};
             for (auto& character : lowercase)
                 if (character >= 'A' && character <= 'Z')
                     character = static_cast<char>(character + ('a' - 'A'));
-            result.trailers.push_back({std::move(lowercase), value});
+            result.trailers.push_back(
+                {std::move(lowercase), std::move(value)});
         }
         co_return result;
     };

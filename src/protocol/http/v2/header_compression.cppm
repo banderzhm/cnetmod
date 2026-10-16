@@ -18,6 +18,9 @@ public:
 
     [[nodiscard]] auto decode(std::span<const std::byte> block)
         -> std::expected<std::vector<header_field>, std::error_code>;
+    [[nodiscard]] auto decode(std::span<const std::byte> block,
+        std::vector<header_field>& output)
+        -> std::expected<void, std::error_code>;
     [[nodiscard]] auto encode(std::span<const header_field> fields)
         -> std::expected<std::vector<std::byte>, std::error_code>;
     [[nodiscard]] auto encode(std::span<const header_field> fields,

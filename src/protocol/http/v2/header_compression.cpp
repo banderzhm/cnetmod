@@ -282,7 +282,17 @@ auto header_compression::decode(std::span<const std::byte> block)
     -> std::expected<std::vector<header_field>, std::error_code>
 {
     std::vector<header_field> result;
-    result.reserve(std::min<std::size_t>(block.size(), 16U));
+    if (auto decoded = decode(block, result); !decoded)
+        return std::unexpected(decoded.error());
+    return result;
+}
+
+auto header_compression::decode(std::span<const std::byte> block,
+    std::vector<header_field>& output)
+    -> std::expected<void, std::error_code>
+{
+    output.clear();
+    output.reserve(std::min<std::size_t>(block.size(), 16U));
     std::size_t offset = 0;
     bool can_resize = true;
     while (offset < block.size())
@@ -295,7 +305,7 @@ auto header_compression::decode(std::span<const std::byte> block)
             auto value = index ? at(*index) : std::nullopt;
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            result.push_back({std::move(value->name), std::move(value->value)});
+            output.push_back({std::move(value->name), std::move(value->value)});
             continue;
         }
         if ((first & 0xe0) == 0x20)
@@ -335,9 +345,9 @@ auto header_compression::decode(std::span<const std::byte> block)
         header_field field{std::move(name), std::move(*value), sensitive};
         if (incremental)
             insert({field.name, field.value});
-        result.push_back(std::move(field));
+        output.push_back(std::move(field));
     }
-    return result;
+    return {};
 }
 
 auto header_compression::encode(std::span<const header_field> fields)

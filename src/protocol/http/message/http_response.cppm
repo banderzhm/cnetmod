@@ -80,6 +80,8 @@ public:
     [[nodiscard]] auto trailers() const noexcept -> const header_map&;
     [[nodiscard]] auto body() const noexcept -> std::string_view;
 
+    [[nodiscard]] auto take_headers() -> header_map;
+    [[nodiscard]] auto take_trailers() noexcept -> header_map;
     [[nodiscard]] auto take_body() noexcept -> std::string;
     [[nodiscard]] auto body_source() const noexcept
         -> const std::shared_ptr<response_body_source>&;

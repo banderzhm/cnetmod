@@ -185,6 +185,17 @@ request_context::request_context(io_context& c, socket& s, std::string_view m,
     init_path_query(u);
 }
 
+request_context::request_context(io_context& c, socket& s, std::string_view m,
+    std::string_view u, std::span<const request_header_view> h,
+    std::string_view b, response& r, route_params x,
+    std::shared_ptr<request_body_stream> stream)
+    : ctx_(c), sock_(s), resp_(r), params_(std::move(x)), header_views_(h),
+      method_(m), body_storage_(b), body_(body_storage_),
+      body_stream_(std::move(stream))
+{
+    init_path_query(u);
+}
+
 auto request_context::method() const noexcept -> std::string_view
 {
     return method_;
@@ -313,7 +324,18 @@ auto request_context::uri() const noexcept -> std::string_view
 
 auto request_context::headers() const -> const header_map&
 {
-    return parser_ ? parser_->headers() : *headers_ptr_;
+    if (parser_)
+        return parser_->headers();
+    if (headers_ptr_)
+        return *headers_ptr_;
+    if (!header_views_materialized_)
+    {
+        materialized_headers_.reserve(header_views_.size());
+        for (const auto header : header_views_)
+            materialized_headers_[std::string{header.name}] = header.value;
+        header_views_materialized_ = true;
+    }
+    return materialized_headers_;
 }
 
 auto request_context::body() const -> std::string_view
@@ -355,9 +377,17 @@ auto request_context::get_header(std::string_view key) const
 {
     if (parser_)
         return parser_->get_header(key);
-    auto it = headers_ptr_->find(key);
-    return it == headers_ptr_->end() ? std::string_view{}
-                                     : std::string_view{it->second};
+    if (headers_ptr_)
+    {
+        auto it = headers_ptr_->find(key);
+        return it == headers_ptr_->end() ? std::string_view{}
+                                         : std::string_view{it->second};
+    }
+    const case_insensitive_less less;
+    for (const auto header : header_views_)
+        if (!less(header.name, key) && !less(key, header.name))
+            return header.value;
+    return {};
 }
 
 auto request_context::param(std::string_view n) const noexcept

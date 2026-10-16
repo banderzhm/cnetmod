@@ -269,6 +269,18 @@ auto response::body() const noexcept -> std::string_view
     return body_;
 }
 
+auto response::take_headers() -> header_map
+{
+    materialize_headers();
+    headers_snapshot_valid_ = false;
+    return std::move(headers_snapshot_);
+}
+
+auto response::take_trailers() noexcept -> header_map
+{
+    return std::move(trailers_);
+}
+
 auto response::take_body() noexcept -> std::string
 {
     return std::move(body_);

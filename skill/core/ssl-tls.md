@@ -3,7 +3,7 @@
 > 提供基于 OpenSSL 的 TLS/DTLS 加密通信支持，包含上下文管理、异步流式读写及 ALPN/SNI/kTLS。
 
 **import**: `import cnetmod.core.ssl;` (TLS) / `import cnetmod.core.dtls;` (DTLS)
-**源码**: `src/core/ssl.cppm`, `src/core/dtls.cppm`
+**源码**: `src/core/ssl.cppm`, `src/core/ssl_impl.cpp`, `src/core/ssl_ktls.cpp`, `src/core/dtls.cppm`
 
 > ⚠️ 所有 SSL/TLS 功能受条件编译宏 `CNETMOD_HAS_SSL` 保护。构建时需启用 `-DCNETMOD_ENABLE_SSL=ON` 并链接 OpenSSL。
 
@@ -92,8 +92,12 @@ Windows 本地回归覆盖预取消，以及已握手连接等待对端 close_no
 对端只消费密文、不发送关闭确认；客户端返回 timed_out 后关闭 socket，对端观察到连接结束。
 该用例由独立 test_ssl_shutdown 目标执行，仅依赖 SSL 与 OpenSSL 证书生成工具，不依赖
 Redis 开关；它与 test_redis_tls 共用证书设施。Arch Clang 22 的 SSL-only 配置（HTTP、Redis、
-ORM 均关闭）也已运行通过。当前仓库强制使用内置 BoringSSL，其头文件未提供 SSL_OP_ENABLE_KTLS，
-因此该配置实际使用 memory BIO；不能将结果当作 direct socket BIO/kTLS 的运行证据。
+ORM 均关闭）也已运行通过。当前仓库使用内置 BoringSSL。Linux 上显式调用
+`set_kernel_tls(true)` 后，上下文会把协议上限设为 TLS 1.2；握手完成后，框架从
+BoringSSL 导出 AES-128/256-GCM 的 TLS 1.2 发送密钥并安装到 Linux TLS ULP。只有
+安装成功，`kernel_tls_active()` 才返回 `true`；内核或密码套件不支持时保留用户态 TLS。
+普通上下文默认不启用，继续协商 TLS 1.3。该路径仅卸载 TX，接收方向仍由 BoringSSL
+解密；QUIC 不使用 kTLS。
 
 HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
 `SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
@@ -285,15 +289,19 @@ auto run_dtls_server(cnetmod::io_context& ctx, cnetmod::ssl_context& ssl_ctx,
 ## 场景：kTLS 内核加速
 
 ```cpp
-// 启用 kTLS（仅 Linux，需要内核和 OpenSSL 版本支持）
+// 显式启用 kTLS（仅 Linux；bundled BoringSSL 路径选择 TLS 1.2 AES-GCM）
 auto ssl_ctx = *cnetmod::ssl_context::server();
 ssl_ctx.set_kernel_tls(true);
 
 // 握手后检查是否实际激活
 if (stream.kernel_tls_active()) {
-    // 内核态 TLS TX 已激活，零拷贝 sendfile 可用
+    // 当前连接的发送记录已经由 Linux kTLS 接管
 }
 ```
+
+这是面向大吞吐或基准测试的显式取舍：在 bundled BoringSSL 下启用它会从默认 TLS 1.3
+降到 TLS 1.2 AES-GCM。不要仅凭配置项判断已经卸载，必须在握手后检查
+`kernel_tls_active()`；Linux 上还可用 `/proc/net/tls_stat` 的 `TlsTxSw` 验证实际连接。
 
 ## Do's & Don'ts
 | ✅ 正确 | ❌ 错误 |
@@ -307,6 +315,7 @@ if (stream.kernel_tls_active()) {
 
 ## 参考源码
 - `src/core/ssl.cppm` — ssl_context、ssl_stream、kTLS、ALPN
+- `src/core/ssl_ktls.cpp` — Linux/BoringSSL kTLS TX 密钥安装与关闭通知
 - `src/core/dtls.cppm` — dtls_datagram_session、dtls_role
 - `examples/core/ssl_echo_server.cpp` — TLS Echo 服务端示例
 - `examples/core/dtls_echo_server.cpp` — DTLS Echo 服务端示例

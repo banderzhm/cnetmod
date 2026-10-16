@@ -29,6 +29,7 @@ struct server_response
     std::vector<header_field> headers;
     std::vector<header_field> trailers;
     std::vector<std::byte> body;
+    std::string body_text;
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
 };
 
@@ -99,7 +100,8 @@ private:
     settings peer_{};
     header_compression decoder_{};
     header_compression encoder_{};
-    std::unordered_map<std::uint32_t, stream> streams_;
+    std::pmr::unsynchronized_pool_resource stream_pool_;
+    std::pmr::unordered_map<std::uint32_t, stream> streams_;
     std::vector<std::uint32_t> ready_streams_;
     server_handler handler_;
     streaming_server_handler streaming_handler_;

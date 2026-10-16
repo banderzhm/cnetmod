@@ -34,6 +34,15 @@ namespace cnetmod {
 
 namespace detail {
 
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+    auto enable_kernel_tls_tx(SSL* ssl, socket& transport) noexcept -> bool;
+    auto async_kernel_tls_shutdown(io_context& context, socket& transport)
+        -> task<std::expected<void, std::error_code>>;
+    auto async_kernel_tls_shutdown(io_context& context, socket& transport,
+        cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>;
+    #endif
+
     void ssl_global_init() noexcept
     {
         static const bool initialized = []
@@ -324,9 +333,7 @@ auto ssl_context::client() -> std::expected<ssl_context, std::error_code>
     }
 
     SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION);
-    auto result = ssl_context{context};
-    result.set_kernel_tls(true);
-    return result;
+    return ssl_context{context};
 }
 
 auto ssl_context::server() -> std::expected<ssl_context, std::error_code>
@@ -339,9 +346,7 @@ auto ssl_context::server() -> std::expected<ssl_context, std::error_code>
     }
 
     SSL_CTX_set_min_proto_version(context, TLS1_2_VERSION);
-    auto result = ssl_context{context};
-    result.set_kernel_tls(true);
-    return result;
+    return ssl_context{context};
 }
 
 auto ssl_context::dtls_client() -> std::expected<ssl_context, std::error_code>
@@ -468,7 +473,14 @@ void ssl_context::set_verify_peer(bool verify) noexcept
 
 void ssl_context::set_kernel_tls(bool enabled) noexcept
 {
-    #if defined(CNETMOD_PLATFORM_LINUX) && defined(SSL_OP_ENABLE_KTLS) && !defined(OPENSSL_NO_KTLS)
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+    kernel_tls_enabled_ = enabled;
+    // BoringSSL does not expose its record keys for TLS 1.3. Its supported
+    // TLS 1.2 AES-GCM state is exported to Linux TLS ULP after the handshake.
+    // Make that protocol choice explicit only when the application requests
+    // kTLS; the normal context continues to negotiate TLS 1.3.
+    SSL_CTX_set_max_proto_version(ctx_, enabled ? TLS1_2_VERSION : 0);
+    #elif defined(CNETMOD_PLATFORM_LINUX) && defined(SSL_OP_ENABLE_KTLS) && !defined(OPENSSL_NO_KTLS)
     kernel_tls_enabled_ = enabled;
     if (enabled)
     {
@@ -561,7 +573,8 @@ auto ssl_context::dtls_verify_cookie(
 }
 
 ssl_stream::ssl_stream(ssl_context& context, io_context& io, socket& socket)
-    : io_ctx_(io), sock_(socket), ssl_(SSL_new(context.native()))
+    : io_ctx_(io), sock_(socket), ssl_(SSL_new(context.native())),
+      kernel_tls_requested_(context.kernel_tls_enabled())
 {
     // OpenSSL can install the Linux TLS ULP only while doing the handshake on
     // socket BIOs. Memory BIOs remain the portable fallback used everywhere
@@ -598,7 +611,16 @@ ssl_stream::~ssl_stream()
 }
 
 ssl_stream::ssl_stream(ssl_stream&& other) noexcept
-    : io_ctx_(other.io_ctx_), sock_(other.sock_), ssl_(std::exchange(other.ssl_, nullptr)), rbio_(std::exchange(other.rbio_, nullptr)), wbio_(std::exchange(other.wbio_, nullptr)), direct_socket_bio_(std::exchange(other.direct_socket_bio_, false)), kernel_tls_active_(std::exchange(other.kernel_tls_active_, false)) {}
+    : io_ctx_(other.io_ctx_), sock_(other.sock_),
+      ssl_(std::exchange(other.ssl_, nullptr)),
+      rbio_(std::exchange(other.rbio_, nullptr)),
+      wbio_(std::exchange(other.wbio_, nullptr)),
+      direct_socket_bio_(std::exchange(other.direct_socket_bio_, false)),
+      kernel_tls_requested_(
+          std::exchange(other.kernel_tls_requested_, false)),
+      kernel_tls_active_(std::exchange(other.kernel_tls_active_, false))
+{
+}
 
 void ssl_stream::set_hostname(std::string_view hostname)
 {
@@ -652,6 +674,14 @@ auto ssl_stream::async_handshake(cancel_token& token)
                     co_return std::unexpected(flushed.error());
                 }
             }
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+            if (!direct_socket_bio_ && kernel_tls_requested_ &&
+                !kernel_tls_active_)
+            {
+                kernel_tls_active_ =
+                    detail::enable_kernel_tls_tx(ssl_, sock_);
+            }
+    #endif
     #if defined(CNETMOD_PLATFORM_LINUX) && defined(SSL_OP_ENABLE_KTLS) && !defined(OPENSSL_NO_KTLS)
             kernel_tls_active_ = direct_socket_bio_ && BIO_get_ktls_send(SSL_get_wbio(ssl_)) == 1;
     #endif
@@ -886,6 +916,12 @@ auto ssl_stream::async_write(const_buffer buffer)
 auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+    if (kernel_tls_active_)
+    {
+        co_return co_await cnetmod::async_write(io_ctx_, sock_, buffer, token);
+    }
+    #endif
     for (;;)
     {
         co_await engine_mutex_.lock();
@@ -1008,6 +1044,20 @@ template <typename Cancellation>
 auto ssl_stream::shutdown_impl(Cancellation cancellation)
     -> task<std::expected<void, std::error_code>>
 {
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+    if (kernel_tls_active_)
+    {
+        // TLS_TX owns record framing; the platform implementation emits a
+        // close_notify record without feeding ciphertext back through kTLS.
+        if constexpr (std::is_same_v<Cancellation, std::nullptr_t>)
+            co_return co_await detail::async_kernel_tls_shutdown(
+                io_ctx_, sock_);
+        else
+            co_return co_await detail::async_kernel_tls_shutdown(
+                io_ctx_, sock_, *cancellation);
+    }
+    #endif
+
     auto flush = [&]()
     {
         if constexpr (std::is_same_v<Cancellation, std::nullptr_t>)

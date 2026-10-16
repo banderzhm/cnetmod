@@ -24,6 +24,8 @@ public:
     [[nodiscard]] auto state() const noexcept -> stream_state;
     [[nodiscard]] auto receive_headers(std::vector<header_field> fields,
         bool end_stream) -> bool;
+    [[nodiscard]] auto prepare_headers(bool end_stream) noexcept
+        -> std::vector<header_field>*;
     [[nodiscard]] auto receive_data(std::span<const std::byte> data,
         bool end_stream) -> bool;
     [[nodiscard]] auto headers() const noexcept

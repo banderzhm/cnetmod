@@ -63,6 +63,16 @@ auto stream::receive_headers(std::vector<header_field> fields, bool end_stream)
     return true;
 }
 
+auto stream::prepare_headers(bool end_stream) noexcept
+    -> std::vector<header_field>*
+{
+    if (state_ != stream_state::idle && state_ != stream_state::open)
+        return nullptr;
+    headers_.clear();
+    state_ = end_stream ? stream_state::half_closed_remote : stream_state::open;
+    return &headers_;
+}
+
 auto stream::receive_data(std::span<const std::byte> data, bool end_stream)
     -> bool
 {
