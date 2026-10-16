@@ -10,6 +10,8 @@ module;
 export module cnetmod.protocol.openai:client;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
@@ -19,7 +21,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -53,6 +55,11 @@ public:
 
     /// Connect to OpenAI API endpoint (TCP + TLS handshake)
     auto connect(connect_options opts) -> task<std::expected<void, std::string>>;
+
+    /// Connect with caller-controlled cancellation for DNS-independent socket
+    /// establishment and the TLS handshake.
+    auto connect(connect_options opts, cancel_token& cancellation)
+        -> task<std::expected<void, std::string>>;
 
     /// Check if connected
     [[nodiscard]] auto is_connected() const noexcept -> bool;

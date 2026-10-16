@@ -24,7 +24,6 @@ static void verify_postgresql_reconnect_failure(postgresql_reconnect_failure fai
     options.connection.maximum_connect_attempts = 1;
     cnetmod::application::postgresql_service service{*io, options, "fault",
         cnetmod::application::service_requirement::required, {}};
-    auto& pool = service.pool();
     cnetmod::observability::telemetry_hub telemetry{*io,
         {.export_traces = false, .export_metrics = false, .export_logs = false}};
     cnetmod::application::task_supervisor supervisor{*io};
@@ -65,6 +64,10 @@ static void verify_postgresql_reconnect_failure(postgresql_reconnect_failure fai
     };
     auto exercise = [&]() -> cnetmod::task<void>
     {
+        // A sharded Application integration selects its pool from the
+        // currently executing event loop.  Resolve the shard only after this
+        // coroutine has been dispatched to the owning io_context.
+        auto& pool = service.pool();
         cnetmod::cancel_token initial;
         cnetmod::application::service_context context{*io, telemetry, supervisor, initial, {}};
         ASSERT_TRUE((co_await service.start(context)).has_value());

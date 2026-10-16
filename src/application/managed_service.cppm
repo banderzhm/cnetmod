@@ -10,7 +10,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.io.io_context;
-import cnetmod.observability;
+import cnetmod.observability.telemetry;
 
 namespace cnetmod::application {
 

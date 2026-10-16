@@ -22,18 +22,77 @@ namespace {
         co_return std::unexpected(error ? error : std::make_error_code(std::errc::io_error));
     }
 
+    auto verify_shard(mysql::sharded_connection_pool& pool,
+        io_context& event_loop, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>
+    {
+        auto connection = co_await pool.async_get_connection(
+            event_loop, cancellation);
+        if (!connection)
+            co_return std::unexpected(connection.error());
+        co_return {};
+    }
+
+    auto probe_shard(mysql::sharded_connection_pool& pool,
+        io_context& event_loop, cancel_token& cancellation)
+        -> task<std::expected<void, std::error_code>>
+    {
+        auto connection = co_await pool.async_get_connection(
+            event_loop, cancellation);
+        if (!connection)
+            co_return std::unexpected(connection.error());
+        co_return co_await ping_connection(connection->get(), cancellation);
+    }
+
 } // namespace
 
 mysql_service::mysql_service(io_context& io, mysql::pool_params options,
     std::string instance, service_requirement requirement,
     recovery_policy recovery)
-    : io_(io), pool_(io, std::move(options)), instance_(std::move(instance)), requirement_(requirement), recovery_(recovery)
+    : io_(io), pool_(std::make_unique<mysql::connection_pool>(io, std::move(options))), instance_(std::move(instance)), requirement_(requirement), recovery_(recovery)
 {
 }
 
-auto mysql_service::pool() noexcept -> mysql::connection_pool&
+mysql_service::mysql_service(io_context& control,
+    std::span<io_context* const> event_loops, mysql::pool_params options,
+    std::string instance, service_requirement requirement,
+    recovery_policy recovery)
+    : io_(control),
+      sharded_pool_(std::make_unique<mysql::sharded_connection_pool>(
+          std::vector<io_context*>{event_loops.begin(), event_loops.end()},
+          std::move(options))),
+      event_loops_(event_loops.begin(), event_loops.end()),
+      instance_(std::move(instance)), requirement_(requirement),
+      recovery_(recovery)
 {
-    return pool_;
+}
+
+auto mysql_service::pool() -> mysql::connection_pool&
+{
+    if (!pool_)
+        throw std::logic_error{
+            "mysql_service::pool() is unavailable in multi-loop mode; use acquire()"};
+    return *pool_;
+}
+
+auto mysql_service::acquire(cancel_token& cancellation)
+    -> task<std::expected<mysql::pooled_connection, std::error_code>>
+{
+    if (pool_)
+        co_return co_await pool_->async_get_connection(cancellation);
+    auto* caller = io_context::current();
+    if (caller == nullptr)
+        co_return std::unexpected(
+            std::make_error_code(std::errc::operation_not_permitted));
+    co_return co_await sharded_pool_->async_get_connection(
+        *caller, cancellation);
+}
+
+auto mysql_service::acquire()
+    -> task<std::expected<mysql::pooled_connection, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await acquire(cancellation);
 }
 
 auto mysql_service::key() const -> service_key
@@ -69,22 +128,44 @@ auto mysql_service::start(service_context& context)
             std::format("mysql-pool:{}", instance_),
             [this](cancel_token&) -> task<std::expected<void, std::error_code>>
             {
-                co_await pool_.async_run();
+                if (pool_)
+                    co_await pool_->async_run();
+                else
+                    co_await resume_on(io_, sharded_pool_->async_run());
                 co_return {};
             },
             recovery_, requirement_ == service_requirement::required,
             [this]() noexcept
             {
-                pool_.request_stop();
+                if (pool_)
+                    pool_->request_stop();
+                else
+                    sharded_pool_->request_stop();
             });
         if (!supervised)
             co_return std::unexpected(supervised.error());
         started_ = true;
     }
-    auto connection = co_await with_deadline(context.io, context.operation_deadline,
-        pool_.async_get_connection(context.cancellation), context.cancellation);
-    if (!connection)
-        co_return std::unexpected(connection.error());
+    std::expected<void, std::error_code> verified;
+    if (pool_)
+    {
+        auto connection = co_await with_deadline(context.io,
+            context.operation_deadline, acquire(context.cancellation),
+            context.cancellation);
+        if (!connection)
+            co_return std::unexpected(connection.error());
+    }
+    else
+    {
+        verified = co_await with_deadline(context.io,
+            context.operation_deadline,
+            resume_on(context.io, starts_on(*event_loops_.front(),
+                verify_shard(*sharded_pool_, *event_loops_.front(),
+                    context.cancellation))),
+            context.cancellation);
+        if (!verified)
+            co_return std::unexpected(verified.error());
+    }
     co_return {};
 }
 
@@ -92,9 +173,15 @@ auto mysql_service::stop(service_context& context)
     -> task<std::expected<void, std::error_code>>
 {
     if (started_)
-        co_await pool_.cancel();
+    {
+        if (pool_)
+            co_await pool_->cancel();
+        else
+            co_await sharded_pool_->cancel();
+    }
     bool waited_for_leases = false;
-    while (pool_.checked_out_count() != 0)
+    while ((pool_ ? pool_->checked_out_count()
+                  : sharded_pool_->checked_out_count()) != 0)
     {
         waited_for_leases = true;
         if (context.cancellation.is_cancelled())
@@ -109,7 +196,12 @@ auto mysql_service::stop(service_context& context)
             co_return std::unexpected(waited.error());
     }
     if (waited_for_leases)
-        co_await pool_.cancel();
+    {
+        if (pool_)
+            co_await pool_->cancel();
+        else
+            co_await sharded_pool_->cancel();
+    }
     started_ = false;
     co_return {};
 }
@@ -118,14 +210,29 @@ auto mysql_service::probe(service_context& context) -> task<health_report>
 {
     if (!started_)
         co_return health_report{.status = service_health::down, .message = "mysql pool stopped"};
-    auto connection = co_await with_deadline(context.io, context.operation_deadline,
-        pool_.async_get_connection(context.cancellation), context.cancellation);
-    if (!connection)
-        co_return health_report{.status = service_health::down,
-            .message = "mysql connection unavailable",
-            .error = connection.error()};
-    auto pong = co_await with_deadline(context.io, context.operation_deadline,
-        ping_connection(connection->get(), context.cancellation), context.cancellation);
+    std::expected<void, std::error_code> pong;
+    if (pool_)
+    {
+        auto connection = co_await with_deadline(context.io,
+            context.operation_deadline, acquire(context.cancellation),
+            context.cancellation);
+        if (!connection)
+            co_return health_report{.status = service_health::down,
+                .message = "mysql connection unavailable",
+                .error = connection.error()};
+        pong = co_await with_deadline(context.io,
+            context.operation_deadline,
+            ping_connection(connection->get(), context.cancellation),
+            context.cancellation);
+    }
+    else
+    {
+        pong = co_await with_deadline(context.io, context.operation_deadline,
+            resume_on(context.io, starts_on(*event_loops_.front(),
+                probe_shard(*sharded_pool_, *event_loops_.front(),
+                    context.cancellation))),
+            context.cancellation);
+    }
     co_return health_report{
         .status = pong ? service_health::up : service_health::down,
         .message = pong ? "mysql PING succeeded" : "mysql PING failed",
@@ -201,9 +308,15 @@ auto auto_configure_mysql(const configured_service& configuration,
     if (options.username.empty() || options.database.empty())
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
-    auto service = std::make_shared<mysql_service>(context.io,
-        std::move(options), configuration.instance,
-        configuration.requirement, configuration.recovery);
+    std::shared_ptr<mysql_service> service;
+    if (context.event_loops.size() > 1)
+        service = std::make_shared<mysql_service>(context.io,
+            context.event_loops, std::move(options), configuration.instance,
+            configuration.requirement, configuration.recovery);
+    else
+        service = std::make_shared<mysql_service>(context.io,
+            std::move(options), configuration.instance,
+            configuration.requirement, configuration.recovery);
     return context.services.add_managed_named<mysql_service>(
         configuration.instance, std::move(service));
 }

@@ -69,7 +69,7 @@ public:
 
     [[nodiscard]] auto status_code() const noexcept -> int;
     [[nodiscard]] auto version() const noexcept -> http_version;
-    [[nodiscard]] auto headers() const noexcept -> const header_map&;
+    [[nodiscard]] auto headers() const -> const header_map&;
     [[nodiscard]] auto trailers() const noexcept -> const header_map&;
     [[nodiscard]] auto body() const noexcept -> std::string_view;
 
@@ -86,6 +86,11 @@ public:
     /// transient allocation for every response on a keep-alive connection.
     void serialize_to(std::string& output) const;
 
+    /// Append a complete response to existing caller-owned storage. This is
+    /// used by HTTP/1 pipelining to submit several ordered responses with one
+    /// kernel write while keeping serialize_to()'s replacement semantics.
+    void append_serialized_to(std::string& output) const;
+
     /// Install a fixed-width, server-generated IMF-fixdate without allocating
     /// a header-map value. A later explicit `set_header("Date", ...)` retains
     /// the normal response-builder override semantics.
@@ -94,10 +99,31 @@ public:
     [[nodiscard]] auto cached_date_header() const noexcept -> std::string_view;
 
 private:
+    static constexpr std::size_t common_header_count = 10;
+    struct common_header_value
+    {
+        std::string value;
+        bool present{};
+    };
+
+    [[nodiscard]] static auto common_header_slot(std::string_view key) noexcept
+        -> std::optional<std::size_t>;
+    [[nodiscard]] static auto common_header_name(std::size_t slot) noexcept
+        -> std::string_view;
+    void invalidate_headers_snapshot() noexcept;
+    void materialize_headers() const;
+    auto set_common_header(std::size_t slot, std::string_view value)
+        -> response&;
+    auto set_common_header_owned(std::size_t slot, std::string value)
+        -> response&;
+
     int status_code_ = 200;
     std::string status_msg_;
     http_version version_ = http_version::http_1_1;
     header_map headers_;
+    std::array<common_header_value, common_header_count> common_headers_{};
+    mutable header_map headers_snapshot_;
+    mutable bool headers_snapshot_valid_{};
     header_map trailers_;
     std::string body_;
     std::array<char, 29U> cached_date_header_{};

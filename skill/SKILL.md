@@ -24,7 +24,7 @@
 | 我想… | 看这个文件 |
 |-------|-----------|
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
-| 使用 Glaze-only JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
+| 使用模块化 JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
 | 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
 | 下载、发布和消费预构建 SDK | [distribution.md](infra/distribution.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
@@ -98,8 +98,13 @@
 | 我想… | 看这个文件 |
 |-------|-----------|
 | JWT 签发、验证、过期检查 | [security-jwt.md](security/security-jwt.md) |
+| 口令哈希、校验与升级策略 | [security-password.md](security/security-password.md) |
 
 ## CMake 协议开关
+
+所有协议开关默认关闭；只启用应用实际使用的协议。测试、benchmark、示例、C API 与
+Python Binding 也默认关闭。只有框架维护者的完整验证构建才显式设置
+`CNETMOD_ENABLE_ALL_PROTOCOLS=ON` 和相应的 `CNETMOD_BUILD_*` 开关。
 
 | 开关 | 协议 | 依赖 |
 |------|------|------|

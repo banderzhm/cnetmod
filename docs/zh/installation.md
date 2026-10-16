@@ -217,8 +217,12 @@ cmake --build build
 
 | 选项 | 默认值 | 描述 |
 |--------|---------|-------------|
-| `CNETMOD_BUILD_EXAMPLES` | `ON` | 构建示例程序 |
+| `CNETMOD_ENABLE_ALL_PROTOCOLS` | `OFF` | 将全部单协议开关的默认值设为 ON；普通应用应按需开启 |
+| `CNETMOD_BUILD_C_API` | `OFF` | 构建稳定 C ABI 库 |
+| `CNETMOD_BUILD_PYTHON_BINDINGS` | `OFF` | 构建 CPython 扩展 |
+| `CNETMOD_BUILD_EXAMPLES` | `OFF` | 构建示例程序 |
 | `CNETMOD_BUILD_TESTS` | `OFF` | 构建单元测试 |
+| `CNETMOD_BUILD_BENCH` | `OFF` | 构建性能基准 |
 | `CNETMOD_ENABLE_SSL` | `ON` | 启用 SSL/TLS 支持（需要 OpenSSL） |
 | `LIBCXX_MODULE_DIRS` | 自动检测 | 标准库模块路径 |
 | `LIBCXX_INCLUDE_DIRS` | 自动检测 | 标准库头文件路径 |

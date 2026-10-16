@@ -187,6 +187,10 @@ public:
         unsigned pool_threads = std::thread::hardware_concurrency(),
         thread_affinity_options affinity = {});
 
+    /// Uses an application-owned CPU pool instead of allocating a duplicate.
+    server_context(unsigned workers, thread_pool& pool,
+        thread_affinity_options affinity = {});
+
     ~server_context();
 
     // Non-copyable and non-movable
@@ -218,7 +222,7 @@ public:
     auto offload(io_context& return_to, F&& fn)
     {
         return detail::offload_impl(
-            pool_, return_to, std::decay_t<F>(std::forward<F>(fn)));
+            *pool_, return_to, std::decay_t<F>(std::forward<F>(fn)));
     }
 
     /// Spawn a coroutine on the next worker io_context (round-robin,
@@ -233,10 +237,13 @@ public:
     void stop();
 
 private:
+    void initialize_workers(unsigned worker_count);
+
     std::unique_ptr<io_context> accept_io_;
     std::vector<std::unique_ptr<io_context>> workers_;
     std::vector<std::jthread> threads_;
-    thread_pool pool_;
+    std::unique_ptr<thread_pool> owned_pool_;
+    thread_pool* pool_ = nullptr;
     thread_affinity_options affinity_;
     std::atomic<std::size_t> next_{0};
 };

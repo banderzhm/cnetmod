@@ -7,6 +7,8 @@ module;
 module cnetmod.protocol.openai;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
@@ -16,7 +18,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif
@@ -37,6 +39,15 @@ client::~client()
 auto client::connect(connect_options opts)
     -> task<std::expected<void, std::string>>
 {
+    cancel_token cancellation;
+    co_return co_await connect(std::move(opts), cancellation);
+}
+
+auto client::connect(connect_options opts, cancel_token& cancellation)
+    -> task<std::expected<void, std::string>>
+{
+    if (cancellation.is_cancelled())
+        co_return std::unexpected("connect cancelled");
     opts_ = std::move(opts);
 
     auto url_r = http::url::parse(opts_.api_base);
@@ -71,7 +82,8 @@ auto client::connect(connect_options opts)
     }
     sock_ = std::move(*sock_r);
 
-    auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, url_.port});
+    auto cr = co_await async_connect(ctx_, sock_,
+        endpoint{*addr_r, url_.port}, cancellation);
     if (!cr)
     {
         sock_.close();
@@ -108,7 +120,7 @@ auto client::connect(connect_options opts)
         ssl_->set_connect_state();
         ssl_->set_hostname(url_.host);
 
-        auto hs = co_await ssl_->async_handshake();
+        auto hs = co_await ssl_->async_handshake(cancellation);
         if (!hs)
         {
             sock_.close();
@@ -186,6 +198,10 @@ auto client::do_read_some() -> task<std::optional<std::string>>
     auto r = co_await do_read(mutable_buffer{buf.data(), buf.size()});
     if (!r || *r == 0)
     {
+        // A failed/EOF read makes a keep-alive exchange incomplete.  The
+        // native socket can still look open after a peer idle timeout, so it
+        // must never be returned to a model pool as reusable.
+        close();
         co_return std::nullopt;
     }
     co_return std::string(reinterpret_cast<const char*>(buf.data()), *r);
@@ -206,9 +222,15 @@ auto client::do_read_some(cancel_token& token)
         mutable_buffer{buf.data(), buf.size()}, token);
 #endif
     if (!read)
+    {
+        close();
         co_return std::unexpected(read.error());
+    }
     if (*read == 0)
+    {
+        close();
         co_return std::unexpected(make_error_code(errc::end_of_file));
+    }
     co_return std::string(reinterpret_cast<const char*>(buf.data()), *read);
 }
 

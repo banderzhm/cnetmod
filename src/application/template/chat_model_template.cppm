@@ -13,6 +13,7 @@ import cnetmod.ai;
 import cnetmod.application.chat_model_pool;
 import cnetmod.coro.striped_mutex;
 import cnetmod.coro.task;
+import cnetmod.io.io_context;
 
 namespace cnetmod::application {
 
@@ -54,8 +55,12 @@ export class chat_conversation;
  * exclusive lease until its complete response or stream terminal event. The
  * public contract depends only on cnetmod.ai, so provider adapters can target
  * OpenAI-compatible APIs, Claude, Gemini, or local inference runtimes.
+ *
+ * The template implements ai::chat_model, so provider-neutral decorators
+ * (routed, resilient and governed models) compose directly over managed,
+ * pooled and observed models.
  */
-export class chat_model_template
+export class chat_model_template : public ai::chat_model
 {
 public:
     /**
@@ -68,9 +73,9 @@ public:
     /**
      * @brief Invokes a pooled model with an explicit request.
      */
-    [[nodiscard]] auto invoke(ai::chat_request request,
-        ai::run_config configuration = {})
-        -> task<std::expected<ai::chat_response, std::string>>;
+    auto invoke(ai::chat_request request,
+        const ai::run_config& configuration = {})
+        -> task<std::expected<ai::chat_response, std::string>> override;
 
     /**
      * @brief Invokes a pooled model with configured defaults and user input.
@@ -82,10 +87,10 @@ public:
     /**
      * @brief Streams an explicit request while retaining its model lease.
      */
-    [[nodiscard]] auto stream(ai::chat_request request,
+    auto stream(ai::chat_request request,
         ai::chat_model::stream_handler handler,
-        ai::run_config configuration = {})
-        -> task<std::expected<ai::chat_response, std::string>>;
+        const ai::run_config& configuration = {})
+        -> task<std::expected<ai::chat_response, std::string>> override;
 
     /**
      * @brief Streams user input using configured request defaults.
@@ -103,10 +108,18 @@ public:
         chat_conversation_options options = {}) -> chat_conversation;
 
 private:
+    auto invoke_local(ai::chat_request request,
+        ai::run_config configuration)
+        -> task<std::expected<ai::chat_response, std::string>>;
+    auto stream_local(ai::chat_request request,
+        ai::chat_model::stream_handler handler,
+        ai::run_config configuration)
+        -> task<std::expected<ai::chat_response, std::string>>;
     [[nodiscard]] auto make_request(std::string input,
         std::vector<ai::message> history = {}) const -> ai::chat_request;
 
     chat_model_pool& models_;
+    io_context& event_loop_;
     chat_model_template_options options_;
     std::shared_ptr<striped_async_mutex<std::string>> session_gates_;
 

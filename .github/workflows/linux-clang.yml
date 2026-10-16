@@ -17,6 +17,8 @@ concurrency:
 env:
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+  # C++ module caches embed interface paths; bump this after module moves.
+  SCCACHE_C_CUSTOM_CACHE_BUSTER: "cnetmod-module-layout-v2"
 
 jobs:
   build-clang-linux:
@@ -36,7 +38,7 @@ jobs:
           --health-interval=10s
           --health-timeout=5s
           --health-retries=12
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -151,7 +153,7 @@ jobs:
           -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
-          -S ${{ github.workspace }}
+          -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON -DCNETMOD_ENABLE_ORM=ON -DCNETMOD_BUILD_C_API=ON -DCNETMOD_BUILD_PYTHON_BINDINGS=ON -S ${{ github.workspace }}
       env:
         CC: clang-${{ matrix.clang_version }}
         CXX: clang++-${{ matrix.clang_version }}
@@ -342,10 +344,10 @@ jobs:
       run: |
         echo "=== Running cnetmod_app ==="
         ${{ github.workspace }}/build/cnetmod_app || true
-        
+
         echo "=== Running timer_demo ==="
         timeout 5 ${{ github.workspace }}/build/examples/core/example_timer_demo || true
-        
+
         echo "=== Running channel_demo ==="
         ${{ github.workspace }}/build/examples/concurrency/example_channel_demo || true
 
@@ -369,4 +371,4 @@ jobs:
         echo "Build Type: ${{ matrix.build_type }}"
         echo "Compiler: /usr/bin/clang++-${{ matrix.clang_version }}"
         /usr/bin/clang++-${{ matrix.clang_version }} --version 2>&1 || echo "clang++ not found"
-        echo "=========================================" 
+        echo "========================================="

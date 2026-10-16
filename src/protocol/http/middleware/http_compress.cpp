@@ -8,9 +8,11 @@ module;
 module cnetmod.protocol.http.middleware.compress;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.semaphore;
 import cnetmod.instrumentation.metric;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod {
 namespace {

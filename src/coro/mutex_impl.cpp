@@ -46,6 +46,7 @@ auto async_mutex::lock_awaitable::await_suspend(
     std::coroutine_handle<> handle) noexcept -> std::coroutine_handle<>
 {
     node_.handle = handle;
+    node_.event_loop = io_context::current();
     node_.next = nullptr;
     auto_lock guard(mtx_.lock_);
     bool expected = false;
@@ -78,6 +79,7 @@ auto async_mutex::lock() noexcept -> lock_awaitable
 void async_mutex::unlock() noexcept
 {
     std::coroutine_handle<> handle;
+    io_context* event_loop = nullptr;
     {
         auto_lock guard(lock_);
         if (head_)
@@ -87,6 +89,7 @@ void async_mutex::unlock() noexcept
             if (!head_)
                 tail_ = nullptr;
             handle = waiter->handle;
+            event_loop = waiter->event_loop;
         }
         else
         {
@@ -94,7 +97,12 @@ void async_mutex::unlock() noexcept
         }
     }
     if (handle)
-        handle.resume();
+    {
+        if (event_loop && !event_loop->running_in_this_thread())
+            event_loop->post(handle);
+        else
+            handle.resume();
+    }
 }
 
 auto async_mutex::try_lock() noexcept -> bool

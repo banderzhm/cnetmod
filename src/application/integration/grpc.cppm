@@ -7,16 +7,17 @@ export module cnetmod.application.grpc;
 
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.application.auto_configuration;
 import cnetmod.application.configuration;
 import cnetmod.application.managed_service;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
-import cnetmod.observability;
+import cnetmod.observability.telemetry;
 import cnetmod.observability.grpc;
 import cnetmod.observability.grpc_server;
 import cnetmod.protocol.grpc;
-import cnetmod.protocol.http;
 
 namespace cnetmod::application {
 

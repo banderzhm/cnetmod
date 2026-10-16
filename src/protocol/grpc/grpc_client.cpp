@@ -5,10 +5,12 @@ module;
 module cnetmod.protocol.grpc.client;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.codec;

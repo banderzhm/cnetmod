@@ -158,7 +158,7 @@ public:
      * @brief Executes a routed read without opening a transaction.
      */
     template <class T, class Operation>
-    auto read(const shard_key& key, Operation&& operation)
+    auto read(const shard_key& key, Operation operation)
         -> task<std::expected<T, std::string>>
     {
         auto routed = route(key);
@@ -170,14 +170,14 @@ public:
             co_return std::unexpected(lease.error());
 
         session_type session{client_(*lease), routed->physical_table, dialect_};
-        co_return co_await std::forward<Operation>(operation)(session);
+        co_return co_await operation(session);
     }
 
     /**
      * @brief Executes a routed write in one shard-local transaction.
      */
     template <class T, class Operation>
-    auto write(const shard_key& key, Operation&& operation)
+    auto write(const shard_key& key, Operation operation)
         -> task<std::expected<T, std::string>>
     {
         auto routed = route(key);

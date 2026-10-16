@@ -6,8 +6,32 @@ namespace cnetmod::application {
 
 rest_template::rest_template(io_context& io,
     observability::telemetry_hub& telemetry, rest_template_options options)
-    : clients_(io, std::move(options.client), options.max_idle), telemetry_(telemetry), default_headers_(std::move(options.default_headers))
+    : telemetry_(telemetry), default_headers_(std::move(options.default_headers))
 {
+    client_shards_.push_back(client_pool_shard{
+        .io = &io,
+        .clients = std::make_unique<http::client_pool>(
+            io, std::move(options.client), options.max_idle),
+    });
+}
+
+rest_template::rest_template(std::span<io_context* const> event_loops,
+    observability::telemetry_hub& telemetry, rest_template_options options)
+    : telemetry_(telemetry), default_headers_(std::move(options.default_headers))
+{
+    if (event_loops.empty())
+        throw std::invalid_argument{"rest_template requires an event loop"};
+    client_shards_.reserve(event_loops.size());
+    for (auto* io : event_loops)
+    {
+        if (io == nullptr)
+            throw std::invalid_argument{"rest_template event loop is null"};
+        client_shards_.push_back(client_pool_shard{
+            .io = io,
+            .clients = std::make_unique<http::client_pool>(
+                *io, options.client, options.max_idle),
+        });
+    }
 }
 
 rest_template::rest_template(io_context& io,
@@ -122,19 +146,34 @@ auto rest_template::remove(std::string_view url,
 
 void rest_template::clear() noexcept
 {
-    clients_.clear();
+    for (auto& shard : client_shards_)
+        shard.clients->clear();
 }
 
 auto rest_template::idle_count() const noexcept -> std::size_t
 {
-    return clients_.idle_count();
+    std::size_t total = 0;
+    for (const auto& shard : client_shards_)
+        total += shard.clients->idle_count();
+    return total;
+}
+
+auto rest_template::clients() noexcept -> http::client_pool&
+{
+    auto* current = io_context::current();
+    if (current)
+        for (auto& shard : client_shards_)
+            if (shard.io == current)
+                return *shard.clients;
+    return *client_shards_.front().clients;
 }
 
 auto rest_template::exchange_impl(const http::request& request,
     const http::tracing::trace_context& parent, cancel_token* cancellation)
     -> task<std::expected<http::response, std::error_code>>
 {
-    auto client = clients_.acquire();
+    auto& pool = clients();
+    auto client = pool.acquire();
     auto outgoing = request;
     for (const auto& [name, value] : default_headers_)
     {
@@ -147,7 +186,7 @@ auto rest_template::exchange_impl(const http::request& request,
         ? co_await observed.send(outgoing, parent, *cancellation)
         : co_await observed.send(outgoing, parent);
     if (response)
-        clients_.release(std::move(client));
+        pool.release(std::move(client));
     else
         client->close();
     co_return response;

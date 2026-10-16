@@ -3,9 +3,10 @@
  * @brief Cache storage abstract interface — lightweight module, no concrete backend dependencies
  *
  * Extracted from cache.cppm, contains only cache_store abstract base class.
- * Modules that need cache interface but not memory_cache/redis_cache implementations
- * (like ip_firewall) can import only this module, avoiding transitive inclusion of
- * cnetmod.protocol.redis and other heavyweight dependencies, preventing MSVC C1605.
+ * Modules that need only the cache contract (like ip_firewall) can import this
+ * module without selecting a backend. memory_cache remains the HTTP-local
+ * backend; the Redis-backed adapter is an independent integration component
+ * and never becomes a transitive dependency of HTTP.
  *
  * Usage example:
  *   import cnetmod.protocol.http.middleware.cache_store;

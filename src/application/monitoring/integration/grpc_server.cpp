@@ -2,10 +2,11 @@ module cnetmod.observability.grpc_server;
 
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.instrumentation.operation_scope;
 import cnetmod.instrumentation.operation_result;
 import cnetmod.coro.task;
-import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.tracing;
 
 namespace cnetmod::observability {

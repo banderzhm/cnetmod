@@ -225,8 +225,21 @@ void spawn_on(io_context& target, task<void> task)
 
 server_context::server_context(unsigned worker_count, unsigned pool_threads,
     thread_affinity_options affinity)
-    : pool_(pool_threads == 0 ? 1 : pool_threads),
-      affinity_(std::move(affinity))
+    : owned_pool_(std::make_unique<thread_pool>(
+          pool_threads == 0 ? 1 : pool_threads)),
+      pool_(owned_pool_.get()), affinity_(std::move(affinity))
+{
+    initialize_workers(worker_count);
+}
+
+server_context::server_context(unsigned worker_count, thread_pool& pool,
+    thread_affinity_options affinity)
+    : pool_(&pool), affinity_(std::move(affinity))
+{
+    initialize_workers(worker_count);
+}
+
+void server_context::initialize_workers(unsigned worker_count)
 {
     worker_count = std::max(worker_count, 1U);
     accept_io_ = make_io_context();
@@ -268,7 +281,7 @@ auto server_context::worker_ios() -> std::vector<io_context*>
 
 auto server_context::pool() noexcept -> thread_pool&
 {
-    return pool_;
+    return *pool_;
 }
 
 void server_context::spawn_next(task<void> t)
@@ -308,7 +321,8 @@ void server_context::stop()
         accept_io_->stop();
     for (const auto& worker : workers_)
         worker->stop();
-    pool_.request_stop();
+    if (owned_pool_)
+        owned_pool_->request_stop();
 }
 
 } // namespace cnetmod

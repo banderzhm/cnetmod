@@ -224,7 +224,8 @@ int main()
         {
             ctx.json(http::status::ok, std::format(R"({{"message":"Hello from multi-core cnetmod!","thread":"{}"}})", std::this_thread::get_id()));
             co_return;
-        });
+        },
+        http::endpoint_metadata{http::allow_anonymous{}});
 
     // GET /api/users/:id
     router.get("/api/users/:id", [](http::request_context& ctx) -> cn::task<void>
@@ -232,10 +233,12 @@ int main()
             auto id = ctx.param("id");
             ctx.json(http::status::ok, std::format(R"({{"id":{},"name":"User_{}","thread":"{}"}})", id, id, std::this_thread::get_id()));
             co_return;
-        });
+        },
+        http::endpoint_metadata{http::allow_anonymous{}});
 
     // GET /compute/:n - CPU ( pool)
-    router.get("/compute/:n", handle_compute(sctx));
+    router.get("/compute/:n", handle_compute(sctx),
+        http::endpoint_metadata{http::allow_anonymous{}});
 
     // GET /api/secret - JWT protectroute
     router.get("/api/secret", [](http::request_context& ctx) -> cn::task<void>
@@ -261,12 +264,13 @@ int main()
     srv.use(cn::request_id());
     srv.use(cn::body_limit(2 * 1024 * 1024));                   // 2MB
     srv.use(cn::rate_limiter({.rate = 100.0, .burst = 200.0})); // Rate limiting
+    // Public routes declare http::allow_anonymous where they are registered;
+    // every other route requires a valid token.
     srv.use(cn::jwt_auth({
         .verify = [](std::string_view token)
         {
             return token == "demo-secret";
         },
-        .skip_paths = {"/", "/api/users", "/compute"},
     }));
     srv.set_router(std::move(router));
 

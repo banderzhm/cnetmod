@@ -21,7 +21,9 @@
 export module cnetmod.protocol.http.middleware.cors;
 
 import std;
+
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod {
 

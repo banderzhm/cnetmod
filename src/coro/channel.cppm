@@ -5,6 +5,7 @@ module;
 export module cnetmod.coro.channel;
 
 import std;
+import cnetmod.io.io_context;
 
 namespace cnetmod {
 
@@ -118,8 +119,20 @@ class channel
     struct waiter_node
     {
         std::coroutine_handle<> handle{};
+        io_context* event_loop = nullptr;
         waiter_node* next = nullptr;
     };
+
+    static void resume_waiter(waiter_node* waiter) noexcept
+    {
+        if (!waiter || !waiter->handle)
+            return;
+        if (waiter->event_loop &&
+            !waiter->event_loop->running_in_this_thread())
+            waiter->event_loop->post(waiter->handle);
+        else
+            waiter->handle.resume();
+    }
 
     struct send_node : waiter_node
     {
@@ -231,7 +244,7 @@ public:
 
         auto await_ready() noexcept -> bool
         {
-            std::coroutine_handle<> to_resume;
+            waiter_node* to_resume = nullptr;
             {
                 auto_lock g(ch_.lock_);
                 if (ch_.closed_)
@@ -244,7 +257,7 @@ public:
                     auto* w = static_cast<recv_node*>(ch_.recv_head_);
                     *w->slot = std::move(node_.value);
                     dequeue(ch_.recv_head_, ch_.recv_tail_);
-                    to_resume = w->handle;
+                    to_resume = w;
                     node_.succeeded = true;
                 }
                 // Fast path 2: buffer has space
@@ -259,8 +272,7 @@ public:
                     return false;
                 }
             }
-            if (to_resume)
-                to_resume.resume();
+            resume_waiter(to_resume);
             return true;
         }
 
@@ -272,6 +284,7 @@ public:
             if (ch_.closed_)
                 return h; // resume self immediately
             node_.handle = h;
+            node_.event_loop = io_context::current();
             enqueue(ch_.send_head_, ch_.send_tail_, &node_);
             return std::noop_coroutine(); // stay suspended
         }
@@ -300,7 +313,7 @@ public:
 
         auto await_ready() noexcept -> bool
         {
-            std::coroutine_handle<> to_resume;
+            waiter_node* to_resume = nullptr;
             {
                 auto_lock g(ch_.lock_);
 
@@ -315,7 +328,7 @@ public:
                         ch_.buf_push(std::move(w->value));
                         dequeue(ch_.send_head_, ch_.send_tail_);
                         w->succeeded = true;
-                        to_resume = w->handle;
+                        to_resume = w;
                     }
                 }
                 // Fast path 2: buffer empty but sender waiting → direct handoff
@@ -325,7 +338,7 @@ public:
                     result_.emplace(std::move(w->value));
                     dequeue(ch_.send_head_, ch_.send_tail_);
                     w->succeeded = true;
-                    to_resume = w->handle;
+                    to_resume = w;
                 }
                 // Closed and no data → nullopt
                 else if (ch_.closed_)
@@ -338,8 +351,7 @@ public:
                     return false;
                 }
             }
-            if (to_resume)
-                to_resume.resume();
+            resume_waiter(to_resume);
             return true;
         }
 
@@ -351,6 +363,7 @@ public:
             if (ch_.closed_)
                 return h; // resume self, result_ is nullopt
             node_.handle = h;
+            node_.event_loop = io_context::current();
             node_.slot = &result_;
             enqueue(ch_.recv_head_, ch_.recv_tail_, &node_);
             return std::noop_coroutine();
@@ -375,7 +388,7 @@ public:
     /// Non-blocking send — returns false when the channel is closed or full.
     auto try_send(T value) -> bool
     {
-        std::coroutine_handle<> to_resume;
+        waiter_node* to_resume = nullptr;
         bool succeeded = false;
         {
             auto_lock g(lock_);
@@ -387,7 +400,7 @@ public:
                 auto* w = static_cast<recv_node*>(recv_head_);
                 *w->slot = std::move(value);
                 dequeue(recv_head_, recv_tail_);
-                to_resume = w->handle;
+                to_resume = w;
                 succeeded = true;
             }
             else if (capacity_ > 0 && !buf_full())
@@ -396,8 +409,7 @@ public:
                 succeeded = true;
             }
         }
-        if (to_resume)
-            to_resume.resume();
+        resume_waiter(to_resume);
         return succeeded;
     }
 
@@ -406,7 +418,7 @@ public:
     /// safely fall back to the suspending send path when the channel is full.
     auto try_send_move(T& value) -> bool
     {
-        std::coroutine_handle<> to_resume;
+        waiter_node* to_resume = nullptr;
         bool succeeded = false;
         {
             auto_lock g(lock_);
@@ -418,7 +430,7 @@ public:
                 auto* w = static_cast<recv_node*>(recv_head_);
                 *w->slot = std::move(value);
                 dequeue(recv_head_, recv_tail_);
-                to_resume = w->handle;
+                to_resume = w;
                 succeeded = true;
             }
             else if (capacity_ > 0 && !buf_full())
@@ -427,8 +439,7 @@ public:
                 succeeded = true;
             }
         }
-        if (to_resume)
-            to_resume.resume();
+        resume_waiter(to_resume);
         return succeeded;
     }
 
@@ -437,8 +448,8 @@ public:
     /// number of values accepted before the channel became full or closed.
     auto try_send_many_move(std::span<T*> values) -> std::size_t
     {
-        std::coroutine_handle<> first_to_resume;
-        std::vector<std::coroutine_handle<>> extra_to_resume;
+        waiter_node* first_to_resume = nullptr;
+        std::vector<waiter_node*> extra_to_resume;
         std::size_t sent = 0;
         {
             auto_lock g(lock_);
@@ -452,11 +463,11 @@ public:
                 dequeue(recv_head_, recv_tail_);
                 if (!first_to_resume)
                 {
-                    first_to_resume = w->handle;
+                    first_to_resume = w;
                 }
                 else
                 {
-                    extra_to_resume.push_back(w->handle);
+                    extra_to_resume.push_back(w);
                 }
                 ++sent;
             }
@@ -467,13 +478,9 @@ public:
                 ++sent;
             }
         }
-        if (first_to_resume)
-            first_to_resume.resume();
-        for (auto h : extra_to_resume)
-        {
-            if (h)
-                h.resume();
-        }
+        resume_waiter(first_to_resume);
+        for (auto* waiter : extra_to_resume)
+            resume_waiter(waiter);
         return sent;
     }
 
@@ -486,7 +493,7 @@ public:
     /// Non-blocking try_receive — returns nullopt immediately if no data available
     auto try_receive() noexcept -> std::optional<T>
     {
-        std::coroutine_handle<> to_resume;
+        waiter_node* to_resume = nullptr;
         std::optional<T> result;
         {
             auto_lock g(lock_);
@@ -502,7 +509,7 @@ public:
                     buf_push(std::move(w->value));
                     dequeue(send_head_, send_tail_);
                     w->succeeded = true;
-                    to_resume = w->handle;
+                    to_resume = w;
                 }
             }
             // Fast path 2: buffer empty but sender waiting → direct handoff
@@ -512,12 +519,11 @@ public:
                 result.emplace(std::move(w->value));
                 dequeue(send_head_, send_tail_);
                 w->succeeded = true;
-                to_resume = w->handle;
+                to_resume = w;
             }
             // No data available — return immediately
         }
-        if (to_resume)
-            to_resume.resume();
+        resume_waiter(to_resume);
         return result;
     }
 
@@ -527,7 +533,7 @@ public:
     /// opportunistic batching without pulling producers into the consumer's loop.
     auto try_receive_buffered_refill() noexcept -> std::optional<T>
     {
-        std::coroutine_handle<> to_resume;
+        waiter_node* to_resume = nullptr;
         std::optional<T> result;
         {
             auto_lock g(lock_);
@@ -541,12 +547,11 @@ public:
                     buf_push(std::move(w->value));
                     dequeue(send_head_, send_tail_);
                     w->succeeded = true;
-                    to_resume = w->handle;
+                    to_resume = w;
                 }
             }
         }
-        if (to_resume)
-            to_resume.resume();
+        resume_waiter(to_resume);
         return result;
     }
 
@@ -557,7 +562,7 @@ public:
     /// amplification in high-pressure writer actors.
     auto try_receive_many(std::vector<T>& out, std::size_t max_items) -> std::size_t
     {
-        std::vector<std::coroutine_handle<>> to_resume;
+        std::vector<waiter_node*> to_resume;
         std::size_t received = 0;
         {
             auto_lock g(lock_);
@@ -575,14 +580,11 @@ public:
                 buf_push(std::move(w->value));
                 dequeue(send_head_, send_tail_);
                 w->succeeded = true;
-                to_resume.push_back(w->handle);
+                to_resume.push_back(w);
             }
         }
-        for (auto h : to_resume)
-        {
-            if (h)
-                h.resume();
-        }
+        for (auto* waiter : to_resume)
+            resume_waiter(waiter);
         return received;
     }
 
@@ -606,16 +608,14 @@ public:
         for (auto* n = sends; n;)
         {
             auto* nx = n->next;
-            if (n->handle)
-                n->handle.resume();
+            resume_waiter(n);
             n = nx;
         }
         // Resume all receivers (result_ stays nullopt)
         for (auto* n = recvs; n;)
         {
             auto* nx = n->next;
-            if (n->handle)
-                n->handle.resume();
+            resume_waiter(n);
             n = nx;
         }
     }

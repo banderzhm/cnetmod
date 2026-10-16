@@ -54,7 +54,7 @@ TEST(application_validates_connector_ports_before_narrowing)
             auto host = build(port);
             ASSERT_FALSE(host.has_value());
             if (!host)
-                ASSERT_EQ(host.error(), std::make_error_code(std::errc::invalid_argument));
+                ASSERT_EQ(host.error().code, std::make_error_code(std::errc::invalid_argument));
         }
         for (const auto port : {1, 65535})
             ASSERT_TRUE(build(port).has_value());

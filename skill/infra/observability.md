@@ -2,15 +2,24 @@
 
 > 通过一个 Telemetry Hub 低侵入地统一 Trace、Metric、Log、W3C 上下文传播和有界 OTLP/HTTP 导出。
 
-**import**: `import cnetmod.observability;`
+**import**: `import cnetmod.observability;`（兼容总入口）或仅使用 Hub 时
+`import cnetmod.observability.telemetry;`
 
-**源码**: `src/application/monitoring/telemetry.cppm`、`src/application/monitoring/otlp/otlp_http_exporter.cppm`、`src/application/monitoring/integration/http_client.cppm`
+**源码**: `src/application/monitoring/observability.cppm`、
+`src/application/monitoring/telemetry.cppm`、
+`src/application/monitoring/otlp/otlp_http_exporter.cppm`、
+`src/application/monitoring/integration/http_client.cppm`
 
 监控源码统一归属 `src/application/monitoring/`：`core/` 放协议无关的上下文、
 操作结果和指标契约，`otlp/` 放编码与投递，`integration/` 放协议观测适配器。
 目录归属不改变模块依赖方向：协议只依赖中立契约，不导入 Application Host 或 OTLP。
 模块名保留 `cnetmod.instrumentation.*` / `cnetmod.observability.*`，避免目录整理
 同时改变调用方 API。HTTP 关闭时 CMake 仍编译 `monitoring/core/`。
+`cnetmod.observability` 继续导出 telemetry 与 messaging，保持既有调用方兼容；
+框架内部只导入 `cnetmod.observability.telemetry`，避免生命周期和配置模块因使用
+`telemetry_hub` 而连带依赖 Kafka、MQTT、AMQP 与 WebSocket。需要消息上下文传播时
+应显式导入 `cnetmod.observability.messaging`。
+`tools/check_observability_dependencies.py` 会拒绝 Application 内部重新导入兼容总入口。
 
 ## 核心原则
 

@@ -231,7 +231,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     const std::vector<std::pair<std::string, orm::param_value>> filters{
         {"id", orm::param_value::from_int(1)}};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description");
+    query.select(&routed_order::id, &routed_order::description);
     (void)co_await mapper.update_batch(immutable, 1);
     (void)co_await mapper.save_or_update(models[0]);
     (void)co_await mapper.save_or_update_batch(std::span{models}, 1);
@@ -250,7 +250,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     orm::mapper<routed_order, decltype(session)> orders{session};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description");
+    query.select(&routed_order::id, &routed_order::description);
     std::array models{routed_order{1, "one"}, routed_order{2, "two"}};
     (void)co_await orders.exists(query);
     (void)co_await orders.select_by_ids(std::span<const std::int64_t>{ids});
@@ -284,7 +284,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     orm::repository<routed_order, gateway_type> orders{gateway};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description");
+    query.select(&routed_order::id, &routed_order::description);
     std::array filters{std::pair<std::string, orm::param_value>{
         "id", orm::param_value::from_int(1)}};
     (void)co_await orders.list_by_ids(std::span<const std::int64_t>{ids});
@@ -456,7 +456,8 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
         std::make_error_code(std::errc::invalid_argument));
 
     orm::query_wrapper<routed_order> projection;
-    projection.select("id", "description").order_by_asc("id");
+    projection.select(&routed_order::id, &routed_order::description)
+        .order_by_asc(&routed_order::id);
     client.response = routed_order_result({{7, "selected"}, {9, "next"}});
     auto maps = cnetmod::sync_wait(orders.select_maps(projection));
     ASSERT_TRUE(maps.ok());
@@ -465,7 +466,7 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
     ASSERT_EQ(maps.data[1].at("description").get_string(), "next");
 
     orm::query_wrapper<routed_order> ids;
-    ids.select("id").order_by_asc("id");
+    ids.select(&routed_order::id).order_by_asc(&routed_order::id);
     auto objects = cnetmod::sync_wait(orders.select_objects(ids));
     ASSERT_TRUE(objects.ok());
     ASSERT_EQ(objects.data.size(), 2U);
@@ -485,7 +486,8 @@ TEST(orm_projection_page_keeps_count_and_page_query_diagnostics)
         routed_order_result({{3, "third"}}));
 
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description").order_by_asc("id");
+    query.select(&routed_order::id, &routed_order::description)
+        .order_by_asc(&routed_order::id);
     auto page = cnetmod::sync_wait(
         orders.select_maps_page(2, 2, query));
     ASSERT_TRUE(page.ok());
@@ -920,6 +922,52 @@ TEST(orm_repository_transaction_shares_one_session_across_mappers)
     ASSERT_EQ(client.statements.size(), 4U);
 }
 
+TEST(orm_repository_void_transaction_shares_one_session_across_mappers)
+{
+    recording_session_client client;
+    using gateway_type = orm::session_gateway<recording_session_client,
+        std::monostate>;
+    gateway_type gateway{
+        orm::sql_dialect::mysql,
+        []() -> cnetmod::task<std::expected<void, std::string>>
+        {
+            co_return std::expected<void, std::string>{};
+        },
+        []() -> cnetmod::task<std::expected<std::monostate, std::string>>
+        {
+            co_return std::monostate{};
+        },
+        [&client](std::monostate&) -> recording_session_client&
+        {
+            return client;
+        }};
+
+    client.responses.push_back(routed_order_result({{7, "stored"}}));
+    client.responses.push_back({});
+    orm::repository<routed_order, gateway_type> orders{gateway};
+    auto pending = orders.transaction<void>(
+        [description = std::string{"created"}](auto& unit) mutable
+            -> cnetmod::task<std::expected<void, std::string>>
+        {
+            auto mapper = unit.template mapper<routed_order>();
+            auto loaded = co_await mapper.select_by_id(
+                orm::param_value::from_int(7));
+            if (loaded.is_err())
+                co_return std::unexpected(loaded.error_msg);
+            routed_order copy{8, std::move(description)};
+            auto inserted = co_await mapper.insert(copy);
+            if (inserted.is_err())
+                co_return std::unexpected(inserted.error_msg);
+            co_return std::expected<void, std::string>{};
+        });
+    auto result = cnetmod::sync_wait(std::move(pending));
+
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(client.statements.front(), "START TRANSACTION");
+    ASSERT_EQ(client.statements.back(), "COMMIT");
+    ASSERT_EQ(client.statements.size(), 4U);
+}
+
 TEST(orm_repository_executes_xml_statements_through_the_same_gateway)
 {
     recording_session_client client;
@@ -1220,7 +1268,8 @@ TEST(orm_projection_stream_honors_backpressure_cancellation_and_deadline)
     orm::database_session session{client, orm::sql_dialect::mysql};
     orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description").order_by_asc("id");
+    query.select(&routed_order::id, &routed_order::description)
+        .order_by_asc(&routed_order::id);
     cnetmod::cancel_token cancellation;
     std::size_t seen{};
     auto result = cnetmod::sync_wait(orders.for_each_map(query, [&seen, &cancellation](const orm::projection_row&) -> cnetmod::task<std::expected<void, std::string>>

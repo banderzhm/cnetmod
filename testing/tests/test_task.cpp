@@ -6,6 +6,7 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
 import cnetmod.coro.bridge;
+import cnetmod.coro.mutex;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.executor.scheduler;
@@ -81,10 +82,57 @@ static auto completes_after_external_resume() -> task<int>
     co_return 7;
 }
 
+static auto fails_after_external_resume() -> task<int>
+{
+    co_await delayed_resume_awaitable{};
+    throw std::runtime_error("external failure");
+    co_return 0;
+}
+
+static auto records_resume_on_continuation(io_context& context,
+    std::thread::id& continuation_thread) -> task<int>
+{
+    const auto result = co_await resume_on(
+        context, completes_after_external_resume());
+    continuation_thread = std::this_thread::get_id();
+    co_return result;
+}
+
+static auto catches_resume_on_failure(io_context& context,
+    std::thread::id& catch_thread) -> task<void>
+{
+    try
+    {
+        (void)co_await resume_on(context, fails_after_external_resume());
+    }
+    catch (const std::runtime_error&)
+    {
+        catch_thread = std::this_thread::get_id();
+    }
+}
+
 static auto records_execution_thread(std::thread::id& execution_thread) -> task<int>
 {
     execution_thread = std::this_thread::get_id();
     co_return 9;
+}
+
+static auto records_current_context(io_context*& current) -> task<void>
+{
+    current = io_context::current();
+    co_return;
+}
+
+static auto completes_on(io_context& context) -> task<int>
+{
+    co_await post_awaitable{context};
+    co_return 17;
+}
+
+static auto throws_on(io_context& context) -> task<int>
+{
+    co_await post_awaitable{context};
+    throw std::runtime_error{"resume failure"};
 }
 
 static auto schedules_on(io_scheduler scheduler,
@@ -127,6 +175,21 @@ TEST(task_int_basic)
 {
     auto result = sync_wait(return_42());
     ASSERT_EQ(result, 42);
+}
+
+TEST(task_coroutine_frames_are_cache_line_aligned)
+{
+    std::vector<task<int>> tasks;
+    tasks.reserve(256);
+    for (int index{}; index < 256; ++index)
+        tasks.push_back(return_42());
+
+    for (const auto& operation : tasks)
+    {
+        const auto address = reinterpret_cast<std::uintptr_t>(
+            operation.handle().address());
+        ASSERT_EQ(address % 64U, 0U);
+    }
 }
 
 TEST(task_string_basic)
@@ -200,6 +263,76 @@ TEST(starts_on_starts_task_on_target_io_context)
     runner.join();
     ASSERT_EQ(result, 9);
     ASSERT_EQ(execution_thread, context_thread);
+}
+
+TEST(io_context_current_tracks_the_dispatching_loop)
+{
+    ASSERT_TRUE(io_context::current() == nullptr);
+    auto context = make_io_context();
+    io_context* observed = nullptr;
+    std::thread runner{[&] { context->run(); }};
+
+    sync_wait(starts_on(*context, records_current_context(observed)));
+
+    context->stop();
+    runner.join();
+    ASSERT_TRUE(observed == context.get());
+    ASSERT_TRUE(io_context::current() == nullptr);
+}
+
+TEST(resume_on_returns_values_and_exceptions_to_target_context)
+{
+    auto source = make_io_context();
+    auto target = make_io_context();
+    std::jthread source_thread{[&] { source->run(); }};
+    std::jthread target_thread{[&] { target->run(); }};
+
+    int result = 0;
+    io_context* value_context = nullptr;
+    io_context* error_context = nullptr;
+    auto verify = [&]() -> task<void>
+    {
+        result = co_await resume_on(*target, completes_on(*source));
+        value_context = io_context::current();
+        try
+        {
+            (void)co_await resume_on(*target, throws_on(*source));
+        }
+        catch (const std::runtime_error&)
+        {
+            error_context = io_context::current();
+        }
+    };
+    sync_wait(verify());
+
+    source->stop();
+    target->stop();
+    ASSERT_EQ(result, 17);
+    ASSERT_TRUE(value_context == target.get());
+    ASSERT_TRUE(error_context == target.get());
+}
+
+TEST(resume_on_restores_success_and_failure_to_target_io_context)
+{
+    auto context = make_io_context();
+    std::thread::id context_thread;
+    std::thread runner{[&]
+        {
+            context_thread = std::this_thread::get_id();
+            context->run();
+        }};
+
+    std::thread::id continuation_thread;
+    ASSERT_EQ(sync_wait(records_resume_on_continuation(
+                  *context, continuation_thread)),
+        7);
+    std::thread::id catch_thread;
+    sync_wait(catches_resume_on_failure(*context, catch_thread));
+
+    context->stop();
+    runner.join();
+    ASSERT_EQ(continuation_thread, context_thread);
+    ASSERT_EQ(catch_thread, context_thread);
 }
 
 TEST(io_scheduler_schedule_resumes_on_target_io_context)
@@ -479,6 +612,32 @@ TEST(raw_post_node_ownership_is_captured_before_callback)
     io->poll();
     ASSERT_TRUE(node.heap_owned);
     node.heap_owned = false;
+}
+
+TEST(async_mutex_resumes_waiter_on_its_event_loop)
+{
+    auto io = make_io_context();
+    async_mutex mutex;
+    ASSERT_TRUE(mutex.try_lock());
+    std::atomic<bool> waiting{false};
+    std::atomic<bool> resumed_on_owner{false};
+
+    auto waiter = [&]() -> task<void>
+    {
+        waiting.store(true, std::memory_order_release);
+        co_await mutex.lock();
+        resumed_on_owner.store(io_context::current() == io.get(),
+            std::memory_order_release);
+        mutex.unlock();
+        io->stop();
+    };
+    spawn(*io, waiter());
+    std::jthread runner([&] { io->run(); });
+    while (!waiting.load(std::memory_order_acquire))
+        std::this_thread::yield();
+    mutex.unlock();
+    runner.join();
+    ASSERT_TRUE(resumed_on_owner.load(std::memory_order_acquire));
 }
 
 RUN_TESTS()

@@ -74,7 +74,14 @@ foreach(bench_name ${BENCH_TARGETS})
     elseif(bench_name STREQUAL "bench_http_disabled")
         target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_DISABLED_ONLY=1)
     endif()
-    target_link_libraries(${bench_name} PRIVATE cnetmod_core)
+    if(bench_name STREQUAL "crosslang_cnetmod_server")
+        # The cross-language server exercises the HTTP stack directly. Keep
+        # Application, ORM and unrelated protocols out of the benchmark binary
+        # so allocator and transport measurements are not configuration-bound.
+        target_link_libraries(${bench_name} PRIVATE cnetmod_http)
+    else()
+        target_link_libraries(${bench_name} PRIVATE cnetmod_core)
+    endif()
     cnetmod_deploy_mimalloc_runtime(${bench_name})
     target_include_directories(${bench_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set_property(TARGET ${bench_name} PROPERTY

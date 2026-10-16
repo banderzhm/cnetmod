@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reject reverse named-module dependencies into application/OTEL adapters.
+"""Reject forbidden or needlessly broad named-module dependencies.
 
 This source-level guard conservatively includes all preprocessor branches and
 implementation units. It is not a C++ preprocessor, header dependency scanner,
@@ -23,6 +23,15 @@ LOWER_LAYERS = (
     'cnetmod.coro', 'cnetmod.io', 'cnetmod.executor', 'cnetmod.instrumentation',
 )
 UPPER_LAYERS = ('cnetmod.observability', 'cnetmod.application')
+OBSERVABILITY_UMBRELLA = 'cnetmod.observability'
+OPENAI_PRIMARY = 'cnetmod.protocol.openai'
+OPENAI_MODEL_UMBRELLA = 'cnetmod.protocol.openai:model'
+OPENAI_RUN_ONLY_PARTITIONS = {
+    f'{OPENAI_PRIMARY}:{name}' for name in (
+        'agentic', 'ingestion', 'loaders', 'methods', 'planners',
+        'skills', 'structured', 'tools',
+    )
+}
 
 
 def belongs_to(module, roots):
@@ -77,6 +86,20 @@ def violations(graph):
     return failures
 
 
+def broad_observability_imports(graph):
+    """Reject Application internals that pull every observability adapter."""
+    return sorted(owner for owner, imports in graph.items()
+                  if belongs_to(owner, ('cnetmod.application',))
+                  and OBSERVABILITY_UMBRELLA in imports)
+
+
+def broad_openai_model_imports(graph):
+    """Keep model contracts out of lifecycle-only OpenAI units."""
+    return sorted(owner for owner, imports in graph.items()
+                  if owner in OPENAI_RUN_ONLY_PARTITIONS
+                  and OPENAI_MODEL_UMBRELLA in imports)
+
+
 def main():
     root = Path(__file__).resolve().parent.parent / 'src'
     try:
@@ -87,9 +110,19 @@ def main():
     failures = violations(graph)
     for chain in failures:
         print('Forbidden module dependency: ' + ' -> '.join(chain), file=sys.stderr)
-    if failures:
+    broad_imports = broad_observability_imports(graph)
+    for owner in broad_imports:
+        print(f'Broad observability import: {owner} -> '
+              f'{OBSERVABILITY_UMBRELLA}; import the required narrow module',
+              file=sys.stderr)
+    broad_model_imports = broad_openai_model_imports(graph)
+    for owner in broad_model_imports:
+        print(f'Broad OpenAI model import: {owner} -> '
+              f'{OPENAI_MODEL_UMBRELLA}; import the required narrow partition',
+              file=sys.stderr)
+    if failures or broad_imports or broad_model_imports:
         return 1
-    print(f'Checked {len(graph)} named modules: no reverse application/OTEL dependencies.')
+    print(f'Checked {len(graph)} named modules: architecture boundaries are valid.')
     return 0
 
 

@@ -11,7 +11,7 @@ import cnetmod.coro.task;
 import :foundation;
 import :tool_contracts;
 import :messages;
-import :model;
+import :run;
 import cnetmod.json;
 
 namespace cnetmod::openai {

@@ -87,6 +87,75 @@ namespace {
             received.erase(received.begin());
     }
 
+    auto queue_crypto_frames(std::span<const std::byte> data,
+        std::uint64_t& next_offset, std::size_t maximum_encoded_size,
+        std::deque<std::vector<std::byte>>& destination) -> bool
+    {
+        auto candidate_offset = next_offset;
+        std::deque<std::vector<std::byte>> candidates;
+        std::size_t position{};
+        while (position < data.size())
+        {
+            const auto remaining = data.size() - position;
+            const auto offset_size = static_cast<std::size_t>(varint_size(candidate_offset));
+            if (maximum_encoded_size <= 1U + offset_size + 1U)
+                return false;
+
+            auto chunk_size = std::min(remaining,
+                maximum_encoded_size - 1U - offset_size - 1U);
+            while (chunk_size != 0U)
+            {
+                const auto encoded_size = 1U + offset_size +
+                    static_cast<std::size_t>(varint_size(chunk_size)) + chunk_size;
+                if (encoded_size <= maximum_encoded_size)
+                    break;
+                chunk_size = maximum_encoded_size - 1U - offset_size -
+                    static_cast<std::size_t>(varint_size(chunk_size));
+            }
+            if (chunk_size == 0U)
+                return false;
+
+            const auto chunk = data.subspan(position, chunk_size);
+            candidates.push_back(encode_frame(crypto_frame{candidate_offset, chunk}));
+            candidate_offset += chunk_size;
+            position += chunk_size;
+        }
+        while (!candidates.empty())
+        {
+            destination.push_back(std::move(candidates.front()));
+            candidates.pop_front();
+        }
+        next_offset = candidate_offset;
+        return true;
+    }
+
+    auto fit_front_crypto_frame(std::deque<std::vector<std::byte>>& frames,
+        std::size_t maximum_encoded_size) -> bool
+    {
+        if (frames.empty() || frames.front().size() <= maximum_encoded_size)
+            return true;
+
+        const auto& oversized = frames.front();
+        const auto decoded = decode_frame(oversized);
+        if (!decoded || decoded->second != oversized.size())
+            return false;
+        const auto* crypto = std::get_if<crypto_frame>(&decoded->first);
+        if (!crypto)
+            return false;
+
+        std::deque<std::vector<std::byte>> fragments;
+        auto offset = crypto->offset;
+        if (!queue_crypto_frames(crypto->data, offset, maximum_encoded_size, fragments))
+            return false;
+        frames.pop_front();
+        while (!fragments.empty())
+        {
+            frames.push_front(std::move(fragments.back()));
+            fragments.pop_back();
+        }
+        return true;
+    }
+
     constexpr auto packet_number_space_for(encryption_level level) noexcept -> pn_space
     {
         switch (level)
@@ -1559,12 +1628,11 @@ auto quic_connection::do_run() -> task<std::expected<void, std::error_code>>
             co_return std::unexpected(handshake.error());
         if (impl_->connection_role == quic_role::client)
         {
-            auto initial = pack_initial_packet();
-            if (initial.empty())
-                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            auto sent = co_await send_datagram(initial, impl_->peer);
+            auto sent = co_await send_initial_packets();
             if (!sent)
                 co_return std::unexpected(sent.error());
+            if (*sent == 0U)
+                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
             // BoringSSL installs the client early-write secret while creating
             // the Initial flight.  Send queued replay-safe application bytes
             // only after that secret exists, in their own 0-RTT long packet.
@@ -1784,12 +1852,11 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
                     pending.push_back(frame);
             impl_->sent_packets[level_index(encryption_level::initial)].clear();
             impl_->next_send_packet_number[level_index(encryption_level::initial)] = 0;
-            auto initial = pack_initial_packet();
-            if (initial.empty())
-                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            auto sent = co_await send_datagram(initial, impl_->peer);
+            auto sent = co_await send_initial_packets();
             if (!sent)
                 co_return std::unexpected(sent.error());
+            if (*sent == 0U)
+                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
             co_return {};
         }
         if (header->type == packet_type::retry)
@@ -1797,6 +1864,12 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             if (impl_->connection_role != quic_role::client ||
                 !impl_->original_destination_id || header->scid.empty())
                 co_return std::unexpected(make_error_code(quic_errc::protocol_violation));
+            // RFC 9000 §17.2.5: a client accepts at most one Retry. A
+            // fragmented first flight can make a stateless server answer each
+            // tokenless Initial fragment; every response after the first is
+            // stale and must not replace the validated Retry SCID/token.
+            if (impl_->retry_received)
+                co_return {};
             auto verified = validate_retry_integrity_tag(impl_->version,
                 *impl_->original_destination_id, packet);
             if (!verified)
@@ -1822,12 +1895,11 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
                     pending.push_back(frame);
             impl_->sent_packets[level_index(encryption_level::initial)].clear();
             impl_->retry_received = true;
-            auto retried_initial = pack_initial_packet();
-            if (retried_initial.empty())
-                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            auto sent = co_await send_datagram(retried_initial, impl_->peer);
+            auto sent = co_await send_initial_packets();
             if (!sent)
                 co_return std::unexpected(sent.error());
+            if (*sent == 0U)
+                co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
             co_return {};
         }
         // RFC 9001 §4.9 requires Initial keys to be discarded after the TLS
@@ -1967,14 +2039,14 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             if (impl_->tls->has_pending_handshake_data() ||
                 !impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::initial)].empty())
             {
-                auto response = pack_initial_packet();
-                auto handshake_response = pack_handshake_packet();
-                response.insert(response.end(), handshake_response.begin(), handshake_response.end());
-                if (response.empty())
+                auto initial_count = co_await send_initial_packets();
+                if (!initial_count)
+                    co_return std::unexpected(initial_count.error());
+                auto handshake_count = co_await send_handshake_packets();
+                if (!handshake_count)
+                    co_return std::unexpected(handshake_count.error());
+                if (*initial_count == 0U && *handshake_count == 0U)
                     co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
-                auto sent = co_await send_datagram(response, impl_->peer);
-                if (!sent)
-                    co_return std::unexpected(sent.error());
             }
         }
         else if (header->type == packet_type::handshake)
@@ -2066,13 +2138,9 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             if (impl_->tls->has_pending_handshake_data() ||
                 !impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::handshake)].empty())
             {
-                auto response = pack_handshake_packet();
-                if (!response.empty())
-                {
-                    auto sent = co_await send_datagram(response, impl_->peer);
-                    if (!sent)
-                        co_return std::unexpected(sent.error());
-                }
+                auto sent = co_await send_handshake_packets();
+                if (!sent)
+                    co_return std::unexpected(sent.error());
             }
         }
         else if (header->type == packet_type::zero_rtt)
@@ -2926,15 +2994,11 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
     }
     if (level == encryption_level::initial)
     {
-        auto retransmission = pack_initial_packet();
-        if (!retransmission.empty())
-            (void)co_await send_datagram(retransmission, impl_->peer);
+        (void)co_await send_initial_packets();
     }
     else if (level == encryption_level::handshake)
     {
-        auto retransmission = pack_handshake_packet();
-        if (!retransmission.empty())
-            (void)co_await send_datagram(retransmission, impl_->peer);
+        (void)co_await send_handshake_packets();
     }
     co_return;
 }
@@ -3593,6 +3657,40 @@ auto quic_connection::pack_and_send_packets() -> task<void>
     co_return;
 }
 
+auto quic_connection::send_initial_packets()
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    std::size_t packet_count{};
+    while (true)
+    {
+        auto packet = pack_initial_packet();
+        if (packet.empty())
+            break;
+        auto sent = co_await send_datagram(packet, impl_->peer);
+        if (!sent)
+            co_return std::unexpected(sent.error());
+        ++packet_count;
+    }
+    co_return packet_count;
+}
+
+auto quic_connection::send_handshake_packets()
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    std::size_t packet_count{};
+    while (true)
+    {
+        auto packet = pack_handshake_packet();
+        if (packet.empty())
+            break;
+        auto sent = co_await send_datagram(packet, impl_->peer);
+        if (!sent)
+            co_return std::unexpected(sent.error());
+        ++packet_count;
+    }
+    co_return packet_count;
+}
+
 auto quic_connection::pack_zero_rtt_packet() -> std::vector<std::byte>
 {
     if (impl_->connection_role != quic_role::client || !impl_->local_connection_id ||
@@ -3746,38 +3844,6 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
     const auto& destination_id = impl_->connection_role == quic_role::client
         ? *impl_->initial_destination_id
         : *impl_->peer_connection_id;
-    std::vector<std::byte> payload;
-    std::vector<std::vector<std::byte>> retransmittable_frames;
-    auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
-    if (!retransmit.empty())
-    {
-        auto frame = std::move(retransmit.front());
-        retransmit.pop_front();
-        payload.insert(payload.end(), frame.begin(), frame.end());
-        retransmittable_frames.push_back(std::move(frame));
-    }
-    else
-    {
-        const auto crypto = impl_->tls->take_handshake_data(encryption_level::initial);
-        if (!crypto.empty())
-        {
-            auto frame = encode_frame(crypto_frame{
-                impl_->next_send_crypto_offset[level_index(encryption_level::initial)], crypto});
-            impl_->next_send_crypto_offset[level_index(encryption_level::initial)] += crypto.size();
-            payload.insert(payload.end(), frame.begin(), frame.end());
-            retransmittable_frames.push_back(std::move(frame));
-        }
-    }
-    if (auto ack = take_ack_frame(
-            impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::initial)]))
-    {
-        auto encoded_ack = encode_frame(*ack);
-        payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
-    }
-    if (payload.empty())
-        return {};
-    // Initial datagrams must be at least 1200 octets (RFC 9000 §14.1).  The
-    // padding is authenticated and therefore added before sealing.
     constexpr std::size_t pn_length = 4;
     constexpr std::size_t tag_length = 16;
     const auto retry_token_length = encode_varint(impl_->retry_token.size());
@@ -3786,8 +3852,50 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
     const std::size_t fixed_header = 1 + 4 + 1 + destination_id.size() +
         1 + impl_->local_connection_id->size() + retry_token_length->second +
         impl_->retry_token.size();
-    const auto minimum_payload = min_initial_pkt_size > fixed_header + 2 + pn_length + tag_length
-        ? min_initial_pkt_size - fixed_header - 2 - pn_length - tag_length
+    constexpr std::size_t length_field_size = 2;
+    if (fixed_header + length_field_size + pn_length + tag_length >= max_udp_payload)
+        return {};
+    const auto maximum_payload = max_udp_payload - fixed_header -
+        length_field_size - pn_length - tag_length;
+
+    std::vector<std::byte> payload;
+    std::vector<std::vector<std::byte>> retransmittable_frames;
+    auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
+    if (retransmit.empty())
+    {
+        const auto crypto = impl_->tls->take_handshake_data(encryption_level::initial);
+        if (!crypto.empty() && !queue_crypto_frames(crypto,
+                impl_->next_send_crypto_offset[level_index(encryption_level::initial)],
+                maximum_payload, retransmit))
+            return {};
+    }
+    if (!retransmit.empty())
+    {
+        if (!fit_front_crypto_frame(retransmit, maximum_payload))
+            return {};
+        auto frame = std::move(retransmit.front());
+        retransmit.pop_front();
+        payload.insert(payload.end(), frame.begin(), frame.end());
+        retransmittable_frames.push_back(std::move(frame));
+    }
+    auto& received =
+        impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::initial)];
+    if (auto ack = take_ack_frame(received))
+    {
+        auto encoded_ack = encode_frame(*ack);
+        if (payload.size() + encoded_ack.size() <= maximum_payload)
+        {
+            payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+            received.clear();
+        }
+    }
+    if (payload.empty())
+        return {};
+    // Initial datagrams must be at least 1200 octets (RFC 9000 §14.1).  The
+    // padding is authenticated and therefore added before sealing.
+    const auto minimum_payload = min_initial_pkt_size > fixed_header +
+            length_field_size + pn_length + tag_length
+        ? min_initial_pkt_size - fixed_header - length_field_size - pn_length - tag_length
         : 0;
     if (payload.size() < minimum_payload)
         payload.resize(minimum_payload, std::byte{0});
@@ -3842,38 +3950,49 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
     const auto* keys = impl_->tls->write_keys(encryption_level::handshake);
     if (!keys)
         return {};
+    constexpr std::size_t pn_length = 4;
+    constexpr std::size_t tag_length = 16;
+    constexpr std::size_t length_field_size = 2;
+    const std::size_t fixed_header = 1 + 4 + 1 +
+        impl_->peer_connection_id->size() + 1 + impl_->local_connection_id->size();
+    if (fixed_header + length_field_size + pn_length + tag_length >= max_udp_payload)
+        return {};
+    const auto maximum_payload = max_udp_payload - fixed_header -
+        length_field_size - pn_length - tag_length;
+
     std::vector<std::byte> payload;
     std::vector<std::vector<std::byte>> retransmittable_frames;
     auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)];
+    if (retransmit.empty())
+    {
+        const auto crypto = impl_->tls->take_handshake_data(encryption_level::handshake);
+        if (!crypto.empty() && !queue_crypto_frames(crypto,
+                impl_->next_send_crypto_offset[level_index(encryption_level::handshake)],
+                maximum_payload, retransmit))
+            return {};
+    }
     if (!retransmit.empty())
     {
+        if (!fit_front_crypto_frame(retransmit, maximum_payload))
+            return {};
         auto frame = std::move(retransmit.front());
         retransmit.pop_front();
         payload.insert(payload.end(), frame.begin(), frame.end());
         retransmittable_frames.push_back(std::move(frame));
     }
-    else
-    {
-        const auto crypto = impl_->tls->take_handshake_data(encryption_level::handshake);
-        if (!crypto.empty())
-        {
-            auto frame = encode_frame(crypto_frame{
-                impl_->next_send_crypto_offset[level_index(encryption_level::handshake)], crypto});
-            impl_->next_send_crypto_offset[level_index(encryption_level::handshake)] += crypto.size();
-            payload.insert(payload.end(), frame.begin(), frame.end());
-            retransmittable_frames.push_back(std::move(frame));
-        }
-    }
-    if (auto ack = take_ack_frame(
-            impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::handshake)]))
+    auto& received =
+        impl_->received_ack_eliciting_packet_numbers[level_index(encryption_level::handshake)];
+    if (auto ack = take_ack_frame(received))
     {
         auto encoded_ack = encode_frame(*ack);
-        payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+        if (payload.size() + encoded_ack.size() <= maximum_payload)
+        {
+            payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+            received.clear();
+        }
     }
     if (payload.empty())
         return {};
-    constexpr std::size_t pn_length = 4;
-    constexpr std::size_t tag_length = 16;
     auto length = encode_varint(payload.size() + pn_length + tag_length);
     if (!length)
         return {};

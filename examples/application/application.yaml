@@ -14,6 +14,7 @@ logging:
 http:
   address: 0.0.0.0
   port: 8080
+  backlog: 4096
   request_timeout_ms: 30000
   sse:
     max_duration_ms: 120000
@@ -23,6 +24,7 @@ management:
   enabled: true
   address: 127.0.0.1
   port: 8081
+  backlog: 4096
 
 observability:
   tracing: true

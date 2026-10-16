@@ -1,6 +1,37 @@
 # Coroutine 并发原语
 
-> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token，全部非阻塞、零堆分配设计。
+> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token；等待路径不阻塞事件循环。
+
+`channel`、`async_mutex`、`async_shared_mutex`、`async_semaphore` 与
+`async_wait_group` 支持跨事件循环唤醒：等待节点记录挂起时的
+`io_context::current()`，由其他线程/循环完成或释放时，会把 continuation 投递回等待者所属
+循环。不要在自定义同步原语里直接对外部循环的 coroutine handle 调用 `resume()`。
+
+## 事件循环恢复契约
+
+- `task<T>`、返回值和异常传播不绑定线程；事件循环归属由所等待的 awaitable 决定。
+- cnetmod 自带 socket、timer、文件 I/O 和上述协程同步原语会在其所属/等待者循环恢复。
+- `starts_on(loop, task)` 只决定任务从哪个循环开始，不能保证第三方 awaitable 完成后仍在该循环。
+- 第三方 awaitable、自定义回调桥或线程池可能从任意线程完成时，必须保存调用处的
+  `io_context::current()`，并用 `resume_on(*caller, operation)` 发布返回值或异常。
+- HTTP handler、SSE writer、数据库连接和循环本地组件在每次访问前都必须已经回到其 owner loop；
+  禁止从外部线程直接 `coroutine_handle::resume()`。
+
+```cpp
+auto invoke_on_owner(io_context& owner, task<int> operation)
+    -> task<int>
+{
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &owner)
+        co_return co_await resume_on(*caller,
+            starts_on(owner, std::move(operation)));
+    co_return co_await std::move(operation);
+}
+```
+
+Application 的 `offload()` 已自动捕获并返回调用者循环，不要在它外面重复套
+`resume_on()`。只有直接使用第三方 awaitable、`pool_post_awaitable` 或自行实现跨线程
+完成源时，调用方才负责显式恢复。
 
 **import**: `import cnetmod.coro.task;` / `import cnetmod.coro.channel;` / `import cnetmod.coro.mutex;` 等子模块
 **源码**: `src/coro/task.cppm`, `spawn.cppm`, `channel.cppm`, `mutex.cppm`, `shared_mutex.cppm`, `semaphore.cppm`, `wait_group.cppm`, `cancel.cppm`
@@ -26,6 +57,8 @@
 export template <typename T> class task;       // 协程返回类型（不可拷贝，可移动）
 export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待，不驱动 io_context
 export void sync_wait(task<void> t);
+export template <typename T>
+auto resume_on(io_context& target, task<T> operation) -> task<T>;
 ```
 
 ```cpp
@@ -49,8 +82,17 @@ int main() {
 
 `sync_wait()` 也不是第三方协程库或阻塞 API 的桥接器。接入阻塞函数时使用
 `thread_pool`、`spawn_on` 或 `blocking_invoke`；接入其他协程库提供的 awaitable
-时使用 `from_awaitable`。执行域切换、返回目标 `io_context` 及生命周期要求见
+时使用 `from_awaitable`。若第三方 awaitable 可能在任意线程完成，用
+`resume_on(request_io, operation)` 显式保证成功返回和异常处理都回到请求所属的
+`io_context`；不要把 Application 控制循环误当成请求循环。执行域切换、返回目标
+`io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
+
+`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
+构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
+AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
+绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
+并发请求测试，不能只验证编译通过。
 
 ---
 

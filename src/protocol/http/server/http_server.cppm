@@ -20,6 +20,7 @@ import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.spawn;
+import cnetmod.coro.wait_group;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
@@ -109,6 +110,7 @@ public:
 
     /// Multi-core mode
     explicit server(server_context& sctx);
+    ~server();
 
 #ifdef CNETMOD_HAS_SSL
     /// Configure TLS
@@ -117,7 +119,7 @@ public:
 
     /// Listen on specified address and port
     auto listen(std::string_view host, std::uint16_t port,
-        socket_options opts = {.reuse_address = true})
+        socket_options opts = {.reuse_address = true}, int backlog = 4096)
         -> std::expected<void, std::error_code>;
 
     /**
@@ -131,7 +133,7 @@ public:
      * listening.
      */
     [[nodiscard]] auto local_endpoint()
-        -> std::expected<endpoint, std::error_code>;
+        -> std::expected<cnetmod::endpoint, std::error_code>;
 
     /// Set router
     void set_router(router r);
@@ -175,7 +177,11 @@ public:
 private:
     struct conn_count_guard;
     struct connection_registration;
+    struct recv_service_state;
 
+    void dispatch_connection(socket client);
+    auto run_accept_shard(tcp::acceptor& listener, io_context& owner,
+        cancel_token& cancellation, async_wait_group& completed) -> task<void>;
     auto handle_connection(socket client, io_context& io, conn_count_guard ownership) -> task<void>;
 
     auto handle_h1_clear(socket& client, io_context& io,
@@ -210,11 +216,14 @@ private:
     io_context& ctx_;
     server_context* sctx_ = nullptr;
     std::unique_ptr<tcp::acceptor> acc_;
+    std::vector<std::unique_ptr<tcp::acceptor>> worker_acceptors_;
+    std::vector<std::unique_ptr<cancel_token>> worker_accept_cancellations_;
+    std::unique_ptr<recv_service_state> recv_services_;
     router router_;
     std::vector<middleware_fn> middlewares_;
     std::string host_;
     std::uint16_t port_ = 0;
-    bool running_ = false;
+    std::atomic<bool> running_{false};
     cancel_token accept_cancellation_;
     std::size_t max_connections_ = 0;
     std::atomic<std::size_t> active_connections_{0};

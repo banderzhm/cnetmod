@@ -291,14 +291,16 @@ auto rs2 = co_await cli.transaction([&]() -> cn::task<void> {
 
 ### ORM 集成
 
-MySQL 只提供协议客户端、连接池、方言和结果适配器。ORM 业务入口由
-Application 暴露的 `repository<T>` 提供，统一委托给 MySQL
-`session_gateway`；不存在协议专属的 ORM Session/Mapper 门面。
+MySQL 只提供协议客户端、连接池、方言和结果适配器。ORM 业务入口是
+Application 组件 `managed_repository<T>`（由 `add_repository<T>()` 注册），统一委托给
+MySQL `session_gateway`；不存在协议专属的 ORM Session/Mapper 门面。
 
 ```cpp
-auto users = runtime.repository<User>("primary");
-auto user = co_await users->save(User{.name = "Alice", .balance = 1000.0});
-auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
+application::add_repository<User>(context.components, {.instance = "primary"});
+
+auto& users = resolver.get<application::managed_repository<User>>();
+auto user = co_await users.save(User{.name = "Alice", .balance = 1000.0});
+auto page = co_await users.page(1, 20, query_wrapper<User>{}.eq(&User::status, 1));
 ```
 
 ## 连接池（生产级用法）

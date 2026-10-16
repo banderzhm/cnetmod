@@ -18,11 +18,13 @@ env:
   HOMEBREW_NO_AUTO_UPDATE: "1"
   SCCACHE_GHA_ENABLED: "true"
   SCCACHE_IGNORE_SERVER_IO_ERROR: "1"
+  # C++ module caches embed interface paths; bump this after module moves.
+  SCCACHE_C_CUSTOM_CACHE_BUSTER: "cnetmod-module-layout-v2"
 
 jobs:
   build-clang-macos:
     runs-on: ${{ matrix.os }}
-    
+
     strategy:
       fail-fast: false
       matrix:
@@ -48,14 +50,14 @@ jobs:
       id: llvm-paths
       run: |
         LLVM_PREFIX="$(brew --prefix llvm@21)"
-        
+
         echo "LLVM_PREFIX=${LLVM_PREFIX}" >> $GITHUB_OUTPUT
         echo "Detected LLVM prefix: ${LLVM_PREFIX}"
-        
+
         ls -la "${LLVM_PREFIX}/" || true
         ls -la "${LLVM_PREFIX}/share/" || true
         ls -la "${LLVM_PREFIX}/share/libc++/" 2>/dev/null || echo "No share/libc++/ directory"
-        
+
         LIBCXX_MODULES=""
         for path in \
           "${LLVM_PREFIX}/share/libc++/v1" \
@@ -67,18 +69,18 @@ jobs:
             break
           fi
         done
-        
+
         if [ -z "${LIBCXX_MODULES}" ]; then
           LIBCXX_MODULES=$(find ${LLVM_PREFIX} -name "std.cppm" -exec dirname {} \; 2>/dev/null | head -1)
         fi
-        
+
         echo "LIBCXX_MODULES=${LIBCXX_MODULES}" >> $GITHUB_OUTPUT
         echo "libc++ modules path: ${LIBCXX_MODULES}"
-        
+
         LIBCXX_INCLUDE="${LLVM_PREFIX}/include/c++/v1"
         echo "LIBCXX_INCLUDE=${LIBCXX_INCLUDE}" >> $GITHUB_OUTPUT
         echo "libc++ include path: ${LIBCXX_INCLUDE}"
-        
+
         echo "=== Path Validation ==="
         if [ -n "${LIBCXX_MODULES}" ] && [ -d "${LIBCXX_MODULES}" ]; then
           echo "libc++ modules found:"
@@ -87,7 +89,7 @@ jobs:
           echo "WARNING: libc++ modules NOT found at expected location"
           find ${LLVM_PREFIX} -name "*.cppm" 2>/dev/null || echo "No .cppm files found"
         fi
-        
+
         if [ -d "${LIBCXX_INCLUDE}" ]; then
           echo "libc++ headers found at: ${LIBCXX_INCLUDE}"
         else
@@ -139,7 +141,7 @@ jobs:
         SDKROOT="${{ steps.sdk-path.outputs.SDKROOT }}"
         LIBCXX_MODULES="${{ steps.llvm-paths.outputs.LIBCXX_MODULES }}"
         LIBCXX_INCLUDE="${{ steps.llvm-paths.outputs.LIBCXX_INCLUDE }}"
-        
+
         cmake -B ${{ github.workspace }}/build \
           -G "Ninja" \
           -DCMAKE_CXX_COMPILER="${LLVM_PREFIX}/bin/clang++" \
@@ -157,7 +159,7 @@ jobs:
           -DCNETMOD_BUILD_TESTS=${{ github.event_name == 'workflow_dispatch' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_EXAMPLES=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
           -DCNETMOD_BUILD_BENCH=${{ github.event_name == 'workflow_dispatch' && matrix.build_type == 'Release' && 'ON' || 'OFF' }} \
-          -S ${{ github.workspace }}
+          -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON -DCNETMOD_ENABLE_ORM=ON -DCNETMOD_BUILD_C_API=ON -DCNETMOD_BUILD_PYTHON_BINDINGS=ON -S ${{ github.workspace }}
       env:
         CC: ${{ steps.llvm-paths.outputs.LLVM_PREFIX }}/bin/clang
         CXX: ${{ steps.llvm-paths.outputs.LLVM_PREFIX }}/bin/clang++
@@ -245,11 +247,11 @@ jobs:
       run: |
         echo "Build artifacts:"
         ls -la ${{ github.workspace }}/build/
-        
+
         if [ -f "${{ github.workspace }}/build/cnetmod_app" ]; then
           echo "Main executable found:"
           file ${{ github.workspace }}/build/cnetmod_app
-          
+
           echo "Dynamic library dependencies:"
           otool -L ${{ github.workspace }}/build/cnetmod_app || true
         fi
@@ -259,10 +261,10 @@ jobs:
       run: |
         echo "=== Running cnetmod_app ==="
         ${{ github.workspace }}/build/cnetmod_app || true
-        
+
         echo "=== Running timer_demo ==="
         timeout 5 ${{ github.workspace }}/build/examples/core/example_timer_demo || true
-        
+
         echo "=== Running channel_demo ==="
         ${{ github.workspace }}/build/examples/concurrency/example_channel_demo || true
 

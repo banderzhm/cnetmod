@@ -133,13 +133,30 @@ auto main() -> int
             }
             return parser.ready() ? input.size() : 0U;
         });
+    cnetmod::http::request_parser reused_parser;
+    const auto reused = measure(parse_iterations, [&](std::size_t index)
+        {
+            reused_parser.reset();
+            const auto& input = (index & 1U) == 0 ? typical : large;
+            auto result = reused_parser.consume(input.data(), input.size());
+            const auto length = reused_parser.get_header("content-length");
+            const auto extension = reused_parser.get_header("x-benchmark-3");
+            return result && reused_parser.ready() && length == "16" &&
+                    !extension.empty()
+                ? input.size()
+                : 0U;
+        });
 
     report("CRLF scalar", scalar);
     report("CRLF AVX2 candidate", vectorized);
     report("request_parser complete", complete);
     report("request_parser fragmented-31", fragmented);
+    report("request_parser reused + indexed lookup", reused);
     logger::info{"isolated CRLF speedup: {:.2f}x",
         scalar.nanoseconds_per_operation / vectorized.nanoseconds_per_operation};
     logger::shutdown();
-    return complete.checksum != 0 && fragmented.checksum != 0 ? 0 : 1;
+    return complete.checksum != 0 && fragmented.checksum != 0 &&
+            reused.checksum != 0
+        ? 0
+        : 1;
 }

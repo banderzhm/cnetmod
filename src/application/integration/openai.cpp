@@ -8,7 +8,7 @@ import cnetmod.observability.openai;
 import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
 import cnetmod.coro.task_group;
-import cnetmod.json;
+import cnetmod.coro.timer;
 
 namespace cnetmod::application {
 
@@ -135,19 +135,56 @@ namespace {
         if (cancellation && cancellation->is_cancelled())
             co_return std::unexpected(
                 std::make_error_code(std::errc::operation_canceled));
-        task_group connections{io};
+        task_group connections{io, deadline::after(std::chrono::seconds{
+                                       generation.options.timeout_seconds})};
+        struct cancellation_link
+        {
+            cancel_token* parent;
+            task_group& children;
+            bool registered{};
+
+            cancellation_link(cancel_token* token, task_group& group) noexcept
+                : parent(token), children(group)
+            {
+                if (parent)
+                {
+                    registered = parent->register_callback(this,
+                        [](void* value) noexcept
+                        {
+                            static_cast<cancellation_link*>(value)
+                                ->children.cancel();
+                        });
+                    if (!registered)
+                        children.cancel();
+                }
+            }
+
+            ~cancellation_link()
+            {
+                if (parent && registered)
+                {
+                    (void)parent->complete_callback(this);
+                    parent->finish_callback(this);
+                }
+            }
+        } cancellation_scope{cancellation, connections};
         for (auto& client : generation.clients)
         {
             if (client->is_connected())
                 continue;
             const auto accepted = connections.run(
-                [client, options = generation.options](cancel_token&)
+                [client, options = generation.options](cancel_token& token)
                     -> task<std::expected<void, std::error_code>>
                 {
-                    auto connected = co_await client->connect(options);
+                    auto connected = co_await client->connect(options, token);
                     if (!connected)
+                    {
+                        if (token.is_cancelled())
+                            co_return std::unexpected(std::make_error_code(
+                                std::errc::operation_canceled));
                         co_return std::unexpected(std::make_error_code(
                             std::errc::connection_refused));
+                    }
                     co_return std::expected<void, std::error_code>{};
                 });
             if (!accepted)
@@ -160,6 +197,8 @@ namespace {
                     std::make_error_code(std::errc::not_enough_memory));
             }
         }
+        if (cancellation && cancellation->is_cancelled())
+            connections.cancel();
         auto connected = co_await connections.join();
         if (!connected || (cancellation && cancellation->is_cancelled()))
         {
@@ -170,6 +209,14 @@ namespace {
             co_return std::unexpected(
                 std::make_error_code(std::errc::operation_canceled));
         }
+
+        // Startup/reconfiguration validates that every slot can establish a
+        // connection, but it must not publish a pool full of idle sockets.
+        // Proxies commonly reap those sockets before their first lease while
+        // the local descriptor still reports open.  Runtime requests connect
+        // lazily and failed reads invalidate their own connection.
+        for (auto& opened : generation.clients)
+            opened->close();
         co_return std::expected<void, std::error_code>{};
     }
 
@@ -205,6 +252,10 @@ openai_service::openai_service(io_context& io,
 auto openai_service::current_client()
     -> task<std::shared_ptr<openai::client>>
 {
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &io_)
+        throw std::logic_error{
+            "OpenAI client handle cannot cross its owning event loop"};
     co_await generation_gate_.lock();
     async_lock_guard guard{generation_gate_, std::adopt_lock};
     co_return generation_->clients.front();
@@ -236,6 +287,10 @@ auto openai_service::reconfigure(chat_model_reconfiguration configuration,
     cancel_token* cancellation)
     -> task<std::expected<void, std::error_code>>
 {
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &io_)
+        co_return co_await resume_on(*caller, starts_on(io_,
+            reconfigure(std::move(configuration), cancellation)));
     auto parsed = parse_openai_settings(configuration.properties);
     if (!parsed)
         co_return std::unexpected(parsed.error());
@@ -302,6 +357,7 @@ auto openai_service::start(service_context& context)
     }
     if (auto reset = co_await model_pool_.reset(generation_->models); !reset)
         co_return std::unexpected(reset.error());
+    ready_ = true;
     co_return {};
 }
 
@@ -311,6 +367,7 @@ auto openai_service::stop(service_context& context)
     (void)context;
     co_await generation_gate_.lock();
     async_lock_guard guard{generation_gate_, std::adopt_lock};
+    ready_ = false;
     co_await model_pool_.close();
     for (auto& client : generation_->clients)
         client->close();
@@ -325,17 +382,20 @@ auto openai_service::probe(service_context& context) -> task<health_report>
             .status = service_health::degraded,
             .message = "openai generation reconfiguration in progress"};
     async_lock_guard guard{generation_gate_, std::adopt_lock};
+    if (!ready_)
+        co_return health_report{.status = service_health::down,
+            .message = "openai pool is not started"};
     const auto connected = static_cast<std::size_t>(std::ranges::count_if(
         generation_->clients, [](const auto& client)
         {
             return client->is_connected();
         }));
-    co_return health_report{.status = connected == generation_->clients.size()
-            ? service_health::up
-            : connected > 0 ? service_health::degraded
-                            : service_health::down,
-        .message = std::format("openai pool connections {}/{}", connected,
-            generation_->clients.size())};
+    // Connections are intentionally lazy and streaming exchanges close their
+    // socket after completion.  A disconnected idle slot is therefore not a
+    // health failure; start()/reconfigure() already validate reachability.
+    co_return health_report{.status = service_health::up,
+        .message = std::format("openai pool ready; active connections {}/{}",
+            connected, generation_->clients.size())};
 }
 
 auto auto_configure_openai(const configured_service& configuration,

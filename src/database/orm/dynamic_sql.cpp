@@ -254,6 +254,14 @@ void dynamic_sql_processor::process_text(std::string_view text,
         const auto mapping = parse_parameter_mapping(expression);
         const auto param_name = std::string_view(mapping.property);
 
+        if (param_name.empty())
+            throw std::invalid_argument(
+                "dynamic SQL placeholder has an empty parameter name");
+        if (!ctx.has(param_name))
+            throw std::invalid_argument(std::format(
+                "dynamic SQL placeholder references missing parameter '{}'",
+                param_name));
+
         if (is_parameterized)
         {
             // #{param}: Parameterized query - add placeholder and param

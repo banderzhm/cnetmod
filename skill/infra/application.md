@@ -8,7 +8,7 @@
 
 ## 核心原则
 
-1. 使用 `application_builder` 构建，使用 `application_host` 运行；不存在旧 `http_application` 兼容层。
+1. 使用 `application_builder` 构建，使用 `application_host` 运行；业务以 `application_module` 组合，不存在旧 `http_application` 兼容层。
 2. 外部组件只有在配置中 `enabled: true` 且调用 `enable_auto_configuration()` 时才会装配。
 3. 所有长生命周期组件实现 `managed_service`，关键后台协程交给 `task_supervisor`。
 4. `build()` 完成严格配置校验、服务注册冻结和依赖环检查；失败时不启动网络监听。
@@ -22,70 +22,270 @@ optional 组件的单组件超时只触发降级与恢复，不能由共享计�
 
 ## 最小入口
 
+业务以 **模块**（`application_module`）组合进 Application。一个模块声明自己的配置节、注册
+组件、贡献路由与中间件，并可挂接启动/停止钩子：
+
 ```cpp
 #include <cnetmod/config.hpp>
+#include <cnetmod/json.hpp>
 
 import std;
 import cnetmod.application;
+import cnetmod.core.log;
+import cnetmod.json;
 
-auto configure_routes(cnetmod::http::router& routes) -> void
+namespace application = cnetmod::application;
+namespace http = cnetmod::http;
+
+struct order_options
 {
-    routes.get("/orders", [](cnetmod::http::request_context& request)
-        -> cnetmod::task<void>
+    int page_size = 20;
+};
+
+CNETMOD_JSON(order_options,
+    CNETMOD_JSON_FIELD(page_size))
+
+class order_catalog
+{
+public:
+    explicit order_catalog(const order_options& options) : page_size_(options.page_size) {}
+    [[nodiscard]] auto list() const -> std::string
     {
-        request.json(cnetmod::http::status::ok, R"({"orders":[]})");
-        co_return;
-    });
-}
+        return std::format(R"({{"orders":[],"page_size":{}}})", page_size_);
+    }
+
+private:
+    int page_size_;
+};
+
+class order_module final : public application::application_module
+{
+public:
+    auto name() const -> std::string_view override { return "orders"; }
+
+    void configure_options(application::options_registry& options) override
+    {
+        options.section<order_options>("orders");
+    }
+
+    auto register_components(application::registration_context& context)
+        -> std::expected<void, std::string> override
+    {
+        context.components.singleton<order_catalog>(
+            [](application::component_resolver& resolver) {
+                return std::make_shared<order_catalog>(*resolver
+                    .get<application::options_monitor<order_options>>("orders")
+                    .current());
+            });
+        return {};
+    }
+
+    auto compose(application::composition_context& context)
+        -> std::expected<void, std::string> override
+    {
+        auto& catalog = context.components.get<order_catalog>();
+        context.routes.get("/orders",
+            [&catalog](http::request_context& request) -> cnetmod::task<void> {
+                request.json(http::status::ok, catalog.list());
+                co_return;
+            },
+            http::endpoint_metadata{http::allow_anonymous{}});
+        context.middleware.push_back(cnetmod::cors());
+        return {};
+    }
+};
 
 auto main() -> int
 {
-auto host = cnetmod::application::application_builder{"order-service"}
-    .configuration_file("application.yaml")
-    .enable_auto_configuration()
-    .routes(configure_routes)
-    .middleware(cnetmod::cors())
-    .build();
+    auto host = application::application_builder{"order-service"}
+        .configuration_file("application.yaml")
+        .enable_auto_configuration()
+        .add_module<order_module>()
+        .build();
     if (!host)
+    {
+        logger::critical{"cannot start: {}", host.error().describe()};
         return EXIT_FAILURE;
+    }
     return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 ```
 
 `application_host` 自己创建 `net_init`、`io_context`、CPU `thread_pool`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。CPU 线程数通过 `application.cpu_threads` 配置，默认取硬件并发数且至少为 1；也可由 `CNETMOD_CPU_THREADS` 覆盖。该值运行时变更需要重启。
 
-`application_host::runtime()` 返回受控的 `application_runtime` 门面，而不是公开原始
-`io_context`。业务用 `spawn_managed()` 注册可取消、可等待、可恢复的后台任务；回调得到
-独立 `cancel_token`。短时 CPU 工作使用 `offload()`，完成后自动回到 Application 事件
-循环。`cancellation()` 返回可复制、可注册回调的 `std::stop_token`，
-`stop_requested()` 提供轻量查询；`tasks()` 与 `telemetry()` 分别提供既有任务监管和观测
-组合根。停机先排空请求、广播取消、等待监管任务、逆序关闭服务，最后停止 CPU 池。
+## 组合阶段
 
-Route 中优先使用 `offload()` 包装一段纯 CPU callable：它会在 Application CPU 池运行，
-无论正常返回还是抛异常，等待方都会恢复到当前 Application 事件循环。只有算法必须跨
-多个异步步骤持续驻留 CPU 池时才成对使用 `schedule_on_cpu()` 与
-`resume_to_event_loop()`；切回事件循环前不得读写 `request_context`。两种方式都不需要
-业务保存或传递裸 `io_context&`：
+`build()` 按固定顺序执行命名阶段，任一阶段失败都返回 `build_error`，此时不监听端口、
+不启动任何托管服务：
+
+| 阶段 `build_phase` | 内容 |
+|---|---|
+| `configuration` | 读取 YAML/JSON、展开环境变量、应用 customizer、校验框架配置 |
+| `options` | 模块 `configure_options()` 声明配置节；每个应用配置节必须被声明认领 |
+| `registration` | `service_factory()`、自动装配、分片装配、模块 `register_components()` |
+| `validation` | 托管服务依赖图校验 |
+| `resolution` | 组件容器按依赖顺序急切构造全部单例 |
+| `composition` | 模块 `compose()` 贡献路由与中间件 |
+
+运行期还有两个钩子：`on_started()` 在托管服务启动完成、监听端口之前按注册顺序执行，
+失败会回滚已启动的服务；`on_stopping()` 在 HTTP 排空、监管任务结束之后、托管服务关闭
+之前逆序执行，只对已成功启动的模块调用一次。
+
+`build_error{phase, component, path, message, code}` 的 `describe()` 输出形如
+`resolution [orders_service] services.primary: component is not registered`。配置错误带
+文档路径，例如 `http.sse.max_duration_ms: expected an integer number of milliseconds, got string`、
+`services.cache.password: environment variable 'REDIS_PASSWORD' is not set and has no ${REDIS_PASSWORD:-default}`。
+启用了未编译进当前构建的集成时，路径指向 `services.<name>.type`，错误码为 `not_supported`。
+
+不需要独立类型的模块用 `make_module(name, module_hooks{...})` 以回调定义。模块名必须唯一，
+重复或空模块在 `add_module()` 时抛出异常。
+
+## 组件容器
+
+`component_collection` 是模块注册组件的唯一入口，`component_container` 在 `resolution`
+阶段急切构造所有单例；构造完成后容器只读，可并发查询。
 
 ```cpp
-builder.routes([](http::router& routes, application_runtime& runtime) {
-    routes.post("/score", [&runtime](http::request_context& request)
+context.components.singleton<pricing_service>([](application::component_resolver& r) {
+    return std::make_shared<pricing_service>(r.get<clock_source>("utc"));
+});
+context.components.instance(std::make_shared<clock_source>(), "utc");
+context.components.alias<greeting, english_greeting>();   // 接口 → 实现
+context.components.borrow(external_object, "external");  // 非拥有
+```
+
+- 工厂返回 `T`、`std::unique_ptr<U>` 或 `std::shared_ptr<U>`（`U` 为 `T` 或其派生类）。
+- 空名字表示该类型的默认绑定；同一 `(类型, 名字)` 注册两次在 `resolution` 阶段报 `file_exists`。
+- 缺失依赖报出完整解析链，例如 `component is not registered (required by pricing_service -> clock_source 'utc')`；
+  循环依赖报 `dependency cycle: A -> B -> A`；工厂抛出的异常转为带组件名的诊断。
+- 未注册的类型回退到托管服务注册表：自动装配的 `redis_service`、`mysql_service`、
+  `postgresql_service`、`chat_model_service` 可以直接按类型和实例名注入。
+- Host 预先注册 `application_runtime`、`execution_context`、`service_registry`、
+  `observability::telemetry_hub` 与每个配置节的 `options_monitor<T>`（名字为配置节名）。
+- 容器按创建顺序的逆序析构，组件总是先于它所借用的对象销毁；容器在 runtime、托管服务和
+  模块之前析构。
+
+组件在构建期就绪，因此 `compose()` 中可以按引用捕获组件，不需要 `shared_ptr` 或延迟绑定。
+
+## 应用配置节（Options）
+
+框架配置节（`application`、`logging`、`http`、`management`、`observability`、
+`crash_dump`、`lifecycle`、`health`、`orm`、`security`、`services`）严格校验未知键。
+其他顶层配置节属于应用，必须由某个模块声明：
+
+```cpp
+options.section<llm_options>("llm", /*required=*/true)
+    .validate([](const llm_options& value) -> std::expected<void, std::string> {
+        return value.providers.empty()
+            ? std::unexpected(std::string{"at least one provider is required"})
+            : std::expected<void, std::string>{};
+    })
+    .reload(application::options_reload::runtime_safe);
+```
+
+- `T` 为可默认构造、可由 cnetmod.json（Glaze）映射的聚合类型；缺省的键取成员默认值，
+  包括数组元素中聚合类型的默认成员；嵌套映射逐层合并。未知键会递归拒绝（包括数组
+  元素内的未知键）；空对象成员视为 map，接受任意键。
+- 未被任何模块声明的应用配置节使 `build()` 在 `options` 阶段失败。
+- 注册阶段按配置决定注册什么（例如每个供应商一个组件）时，用
+  `context.options.current<T>("name")` 读取已绑定的快照；类型不符或未声明时构建在
+  `registration` 阶段失败。需要感知重载的组件仍应注入 `options_monitor<T>`。
+- 组件通过 `options_monitor<T>`（名为配置节名）读取：`current()` 返回线程安全的不可变快照，
+  `on_change()` 返回 RAII `options_subscription`。
+- `reload_configuration()` 先校验所有变更的配置节，全部通过后才发布；`runtime_safe`
+  配置节原子替换快照并通知订阅者，`restart_required`（默认）只把结果标记为需要重启。
+  builder 的应用名与 `configure()` 显式覆盖会按原顺序重新应用到候选配置，保持与首次
+  构建相同的配置优先级。
+
+环境变量引用支持 `${NAME}`、`${NAME:-default}` 与转义 `$${`；空值视为未设置。无默认值
+的缺失变量是带路径的配置错误。`expand_environment_references()` 公开同一规则。
+
+## 多事件循环与资源归属
+
+`application.io_threads` 配置业务 HTTP 事件循环数量，默认 `1`；也可由
+`CNETMOD_IO_THREADS` 提供环境层值。大于 `1` 时，Host 使用一个控制循环负责生命周期、
+健康检查和管理端点，并使用指定数量的业务循环承载连接。连接一旦分配给业务循环，handler、
+响应和 SSE 写入在整个连接生命周期内都留在该循环：
+`server_context` 复用 Application 的 CPU pool，不会额外创建隐藏执行器；
+`application.cpu_threads` 始终是整个进程唯一的 CPU offload 线程预算。
+
+```yaml
+application:
+  io_threads: 4
+  cpu_threads: 8
+```
+
+自动配置集成必须通过 `integration_loop_mode` 显式声明归属：
+
+| 模式 | 约束 |
+|---|---|
+| `loop_local` | 控制循环和每个业务循环各持有一个 client/pool shard；调用按 `io_context::current()` 选本地实例 |
+| `owned` | 单实例固定在 owner loop；请求、结果及流式回调显式往返切换 |
+| `shared` | 实现本身允许所有循环并发访问 |
+| `single_loop_only` | `io_threads > 1` 时在 registration 阶段拒绝构建，不做不安全降级 |
+
+内置 HTTP client、MySQL、PostgreSQL、Redis/Redis Cluster 使用 `loop_local`；OpenAI
+使用 `owned`，流式 chunk 会先回到请求循环才调用 handler。SQL/Redis 的
+`minimum_size`、`maximum_size` 是整个应用的总量，按商和余数分配到各 shard；
+最大连接数小于循环数会拒绝配置，不能让某个循环借用另一循环的连接。
+
+组件也必须声明作用域：无状态或内部已同步的对象用 `singleton<T>()`；含循环绑定状态的对象
+用 `event_loop<T>()`，容器会为控制/业务循环分别提前构造，并在调用处按当前循环解析。
+实现通过接口暴露时使用 `event_loop_alias<Interface, Implementation>()`；普通
+`alias()` 只用于 singleton，不能把循环本地对象降级成进程单例。
+singleton 不得隐式依赖 event-loop component，这种歧义会在构建期报错。
+
+跨线程释放 `async_mutex`、`async_shared_mutex`、`async_semaphore`、
+`async_wait_group` 或 `channel` 时，框架会把等待协程投递回其原事件循环，不会在释放者线程
+直接恢复。自定义异步原语也必须保存等待者的 loop 并遵守相同规则。
+
+## 执行与 Runtime
+
+`application_runtime` 只暴露与集成无关的执行能力：`spawn_managed()`、`offload()`、
+`schedule_on_cpu()`/`resume_to_event_loop()`、`files()`、`rest()`、`json()`、
+`compression()`、`cancellation()`、`tasks()`、`telemetry()` 与 `configuration()`。
+仓储、Redis、Chat Model 等集成以组件方式注入，新增集成不会修改 runtime 接口。
+
+`runtime.executor()` 返回 `execution_context`：非拥有地提供事件循环与 CPU 池，
+供需要执行上下文的协议层组件使用（计时器、`ai::resilient_chat_model` 等装饰器、显式
+超时 `with_timeout()`、`sleep()`）。调用方不得 run、stop 或 restart 事件循环。
+`event_loop()` 在事件循环线程内返回 `io_context::current()`，在普通线程或 CPU pool 上才
+回退到控制循环；`control_event_loop()` 始终返回控制循环。`post()`、`sleep()` 和
+`with_timeout()` 在调用时捕获同样的当前循环规则。
+
+JWT 签发与验签必须在离开 handler 循环前取得恢复点：
+
+```cpp
+auto& executor = runtime.executor();
+auto result = co_await security::verify_jwt(executor.cpu_pool(),
+    executor.event_loop(), token, secret);
+```
+
+上述调用在 request handler 中会回到 socket 所属业务循环；禁止改用
+`control_event_loop()`。如果已经运行到 CPU pool、`io_context::current()` 为 null，必须在
+离开业务循环前显式保存引用，不能指望 `event_loop()` 还原已经丢失的调用上下文。
+
+Route 中优先使用 `offload()` 包装一段纯 CPU callable：它会在 Application CPU 池运行，
+无论正常返回还是抛异常，等待方都会恢复到发起调用的事件循环。只有算法必须跨
+多个异步步骤持续驻留 CPU 池时才成对使用 `schedule_on_cpu()` 与
+`resume_to_event_loop(captured_loop)`；必须在离开前保存
+`auto* captured_loop = io_context::current()`，切回之前不得读写 `request_context`。
+无参数 `resume_to_event_loop()` 只返回控制循环，不适合多循环 request handler：
+
+```cpp
+auto compose(application::composition_context& context)
+    -> std::expected<void, std::string> override
+{
+    auto& runtime = context.runtime;
+    context.routes.post("/score", [&runtime](http::request_context& request)
         -> task<void> {
         auto input = std::string{request.body()};
         auto score = co_await runtime.offload(
             [input = std::move(input)] { return calculate_score(input); });
         request.text(http::status::ok, std::to_string(score));
     });
-
-    routes.post("/pipeline", [&runtime](http::request_context& request)
-        -> task<void> {
-        auto input = std::string{request.body()};
-        co_await runtime.schedule_on_cpu();
-        auto result = run_cpu_pipeline(input);
-        co_await runtime.resume_to_event_loop();
-        request.text(http::status::ok, std::move(result));
-    });
-});
+    return {};
+}
 ```
 
 `parse_offloaded(runtime, text)` 与 `dump_offloaded(runtime, value)` 在 Host CPU 池执行
@@ -99,43 +299,41 @@ JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有�
 Application 停机时会取消并等待任务，不会让协程访问已经析构的服务。
 
 ```cpp
-builder.routes([](http::router& routes, application_runtime& runtime) {
-    auto reports = std::make_shared<report_service>();
-
-    routes.post("/reports", [&runtime, reports](http::request_context& request)
+auto compose(application::composition_context& context)
+    -> std::expected<void, std::string> override
+{
+    auto& runtime = context.runtime;
+    auto reports = context.components.shared<report_service>();
+    context.routes.post("/reports", [&runtime, reports](http::request_context& request)
         -> task<void> {
         // request_context 只活到本次请求结束；后台任务必须按值拥有所需输入。
         auto input = std::string{request.body()};
         auto job_id = make_job_id();
-        auto task_name = std::string{"report:"};
-        task_name.append(job_id);
-
         recovery_policy one_shot;
         one_shot.budget = std::chrono::milliseconds{0};
-        auto accepted = runtime.spawn_managed(std::move(task_name),
+        auto accepted = runtime.spawn_managed(std::format("report:{}", job_id),
             [reports, input = std::move(input), job_id](cancel_token& cancellation)
                 -> task<std::expected<void, std::error_code>> {
-                co_return co_await reports->generate(
-                    job_id, input, cancellation);
+                co_return co_await reports->generate(job_id, input, cancellation);
             },
             one_shot,
             false); // 单个业务任务失败不触发整个应用停机
-
         if (!accepted) {
             request.json(http::status::service_unavailable,
                 R"({"error":"background task was not accepted"})");
             co_return;
         }
-        request.json(http::status::accepted,
-            make_job_accepted_document(job_id));
+        request.json(http::status::accepted, make_job_accepted_document(job_id));
     });
-});
+    return {};
+}
 ```
 
 必须遵守以下生命周期语义：
 
 1. 后台 lambda 不捕获 `request_context&`、请求 body 的 view、局部变量引用或裸业务指针。
-2. 输入按值移动，服务使用 `shared_ptr` 或其他覆盖任务生命周期的受管理所有权。
+2. 输入按值移动，服务使用 `shared_ptr` 或其他覆盖任务生命周期的受管理所有权
+   （`components.shared<T>()` 与容器共享所有权）。
 3. `202 Accepted` 只表示 supervisor 已接管，不表示任务成功；任务状态应持久化，并提供
    `GET /jobs/{id}` 等查询接口。
 4. 任务名称必须唯一。重复名称返回 `errc::file_exists`，停机期间注册返回
@@ -147,8 +345,9 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
 
 `application_runtime::files()` 返回 `async_file_template`，其
 `open/read/write/flush/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
-领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
-重载；`remove()` 对不存在的目标幂等成功。
+领域端口无需传递 `io_context&`。原子替换文件时使用
+`write_all(path, content, file_write_durability::flushed)` 在关闭前刷盘，再做同目录改名。
+涉及请求超时的调用应使用带独立 `cancel_token&` 的重载；`remove()` 对不存在的目标幂等成功。
 
 `application_runtime::rest()` 返回 `rest_template`，用于业务出站 HTTP 调用。它组合既有
 HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/put/patch/remove`；
@@ -159,70 +358,76 @@ HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/
 `rest_request_options::headers` 注入单次请求头；名称按 HTTP 规则忽略大小写，单次值覆盖默认值。
 Template 的接口与实现统一位于 `src/application/template/`，不在 Application 根目录堆放实现。
 
-启用任一 Chat Model provider 自动装配后，
-`application_runtime::chat_model(instance, options)` 返回具名
-`chat_model_template`。Application 只依赖 `cnetmod.ai` 与
-`chat_model_service`，不依赖 OpenAI 客户端类型；OpenAI-compatible、Claude、Gemini
-或本地推理后端通过同一 provider Strategy 接入。每个 managed provider 拥有固定容量
-连接池，一次 invoke/stream 独占一个 lease 到终态，避免 keep-alive 响应交错。
-文本重载复制 `chat_model_template_options::request`，按 system、默认消息、历史、当前
-user 输入的顺序构造请求；显式 `chat_request` 重载不改写调用方消息。模板必须在
-`build()` 完成后或 route handler 执行时解析，因为自动装配服务是在 Host 构建期间注册的。
+## 路由策略与端点元数据
 
-运行时端点、凭据或池容量变更通过
-`application_runtime::reconfigure_chat_model(instance, configuration, cancellation)`
+路由的访问策略在注册处用 `http::endpoint_metadata` 声明，中间件在路由匹配后通过
+`request_context::endpoint()` 读取，不再维护与路由分离的路径白名单：
+
+| 元数据 | 含义 |
+|---|---|
+| `http::allow_anonymous` | 不解析凭据，`jwt_auth` 与 `authorize` 都直接放行 |
+| `http::optional_authentication` | 无凭据按匿名继续；携带的凭据必须有效（默认） |
+| `http::required_permissions{all_of, any_of}` | `authorize` 的默认权限要求，段支持 `*` |
+| `http::endpoint_name{"orders.list"}` | 稳定操作名，用于日志、指标与 API 文档 |
+
+未声明认证元数据的路由必须认证。策略按方法区分：同一路径的 `GET` 可以匿名而 `DELETE`
+需要权限。未匹配任何路由的请求默认直接交给路由器返回 404（`jwt_auth_options::unmatched`、
+`authorization_options::authorize_unmatched` 可改为强制认证）。`router::endpoints()` 列出
+全部端点，可用于生成文档或在启动时审计策略。
+
+## 数据访问
+
+仓储是组件。模块用 `add_repository<T>()` 注册，按类型注入：
+
+```cpp
+application::add_repository<order_record>(context.components,
+    {.instance = "primary",
+     .policies = {.logical_delete_policy = cnetmod::orm::logical_delete_config{
+         .field_name = "deleted_at",
+         .mode = cnetmod::orm::logical_delete_mode::nullable_datetime}}});
+
+auto& orders = context.components.get<application::managed_repository<order_record>>();
+auto& factory = context.components.get<application::repository_factory<order_record>>();
+auto scoped = factory.for_request(request);   // 绑定请求的租户与数据权限快照
+```
+
+`repository_factory<T>` 在构建期解析数据源，缺失或同名歧义的数据源让 `build()` 在
+`resolution` 阶段失败。`shared()` 返回进程级仓储；`for_request()` 返回绑定请求
+`tenant_scope` 与 `data_permission_scope` 快照的仓储，认证未绑定数据权限时应用空范围
+（对 `DATA_PARTITION`/`DATA_OWNER` 模型拒绝全部行）。每个仓储只构建一次拦截链并在所有
+操作间复用。严格 SaaS 模式由配置 `orm.tenant_scope_required: true` 开启并在构建时冻结：
+租户模型没有请求租户快照时返回 `permission_denied`，且不提供进程级 `shared()` 仓储。
+
+## Chat Model
+
+启用 Chat Model provider 自动装配后，`chat_model_service` 按实例名注入；
+`make_template(options)` 返回的 `chat_model_template` 实现 `ai::chat_model`。cnetmod 负责
+provider 客户端、连接池、生命周期、Telemetry，以及 `routed_chat_model`、
+`resilient_chat_model`、`governed_chat_model` 等通用机制。`add_chat_model()` 可把多个
+托管实例组合成一个组件，但多实例行为必须显式开启：两个以上实例必须设置 `routing`；
+跨实例失败切换还必须设置 `fallback_to_remaining_instances = true` 并提供 `resilience`。
+
+```cpp
+application::add_chat_model(context.components, "assistant",
+    {.instances = {"deepseek-key-1", "deepseek-key-2"},
+     .routing = application::chat_model_routing::round_robin,
+     .resilience = cnetmod::ai::resilient_model_options{.max_attempts_per_model = 2},
+     .fallback_to_remaining_instances = true});
+```
+
+缺失实例或省略多实例路由都会让 `build()` 在 `resolution` 阶段失败。流式切换遵守
+`resilient_chat_model` 的边界：首个分片交付后不再重试，避免重复或拼接输出。
+
+每个 managed provider 拥有固定容量连接池，一次 invoke/stream 独占一个 lease 到终态，避免
+keep-alive 响应交错。文本重载复制 `chat_model_template_options::request`，按 system、默认
+消息、历史、当前 user 输入的顺序构造请求；显式 `chat_request` 重载不改写调用方消息。
+
+运行时端点、凭据或池容量变更通过 `chat_model_service::reconfigure(configuration, cancellation)`
 提交完整 provider 配置。具体 provider 先校验配置并建立整代新连接，全部成功后才原子发布；
 失败时旧代保持服务。已借出的 model lease 持有旧客户端所有权，会在请求结束后自然退休，
 新请求只进入新代。不要把 `chat_model_pool::reset()` 暴露给业务代码，否则会绕过 provider
 校验、连接建立、Telemetry 和生命周期边界。OpenAI 配置支持热更 `base_url`、`api_key`、
 `tls_verify`、`timeout_seconds` 与 `pool_size`，传入属性是完整替换而不是局部 patch。
-
-`chat_model_template::conversation(session_id, store)` 提供显式会话边界。
-同一 session 的调用通过共享协程门串行化，不同 session 可占用不同池连接并行运行；
-持久层仍是唯一真相。成功回合才用 `append_batch(user, assistant)` 原子追加，失败或取消
-不产生半回合。`history_limit` 控制每次读取的最近消息数，零表示读取全部。
-
-需要在 route handler 捕获 Runtime 时，使用双参数路由配置器：
-
-```cpp
-builder.routes([](http::router& routes, application_runtime& runtime) {
-    auto* application = &runtime;
-    routes.post("/archive", [application](http::request_context& request)
-        -> task<void> {
-        auto saved = co_await request.with_deadline(
-            [application](cancel_token& token) {
-                return application->files().write_all("archive.json", "{}", token);
-            });
-        request.text(saved ? http::status::ok : http::status::internal_server_error,
-            saved ? "saved" : "failed");
-        co_return;
-    });
-    routes.get("/upstream", [application](http::request_context& request)
-        -> task<void> {
-        auto response = co_await application->rest().get(
-            "https://service.internal/health",
-            {.headers = {{"Authorization", "Bearer runtime-token"}}});
-        request.text(response ? http::status::ok
-                              : http::status::bad_gateway,
-            response ? std::string{response->body()} : "upstream failed");
-        co_return;
-    });
-    routes.post("/chat", [application](http::request_context& request)
-        -> task<void> {
-        auto model = application->chat_model("assistant",
-            {.request = {.model = "gpt-4o-mini"},
-                .system_prompt = "Answer concisely."});
-        if (!model) {
-            request.text(http::status::service_unavailable,
-                "model unavailable");
-            co_return;
-        }
-        auto response = co_await model->invoke(std::string{request.body()});
-        request.text(response ? http::status::ok : http::status::bad_gateway,
-            response ? std::string{response->content()} : response.error());
-    });
-});
-```
 
 ```cpp
 application::chat_model_reconfiguration next;
@@ -233,17 +438,20 @@ next.properties = {
     {"timeout_seconds", 30},
     {"pool_size", 8},
 };
-auto reloaded = co_await runtime.reconfigure_chat_model(
-    "assistant", std::move(next), &cancellation);
+auto& service = components.get<application::chat_model_service>("assistant");
+auto reloaded = co_await service.reconfigure(std::move(next), &cancellation);
 ```
 
-双参数配置器在 Host Runtime 构造完成后、`build()` 返回前执行。handler 可在 Host 生命周期
-内安全捕获 Runtime 引用。HTTP 底层不反向依赖 Application，也不提供线程局部的
-`current_io_context()`。
+`chat_model_template::conversation(session_id, store)` 提供显式会话边界。
+同一 session 的调用通过共享协程门串行化，不同 session 可占用不同池连接并行运行；
+持久层仍是唯一真相。成功回合才用 `append_batch(user, assistant)` 原子追加，失败或取消
+不产生半回合。`history_limit` 控制每次读取的最近消息数，零表示读取全部。
 
-Application 的 SSE 接口直接在同一个 routes 配置器中使用 `router::sse_get()` 或
+## SSE
+
+Application 的 SSE 接口在模块 `compose()` 中用 `router::sse_get()` 或
 `router::sse_post()` 声明。框架按请求注入 `sse_stream&`，业务只序列化事件 payload；
-SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责：
+SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责。
 
 如果同一路由按请求参数在普通 JSON 与 SSE 间切换，保持普通 `get/post` 路由，
 在完成参数校验和资源检查、确认要流式响应后调用
@@ -255,18 +463,16 @@ handler 内，业务自己的事件 writer 也应在其中构造和使用。只�
 不要假定 Application 为独立 SSE 路由注入的 `http.sse` 配置会自动应用到动态入口。
 
 ```cpp
-builder.routes([](http::router& routes) {
-    routes.sse_post("/chat", [](http::request_context& request,
-                                http::sse_stream& stream) -> task<void> {
-        if (!co_await stream.send(R"({"text":"hello"})", "delta"))
-            co_return;
-        co_await stream.send(R"({"tokens":1})", "done");
-        co_await stream.finish();
-    }, http::sse_stream_options{
-        .max_duration = std::chrono::seconds{60},
-        .write_timeout = std::chrono::seconds{3},
-    });
-});
+context.routes.sse_post("/chat", [](http::request_context& request,
+                                    http::sse_stream& stream) -> task<void> {
+    if (!co_await stream.send(R"({"text":"hello"})", "delta"))
+        co_return;
+    co_await stream.send(R"({"tokens":1})", "done");
+    co_await stream.finish();
+}, http::sse_stream_options{
+    .max_duration = std::chrono::seconds{60},
+    .write_timeout = std::chrono::seconds{3},
+}, http::endpoint_metadata{http::optional_authentication{}});
 ```
 
 `stream.started()` 为 false 时，业务仍可返回普通 HTTP 错误；一旦为 true，只能继续写 SSE
@@ -274,24 +480,25 @@ builder.routes([](http::router& routes) {
 已经提交后错误地回退 JSON 响应。
 
 Application 默认从 `http.sse` 为所有 SSE 路由注入超时：整条流最长 120 秒，单次响应头或
-事件帧写出最长 5 秒。路由尾部的 `sse_stream_options` 可按接口缩短或延长，但两个值都必须
+事件帧写出最长 5 秒。路由的 `sse_stream_options` 可按接口缩短或延长，但两个值都必须
 为正数。达到总时限或写超时后，当前写操作会被取消、流进入 `failed`、socket 被关闭；不会
 继续占用连接或回退普通 HTTP。调用 OpenAI、数据库等下游操作时应通过
 `request.with_deadline()` 继承同一个总预算，避免业务生产者在连接结束后继续运行。
 
-自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。该 API 是
-协议适配器的基础设施扩展点，不是业务执行入口；普通业务只能从 Host 获得 Runtime 门面。
-工厂通过
+## 基础设施扩展与中间件顺序
+
+自定义基础设施使用 `application_builder::service_factory()` 在 `registration` 阶段创建。
+该 API 是协议适配器的基础设施扩展点，不是业务执行入口；业务功能使用模块。工厂通过
 `application_service_context` 获得 host 所有的 `io_context`、Telemetry Hub、
 `task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
-服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。工厂还可以保存
-`application_service_context::runtime` 的非拥有引用，但不得超过 Host 生命周期。框架不
-公开运行期 `application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+服务身份都会让 `build()` 失败；所有阶段完成后 registry 才冻结。模块需要登记托管服务时
+使用 `registration_context::manage()`。
 
-业务 HTTP 中间件通过 `application_builder::middleware()` 按注册顺序装配，不影响独立的
-管理端点。执行顺序固定为：框架异常恢复、停机跟踪、请求 ID、追踪、指标和请求超时位于
-业务中间件外层，访问日志位于业务中间件内层。这样自定义认证、CORS、限流等逻辑仍受到
-框架取消、排空和遥测边界监管，同时不能绕过管理端点隔离。空中间件在构建配置阶段拒绝。
+业务 HTTP 中间件由模块在 `compose()` 中追加到 `composition_context::middleware`，
+按模块注册顺序、模块内追加顺序执行，不影响独立的管理端点。执行顺序固定为：框架异常恢复、
+停机跟踪、请求 ID、追踪、指标和请求超时位于业务中间件外层，访问日志位于业务中间件内层。
+路由在中间件之前完成匹配，因此业务中间件可以读取 `request_context::endpoint()`。空中间件
+使 `build()` 在 `composition` 阶段失败。
 
 host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 
@@ -370,6 +577,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   "http": {
     "address": "0.0.0.0",
     "port": 8080,
+    "backlog": 4096,
     "request_timeout_ms": 30000,
     "sse": {
       "max_duration_ms": 120000,
@@ -380,6 +588,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
     "enabled": true,
     "address": "127.0.0.1",
     "port": 8081,
+    "backlog": 4096,
     "same_port": false
   },
   "observability": {
@@ -474,7 +683,7 @@ MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`
 
 支持的环境变量包括：
 
-- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_LOG_LEVEL`
+- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_HTTP_BACKLOG`、`CNETMOD_LOG_LEVEL`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`、`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
 - `OTEL_SERVICE_NAME`、`OTEL_SERVICE_VERSION`
@@ -665,6 +874,12 @@ required 服务同一故障周期耗尽预算后不重复派发或通知停机�
 
 `reload_configuration()` 只原位更新日志级别、OTEL 采样率、健康策略和恢复策略。监听地址、端口、中间件、线程、连接参数、凭据、OTLP 出口或队列参数变化会设置 `restart_required`，不会偷偷重建连接。
 
+配置加载保留错误所属的 error category：JSON 语法错误返回
+`cnetmod::json::errc::parse_failed`，文件不存在返回
+`std::errc::no_such_file_or_directory`，根节点不是对象或字段值非法才返回
+`std::errc::invalid_argument`。调用方不得把所有 `invalid_argument` 翻译成“JSON
+语法错误”，也不得丢弃 JSON 模块提供的精确错误身份。
+
 底层 `reload_safe_configuration(active, candidate)` 返回
 `std::expected<configuration_reload_result, std::error_code>`。它先校验候选并在私有副本中
 准备变更清单，准备失败不修改 active；提交使用已静态验证的不抛异常移动赋值。
@@ -763,7 +978,7 @@ host 在现有清理截止时间内重试仍登记的服务，退避从 1ms 增�
 业务模块应继续通过构造函数依赖明确接口，不要把 `service_registry` 当作全局 Service Locator。
 # JWT operations
 
-`application_runtime::sign_jwt(options, secret)` and
-`application_runtime::verify_jwt(token, secret)` use the managed CPU executor
-and resume on the application event loop. The application retains ownership of
-the secret and passes it only at the call site.
+JWT 使用 `security::sign_jwt/verify_jwt(executor.cpu_pool(),
+executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在循环内求值，确保 CPU
+计算结束后回到请求循环；需要生命周期控制循环时才显式使用 `control_event_loop()`。
+密钥由应用持有，只在调用点传入框架。

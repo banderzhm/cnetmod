@@ -4,10 +4,11 @@
 export module cnetmod.observability.http;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.instrumentation.metric;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
-import cnetmod.protocol.http;
 import cnetmod.protocol.http.middleware.tracing;
 
 namespace cnetmod::observability {

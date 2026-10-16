@@ -4,7 +4,9 @@
 export module cnetmod.protocol.http.middleware.tracing;
 
 import std;
+
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.instrumentation.tracing;
 
 namespace cnetmod::http::tracing {

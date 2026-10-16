@@ -21,7 +21,7 @@ import cnetmod.coro.task_group;
 import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
 import cnetmod.io.io_context;
-import cnetmod.observability;
+import cnetmod.observability.telemetry;
 import cnetmod.observability.openai;
 import cnetmod.protocol.openai;
 
@@ -86,6 +86,7 @@ private:
     service_requirement requirement_;
     recovery_policy recovery_;
     std::shared_ptr<striped_async_mutex<std::string>> session_gates_;
+    bool ready_ = false;
 };
 
 export [[nodiscard]] auto auto_configure_openai(

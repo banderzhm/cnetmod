@@ -16,6 +16,57 @@ namespace cnetmod::openai {
 
 export using token_counter = std::function<std::size_t(const message&)>;
 
+export inline constexpr std::string_view conversation_summary_message_name =
+    "cnetmod_conversation_summary";
+
+/**
+ * Supplies the oldest conversation segment to an asynchronous summarization
+ * strategy. Views remain valid only until summarize() completes.
+ */
+export struct conversation_summary_request
+{
+    std::string_view session_id;
+    std::span<const message> messages;
+    std::size_t target_tokens = 0;
+};
+
+/**
+ * Strategy used by conversation memory to semantically compact old history.
+ */
+export class conversation_summarizer
+{
+public:
+    virtual ~conversation_summarizer() = default;
+    virtual auto summarize(conversation_summary_request request)
+        -> task<std::expected<std::string, std::string>> = 0;
+};
+
+export using conversation_summary_handler = std::function<task<
+    std::expected<std::string, std::string>>(conversation_summary_request)>;
+
+/**
+ * Adapts an application coroutine to the conversation_summarizer contract.
+ */
+export class functional_conversation_summarizer final
+    : public conversation_summarizer
+{
+public:
+    explicit functional_conversation_summarizer(
+        conversation_summary_handler handler);
+
+    auto summarize(conversation_summary_request request)
+        -> task<std::expected<std::string, std::string>> override;
+
+private:
+    conversation_summary_handler handler_;
+};
+
+export enum class summary_failure_policy
+{
+    fallback_to_trim,
+    return_error,
+};
+
 export struct memory_options
 {
     /**
@@ -40,6 +91,25 @@ export struct memory_options
      * Number of trailing messages that trimming must never remove.
      */
     std::size_t preserved_tail_messages = 1;
+
+    /**
+     * Optional semantic compaction strategy. When configured, an over-budget
+     * history is summarized before deterministic trimming is attempted.
+     */
+    conversation_summarizer* summarizer = nullptr;
+
+    /**
+     * Recent messages kept verbatim when producing a rolling summary.
+     */
+    std::size_t summary_preserved_messages = 8;
+
+    /**
+     * Prefix attached to model-produced summaries before they enter context.
+     */
+    std::string summary_prefix = "Summary of earlier conversation:\n";
+
+    summary_failure_policy summary_failure =
+        summary_failure_policy::fallback_to_trim;
 };
 
 /**
@@ -69,6 +139,29 @@ export struct trim_result
  */
 export auto trim_messages(std::vector<message>& messages,
     const memory_options& options) -> trim_result;
+
+/**
+ * Observable result of asynchronous semantic compaction.
+ */
+export struct compaction_result
+{
+    bool summary_applied = false;
+    bool fallback_trimmed = false;
+    std::size_t summarized_messages = 0;
+    std::size_t summarized_tokens = 0;
+    std::size_t summary_tokens = 0;
+    std::string summary_error;
+    trim_result window;
+};
+
+/**
+ * Replaces the oldest eligible history segment with a generated summary, then
+ * enforces the configured hard window. Mutation is atomic with respect to
+ * summarizer failures when summary_failure is return_error.
+ */
+export auto compact_messages(std::vector<message>& messages,
+    const memory_options& options, std::string_view session_id = {})
+    -> task<std::expected<compaction_result, std::string>>;
 
 /**
  * Defines snapshot persistence for session-keyed conversation messages.
@@ -376,6 +469,8 @@ public:
 private:
     auto load_locked()
         -> task<std::expected<std::vector<message>, std::string>>;
+    auto apply_window_locked(std::vector<message>& values)
+        -> task<std::expected<compaction_result, std::string>>;
     auto save_locked(std::vector<message> values)
         -> task<std::expected<void, std::string>>;
 

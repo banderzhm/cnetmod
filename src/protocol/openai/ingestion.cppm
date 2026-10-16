@@ -8,7 +8,7 @@ export module cnetmod.protocol.openai:ingestion;
 
 import std;
 import cnetmod.coro.task;
-import :model;
+import :run;
 import :retrieval;
 
 namespace cnetmod::openai {

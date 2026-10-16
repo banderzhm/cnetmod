@@ -3,6 +3,7 @@
 > 高性能异步 HTTP/HTTPS 服务器栈，支持 HTTP/1.1、HTTP/2、HTTP/3、路由、中间件、SSE、Swagger 与文件上传。
 
 **import**: `import cnetmod.protocol.http;`
+
 **CMake**: `-DCNETMOD_ENABLE_HTTP=ON`
 **源码**: `src/protocol/http/`
 
@@ -31,11 +32,26 @@
 - `sctx` — 多核服务器上下文（多线程模式）
 
 #### `server::listen`
-**签名**: `auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true}) -> std::expected<void, std::error_code>`
+**签名**: `auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true}, int backlog = 4096) -> std::expected<void, std::error_code>`
 **参数**:
 - `host` — 监听地址（如 `"0.0.0.0"`）
 - `port` — 监听端口
 - `opts` — 套接字选项
+- `backlog` — 等待 `accept` 的内核连接队列长度；必须为正，最终值可被操作系统上限截断
+
+Application 项目用 `http.backlog` 配置业务端口、用 `management.backlog` 配置独立管理端口；
+默认均为 4096，也可通过 `CNETMOD_HTTP_BACKLOG` 覆盖业务端口。`max_connections`
+限制的是已经接纳的并发连接，与 backlog 不是同一个概念。
+
+HTTP accept 循环收到首个异步完成后，会限量排空最多 64 个已经排队的连接，再回到
+事件循环公平点。Linux 使用 `accept4(SOCK_NONBLOCK | SOCK_CLOEXEC)`，Windows 使用
+非阻塞监听 socket 的 `accept`；没有排队连接时不会自旋。不要在业务层再创建并行
+accept 循环或重复实现这一批处理。
+
+在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，`server` 会为每个
+事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
+不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
+框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
 
 #### `server::set_router`
 **签名**: `void set_router(router r)`
@@ -93,7 +109,8 @@ auto main() -> int {
     });
 
     server srv(*ctx);
-    auto result = srv.listen("0.0.0.0", 8080);
+    auto result = srv.listen("0.0.0.0", 8080,
+        {.reuse_address = true}, 8192);
     if (!result) {
         std::println("Listen failed: {}", result.error().message());
         return 1;
@@ -112,16 +129,46 @@ auto main() -> int {
 #### `router::get / post / put / del / patch / any`
 **签名**:
 ```cpp
-auto get(std::string_view pattern, handler_fn fn) -> router&;
-auto post(std::string_view pattern, handler_fn fn) -> router&;
-auto put(std::string_view pattern, handler_fn fn) -> router&;
-auto del(std::string_view pattern, handler_fn fn) -> router&;
-auto patch(std::string_view pattern, handler_fn fn) -> router&;
-auto any(std::string_view pattern, handler_fn fn) -> router&;
+auto get(std::string_view pattern, handler_fn fn,
+    endpoint_metadata metadata = {}) -> router&;
+// post / put / del / patch / any 同形；stream_* 与 sse_* 的元数据参数位于选项之后
+auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 ```
 **参数**:
 - `pattern` — 路由模式，支持 `:name` 命名参数和 `*filepath` 通配符
 - `fn` — 处理函数 `std::function<task<void>(request_context&)>`
+- `metadata` — 端点策略，按类型存取（同类型后加覆盖先加）。标准类型：
+  `allow_anonymous`、`optional_authentication`、`required_permissions{all_of, any_of}`、
+  `endpoint_name{"orders.list"}`；应用可添加任意自定义类型
+
+不需要等待异步操作的端点使用 `get_sync / post_sync / put_sync / del_sync /
+patch_sync / any_sync`，其 handler 为 `std::function<void(request_context&)>`。在没有
+中间件时服务器直接调用它，不创建 handler 或中间件链协程帧；有中间件时框架才按需
+适配成 `task<void>`。不要为了使用 sync API 在 handler 内执行阻塞 I/O 或 CPU 重任务。
+
+路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
+`endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
+
+服务器会区分“路径不存在”和“方法不匹配”：没有任何模式匹配时返回 `404`；路径模式存在但
+当前方法未注册时自动返回 `405 Method Not Allowed`，并生成 `Allow` 响应头。业务控制器不应
+为同一路径补一个手写的兜底路由。`router::allowed_methods(path)` 可用于测试或自定义调度。
+默认的 404/405 响应体是纯文本；应用用 `router::on_unmatched(handler)` 输出自己的错误响应格式，
+handler 收到 `unmatched_request{status, allowed}`，405 的 `Allow` 头已由服务器设置：
+
+```cpp
+routes.on_unmatched([](request_context& request, const unmatched_request& unmatched)
+    -> task<void> {
+    respond_error(request, unmatched.status == status::not_found
+        ? error_code::route_not_found : error_code::method_not_allowed);
+    co_return;
+});
+```
+
+```cpp
+routes.get("/orders/:id", read_order, endpoint_metadata{
+    required_permissions{.all_of = {"orders:read"}}, endpoint_name{"orders.read"}});
+routes.post("/login", login, endpoint_metadata{allow_anonymous{}});
+```
 
 **路由模式说明**:
 | 模式 | 示例路径 | 说明 |
@@ -195,8 +242,15 @@ r.get("/static/*filepath", [](request_context& ctx) -> task<void> {
 #### `request_context::get_header`
 **签名**: `[[nodiscard]] auto get_header(std::string_view key) const -> std::string_view`
 
+**说明**: 首选接口。名称匹配不区分大小写；常用 header 使用固定槽位，其他 header 使用
+大小写无关哈希索引，返回值直接引用本次请求的 header backing buffer，不会为名称和值
+逐项创建 `std::string`。返回的视图只在当前请求生命周期内有效，不要跨请求保存。
+
 #### `request_context::headers`
-**签名**: `[[nodiscard]] auto headers() const noexcept -> const header_map&`
+**签名**: `[[nodiscard]] auto headers() const -> const header_map&`
+
+**说明**: 兼容需要遍历全部 header 的场景，首次调用时才物化 `header_map`，因此会产生
+字符串分配。中间件和 handler 只读取少量已知 header 时必须使用 `get_header()`。
 
 #### `request_context::body`
 **签名**: `[[nodiscard]] auto body() const -> std::string_view`
@@ -610,6 +664,7 @@ r.get("/static/*filepath", serve_dir({
 |---------|---------|
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
+| 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
 | SSE 时使用 `sse_begin()`、`sse_send()` 与 `sse_heartbeat()` | `sse_started()` 后回退使用 `ctx.json()` |
 | 使用 `co_return` 结束 handler | 忘记 `co_return` 导致未定义行为 |
@@ -643,11 +698,17 @@ class server_context {
 **架构**：
 | 线程 | 角色 | 说明 |
 |------|------|------|
-| Thread 0（main） | `accept_io()` | 专用 accept 循环，不参与请求处理 |
-| Thread 1..N | `next_worker_io()` | 每个 worker 独立 `io_context`，round-robin 分配连接 |
+| Thread 0（main） | `accept_io()` | 控制循环；Linux 多 worker HTTP 不在这里接纳连接 |
+| Thread 1..N | `worker_ios()` | 每个 worker 独立 `io_context`，连接全生命周期归属该循环 |
 | Thread Pool | `pool()` | cnetmod `thread_pool`，用于 CPU 密集型任务卸载 |
 
-**IOCP 特性**：accept 后的新 socket 尚未关联 IOCP，首次 `async_read/write` 时自动绑定到 worker 的 IOCP。
+Linux 多 worker HTTP 为每个 worker 创建 `SO_REUSEPORT` listener，内核把连接直接分配给
+最终所属的循环，不再经过控制循环 round-robin 转交；每个循环同时持有自己的 multishot
+recv 注册缓冲区。单循环、Windows 和不支持该能力的平台保持原有 listener/dispatch 模型。
+
+HTTP/1 解析器会保留同一次 receive 中第一个消息之后的未消费字节，并连续处理完整的
+pipelined 请求。普通响应在该 receive 批次内顺序序列化到连接级缓冲区，再一次提交；遇到
+SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响应，保证线上顺序不变。
 
 ---
 
@@ -754,7 +815,7 @@ auto main() -> int {
 | 使用 `server_context` 构造 `server` 启用多核 | 在多核场景手动创建多个 `server` 实例 |
 | CPU 密集任务通过 `pool_post_awaitable` 卸载到 `pool()` | 在 handler 中直接执行耗时计算阻塞 worker |
 | 卸载后用 `post_awaitable{ctx.io_ctx()}` 切回 worker | 在 pool 线程上直接调用 `ctx.json()` |
-| `spawn(sctx.accept_io(), srv.run())` 启动 accept | 在 worker 线程上运行 accept 循环 |
+| `spawn(sctx.accept_io(), srv.run())` 启动服务器编排 | 业务代码跨 worker 写另一个循环的 socket |
 
 ---
 

@@ -62,6 +62,50 @@ TEST(router_method_filter)
 
     auto m_put = r.match(http_method::PUT, "/data");
     ASSERT_FALSE(m_put.has_value());
+
+    const auto allowed = r.allowed_methods("/data");
+    ASSERT_EQ(allowed.size(), std::size_t{2});
+    ASSERT_EQ(method_to_string(allowed[0]), std::string_view{"GET"});
+    ASSERT_EQ(method_to_string(allowed[1]), std::string_view{"POST"});
+}
+
+TEST(router_distinguishes_method_mismatch_from_unknown_path)
+{
+    router r;
+    r.get("/users/:id", make_handler("get-user"));
+    r.patch("/users/:id", make_handler("patch-user"));
+
+    ASSERT_TRUE(r.allowed_methods("/missing/42").empty());
+    const auto allowed = r.allowed_methods("/users/42");
+    ASSERT_EQ(allowed.size(), std::size_t{2});
+    ASSERT_EQ(method_to_string(allowed[0]), std::string_view{"GET"});
+    ASSERT_EQ(method_to_string(allowed[1]), std::string_view{"PATCH"});
+}
+
+TEST(router_keeps_the_application_unmatched_handler)
+{
+    router r;
+    ASSERT_FALSE(static_cast<bool>(r.unmatched_handler()));
+    int observed = 0;
+    r.on_unmatched([&observed](request_context&, const unmatched_request& unmatched)
+        -> cnetmod::task<void>
+    {
+        observed = unmatched.status;
+        co_return;
+    });
+    ASSERT_TRUE(static_cast<bool>(r.unmatched_handler()));
+    auto moved = std::move(r);
+    ASSERT_TRUE(static_cast<bool>(moved.unmatched_handler()));
+    (void)observed;
+}
+
+TEST(router_any_route_has_no_method_mismatch)
+{
+    router r;
+    r.any("/health", make_handler("health"));
+
+    ASSERT_TRUE(r.match(http_method::TRACE, "/health").has_value());
+    ASSERT_TRUE(r.allowed_methods("/health").empty());
 }
 
 TEST(router_any_method)
@@ -72,6 +116,22 @@ TEST(router_any_method)
     ASSERT_TRUE(r.match(http_method::GET, "/health").has_value());
     ASSERT_TRUE(r.match(http_method::POST, "/health").has_value());
     ASSERT_TRUE(r.match(http_method::DELETE_, "/health").has_value());
+}
+
+TEST(router_sync_handler_is_preserved_without_coroutine_adapter)
+{
+    router routes;
+    bool called = false;
+    routes.get_sync("/health", [&called](request_context& context)
+        {
+            called = true;
+            context.text(status::ok, "ok");
+        });
+
+    auto matched = routes.match(http_method::GET, "/health");
+    ASSERT_TRUE(matched.has_value());
+    ASSERT_TRUE(static_cast<bool>(matched->sync_handler));
+    ASSERT_FALSE(static_cast<bool>(matched->handler));
 }
 
 // =============================================================================

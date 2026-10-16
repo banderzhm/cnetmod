@@ -54,7 +54,6 @@ struct column_def
     column_type type;
     col_flag flags = col_flag::none;
     id_strategy strategy = id_strategy::none;
-    std::size_t member_offset = 0;
     [[nodiscard]] auto is_pk() const noexcept -> bool;
     [[nodiscard]] auto is_auto() const noexcept -> bool;
     [[nodiscard]] auto is_nullable() const noexcept -> bool;
@@ -70,6 +69,26 @@ template <class T> using json_field_setter = std::expected<void, std::error_code
 template <class T> using json_field_getter = std::expected<cnetmod::json::document,
     std::error_code> (*)(const T&);
 
+namespace detail {
+
+    template <class Pointer>
+    inline constexpr std::byte member_pointer_type_tag{};
+
+    template <class Pointer>
+    [[nodiscard]] constexpr auto member_pointer_type() noexcept -> const void*
+    {
+        return std::addressof(member_pointer_type_tag<Pointer>);
+    }
+
+    template <auto Expected>
+    [[nodiscard]] auto matches_member_pointer(const void* candidate) noexcept -> bool
+    {
+        using pointer_type = decltype(Expected);
+        return *static_cast<const pointer_type*>(candidate) == Expected;
+    }
+
+} // namespace detail
+
 template <class T> struct field_mapping
 {
     column_def col;
@@ -77,6 +96,17 @@ template <class T> struct field_mapping
     field_getter<T> getter;
     json_field_setter<T> json_setter;
     json_field_getter<T> json_getter;
+    const void* member_pointer_type = nullptr;
+    bool (*member_pointer_matches)(const void*) noexcept = nullptr;
+
+    template <class U>
+    [[nodiscard]] auto matches(U T::* candidate) const noexcept -> bool
+    {
+        using pointer_type = U T::*;
+        return member_pointer_matches != nullptr &&
+            member_pointer_type == detail::member_pointer_type<pointer_type>() &&
+            member_pointer_matches(std::addressof(candidate));
+    }
 };
 
 template <class T> struct table_meta

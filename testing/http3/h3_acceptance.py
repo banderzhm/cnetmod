@@ -85,7 +85,11 @@ def curl_http3(url: str) -> None:
     version = run([curl, "--version"], 5)
     if "http3" not in version.stdout.lower():
         raise SkipCase("curl lacks HTTP/3 support")
-    reply = run([curl, "--http3-only", "--insecure", "--silent", "--show-error", "--fail", url], 20)
+    # Loopback interoperability must never depend on the developer or CI
+    # machine's outbound proxy settings.  In particular, proxying a UDP/QUIC
+    # localhost probe turns a valid server into a misleading CONNECT failure.
+    reply = run([curl, "--noproxy", "*", "--http3-only", "--insecure",
+                 "--silent", "--show-error", "--fail", url], 20)
     if reply.returncode:
         raise AssertionError(reply.stderr.strip() or reply.stdout.strip())
     if "ok" not in reply.stdout.lower():

@@ -79,10 +79,147 @@ private:
     std::unordered_map<std::type_index, std::shared_ptr<void>> values_;
 };
 
+/**
+ * @brief Immutable, type-indexed policy values attached to one route.
+ *
+ * Metadata is declared where a route is registered and read by middleware
+ * after route matching, so authentication, authorization, rate limiting and
+ * documentation derive from one declaration instead of parallel path lists.
+ * Each type appears at most once; adding a value of an existing type replaces
+ * the earlier value.
+ */
+export class endpoint_metadata
+{
+public:
+    endpoint_metadata() = default;
+
+    /**
+     * @brief Creates metadata from a list of heterogeneous policy values.
+     */
+    template <typename... Values>
+    requires(sizeof...(Values) > 0 &&
+        (!std::same_as<std::remove_cvref_t<Values>, endpoint_metadata> && ...))
+    explicit endpoint_metadata(Values... values)
+    {
+        (add(std::move(values)), ...);
+    }
+
+    /**
+     * @brief Adds or replaces the value of type T.
+     */
+    template <typename T>
+    auto add(T value) -> endpoint_metadata&
+    {
+        const std::type_index key{typeid(T)};
+        auto stored = std::make_shared<const T>(std::move(value));
+        for (auto& [type, item] : items_)
+        {
+            if (type == key)
+            {
+                item = std::move(stored);
+                return *this;
+            }
+        }
+        items_.emplace_back(key, std::move(stored));
+        return *this;
+    }
+
+    /**
+     * @brief Returns the value of type T, or null when it was not declared.
+     */
+    template <typename T>
+    [[nodiscard]] auto find() const noexcept -> const T*
+    {
+        const std::type_index key{typeid(T)};
+        for (const auto& [type, item] : items_)
+            if (type == key)
+                return static_cast<const T*>(item.get());
+        return nullptr;
+    }
+
+    /**
+     * @brief Reports whether a value of type T was declared.
+     */
+    template <typename T>
+    [[nodiscard]] auto contains() const noexcept -> bool
+    {
+        return find<T>() != nullptr;
+    }
+
+    [[nodiscard]] auto empty() const noexcept -> bool
+    {
+        return items_.empty();
+    }
+
+    [[nodiscard]] auto size() const noexcept -> std::size_t
+    {
+        return items_.size();
+    }
+
+private:
+    std::vector<std::pair<std::type_index, std::shared_ptr<const void>>> items_;
+};
+
+/**
+ * @brief One registered route as seen by middleware and documentation tools.
+ */
+export struct endpoint
+{
+    /// Matched method; empty for routes registered with router::any().
+    std::optional<http_method> method;
+    /// Canonical route pattern such as /api/orders/:id.
+    std::string pattern;
+    /// Optional stable operation name for logs, metrics and API documents.
+    std::string name;
+    endpoint_metadata metadata;
+};
+
+/**
+ * @brief Declares that a route is reachable without credentials.
+ *
+ * Authentication middleware skips credential parsing entirely.
+ */
+export struct allow_anonymous
+{
+};
+
+/**
+ * @brief Declares that credentials are optional for a route.
+ *
+ * A valid credential binds the principal and an absent credential continues
+ * anonymously. Presented invalid credentials are rejected by default; the
+ * authentication middleware may explicitly opt into anonymous fallback.
+ */
+export struct optional_authentication
+{
+};
+
+/**
+ * @brief Declares the permissions an authenticated caller must hold.
+ *
+ * Every entry of all_of must match. When any_of is non-empty, at least one of
+ * its entries must match. Segments support the `*` wildcard.
+ */
+export struct required_permissions
+{
+    std::vector<std::string> all_of;
+    std::vector<std::string> any_of;
+};
+
+/**
+ * @brief Stable operation name used by logs, metrics and API documents.
+ */
+export struct endpoint_name
+{
+    std::string value;
+};
+
 export struct route_params
 {
     cnetmod::flat_map<std::string, std::string, std::less<>> named;
     std::string wildcard;
+    /// Endpoint selected by the router; null when no route matched.
+    std::shared_ptr<const endpoint> matched;
     [[nodiscard]] auto get(std::string_view key) const noexcept
         -> std::string_view;
 };
@@ -91,7 +228,8 @@ export class request_context
 {
 public:
     request_context(io_context& ctx, socket& sock, const request_parser& parser,
-        response& resp, route_params params);
+        response& resp, route_params params,
+        std::shared_ptr<request_body_stream> body_stream = {});
     request_context(io_context& ctx, socket& sock, std::string_view method,
         std::string_view uri, const header_map& headers,
         std::string_view body, response& resp, route_params params,
@@ -101,7 +239,7 @@ public:
     [[nodiscard]] auto path() const noexcept -> std::string_view;
     [[nodiscard]] auto query_string() const noexcept -> std::string_view;
     [[nodiscard]] auto uri() const noexcept -> std::string_view;
-    [[nodiscard]] auto headers() const noexcept -> const header_map&;
+    [[nodiscard]] auto headers() const -> const header_map&;
     [[nodiscard]] auto body() const -> std::string_view;
     [[nodiscard]] auto has_body_stream() const noexcept -> bool;
     [[nodiscard]] auto receive_body_chunk()
@@ -114,6 +252,13 @@ public:
         -> std::string_view;
     [[nodiscard]] auto wildcard() const noexcept -> std::string_view;
     [[nodiscard]] auto params() const noexcept -> const route_params&;
+    /**
+     * @brief Returns the matched endpoint, or null for unmatched requests.
+     *
+     * The router selects the endpoint before middleware runs, so middleware
+     * can enforce policy declared on the route.
+     */
+    [[nodiscard]] auto endpoint() const noexcept -> const http::endpoint*;
     [[nodiscard]] auto scope() noexcept -> request_scope&;
     [[nodiscard]] auto scope() const noexcept -> const request_scope&;
     void text(int status_code, std::string_view text_body);
@@ -164,6 +309,9 @@ public:
     [[nodiscard]] auto resp() noexcept -> response&;
     [[nodiscard]] auto io_ctx() noexcept -> io_context&;
     [[nodiscard]] auto raw_socket() noexcept -> socket&;
+    /// IP address of the TCP peer (the proxy when one is in front); empty
+    /// when the socket has no peer. Use resolve_client_ip() for the client.
+    [[nodiscard]] auto peer_address() const -> std::string;
     /// Request-scoped budget. Nested services should constrain and forward it
     /// instead of starting independent relative timeouts.
     [[nodiscard]] auto request_deadline() const noexcept -> const cnetmod::deadline&;
@@ -219,6 +367,8 @@ public:
     [[nodiscard]] auto trace_state() const noexcept -> std::string_view;
     void set_trace_context(std::string trace_id, std::string span_id,
         std::uint8_t flags, std::string state = {});
+    /// TCP peer endpoint as "address:port" for access logs and tracing; it is
+    /// the proxy when one is in front. Use resolve_client_ip() for identity.
     [[nodiscard]] auto client_address() const -> std::string;
 
 private:
@@ -239,6 +389,7 @@ private:
     socket& sock_;
     response& resp_;
     route_params params_;
+    const request_parser* parser_{};
     const header_map* headers_ptr_{};
     std::string_view method_;
     mutable std::string body_storage_;
@@ -357,6 +508,7 @@ private:
 };
 
 export using handler_fn = std::function<task<void>(request_context&)>;
+export using sync_handler_fn = std::function<void(request_context&)>;
 export using next_fn = std::function<task<void>()>;
 export using middleware_fn =
     std::function<task<void>(request_context&, next_fn)>;
@@ -389,50 +541,109 @@ namespace detail {
 export struct match_result
 {
     handler_fn handler;
+    sync_handler_fn sync_handler;
     route_params params;
     std::optional<request_body_stream_options> request_stream;
 };
+
+/**
+ * @brief A request that matched no route.
+ *
+ * status is 404 when the path is unknown and 405 when the path exists for
+ * other methods; allowed lists those methods (the server has already set the
+ * Allow header).
+ */
+export struct unmatched_request
+{
+    int status = status::not_found;
+    std::vector<http_method> allowed;
+};
+
+/// Writes the response for an unmatched request in the application envelope.
+export using unmatched_handler_fn =
+    std::function<task<void>(request_context&, const unmatched_request&)>;
 
 export class router
 {
 public:
     router() = default;
-    auto get(std::string_view pattern, handler_fn fn) -> router&;
-    auto post(std::string_view pattern, handler_fn fn) -> router&;
-    auto put(std::string_view pattern, handler_fn fn) -> router&;
-    auto del(std::string_view pattern, handler_fn fn) -> router&;
-    auto patch(std::string_view pattern, handler_fn fn) -> router&;
-    auto any(std::string_view pattern, handler_fn fn) -> router&;
+
+    /**
+     * @brief Installs the response writer for 404 / 405.
+     *
+     * The default writes plain-text bodies. The Allow header of a 405 is always
+     * set by the server before the handler runs.
+     */
+    void on_unmatched(unmatched_handler_fn handler);
+    [[nodiscard]] auto unmatched_handler() const -> unmatched_handler_fn;
+
+    /**
+     * Route registration. Metadata declared here is exposed to middleware
+     * through request_context::endpoint() after the route matches.
+     */
+    auto get(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto post(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto put(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto del(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto patch(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto any(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+
+    /// Register allocation-free handlers for endpoints that complete without
+    /// suspension. Middleware still works; without middleware the server calls
+    /// these directly and creates no handler coroutine frame.
+    auto get_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto post_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto put_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto del_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto patch_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto any_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
 
     /**
      * @brief Registers a POST route whose body is delivered incrementally.
      */
     auto stream_post(std::string_view pattern, handler_fn fn,
-        request_body_stream_options options = {}) -> router&;
+        request_body_stream_options options = {},
+        endpoint_metadata metadata = {}) -> router&;
 
     /**
      * @brief Registers a PUT route whose body is delivered incrementally.
      */
     auto stream_put(std::string_view pattern, handler_fn fn,
-        request_body_stream_options options = {}) -> router&;
+        request_body_stream_options options = {},
+        endpoint_metadata metadata = {}) -> router&;
 
     /**
      * @brief Registers a PATCH route whose body is delivered incrementally.
      */
     auto stream_patch(std::string_view pattern, handler_fn fn,
-        request_body_stream_options options = {}) -> router&;
+        request_body_stream_options options = {},
+        endpoint_metadata metadata = {}) -> router&;
 
     /**
      * @brief Registers a GET endpoint with a request-bound SSE stream.
      */
     auto sse_get(std::string_view pattern, sse_handler_fn fn,
-        std::optional<sse_stream_options> options = std::nullopt) -> router&;
+        std::optional<sse_stream_options> options = std::nullopt,
+        endpoint_metadata metadata = {}) -> router&;
 
     /**
      * @brief Registers a POST endpoint with a request-bound SSE stream.
      */
     auto sse_post(std::string_view pattern, sse_handler_fn fn,
-        std::optional<sse_stream_options> options = std::nullopt) -> router&;
+        std::optional<sse_stream_options> options = std::nullopt,
+        endpoint_metadata metadata = {}) -> router&;
 
     /**
      * @brief Sets the options inherited by subsequently registered SSE routes.
@@ -443,6 +654,26 @@ public:
     [[nodiscard]] auto match(std::string_view method, std::string_view path) const
         -> std::optional<match_result>;
 
+    /**
+     * @brief Returns methods whose route pattern matches path.
+     *
+     * An empty result means the resource path is unknown. A non-empty result
+     * after match() failed means the server must return 405 and emit these
+     * methods in the Allow response header. Routes registered with any()
+     * accept every method and therefore never appear here after a failed
+     * match.
+     */
+    [[nodiscard]] auto allowed_methods(std::string_view path) const
+        -> std::vector<http_method>;
+
+    /**
+     * @brief Returns every registered endpoint in registration order.
+     *
+     * Intended for API documentation and startup policy audits.
+     */
+    [[nodiscard]] auto endpoints() const
+        -> std::vector<std::shared_ptr<const endpoint>>;
+
 private:
     struct route_entry
     {
@@ -450,18 +681,24 @@ private:
         std::vector<detail::segment> segments;
         std::string canonical_path;
         handler_fn handler;
+        sync_handler_fn sync_handler;
         std::optional<request_body_stream_options> request_stream;
         detail::route_score score;
         std::uint64_t order = 0;
+        std::shared_ptr<const endpoint> described;
     };
 
-    auto add(http_method method, std::string_view pattern, handler_fn fn)
-        -> router&;
+    auto add(http_method method, std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata) -> router&;
+    auto add_sync(std::optional<http_method> method, std::string_view pattern,
+        sync_handler_fn fn, endpoint_metadata metadata) -> router&;
     auto add_sse(http_method method, std::string_view pattern,
-        sse_handler_fn fn, std::optional<sse_stream_options> options) -> router&;
+        sse_handler_fn fn, std::optional<sse_stream_options> options,
+        endpoint_metadata metadata) -> router&;
     auto add_route(std::optional<http_method> method, std::string_view pattern,
-        handler_fn fn,
-        std::optional<request_body_stream_options> request_stream = {}) -> router&;
+        handler_fn fn, endpoint_metadata metadata,
+        std::optional<request_body_stream_options> request_stream = {},
+        sync_handler_fn sync_handler = {}) -> router&;
     [[nodiscard]] auto find_exact(http_method method,
         std::string_view canonical_path) const
         -> const route_entry*;
@@ -469,6 +706,7 @@ private:
         const std::vector<std::string_view>& parts,
         route_params& out) -> bool;
     std::vector<route_entry> entries_;
+    unmatched_handler_fn unmatched_;
     sse_stream_options sse_defaults_{};
     std::vector<std::size_t> static_exact_indices_;
     std::unordered_map<std::string, std::vector<std::size_t>> exact_index_;

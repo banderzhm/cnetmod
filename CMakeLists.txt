@@ -1,10 +1,19 @@
 
 cmake_minimum_required(VERSION 3.28)
 
+# CMake 4.2 preserves backslashes passed through macros. Component extraction
+# regexes intentionally match both Windows and POSIX separators, so use the
+# non-lossy argument semantics when the policy is available while retaining
+# compatibility with the declared 3.28 minimum.
+if(POLICY CMP0219)
+    cmake_policy(SET CMP0219 NEW)
+endif()
+
 file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" CNETMOD_VERSION
     LIMIT_COUNT 1)
 if(NOT CNETMOD_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
-    message(FATAL_ERROR "VERSION must contain one semantic version: ${CNETMOD_VERSION}")
+    message(FATAL_ERROR
+        "VERSION must contain one semantic version: ${CNETMOD_VERSION}")
 endif()
 
 project(cnetmod
@@ -57,7 +66,7 @@ if(CNETMOD_USE_MOLD)
     cnetmod_use_mold()
 endif()
 # ==============================================================================
-# Memory Allocator Optimization: Use mimalloc if available
+# Memory Allocator Optimization: bundled mimalloc, enabled on final executables
 # ==============================================================================
 option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
 set(CNETMOD_DEPENDENCY_MODE "system" CACHE STRING
@@ -68,6 +77,7 @@ if(NOT CNETMOD_DEPENDENCY_MODE MATCHES "^(system|vcpkg|conan)$")
         "CNETMOD_DEPENDENCY_MODE must be system, vcpkg, or conan")
 endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/Mimalloc.cmake)
+set(CNETMOD_USING_MIMALLOC FALSE CACHE BOOL "Using bundled mimalloc" FORCE)
 if(CNETMOD_USE_MIMALLOC)
     cnetmod_use_mimalloc()
 endif()
@@ -122,6 +132,78 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wall -Wextra)
 endif()
+
+# ==============================================================================
+# Release code-generation profile
+# ==============================================================================
+# Keep distributed SDK objects portable by default. Performance deployments and
+# reproducible benchmark builds can select a declared CPU contract instead of
+# relying on the build host's accidental `-march=native` feature set.
+set(CNETMOD_CPU_TARGET "portable" CACHE STRING
+    "Release CPU target: portable, x86-64-v3, or native")
+set_property(CACHE CNETMOD_CPU_TARGET PROPERTY STRINGS portable x86-64-v3 native)
+option(CNETMOD_ENABLE_THIN_LTO
+    "Enable ThinLTO/IPO for optimized cnetmod targets" OFF)
+
+if(NOT CNETMOD_CPU_TARGET MATCHES "^(portable|x86-64-v3|native)$")
+    message(FATAL_ERROR
+        "CNETMOD_CPU_TARGET must be portable, x86-64-v3, or native")
+endif()
+
+function(cnetmod_enable_release_codegen target)
+    if(NOT TARGET ${target})
+        return()
+    endif()
+    if(CNETMOD_CPU_TARGET STREQUAL "x86-64-v3")
+        if(MSVC)
+            message(FATAL_ERROR
+                "CNETMOD_CPU_TARGET=x86-64-v3 requires Clang or GCC")
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-march=x86-64-v3>")
+            if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+                # Clang 22 may widen aggregate initialization inside a
+                # coroutine frame to an aligned 256-bit store even though the
+                # frame returned by the ordinary allocation function is only
+                # max_align_t-aligned. Prefer 128-bit vectors until LLVM makes
+                # that lowering alignment-safe; scalar AVX2 instructions and
+                # the rest of the x86-64-v3 contract remain available.
+                target_compile_options(${target} PRIVATE
+                    "$<$<CONFIG:Release,RelWithDebInfo>:-mprefer-vector-width=128>")
+            endif()
+        else()
+            message(FATAL_ERROR
+                "x86-64-v3 was selected for a non-x86_64 target")
+        endif()
+    elseif(CNETMOD_CPU_TARGET STREQUAL "native")
+        if(MSVC)
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:/arch:AVX2>")
+        else()
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-march=native>")
+            if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+                CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+                target_compile_options(${target} PRIVATE
+                    "$<$<CONFIG:Release,RelWithDebInfo>:-mprefer-vector-width=128>")
+            endif()
+        endif()
+    endif()
+
+    if(CNETMOD_ENABLE_THIN_LTO)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-flto=thin>")
+            target_link_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-flto=thin>")
+        else()
+            set_property(TARGET ${target} PROPERTY
+                INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+            set_property(TARGET ${target} PROPERTY
+                INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+        endif()
+    endif()
+endfunction()
 
 # ==============================================================================
 # C++20 Module Scanning Configuration
@@ -209,6 +291,8 @@ file(GLOB_RECURSE MODULE_INTERFACE_FILES CONFIGURE_DEPENDS
 # Collect implementation files (excluding main.cpp)
 file(GLOB_RECURSE CPP_SOURCES CONFIGURE_DEPENDS "src/*.cpp")
 list(REMOVE_ITEM CPP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp")
+list(REMOVE_ITEM CPP_SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/component_facade.cpp")
 # query_wrapper<T> is instantiated for application-defined models. Its member
 # definitions are included by the module interface; keep the BMI dependency
 # explicit because CMake's module scanner does not track textual includes.
@@ -250,6 +334,11 @@ cnetmod_filter_disabled_component_sources(
         REGULAR_CPP_SOURCES
 )
 
+if(NOT CNETMOD_ENABLE_OPENAI)
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX
+        "[/\\\\]src[/\\\\]ai\\.(cppm|ixx|cpp)$")
+endif()
+
 # The application host and OTLP adapters are HTTP-based composition features.
 # Keep a protocol-free core build valid when HTTP is intentionally disabled.
 if(NOT CNETMOD_ENABLE_HTTP)
@@ -286,9 +375,12 @@ if(NOT CNETMOD_ENABLE_SSL)
         list(FILTER ${source_list_variable} EXCLUDE REGEX
             "[/\\]utils[/\\]hmac_sha256\\.(cppm|ixx|cpp)$")
     endforeach()
-    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.(cppm|ixx)$")
-    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
-    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX "[/\\]security[/\\]jwt\\.cpp$")
+    list(FILTER MODULE_INTERFACE_FILES EXCLUDE REGEX
+        "[/\\]security(\\.cppm|[/\\].*\\.(cppm|ixx))$")
+    list(FILTER MODULE_IMPLEMENTATION_CPP_FILES EXCLUDE REGEX
+        "[/\\]security[/\\].*\\.cpp$")
+    list(FILTER REGULAR_CPP_SOURCES EXCLUDE REGEX
+        "[/\\]security[/\\].*\\.cpp$")
 endif()
 
 # HTTP/3 modules live under src/protocol/http/v3/ and depend on QUIC primitives
@@ -359,24 +451,118 @@ endif()
 # compiling their own TLS code out.  Removing the units here made MSVC fail
 # dependency scanning with C2230 before those feature guards were considered.
 
-# ============================================================================== 
-# Core Library Target: cnetmod_core
-# ============================================================================== 
+# ==============================================================================
+# Component libraries
+# ==============================================================================
 
-add_library(cnetmod_core STATIC
-    ${REGULAR_CPP_SOURCES}
+# Keep each public C++ module and its implementation in the component that owns
+# it.  cnetmod_core remains a tiny static compatibility facade; it no longer
+# contains every enabled protocol in one physical archive.
+macro(cnetmod_extract_component PREFIX SOURCE_REGEX)
+    foreach(_kind MODULE_INTERFACE_FILES MODULE_IMPLEMENTATION_CPP_FILES
+            REGULAR_CPP_SOURCES)
+        set(${PREFIX}_${_kind} "${${_kind}}")
+        list(FILTER ${PREFIX}_${_kind} INCLUDE REGEX "${SOURCE_REGEX}")
+        list(FILTER ${_kind} EXCLUDE REGEX "${SOURCE_REGEX}")
+    endforeach()
+endmacro()
+
+# Monitoring contracts are protocol-neutral despite their physical location
+# below application/.  Keep them in runtime so protocol-only consumers retain
+# metrics and tracing without linking the Application composition layer.
+cnetmod_extract_component(CNETMOD_MONITORING_CORE
+    "[/\\\\]src[/\\\\]application[/\\\\]monitoring[/\\\\]core[/\\\\]")
+cnetmod_extract_component(CNETMOD_HTTP_REDIS_CACHE
+    "[/\\\\]src[/\\\\]protocol[/\\\\]http[/\\\\]middleware[/\\\\]redis_cache\\.(cppm|ixx|cpp)$")
+cnetmod_extract_component(CNETMOD_ORM
+    "[/\\\\]src[/\\\\]database[/\\\\]orm[/\\\\]")
+
+set(CNETMOD_PROTOCOL_COMPONENT_TARGETS)
+foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
+    if(NOT CNETMOD_ENABLE_${protocol})
+        continue()
+    endif()
+    string(TOLOWER "${protocol}" _protocol_lower)
+    set(_protocol_directory "${CNETMOD_PROTOCOL_${protocol}_DIRECTORY}")
+    cnetmod_extract_component(CNETMOD_PROTOCOL_${protocol}
+        "[/\\\\]src[/\\\\]protocol[/\\\\]${_protocol_directory}([/\\\\]|\\.(cppm|ixx|cpp)$)")
+    list(APPEND CNETMOD_PROTOCOL_COMPONENT_TARGETS
+        "cnetmod_${_protocol_lower}")
+endforeach()
+
+cnetmod_extract_component(CNETMOD_APPLICATION
+    "[/\\\\]src[/\\\\](application([/\\\\]|\\.(cppm|ixx|cpp)$)|ai\\.(cppm|ixx|cpp)$)")
+
+# Repository composition is an optional Application capability.  Do not leave
+# its module interfaces in the Application target when ORM is disabled: an
+# empty/preprocessor-guarded facade is insufficient because
+# application.orm_repository itself imports concrete ORM modules during CMake's
+# dependency scan.
+if(NOT CNETMOD_ENABLE_ORM)
+    foreach(_kind MODULE_INTERFACE_FILES MODULE_IMPLEMENTATION_CPP_FILES
+            REGULAR_CPP_SOURCES)
+        list(FILTER CNETMOD_APPLICATION_${_kind} EXCLUDE REGEX
+            "[/\\\\]src[/\\\\]application[/\\\\](data|orm_repository)\\.(cppm|ixx|cpp)$")
+        list(FILTER CNETMOD_APPLICATION_${_kind} EXCLUDE REGEX
+            "[/\\\\]src[/\\\\]application[/\\\\]integration[/\\\\](mysql_orm|postgresql_orm)\\.(cppm|ixx|cpp)$")
+    endforeach()
+endif()
+
+set(CNETMOD_RUNTIME_MODULE_INTERFACE_FILES
+    ${MODULE_INTERFACE_FILES}
+    ${CNETMOD_MONITORING_CORE_MODULE_INTERFACE_FILES})
+set(CNETMOD_RUNTIME_MODULE_IMPLEMENTATION_CPP_FILES
     ${MODULE_IMPLEMENTATION_CPP_FILES}
-)
+    ${CNETMOD_MONITORING_CORE_MODULE_IMPLEMENTATION_CPP_FILES})
+set(CNETMOD_RUNTIME_REGULAR_CPP_SOURCES
+    ${REGULAR_CPP_SOURCES}
+    ${CNETMOD_MONITORING_CORE_REGULAR_CPP_SOURCES})
 
-target_include_directories(cnetmod_core PUBLIC
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated/include>
+function(cnetmod_configure_component TARGET_NAME EXPORT_NAME)
+    target_include_directories(${TARGET_NAME} PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
+    target_compile_features(${TARGET_NAME} PUBLIC cxx_std_23)
+    if(MSVC)
+        # A consumer recompiles installed module interfaces to produce local
+        # BMIs.  Keep the character-set environment identical to the archive
+        # build or MSVC reports C5050 module incompatibility warnings.
+        target_compile_options(${TARGET_NAME} PUBLIC /utf-8)
+    endif()
+    set_target_properties(${TARGET_NAME} PROPERTIES
+        CXX_MODULE_GENERATION_MODE "SEPARATE"
+        POSITION_INDEPENDENT_CODE ON
+        EXPORT_NAME "${EXPORT_NAME}")
+endfunction()
+
+function(cnetmod_add_component TARGET_NAME EXPORT_NAME INTERFACE_VAR
+        IMPLEMENTATION_VAR REGULAR_VAR)
+    add_library(${TARGET_NAME} STATIC
+        ${${IMPLEMENTATION_VAR}}
+        ${${REGULAR_VAR}})
+    cnetmod_configure_component(${TARGET_NAME} ${EXPORT_NAME})
+    target_link_libraries(${TARGET_NAME} PUBLIC cnetmod_runtime)
+    if(${INTERFACE_VAR})
+        target_sources(${TARGET_NAME} PUBLIC
+            FILE_SET cxx_modules TYPE CXX_MODULES
+            BASE_DIRS ${CMAKE_CURRENT_SOURCE_DIR}
+            FILES ${${INTERFACE_VAR}})
+    endif()
+endfunction()
+
+add_library(cnetmod_runtime STATIC
+    ${CNETMOD_RUNTIME_REGULAR_CPP_SOURCES}
+    ${CNETMOD_RUNTIME_MODULE_IMPLEMENTATION_CPP_FILES})
+cnetmod_configure_component(cnetmod_runtime runtime)
+add_library(cnetmod::runtime ALIAS cnetmod_runtime)
+
+target_include_directories(cnetmod_runtime PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-target_compile_features(cnetmod_core PUBLIC cxx_std_23)
 
 # Platform-specific macro definitions
-target_compile_definitions(cnetmod_core PUBLIC
+target_compile_definitions(cnetmod_runtime PUBLIC
     $<$<PLATFORM_ID:Windows>:CNETMOD_PLATFORM_WINDOWS>
     $<$<PLATFORM_ID:Linux>:CNETMOD_PLATFORM_LINUX>
     $<$<PLATFORM_ID:Darwin>:CNETMOD_PLATFORM_MACOS>
@@ -403,43 +589,157 @@ target_compile_definitions(cnetmod_core PUBLIC
 )
 foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
     if(CNETMOD_ENABLE_${protocol})
-        target_compile_definitions(cnetmod_core PUBLIC
+        target_compile_definitions(cnetmod_runtime PUBLIC
             CNETMOD_HAS_PROTOCOL_${protocol})
     endif()
 endforeach()
-add_library(cnetmod::core ALIAS cnetmod_core)
 
 # Platform-specific linking
 if(WIN32)
-    target_link_libraries(cnetmod_core PUBLIC ws2_32 mswsock crypt32)
+    target_link_libraries(cnetmod_runtime PUBLIC ws2_32 mswsock crypt32)
 elseif(CNETMOD_USE_LIBKQUEUE)
-    target_include_directories(cnetmod_core PRIVATE
+    target_include_directories(cnetmod_runtime PRIVATE
         "${CNETMOD_LIBKQUEUE_INCLUDE_DIR}")
-    target_link_libraries(cnetmod_core PRIVATE
+    target_link_libraries(cnetmod_runtime PRIVATE
         "${CNETMOD_LIBKQUEUE_LIBRARY}")
 elseif(CNETMOD_HAS_IO_URING)
-    target_link_libraries(cnetmod_core PUBLIC uring)
+    target_link_libraries(cnetmod_runtime PUBLIC uring)
 endif()
 
-cnetmod_link_third_party_dependencies(cnetmod_core)
-cnetmod_link_selected_stdlib(cnetmod_core)
-cnetmod_link_mimalloc(cnetmod_core)
-
-# ==============================================================================
-# C++ Module Configuration
-# ==============================================================================
-#[[
-  Configure standard-library/project/json C++ module file sets on cnetmod_core.
-]]
+cnetmod_link_stdexec(cnetmod_runtime)
+cnetmod_link_nlohmann_json(cnetmod_runtime)
+cnetmod_link_boringssl(cnetmod_runtime)
+cnetmod_link_selected_stdlib(cnetmod_runtime)
 configure_cxx_modules(
-    TARGET cnetmod_core
-    MODULE_INTERFACE_FILES ${MODULE_INTERFACE_FILES}
-)
+    TARGET cnetmod_runtime
+    MODULE_INTERFACE_FILES ${CNETMOD_RUNTIME_MODULE_INTERFACE_FILES}
+    DEPENDENCY_MODULE_INTERFACE_FILES ${CNETMOD_NLOHMANN_JSON_MODULE})
 
-# Module generation mode
-set_property(TARGET cnetmod_core PROPERTY
-    CXX_MODULE_GENERATION_MODE "SEPARATE"
-)
+set(CNETMOD_COMPONENT_TARGETS cnetmod_runtime)
+
+if(CNETMOD_ENABLE_ORM)
+    cnetmod_add_component(cnetmod_orm orm
+        CNETMOD_ORM_MODULE_INTERFACE_FILES
+        CNETMOD_ORM_MODULE_IMPLEMENTATION_CPP_FILES
+        CNETMOD_ORM_REGULAR_CPP_SOURCES)
+    add_library(cnetmod::orm ALIAS cnetmod_orm)
+    cnetmod_link_pugixml(cnetmod_orm)
+    list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_orm)
+endif()
+
+foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
+    if(NOT CNETMOD_ENABLE_${protocol})
+        continue()
+    endif()
+    string(TOLOWER "${protocol}" _protocol_lower)
+    set(_target "cnetmod_${_protocol_lower}")
+    cnetmod_add_component(${_target} ${_protocol_lower}
+        CNETMOD_PROTOCOL_${protocol}_MODULE_INTERFACE_FILES
+        CNETMOD_PROTOCOL_${protocol}_MODULE_IMPLEMENTATION_CPP_FILES
+        CNETMOD_PROTOCOL_${protocol}_REGULAR_CPP_SOURCES)
+    add_library(cnetmod::${_protocol_lower} ALIAS ${_target})
+    list(APPEND CNETMOD_COMPONENT_TARGETS ${_target})
+endforeach()
+
+# Third-party implementations belong to the component that uses them.  This
+# keeps a runtime-only consumer from inheriting every optional protocol SDK.
+if(TARGET cnetmod_http)
+    cnetmod_link_zlib(cnetmod_http)
+endif()
+if(TARGET cnetmod_grpc)
+    cnetmod_link_zlib(cnetmod_grpc)
+    cnetmod_link_zstd(cnetmod_grpc)
+    cnetmod_link_brotli(cnetmod_grpc)
+endif()
+if(TARGET cnetmod_kafka)
+    cnetmod_link_zlib(cnetmod_kafka)
+    cnetmod_link_zstd(cnetmod_kafka)
+    cnetmod_link_lz4(cnetmod_kafka)
+endif()
+if(TARGET cnetmod_mongodb)
+    cnetmod_link_zlib(cnetmod_mongodb)
+endif()
+if(TARGET cnetmod_raft)
+    cnetmod_link_leveldb(cnetmod_raft)
+endif()
+if(TARGET cnetmod_postgresql)
+    cnetmod_link_icu(cnetmod_postgresql)
+endif()
+
+# Cross-protocol imports form a directed component graph.  HTTP owns optional
+# HTTP/3 support, while the Redis-backed HTTP cache remains an explicit
+# integration component below.
+foreach(_edge IN ITEMS
+        "dns;http"
+        "grpc;http"
+        "mqtt;http"
+        "mqtt;websocket"
+        "openai;http"
+        "websocket;http")
+    list(GET _edge 0 _consumer)
+    list(GET _edge 1 _dependency)
+    if(TARGET cnetmod_${_consumer} AND TARGET cnetmod_${_dependency})
+        target_link_libraries(cnetmod_${_consumer} PUBLIC
+            cnetmod_${_dependency})
+    endif()
+endforeach()
+if(TARGET cnetmod_http AND TARGET cnetmod_quic)
+    target_link_libraries(cnetmod_http PUBLIC cnetmod_quic)
+endif()
+if(CNETMOD_ENABLE_ORM)
+    foreach(_database_target IN ITEMS cnetmod_mysql cnetmod_postgresql)
+        if(TARGET ${_database_target})
+            target_link_libraries(${_database_target} PUBLIC cnetmod_orm)
+        endif()
+    endforeach()
+endif()
+
+if(TARGET cnetmod_http AND TARGET cnetmod_redis)
+    cnetmod_add_component(cnetmod_http_redis_cache http_redis_cache
+        CNETMOD_HTTP_REDIS_CACHE_MODULE_INTERFACE_FILES
+        CNETMOD_HTTP_REDIS_CACHE_MODULE_IMPLEMENTATION_CPP_FILES
+        CNETMOD_HTTP_REDIS_CACHE_REGULAR_CPP_SOURCES)
+    target_link_libraries(cnetmod_http_redis_cache PUBLIC
+        cnetmod_http cnetmod_redis)
+    add_library(cnetmod::http_redis_cache ALIAS cnetmod_http_redis_cache)
+    list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_http_redis_cache)
+endif()
+
+if(CNETMOD_APPLICATION_MODULE_INTERFACE_FILES OR
+        CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES OR
+        CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
+    cnetmod_add_component(cnetmod_application application
+        CNETMOD_APPLICATION_MODULE_INTERFACE_FILES
+        CNETMOD_APPLICATION_MODULE_IMPLEMENTATION_CPP_FILES
+        CNETMOD_APPLICATION_REGULAR_CPP_SOURCES)
+    add_library(cnetmod::application ALIAS cnetmod_application)
+    if(TARGET cnetmod_orm)
+        target_link_libraries(cnetmod_application PUBLIC cnetmod_orm)
+    endif()
+    foreach(_protocol_target IN LISTS CNETMOD_PROTOCOL_COMPONENT_TARGETS)
+        target_link_libraries(cnetmod_application PUBLIC ${_protocol_target})
+    endforeach()
+    if(CNETMOD_HAS_YAML_CONFIGURATION)
+        target_link_libraries(cnetmod_application PRIVATE yaml_cpp::yaml_cpp)
+    endif()
+    list(APPEND CNETMOD_COMPONENT_TARGETS cnetmod_application)
+endif()
+
+# Compatibility/convenience facade.  Its own archive contains only a marker;
+# the linked component targets retain the actual implementation and module
+# ownership.  Keeping a physical target preserves `--target cnetmod_core` for
+# existing build scripts without recreating the monolith.
+add_library(cnetmod_core STATIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/component_facade.cpp")
+cnetmod_configure_component(cnetmod_core cnetmod_core)
+target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_COMPONENT_TARGETS})
+foreach(_cnetmod_component IN LISTS CNETMOD_COMPONENT_TARGETS)
+    cnetmod_enable_release_codegen(${_cnetmod_component})
+endforeach()
+cnetmod_enable_release_codegen(cnetmod_core)
+add_library(cnetmod::core ALIAS cnetmod_core)
+add_library(cnetmod::all ALIAS cnetmod_core)
+
 
 # ==============================================================================
 # C ABI bindings
@@ -448,7 +748,7 @@ set_property(TARGET cnetmod_core PROPERTY
 # can link it without exposing compiler-specific C++ module BMIs. Keep it
 # static by default: the C++ module core owns process-level initialization and
 # is safely embedded in the extension/application that owns its event loop.
-option(CNETMOD_BUILD_C_API "Build the stable C ABI library" ON)
+option(CNETMOD_BUILD_C_API "Build the stable C ABI library" OFF)
 if(CNETMOD_BUILD_C_API AND CNETMOD_ENABLE_HTTP)
     set_target_properties(cnetmod_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
     add_library(cnetmod_c STATIC
@@ -472,7 +772,7 @@ endif()
 # CPython extension built on the stable C ABI. It deliberately links the
 # static cnetmod_c target into the extension, so Python imports no C++ module
 # DLL and owns the same event-loop lifetime as the binding.
-option(CNETMOD_BUILD_PYTHON_BINDINGS "Build the CPython native extension" ON)
+option(CNETMOD_BUILD_PYTHON_BINDINGS "Build the CPython native extension" OFF)
 if(TARGET cnetmod_c AND CNETMOD_BUILD_PYTHON_BINDINGS)
     find_package(Python3 COMPONENTS Interpreter Development.SABIModule QUIET)
     if(Python3_Development.SABIModule_FOUND)
@@ -525,28 +825,35 @@ if(BoringSSL_FOUND AND TARGET ssl AND TARGET crypto)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/boringssl/include/"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 endif()
-if(WIN32 AND CNETMOD_BUNDLED_ICU)
+if(CNETMOD_USING_BUNDLED_ICU)
+    # Ship the exact ICU build used by the PostgreSQL component.  Consumers of
+    # an installed SDK must never fall back to an unrelated machine-wide ICU.
     install(FILES
-        "${CNETMOD_BUNDLED_ICU_LIBRARY_DIR}/icuuc.lib"
-        "${CNETMOD_BUNDLED_ICU_LIBRARY_DIR}/icuin.lib"
-        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/icu"
-        CONFIGURATIONS Release RelWithDebInfo MinSizeRel)
+        "$<TARGET_LINKER_FILE:ICU::uc>"
+        "$<TARGET_LINKER_FILE:ICU::i18n>"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/icu")
     install(FILES
-        "${CNETMOD_BUNDLED_ICU_RUNTIME_DIR}/icuuc78.dll"
-        "${CNETMOD_BUNDLED_ICU_RUNTIME_DIR}/icuin78.dll"
+        "$<TARGET_FILE:ICU::uc>"
+        "$<TARGET_FILE:ICU::i18n>"
         "${CNETMOD_BUNDLED_ICU_RUNTIME_DIR}/icudt78.dll"
-        DESTINATION "${CMAKE_INSTALL_BINDIR}"
-        CONFIGURATIONS Release RelWithDebInfo MinSizeRel)
-    install(DIRECTORY "${CNETMOD_BUNDLED_ICU_INCLUDE_DIR}/unicode"
+        DESTINATION "${CMAKE_INSTALL_BINDIR}")
+    install(DIRECTORY
+        "${CNETMOD_BUNDLED_ICU_SOURCE_DIR}/common/unicode"
+        "${CNETMOD_BUNDLED_ICU_SOURCE_DIR}/i18n/unicode"
         DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 endif()
-install(TARGETS cnetmod_core
+install(TARGETS ${CNETMOD_COMPONENT_TARGETS}
     EXPORT cnetmodTargets
     ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
     RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}"
     FILE_SET cxx_modules DESTINATION "${CMAKE_INSTALL_LIBDIR}/cnetmod/modules"
 )
+install(TARGETS cnetmod_core
+    EXPORT cnetmodTargets
+    ARCHIVE DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    LIBRARY DESTINATION "${CMAKE_INSTALL_LIBDIR}"
+    RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 if(UNIX AND STDLIB_MODULE_DIRS)
     # libc++'s std module units include generated declaration fragments from
     # adjacent std/ and std.compat/ directories.  CMake installs only files
@@ -575,85 +882,22 @@ if(TARGET cnetmod_c)
         RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
 endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}"
-    PATTERN "version.hpp" EXCLUDE
-    PATTERN "version.hpp.in" EXCLUDE)
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/cnetmod/version.hpp.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/include/cnetmod/version.hpp"
-    @ONLY)
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/generated/include/cnetmod/version.hpp"
-    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cnetmod")
-install(DIRECTORY "${CNETMOD_GLAZE_SOURCE_DIR}/include/glaze"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(DIRECTORY "${CNETMOD_NLOHMANN_JSON_SOURCE_DIR}/include/nlohmann"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
 # stdexec remains a private build-time implementation dependency.  It is not
 # installed because no public cnetmod module interface exposes its types.
 
-set(CNETMOD_PACKAGE_COMPONENTS core coro io executor json security)
-if(CNETMOD_ENABLE_HTTP)
-    list(APPEND CNETMOD_PACKAGE_COMPONENTS application)
-endif()
-if(CNETMOD_ENABLE_ORM)
-    list(APPEND CNETMOD_PACKAGE_COMPONENTS orm)
-endif()
-foreach(protocol IN LISTS CNETMOD_PROTOCOLS)
-    if(CNETMOD_ENABLE_${protocol})
-        string(TOLOWER "${protocol}" protocol_component)
-        list(APPEND CNETMOD_PACKAGE_COMPONENTS "${protocol_component}")
-    endif()
-endforeach()
-list(REMOVE_DUPLICATES CNETMOD_PACKAGE_COMPONENTS)
-
-set(CNETMOD_PACKAGE_COMPONENTS_JSON "")
-foreach(component IN LISTS CNETMOD_PACKAGE_COMPONENTS)
-    if(CNETMOD_PACKAGE_COMPONENTS_JSON)
-        string(APPEND CNETMOD_PACKAGE_COMPONENTS_JSON ", ")
-    endif()
-    string(APPEND CNETMOD_PACKAGE_COMPONENTS_JSON "\"${component}\"")
-endforeach()
-
-if(MSVC)
-    set(CNETMOD_PACKAGE_STDLIB "msvc")
-    set(CNETMOD_PACKAGE_RUNTIME "md")
-elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    set(CNETMOD_PACKAGE_STDLIB "libc++")
-    set(CNETMOD_PACKAGE_RUNTIME "native")
-else()
-    set(CNETMOD_PACKAGE_STDLIB "libstdc++")
-    set(CNETMOD_PACKAGE_RUNTIME "native")
-endif()
-set(CNETMOD_DISTRIBUTION_PLATFORM_BASELINE "native" CACHE STRING
-    "Minimum platform ABI recorded in the installed SDK manifest")
-if(CMAKE_CONFIGURATION_TYPES)
-    set(_cnetmod_default_distribution_configuration "multi-config")
-else()
-    set(_cnetmod_default_distribution_configuration "${CMAKE_BUILD_TYPE}")
-endif()
-set(CNETMOD_DISTRIBUTION_CONFIGURATION
-    "${_cnetmod_default_distribution_configuration}" CACHE STRING
-    "Configuration recorded in the installed SDK manifest")
-if(CNETMOD_DISTRIBUTION_CONFIGURATION STREQUAL "")
-    set(CNETMOD_DISTRIBUTION_CONFIGURATION "unknown")
-endif()
-string(TOLOWER "${CMAKE_SYSTEM_NAME}" CNETMOD_PACKAGE_SYSTEM)
-string(TOLOWER "${CMAKE_SYSTEM_PROCESSOR}" CNETMOD_PACKAGE_PROCESSOR)
-string(TOLOWER "${CMAKE_CXX_COMPILER_ID}" CNETMOD_PACKAGE_COMPILER)
-set(CNETMOD_PACKAGE_ABI
-    "${CNETMOD_PACKAGE_SYSTEM}-${CNETMOD_PACKAGE_PROCESSOR}-${CNETMOD_PACKAGE_COMPILER}${CMAKE_CXX_COMPILER_VERSION}-${CNETMOD_PACKAGE_STDLIB}-${CNETMOD_PACKAGE_RUNTIME}-${CNETMOD_DISTRIBUTION_PLATFORM_BASELINE}")
-string(REGEX REPLACE "[^A-Za-z0-9.+_-]" "-" CNETMOD_PACKAGE_ABI "${CNETMOD_PACKAGE_ABI}")
-set(CNETMOD_DISTRIBUTION_TARGET_ID "${CNETMOD_PACKAGE_ABI}" CACHE STRING
-    "Stable target identifier used by cnetmod release catalogs")
-
-configure_file(
-    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmod-package-manifest.json.in"
-    "${CMAKE_CURRENT_BINARY_DIR}/cnetmod-package-manifest.json"
-    @ONLY)
 configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodConfig.cmake.in"
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
+)
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodMimalloc.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodMimalloc.cmake"
+    @ONLY
 )
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfigVersion.cmake"
@@ -668,18 +912,14 @@ install(EXPORT cnetmodTargets
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodMimalloc.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
 )
-install(FILES
-    "${CMAKE_CURRENT_BINARY_DIR}/cnetmod-package-manifest.json"
-    DESTINATION "${CMAKE_INSTALL_DATADIR}/cnetmod")
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE"
-    DESTINATION "${CMAKE_INSTALL_DATADIR}/cnetmod/licenses")
 
 set(CPACK_PACKAGE_NAME "cnetmod")
 set(CPACK_PACKAGE_VENDOR "banderzhm")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-set(CPACK_PACKAGE_FILE_NAME "cnetmod-sdk-${PROJECT_VERSION}-${CNETMOD_PACKAGE_ABI}")
+set(CPACK_PACKAGE_FILE_NAME "cnetmod-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")
 set(CPACK_GENERATOR "ZIP")
 include(CPack)
 
@@ -691,6 +931,9 @@ set(CNETMOD_LINK_TARGET cnetmod_core)
 
 add_executable(cnetmod_app src/main.cpp)
 target_link_libraries(cnetmod_app PRIVATE ${CNETMOD_LINK_TARGET})
+if(CNETMOD_USING_MIMALLOC)
+    cnetmod_enable_mimalloc(cnetmod_app)
+endif()
 set_property(TARGET cnetmod_app PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE"
 )
@@ -699,8 +942,8 @@ set_property(TARGET cnetmod_app PROPERTY
 # Testing, Benchmarks & TFB
 # ==============================================================================
 
-option(CNETMOD_BUILD_TESTS "Build tests" ON)
-option(CNETMOD_BUILD_BENCH "Build performance benchmarks" ON)
+option(CNETMOD_BUILD_TESTS "Build tests" OFF)
+option(CNETMOD_BUILD_BENCH "Build performance benchmarks" OFF)
 if(CNETMOD_BUILD_TESTS)
     enable_testing()
 endif()
@@ -719,7 +962,7 @@ endif()
 # Example Program Configuration
 # ==============================================================================
 
-option(CNETMOD_BUILD_EXAMPLES "Build examples" ON)
+option(CNETMOD_BUILD_EXAMPLES "Build examples" OFF)
 if(CNETMOD_BUILD_EXAMPLES AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/examples/CMakeLists.txt")
     add_subdirectory(examples)
 endif()
@@ -751,6 +994,29 @@ if(TARGET cnetmod_python)
 endif()
 
 list(REMOVE_DUPLICATES CNETMOD_ALL_TARGETS)
+
+foreach(_cnetmod_target IN LISTS CNETMOD_ALL_TARGETS)
+    if(NOT _cnetmod_target STREQUAL "cnetmod_core")
+        cnetmod_enable_release_codegen(${_cnetmod_target})
+    endif()
+endforeach()
+
+# Allocator replacement is a property of the completed process. Apply it to
+# every executable owned by this build; libraries remain allocator-neutral so
+# downstream applications can opt in explicitly on their final target.
+if(CNETMOD_USING_MIMALLOC)
+    foreach(_cnetmod_target IN LISTS CNETMOD_ALL_TARGETS)
+        if(TARGET ${_cnetmod_target})
+            get_target_property(_cnetmod_target_type ${_cnetmod_target} TYPE)
+            get_target_property(_cnetmod_disable_mimalloc
+                ${_cnetmod_target} CNETMOD_DISABLE_MIMALLOC)
+            if(_cnetmod_target_type STREQUAL "EXECUTABLE" AND
+                    NOT _cnetmod_disable_mimalloc)
+                cnetmod_enable_mimalloc(${_cnetmod_target})
+            endif()
+        endif()
+    endforeach()
+endif()
 
 add_custom_target(cnetmod_build_all
     DEPENDS ${CNETMOD_ALL_TARGETS}

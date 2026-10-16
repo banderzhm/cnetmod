@@ -75,6 +75,14 @@ public:
      */
     [[nodiscard]] auto running_in_this_thread() const noexcept -> bool;
 
+    /**
+     * @brief Returns the event loop currently dispatching on this thread.
+     *
+     * The result is null outside run(), run_one(), poll(), and callbacks or
+     * coroutines dispatched by those entry points. The pointer is non-owning.
+     */
+    [[nodiscard]] static auto current() noexcept -> io_context*;
+
     /// Post a coroutine to event loop for execution (thread-safe, lock-free)
     void post(std::coroutine_handle<> h);
 

@@ -6,6 +6,91 @@ import cnetmod.protocol.http.semantics;
 
 namespace cnetmod::http {
 namespace detail {
+    constexpr auto ascii_lower(unsigned char value) noexcept -> unsigned char
+    {
+        return value >= 'A' && value <= 'Z'
+            ? static_cast<unsigned char>(value + ('a' - 'A'))
+            : value;
+    }
+
+    constexpr auto header_hash(std::string_view value) noexcept -> std::uint64_t
+    {
+        std::uint64_t result = 1469598103934665603ULL;
+        for (const auto character : value)
+        {
+            result ^= ascii_lower(static_cast<unsigned char>(character));
+            result *= 1099511628211ULL;
+        }
+        return result;
+    }
+
+    auto header_equal(std::string_view left, std::string_view right) noexcept
+        -> bool
+    {
+        if (left.size() != right.size())
+            return false;
+        for (std::size_t index{}; index < left.size(); ++index)
+            if (ascii_lower(static_cast<unsigned char>(left[index])) !=
+                ascii_lower(static_cast<unsigned char>(right[index])))
+                return false;
+        return true;
+    }
+
+    auto common_header_slot(std::string_view name) noexcept
+        -> std::optional<std::size_t>
+    {
+        // Length dispatch avoids hashing the hot fixed-name lookups (notably
+        // Connection, Content-Length and Authorization). Hashing remains only
+        // for extension headers in the open-addressed fallback table.
+        switch (name.size())
+        {
+        case 4:
+            if (header_equal(name, "Host")) return 0;
+            break;
+        case 5:
+            if (header_equal(name, "Range")) return 7;
+            break;
+        case 6:
+            if (header_equal(name, "Origin")) return 8;
+            if (header_equal(name, "Cookie")) return 15;
+            break;
+        case 7:
+            if (header_equal(name, "Upgrade")) return 16;
+            break;
+        case 9:
+            if (header_equal(name, "Forwarded")) return 9;
+            if (header_equal(name, "X-Real-IP")) return 11;
+            break;
+        case 10:
+            if (header_equal(name, "Connection")) return 1;
+            if (header_equal(name, "Tracestate")) return 13;
+            if (header_equal(name, "User-Agent")) return 14;
+            break;
+        case 11:
+            if (header_equal(name, "Traceparent")) return 12;
+            break;
+        case 12:
+            if (header_equal(name, "Content-Type")) return 4;
+            break;
+        case 13:
+            if (header_equal(name, "Authorization")) return 5;
+            break;
+        case 14:
+            if (header_equal(name, "Content-Length")) return 2;
+            break;
+        case 15:
+            if (header_equal(name, "Accept-Encoding")) return 6;
+            if (header_equal(name, "X-Forwarded-For")) return 10;
+            break;
+        case 17:
+            if (header_equal(name, "Transfer-Encoding")) return 3;
+            break;
+        default:
+            break;
+        }
+        return std::nullopt;
+    }
+
     auto find_crlf(const char* data, std::size_t size) noexcept -> std::size_t
     {
         for (std::size_t i = 0; i + 1 < size; ++i)
@@ -22,7 +107,34 @@ namespace detail {
             value.remove_suffix(1);
         return value;
     }
+
+    auto completed_chunked_message_size(
+        std::string_view readable, std::size_t chunk_size_line_end) noexcept
+        -> std::optional<std::size_t>
+    {
+        const auto trailer_start = chunk_size_line_end + 2;
+        const auto trailers = readable.substr(trailer_start);
+
+        // RFC 9112: the last chunk is followed by an optional trailer section
+        // and a mandatory empty line. Do not report the message complete when
+        // only "0\r\n" (or one byte of the final CRLF) has arrived.
+        if (trailers.starts_with("\r\n"))
+            return trailer_start + 2;
+
+        const auto trailer_end = trailers.find("\r\n\r\n");
+        if (trailer_end == std::string_view::npos)
+            return std::nullopt;
+        return trailer_start + trailer_end + 4;
+    }
 } // namespace detail
+
+request_parser::request_parser()
+{
+    buf_.reserve(4096);
+    header_fields_.reserve(16);
+    header_index_.reserve(32);
+    common_headers_.fill(missing_header);
+}
 
 auto request_parser::ready() const noexcept -> bool
 {
@@ -36,17 +148,19 @@ auto request_parser::headers_ready() const noexcept -> bool
 
 auto request_parser::method() const noexcept -> std::string_view
 {
-    return method_;
+    const auto& storage = headers_ready_ ? header_storage_ : buf_;
+    return {storage.data() + method_offset_, method_size_};
 }
 
 auto request_parser::method_enum() const noexcept -> std::optional<http_method>
 {
-    return string_to_method(method_);
+    return string_to_method(method());
 }
 
 auto request_parser::uri() const noexcept -> std::string_view
 {
-    return uri_;
+    const auto& storage = headers_ready_ ? header_storage_ : buf_;
+    return {storage.data() + uri_offset_, uri_size_};
 }
 
 auto request_parser::version() const noexcept -> http_version
@@ -54,8 +168,9 @@ auto request_parser::version() const noexcept -> http_version
     return version_;
 }
 
-auto request_parser::headers() const noexcept -> const header_map&
+auto request_parser::headers() const -> const header_map&
 {
+    materialize_headers();
     return headers_;
 }
 
@@ -73,22 +188,71 @@ auto request_parser::take_body_chunk() -> std::string
 
 auto request_parser::get_header(std::string_view k) const -> std::string_view
 {
-    const auto it = headers_.find(k);
-    return it == headers_.end() ? std::string_view{} : std::string_view{it->second};
+    const auto index = find_header(k);
+    if (index == missing_header)
+        return {};
+    if (header_fields_[index].duplicate)
+    {
+        materialize_headers();
+        const auto it = headers_.find(k);
+        return it == headers_.end() ? std::string_view{}
+                                    : std::string_view{it->second};
+    }
+    return header_value(index);
 }
 
 void request_parser::reset() noexcept
 {
     buf_.clear();
+    header_storage_.clear();
+    // Header-only requests alternate ownership of the receive allocation.
+    // Return the larger retained block to the input side before parsing the
+    // next keep-alive request, avoiding a new allocation per request.
+    if (buf_.capacity() < header_storage_.capacity())
+        buf_.swap(header_storage_);
     read_pos_ = 0;
-    method_.clear();
-    uri_.clear();
+    reset_message_state();
+}
+
+void request_parser::reset_message_state() noexcept
+{
+    method_offset_ = method_size_ = uri_offset_ = uri_size_ = 0;
     version_ = http_version::http_1_1;
+    header_fields_.clear();
+    header_index_.clear();
+    common_headers_.fill(missing_header);
     headers_.clear();
+    headers_materialized_ = false;
     body_.clear();
     state_ = state::request_line;
     header_bytes_ = body_bytes_remaining_ = body_bytes_received_ = 0;
     chunked_ = headers_ready_ = ready_ = false;
+}
+
+auto request_parser::has_buffered_data() const noexcept -> bool
+{
+    return read_pos_ < buf_.size();
+}
+
+auto request_parser::reset_for_next_message() noexcept -> bool
+{
+    if (read_pos_ == buf_.size())
+        buf_.clear();
+    else if (read_pos_ != 0)
+        buf_.erase(0, read_pos_);
+    read_pos_ = 0;
+    header_storage_.clear();
+    reset_message_state();
+    return !buf_.empty();
+}
+
+auto request_parser::consume_buffered()
+    -> std::expected<void, std::error_code>
+{
+    auto parsed = consume(nullptr, 0);
+    if (!parsed)
+        return std::unexpected(parsed.error());
+    return {};
 }
 
 auto request_parser::readable_buffer() const noexcept -> std::string_view
@@ -98,6 +262,11 @@ auto request_parser::readable_buffer() const noexcept -> std::string_view
 
 void request_parser::compact_buffer()
 {
+    // Header offsets are recorded while fragmented input arrives. Keep the
+    // bounded header block stable until finalize_headers() moves it into its
+    // request-lifetime backing store.
+    if (!headers_ready_)
+        return;
     if (read_pos_ == 0)
         return;
     if (read_pos_ == buf_.size())
@@ -114,12 +283,15 @@ auto request_parser::parse_request_line(std::string_view l) -> std::expected<voi
     auto a = l.find(' ');
     if (a == std::string_view::npos)
         return std::unexpected(make_error_code(http_errc::invalid_method));
-    method_ = std::string(l.substr(0, a));
+    const auto* base = buf_.data();
+    method_offset_ = static_cast<std::size_t>(l.data() - base);
+    method_size_ = a;
     auto r = l.substr(a + 1);
     auto b = r.find(' ');
     if (b == std::string_view::npos)
         return std::unexpected(make_error_code(http_errc::invalid_uri));
-    uri_ = std::string(r.substr(0, b));
+    uri_offset_ = static_cast<std::size_t>(r.data() - base);
+    uri_size_ = b;
     auto v = string_to_version(r.substr(b + 1));
     if (!v)
         return std::unexpected(make_error_code(http_errc::invalid_version));
@@ -136,15 +308,120 @@ auto request_parser::parse_header_line(std::string_view l) -> std::expected<void
     auto v = detail::trim(l.substr(c + 1));
     if (k.empty())
         return std::unexpected(make_error_code(http_errc::invalid_header));
-    auto it = headers_.find(k);
-    if (it == headers_.end())
-        headers_.emplace(std::string(k), std::string(v));
-    else
-    {
-        it->second += ", ";
-        it->second += v;
-    }
+    const auto* base = buf_.data();
+    header_fields_.push_back({
+        .name_offset = static_cast<std::size_t>(k.data() - base),
+        .name_size = k.size(),
+        .value_offset = static_cast<std::size_t>(v.data() - base),
+        .value_size = v.size(),
+    });
     return {};
+}
+
+auto request_parser::header_name(std::size_t index) const noexcept
+    -> std::string_view
+{
+    const auto& field = header_fields_[index];
+    return {header_storage_.data() + field.name_offset, field.name_size};
+}
+
+auto request_parser::header_value(std::size_t index) const noexcept
+    -> std::string_view
+{
+    const auto& field = header_fields_[index];
+    return {header_storage_.data() + field.value_offset, field.value_size};
+}
+
+void request_parser::finalize_headers()
+{
+    const auto header_end = read_pos_;
+    header_storage_.clear();
+    header_storage_.swap(buf_);
+    // The header backing allocation is transferred, not copied. Only bytes
+    // already received after the header boundary need to move into the body
+    // parser's buffer.
+    buf_.assign(header_storage_.data() + header_end,
+        header_storage_.size() - header_end);
+    header_storage_.resize(header_end);
+    read_pos_ = 0;
+
+    std::size_t capacity = 8;
+    while (capacity < header_fields_.size() * 2)
+        capacity *= 2;
+    header_index_.assign(capacity, missing_header);
+    common_headers_.fill(missing_header);
+
+    for (std::size_t index{}; index < header_fields_.size(); ++index)
+    {
+        const auto name = header_name(index);
+        if (const auto common = detail::common_header_slot(name))
+        {
+            auto& slot = common_headers_[*common];
+            if (slot == missing_header)
+                slot = index;
+            else
+                header_fields_[slot].duplicate = true;
+            continue;
+        }
+
+        auto bucket = static_cast<std::size_t>(detail::header_hash(name)) &
+            (header_index_.size() - 1);
+        while (header_index_[bucket] != missing_header)
+        {
+            const auto existing = header_index_[bucket];
+            if (detail::header_equal(header_name(existing), name))
+            {
+                header_fields_[existing].duplicate = true;
+                break;
+            }
+            bucket = (bucket + 1) & (header_index_.size() - 1);
+        }
+        if (header_index_[bucket] == missing_header)
+            header_index_[bucket] = index;
+    }
+}
+
+auto request_parser::find_header(std::string_view name) const noexcept
+    -> std::size_t
+{
+    if (const auto common = detail::common_header_slot(name))
+        return common_headers_[*common];
+    if (header_index_.empty())
+        return missing_header;
+    auto bucket = static_cast<std::size_t>(detail::header_hash(name)) &
+        (header_index_.size() - 1);
+    for (std::size_t probes{}; probes < header_index_.size(); ++probes)
+    {
+        const auto index = header_index_[bucket];
+        if (index == missing_header)
+            return missing_header;
+        if (detail::header_equal(header_name(index), name))
+            return index;
+        bucket = (bucket + 1) & (header_index_.size() - 1);
+    }
+    return missing_header;
+}
+
+void request_parser::materialize_headers() const
+{
+    if (headers_materialized_)
+        return;
+    headers_.clear();
+    headers_.reserve(header_fields_.size());
+    for (std::size_t index{}; index < header_fields_.size(); ++index)
+    {
+        const auto name = header_name(index);
+        const auto value = header_value(index);
+        auto found = headers_.find(name);
+        if (found == headers_.end())
+            headers_.emplace(std::string{name}, std::string{value});
+        else
+        {
+            found->second += ", ";
+            found->second += value;
+        }
+    }
+    headers_materialized_ = true;
 }
 
 auto request_parser::prepare_body() -> bool
@@ -184,9 +461,16 @@ auto request_parser::process_chunked_body() -> std::expected<bool, std::error_co
             return std::unexpected(make_error_code(http_errc::invalid_chunk));
         if (!n)
         {
-            read_pos_ += p + 2;
-            if (readable_buffer().starts_with("\r\n"))
-                read_pos_ += 2;
+            const auto completed =
+                detail::completed_chunked_message_size(readable, p);
+            if (!completed)
+            {
+                if (readable.size() > max_header_size)
+                    return std::unexpected(
+                        make_error_code(http_errc::header_too_large));
+                return false;
+            }
+            read_pos_ += *completed;
             return true;
         }
         auto start = p + 2;
@@ -206,7 +490,8 @@ auto request_parser::consume(const char* data, std::size_t len)
     if (ready_)
         return std::size_t{0};
     compact_buffer();
-    buf_.append(data, len);
+    if (len != 0)
+        buf_.append(data, len);
     const std::size_t total_consumed = len;
     while (!ready_)
     {
@@ -244,6 +529,7 @@ auto request_parser::consume(const char* data, std::size_t len)
             {
                 read_pos_ += 2;
                 header_bytes_ += 2;
+                finalize_headers();
                 headers_ready_ = true;
                 if (!prepare_body())
                     ready_ = true;
@@ -519,9 +805,16 @@ auto response_parser::process_chunked_body() -> std::expected<bool, std::error_c
             return std::unexpected(make_error_code(http_errc::invalid_chunk));
         if (!n)
         {
-            read_pos_ += p + 2;
-            if (readable_buffer().starts_with("\r\n"))
-                read_pos_ += 2;
+            const auto completed =
+                detail::completed_chunked_message_size(readable, p);
+            if (!completed)
+            {
+                if (readable.size() > max_header_size)
+                    return std::unexpected(
+                        make_error_code(http_errc::header_too_large));
+                return false;
+            }
+            read_pos_ += *completed;
             return true;
         }
         auto start = p + 2;

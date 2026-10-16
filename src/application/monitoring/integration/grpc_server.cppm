@@ -5,10 +5,11 @@ export module cnetmod.observability.grpc_server;
 
 #ifdef CNETMOD_HAS_PROTOCOL_GRPC
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.instrumentation.metric;
 import cnetmod.instrumentation.tracing;
 import cnetmod.protocol.grpc;
-import cnetmod.protocol.http;
 
 namespace cnetmod::observability {
 

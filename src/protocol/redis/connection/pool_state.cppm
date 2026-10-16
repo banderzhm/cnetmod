@@ -25,6 +25,12 @@ struct conn_node
     std::chrono::steady_clock::time_point last_used;
     std::coroutine_handle<> task_waiting{};
     /**
+     * Owns the maintenance-coroutine resume queued when a lease is returned.
+     * Keeping the queue node in conn_node makes the noexcept return path
+     * allocation-free even when another coroutine holds the pool lock.
+     */
+    post_node task_completion;
+    /**
      * @brief Cancels this node's maintenance wait or heartbeat, never user I/O.
      */
     cancel_token maintenance_cancellation;

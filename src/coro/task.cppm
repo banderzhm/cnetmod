@@ -16,6 +16,26 @@ namespace cnetmod {
 class promise_base
 {
 public:
+    // Clang can place vectorized aggregate initialization in a coroutine frame
+    // and emit aligned AVX/AVX-512 stores for it. The ordinary allocation
+    // function only guarantees max_align_t, which is insufficient for those
+    // frame slots on x86. Keep every task frame cache-line aligned so optimized
+    // CPU targets remain correct without disabling vector code generation.
+    static auto operator new(std::size_t size) -> void*
+    {
+        return ::operator new(size, std::align_val_t{64});
+    }
+
+    static void operator delete(void* address) noexcept
+    {
+        ::operator delete(address, std::align_val_t{64});
+    }
+
+    static void operator delete(void* address, std::size_t size) noexcept
+    {
+        ::operator delete(address, size, std::align_val_t{64});
+    }
+
     auto initial_suspend() noexcept -> std::suspend_always;
 
     struct final_awaiter
@@ -283,6 +303,50 @@ auto starts_on(io_context& context, task<T> operation) -> task<T>
     else
     {
         co_return co_await std::move(operation);
+    }
+}
+
+// =============================================================================
+// resume_on -- restore an awaited task's continuation to an event loop
+// =============================================================================
+
+/// Await @p operation and resume its caller on @p context, including when the
+/// operation fails. This is the explicit bridge for third-party awaitables
+/// whose completion thread is not controlled by cnetmod.
+export template <typename T>
+auto resume_on(io_context& context, task<T> operation) -> task<T>
+{
+    std::exception_ptr failure;
+    if constexpr (std::is_void_v<T>)
+    {
+        try
+        {
+            co_await std::move(operation);
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        co_await post_awaitable{context};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return;
+    }
+    else
+    {
+        std::optional<T> result;
+        try
+        {
+            result.emplace(co_await std::move(operation));
+        }
+        catch (...)
+        {
+            failure = std::current_exception();
+        }
+        co_await post_awaitable{context};
+        if (failure)
+            std::rethrow_exception(failure);
+        co_return std::move(*result);
     }
 }
 

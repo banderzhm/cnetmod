@@ -118,7 +118,7 @@ struct template_options
 };
 
 /**
- * @brief Glaze-only JSON codec used by typed Redis template operations.
+ * @brief Framework JSON codec used by typed Redis template operations.
  */
 struct json_codec
 {
@@ -209,6 +209,11 @@ public:
         instrumentation::trace_context parent = {},
         instrumentation::span_exporter spans = {},
         io_context* timer_context = nullptr);
+    explicit redis_template(sharded_connection_pool& pool,
+        template_options options = {},
+        instrumentation::trace_context parent = {},
+        instrumentation::span_exporter spans = {},
+        io_context* fallback_timer_context = nullptr);
 
     /**
      * @brief Attempts one immediate atomic lock acquisition.
@@ -248,6 +253,17 @@ public:
      * @brief Reads one value and forwards caller cancellation to pool and transport.
      */
     [[nodiscard]] auto get(std::string_view key, cancel_token& cancellation)
+        -> task<std::expected<std::optional<std::string>, std::error_code>>;
+
+    /**
+     * @brief Atomically reads one value and resets its expiration.
+     *
+     * Requires Redis 6.2 or newer. A missing key remains a successful nullopt.
+     */
+    [[nodiscard]] auto getex(std::string_view key, ttl_seconds ttl)
+        -> task<std::expected<std::optional<std::string>, std::error_code>>;
+    [[nodiscard]] auto getex(std::string_view key, ttl_seconds ttl,
+        cancel_token& cancellation)
         -> task<std::expected<std::optional<std::string>, std::error_code>>;
 
     /**
@@ -399,6 +415,23 @@ public:
         cancel_token& cancellation)
         -> task<std::expected<std::vector<pipeline_reply>, std::error_code>>;
 
+    /**
+     * @brief Runs a Lua script and parses its scalar integer result.
+     *
+     * Keys are logical template keys and are namespace-prefixed exactly once;
+     * arguments are passed unchanged. Redis Cluster scripts must keep all keys
+     * in the same hash slot.
+     */
+    [[nodiscard]] auto eval_integer(std::string_view script,
+        std::span<const std::string> keys,
+        std::span<const std::string> arguments = {})
+        -> task<std::expected<std::int64_t, std::error_code>>;
+    [[nodiscard]] auto eval_integer(std::string_view script,
+        std::span<const std::string> keys,
+        std::span<const std::string> arguments,
+        cancel_token& cancellation)
+        -> task<std::expected<std::int64_t, std::error_code>>;
+
     template <typename T, typename Codec = json_codec>
     [[nodiscard]] auto get_as(std::string_view key)
         -> task<std::expected<std::optional<T>, std::error_code>>
@@ -444,11 +477,16 @@ public:
 
 private:
     friend class distributed_lock;
-    connection_pool& pool_;
+    connection_pool* pool_{};
+    sharded_connection_pool* sharded_pool_{};
     template_options options_;
     instrumentation::trace_context parent_;
     instrumentation::span_exporter spans_;
     io_context* timer_context_ = nullptr;
+
+    [[nodiscard]] auto acquire(cancel_token& cancellation)
+        -> task<std::expected<pooled_connection, std::error_code>>;
+    [[nodiscard]] auto timer_context() const noexcept -> io_context*;
 
     [[nodiscard]] auto physical_key(std::string_view key) const -> std::string;
     [[nodiscard]] auto effective_ttl(ttl_seconds ttl) const noexcept

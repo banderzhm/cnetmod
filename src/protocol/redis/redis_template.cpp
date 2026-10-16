@@ -423,9 +423,38 @@ auto pipeline_builder::size() const noexcept -> std::size_t
 redis_template::redis_template(connection_pool& pool, template_options options,
     instrumentation::trace_context parent,
     instrumentation::span_exporter spans, io_context* timer_context)
-    : pool_(pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)),
+    : pool_(&pool), options_(std::move(options)), parent_(std::move(parent)), spans_(std::move(spans)),
       timer_context_(timer_context ? timer_context : &pool.execution_context())
 {
+}
+
+redis_template::redis_template(sharded_connection_pool& pool,
+    template_options options, instrumentation::trace_context parent,
+    instrumentation::span_exporter spans, io_context* fallback_timer_context)
+    : sharded_pool_(&pool), options_(std::move(options)),
+      parent_(std::move(parent)), spans_(std::move(spans)),
+      timer_context_(fallback_timer_context)
+{
+}
+
+auto redis_template::acquire(cancel_token& cancellation)
+    -> task<std::expected<pooled_connection, std::error_code>>
+{
+    if (pool_)
+        co_return co_await pool_->async_get_connection(cancellation);
+    auto* current = io_context::current();
+    if (current == nullptr)
+        co_return co_await sharded_pool_->async_get_connection(cancellation);
+    co_return co_await sharded_pool_->async_get_connection(
+        *current, cancellation);
+}
+
+auto redis_template::timer_context() const noexcept -> io_context*
+{
+    if (sharded_pool_)
+        if (auto* current = io_context::current())
+            return current;
+    return timer_context_;
 }
 
 auto redis_template::try_lock(std::string_view key,
@@ -479,7 +508,7 @@ auto redis_template::lock(std::string_view key,
     if (key.empty() || !valid_lock_options(options))
         co_return std::unexpected(invalid_argument());
     if (options.wait_timeout > std::chrono::milliseconds::zero() &&
-        !timer_context_)
+        !timer_context())
         co_return std::unexpected(
             std::make_error_code(std::errc::operation_not_supported));
 
@@ -512,7 +541,7 @@ auto redis_template::lock(std::string_view key,
         delay = std::max(std::chrono::milliseconds{1},
             std::min(delay, remaining));
         auto waited = co_await async_timer_wait(
-            *timer_context_, delay, cancellation);
+            *timer_context(), delay, cancellation);
         if (!waited)
             co_return std::unexpected(waited.error());
     }
@@ -634,7 +663,7 @@ auto redis_template::execute(pipeline_builder& builder,
         }
     }
 
-    auto lease = co_await pool_.async_get_connection(cancellation);
+    auto lease = co_await acquire(cancellation);
     if (!lease)
     {
         complete_scopes(scopes, nullptr, lease.error());
@@ -643,7 +672,7 @@ auto redis_template::execute(pipeline_builder& builder,
     auto exchange = lease->get().exchange(builder.batch_, cancellation,
         options_.response_byte_limit);
     auto exchanged = options_.operation_timeout > std::chrono::steady_clock::duration::zero()
-        ? co_await with_timeout(*timer_context_, options_.operation_timeout,
+        ? co_await with_timeout(*timer_context(), options_.operation_timeout,
               std::move(exchange), cancellation)
         : co_await std::move(exchange);
     if (!exchanged)
@@ -677,6 +706,60 @@ auto redis_template::get(std::string_view key, cancel_token& cancellation)
     if (!response)
         co_return std::unexpected(response.error());
     co_return optional_string(*response);
+}
+
+auto redis_template::getex(std::string_view key, ttl_seconds ttl)
+    -> task<std::expected<std::optional<std::string>, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await getex(key, ttl, cancellation);
+}
+
+auto redis_template::getex(std::string_view key, ttl_seconds ttl,
+    cancel_token& cancellation)
+    -> task<std::expected<std::optional<std::string>, std::error_code>>
+{
+    if (key.empty() || ttl <= ttl_seconds::zero())
+        co_return std::unexpected(invalid_argument());
+    auto response = co_await execute_one({"GETEX", physical_key(key), "EX",
+                                             std::to_string(ttl.count())},
+        cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    co_return optional_string(*response);
+}
+
+auto redis_template::eval_integer(std::string_view script,
+    std::span<const std::string> keys,
+    std::span<const std::string> arguments)
+    -> task<std::expected<std::int64_t, std::error_code>>
+{
+    cancel_token cancellation;
+    co_return co_await eval_integer(script, keys, arguments, cancellation);
+}
+
+auto redis_template::eval_integer(std::string_view script,
+    std::span<const std::string> keys,
+    std::span<const std::string> arguments, cancel_token& cancellation)
+    -> task<std::expected<std::int64_t, std::error_code>>
+{
+    if (script.empty() || std::ranges::any_of(keys,
+                              [](const std::string& key) { return key.empty(); }))
+        co_return std::unexpected(invalid_argument());
+
+    std::vector<std::string> command;
+    command.reserve(3U + keys.size() + arguments.size());
+    command.emplace_back("EVAL");
+    command.emplace_back(script);
+    command.push_back(std::to_string(keys.size()));
+    for (const auto& key : keys)
+        command.push_back(physical_key(key));
+    command.insert(command.end(), arguments.begin(), arguments.end());
+
+    auto response = co_await execute_one(std::move(command), cancellation);
+    if (!response)
+        co_return std::unexpected(response.error());
+    co_return integer(*response);
 }
 
 auto redis_template::set(std::string_view key, std::string_view value,

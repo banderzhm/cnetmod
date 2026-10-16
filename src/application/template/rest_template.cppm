@@ -4,11 +4,13 @@
 export module cnetmod.application.rest_template;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
-import cnetmod.observability;
-import cnetmod.protocol.http;
+import cnetmod.observability.telemetry;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.client.pool;
 import cnetmod.protocol.http.middleware.tracing;
 
@@ -66,6 +68,9 @@ public:
      * @brief Binds outbound requests to application-owned infrastructure.
      */
     rest_template(io_context& io, observability::telemetry_hub& telemetry,
+        rest_template_options options = {});
+    rest_template(std::span<io_context* const> event_loops,
+        observability::telemetry_hub& telemetry,
         rest_template_options options = {});
 
     /**
@@ -182,7 +187,15 @@ private:
         std::string_view url, std::string body,
         const rest_request_options& options) const -> http::request;
 
-    http::client_pool clients_;
+    struct client_pool_shard
+    {
+        io_context* io{};
+        std::unique_ptr<http::client_pool> clients;
+    };
+
+    [[nodiscard]] auto clients() noexcept -> http::client_pool&;
+
+    std::vector<client_pool_shard> client_shards_;
     observability::telemetry_hub& telemetry_;
     http::header_map default_headers_;
 };

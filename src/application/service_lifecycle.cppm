@@ -12,7 +12,7 @@ import cnetmod.application.task_supervisor;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.io.io_context;
-import cnetmod.observability;
+import cnetmod.observability.telemetry;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 
 namespace cnetmod::application {

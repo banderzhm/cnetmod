@@ -2,6 +2,7 @@
 
 > 协程原生 JWT 模块，使用 `cnetmod.json` 与框架 HMAC-SHA256，CPU 密集操作卸载到 cnetmod 线程池。
 > 模块: `import cnetmod.security.jwt;`
+> 源码位于 `src/utils/security/`；目录归属不改变公开模块名。
 
 ## 核心原则
 

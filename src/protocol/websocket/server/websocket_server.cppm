@@ -9,7 +9,7 @@ import :types;
 import :frame;
 import :handshake;
 import :connection;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;

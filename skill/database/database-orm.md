@@ -52,29 +52,50 @@ Model fields support scalar values, enums, UUIDs, calendar date/time values and 
 
 ## Application entry point
 
-Resolve a repository after the application host has been built and its managed services have been registered:
+Repositories are application components. A module registers them with
+`add_repository<T>()`; the data source is resolved while the application is
+built, so a missing or ambiguous data source fails `build()` in the
+`resolution` phase instead of the first request:
 
 ```cpp
-auto users = host->runtime().repository<user_record>("primary");
-if (!users)
-    return EXIT_FAILURE;
+auto register_components(cnetmod::application::registration_context& context)
+    -> std::expected<void, std::string> override
+{
+    cnetmod::application::add_repository<user_record>(context.components,
+        {.instance = "primary"});
+    return {};
+}
 
-auto result = co_await users->get_by_id(
-    cnetmod::orm::param_value::from_int(42));
+// Constructor injection in another component factory:
+auto& users = resolver.get<cnetmod::application::managed_repository<user_record>>();
+auto result = co_await users.get_by_id(cnetmod::orm::param_value::from_int(42));
 if (result.is_err())
     co_return;
-
 auto user = result.first();
 ```
 
 When a MySQL and PostgreSQL service deliberately use the same instance name, specify the provider:
 
 ```cpp
-auto users = host->runtime().repository<user_record>("primary", {},
-    cnetmod::application::database_provider::postgresql);
+cnetmod::application::add_repository<user_record>(context.components,
+    {.instance = "primary",
+     .provider = cnetmod::application::database_provider::postgresql});
 ```
 
 Automatic provider selection succeeds only when exactly one supported provider owns the requested instance.
+
+`managed_repository<T>` is move-only. The registered component is the shared
+instance; a component that owns its repository by value (a mapper or domain
+service) takes a new handle over the same data source and policies:
+
+```cpp
+auto& factory = resolver.get<cnetmod::application::repository_factory<user_record>>();
+auto owned = factory.make_repository();   // std::expected<managed_repository<T>, error_code>
+```
+
+`repository_factory<T>::create(services, configuration, options)` is the same
+factory without the component container. Each repository builds its policy
+chain once and reuses it for every operation.
 
 ## Repository API
 
@@ -181,9 +202,12 @@ if (!page.ok())
 语句需要自己维护带表别名的逻辑删除谓词，在该 `<select>` / `<update>` 等语句上声明
 `logicalDelete="false"`；这只跳过当前语句的逻辑删除拦截器，租户、数据权限和 SQL
 安全拦截仍然生效。属性省略或设为 `true` 时沿用仓储策略；其他值在装载 XML 时拒绝。
-`nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
-若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
-`calendar_datetime` 参数的选择性更新完成软删除。
+自动 DELETE 转 UPDATE 默认使用应用侧 UTC 时钟：`nullable_datetime` 的删除标记和
+任意模式下的时间型 `touch_fields` 都绑定同一次采样得到的参数，不依赖数据库会话时区，
+且保证同一操作的多个时间字段一致。只有明确管理了数据库会话时区、确实希望
+使用数据库时钟时，才把 `time_source` 设为
+`logical_delete_time_source::database_session`；该模式生成 `CURRENT_TIMESTAMP`、
+`CURRENT_DATE` 或 `CURRENT_TIME`。
 
 `FILL_INSERT` 与 `FILL_INSERT_UPDATE` 直接从模型元数据读取；普通仓储请求
 不会反复修改全局注册表。自定义填充配置可按表名和字段名在启动期注册。普通 ORM
@@ -205,7 +229,9 @@ if (!page.ok())
 `testing/tests/test_orm_tenant_live.cpp` 的
 `mysql_live_system_chart_chat_timestamp_fill`。
 
-`query_wrapper<T>` accepts column names and type-safe member pointers. Prefer member pointers in application code:
+`query_wrapper<T>` uses type-safe member pointers for model-backed application
+queries. The member type is checked against the supplied value at compile time,
+so an integer field cannot accidentally be compared with a string:
 
 ```cpp
 cnetmod::orm::query_wrapper<user_record> query;
@@ -216,6 +242,17 @@ query.eq(&user_record::name, "Ada")
 
 auto rows = co_await users->list(query);
 ```
+
+When a column truly is selected at runtime (for example, a validated reporting
+dimension), make that loss of static safety explicit with `runtime_column`:
+
+```cpp
+query.eq(cnetmod::orm::runtime_column{validated_column_name}, value);
+```
+
+The legacy bare-string overloads are deprecated. Do not use them in ordinary
+Mapper or Repository code. XML statements remain the appropriate API when the
+shape of the SQL itself is dynamic.
 
 It supports comparisons, `LIKE`, `IN`, ranges, null/boolean predicates, nested groups, structured subqueries, joins, projection, grouping, aggregates, ordering and limits. Values are always bound parameters; arbitrary trailing SQL is not part of the API.
 
@@ -351,15 +388,20 @@ Build parameters with `param_context::set()`, `from_map()`, `from_model()`,
 
 | XML form | Behavior |
 |---|---|
-| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. |
+| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. A missing property fails statement construction before database execution. |
 | `#{name,jdbcType=...,javaType=...,typeHandler=...,mode=...,numericScale=...}` | Parses and preserves mapping metadata. The current protocol execution binds the value; custom `typeHandler` execution and OUT parameters are not implemented. |
 | `#{request.id}` | Reads a dotted property from a nested `param_context`. |
-| `${name}` | Inserts raw text. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
+| `${name}` | Inserts raw text and fails statement construction when the property is missing. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
 
 `param_context::set()` accepts values supported by `to_query_parameter`,
 including null, signed/unsigned integers, floating point, strings, blobs,
 calendar date/time values and optional values. A missing property resolves to
-null. Model overloads use `CNETMOD_MODEL` metadata to expose model fields.
+null inside dynamic expressions so optional conditions can test it. SQL
+placeholders are stricter: missing properties fail immediately, while an
+explicitly registered null remains a valid bound SQL `NULL`. Model overloads
+use `CNETMOD_MODEL` metadata to expose model fields. Mapper execution reports
+both the statement id and missing property name and does not contact the
+database when statement construction fails.
 
 ### Dynamic SQL elements
 
@@ -526,7 +568,8 @@ The framework does not accept arbitrary SQL expressions in logical-delete touch 
 Per-request row visibility is an automatic interceptor policy. Mark the model
 partition and owner columns with `DATA_PARTITION` and `DATA_OWNER`, bind one
 `data_permission_scope` in the HTTP request scope during authentication, then
-resolve the repository with `runtime.repository<T>(request, "primary")`.
+resolve the repository with `repository_factory<T>::for_request(request)`
+(inject `repository_factory<T>`, registered by `add_repository<T>()`).
 Typed CRUD, XML statements, projections and transactions all pass through the
 same frozen chain. Service and Mapper code do not receive, resolve or bind a
 data-scope object. The request repository owns a scope snapshot instead of
@@ -536,12 +579,14 @@ row.
 
 ### SaaS tenant and organization hierarchies
 
-SaaS mode is explicit. Call `runtime.require_tenant_scope(true)` before
-serving requests, mark exactly one model column `TENANT_ID`, and bind a
-`tenant_scope` to each authenticated request. The runtime copies it into the
-repository's frozen policy chain. Missing tenant scope rejects operations on
-tenant models; it never means “all tenants.” Leave the runtime switch off for
-a single-tenant application. The legacy `tenant_guard` is thread-local and
+SaaS mode is explicit. Set `orm.tenant_scope_required: true` in the
+application configuration (frozen at build time), mark exactly one model column
+`TENANT_ID`, and bind a `tenant_scope` to each authenticated request.
+`repository_factory<T>::for_request()` copies it into the repository's frozen
+policy chain. Missing tenant scope returns `permission_denied` for tenant
+models; it never means “all tenants,” and strict mode offers no process-wide
+`shared()` repository for tenant models. Leave the switch off for a
+single-tenant application. The legacy `tenant_guard` is thread-local and
 must not be used as a SaaS request policy.
 In strict SaaS mode, models marked `DATA_PARTITION` or `DATA_OWNER` must also
 declare a tenant column; otherwise the ORM rejects them instead of applying
@@ -552,14 +597,14 @@ first resolve a tenant from a trusted host or tenant identifier and bind a
 narrow scope; the ORM cannot infer a tenant from an unauthenticated user ID.
 
 ```cpp
-runtime.require_tenant_scope(true);
+// application.yaml: orm: { tenant_scope_required: true }
 request.scope().bind(std::make_shared<cnetmod::orm::tenant_scope>(
     cnetmod::orm::tenant_scope{
         .tenant_id = current_tenant,
         .readable_tenant_ids = authorized_tenant_tree,
         .writable_tenant_ids = authorized_write_tenants,
     }));
-auto orders = runtime.repository<order>(request, "primary");
+auto orders = order_repositories.for_request(request);   // repository_factory<order>&
 ```
 
 The application/IAM layer resolves parent–child tenant and department IDs

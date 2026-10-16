@@ -25,8 +25,13 @@ public:
         std::string instance, service_requirement requirement,
         recovery_policy recovery,
         instrumentation::span_exporter spans = {});
+    redis_service(io_context& control,
+        std::span<io_context* const> event_loops, redis::pool_params options,
+        std::string instance, service_requirement requirement,
+        recovery_policy recovery,
+        instrumentation::span_exporter spans = {});
 
-    [[nodiscard]] auto pool() noexcept -> redis::connection_pool&;
+    [[nodiscard]] auto pool() -> redis::connection_pool&;
     /**
      * @brief Creates a namespaced Redis template using application telemetry.
      *
@@ -54,7 +59,9 @@ public:
 
 private:
     io_context& io_;
-    redis::connection_pool pool_;
+    std::unique_ptr<redis::connection_pool> pool_;
+    std::unique_ptr<redis::sharded_connection_pool> sharded_pool_;
+    std::vector<io_context*> event_loops_;
     std::string instance_;
     service_requirement requirement_;
     recovery_policy recovery_;
@@ -74,11 +81,15 @@ public:
     redis_cluster_service(io_context& io,
         std::vector<redis::connect_options> seeds, std::string instance,
         service_requirement requirement, recovery_policy recovery);
+    redis_cluster_service(io_context& control,
+        std::span<io_context* const> event_loops,
+        std::vector<redis::connect_options> seeds, std::string instance,
+        service_requirement requirement, recovery_policy recovery);
 
     /**
      * @brief Returns the lifecycle-owned cluster client.
      */
-    [[nodiscard]] auto client() noexcept -> redis::cluster_client&;
+    [[nodiscard]] auto client() -> redis::cluster_client&;
     [[nodiscard]] auto key() const -> service_key override;
     [[nodiscard]] auto requirement() const noexcept
         -> service_requirement override;
@@ -92,7 +103,8 @@ public:
 
 private:
     io_context& io_;
-    redis::cluster_client client_;
+    std::vector<io_context*> event_loops_;
+    std::vector<std::unique_ptr<redis::cluster_client>> clients_;
     std::vector<redis::connect_options> seeds_;
     std::string instance_;
     service_requirement requirement_;

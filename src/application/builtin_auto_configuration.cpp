@@ -41,18 +41,23 @@ namespace cnetmod::application {
 void register_builtin_auto_configurations(
     auto_configuration_registry& registry)
 {
-    registry.add("http_client", auto_configure_http_client);
+    registry.add("http_client", auto_configure_http_client,
+        integration_loop_mode::loop_local);
 #ifdef CNETMOD_HAS_PROTOCOL_OPENAI
-    registry.add("openai", auto_configure_openai);
+    registry.add("openai", auto_configure_openai,
+        integration_loop_mode::owned);
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_REDIS
-    registry.add("redis", auto_configure_redis);
+    registry.add("redis", auto_configure_redis,
+        integration_loop_mode::loop_local);
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
-    registry.add("mysql", auto_configure_mysql);
+    registry.add("mysql", auto_configure_mysql,
+        integration_loop_mode::loop_local);
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_POSTGRESQL
-    registry.add("postgresql", auto_configure_postgresql);
+    registry.add("postgresql", auto_configure_postgresql,
+        integration_loop_mode::loop_local);
 #endif
 #ifdef CNETMOD_HAS_PROTOCOL_MONGODB
     registry.add("mongodb", auto_configure_mongodb);

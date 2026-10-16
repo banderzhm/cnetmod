@@ -230,6 +230,16 @@ auto service_lifecycle::start(std::chrono::milliseconds rollback_reserve)
                             co_return {};
                         }
 
+                        try
+                        {
+                            logger::error("service {} startup failed: {}",
+                                key.canonical_name(), result.error().message());
+                        }
+                        catch (...)
+                        {
+                            // Diagnostic failure must not alter lifecycle rollback.
+                        }
+
                         health_.update(key, {
                                                 .status = service_health::down,
                                                 .message = "startup failed",

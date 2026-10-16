@@ -288,15 +288,20 @@ cd cnetmod
 # Initialize submodules (required for third-party dependencies)
 git submodule update --init --recursive
 
-# Build
-cmake -B build -DCNETMOD_DEPENDENCY_MODE=system -DCNETMOD_BUILD_EXAMPLES=ON
-cmake --build build
+# Build the lean SDK core (protocols and auxiliary targets are opt-in)
+cmake -B build -DCNETMOD_DEPENDENCY_MODE=system
+cmake --build build --target cnetmod_core
 
-# Build every cnetmod target explicitly
-cmake --build build --target cnetmod_build_all
+# Configure the framework maintainer's complete validation build explicitly
+cmake -B build-full -DCNETMOD_DEPENDENCY_MODE=system \
+  -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
+  -DCNETMOD_BUILD_TESTS=ON \
+  -DCNETMOD_BUILD_EXAMPLES=ON \
+  -DCNETMOD_BUILD_BENCH=ON
+cmake --build build-full --target cnetmod_build_all
 
 # Visual Studio generators with C++ modules: use single-node MSBuild
-cmake --build build --target cnetmod_build_all --config Debug
+cmake --build build-full --target cnetmod_build_all --config Debug -- /m:1
 ```
 
 ### Build with vcpkg
@@ -340,7 +345,7 @@ installed libraries and falls back to pinned submodules where available; on
 Linux it prints Arch, Ubuntu, and CentOS installation commands for missing
 optional libraries. `vcpkg` and `conan` require their
 own toolchain and use package targets for managed dependencies. BoringSSL,
-Glaze, and the YAML C++23 module facade remain pinned source dependencies in
+nlohmann/json, and the YAML C++23 module facade remain pinned source dependencies in
 all three modes. Use a fresh build directory when changing modes.
 
 ### Build with Conan
@@ -379,9 +384,9 @@ conan create . --build=missing -pr:h vs2026 -pr:b vs2026
 ```
 
 The default Conan recipe installs the remaining ConanCenter packages such as
-`pugixml`, `leveldb`, `openssl`, and `zlib`. JSON is provided through
-`cnetmod.json`; the module is intentionally Glaze-only and installs the bundled
-Glaze headers required by its public module interface.
+`pugixml`, `leveldb`, `openssl`, and `zlib`. JSON is provided through the
+backend-neutral `cnetmod.json` facade. Its implementation imports the pinned
+official `nlohmann.json` module; application code never includes parser headers.
 `mimalloc` is enabled by default and can be disabled with
 `-o cnetmod/*:with_mimalloc=False`. `stdexec` is normally taken from
 `3rdparty/stdexec`; if your Conan remote provides the upstream `p2300` package,

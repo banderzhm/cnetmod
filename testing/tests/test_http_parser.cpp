@@ -38,6 +38,83 @@ TEST(request_parser_http_1_0)
     ASSERT_EQ(static_cast<int>(p.version()), static_cast<int>(http_version::http_1_0));
 }
 
+TEST(request_parser_header_views_support_common_and_custom_names)
+{
+    request_parser parser;
+    const std::string request =
+        "GET / HTTP/1.1\r\n"
+        "hOsT: example.com\r\n"
+        "Authorization: Bearer token\r\n"
+        "X-Request-Feature: enabled\r\n\r\n";
+
+    ASSERT_TRUE(parser.consume(request.data(), request.size()).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.get_header("HOST"), std::string_view("example.com"));
+    ASSERT_EQ(parser.get_header("authorization"),
+        std::string_view("Bearer token"));
+    ASSERT_EQ(parser.get_header("x-request-feature"),
+        std::string_view("enabled"));
+    ASSERT_TRUE(parser.get_header("missing").empty());
+
+    const auto& headers = parser.headers();
+    ASSERT_EQ(headers.at("host"), std::string("example.com"));
+    ASSERT_EQ(headers.at("X-REQUEST-FEATURE"), std::string("enabled"));
+}
+
+TEST(request_parser_duplicate_headers_preserve_legacy_joining)
+{
+    request_parser parser;
+    const std::string request =
+        "GET / HTTP/1.1\r\n"
+        "X-Tag: one\r\n"
+        "x-tag: two\r\n\r\n";
+
+    ASSERT_TRUE(parser.consume(request.data(), request.size()).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.get_header("X-TAG"), std::string_view("one, two"));
+    ASSERT_EQ(parser.headers().at("x-tag"), std::string("one, two"));
+}
+
+TEST(request_parser_all_common_header_slots_are_addressable)
+{
+    constexpr std::array<std::string_view, 17> names{
+        "Host", "Connection", "Content-Length", "Transfer-Encoding",
+        "Content-Type", "Authorization", "Accept-Encoding", "Range",
+        "Origin", "Forwarded", "X-Forwarded-For", "X-Real-IP",
+        "Traceparent", "Tracestate", "User-Agent", "Cookie", "Upgrade"};
+    std::string request = "GET / HTTP/1.1\r\n";
+    for (std::size_t index{}; index < names.size(); ++index)
+        request += std::format("{}: value-{}\r\n", names[index], index);
+    request += "\r\n";
+
+    request_parser parser;
+    ASSERT_TRUE(parser.consume(request.data(), request.size()).has_value());
+    ASSERT_TRUE(parser.ready());
+    for (std::size_t index{}; index < names.size(); ++index)
+    {
+        const auto expected = std::format("value-{}", index);
+        ASSERT_EQ(parser.get_header(names[index]), std::string_view(expected));
+    }
+}
+
+TEST(request_parser_fragmented_headers_keep_stable_views)
+{
+    request_parser parser;
+    std::string large_value(6000, 'v');
+    std::string request =
+        "GET /fragmented HTTP/1.1\r\nHost: fragmented.example\r\n"
+        "X-Large: " + large_value + "\r\nX-Tail: retained\r\n\r\n";
+
+    for (const char byte : request)
+        ASSERT_TRUE(parser.consume(&byte, 1).has_value());
+
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.get_header("host"),
+        std::string_view("fragmented.example"));
+    ASSERT_EQ(parser.get_header("x-large"), std::string_view(large_value));
+    ASSERT_EQ(parser.get_header("X-Tail"), std::string_view("retained"));
+}
+
 // =============================================================================
 // request_parser — POST with body
 // =============================================================================
@@ -109,6 +186,56 @@ TEST(request_parser_fragmented_chunked_body_survives_cursor_compaction)
 
     ASSERT_TRUE(parser.ready());
     ASSERT_EQ(parser.body(), std::string_view(payload));
+}
+
+TEST(request_parser_waits_for_complete_chunked_terminator)
+{
+    request_parser parser;
+    const std::string prefix =
+        "POST /upload HTTP/1.1\r\n"
+        "Host: localhost\r\n"
+        "Transfer-Encoding: chunked\r\n\r\n"
+        "2\r\n20\r\n0\r\n";
+
+    ASSERT_TRUE(parser.consume(prefix.data(), prefix.size()).has_value());
+    ASSERT_FALSE(parser.ready());
+
+    constexpr char carriage_return = '\r';
+    ASSERT_TRUE(parser.consume(&carriage_return, 1).has_value());
+    ASSERT_FALSE(parser.ready());
+
+    constexpr char line_feed = '\n';
+    ASSERT_TRUE(parser.consume(&line_feed, 1).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.body(), std::string_view("20"));
+}
+
+TEST(request_parser_preserves_pipelined_requests)
+{
+    request_parser parser;
+    const std::string requests =
+        "GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n"
+        "POST /second HTTP/1.1\r\nHost: localhost\r\n"
+        "Content-Length: 3\r\n\r\ntwo"
+        "GET /third HTTP/1.1\r\nHost: localhost\r\n\r\n";
+
+    ASSERT_TRUE(parser.consume(requests.data(), requests.size()).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.uri(), std::string_view("/first"));
+    ASSERT_TRUE(parser.has_buffered_data());
+
+    ASSERT_TRUE(parser.reset_for_next_message());
+    ASSERT_TRUE(parser.consume_buffered().has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.uri(), std::string_view("/second"));
+    ASSERT_EQ(parser.body(), std::string_view("two"));
+
+    ASSERT_TRUE(parser.reset_for_next_message());
+    ASSERT_TRUE(parser.consume_buffered().has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.uri(), std::string_view("/third"));
+    ASSERT_FALSE(parser.has_buffered_data());
+    ASSERT_FALSE(parser.reset_for_next_message());
 }
 
 // =============================================================================
@@ -237,6 +364,27 @@ TEST(response_parser_chunked)
     ASSERT_TRUE(r.has_value());
     ASSERT_TRUE(p.ready());
     ASSERT_EQ(p.body(), std::string_view("Hello, World!"));
+}
+
+TEST(response_parser_waits_for_complete_chunked_terminator)
+{
+    response_parser parser;
+    const std::string prefix =
+        "HTTP/1.1 200 OK\r\n"
+        "Transfer-Encoding: chunked\r\n\r\n"
+        "2\r\nOK\r\n0\r\n";
+
+    ASSERT_TRUE(parser.consume(prefix.data(), prefix.size()).has_value());
+    ASSERT_FALSE(parser.ready());
+
+    constexpr char carriage_return = '\r';
+    ASSERT_TRUE(parser.consume(&carriage_return, 1).has_value());
+    ASSERT_FALSE(parser.ready());
+
+    constexpr char line_feed = '\n';
+    ASSERT_TRUE(parser.consume(&line_feed, 1).has_value());
+    ASSERT_TRUE(parser.ready());
+    ASSERT_EQ(parser.body(), std::string_view("OK"));
 }
 
 TEST(response_parser_fragmented_headers_survive_cursor_compaction)

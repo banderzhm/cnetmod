@@ -5,8 +5,10 @@
 export module cnetmod.protocol.http.middleware.metrics;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 import cnetmod.utils.flat_map;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 

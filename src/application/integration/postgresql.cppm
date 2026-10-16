@@ -20,10 +20,14 @@ namespace cnetmod::application {
 export class postgresql_service final : public managed_service
 {
 public:
+    ~postgresql_service() override;
     postgresql_service(io_context& io,
         postgresql::connection_pool_options options, std::string instance,
         service_requirement requirement, recovery_policy recovery);
-    [[nodiscard]] auto pool() noexcept -> postgresql::connection_pool&;
+    postgresql_service(std::span<io_context* const> event_loops,
+        postgresql::connection_pool_options options, std::string instance,
+        service_requirement requirement, recovery_policy recovery);
+    [[nodiscard]] auto pool() -> postgresql::connection_pool&;
     [[nodiscard]] auto key() const -> service_key override;
     [[nodiscard]] auto requirement() const noexcept
         -> service_requirement override;
@@ -35,7 +39,8 @@ public:
     auto probe(service_context& context) -> task<health_report> override;
 
 private:
-    postgresql::connection_pool pool_;
+    struct pool_shard;
+    std::vector<std::unique_ptr<pool_shard>> pools_;
     std::string instance_;
     service_requirement requirement_;
     recovery_policy recovery_;

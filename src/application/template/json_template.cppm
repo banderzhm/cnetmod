@@ -4,20 +4,21 @@
 export module cnetmod.application.json_template;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.json;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.coro.bridge;
 import cnetmod.executor.pool;
 import cnetmod.io.io_context;
-import cnetmod.protocol.http;
 
 export namespace cnetmod::application {
 
 /**
  * @brief Offloads typed JSON work to the application-managed CPU pool.
  *
- * Every operation uses the framework's Glaze-only JSON module. Completion is
+ * Every operation uses the framework's JSON module. Completion is
  * always resumed on the application event loop.
  */
 class json_template

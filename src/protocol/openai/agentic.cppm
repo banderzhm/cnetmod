@@ -11,7 +11,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.mutex;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
-import :model;
+import :run;
 import :prompt;
 import :checkpoint;
 import cnetmod.json;

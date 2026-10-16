@@ -235,6 +235,40 @@ TEST(response_explicit_date_overrides_cached_date)
     ASSERT_FALSE(wire.contains("Mon, 10 Aug 2026 12:34:56 GMT"));
 }
 
+TEST(response_common_headers_materialize_and_reset_without_leaking_state)
+{
+    response value{200};
+    value.set_header("content-type", "text/plain");
+    value.set_header("Connection", "keep-alive");
+    value.set_body(std::string_view{"ok"});
+
+    ASSERT_EQ(value.headers().at("Content-Type"), std::string("text/plain"));
+    ASSERT_EQ(value.headers().at("content-length"), std::string("2"));
+    ASSERT_EQ(value.headers().at("connection"), std::string("keep-alive"));
+
+    value.reset();
+    ASSERT_TRUE(value.headers().empty());
+    ASSERT_TRUE(value.get_header("Content-Type").empty());
+}
+
+TEST(response_append_serialized_to_builds_pipeline_batch)
+{
+    response value{200};
+    std::string wire;
+    value.set_body(std::string_view{"one"});
+    value.append_serialized_to(wire);
+    value.reset();
+    value.set_body(std::string_view{"two"});
+    value.append_serialized_to(wire);
+
+    const auto first = wire.find("HTTP/1.1 200 OK\r\n");
+    const auto second = wire.find("HTTP/1.1 200 OK\r\n", first + 1);
+    ASSERT_EQ(first, std::size_t{0});
+    ASSERT_TRUE(second != std::string::npos);
+    ASSERT_TRUE(wire.substr(0, second).ends_with("\r\n\r\none"));
+    ASSERT_TRUE(wire.ends_with("\r\n\r\ntwo"));
+}
+
 // =============================================================================
 // TFB compliance helpers
 // =============================================================================

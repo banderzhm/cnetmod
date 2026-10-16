@@ -139,7 +139,7 @@ public:
     [[nodiscard]] auto bind(const endpoint& ep) -> std::expected<void, std::error_code>;
 
     /// Listen
-    [[nodiscard]] auto listen(int backlog = 128) -> std::expected<void, std::error_code>;
+    [[nodiscard]] auto listen(int backlog = 4096) -> std::expected<void, std::error_code>;
 
     /// Set non-blocking mode
     [[nodiscard]] auto set_non_blocking(bool enabled) -> std::expected<void, std::error_code>;

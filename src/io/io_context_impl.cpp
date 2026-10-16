@@ -28,6 +28,11 @@ auto io_context::running_in_this_thread() const noexcept -> bool
     return executing_context_ == this;
 }
 
+auto io_context::current() noexcept -> io_context*
+{
+    return executing_context_;
+}
+
 io_context::execution_scope::execution_scope(io_context& context) noexcept
     : previous_(executing_context_)
 {

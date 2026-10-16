@@ -168,8 +168,9 @@ auto route_params::get(std::string_view key) const noexcept
 
 request_context::request_context(io_context& c, socket& s,
     const request_parser& p, response& r,
-    route_params x)
-    : ctx_(c), sock_(s), resp_(r), params_(std::move(x)), headers_ptr_(&p.headers()), method_(p.method()), body_(p.body())
+    route_params x, std::shared_ptr<request_body_stream> stream)
+    : ctx_(c), sock_(s), resp_(r), params_(std::move(x)), parser_(&p),
+      method_(p.method()), body_(p.body()), body_stream_(std::move(stream))
 {
     init_path_query(p.uri());
 }
@@ -310,9 +311,9 @@ auto request_context::uri() const noexcept -> std::string_view
     return uri_;
 }
 
-auto request_context::headers() const noexcept -> const header_map&
+auto request_context::headers() const -> const header_map&
 {
-    return *headers_ptr_;
+    return parser_ ? parser_->headers() : *headers_ptr_;
 }
 
 auto request_context::body() const -> std::string_view
@@ -352,6 +353,8 @@ auto request_context::read_full_body() -> task<std::string_view>
 auto request_context::get_header(std::string_view key) const
     -> std::string_view
 {
+    if (parser_)
+        return parser_->get_header(key);
     auto it = headers_ptr_->find(key);
     return it == headers_ptr_->end() ? std::string_view{}
                                      : std::string_view{it->second};
@@ -366,6 +369,11 @@ auto request_context::param(std::string_view n) const noexcept
 auto request_context::wildcard() const noexcept -> std::string_view
 {
     return params_.wildcard;
+}
+
+auto request_context::endpoint() const noexcept -> const http::endpoint*
+{
+    return params_.matched.get();
 }
 
 auto request_context::params() const noexcept -> const route_params&
@@ -599,9 +607,25 @@ auto request_context::io_ctx() noexcept -> io_context&
     return ctx_;
 }
 
+void router::on_unmatched(unmatched_handler_fn handler)
+{
+    unmatched_ = std::move(handler);
+}
+
+auto router::unmatched_handler() const -> unmatched_handler_fn
+{
+    return unmatched_;
+}
+
 auto request_context::raw_socket() noexcept -> socket&
 {
     return sock_;
+}
+
+auto request_context::peer_address() const -> std::string
+{
+    auto remote = sock_.remote_endpoint();
+    return remote ? remote->address().to_string() : std::string{};
 }
 
 void request_context::drain_available_body_chunks() const
@@ -624,34 +648,76 @@ void request_context::init_path_query(std::string_view u)
         query_ = u.substr(q + 1);
 }
 
-auto router::get(std::string_view p, handler_fn f) -> router&
+auto router::get(std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add(http_method::GET, p, std::move(f));
+    return add(http_method::GET, p, std::move(f), std::move(metadata));
 }
 
-auto router::post(std::string_view p, handler_fn f) -> router&
+auto router::post(std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add(http_method::POST, p, std::move(f));
+    return add(http_method::POST, p, std::move(f), std::move(metadata));
 }
 
-auto router::put(std::string_view p, handler_fn f) -> router&
+auto router::put(std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add(http_method::PUT, p, std::move(f));
+    return add(http_method::PUT, p, std::move(f), std::move(metadata));
 }
 
-auto router::del(std::string_view p, handler_fn f) -> router&
+auto router::del(std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add(http_method::DELETE_, p, std::move(f));
+    return add(http_method::DELETE_, p, std::move(f), std::move(metadata));
 }
 
-auto router::patch(std::string_view p, handler_fn f) -> router&
+auto router::patch(std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add(http_method::PATCH, p, std::move(f));
+    return add(http_method::PATCH, p, std::move(f), std::move(metadata));
 }
 
-auto router::any(std::string_view p, handler_fn f) -> router&
+auto router::any(std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add_route({}, p, std::move(f));
+    return add_route({}, p, std::move(f), std::move(metadata));
+}
+
+auto router::get_sync(std::string_view p, sync_handler_fn f,
+    endpoint_metadata metadata) -> router&
+{
+    return add_sync(http_method::GET, p, std::move(f), std::move(metadata));
+}
+
+auto router::post_sync(std::string_view p, sync_handler_fn f,
+    endpoint_metadata metadata) -> router&
+{
+    return add_sync(http_method::POST, p, std::move(f), std::move(metadata));
+}
+
+auto router::put_sync(std::string_view p, sync_handler_fn f,
+    endpoint_metadata metadata) -> router&
+{
+    return add_sync(http_method::PUT, p, std::move(f), std::move(metadata));
+}
+
+auto router::del_sync(std::string_view p, sync_handler_fn f,
+    endpoint_metadata metadata) -> router&
+{
+    return add_sync(http_method::DELETE_, p, std::move(f), std::move(metadata));
+}
+
+auto router::patch_sync(std::string_view p, sync_handler_fn f,
+    endpoint_metadata metadata) -> router&
+{
+    return add_sync(http_method::PATCH, p, std::move(f), std::move(metadata));
+}
+
+auto router::any_sync(std::string_view p, sync_handler_fn f,
+    endpoint_metadata metadata) -> router&
+{
+    return add_sync(std::nullopt, p, std::move(f), std::move(metadata));
 }
 
 auto request_context::body_stream_error() const noexcept -> std::error_code
@@ -665,33 +731,40 @@ auto request_context::received_body_bytes() const noexcept -> std::size_t
 }
 
 auto router::stream_post(std::string_view p, handler_fn f,
-    request_body_stream_options options) -> router&
+    request_body_stream_options options, endpoint_metadata metadata) -> router&
 {
-    return add_route(http_method::POST, p, std::move(f), options);
+    return add_route(http_method::POST, p, std::move(f), std::move(metadata),
+        options);
 }
 
 auto router::stream_put(std::string_view p, handler_fn f,
-    request_body_stream_options options) -> router&
+    request_body_stream_options options, endpoint_metadata metadata) -> router&
 {
-    return add_route(http_method::PUT, p, std::move(f), options);
+    return add_route(http_method::PUT, p, std::move(f), std::move(metadata),
+        options);
 }
 
 auto router::stream_patch(std::string_view p, handler_fn f,
-    request_body_stream_options options) -> router&
+    request_body_stream_options options, endpoint_metadata metadata) -> router&
 {
-    return add_route(http_method::PATCH, p, std::move(f), options);
+    return add_route(http_method::PATCH, p, std::move(f), std::move(metadata),
+        options);
 }
 
 auto router::sse_get(std::string_view p, sse_handler_fn f,
-    std::optional<sse_stream_options> options) -> router&
+    std::optional<sse_stream_options> options, endpoint_metadata metadata)
+    -> router&
 {
-    return add_sse(http_method::GET, p, std::move(f), options);
+    return add_sse(http_method::GET, p, std::move(f), options,
+        std::move(metadata));
 }
 
 auto router::sse_post(std::string_view p, sse_handler_fn f,
-    std::optional<sse_stream_options> options) -> router&
+    std::optional<sse_stream_options> options, endpoint_metadata metadata)
+    -> router&
 {
-    return add_sse(http_method::POST, p, std::move(f), options);
+    return add_sse(http_method::POST, p, std::move(f), options,
+        std::move(metadata));
 }
 
 auto router::sse_defaults(sse_stream_options options) -> router&
@@ -703,13 +776,24 @@ auto router::sse_defaults(sse_stream_options options) -> router&
     return *this;
 }
 
-auto router::add(http_method m, std::string_view p, handler_fn f) -> router&
+auto router::add(http_method m, std::string_view p, handler_fn f,
+    endpoint_metadata metadata) -> router&
 {
-    return add_route(m, p, std::move(f));
+    return add_route(m, p, std::move(f), std::move(metadata));
+}
+
+auto router::add_sync(std::optional<http_method> method, std::string_view path,
+    sync_handler_fn handler, endpoint_metadata metadata) -> router&
+{
+    if (!handler)
+        throw std::invalid_argument("sync route handler must not be empty");
+    return add_route(method, path, {}, std::move(metadata), {},
+        std::move(handler));
 }
 
 auto router::add_sse(http_method m, std::string_view p, sse_handler_fn f,
-    std::optional<sse_stream_options> options) -> router&
+    std::optional<sse_stream_options> options, endpoint_metadata metadata)
+    -> router&
 {
     if (!f)
         throw std::invalid_argument("SSE route handler must not be empty");
@@ -717,18 +801,19 @@ auto router::add_sse(http_method m, std::string_view p, sse_handler_fn f,
     if (selected.max_duration <= std::chrono::milliseconds::zero() ||
         selected.write_timeout <= std::chrono::milliseconds::zero())
         throw std::invalid_argument("SSE timeouts must be positive");
-    return add(m, p,
-        [handler = std::move(f), selected](request_context& request) -> task<void>
+    return add(m, p, [handler = std::move(f), selected](request_context& request) -> task<void>
         {
             co_await request.with_sse(handler, selected);
-        });
+        },
+        std::move(metadata));
 }
 
 auto router::add_route(std::optional<http_method> m, std::string_view p,
-    handler_fn f,
-    std::optional<request_body_stream_options> request_stream) -> router&
+    handler_fn f, endpoint_metadata metadata,
+    std::optional<request_body_stream_options> request_stream,
+    sync_handler_fn sync_handler) -> router&
 {
-    if (!f)
+    if (!f && !sync_handler)
         throw std::invalid_argument("route handler must not be empty");
     if (request_stream &&
         (request_stream->max_bytes == 0 || request_stream->chunk_capacity == 0))
@@ -740,8 +825,15 @@ auto router::add_route(std::optional<http_method> m, std::string_view p,
     auto stat = detail::is_static_route(segs);
     auto first = detail::first_literal_segment(segs);
     auto canonical = detail::canonical_from_segments(segs);
-    entries_.push_back(
-        {m, std::move(segs), canonical, std::move(f), request_stream, {}, order});
+    auto described = std::make_shared<endpoint>();
+    described->method = m;
+    described->pattern = std::string{p};
+    if (const auto* name = metadata.find<endpoint_name>())
+        described->name = name->value;
+    described->metadata = std::move(metadata);
+    entries_.push_back({m, std::move(segs), canonical, std::move(f),
+        std::move(sync_handler), request_stream, {}, order,
+        std::move(described)});
     auto& e = entries_.back();
     e.score = detail::route_specificity(e.segments, !m, order);
     if (stat)
@@ -829,12 +921,18 @@ auto router::try_match(const std::vector<detail::segment>& s,
 auto router::match(http_method m, std::string_view p) const
     -> std::optional<match_result>
 {
+    const auto matched = [](const route_entry& entry, route_params params)
+    {
+        params.matched = entry.described;
+        return match_result{entry.handler, entry.sync_handler, std::move(params),
+            entry.request_stream};
+    };
     if (auto x = find_exact(m, p))
-        return match_result{x->handler, {}, x->request_stream};
+        return matched(*x, {});
     auto parts = detail::split_path(p);
     auto canonical = detail::canonical_from_parts(parts);
     if (auto x = find_exact(m, canonical))
-        return match_result{x->handler, {}, x->request_stream};
+        return matched(*x, {});
     const route_entry* best = nullptr;
     route_params bp;
     auto consider = [&](std::size_t i)
@@ -867,8 +965,36 @@ auto router::match(http_method m, std::string_view p) const
             consider(i);
     }
     if (best)
-        return match_result{best->handler, std::move(bp), best->request_stream};
+        return matched(*best, std::move(bp));
     return {};
+}
+
+auto router::allowed_methods(std::string_view p) const
+    -> std::vector<http_method>
+{
+    const auto parts = detail::split_path(p);
+    std::vector<http_method> result;
+    result.reserve(4);
+    for (const auto& entry : entries_)
+    {
+        if (!entry.method)
+            continue;
+        route_params ignored;
+        if (!try_match(entry.segments, parts, ignored) ||
+            std::ranges::find(result, *entry.method) != result.end())
+            continue;
+        result.push_back(*entry.method);
+    }
+    return result;
+}
+
+auto router::endpoints() const -> std::vector<std::shared_ptr<const endpoint>>
+{
+    std::vector<std::shared_ptr<const endpoint>> result;
+    result.reserve(entries_.size());
+    for (const auto& entry : entries_)
+        result.push_back(entry.described);
+    return result;
 }
 
 auto router::match(std::string_view m, std::string_view p) const

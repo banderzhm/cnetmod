@@ -44,6 +44,7 @@ import cnetmod.application.service_lifecycle;
 import cnetmod.application.service_registry;
 import cnetmod.application.host;
 import cnetmod.application.configuration;
+import cnetmod.application.modules;
 #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
 import cnetmod.protocol.mysql;
 #endif
@@ -181,6 +182,15 @@ auto measure(Operation operation) -> allocation_totals
     for (unsigned index{}; index < 256U; ++index)
         operation();
     return totals;
+}
+
+template <typename T>
+void poll_until_done(cnetmod::io_context& io, cnetmod::task<T>& operation,
+    unsigned max_polls = 8)
+{
+    for (unsigned poll = 0; poll < max_polls && !operation.handle().done();
+        ++poll)
+        io.poll();
 }
 
 } // namespace
@@ -1329,7 +1339,11 @@ TEST(redis_waiter_foreign_cancellation_races_pool_stop)
         stopping.handle().resume();
         io->poll();
         cancelling.join();
-        io->poll();
+        // The waiter completion cancels its pool-timeout watchdog. On IOCP
+        // those are two independent completion batches, so a single poll is
+        // not a completion contract.
+        poll_until_done(*io, pending);
+        poll_until_done(*io, stopping);
         ASSERT_TRUE(stopping.handle().done());
         stopping.handle().promise().result();
         ASSERT_TRUE(pending.handle().done());
@@ -1367,7 +1381,10 @@ TEST(redis_waiter_cancellation_and_stop_schedule_without_allocation)
         fail_after.reset();
         ASSERT_EQ(totals.calls, 0U);
         ASSERT_EQ(totals.bytes, 0U);
-        io->poll();
+        // Redis acquisition owns a pool-timeout watchdog even when the caller
+        // supplies a token. Drain the bounded completion chain instead of
+        // assuming the waiter and watchdog share one platform batch.
+        poll_until_done(*io, pending);
         ASSERT_TRUE(pending.handle().done());
         auto result = pending.handle().promise().result();
         ASSERT_FALSE(result.has_value());
@@ -1772,8 +1789,11 @@ TEST(application_orchestration_failure_cancels_a_pending_handler)
                             configuration.observability.logs = false;
                             configuration.health.interval = std::chrono::hours{1};
                         })
-                    .routes([&](cnetmod::http::router& routes)
-                        {
+                    .add_module(cnetmod::application::make_module("routes",
+                         {.compose = [&](cnetmod::application::composition_context& composition)
+                                 -> std::expected<void, std::string>
+                             {
+                                 auto& routes = composition.routes;
                             routes.get("/pending", [&](cnetmod::http::request_context& request) -> cnetmod::task<void>
                                 {
                                     co_await injected_wait{request.cancellation_token()};
@@ -1783,7 +1803,8 @@ TEST(application_orchestration_failure_cancels_a_pending_handler)
                                     cancelled = request.cancellation_token().is_cancelled();
                                     resource->handler_finished = true;
                                 });
-                        })
+                                 return {};
+                             }}))
                     .service(resource)
                     .build();
     ASSERT_TRUE(host.has_value());

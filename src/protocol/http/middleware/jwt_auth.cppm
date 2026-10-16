@@ -2,20 +2,53 @@
  * @brief Shared Bearer-token parsing for synchronous and coroutine authentication.
  *
  * Application-specific verification and principal binding live in callbacks;
- * this middleware owns header parsing, public paths, and rejection flow.
+ * this middleware owns header parsing and the rejection flow. Whether a
+ * request needs credentials is declared on the matched route through endpoint
+ * metadata:
+ *
+ * - http::allow_anonymous: credentials are not parsed at all;
+ * - http::optional_authentication: a valid credential binds the principal and
+ *   an absent credential continues anonymously;
+ * - no authentication metadata: credentials are required.
+ *
+ * Requests that match no route use jwt_auth_options::unmatched, which defaults
+ * to skip so the router answers 404 without disclosing authentication rules.
  */
 export module cnetmod.protocol.http.middleware.jwt_auth;
 
 import std;
-import cnetmod.coro.task;
+
 import cnetmod.protocol.http;
+import cnetmod.coro.task;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod {
+
+/**
+ * @brief Machine-readable cause of an authentication failure.
+ *
+ * Applications map it to their own error codes instead of matching message
+ * text. Authenticators set it on the failures they return.
+ */
+export enum class jwt_auth_reason
+{
+    /// No credential was presented on a route that requires one.
+    missing_credentials,
+    /// The header does not carry the expected prefix or token.
+    malformed_credentials,
+    /// The token or the session it references is not valid.
+    invalid_credentials,
+    /// The token is well formed but past its expiry.
+    expired_credentials,
+    /// Verification could not complete (session store, principal source).
+    unavailable,
+};
 
 export struct jwt_auth_failure
 {
     int status = http::status::unauthorized;
     std::string message = "invalid or expired token";
+    jwt_auth_reason reason = jwt_auth_reason::invalid_credentials;
 };
 
 export enum class jwt_auth_mode
@@ -25,18 +58,35 @@ export enum class jwt_auth_mode
     skip,
 };
 
+/**
+ * @brief Behavior when an optional route receives a credential that fails.
+ */
+export enum class invalid_optional_credentials
+{
+    /// A presented but malformed, expired or revoked credential is rejected
+    /// with 401 so a client never silently loses its identity.
+    reject,
+    /// The request continues anonymously as if no credential was presented.
+    continue_anonymous,
+};
+
 export struct jwt_auth_options
 {
     /// Token verification function: returns true if valid
     std::function<bool(std::string_view token)> verify;
 
-    /// Paths to skip authentication (exact match or prefix match path + "/")
-    std::vector<std::string> skip_paths;
-
-    /// Per-request policy. Takes precedence over skip_paths when provided.
-    /// Optional authentication ignores absent/malformed credentials and 401;
-    /// other authenticator failures (notably infrastructure errors) are rejected.
+    /// Optional per-request override. When empty the mode is derived from the
+    /// matched endpoint metadata (see endpoint_authentication_mode()).
     std::function<jwt_auth_mode(const http::request_context&)> mode_for;
+
+    /// Mode for requests that matched no route.
+    jwt_auth_mode unmatched = jwt_auth_mode::skip;
+
+    /// Handling of presented-but-invalid credentials on optional routes.
+    /// Authenticator failures other than 401 (notably infrastructure errors)
+    /// are always rejected.
+    invalid_optional_credentials invalid_optional =
+        invalid_optional_credentials::reject;
 
     /// Request header to read token from (default: Authorization)
     std::string header_name = "Authorization";
@@ -56,6 +106,23 @@ export struct jwt_auth_options
         on_failure;
 };
 
+/**
+ * @brief Resolves the authentication mode declared on the matched endpoint.
+ */
+export [[nodiscard]] inline auto endpoint_authentication_mode(
+    const http::request_context& ctx, jwt_auth_mode unmatched) noexcept
+    -> jwt_auth_mode
+{
+    const auto* endpoint = ctx.endpoint();
+    if (endpoint == nullptr)
+        return unmatched;
+    if (endpoint->metadata.contains<http::allow_anonymous>())
+        return jwt_auth_mode::skip;
+    if (endpoint->metadata.contains<http::optional_authentication>())
+        return jwt_auth_mode::optional;
+    return jwt_auth_mode::required;
+}
+
 export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
 {
     return [opts = std::move(opts)](http::request_context& ctx, http::next_fn next) -> task<void>
@@ -69,28 +136,21 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
                 ctx.json(failure.status, default_body);
         };
 
-        const auto mode = [&opts, &ctx]
-        {
-            if (opts.mode_for)
-                return opts.mode_for(ctx);
-            const auto path = ctx.path();
-            return std::ranges::any_of(opts.skip_paths,
-                       [path](const std::string& prefix)
-                       {
-                           return path == prefix ||
-                               (!prefix.empty() && prefix != "/" &&
-                                   path.starts_with(prefix) &&
-                                   path.size() > prefix.size() &&
-                                   path[prefix.size()] == '/');
-                       })
-                ? jwt_auth_mode::skip
-                : jwt_auth_mode::required;
-        }();
+        const auto mode = opts.mode_for
+            ? opts.mode_for(ctx)
+            : endpoint_authentication_mode(ctx, opts.unmatched);
         if (mode == jwt_auth_mode::skip)
         {
             co_await next();
             co_return;
         }
+
+        // An absent credential is the only case an optional route always
+        // accepts anonymously; a presented credential must be valid unless the
+        // application explicitly opts into anonymous fallback.
+        const bool anonymous_on_invalid = mode == jwt_auth_mode::optional &&
+            opts.invalid_optional ==
+                invalid_optional_credentials::continue_anonymous;
 
         const auto authorization = ctx.get_header(opts.header_name);
         if (authorization.empty())
@@ -100,7 +160,8 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
                 co_await next();
                 co_return;
             }
-            reject({.message = "missing authorization header"},
+            reject({.message = "missing authorization header",
+                       .reason = jwt_auth_reason::missing_credentials},
                 R"({"error":"missing authorization header"})");
             co_return;
         }
@@ -108,12 +169,13 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         if (!opts.token_prefix.empty() &&
             !authorization.starts_with(opts.token_prefix))
         {
-            if (mode == jwt_auth_mode::optional)
+            if (anonymous_on_invalid)
             {
                 co_await next();
                 co_return;
             }
-            reject({.message = "invalid authorization format"},
+            reject({.message = "invalid authorization format",
+                       .reason = jwt_auth_reason::malformed_credentials},
                 R"({"error":"invalid authorization format"})");
             co_return;
         }
@@ -122,12 +184,13 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
             opts.token_prefix.size());
         if (token.empty())
         {
-            if (mode == jwt_auth_mode::optional)
+            if (anonymous_on_invalid)
             {
                 co_await next();
                 co_return;
             }
-            reject({.message = "invalid authorization format"},
+            reject({.message = "invalid authorization format",
+                       .reason = jwt_auth_reason::malformed_credentials},
                 R"({"error":"invalid authorization format"})");
             co_return;
         }
@@ -139,7 +202,7 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
             auto result = co_await opts.authenticate_async(ctx, owned_token);
             if (!result)
             {
-                if (mode == jwt_auth_mode::optional &&
+                if (anonymous_on_invalid &&
                     result.error().status == http::status::unauthorized)
                 {
                     co_await next();
@@ -152,7 +215,7 @@ export inline auto jwt_auth(jwt_auth_options opts) -> http::middleware_fn
         }
         else if (!opts.verify || !opts.verify(token))
         {
-            if (mode == jwt_auth_mode::optional)
+            if (anonymous_on_invalid)
             {
                 co_await next();
                 co_return;

@@ -19,6 +19,10 @@ TEST(http1_stream_route_delivers_body_before_peer_finishes_request)
 {
     cnetmod::net_init network;
     auto io = cnetmod::make_io_context();
+    server invalid_server{*io};
+    ASSERT_FALSE(invalid_server
+            .listen("127.0.0.1", 0, {.reuse_address = true}, 0)
+            .has_value());
     server http_server{*io};
     router routes;
     bool first_chunk_seen = false;
@@ -36,7 +40,9 @@ TEST(http1_stream_route_delivers_body_before_peer_finishes_request)
         },
         {.max_bytes = 64, .chunk_capacity = 1});
     http_server.set_router(std::move(routes));
-    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    ASSERT_TRUE(http_server
+            .listen("127.0.0.1", 0, {.reuse_address = true}, 1024)
+            .has_value());
     const auto endpoint = http_server.local_endpoint();
     ASSERT_TRUE(endpoint.has_value());
     auto listener = http_server.run();
@@ -65,6 +71,75 @@ TEST(http1_stream_route_delivers_body_before_peer_finishes_request)
             cnetmod::mutable_buffer{bytes.data(), bytes.size()});
         ASSERT_TRUE(read.has_value() && *read > 0);
         ASSERT_TRUE((std::string_view{bytes.data(), *read}.contains("abcdef")));
+        peer->close();
+        http_server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        listener.handle().promise().result();
+        while (http_server.active_connections() != 0)
+            co_await cnetmod::async_sleep(*io, std::chrono::milliseconds{1});
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+}
+
+TEST(http1_pipeline_preserves_requests_and_orders_batched_responses)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    server http_server{*io};
+    router routes;
+    routes.get_sync("/one", [](request_context& request)
+        { request.text(status::ok, "one"); });
+    routes.get_sync("/two", [](request_context& request)
+        { request.text(status::ok, "two"); });
+    routes.get_sync("/three", [](request_context& request)
+        { request.text(status::ok, "three"); });
+    http_server.set_router(std::move(routes));
+    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = http_server.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    auto listener = http_server.run();
+    listener.handle().resume();
+
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
+                .has_value());
+        const std::string requests =
+            "GET /one HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            "GET /two HTTP/1.1\r\nHost: localhost\r\n\r\n"
+            "GET /three HTTP/1.1\r\nHost: localhost\r\n"
+            "Connection: close\r\n\r\n";
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                         cnetmod::const_buffer{requests.data(), requests.size()}))
+                .has_value());
+
+        std::string wire;
+        std::array<char, 4096> bytes{};
+        for (;;)
+        {
+            auto read = co_await cnetmod::async_read(*io, *peer,
+                cnetmod::mutable_buffer{bytes.data(), bytes.size()});
+            if (!read || *read == 0)
+                break;
+            wire.append(bytes.data(), *read);
+        }
+        const auto first = wire.find("\r\n\r\none");
+        const auto second = wire.find("\r\n\r\ntwo", first + 1);
+        const auto third = wire.find("\r\n\r\nthree", second + 1);
+        ASSERT_TRUE(first != std::string::npos);
+        ASSERT_TRUE(second != std::string::npos);
+        ASSERT_TRUE(third != std::string::npos);
+        ASSERT_TRUE(first < second && second < third);
+
         peer->close();
         http_server.stop();
         while (!listener.handle().done())

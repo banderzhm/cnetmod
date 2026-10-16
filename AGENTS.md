@@ -45,6 +45,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 - `skill/protocols/socks5.md`
 - `skill/protocols/websocket.md`
 - `skill/security/security-jwt.md`
+- `skill/security/security-password.md`
 
 <!-- BEGIN SOURCE: skill/SKILL.md -->
 # Source: `skill/SKILL.md`
@@ -75,7 +76,7 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | 我想… | 看这个文件 |
 |-------|-----------|
 | 了解项目架构、目录结构、模块清单 | [architecture.md](infra/architecture.md) |
-| 使用 Glaze-only JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
+| 使用模块化 JSON、DTO 映射和异步 JSON 模板 | [json.md](infra/json.md) |
 | 创建开箱即用的 HTTP/OTEL 应用 | [application.md](infra/application.md) |
 | 下载、发布和消费预构建 SDK | [distribution.md](infra/distribution.md) |
 | 了解模块/文件命名约定、export 规则 | [module-conventions.md](infra/module-conventions.md) |
@@ -149,8 +150,13 @@ This file is generated from every `skill/**/*.md` file. Edit the source files an
 | 我想… | 看这个文件 |
 |-------|-----------|
 | JWT 签发、验证、过期检查 | [security-jwt.md](security/security-jwt.md) |
+| 口令哈希、校验与升级策略 | [security-password.md](security/security-password.md) |
 
 ## CMake 协议开关
+
+所有协议开关默认关闭；只启用应用实际使用的协议。测试、benchmark、示例、C API 与
+Python Binding 也默认关闭。只有框架维护者的完整验证构建才显式设置
+`CNETMOD_ENABLE_ALL_PROTOCOLS=ON` 和相应的 `CNETMOD_BUILD_*` 开关。
 
 | 开关 | 协议 | 依赖 |
 |------|------|------|
@@ -1907,7 +1913,7 @@ if (stream.kernel_tls_active()) {
 | `create` | `static auto create(address_family, socket_type) -> expected<socket, error_code>` | 创建 socket |
 | `from_native` | `static auto from_native(native_handle_t) noexcept -> socket` | 从原生句柄接管 |
 | `bind` | `auto bind(const endpoint&) -> expected<void, error_code>` | 绑定地址 |
-| `listen` | `auto listen(int backlog = 128) -> expected<void, error_code>` | 监听 |
+| `listen` | `auto listen(int backlog = 4096) -> expected<void, error_code>` | 监听；内核仍可按 `somaxconn` 截断队列长度 |
 | `set_non_blocking` | `auto set_non_blocking(bool) -> expected<void, error_code>` | 设置非阻塞 |
 | `apply_options` | `auto apply_options(const socket_options&) -> expected<void, error_code>` | 应用选项 |
 | `local_endpoint` | `auto local_endpoint() const -> expected<endpoint, error_code>` | 本地端点 |
@@ -1927,9 +1933,18 @@ if (stream.kernel_tls_active()) {
 ### `tcp::acceptor`
 **签名**: `export class acceptor` (命名空间 `cnetmod::tcp`)
 
+`acceptor::open(endpoint, socket_options, backlog)` 将显式 backlog 逐层传给
+`socket::listen()`；默认值为 4096。高并发服务不要把 `max_connections` 当成 backlog：
+前者限制已接纳连接，后者只控制尚未 `accept` 的内核排队连接。
+
+`acceptor::try_accept()` 只获取已经排队的连接，不等待；监听队列已排空时返回空
+`std::optional`。它用于一次异步可读/完成通知后批量排空监听队列，避免为每个连接
+重复注册一次内核等待。调用方必须设置批量上限，避免持续建连压垮定时器和停机任务。
+
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit acceptor(io_context& ctx)` | 绑定 io_context |
+| 尝试接收 | `auto try_accept() -> expected<optional<socket>, error_code>` | 非阻塞获取一个已排队连接 |
 | `open` | `auto open(const endpoint&, const socket_options& = {}) -> expected<void, error_code>` | 打开并绑定监听 |
 | `close` | `void close() noexcept` | 关闭 |
 | `is_open` | `auto is_open() const noexcept -> bool` | 是否打开 |
@@ -2422,7 +2437,38 @@ API instead of repeating `system_clock::now()` conversions in each adapter.
 
 # Coroutine 并发原语
 
-> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token，全部非阻塞、零堆分配设计。
+> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token；等待路径不阻塞事件循环。
+
+`channel`、`async_mutex`、`async_shared_mutex`、`async_semaphore` 与
+`async_wait_group` 支持跨事件循环唤醒：等待节点记录挂起时的
+`io_context::current()`，由其他线程/循环完成或释放时，会把 continuation 投递回等待者所属
+循环。不要在自定义同步原语里直接对外部循环的 coroutine handle 调用 `resume()`。
+
+## 事件循环恢复契约
+
+- `task<T>`、返回值和异常传播不绑定线程；事件循环归属由所等待的 awaitable 决定。
+- cnetmod 自带 socket、timer、文件 I/O 和上述协程同步原语会在其所属/等待者循环恢复。
+- `starts_on(loop, task)` 只决定任务从哪个循环开始，不能保证第三方 awaitable 完成后仍在该循环。
+- 第三方 awaitable、自定义回调桥或线程池可能从任意线程完成时，必须保存调用处的
+  `io_context::current()`，并用 `resume_on(*caller, operation)` 发布返回值或异常。
+- HTTP handler、SSE writer、数据库连接和循环本地组件在每次访问前都必须已经回到其 owner loop；
+  禁止从外部线程直接 `coroutine_handle::resume()`。
+
+```cpp
+auto invoke_on_owner(io_context& owner, task<int> operation)
+    -> task<int>
+{
+    auto* caller = io_context::current();
+    if (caller != nullptr && caller != &owner)
+        co_return co_await resume_on(*caller,
+            starts_on(owner, std::move(operation)));
+    co_return co_await std::move(operation);
+}
+```
+
+Application 的 `offload()` 已自动捕获并返回调用者循环，不要在它外面重复套
+`resume_on()`。只有直接使用第三方 awaitable、`pool_post_awaitable` 或自行实现跨线程
+完成源时，调用方才负责显式恢复。
 
 **import**: `import cnetmod.coro.task;` / `import cnetmod.coro.channel;` / `import cnetmod.coro.mutex;` 等子模块
 **源码**: `src/coro/task.cppm`, `spawn.cppm`, `channel.cppm`, `mutex.cppm`, `shared_mutex.cppm`, `semaphore.cppm`, `wait_group.cppm`, `cancel.cppm`
@@ -2448,6 +2494,8 @@ API instead of repeating `system_clock::now()` conversions in each adapter.
 export template <typename T> class task;       // 协程返回类型（不可拷贝，可移动）
 export template <typename T> auto sync_wait(task<T> t) -> T;  // 阻塞等待，不驱动 io_context
 export void sync_wait(task<void> t);
+export template <typename T>
+auto resume_on(io_context& target, task<T> operation) -> task<T>;
 ```
 
 ```cpp
@@ -2471,8 +2519,17 @@ int main() {
 
 `sync_wait()` 也不是第三方协程库或阻塞 API 的桥接器。接入阻塞函数时使用
 `thread_pool`、`spawn_on` 或 `blocking_invoke`；接入其他协程库提供的 awaitable
-时使用 `from_awaitable`。执行域切换、返回目标 `io_context` 及生命周期要求见
+时使用 `from_awaitable`。若第三方 awaitable 可能在任意线程完成，用
+`resume_on(request_io, operation)` 显式保证成功返回和异常处理都回到请求所属的
+`io_context`；不要把 Application 控制循环误当成请求循环。执行域切换、返回目标
+`io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
+
+`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
+构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
+AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
+绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
+并发请求测试，不能只验证编译通过。
 
 ---
 
@@ -2774,6 +2831,8 @@ public:
         unsigned workers = std::thread::hardware_concurrency(),
         unsigned pool_threads = std::thread::hardware_concurrency(),
         thread_affinity_options affinity = {});
+    server_context(unsigned workers, thread_pool& pool,
+        thread_affinity_options affinity = {});
 
     [[nodiscard]] auto accept_io() noexcept -> io_context&;
     [[nodiscard]] auto next_worker_io() noexcept -> io_context&;
@@ -2790,6 +2849,10 @@ public:
     void stop();
 };
 ```
+
+第二个构造函数借用调用方已有的 CPU pool；`server_context` 不负责停止它。
+Application 使用该重载，确保整个进程只有 `application.cpu_threads` 配置的一套
+CPU 执行器。独立服务器需要自主管理 CPU pool 时使用第一个构造函数。
 
 ## `blocking_invoke`
 
@@ -2923,7 +2986,7 @@ auto result = co_await cnetmod::with_deadline(ctx, db_deadline,
     operation(token), token);
 ```
 
-`with_deadline()` 与 `with_timeout()` 只包装可取消的 `task<std::expected<T, std::error_code>>`。超时会触发传入的 `cancel_token`，并返回 `std::errc::timed_out`；调用方显式取消仍为 `std::errc::operation_canceled`。底层 I/O 必须遵守 token，才能真正中止读写。
+`with_deadline()` 与 `with_timeout()` 只包装可取消的 `task<std::expected<T, std::error_code>>`。超时会触发传入的 `cancel_token`，并返回 `std::errc::timed_out`；调用方显式取消仍为 `std::errc::operation_canceled`。底层 I/O 必须遵守 token，才能真正中止读写。`deadline::after(std::chrono::steady_clock::duration::max())` 明确定义为无限 deadline，不执行可能溢出的时间点加法，也不创建超时看门狗。
 
 ### `with_timeout` — 超时包装
 
@@ -2936,7 +2999,7 @@ auto with_timeout(io_context& ctx, std::chrono::steady_clock::duration timeout,
     -> task<std::expected<T, std::error_code>>;
 ```
 
-超时后通过 `cancel_token` 取消被包装的操作，返回 `std::errc::timed_out`。内部并行启动定时器和操作任务，任一完成即取消另一方；调用方显式取消则仍返回 `std::errc::operation_canceled`。
+超时后通过 `cancel_token` 取消被包装的操作，返回 `std::errc::timed_out`。内部并行启动定时器和操作任务，任一完成即取消另一方；调用方显式取消则仍返回 `std::errc::operation_canceled`。传入 `std::chrono::steady_clock::duration::max()` 时直接执行操作，不启动定时器；这适合明确需要无界等待的底层测试或内部编排，面向外部依赖的生产路径仍应配置有限预算。
 
 ---
 
@@ -3219,29 +3282,50 @@ Model fields support scalar values, enums, UUIDs, calendar date/time values and 
 
 ## Application entry point
 
-Resolve a repository after the application host has been built and its managed services have been registered:
+Repositories are application components. A module registers them with
+`add_repository<T>()`; the data source is resolved while the application is
+built, so a missing or ambiguous data source fails `build()` in the
+`resolution` phase instead of the first request:
 
 ```cpp
-auto users = host->runtime().repository<user_record>("primary");
-if (!users)
-    return EXIT_FAILURE;
+auto register_components(cnetmod::application::registration_context& context)
+    -> std::expected<void, std::string> override
+{
+    cnetmod::application::add_repository<user_record>(context.components,
+        {.instance = "primary"});
+    return {};
+}
 
-auto result = co_await users->get_by_id(
-    cnetmod::orm::param_value::from_int(42));
+// Constructor injection in another component factory:
+auto& users = resolver.get<cnetmod::application::managed_repository<user_record>>();
+auto result = co_await users.get_by_id(cnetmod::orm::param_value::from_int(42));
 if (result.is_err())
     co_return;
-
 auto user = result.first();
 ```
 
 When a MySQL and PostgreSQL service deliberately use the same instance name, specify the provider:
 
 ```cpp
-auto users = host->runtime().repository<user_record>("primary", {},
-    cnetmod::application::database_provider::postgresql);
+cnetmod::application::add_repository<user_record>(context.components,
+    {.instance = "primary",
+     .provider = cnetmod::application::database_provider::postgresql});
 ```
 
 Automatic provider selection succeeds only when exactly one supported provider owns the requested instance.
+
+`managed_repository<T>` is move-only. The registered component is the shared
+instance; a component that owns its repository by value (a mapper or domain
+service) takes a new handle over the same data source and policies:
+
+```cpp
+auto& factory = resolver.get<cnetmod::application::repository_factory<user_record>>();
+auto owned = factory.make_repository();   // std::expected<managed_repository<T>, error_code>
+```
+
+`repository_factory<T>::create(services, configuration, options)` is the same
+factory without the component container. Each repository builds its policy
+chain once and reuses it for every operation.
 
 ## Repository API
 
@@ -3348,9 +3432,12 @@ if (!page.ok())
 语句需要自己维护带表别名的逻辑删除谓词，在该 `<select>` / `<update>` 等语句上声明
 `logicalDelete="false"`；这只跳过当前语句的逻辑删除拦截器，租户、数据权限和 SQL
 安全拦截仍然生效。属性省略或设为 `true` 时沿用仓储策略；其他值在装载 XML 时拒绝。
-`nullable_datetime` 的自动 DELETE 转 UPDATE 当前使用数据库 `CURRENT_TIMESTAMP`；
-若列约定存 UTC 墙钟且会话时区不保证 UTC，应用应像 Nexus 一样用带 UTC
-`calendar_datetime` 参数的选择性更新完成软删除。
+自动 DELETE 转 UPDATE 默认使用应用侧 UTC 时钟：`nullable_datetime` 的删除标记和
+任意模式下的时间型 `touch_fields` 都绑定同一次采样得到的参数，不依赖数据库会话时区，
+且保证同一操作的多个时间字段一致。只有明确管理了数据库会话时区、确实希望
+使用数据库时钟时，才把 `time_source` 设为
+`logical_delete_time_source::database_session`；该模式生成 `CURRENT_TIMESTAMP`、
+`CURRENT_DATE` 或 `CURRENT_TIME`。
 
 `FILL_INSERT` 与 `FILL_INSERT_UPDATE` 直接从模型元数据读取；普通仓储请求
 不会反复修改全局注册表。自定义填充配置可按表名和字段名在启动期注册。普通 ORM
@@ -3372,7 +3459,9 @@ if (!page.ok())
 `testing/tests/test_orm_tenant_live.cpp` 的
 `mysql_live_system_chart_chat_timestamp_fill`。
 
-`query_wrapper<T>` accepts column names and type-safe member pointers. Prefer member pointers in application code:
+`query_wrapper<T>` uses type-safe member pointers for model-backed application
+queries. The member type is checked against the supplied value at compile time,
+so an integer field cannot accidentally be compared with a string:
 
 ```cpp
 cnetmod::orm::query_wrapper<user_record> query;
@@ -3383,6 +3472,17 @@ query.eq(&user_record::name, "Ada")
 
 auto rows = co_await users->list(query);
 ```
+
+When a column truly is selected at runtime (for example, a validated reporting
+dimension), make that loss of static safety explicit with `runtime_column`:
+
+```cpp
+query.eq(cnetmod::orm::runtime_column{validated_column_name}, value);
+```
+
+The legacy bare-string overloads are deprecated. Do not use them in ordinary
+Mapper or Repository code. XML statements remain the appropriate API when the
+shape of the SQL itself is dynamic.
 
 It supports comparisons, `LIKE`, `IN`, ranges, null/boolean predicates, nested groups, structured subqueries, joins, projection, grouping, aggregates, ordering and limits. Values are always bound parameters; arbitrary trailing SQL is not part of the API.
 
@@ -3518,15 +3618,20 @@ Build parameters with `param_context::set()`, `from_map()`, `from_model()`,
 
 | XML form | Behavior |
 |---|---|
-| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. |
+| `#{name}` | Adds a bound parameter. Values are never inserted into SQL text. A missing property fails statement construction before database execution. |
 | `#{name,jdbcType=...,javaType=...,typeHandler=...,mode=...,numericScale=...}` | Parses and preserves mapping metadata. The current protocol execution binds the value; custom `typeHandler` execution and OUT parameters are not implemented. |
 | `#{request.id}` | Reads a dotted property from a nested `param_context`. |
-| `${name}` | Inserts raw text. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
+| `${name}` | Inserts raw text and fails statement construction when the property is missing. Restrict it to values selected from an application-owned allow-list, such as known sort columns; never pass request text directly. |
 
 `param_context::set()` accepts values supported by `to_query_parameter`,
 including null, signed/unsigned integers, floating point, strings, blobs,
 calendar date/time values and optional values. A missing property resolves to
-null. Model overloads use `CNETMOD_MODEL` metadata to expose model fields.
+null inside dynamic expressions so optional conditions can test it. SQL
+placeholders are stricter: missing properties fail immediately, while an
+explicitly registered null remains a valid bound SQL `NULL`. Model overloads
+use `CNETMOD_MODEL` metadata to expose model fields. Mapper execution reports
+both the statement id and missing property name and does not contact the
+database when statement construction fails.
 
 ### Dynamic SQL elements
 
@@ -3693,7 +3798,8 @@ The framework does not accept arbitrary SQL expressions in logical-delete touch 
 Per-request row visibility is an automatic interceptor policy. Mark the model
 partition and owner columns with `DATA_PARTITION` and `DATA_OWNER`, bind one
 `data_permission_scope` in the HTTP request scope during authentication, then
-resolve the repository with `runtime.repository<T>(request, "primary")`.
+resolve the repository with `repository_factory<T>::for_request(request)`
+(inject `repository_factory<T>`, registered by `add_repository<T>()`).
 Typed CRUD, XML statements, projections and transactions all pass through the
 same frozen chain. Service and Mapper code do not receive, resolve or bind a
 data-scope object. The request repository owns a scope snapshot instead of
@@ -3703,12 +3809,14 @@ row.
 
 ### SaaS tenant and organization hierarchies
 
-SaaS mode is explicit. Call `runtime.require_tenant_scope(true)` before
-serving requests, mark exactly one model column `TENANT_ID`, and bind a
-`tenant_scope` to each authenticated request. The runtime copies it into the
-repository's frozen policy chain. Missing tenant scope rejects operations on
-tenant models; it never means “all tenants.” Leave the runtime switch off for
-a single-tenant application. The legacy `tenant_guard` is thread-local and
+SaaS mode is explicit. Set `orm.tenant_scope_required: true` in the
+application configuration (frozen at build time), mark exactly one model column
+`TENANT_ID`, and bind a `tenant_scope` to each authenticated request.
+`repository_factory<T>::for_request()` copies it into the repository's frozen
+policy chain. Missing tenant scope returns `permission_denied` for tenant
+models; it never means “all tenants,” and strict mode offers no process-wide
+`shared()` repository for tenant models. Leave the switch off for a
+single-tenant application. The legacy `tenant_guard` is thread-local and
 must not be used as a SaaS request policy.
 In strict SaaS mode, models marked `DATA_PARTITION` or `DATA_OWNER` must also
 declare a tenant column; otherwise the ORM rejects them instead of applying
@@ -3719,14 +3827,14 @@ first resolve a tenant from a trusted host or tenant identifier and bind a
 narrow scope; the ORM cannot infer a tenant from an unauthenticated user ID.
 
 ```cpp
-runtime.require_tenant_scope(true);
+// application.yaml: orm: { tenant_scope_required: true }
 request.scope().bind(std::make_shared<cnetmod::orm::tenant_scope>(
     cnetmod::orm::tenant_scope{
         .tenant_id = current_tenant,
         .readable_tenant_ids = authorized_tenant_tree,
         .writable_tenant_ids = authorized_write_tenants,
     }));
-auto orders = runtime.repository<order>(request, "primary");
+auto orders = order_repositories.for_request(request);   // repository_factory<order>&
 ```
 
 The application/IAM layer resolves parent–child tenant and department IDs
@@ -4813,14 +4921,16 @@ auto rs2 = co_await cli.transaction([&]() -> cn::task<void> {
 
 ### ORM 集成
 
-MySQL 只提供协议客户端、连接池、方言和结果适配器。ORM 业务入口由
-Application 暴露的 `repository<T>` 提供，统一委托给 MySQL
-`session_gateway`；不存在协议专属的 ORM Session/Mapper 门面。
+MySQL 只提供协议客户端、连接池、方言和结果适配器。ORM 业务入口是
+Application 组件 `managed_repository<T>`（由 `add_repository<T>()` 注册），统一委托给
+MySQL `session_gateway`；不存在协议专属的 ORM Session/Mapper 门面。
 
 ```cpp
-auto users = runtime.repository<User>("primary");
-auto user = co_await users->save(User{.name = "Alice", .balance = 1000.0});
-auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
+application::add_repository<User>(context.components, {.instance = "primary"});
+
+auto& users = resolver.get<application::managed_repository<User>>();
+auto user = co_await users.save(User{.name = "Alice", .balance = 1000.0});
+auto page = co_await users.page(1, 20, query_wrapper<User>{}.eq(&User::status, 1));
 ```
 
 ## 连接池（生产级用法）
@@ -5417,14 +5527,16 @@ Application 的 PostgreSQL 健康探测使用同一个 deadline 获取连接并�
 ### ORM 集成
 
 PostgreSQL 只提供协议客户端、连接池、方言和结果适配器。Application
-通过统一的 `repository<T>` 绑定 PostgreSQL `session_gateway`，因此业务
-代码不依赖任何 PostgreSQL 专属的模型 Session 或结果类型。
+通过统一的仓储组件 `managed_repository<T>` 绑定 PostgreSQL `session_gateway`，
+因此业务代码不依赖任何 PostgreSQL 专属的模型 Session 或结果类型。
 
 ```cpp
-auto users = runtime.repository<User>(
-    "primary", {}, application::database_provider::postgresql);
-auto user = co_await users->save(User{.name = "Alice", .email = "alice@example.com"});
-auto page = co_await users->page(query_wrapper<User>{}.eq(&User::status, 1), 1, 20);
+application::add_repository<User>(context.components,
+    {.instance = "primary", .provider = application::database_provider::postgresql});
+
+auto& users = resolver.get<application::managed_repository<User>>();
+auto user = co_await users.save(User{.name = "Alice", .email = "alice@example.com"});
+auto page = co_await users.page(1, 20, query_wrapper<User>{}.eq(&User::status, 1));
 ```
 
 连接租约的普通归还保持同步快速路径；状态锁竞争时，归还通知存放在池的稳定槽位中，
@@ -6028,6 +6140,7 @@ redis::redis_template cache{pool, {
 
 auto order = co_await cache.get_as<order_record>("42");
 auto saved = co_await cache.set_as("42", value);
+auto active = co_await cache.getex("session:abc", std::chrono::minutes{30});
 
 auto batch = cache.pipeline();
 batch.get("42").exists("43").incr("revision");
@@ -6043,15 +6156,25 @@ auto replies = co_await cache.execute(batch);
 及完整 RESP exchange。任何未完整 exchange 都关闭连接，池只重新发布
 `is_reusable()` 为真的 lease。
 
+直接构造 `pool_params` 时，可将 `pool_timeout` 设为
+`std::chrono::steady_clock::duration::max()` 以明确关闭取连接看门狗；该值主要用于
+底层生命周期与锁竞争测试。连接外部 Redis 的生产配置应保留有限超时，避免故障时
+请求无限等待。
+
 - `get` / `hget` 将 Redis nil 映射为成功的 `std::optional{}`，不映射成错误。
+- `getex(key, ttl)` 使用 Redis 6.2+ 的单条 `GETEX key EX seconds` 原子读取并续期；
+  不要用 Pipeline 的 `GET` + `EXPIRE` 冒充相同语义。
 - `mget` 保持与输入逐位对应，内部消化 RESP aggregate 根节点。
 - `hgetall` 同时规范化 RESP2 array 和 RESP3 map。
 - `sscan_all` 循环游标、保持首次出现顺序、去重，并在超过 `scan_limit` 时整体失败。
 - Pipeline 只执行一次 `exchange()`，返回
   `std::vector<std::expected<reply, std::error_code>>`；Redis 单条错误不会覆盖其他条。
-- `json_codec` 是 `get_as` / `set_as` 的 Glaze-only 默认 JSON codec；Redis 模块只通过 `cnetmod.json` 解析和序列化。若业务需要非 JSON 值编码，可显式传入 Redis 值 codec，但这不会替换框架 JSON 引擎。
+- `json_codec` 是 `get_as` / `set_as` 的默认 JSON codec；Redis 模块只通过 `cnetmod.json` 解析和序列化。若业务需要非 JSON 值编码，可显式传入 Redis 值 codec，但这不会替换框架 JSON 引擎。
 - 配置 `span_exporter` 后，每条命令产生 CLIENT span，只记录
   `db.system.name=redis` 与 `db.operation.name`，不记录 key、value 或服务端错误正文。
+- `eval_integer(script, keys, args)` 用于必须在 Redis 内原子完成的业务状态转换。
+  `keys` 是逻辑键，模板会统一添加命名空间；`args` 原样传入。脚本必须返回整数，
+  且 Cluster 下所有键必须使用同一 hash tag。业务脚本属于应用层，不应塞进 cnetmod。
 
 Application 的 `redis_service::make_template(options, parent)` 自动复用服务连接池及
 Telemetry Hub 的 span exporter；调用方只显式传递当前协程的 trace parent。
@@ -7201,7 +7324,7 @@ srv.use(cors());
 srv.use(request_id());
 srv.use(body_limit(2 * 1024 * 1024));
 srv.use(compress());
-srv.use(jwt_auth({.verify = my_verify, .skip_paths = {"/", "/login"}}));
+srv.use(jwt_auth({.verify = my_verify}));  // 公开路由用 endpoint_metadata 声明
 srv.set_router(std::move(r));
 ```
 
@@ -7240,10 +7363,12 @@ srv.use(cors({
 
 ```cpp
 enum class jwt_auth_mode { required, optional, skip };
+enum class invalid_optional_credentials { reject, continue_anonymous };
 struct jwt_auth_options {
     std::function<bool(std::string_view token)> verify;
-    std::vector<std::string> skip_paths;
-    std::function<jwt_auth_mode(const http::request_context&)> mode_for;
+    std::function<jwt_auth_mode(const http::request_context&)> mode_for;  // 可选覆盖
+    jwt_auth_mode unmatched = jwt_auth_mode::skip;
+    invalid_optional_credentials invalid_optional = invalid_optional_credentials::reject;
     std::string header_name = "Authorization";
     std::string token_prefix = "Bearer ";
     std::function<task<std::expected<void, jwt_auth_failure>>(
@@ -7253,17 +7378,40 @@ struct jwt_auth_options {
 };
 ```
 
-**行为**: `mode_for` 可按完整请求选择必须认证、可选认证或跳过；未设置时沿用 `skip_paths`（命中即跳过，否则必须认证）。可选认证下，无令牌、格式错误、验签失败或异步回调返回 401 均按匿名继续；其他错误（如 Redis 故障导致的 503）仍拒绝请求。成功认证时正常绑定身份。
+**行为**: 是否需要凭据在注册路由时用端点元数据声明，路由器先匹配路由，中间件再通过
+`request_context::endpoint()` 读取（`endpoint_authentication_mode()` 公开同一规则）：
+
+| 匹配到的端点 | 模式 |
+|---|---|
+| 声明 `http::allow_anonymous` | `skip`：不解析凭据 |
+| 声明 `http::optional_authentication` | `optional` |
+| 未声明认证元数据 | `required` |
+| 没有匹配任何路由 | `unmatched`，默认 `skip`，让路由器返回 404 |
+
+策略按方法区分，同一路径的 `GET` 可以匿名、`DELETE` 可以要求认证。`mode_for` 仅在需要
+按完整请求动态决定时覆盖上述规则。
+
+可选认证下，**没有**凭据按匿名继续；**携带**的凭据格式错误、验签失败或回调返回 401 时
+默认拒绝（401），避免客户端静默丢失身份——例如带过期令牌的写请求被当作匿名写入。
+`invalid_optional = continue_anonymous` 恢复按匿名继续。非 401 的失败（如 Redis 故障导致
+的 503）始终拒绝。成功认证时正常绑定身份。
+
 需要异步验签或查询当前用户时，设置 `authenticate_async`；它优先于同步 `verify`，
-并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message}` 拒绝请求；
-`on_failure` 可输出应用自己的错误响应格式。不设置新字段时保持原有同步行为。
+并可在回调中绑定请求作用域。返回 `jwt_auth_failure{status, message, reason}` 拒绝请求；
+`on_failure` 可输出应用自己的错误响应格式，按 `reason`（`missing_credentials`、
+`malformed_credentials`、`invalid_credentials`、`expired_credentials`、`unavailable`）
+映射到应用错误码，不要匹配 `message` 文本。中间件自身产生的缺失/格式错误会带上对应 reason。
 
 ```cpp
+router.post("/login", login, http::endpoint_metadata{http::allow_anonymous{}});
+router.get("/articles/:id", read_article,
+    http::endpoint_metadata{http::optional_authentication{}});
+router.del("/articles/:id", remove_article);   // 需要认证
+
 srv.use(jwt_auth({
     .verify = [](std::string_view token) {
         return token == "my-secret-key";
     },
-    .skip_paths = {"/", "/login", "/register"},
 }));
 ```
 
@@ -7285,16 +7433,26 @@ struct authorization_requirement {
 };
 
 struct authorization_options {
-    principal_authenticator authenticate;
-    authorization_requirement_resolver requirement_for;
+    principal_authenticator authenticate;               // 必填
+    authorization_requirement_resolver requirement_for; // 可选覆盖
     authenticated_principal_sink on_authenticated;
-    std::function<bool(const request_context&)> skip;
+    bool authorize_unmatched = false;
+    std::function<void(request_context&, int status, std::string_view code)> on_failure;
 };
 ```
 
-支持通配符权限匹配（如 `iot:device:*`）。
+权限要求默认读取端点上的 `http::required_permissions{all_of, any_of}`，支持通配符
+（如 `iot:device:*`）；`requirement_for` 仅用于动态覆盖。`allow_anonymous` 端点直接放行；
+`optional_authentication` 且未声明权限的端点允许匿名；未匹配路由默认放行（404），
+`authorize_unmatched = true` 时强制认证。认证失败返回 401，`verifier_failure` 返回 503，
+权限不足返回 403。`on_failure` 可输出应用自己的错误响应格式，收到状态码与稳定错误码
+（`UNAUTHENTICATED`、`FORBIDDEN`、`AUTHENTICATION_UNAVAILABLE`）。`authenticate` 为空时
+`authorize()` 抛出 `std::invalid_argument`。
 
 ```cpp
+router.get("/devices", list_devices, http::endpoint_metadata{
+    http::required_permissions{.all_of = {"iot:device:read"}}});
+
 srv.use(authorize({
     .authenticate = [](request_context& ctx)
         -> std::expected<authorization_principal, authorization_error> {
@@ -7304,10 +7462,6 @@ srv.use(authorize({
                 .code = authorization_error_code::unauthenticated});
         return authorization_principal{.subject = "user1",
             .permissions = {"iot:device:read", "iot:device:write"}};
-    },
-    .requirement_for = [](const request_context& ctx)
-        -> std::optional<authorization_requirement> {
-        return authorization_requirement{.all_of = {"iot:device:read"}};
     },
 }));
 ```
@@ -7322,10 +7476,26 @@ struct rate_limiter_options {
     double burst = 20.0;             // 突发容量
     std::function<std::string(http::request_context&)> key_fn;
     std::chrono::seconds entry_ttl{300};
+    std::vector<std::string> trusted_proxies;   // 可信代理（地址或 CIDR）
+    std::function<void(http::request_context&, std::chrono::seconds)> on_limited;
 };
 ```
 
-默认按 IP 限流；自定义 `key_fn` 可按用户/API Key 限流。
+默认按客户端地址限流；自定义 `key_fn` 可按用户/API Key 限流。拒绝时总会设置
+`Retry-After`；`on_limited` 输出应用自己的错误响应格式，缺省为 429 + 小 JSON。
+
+**客户端地址**：`http::resolve_client_ip(ctx, trusted_proxies)` 默认取 TCP 对端地址
+（`request_context::peer_address()`），**忽略** `X-Forwarded-For` / `X-Real-IP`。只有对端
+属于 `trusted_proxies` 时才从右向左解析 `X-Forwarded-For`，第一个非可信代理的地址即客户端，
+左侧由客户端自填的部分一律忽略。`rate_limiter`、`ip_filter`、`ip_firewall` 统一使用这条规则；
+部署在反向代理之后必须把代理地址配置进 `trusted_proxies`，否则所有请求都会按代理地址计。
+纯函数 `http::resolve_forwarded_client_ip(peer, xff, x_real_ip, trusted)` 与
+`http::ip_matches(address, cidr)` 可直接复用。
+
+每次调用 `rate_limiter()` 创建一个独立的进程内状态；返回的中间件及其所有副本共享该状态。
+因此把同一个中间件实例安装到多事件循环 HTTP 服务器时，同一 key 使用的是**全进程统一令牌桶**，
+不是每个事件循环各一份配额。内部按 key 分片同步，可从不同事件循环并发调用。若需要分路由独立
+配额，应分别创建中间件实例；若需要跨进程全局配额，应使用 Redis 等外部原子计数方案。
 
 ```cpp
 srv.use(rate_limiter({.rate = 100.0, .burst = 200.0}));
@@ -7477,6 +7647,7 @@ struct ip_firewall_options {
     bool track_4xx = true;
     bool track_5xx = false;
     bool track_rate_limit = true;
+    std::vector<std::string> trusted_proxies;  // 同 rate_limiter：仅对可信代理解析转发头
 };
 ```
 
@@ -7515,8 +7686,11 @@ srv.use(ip_filter({
 ### 14. cache_store — 缓存存储
 
 抽象接口 `cache::cache_store`，具体实现：
-- `memory_cache` — 内存 LRU 缓存
-- `redis_cache` — Redis 后端（需 `CNETMOD_HAS_PROTOCOL_REDIS`）
+
+- `memory_cache` — HTTP 组件自带的内存 LRU 缓存。
+- `redis_cache` — 独立 Redis 中间件适配器，不属于 HTTP 核心。必须同时启用
+  HTTP 与 Redis，并显式链接 `cnetmod::http_redis_cache`、导入
+  `cnetmod.integration.http.redis_cache`。
 
 ```cpp
 class memory_cache : public cache_store {
@@ -7536,6 +7710,20 @@ Per-route 缓存：`cacheable()`, `cache_put()`, `cache_evict()`, `cache_evict_g
 ```cpp
 cache::memory_cache store({.max_entries = 10000});
 srv.use(cache::make_cache_middleware(store, {.ttl = std::chrono::seconds{60}}));
+```
+
+Redis 后端：
+
+```cmake
+target_link_libraries(my_service PRIVATE cnetmod::http_redis_cache)
+```
+
+```cpp
+import cnetmod.integration.http.redis_cache;
+
+cnetmod::cache::redis_cache store(redis_client,
+    {.key_prefix = "http-cache:"});
+srv.use(cnetmod::cache::make_cache_middleware(store));
 ```
 
 ### 15. health_check — 健康检查
@@ -7726,6 +7914,7 @@ ignored and never changes the database or Redis operation outcome.
 > 高性能异步 HTTP/HTTPS 服务器栈，支持 HTTP/1.1、HTTP/2、HTTP/3、路由、中间件、SSE、Swagger 与文件上传。
 
 **import**: `import cnetmod.protocol.http;`
+
 **CMake**: `-DCNETMOD_ENABLE_HTTP=ON`
 **源码**: `src/protocol/http/`
 
@@ -7754,11 +7943,26 @@ ignored and never changes the database or Redis operation outcome.
 - `sctx` — 多核服务器上下文（多线程模式）
 
 #### `server::listen`
-**签名**: `auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true}) -> std::expected<void, std::error_code>`
+**签名**: `auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true}, int backlog = 4096) -> std::expected<void, std::error_code>`
 **参数**:
 - `host` — 监听地址（如 `"0.0.0.0"`）
 - `port` — 监听端口
 - `opts` — 套接字选项
+- `backlog` — 等待 `accept` 的内核连接队列长度；必须为正，最终值可被操作系统上限截断
+
+Application 项目用 `http.backlog` 配置业务端口、用 `management.backlog` 配置独立管理端口；
+默认均为 4096，也可通过 `CNETMOD_HTTP_BACKLOG` 覆盖业务端口。`max_connections`
+限制的是已经接纳的并发连接，与 backlog 不是同一个概念。
+
+HTTP accept 循环收到首个异步完成后，会限量排空最多 64 个已经排队的连接，再回到
+事件循环公平点。Linux 使用 `accept4(SOCK_NONBLOCK | SOCK_CLOEXEC)`，Windows 使用
+非阻塞监听 socket 的 `accept`；没有排队连接时不会自旋。不要在业务层再创建并行
+accept 循环或重复实现这一批处理。
+
+在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，`server` 会为每个
+事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
+不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
+框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
 
 #### `server::set_router`
 **签名**: `void set_router(router r)`
@@ -7816,7 +8020,8 @@ auto main() -> int {
     });
 
     server srv(*ctx);
-    auto result = srv.listen("0.0.0.0", 8080);
+    auto result = srv.listen("0.0.0.0", 8080,
+        {.reuse_address = true}, 8192);
     if (!result) {
         std::println("Listen failed: {}", result.error().message());
         return 1;
@@ -7835,16 +8040,46 @@ auto main() -> int {
 #### `router::get / post / put / del / patch / any`
 **签名**:
 ```cpp
-auto get(std::string_view pattern, handler_fn fn) -> router&;
-auto post(std::string_view pattern, handler_fn fn) -> router&;
-auto put(std::string_view pattern, handler_fn fn) -> router&;
-auto del(std::string_view pattern, handler_fn fn) -> router&;
-auto patch(std::string_view pattern, handler_fn fn) -> router&;
-auto any(std::string_view pattern, handler_fn fn) -> router&;
+auto get(std::string_view pattern, handler_fn fn,
+    endpoint_metadata metadata = {}) -> router&;
+// post / put / del / patch / any 同形；stream_* 与 sse_* 的元数据参数位于选项之后
+auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 ```
 **参数**:
 - `pattern` — 路由模式，支持 `:name` 命名参数和 `*filepath` 通配符
 - `fn` — 处理函数 `std::function<task<void>(request_context&)>`
+- `metadata` — 端点策略，按类型存取（同类型后加覆盖先加）。标准类型：
+  `allow_anonymous`、`optional_authentication`、`required_permissions{all_of, any_of}`、
+  `endpoint_name{"orders.list"}`；应用可添加任意自定义类型
+
+不需要等待异步操作的端点使用 `get_sync / post_sync / put_sync / del_sync /
+patch_sync / any_sync`，其 handler 为 `std::function<void(request_context&)>`。在没有
+中间件时服务器直接调用它，不创建 handler 或中间件链协程帧；有中间件时框架才按需
+适配成 `task<void>`。不要为了使用 sync API 在 handler 内执行阻塞 I/O 或 CPU 重任务。
+
+路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
+`endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
+
+服务器会区分“路径不存在”和“方法不匹配”：没有任何模式匹配时返回 `404`；路径模式存在但
+当前方法未注册时自动返回 `405 Method Not Allowed`，并生成 `Allow` 响应头。业务控制器不应
+为同一路径补一个手写的兜底路由。`router::allowed_methods(path)` 可用于测试或自定义调度。
+默认的 404/405 响应体是纯文本；应用用 `router::on_unmatched(handler)` 输出自己的错误响应格式，
+handler 收到 `unmatched_request{status, allowed}`，405 的 `Allow` 头已由服务器设置：
+
+```cpp
+routes.on_unmatched([](request_context& request, const unmatched_request& unmatched)
+    -> task<void> {
+    respond_error(request, unmatched.status == status::not_found
+        ? error_code::route_not_found : error_code::method_not_allowed);
+    co_return;
+});
+```
+
+```cpp
+routes.get("/orders/:id", read_order, endpoint_metadata{
+    required_permissions{.all_of = {"orders:read"}}, endpoint_name{"orders.read"}});
+routes.post("/login", login, endpoint_metadata{allow_anonymous{}});
+```
 
 **路由模式说明**:
 | 模式 | 示例路径 | 说明 |
@@ -7918,8 +8153,15 @@ r.get("/static/*filepath", [](request_context& ctx) -> task<void> {
 #### `request_context::get_header`
 **签名**: `[[nodiscard]] auto get_header(std::string_view key) const -> std::string_view`
 
+**说明**: 首选接口。名称匹配不区分大小写；常用 header 使用固定槽位，其他 header 使用
+大小写无关哈希索引，返回值直接引用本次请求的 header backing buffer，不会为名称和值
+逐项创建 `std::string`。返回的视图只在当前请求生命周期内有效，不要跨请求保存。
+
 #### `request_context::headers`
-**签名**: `[[nodiscard]] auto headers() const noexcept -> const header_map&`
+**签名**: `[[nodiscard]] auto headers() const -> const header_map&`
+
+**说明**: 兼容需要遍历全部 header 的场景，首次调用时才物化 `header_map`，因此会产生
+字符串分配。中间件和 handler 只读取少量已知 header 时必须使用 `get_header()`。
 
 #### `request_context::body`
 **签名**: `[[nodiscard]] auto body() const -> std::string_view`
@@ -8333,6 +8575,7 @@ r.get("/static/*filepath", serve_dir({
 |---------|---------|
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
+| 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
 | SSE 时使用 `sse_begin()`、`sse_send()` 与 `sse_heartbeat()` | `sse_started()` 后回退使用 `ctx.json()` |
 | 使用 `co_return` 结束 handler | 忘记 `co_return` 导致未定义行为 |
@@ -8366,11 +8609,17 @@ class server_context {
 **架构**：
 | 线程 | 角色 | 说明 |
 |------|------|------|
-| Thread 0（main） | `accept_io()` | 专用 accept 循环，不参与请求处理 |
-| Thread 1..N | `next_worker_io()` | 每个 worker 独立 `io_context`，round-robin 分配连接 |
+| Thread 0（main） | `accept_io()` | 控制循环；Linux 多 worker HTTP 不在这里接纳连接 |
+| Thread 1..N | `worker_ios()` | 每个 worker 独立 `io_context`，连接全生命周期归属该循环 |
 | Thread Pool | `pool()` | cnetmod `thread_pool`，用于 CPU 密集型任务卸载 |
 
-**IOCP 特性**：accept 后的新 socket 尚未关联 IOCP，首次 `async_read/write` 时自动绑定到 worker 的 IOCP。
+Linux 多 worker HTTP 为每个 worker 创建 `SO_REUSEPORT` listener，内核把连接直接分配给
+最终所属的循环，不再经过控制循环 round-robin 转交；每个循环同时持有自己的 multishot
+recv 注册缓冲区。单循环、Windows 和不支持该能力的平台保持原有 listener/dispatch 模型。
+
+HTTP/1 解析器会保留同一次 receive 中第一个消息之后的未消费字节，并连续处理完整的
+pipelined 请求。普通响应在该 receive 批次内顺序序列化到连接级缓冲区，再一次提交；遇到
+SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响应，保证线上顺序不变。
 
 ---
 
@@ -8477,7 +8726,7 @@ auto main() -> int {
 | 使用 `server_context` 构造 `server` 启用多核 | 在多核场景手动创建多个 `server` 实例 |
 | CPU 密集任务通过 `pool_post_awaitable` 卸载到 `pool()` | 在 handler 中直接执行耗时计算阻塞 worker |
 | 卸载后用 `post_awaitable{ctx.io_ctx()}` 切回 worker | 在 pool 线程上直接调用 `ctx.json()` |
-| `spawn(sctx.accept_io(), srv.run())` 启动 accept | 在 worker 线程上运行 accept 循环 |
+| `spawn(sctx.accept_io(), srv.run())` 启动服务器编排 | 业务代码跨 worker 写另一个循环的 socket |
 
 ---
 
@@ -8744,6 +8993,11 @@ streams；这避免 Initial flight 与应用帧抢占同一个握手阶段。该
 重新初始化 TLS 或覆盖已建立的 1-RTT 状态。对于被 replay cache 拒绝的 0-RTT，
 仅幂等的完整响应 API 会在新的 1-RTT 连接上重放一次。
 
+TLS 生成的 ClientHello、证书链等 CRYPTO 数据可能超过 1200 字节。传输层会按当前
+最小路径 MTU 将它们拆成多个带连续 offset 的 CRYPTO 帧，并分别纳入丢包恢复；应用层
+不应增大首包 UDP 尺寸，也不应自行拆分 TLS 握手数据。每个客户端 Initial datagram
+仍满足 RFC 9000 要求的至少 1200 字节。
+
 客户端可以通过 `resumption_ticket` 和 `enable_early_data` 显式启用受控 0-RTT；
 自动重试仅适用于幂等请求。服务端必须配置应用拥有的 ticket AEAD 与共享 replay
 cache，默认拒绝 0-RTT。Alt-Svc、ticket 文件均为 opt-in，并应放在权限受限目录。
@@ -8834,7 +9088,7 @@ Multipath 草案对端互操作仍需独立完成，不能宣称为通用浏览�
 
 ## 核心原则
 
-1. 使用 `application_builder` 构建，使用 `application_host` 运行；不存在旧 `http_application` 兼容层。
+1. 使用 `application_builder` 构建，使用 `application_host` 运行；业务以 `application_module` 组合，不存在旧 `http_application` 兼容层。
 2. 外部组件只有在配置中 `enabled: true` 且调用 `enable_auto_configuration()` 时才会装配。
 3. 所有长生命周期组件实现 `managed_service`，关键后台协程交给 `task_supervisor`。
 4. `build()` 完成严格配置校验、服务注册冻结和依赖环检查；失败时不启动网络监听。
@@ -8848,70 +9102,270 @@ optional 组件的单组件超时只触发降级与恢复，不能由共享计�
 
 ## 最小入口
 
+业务以 **模块**（`application_module`）组合进 Application。一个模块声明自己的配置节、注册
+组件、贡献路由与中间件，并可挂接启动/停止钩子：
+
 ```cpp
 #include <cnetmod/config.hpp>
+#include <cnetmod/json.hpp>
 
 import std;
 import cnetmod.application;
+import cnetmod.core.log;
+import cnetmod.json;
 
-auto configure_routes(cnetmod::http::router& routes) -> void
+namespace application = cnetmod::application;
+namespace http = cnetmod::http;
+
+struct order_options
 {
-    routes.get("/orders", [](cnetmod::http::request_context& request)
-        -> cnetmod::task<void>
+    int page_size = 20;
+};
+
+CNETMOD_JSON(order_options,
+    CNETMOD_JSON_FIELD(page_size))
+
+class order_catalog
+{
+public:
+    explicit order_catalog(const order_options& options) : page_size_(options.page_size) {}
+    [[nodiscard]] auto list() const -> std::string
     {
-        request.json(cnetmod::http::status::ok, R"({"orders":[]})");
-        co_return;
-    });
-}
+        return std::format(R"({{"orders":[],"page_size":{}}})", page_size_);
+    }
+
+private:
+    int page_size_;
+};
+
+class order_module final : public application::application_module
+{
+public:
+    auto name() const -> std::string_view override { return "orders"; }
+
+    void configure_options(application::options_registry& options) override
+    {
+        options.section<order_options>("orders");
+    }
+
+    auto register_components(application::registration_context& context)
+        -> std::expected<void, std::string> override
+    {
+        context.components.singleton<order_catalog>(
+            [](application::component_resolver& resolver) {
+                return std::make_shared<order_catalog>(*resolver
+                    .get<application::options_monitor<order_options>>("orders")
+                    .current());
+            });
+        return {};
+    }
+
+    auto compose(application::composition_context& context)
+        -> std::expected<void, std::string> override
+    {
+        auto& catalog = context.components.get<order_catalog>();
+        context.routes.get("/orders",
+            [&catalog](http::request_context& request) -> cnetmod::task<void> {
+                request.json(http::status::ok, catalog.list());
+                co_return;
+            },
+            http::endpoint_metadata{http::allow_anonymous{}});
+        context.middleware.push_back(cnetmod::cors());
+        return {};
+    }
+};
 
 auto main() -> int
 {
-auto host = cnetmod::application::application_builder{"order-service"}
-    .configuration_file("application.yaml")
-    .enable_auto_configuration()
-    .routes(configure_routes)
-    .middleware(cnetmod::cors())
-    .build();
+    auto host = application::application_builder{"order-service"}
+        .configuration_file("application.yaml")
+        .enable_auto_configuration()
+        .add_module<order_module>()
+        .build();
     if (!host)
+    {
+        logger::critical{"cannot start: {}", host.error().describe()};
         return EXIT_FAILURE;
+    }
     return host->run() ? EXIT_SUCCESS : EXIT_FAILURE;
 }
 ```
 
 `application_host` 自己创建 `net_init`、`io_context`、CPU `thread_pool`、HTTP 服务、Telemetry Hub、健康缓存和任务监管器。`request_stop()` 可由其他线程重复调用，所有调用汇入同一条幂等停机路径。CPU 线程数通过 `application.cpu_threads` 配置，默认取硬件并发数且至少为 1；也可由 `CNETMOD_CPU_THREADS` 覆盖。该值运行时变更需要重启。
 
-`application_host::runtime()` 返回受控的 `application_runtime` 门面，而不是公开原始
-`io_context`。业务用 `spawn_managed()` 注册可取消、可等待、可恢复的后台任务；回调得到
-独立 `cancel_token`。短时 CPU 工作使用 `offload()`，完成后自动回到 Application 事件
-循环。`cancellation()` 返回可复制、可注册回调的 `std::stop_token`，
-`stop_requested()` 提供轻量查询；`tasks()` 与 `telemetry()` 分别提供既有任务监管和观测
-组合根。停机先排空请求、广播取消、等待监管任务、逆序关闭服务，最后停止 CPU 池。
+## 组合阶段
 
-Route 中优先使用 `offload()` 包装一段纯 CPU callable：它会在 Application CPU 池运行，
-无论正常返回还是抛异常，等待方都会恢复到当前 Application 事件循环。只有算法必须跨
-多个异步步骤持续驻留 CPU 池时才成对使用 `schedule_on_cpu()` 与
-`resume_to_event_loop()`；切回事件循环前不得读写 `request_context`。两种方式都不需要
-业务保存或传递裸 `io_context&`：
+`build()` 按固定顺序执行命名阶段，任一阶段失败都返回 `build_error`，此时不监听端口、
+不启动任何托管服务：
+
+| 阶段 `build_phase` | 内容 |
+|---|---|
+| `configuration` | 读取 YAML/JSON、展开环境变量、应用 customizer、校验框架配置 |
+| `options` | 模块 `configure_options()` 声明配置节；每个应用配置节必须被声明认领 |
+| `registration` | `service_factory()`、自动装配、分片装配、模块 `register_components()` |
+| `validation` | 托管服务依赖图校验 |
+| `resolution` | 组件容器按依赖顺序急切构造全部单例 |
+| `composition` | 模块 `compose()` 贡献路由与中间件 |
+
+运行期还有两个钩子：`on_started()` 在托管服务启动完成、监听端口之前按注册顺序执行，
+失败会回滚已启动的服务；`on_stopping()` 在 HTTP 排空、监管任务结束之后、托管服务关闭
+之前逆序执行，只对已成功启动的模块调用一次。
+
+`build_error{phase, component, path, message, code}` 的 `describe()` 输出形如
+`resolution [orders_service] services.primary: component is not registered`。配置错误带
+文档路径，例如 `http.sse.max_duration_ms: expected an integer number of milliseconds, got string`、
+`services.cache.password: environment variable 'REDIS_PASSWORD' is not set and has no ${REDIS_PASSWORD:-default}`。
+启用了未编译进当前构建的集成时，路径指向 `services.<name>.type`，错误码为 `not_supported`。
+
+不需要独立类型的模块用 `make_module(name, module_hooks{...})` 以回调定义。模块名必须唯一，
+重复或空模块在 `add_module()` 时抛出异常。
+
+## 组件容器
+
+`component_collection` 是模块注册组件的唯一入口，`component_container` 在 `resolution`
+阶段急切构造所有单例；构造完成后容器只读，可并发查询。
 
 ```cpp
-builder.routes([](http::router& routes, application_runtime& runtime) {
-    routes.post("/score", [&runtime](http::request_context& request)
+context.components.singleton<pricing_service>([](application::component_resolver& r) {
+    return std::make_shared<pricing_service>(r.get<clock_source>("utc"));
+});
+context.components.instance(std::make_shared<clock_source>(), "utc");
+context.components.alias<greeting, english_greeting>();   // 接口 → 实现
+context.components.borrow(external_object, "external");  // 非拥有
+```
+
+- 工厂返回 `T`、`std::unique_ptr<U>` 或 `std::shared_ptr<U>`（`U` 为 `T` 或其派生类）。
+- 空名字表示该类型的默认绑定；同一 `(类型, 名字)` 注册两次在 `resolution` 阶段报 `file_exists`。
+- 缺失依赖报出完整解析链，例如 `component is not registered (required by pricing_service -> clock_source 'utc')`；
+  循环依赖报 `dependency cycle: A -> B -> A`；工厂抛出的异常转为带组件名的诊断。
+- 未注册的类型回退到托管服务注册表：自动装配的 `redis_service`、`mysql_service`、
+  `postgresql_service`、`chat_model_service` 可以直接按类型和实例名注入。
+- Host 预先注册 `application_runtime`、`execution_context`、`service_registry`、
+  `observability::telemetry_hub` 与每个配置节的 `options_monitor<T>`（名字为配置节名）。
+- 容器按创建顺序的逆序析构，组件总是先于它所借用的对象销毁；容器在 runtime、托管服务和
+  模块之前析构。
+
+组件在构建期就绪，因此 `compose()` 中可以按引用捕获组件，不需要 `shared_ptr` 或延迟绑定。
+
+## 应用配置节（Options）
+
+框架配置节（`application`、`logging`、`http`、`management`、`observability`、
+`crash_dump`、`lifecycle`、`health`、`orm`、`security`、`services`）严格校验未知键。
+其他顶层配置节属于应用，必须由某个模块声明：
+
+```cpp
+options.section<llm_options>("llm", /*required=*/true)
+    .validate([](const llm_options& value) -> std::expected<void, std::string> {
+        return value.providers.empty()
+            ? std::unexpected(std::string{"at least one provider is required"})
+            : std::expected<void, std::string>{};
+    })
+    .reload(application::options_reload::runtime_safe);
+```
+
+- `T` 为可默认构造、可由 cnetmod.json（Glaze）映射的聚合类型；缺省的键取成员默认值，
+  包括数组元素中聚合类型的默认成员；嵌套映射逐层合并。未知键会递归拒绝（包括数组
+  元素内的未知键）；空对象成员视为 map，接受任意键。
+- 未被任何模块声明的应用配置节使 `build()` 在 `options` 阶段失败。
+- 注册阶段按配置决定注册什么（例如每个供应商一个组件）时，用
+  `context.options.current<T>("name")` 读取已绑定的快照；类型不符或未声明时构建在
+  `registration` 阶段失败。需要感知重载的组件仍应注入 `options_monitor<T>`。
+- 组件通过 `options_monitor<T>`（名为配置节名）读取：`current()` 返回线程安全的不可变快照，
+  `on_change()` 返回 RAII `options_subscription`。
+- `reload_configuration()` 先校验所有变更的配置节，全部通过后才发布；`runtime_safe`
+  配置节原子替换快照并通知订阅者，`restart_required`（默认）只把结果标记为需要重启。
+  builder 的应用名与 `configure()` 显式覆盖会按原顺序重新应用到候选配置，保持与首次
+  构建相同的配置优先级。
+
+环境变量引用支持 `${NAME}`、`${NAME:-default}` 与转义 `$${`；空值视为未设置。无默认值
+的缺失变量是带路径的配置错误。`expand_environment_references()` 公开同一规则。
+
+## 多事件循环与资源归属
+
+`application.io_threads` 配置业务 HTTP 事件循环数量，默认 `1`；也可由
+`CNETMOD_IO_THREADS` 提供环境层值。大于 `1` 时，Host 使用一个控制循环负责生命周期、
+健康检查和管理端点，并使用指定数量的业务循环承载连接。连接一旦分配给业务循环，handler、
+响应和 SSE 写入在整个连接生命周期内都留在该循环：
+`server_context` 复用 Application 的 CPU pool，不会额外创建隐藏执行器；
+`application.cpu_threads` 始终是整个进程唯一的 CPU offload 线程预算。
+
+```yaml
+application:
+  io_threads: 4
+  cpu_threads: 8
+```
+
+自动配置集成必须通过 `integration_loop_mode` 显式声明归属：
+
+| 模式 | 约束 |
+|---|---|
+| `loop_local` | 控制循环和每个业务循环各持有一个 client/pool shard；调用按 `io_context::current()` 选本地实例 |
+| `owned` | 单实例固定在 owner loop；请求、结果及流式回调显式往返切换 |
+| `shared` | 实现本身允许所有循环并发访问 |
+| `single_loop_only` | `io_threads > 1` 时在 registration 阶段拒绝构建，不做不安全降级 |
+
+内置 HTTP client、MySQL、PostgreSQL、Redis/Redis Cluster 使用 `loop_local`；OpenAI
+使用 `owned`，流式 chunk 会先回到请求循环才调用 handler。SQL/Redis 的
+`minimum_size`、`maximum_size` 是整个应用的总量，按商和余数分配到各 shard；
+最大连接数小于循环数会拒绝配置，不能让某个循环借用另一循环的连接。
+
+组件也必须声明作用域：无状态或内部已同步的对象用 `singleton<T>()`；含循环绑定状态的对象
+用 `event_loop<T>()`，容器会为控制/业务循环分别提前构造，并在调用处按当前循环解析。
+实现通过接口暴露时使用 `event_loop_alias<Interface, Implementation>()`；普通
+`alias()` 只用于 singleton，不能把循环本地对象降级成进程单例。
+singleton 不得隐式依赖 event-loop component，这种歧义会在构建期报错。
+
+跨线程释放 `async_mutex`、`async_shared_mutex`、`async_semaphore`、
+`async_wait_group` 或 `channel` 时，框架会把等待协程投递回其原事件循环，不会在释放者线程
+直接恢复。自定义异步原语也必须保存等待者的 loop 并遵守相同规则。
+
+## 执行与 Runtime
+
+`application_runtime` 只暴露与集成无关的执行能力：`spawn_managed()`、`offload()`、
+`schedule_on_cpu()`/`resume_to_event_loop()`、`files()`、`rest()`、`json()`、
+`compression()`、`cancellation()`、`tasks()`、`telemetry()` 与 `configuration()`。
+仓储、Redis、Chat Model 等集成以组件方式注入，新增集成不会修改 runtime 接口。
+
+`runtime.executor()` 返回 `execution_context`：非拥有地提供事件循环与 CPU 池，
+供需要执行上下文的协议层组件使用（计时器、`ai::resilient_chat_model` 等装饰器、显式
+超时 `with_timeout()`、`sleep()`）。调用方不得 run、stop 或 restart 事件循环。
+`event_loop()` 在事件循环线程内返回 `io_context::current()`，在普通线程或 CPU pool 上才
+回退到控制循环；`control_event_loop()` 始终返回控制循环。`post()`、`sleep()` 和
+`with_timeout()` 在调用时捕获同样的当前循环规则。
+
+JWT 签发与验签必须在离开 handler 循环前取得恢复点：
+
+```cpp
+auto& executor = runtime.executor();
+auto result = co_await security::verify_jwt(executor.cpu_pool(),
+    executor.event_loop(), token, secret);
+```
+
+上述调用在 request handler 中会回到 socket 所属业务循环；禁止改用
+`control_event_loop()`。如果已经运行到 CPU pool、`io_context::current()` 为 null，必须在
+离开业务循环前显式保存引用，不能指望 `event_loop()` 还原已经丢失的调用上下文。
+
+Route 中优先使用 `offload()` 包装一段纯 CPU callable：它会在 Application CPU 池运行，
+无论正常返回还是抛异常，等待方都会恢复到发起调用的事件循环。只有算法必须跨
+多个异步步骤持续驻留 CPU 池时才成对使用 `schedule_on_cpu()` 与
+`resume_to_event_loop(captured_loop)`；必须在离开前保存
+`auto* captured_loop = io_context::current()`，切回之前不得读写 `request_context`。
+无参数 `resume_to_event_loop()` 只返回控制循环，不适合多循环 request handler：
+
+```cpp
+auto compose(application::composition_context& context)
+    -> std::expected<void, std::string> override
+{
+    auto& runtime = context.runtime;
+    context.routes.post("/score", [&runtime](http::request_context& request)
         -> task<void> {
         auto input = std::string{request.body()};
         auto score = co_await runtime.offload(
             [input = std::move(input)] { return calculate_score(input); });
         request.text(http::status::ok, std::to_string(score));
     });
-
-    routes.post("/pipeline", [&runtime](http::request_context& request)
-        -> task<void> {
-        auto input = std::string{request.body()};
-        co_await runtime.schedule_on_cpu();
-        auto result = run_cpu_pipeline(input);
-        co_await runtime.resume_to_event_loop();
-        request.text(http::status::ok, std::move(result));
-    });
-});
+    return {};
+}
 ```
 
 `parse_offloaded(runtime, text)` 与 `dump_offloaded(runtime, value)` 在 Host CPU 池执行
@@ -8925,43 +9379,41 @@ JSON 解析和序列化，避免 route 协程阻塞事件循环。两者拥有�
 Application 停机时会取消并等待任务，不会让协程访问已经析构的服务。
 
 ```cpp
-builder.routes([](http::router& routes, application_runtime& runtime) {
-    auto reports = std::make_shared<report_service>();
-
-    routes.post("/reports", [&runtime, reports](http::request_context& request)
+auto compose(application::composition_context& context)
+    -> std::expected<void, std::string> override
+{
+    auto& runtime = context.runtime;
+    auto reports = context.components.shared<report_service>();
+    context.routes.post("/reports", [&runtime, reports](http::request_context& request)
         -> task<void> {
         // request_context 只活到本次请求结束；后台任务必须按值拥有所需输入。
         auto input = std::string{request.body()};
         auto job_id = make_job_id();
-        auto task_name = std::string{"report:"};
-        task_name.append(job_id);
-
         recovery_policy one_shot;
         one_shot.budget = std::chrono::milliseconds{0};
-        auto accepted = runtime.spawn_managed(std::move(task_name),
+        auto accepted = runtime.spawn_managed(std::format("report:{}", job_id),
             [reports, input = std::move(input), job_id](cancel_token& cancellation)
                 -> task<std::expected<void, std::error_code>> {
-                co_return co_await reports->generate(
-                    job_id, input, cancellation);
+                co_return co_await reports->generate(job_id, input, cancellation);
             },
             one_shot,
             false); // 单个业务任务失败不触发整个应用停机
-
         if (!accepted) {
             request.json(http::status::service_unavailable,
                 R"({"error":"background task was not accepted"})");
             co_return;
         }
-        request.json(http::status::accepted,
-            make_job_accepted_document(job_id));
+        request.json(http::status::accepted, make_job_accepted_document(job_id));
     });
-});
+    return {};
+}
 ```
 
 必须遵守以下生命周期语义：
 
 1. 后台 lambda 不捕获 `request_context&`、请求 body 的 view、局部变量引用或裸业务指针。
-2. 输入按值移动，服务使用 `shared_ptr` 或其他覆盖任务生命周期的受管理所有权。
+2. 输入按值移动，服务使用 `shared_ptr` 或其他覆盖任务生命周期的受管理所有权
+   （`components.shared<T>()` 与容器共享所有权）。
 3. `202 Accepted` 只表示 supervisor 已接管，不表示任务成功；任务状态应持久化，并提供
    `GET /jobs/{id}` 等查询接口。
 4. 任务名称必须唯一。重复名称返回 `errc::file_exists`，停机期间注册返回
@@ -8973,8 +9425,9 @@ builder.routes([](http::router& routes, application_runtime& runtime) {
 
 `application_runtime::files()` 返回 `async_file_template`，其
 `open/read/write/flush/close/stat/read_all/write_all/remove` 内部使用 Host 的事件循环，业务和
-领域端口无需传递 `io_context&`。涉及请求超时的调用应使用带独立 `cancel_token&` 的
-重载；`remove()` 对不存在的目标幂等成功。
+领域端口无需传递 `io_context&`。原子替换文件时使用
+`write_all(path, content, file_write_durability::flushed)` 在关闭前刷盘，再做同目录改名。
+涉及请求超时的调用应使用带独立 `cancel_token&` 的重载；`remove()` 对不存在的目标幂等成功。
 
 `application_runtime::rest()` 返回 `rest_template`，用于业务出站 HTTP 调用。它组合既有
 HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/put/patch/remove`；
@@ -8985,70 +9438,76 @@ HTTP client pool 与 OTEL instrumented client，统一提供 `exchange/get/post/
 `rest_request_options::headers` 注入单次请求头；名称按 HTTP 规则忽略大小写，单次值覆盖默认值。
 Template 的接口与实现统一位于 `src/application/template/`，不在 Application 根目录堆放实现。
 
-启用任一 Chat Model provider 自动装配后，
-`application_runtime::chat_model(instance, options)` 返回具名
-`chat_model_template`。Application 只依赖 `cnetmod.ai` 与
-`chat_model_service`，不依赖 OpenAI 客户端类型；OpenAI-compatible、Claude、Gemini
-或本地推理后端通过同一 provider Strategy 接入。每个 managed provider 拥有固定容量
-连接池，一次 invoke/stream 独占一个 lease 到终态，避免 keep-alive 响应交错。
-文本重载复制 `chat_model_template_options::request`，按 system、默认消息、历史、当前
-user 输入的顺序构造请求；显式 `chat_request` 重载不改写调用方消息。模板必须在
-`build()` 完成后或 route handler 执行时解析，因为自动装配服务是在 Host 构建期间注册的。
+## 路由策略与端点元数据
 
-运行时端点、凭据或池容量变更通过
-`application_runtime::reconfigure_chat_model(instance, configuration, cancellation)`
+路由的访问策略在注册处用 `http::endpoint_metadata` 声明，中间件在路由匹配后通过
+`request_context::endpoint()` 读取，不再维护与路由分离的路径白名单：
+
+| 元数据 | 含义 |
+|---|---|
+| `http::allow_anonymous` | 不解析凭据，`jwt_auth` 与 `authorize` 都直接放行 |
+| `http::optional_authentication` | 无凭据按匿名继续；携带的凭据必须有效（默认） |
+| `http::required_permissions{all_of, any_of}` | `authorize` 的默认权限要求，段支持 `*` |
+| `http::endpoint_name{"orders.list"}` | 稳定操作名，用于日志、指标与 API 文档 |
+
+未声明认证元数据的路由必须认证。策略按方法区分：同一路径的 `GET` 可以匿名而 `DELETE`
+需要权限。未匹配任何路由的请求默认直接交给路由器返回 404（`jwt_auth_options::unmatched`、
+`authorization_options::authorize_unmatched` 可改为强制认证）。`router::endpoints()` 列出
+全部端点，可用于生成文档或在启动时审计策略。
+
+## 数据访问
+
+仓储是组件。模块用 `add_repository<T>()` 注册，按类型注入：
+
+```cpp
+application::add_repository<order_record>(context.components,
+    {.instance = "primary",
+     .policies = {.logical_delete_policy = cnetmod::orm::logical_delete_config{
+         .field_name = "deleted_at",
+         .mode = cnetmod::orm::logical_delete_mode::nullable_datetime}}});
+
+auto& orders = context.components.get<application::managed_repository<order_record>>();
+auto& factory = context.components.get<application::repository_factory<order_record>>();
+auto scoped = factory.for_request(request);   // 绑定请求的租户与数据权限快照
+```
+
+`repository_factory<T>` 在构建期解析数据源，缺失或同名歧义的数据源让 `build()` 在
+`resolution` 阶段失败。`shared()` 返回进程级仓储；`for_request()` 返回绑定请求
+`tenant_scope` 与 `data_permission_scope` 快照的仓储，认证未绑定数据权限时应用空范围
+（对 `DATA_PARTITION`/`DATA_OWNER` 模型拒绝全部行）。每个仓储只构建一次拦截链并在所有
+操作间复用。严格 SaaS 模式由配置 `orm.tenant_scope_required: true` 开启并在构建时冻结：
+租户模型没有请求租户快照时返回 `permission_denied`，且不提供进程级 `shared()` 仓储。
+
+## Chat Model
+
+启用 Chat Model provider 自动装配后，`chat_model_service` 按实例名注入；
+`make_template(options)` 返回的 `chat_model_template` 实现 `ai::chat_model`。cnetmod 负责
+provider 客户端、连接池、生命周期、Telemetry，以及 `routed_chat_model`、
+`resilient_chat_model`、`governed_chat_model` 等通用机制。`add_chat_model()` 可把多个
+托管实例组合成一个组件，但多实例行为必须显式开启：两个以上实例必须设置 `routing`；
+跨实例失败切换还必须设置 `fallback_to_remaining_instances = true` 并提供 `resilience`。
+
+```cpp
+application::add_chat_model(context.components, "assistant",
+    {.instances = {"deepseek-key-1", "deepseek-key-2"},
+     .routing = application::chat_model_routing::round_robin,
+     .resilience = cnetmod::ai::resilient_model_options{.max_attempts_per_model = 2},
+     .fallback_to_remaining_instances = true});
+```
+
+缺失实例或省略多实例路由都会让 `build()` 在 `resolution` 阶段失败。流式切换遵守
+`resilient_chat_model` 的边界：首个分片交付后不再重试，避免重复或拼接输出。
+
+每个 managed provider 拥有固定容量连接池，一次 invoke/stream 独占一个 lease 到终态，避免
+keep-alive 响应交错。文本重载复制 `chat_model_template_options::request`，按 system、默认
+消息、历史、当前 user 输入的顺序构造请求；显式 `chat_request` 重载不改写调用方消息。
+
+运行时端点、凭据或池容量变更通过 `chat_model_service::reconfigure(configuration, cancellation)`
 提交完整 provider 配置。具体 provider 先校验配置并建立整代新连接，全部成功后才原子发布；
 失败时旧代保持服务。已借出的 model lease 持有旧客户端所有权，会在请求结束后自然退休，
 新请求只进入新代。不要把 `chat_model_pool::reset()` 暴露给业务代码，否则会绕过 provider
 校验、连接建立、Telemetry 和生命周期边界。OpenAI 配置支持热更 `base_url`、`api_key`、
 `tls_verify`、`timeout_seconds` 与 `pool_size`，传入属性是完整替换而不是局部 patch。
-
-`chat_model_template::conversation(session_id, store)` 提供显式会话边界。
-同一 session 的调用通过共享协程门串行化，不同 session 可占用不同池连接并行运行；
-持久层仍是唯一真相。成功回合才用 `append_batch(user, assistant)` 原子追加，失败或取消
-不产生半回合。`history_limit` 控制每次读取的最近消息数，零表示读取全部。
-
-需要在 route handler 捕获 Runtime 时，使用双参数路由配置器：
-
-```cpp
-builder.routes([](http::router& routes, application_runtime& runtime) {
-    auto* application = &runtime;
-    routes.post("/archive", [application](http::request_context& request)
-        -> task<void> {
-        auto saved = co_await request.with_deadline(
-            [application](cancel_token& token) {
-                return application->files().write_all("archive.json", "{}", token);
-            });
-        request.text(saved ? http::status::ok : http::status::internal_server_error,
-            saved ? "saved" : "failed");
-        co_return;
-    });
-    routes.get("/upstream", [application](http::request_context& request)
-        -> task<void> {
-        auto response = co_await application->rest().get(
-            "https://service.internal/health",
-            {.headers = {{"Authorization", "Bearer runtime-token"}}});
-        request.text(response ? http::status::ok
-                              : http::status::bad_gateway,
-            response ? std::string{response->body()} : "upstream failed");
-        co_return;
-    });
-    routes.post("/chat", [application](http::request_context& request)
-        -> task<void> {
-        auto model = application->chat_model("assistant",
-            {.request = {.model = "gpt-4o-mini"},
-                .system_prompt = "Answer concisely."});
-        if (!model) {
-            request.text(http::status::service_unavailable,
-                "model unavailable");
-            co_return;
-        }
-        auto response = co_await model->invoke(std::string{request.body()});
-        request.text(response ? http::status::ok : http::status::bad_gateway,
-            response ? std::string{response->content()} : response.error());
-    });
-});
-```
 
 ```cpp
 application::chat_model_reconfiguration next;
@@ -9059,17 +9518,20 @@ next.properties = {
     {"timeout_seconds", 30},
     {"pool_size", 8},
 };
-auto reloaded = co_await runtime.reconfigure_chat_model(
-    "assistant", std::move(next), &cancellation);
+auto& service = components.get<application::chat_model_service>("assistant");
+auto reloaded = co_await service.reconfigure(std::move(next), &cancellation);
 ```
 
-双参数配置器在 Host Runtime 构造完成后、`build()` 返回前执行。handler 可在 Host 生命周期
-内安全捕获 Runtime 引用。HTTP 底层不反向依赖 Application，也不提供线程局部的
-`current_io_context()`。
+`chat_model_template::conversation(session_id, store)` 提供显式会话边界。
+同一 session 的调用通过共享协程门串行化，不同 session 可占用不同池连接并行运行；
+持久层仍是唯一真相。成功回合才用 `append_batch(user, assistant)` 原子追加，失败或取消
+不产生半回合。`history_limit` 控制每次读取的最近消息数，零表示读取全部。
 
-Application 的 SSE 接口直接在同一个 routes 配置器中使用 `router::sse_get()` 或
+## SSE
+
+Application 的 SSE 接口在模块 `compose()` 中用 `router::sse_get()` 或
 `router::sse_post()` 声明。框架按请求注入 `sse_stream&`，业务只序列化事件 payload；
-SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责：
+SSE 响应头、具名帧编码、心跳、断线返回值和终止帧由框架负责。
 
 如果同一路由按请求参数在普通 JSON 与 SSE 间切换，保持普通 `get/post` 路由，
 在完成参数校验和资源检查、确认要流式响应后调用
@@ -9081,18 +9543,16 @@ handler 内，业务自己的事件 writer 也应在其中构造和使用。只�
 不要假定 Application 为独立 SSE 路由注入的 `http.sse` 配置会自动应用到动态入口。
 
 ```cpp
-builder.routes([](http::router& routes) {
-    routes.sse_post("/chat", [](http::request_context& request,
-                                http::sse_stream& stream) -> task<void> {
-        if (!co_await stream.send(R"({"text":"hello"})", "delta"))
-            co_return;
-        co_await stream.send(R"({"tokens":1})", "done");
-        co_await stream.finish();
-    }, http::sse_stream_options{
-        .max_duration = std::chrono::seconds{60},
-        .write_timeout = std::chrono::seconds{3},
-    });
-});
+context.routes.sse_post("/chat", [](http::request_context& request,
+                                    http::sse_stream& stream) -> task<void> {
+    if (!co_await stream.send(R"({"text":"hello"})", "delta"))
+        co_return;
+    co_await stream.send(R"({"tokens":1})", "done");
+    co_await stream.finish();
+}, http::sse_stream_options{
+    .max_duration = std::chrono::seconds{60},
+    .write_timeout = std::chrono::seconds{3},
+}, http::endpoint_metadata{http::optional_authentication{}});
 ```
 
 `stream.started()` 为 false 时，业务仍可返回普通 HTTP 错误；一旦为 true，只能继续写 SSE
@@ -9100,24 +9560,25 @@ builder.routes([](http::router& routes) {
 已经提交后错误地回退 JSON 响应。
 
 Application 默认从 `http.sse` 为所有 SSE 路由注入超时：整条流最长 120 秒，单次响应头或
-事件帧写出最长 5 秒。路由尾部的 `sse_stream_options` 可按接口缩短或延长，但两个值都必须
+事件帧写出最长 5 秒。路由的 `sse_stream_options` 可按接口缩短或延长，但两个值都必须
 为正数。达到总时限或写超时后，当前写操作会被取消、流进入 `failed`、socket 被关闭；不会
 继续占用连接或回退普通 HTTP。调用 OpenAI、数据库等下游操作时应通过
 `request.with_deadline()` 继承同一个总预算，避免业务生产者在连接结束后继续运行。
 
-自定义基础设施使用 `application_builder::service_factory()` 在构建阶段创建。该 API 是
-协议适配器的基础设施扩展点，不是业务执行入口；普通业务只能从 Host 获得 Runtime 门面。
-工厂通过
+## 基础设施扩展与中间件顺序
+
+自定义基础设施使用 `application_builder::service_factory()` 在 `registration` 阶段创建。
+该 API 是协议适配器的基础设施扩展点，不是业务执行入口；业务功能使用模块。工厂通过
 `application_service_context` 获得 host 所有的 `io_context`、Telemetry Hub、
 `task_supervisor` 和只读配置，返回一个 `managed_service`。工厂错误、空服务或重复
-服务身份都会让 `build()` 失败；所有工厂完成后 registry 才冻结。工厂还可以保存
-`application_service_context::runtime` 的非拥有引用，但不得超过 Host 生命周期。框架不
-公开运行期 `application_host::io()`，避免下游在生命周期监管之外派发关键协程。
+服务身份都会让 `build()` 失败；所有阶段完成后 registry 才冻结。模块需要登记托管服务时
+使用 `registration_context::manage()`。
 
-业务 HTTP 中间件通过 `application_builder::middleware()` 按注册顺序装配，不影响独立的
-管理端点。执行顺序固定为：框架异常恢复、停机跟踪、请求 ID、追踪、指标和请求超时位于
-业务中间件外层，访问日志位于业务中间件内层。这样自定义认证、CORS、限流等逻辑仍受到
-框架取消、排空和遥测边界监管，同时不能绕过管理端点隔离。空中间件在构建配置阶段拒绝。
+业务 HTTP 中间件由模块在 `compose()` 中追加到 `composition_context::middleware`，
+按模块注册顺序、模块内追加顺序执行，不影响独立的管理端点。执行顺序固定为：框架异常恢复、
+停机跟踪、请求 ID、追踪、指标和请求超时位于业务中间件外层，访问日志位于业务中间件内层。
+路由在中间件之前完成匹配，因此业务中间件可以读取 `request_context::endpoint()`。空中间件
+使 `build()` 在 `composition` 阶段失败。
 
 host 显式持有预先创建的顶层编排协程，以协程帧内队列节点进入事件循环，不使用 detached 包装派发该主任务。编排异常进入清理边界；`run()` 在事件循环返回后检查主任务已结束。
 
@@ -9196,6 +9657,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   "http": {
     "address": "0.0.0.0",
     "port": 8080,
+    "backlog": 4096,
     "request_timeout_ms": 30000,
     "sse": {
       "max_duration_ms": 120000,
@@ -9206,6 +9668,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
     "enabled": true,
     "address": "127.0.0.1",
     "port": 8081,
+    "backlog": 4096,
     "same_port": false
   },
   "observability": {
@@ -9300,7 +9763,7 @@ MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`
 
 支持的环境变量包括：
 
-- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_LOG_LEVEL`
+- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_HTTP_BACKLOG`、`CNETMOD_LOG_LEVEL`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`、`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
 - `OTEL_SERVICE_NAME`、`OTEL_SERVICE_VERSION`
@@ -9491,6 +9954,12 @@ required 服务同一故障周期耗尽预算后不重复派发或通知停机�
 
 `reload_configuration()` 只原位更新日志级别、OTEL 采样率、健康策略和恢复策略。监听地址、端口、中间件、线程、连接参数、凭据、OTLP 出口或队列参数变化会设置 `restart_required`，不会偷偷重建连接。
 
+配置加载保留错误所属的 error category：JSON 语法错误返回
+`cnetmod::json::errc::parse_failed`，文件不存在返回
+`std::errc::no_such_file_or_directory`，根节点不是对象或字段值非法才返回
+`std::errc::invalid_argument`。调用方不得把所有 `invalid_argument` 翻译成“JSON
+语法错误”，也不得丢弃 JSON 模块提供的精确错误身份。
+
 底层 `reload_safe_configuration(active, candidate)` 返回
 `std::expected<configuration_reload_result, std::error_code>`。它先校验候选并在私有副本中
 准备变更清单，准备失败不修改 active；提交使用已静态验证的不抛异常移动赋值。
@@ -9589,10 +10058,10 @@ host 在现有清理截止时间内重试仍登记的服务，退避从 1ms 增�
 业务模块应继续通过构造函数依赖明确接口，不要把 `service_registry` 当作全局 Service Locator。
 # JWT operations
 
-`application_runtime::sign_jwt(options, secret)` and
-`application_runtime::verify_jwt(token, secret)` use the managed CPU executor
-and resume on the application event loop. The application retains ownership of
-the secret and passes it only at the call site.
+JWT 使用 `security::sign_jwt/verify_jwt(executor.cpu_pool(),
+executor.event_loop(), ...)`。`event_loop()` 必须在 request handler 所在循环内求值，确保 CPU
+计算结束后回到请求循环；需要生命周期控制循环时才显式使用 `control_event_loop()`。
+密钥由应用持有，只在调用点传入框架。
 <!-- END SOURCE: skill/infra/application.md -->
 
 <!-- BEGIN SOURCE: skill/infra/architecture.md -->
@@ -9610,7 +10079,7 @@ the secret and passes it only at the call site.
 | 版本 | 2.1.0（唯一来源为根目录 `VERSION`） |
 | 语言标准 | C++23（`CMAKE_CXX_STANDARD 23`） |
 | 构建系统 | CMake 3.28+，`CMAKE_CXX_SCAN_FOR_MODULES ON` |
-| 库类型 | 静态库 `cnetmod_core`（别名 `cnetmod::core`） |
+| 库类型 | 分层静态组件；`cnetmod::core` / `cnetmod::all` 是兼容聚合入口 |
 | 描述 | Cross-platform asynchronous network library with C++23 modules |
 
 ## 目录结构
@@ -9625,8 +10094,7 @@ cnetmod/
 │   ├── executor/           # 执行器（async_op, scheduler, pool）
 │   ├── protocol/           # 协议模块（http, mqtt, grpc, redis, mysql...）
 │   ├── database/           # 数据库通用模块
-│   ├── security/           # 安全模块
-│   ├── utils/              # 工具模块
+│   ├── utils/              # 通用工具、JSON 与安全能力
 │   ├── core.cppm           # core 聚合模块
 │   ├── coro.cppm           # coro 聚合模块
 │   ├── io.cppm             # io 聚合模块
@@ -9639,8 +10107,9 @@ cnetmod/
 │   ├── messaging/
 │   └── database/
 ├── 3rdparty/               # 第三方依赖
-│   ├── json/               # Glaze-only JSON module facade
+│   ├── json/               # Backend-neutral JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
+│   ├── mimalloc/            # 进程级高性能内存分配器
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
 │   └── stdexec/            # P2300 std::execution 实现
@@ -9666,6 +10135,34 @@ executor (异步执行器)
   ↓
 protocol (协议实现)
 ```
+
+## 二进制组件边界
+
+构建不再把所有实现塞进一个巨大归档。按职责生成并导出以下 CMake target：
+
+- `cnetmod::runtime`：core、coro、io、executor、JSON、安全与基础观测能力。
+- `cnetmod::orm`：通用 ORM；仅在 `CNETMOD_ENABLE_ORM=ON` 时存在。
+- `cnetmod::<protocol>`：每个已启用协议各自一个静态组件，例如
+  `cnetmod::http`、`cnetmod::redis`、`cnetmod::mysql`。
+- `cnetmod::application`：Application 组合与自动配置层。
+- `cnetmod::http_redis_cache`：Redis 驱动的 HTTP 缓存中间件适配器；仅在
+  HTTP 与 Redis 同时启用时存在。
+- `cnetmod::core` / `cnetmod::all`：兼容旧工程的一次性聚合入口，自身只含
+  极小 facade，不再复制组件实现。
+
+应用应链接实际使用的最小组件。特别是 Redis 协议并不是 HTTP 的隐式依赖，
+HTTP 的内存缓存也不需要 Redis。只有明确使用 Redis 缓存后端时才链接：
+
+```cmake
+target_link_libraries(my_service PRIVATE cnetmod::http_redis_cache)
+```
+
+```cpp
+import cnetmod.integration.http.redis_cache;
+```
+
+`CNETMOD_USE_SYSTEM_DEPS=OFF` 表示严格使用仓库内置依赖；可选压缩库在仓库
+没有对应源码时保持关闭，不得从 Conda、系统目录或包管理器静默捡取。
 
 ### core 层（11 个子模块）
 
@@ -9712,9 +10209,15 @@ HTTP、WebSocket、gRPC、MQTT、Redis、MySQL、PostgreSQL、MongoDB、Kafka、
 所有协议通过 `cmake/Protocols.cmake` 统一注册，每个协议对应一个 CMake option：
 
 ```cmake
--DCNETMOD_ENABLE_ALL_PROTOCOLS=ON|OFF   # 全部协议的默认值
+-DCNETMOD_ENABLE_ALL_PROTOCOLS=ON|OFF   # 各协议开关的默认值，默认 OFF
 -DCNETMOD_ENABLE_ORM=ON|OFF             # SQL ORM 和 XML mapper 支持
 ```
+
+仓库默认配置只构建核心运行时和 ORM，不隐式启用全部协议，也不构建测试、
+benchmark、示例、C API 或 Python Binding。应用必须按实际需求显式开启协议；框架自身的
+完整验证构建则显式传入 `CNETMOD_ENABLE_ALL_PROTOCOLS=ON` 和对应的构建开关。
+这条边界避免普通 SDK 构建无意间生成数百个 IFC/OBJ，并避免 MSVC 编译仅供框架
+维护者使用的重模板测试。
 
 ### 18 个协议开关一览
 
@@ -9741,6 +10244,19 @@ HTTP、WebSocket、gRPC、MQTT、Redis、MySQL、PostgreSQL、MongoDB、Kafka、
 
 CMake 会自动验证依赖关系：若启用了某协议但未启用其依赖，构建会报 `FATAL_ERROR`。
 
+### 组件目标与精简构建
+
+下游只链接实际使用的组件目标，例如 `cnetmod::runtime`、`cnetmod::http`、
+`cnetmod::redis` 或 `cnetmod::application`。`cnetmod::core` 与 `cnetmod::all`
+是保留给旧消费者和完整工具的全功能兼容门面，会传递当前配置中所有已启用组件；
+不应把它用于只需要协程、HTTP 或单一协议的精简目标。
+
+项目测试也遵守同一依赖边界：协程与基础设施测试只链接 runtime，HTTP 测试只
+链接 HTTP，ORM 和各协议测试链接各自组件。这样构建单个测试不会触发无关协议。
+关闭 `CNETMOD_ENABLE_ORM` 时，Application 不提供或编译
+`cnetmod.application.data`、`application.orm_repository` 及数据库 ORM 适配器；
+普通 Application 和数据库协议客户端仍可独立使用。
+
 ## 构建命令
 
 ```bash
@@ -9748,7 +10264,8 @@ CMake 会自动验证依赖关系：若启用了某协议但未启用其依赖�
 cmake -B build -G Ninja \
     -DCMAKE_CXX_COMPILER=clang++ \
     -DCMAKE_BUILD_TYPE=Debug \
-    -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON
+    -DCNETMOD_ENABLE_HTTP=ON \
+    -DCNETMOD_ENABLE_OPENAI=ON
 
 # 构建
 cmake --build build
@@ -9760,14 +10277,26 @@ ctest --test-dir build
 cmake --install build --prefix install
 ```
 
+需要维护者完整验证时，必须显式配置：
+
+```bash
+cmake -B build-full -G Ninja \
+    -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON \
+    -DCNETMOD_BUILD_TESTS=ON \
+    -DCNETMOD_BUILD_EXAMPLES=ON \
+    -DCNETMOD_BUILD_BENCH=ON
+cmake --build build-full --target cnetmod_build_all
+```
+
 MSVC 构建使用 `rebuild_install.bat` 脚本。
 
 ## 第三方依赖
 
 | 依赖 | 目录 | 用途 |
 |------|------|------|
-| Glaze | `3rdparty/glaze` | `cnetmod.json` private parsing backend |
+| nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
+| mimalloc | `3rdparty/mimalloc` | 最终可执行程序的进程级内存分配器 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
 | spdlog | `3rdparty/spdlog` | 日志后端 |
 | stdexec | `3rdparty/stdexec` | P2300 std::execution 实现 |
@@ -9779,7 +10308,46 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 | 优化项 | CMake Option | 说明 |
 |--------|-------------|------|
 | mold 链接器 | `CNETMOD_USE_MOLD=ON` | Linux 下 10-20x 更快链接 |
-| mimalloc 分配器 | `CNETMOD_USE_MIMALLOC=ON` | 2-3x 更快内存分配 |
+| mimalloc 分配器 | `CNETMOD_USE_MIMALLOC=ON` | 构建并随 SDK 分发；框架自身 executable 自动启用 |
+| CPU 指令集契约 | `CNETMOD_CPU_TARGET=portable\|x86-64-v3\|native` | SDK 默认 portable；固定 benchmark/部署机器可显式选 v3 或 native |
+| ThinLTO / IPO | `CNETMOD_ENABLE_THIN_LTO=ON` | 默认关闭以控制构建时间和内存；最终性能构建显式开启 |
+
+可复现的 x86-64 性能构建使用：
+
+```bash
+cmake -S . -B build-perf -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCNETMOD_CPU_TARGET=x86-64-v3 \
+  -DCNETMOD_ENABLE_THIN_LTO=ON
+```
+
+不要把 `native` 产物作为通用 SDK 发布；它可能包含构建机独有指令。性能比较必须记录
+CPU target、LTO、allocator、worker 数量和线程亲和性，不能拿 portable 与 native 产物直接排名。
+
+### 下游启用 mimalloc
+
+`mimalloc` 固定由 `3rdparty/mimalloc` 构建，不从 vcpkg、Conan 或系统目录
+静默获取。安装 cnetmod 时会把对应平台的库、头文件和运行时一起放进 SDK。
+分配器替换必须发生在最终可执行程序，不能靠静态库的传递链接保证，因此下游
+应用需要显式调用：
+
+```cmake
+find_package(cnetmod 2 CONFIG REQUIRED)
+
+add_executable(my_service main.cpp)
+target_link_libraries(my_service PRIVATE cnetmod::http)
+cnetmod_enable_mimalloc(my_service)
+```
+
+`cnetmod_enable_mimalloc()` 只接受 executable target，并负责平台差异：
+
+- Windows：链接 SDK 内的 `mimalloc.dll` 导入库，强制引入初始化符号，并在
+  构建后把 `mimalloc.dll`、`mimalloc-redirect.dll` 复制到程序旁边。
+- Linux/WSL/macOS：把 SDK 内的 `mimalloc.o` 直接加入最终链接，避免静态
+  archive 因链接顺序或 `--as-needed` 未真正接管 `malloc/new`。
+
+不调用该函数时，下游继续使用平台默认分配器；无需修改业务源码，也不会因
+链接 cnetmod 的任一静态组件而隐式开启。
 
 ## 参考源码
 - `CMakeLists.txt` — 根构建文件（项目配置、平台检测、目标定义）
@@ -10093,19 +10661,19 @@ ID 一致的工具链和 ABI；系统依赖模式的 Unix SDK 还要求目标机
 
 # JSON
 
-> `cnetmod.json` is a Glaze-only C++23 module. It exposes Glaze's native typed codec and dynamic document without an intermediate DOM or a switchable backend layer.
+> `cnetmod.json` is the backend-neutral JSON document and typed codec facade. The implementation imports the pinned official `nlohmann.json` module; third-party JSON types never cross the framework boundary.
 
 **import**: `import cnetmod.json;`
-**sources**: `src/json/json.cppm`, `src/json/json.cpp`
+**macro header**: `#include <cnetmod/json.hpp>`
+**sources**: `src/utils/json/json.cppm`, `src/utils/json/json.cpp`
 
-## Design contract
+## Boundary rules
 
-1. Glaze is the only JSON engine. There is no backend registry, virtual JSON interface, structural validator, or conversion through another DOM.
-2. `document` is `glz::generic_u64`, preserving unsigned 64-bit integers in dynamic JSON.
-3. `parse<T>()` and `write<T>()` invoke Glaze directly for ordinary C++ types. Registered ORM records use their existing field metadata to produce Glaze's native document so database temporal and identifier wire forms remain stable.
-4. Only `src/json/json.cppm` and `src/json/json.cpp` may include Glaze headers or spell `glz::*` names. Other framework code imports `cnetmod.json`.
-5. Glaze headers are placed in the module's global module fragment. Consumers import the compiled module rather than including Glaze themselves.
-6. The bundled Glaze headers are installed because the public module interface owns a native Glaze document type.
+1. Application and protocol code imports `cnetmod.json`; it never imports a parser library.
+2. Only `src/utils/json/json.cpp` may import `nlohmann.json` or spell `nlohmann::*`; application, protocol, ORM, and public module interfaces use `cnetmod.json`.
+3. `document`, errors, codecs, and DTO metadata contain only framework or standard-library types.
+4. `tools/check_json_boundary.py` enforces the boundary in CTest.
+5. `3rdparty/json/src/modules/json.cppm` is compiled as a dependency module exactly once. Do not include `nlohmann/json.hpp` in framework or business code.
 
 ## Dynamic documents
 
@@ -10119,36 +10687,22 @@ if (!parsed)
     co_return std::unexpected(parsed.error());
 
 const auto service = parsed->at("service").get<std::string>();
-const auto replicas = parsed->at("replicas").as<std::uint32_t>();
 parsed->operator[]("ready") = true;
-
 auto wire = cnetmod::json::write_document(*parsed);
 ```
 
-Use the module helpers instead of emulating nlohmann APIs:
+`document` supports null, booleans, signed and unsigned integers, floating-point
+numbers, strings, arrays, and objects. Binary payloads must use an explicit
+application representation such as a byte array or Base64 string because JSON
+has no binary value type.
 
-| Operation | API |
-|---|---|
-| Empty object | `cnetmod::json::object()` |
-| Empty array | `cnetmod::json::array()` |
-| Object lookup | `cnetmod::json::find(document, key)` |
-| Member with fallback | `cnetmod::json::value_or(document, key, fallback)` |
-| Array iteration | `document.get_array()` |
-| Object iteration | `document.get_object()` |
-| Numeric conversion | `document.as<T>()` |
-| Exact stored scalar | `document.get<T>()` |
-| Semantic comparison | `cnetmod::json::equivalent(left, right)` |
+## Plain DTOs
 
-`get<T>()` is for an exact Glaze variant alternative. Parsed integral values
-are stored as `std::uint64_t` or `std::int64_t`; use `as<T>()` when narrowing to
-an application integer type.
-
-## Typed aggregates
-
-Glaze reflects ordinary public aggregates directly. DTOs do not need generated
-traits, registration tables, or field macros when JSON names match member names:
+C++23 has no general static reflection. A plain DTO declares its mapping once:
 
 ```cpp
+#include <cnetmod/json.hpp>
+
 import std;
 import cnetmod.json;
 
@@ -10159,23 +10713,33 @@ struct user_view
     std::optional<std::string> nickname;
 };
 
-auto encoded = cnetmod::json::write(
-    user_view{42, "Ada", std::nullopt});
+CNETMOD_JSON(user_view,
+    CNETMOD_JSON_FIELD(id),
+    CNETMOD_JSON_FIELD(name),
+    CNETMOD_JSON_FIELD(nickname))
+
+auto encoded = cnetmod::json::write(user_view{42, "Ada", std::nullopt});
 auto decoded = cnetmod::json::parse<user_view>(*encoded);
 ```
 
-The default policy rejects unknown fields and missing required fields.
-Use `parse_lenient<T>()` when unknown object members are acceptable and
-`write_explicit_nulls<T>()` when nullable members must remain on the wire.
-Both are fixed Glaze policies; the public parse/write API has no pluggable
-backend or caller-supplied JSON codec.
+The default codec rejects unknown fields and missing required fields. Optional
+members may be absent. `parse_allow_unknown<T>()` (or the compatibility name
+`parse_lenient<T>()`) accepts unknown fields, while
+`explicit_null_codec` emits disengaged optionals as JSON null.
+
+`from_document_with_defaults<T>()` and `defaulted_codec` still reject unknown
+fields but retain each mapped DTO member's C++ default when that field is
+omitted. This policy propagates through nested objects and arrays and is used by
+Application typed options.
+
+Typed conversion supports nested mapped DTOs, optionals, enums, sequences, and
+string-keyed associative containers. Numeric decoding checks integral sign and
+range instead of silently narrowing.
 
 ## ORM models and projections
 
-`CNETMOD_MODEL` and `CNETMOD_PROJECTION` metadata remains the ORM source of
-truth. The framework installs this bridge automatically: application DTOs do
-not declare JSON traits. ORM JSON conversion produces and consumes the same
-native `document`; it does not build a second JSON mapping registry.
+Do not add `CNETMOD_JSON` to a type already declared with `CNETMOD_MODEL` or
+`CNETMOD_PROJECTION`. ORM field metadata is also its JSON metadata:
 
 ```cpp
 CNETMOD_MODEL(user_record, "users",
@@ -10185,21 +10749,37 @@ CNETMOD_MODEL(user_record, "users",
 auto wire = cnetmod::json::write(user_record{42, "Ada"});
 ```
 
+This shared mapping covers ORM scalar fields, `DATE`, `DATETIME`, `TIME`, UUID,
+and nullable `DATETIME`. Database temporal values use their canonical
+timezone-free SQL text representation.
+
 ## Application offload
 
-Use `cnetmod::application::json_template` when parsing or serialization should
-run on the Application-managed CPU pool. It calls the same Glaze-only codec,
-supports cancellation, and resumes on the application execution context.
+Use `cnetmod::application::json_template` for parsing or writing on the
+Application-managed CPU pool. Its typed operations use the same codec contract,
+support cancellation, and resume on the application execution context.
 
-## Boundary verification
+## Codec SPI
+
+A custom codec implements:
+
+```cpp
+template <typename T>
+static auto decode(std::string_view) -> std::expected<T, std::error_code>;
+
+template <typename T>
+static auto encode(const T&) -> std::expected<std::string, std::error_code>;
+```
+
+and satisfies `cnetmod::json::codec_for<Codec, T>`. RedisTemplate and other
+framework templates accept this SPI without exposing the parser backend.
+
+## Verification
 
 ```bash
 python tools/check_json_boundary.py
 ctest --test-dir build -R "json_backend_boundary|test_json_template|test_orm_json_result_map"
 ```
-
-The boundary check rejects nlohmann usage everywhere and rejects direct Glaze
-usage outside the two `cnetmod.json` implementation files.
 <!-- END SOURCE: skill/infra/json.md -->
 
 <!-- BEGIN SOURCE: skill/infra/module-conventions.md -->
@@ -10237,6 +10817,21 @@ export module cnetmod.core.buffer;
 ```cpp
 export module cnetmod.protocol.http:server;
 ```
+
+分区只用于同一主模块内部的编译边界；应用仍导入公开聚合模块。不要把每个类型或设计模式
+机械拆成独立分区。MSVC 会为每个模块接口单元单独扫描和生成 IFC，过细拆分可能让全量
+构建并行峰值上升，即使增量依赖图看起来更小。
+
+新增分区前必须同时满足：
+
+1. 它是稳定的职责边界，并被多个内部单元复用；
+2. 能切断一个实测的高扇入或重传递依赖；
+3. 保持原聚合模块的 `export import` 兼容性；
+4. 用完整干净构建比较耗时和峰值内存，并跑相关行为测试。
+
+优先拆出轻量、高扇入的契约；低扇入且共享同一批重依赖的类型应留在一个接口单元中。
+例如 OpenAI 只把运行生命周期契约拆为 `:run`，而不是把路由、韧性、治理、图像和审核
+各拆一个分区。
 
 ### 聚合模块
 
@@ -10664,15 +11259,24 @@ ctest --test-dir build -R test_my_feature
 
 > 通过一个 Telemetry Hub 低侵入地统一 Trace、Metric、Log、W3C 上下文传播和有界 OTLP/HTTP 导出。
 
-**import**: `import cnetmod.observability;`
+**import**: `import cnetmod.observability;`（兼容总入口）或仅使用 Hub 时
+`import cnetmod.observability.telemetry;`
 
-**源码**: `src/application/monitoring/telemetry.cppm`、`src/application/monitoring/otlp/otlp_http_exporter.cppm`、`src/application/monitoring/integration/http_client.cppm`
+**源码**: `src/application/monitoring/observability.cppm`、
+`src/application/monitoring/telemetry.cppm`、
+`src/application/monitoring/otlp/otlp_http_exporter.cppm`、
+`src/application/monitoring/integration/http_client.cppm`
 
 监控源码统一归属 `src/application/monitoring/`：`core/` 放协议无关的上下文、
 操作结果和指标契约，`otlp/` 放编码与投递，`integration/` 放协议观测适配器。
 目录归属不改变模块依赖方向：协议只依赖中立契约，不导入 Application Host 或 OTLP。
 模块名保留 `cnetmod.instrumentation.*` / `cnetmod.observability.*`，避免目录整理
 同时改变调用方 API。HTTP 关闭时 CMake 仍编译 `monitoring/core/`。
+`cnetmod.observability` 继续导出 telemetry 与 messaging，保持既有调用方兼容；
+框架内部只导入 `cnetmod.observability.telemetry`，避免生命周期和配置模块因使用
+`telemetry_hub` 而连带依赖 Kafka、MQTT、AMQP 与 WebSocket。需要消息上下文传播时
+应显式导入 `cnetmod.observability.messaging`。
+`tools/check_observability_dependencies.py` 会拒绝 Application 内部重新导入兼容总入口。
 
 ## 核心原则
 
@@ -10863,12 +11467,28 @@ Host 在最终连接收尾阶段也检查此状态，使用已有剩余预算，
 # Windows 构建与 bundled ICU
 
 使用 Visual Studio 的 CMake generator 构建；Debug 与 Release 必须分别构建，不能混用产物。
+默认配置是轻量 SDK 核心，不开启协议、测试、示例、benchmark、C API 或 Python Binding。
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64
-cmake --build build --config Debug --target cnetmod_build_all
-cmake --build build --config Release --target cnetmod_build_all
+cmake --build build --config Release --target cnetmod_core -- /m:1
 ```
+
+框架维护者需要完整验证时必须显式开启，并继续使用单 MSBuild 节点：
+
+```powershell
+cmake -S . -B build-full -G "Visual Studio 18 2026" -A x64 `
+  -DCNETMOD_ENABLE_ALL_PROTOCOLS=ON `
+  -DCNETMOD_BUILD_TESTS=ON `
+  -DCNETMOD_BUILD_EXAMPLES=ON `
+  -DCNETMOD_BUILD_BENCH=ON
+cmake --build build-full --config Release --target cnetmod_build_all -- /m:1
+```
+
+OpenAI 测试源在非 MSVC 平台保持单目标；MSVC 配置会把它编译为七个测试分片，限制
+单个 `cl.exe` 同时持有的 JSON/OpenAI 模板语义图。不要为了恢复单一测试可执行文件而
+移除分片，也不要用 `/Zm` 掩盖编译器堆耗尽。若新增重模板测试，应优先放入语义对应的
+分片；单个测试翻译单元接近数千行时必须继续拆分。
 
 ## PostgreSQL 的 ICU 依赖
 
@@ -14487,6 +15107,21 @@ opts.persistence = {
 
 ## Part 1: OpenAI
 
+### 模块依赖边界
+
+应用代码继续只导入公开聚合模块：
+
+```cpp
+import cnetmod.protocol.openai;
+```
+
+`cnetmod.protocol.openai:model` 保留既有公开类型与源码兼容性。OpenAI 模块内部将高扇入、
+轻量的运行生命周期契约单独放在 `:run`；只需要 `run_config`、listener 或 `run_scope` 的
+Agent 工作流、加载器、规划器和工具单元必须直接导入 `:run`。真正使用聊天、向量、图像、
+审核或模型治理能力的单元才导入 `:model`。不要为理论纯度继续把低扇入模型类型拆成大量
+接口分区；MSVC 会为每个模块单元重复扫描依赖，并提高并行构建内存。这两个分区是框架
+内部编译边界，不是应用侧的新入口。
+
 ### 场景导航
 
 - 我要调用 Chat Completions → [看这里](#场景chat-completions)
@@ -14568,7 +15203,7 @@ struct chat_response {
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit client(io_context&) noexcept` | |
-| `connect` | `auto connect(connect_options) -> task<std::expected<void, std::string>>` | 连接 API |
+| `connect` | `auto connect(connect_options[, cancel_token&]) -> task<std::expected<void, std::string>>` | 连接 API；可取消重载覆盖 TCP 建连与 TLS 握手 |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
 | `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
@@ -14585,25 +15220,29 @@ struct chat_response {
 
 #### `chat_model_template` — provider-neutral Application 大模型门面
 
-Application 项目启用 OpenAI 自动装配后，优先使用
-`application_runtime::chat_model(instance, options)`，不要在 route 中自行创建或连接
-`openai::client`。Application 仅依赖 `cnetmod.ai` 的 provider-neutral 合约；
-`openai_service` 作为 adapter 管理多个 client 和固定容量连接池，未来 Claude、Gemini
-与本地模型实现相同的 `chat_model_service` 即可复用模板、会话和路由代码：
+Application 项目启用 OpenAI 自动装配后，注入 `chat_model_service`（按实例名）并调用
+`make_template(options)`；不要在 route 中自行创建或连接 `openai::client`。应用可以显式
+调用 `add_chat_model()` 组合多个实例，但必须声明多实例路由，并单独开启跨实例 fallback；
+只配置多个实例不会隐式启用轮询或换 key。Application 仅
+依赖 `cnetmod.ai` 的 provider-neutral 合约；`openai_service` 作为 adapter 管理多个
+client 和固定容量连接池，未来 Claude、Gemini 与本地模型实现相同的
+`chat_model_service` 即可复用模板、会话和路由代码。`chat_model_template` 实现
+`ai::chat_model`，因此 `routed_chat_model`、`resilient_chat_model`、
+`governed_chat_model` 可以直接装饰托管模型（`resilient_chat_model` 所需的事件循环来自
+`application_runtime::executor().event_loop()`）：
 
 ```cpp
-auto model = runtime.chat_model("assistant",
+auto& service = components.get<application::chat_model_service>("assistant");
+auto model = service.make_template(
     {.request = {.model = "gpt-4o-mini", .temperature = 0.2},
         .system_prompt = "Answer with verified facts."});
-if (!model)
-    co_return;
 
 ai::run_config run{
     .metadata = {{"tenant", "acme"}},
     .cancellation = &cancellation,
     .trace_parent = parent,
 };
-auto response = co_await model->invoke("Summarize the incident", run);
+auto response = co_await model.invoke("Summarize the incident", run);
 ```
 
 | 方法 | 说明 |
@@ -14620,11 +15259,15 @@ auto response = co_await model->invoke("Summarize the incident", run);
 session 不共享消息且可以并行。成功响应才原子追加 user/assistant 两条记录；store 始终是
 唯一真相，不维护内存影子快照。
 
-`application_runtime::reconfigure_chat_model()` 是 provider-neutral 热重载入口。
+`chat_model_service::reconfigure()` 是 provider-neutral 热重载入口。
 调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
 `base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
-建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时
-旧 generation 不变；成功发布后，在途请求继续持有旧客户端，新请求只获取新客户端。
+建立并验证全部新连接，验证完成立即关闭探测连接，再通过连接池 generation swap 一次
+发布。运行期按 lease 惰性重连，避免启动到首个请求之间被网关回收的空闲 socket 形成
+一整池假活连接。配置非法或任一连接失败时旧 generation 不变；成功发布后，在途请求继续
+持有旧客户端，新请求只获取新客户端。启动和热重载的建连组统一使用
+`timeout_seconds` 作为完整 generation 的截止时间，并把 Application 生命周期取消信号
+转发给每个 TCP/TLS 建连；上游地址黑洞或停机时不会无限阻塞启动、重载或关闭。
 `chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型
@@ -14740,7 +15383,11 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 对已存在会话返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。record store 的分页、计数、最近读取和删除在会话不存在时返回 `session_not_found`；memory adapter 将读取映射为空历史、将删除映射为幂等成功。无外部会话目录的存储可在首次 append 时创建会话；受外键约束的实现应返回 `session_not_found`。空批次是无副作用成功，不创建会话。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 对已存在会话返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。record store 的分页、计数、最近读取和删除在会话不存在时返回 `session_not_found`；memory adapter 将读取映射为空历史、将删除映射为幂等成功。无外部会话目录的存储可在首次 append 时创建会话；受外键约束的实现应返回 `session_not_found`。空批次是无副作用成功，不创建会话。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。
+
+`conversation_summarizer` 是自动摘要压缩的 Strategy 契约，`model_conversation_summarizer` 可将任意 provider-neutral `chat_model` 接入为默认实现；应用也可以用 `functional_conversation_summarizer` 注入自有模型、审计或缓存流程。为 `memory_options::summarizer` 配置实例后，`conversation_memory` 在消息数或 token 超限时先把最旧的可压缩连续历史生成滚动摘要，再执行确定性的硬窗口裁剪。`summary_preserved_messages` 控制近期原文保留数量，系统/开发者提示、pinned 前缀、近期消息和完整工具交换不会被拆开。模型生成的摘要使用带保留名称的 assistant 消息，避免把历史中的不可信用户指令提升为 system/developer 权限。摘要失败默认回退到原有裁剪；配置 `summary_failure_policy::return_error` 时，输入历史保持原样并把错误返回调用方。快照型 Store 会在后续写入时持久化摘要；append-only Store 只压缩发给模型的视图，数据库原始审计消息永不删除。
+
+`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`compact_messages` 是对应的异步摘要压缩算法。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；摘要压缩返回 `compaction_result`，额外报告摘要覆盖的消息/token、摘要 token、降级裁剪和摘要错误。`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
 
 `prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行使用 `prompt_section`，拥有局部变量和可递归的子 section；变量及子 section 都按“当前行优先、根上下文兜底”解析。富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 
@@ -14898,6 +15545,9 @@ auto cancellable = co_await client.chat_stream_async(req, callback, cancellation
 避免未消费的增量污染下一次请求。
 每次流式网络读取受 `connect_options::timeout_seconds` 限制；调用方取消、
 读取超时、写入失败和解析失败都会关闭连接，后续请求通过自动重连获得干净会话。
+非流式读取的 EOF 和传输错误也会立即关闭本地 socket，不能仅凭 native handle 仍打开就把
+连接视为可复用。框架不会在请求可能已经写入后偷偷重放 POST；需要重试时应在
+`resilient_chat_model` 层配置，并且流式调用只允许在尚未交付任何 chunk 时重试。
 
 ### 场景：Runnable 与结构化输出
 
@@ -15025,6 +15675,25 @@ auto trimmed = cn::openai::trim_messages(messages,
      .preserved_tail_messages = 1});
 if (!trimmed.limit_satisfied)
     cn::logger::warn{"Protected prompt messages exceed the configured budget"};
+```
+
+自动摘要压缩使用相同窗口配置，并明确保留最近原文：
+
+```cpp
+cn::openai::model_conversation_summarizer summarizer{model,
+    {.request = {.model = "gpt-4o-mini",
+        .temperature = 0.1,
+        .max_tokens = 1'024}}};
+
+cn::openai::conversation_memory compacting_memory{"session-42", store,
+    {.max_tokens = 256'000,
+        .pinned_prefix_messages = 1,
+        .preserved_tail_messages = 1,
+        .summarizer = &summarizer,
+        .summary_preserved_messages = 16}};
+
+// snapshot() 超过窗口时自动生成滚动摘要；append-only store 的原始记录不变。
+auto compacted_context = co_await compacting_memory.snapshot();
 ```
 
 跨会话用户记忆使用独立的 Long-term Store：
@@ -17101,6 +17770,7 @@ auto chat_handler(ws::ws_context& ctx) -> cn::task<void> {
 
 > 协程原生 JWT 模块，使用 `cnetmod.json` 与框架 HMAC-SHA256，CPU 密集操作卸载到 cnetmod 线程池。
 > 模块: `import cnetmod.security.jwt;`
+> 源码位于 `src/utils/security/`；目录归属不改变公开模块名。
 
 ## 核心原则
 
@@ -17329,3 +17999,83 @@ auto jwt_middleware(cnetmod::thread_pool& pool, std::string_view secret)
 JWT 模块位于 `cnetmod_core` 静态库中，无需额外 CMake 开关。
 JWT 的 JSON 与密码学实现只依赖框架门面，不向下游公开第三方 JSON/JWT 类型。
 <!-- END SOURCE: skill/security/security-jwt.md -->
+
+<!-- BEGIN SOURCE: skill/security/security-password.md -->
+# Source: `skill/security/security-password.md`
+
+# 口令哈希
+
+> 使用 BoringSSL 的 PBKDF2-HMAC-SHA256 提供随机盐、常量时间校验和哈希策略升级检测。
+> 模块：`import cnetmod.security.password;`，也可使用聚合模块 `import cnetmod.security;`。
+> 源码位于 `src/utils/security/`；目录归属不改变公开模块名。
+
+## 核心原则
+
+- 业务不得自行实现或复制口令派生、编码解析和常量时间比较。
+- 请求协程中使用线程池重载，避免 PBKDF2 阻塞事件循环。
+- 编码包含算法、迭代次数、盐和派生摘要，可直接持久化到密码字段。
+- 每次哈希都从 CSPRNG 生成新盐；同一口令的两次结果应不同。
+- Argon2 不由 BoringSSL 提供。框架不自行实现密码算法；引入经过审计的提供者后才能新增该枚举值。
+
+## API
+
+```cpp
+enum class password_hash_algorithm
+{
+    pbkdf2_sha256,
+};
+
+struct password_hash_options
+{
+    password_hash_algorithm algorithm = password_hash_algorithm::pbkdf2_sha256;
+    std::uint32_t iterations = 210000;
+    std::size_t salt_bytes = 16;
+    std::size_t digest_bytes = 32;
+};
+
+auto hash_password(std::string_view password,
+    password_hash_options options = {})
+    -> std::expected<std::string, std::error_code>;
+auto verify_password(std::string_view password,
+    std::string_view encoded) noexcept -> bool;
+auto password_hash_needs_rehash(std::string_view encoded,
+    password_hash_options options = {}) noexcept -> bool;
+
+auto hash_password(thread_pool& pool, io_context& request_loop,
+    std::string password, password_hash_options options = {})
+    -> task<std::expected<std::string, std::error_code>>;
+auto verify_password(thread_pool& pool, io_context& request_loop,
+    std::string password, std::string encoded) -> task<bool>;
+```
+
+同步重载用于 CPU 工作线程、离线工具或测试。HTTP handler 必须使用异步重载，并把当前请求所在的事件循环作为 `request_loop`；多事件循环应用中不要传控制循环。
+
+## 示例
+
+```cpp
+import std;
+import cnetmod.security.password;
+
+auto create_password(cnetmod::thread_pool& cpu,
+    cnetmod::io_context& request_loop, std::string password)
+    -> cnetmod::task<std::expected<std::string, std::error_code>>
+{
+    co_return co_await cnetmod::security::hash_password(
+        cpu, request_loop, std::move(password));
+}
+
+auto authenticate(cnetmod::thread_pool& cpu,
+    cnetmod::io_context& request_loop, std::string password,
+    std::string stored_hash) -> cnetmod::task<bool>
+{
+    co_return co_await cnetmod::security::verify_password(
+        cpu, request_loop, std::move(password), std::move(stored_hash));
+}
+```
+
+登录成功后可调用 `password_hash_needs_rehash()`。返回 `true` 时，用当前策略重新哈希并更新数据库，实现无停机迭代次数升级。
+
+## CMake
+
+口令哈希依赖框架的 BoringSSL 密码学提供者，需要 `CNETMOD_ENABLE_SSL=ON`。关闭 SSL 时不会导出 `cnetmod.security`、`cnetmod.security.jwt` 或 `cnetmod.security.password`。
+<!-- END SOURCE: skill/security/security-password.md -->

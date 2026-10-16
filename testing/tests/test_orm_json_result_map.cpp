@@ -50,6 +50,43 @@ CNETMOD_MODEL(orm_crud_user, "users",
     CNETMOD_FIELD(name, "name", varchar),
     CNETMOD_FIELD(status, "status", int_))
 
+struct member_identity_record
+{
+    std::int64_t first_id{};
+    std::int64_t second_id{};
+    std::int64_t transient_id{};
+};
+
+CNETMOD_MODEL(member_identity_record, "member_identity",
+    CNETMOD_FIELD(first_id, "first_id", bigint),
+    CNETMOD_FIELD(second_id, "second_id", bigint))
+
+template <class Value>
+concept crud_id_predicate = requires(
+    orm::query_wrapper<orm_crud_user> query, const Value& value) {
+    query.eq(&orm_crud_user::id, value);
+};
+
+template <class Value>
+concept crud_name_predicate = requires(
+    orm::query_wrapper<orm_crud_user> query, const Value& value) {
+    query.eq(&orm_crud_user::name, value);
+};
+
+template <class Value>
+concept crud_id_assignment = requires(
+    orm::update_wrapper<orm_crud_user> update, const Value& value) {
+    update.set(&orm_crud_user::id, value);
+};
+
+static_assert(crud_id_predicate<int>);
+static_assert(crud_id_predicate<std::optional<std::int64_t>>);
+static_assert(!crud_id_predicate<std::string>);
+static_assert(crud_name_predicate<const char*>);
+static_assert(!crud_name_predicate<std::int64_t>);
+static_assert(crud_id_assignment<std::int32_t>);
+static_assert(!crud_id_assignment<std::nullopt_t>);
+
 struct orm_timestamp_record
 {
     std::int64_t id{};
@@ -167,19 +204,23 @@ struct traced_database_client
 struct diagnostic_database_client
 {
     orm::query_result response;
+    std::size_t query_calls{};
 
     auto query(std::string_view) -> cnetmod::task<orm::query_result>
     {
+        ++query_calls;
         co_return response;
     }
 
     auto execute(std::string_view) -> cnetmod::task<orm::query_result>
     {
+        ++query_calls;
         co_return response;
     }
 
     auto execute(orm::parameterized_query) -> cnetmod::task<orm::query_result>
     {
+        ++query_calls;
         co_return response;
     }
 };
@@ -746,6 +787,10 @@ TEST(expression_engine_sequences_binary_operator_parsing_portably)
     ASSERT_EQ(orm::eval_expr("1 + 2 * 3", parameters).to_int(), 7);
     ASSERT_TRUE(orm::eval_expr("score == 7 or score < 0", parameters)
             .is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing < 0", parameters).is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing > 0", parameters).is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing <= 0", parameters).is_truthy());
+    ASSERT_FALSE(orm::eval_expr("missing >= 0", parameters).is_truthy());
 }
 
 TEST(dynamic_sql_binds_property_not_mybatis_placeholder_modifiers)
@@ -781,6 +826,63 @@ TEST(dynamic_sql_binds_property_not_mybatis_placeholder_modifiers)
     ASSERT_EQ(built.parameter_mappings.at(1).type_handler,
         "example::name_handler");
     ASSERT_EQ(built.parameter_mappings.at(1).mode, "IN");
+}
+
+TEST(dynamic_sql_rejects_missing_placeholder_parameters)
+{
+    auto bound = orm::parse_xml(R"(
+        <select>SELECT * FROM users WHERE id = #{missing}</select>)");
+    auto direct = orm::parse_xml(R"(
+        <select>SELECT * FROM ${missing}</select>)");
+    auto empty = orm::parse_xml(R"(
+        <select>SELECT * FROM users WHERE id = #{}</select>)");
+    ASSERT_TRUE(bound.has_value());
+    ASSERT_TRUE(direct.has_value());
+    ASSERT_TRUE(empty.has_value());
+
+    orm::dynamic_sql_processor processor{orm::format_options{}};
+    const orm::param_context parameters;
+    ASSERT_THROWS((void)processor.process(**bound, parameters, {}));
+    ASSERT_THROWS((void)processor.process(**direct, parameters, {}));
+    ASSERT_THROWS((void)processor.process(**empty, parameters, {}));
+}
+
+TEST(dynamic_sql_accepts_explicit_null_placeholder_parameters)
+{
+    auto statement = orm::parse_xml(R"(
+        <select>SELECT * FROM users WHERE deleted_at = #{deletedAt}</select>)");
+    ASSERT_TRUE(statement.has_value());
+
+    orm::param_context parameters;
+    parameters.set("deletedAt", orm::param_value::null());
+    orm::dynamic_sql_processor processor{orm::format_options{}};
+    const auto built = processor.process(**statement, parameters, {});
+
+    ASSERT_EQ(built.params.size(), 1U);
+    ASSERT_TRUE(built.params.front().kind ==
+        orm::param_value::kind_t::null_kind);
+}
+
+TEST(xml_mapper_reports_missing_placeholder_parameters_without_querying)
+{
+    orm::mapper_registry registry;
+    ASSERT_TRUE(registry.load_xml(R"(
+        <mapper namespace="UserMapper">
+          <select id="findById" resultType="orm_json_user">
+            SELECT id, name, status FROM users WHERE id = #{id}
+          </select>
+        </mapper>)"));
+
+    diagnostic_database_client client;
+    orm::database_session session{client, orm::sql_dialect::mysql};
+    orm::mapper<orm_json_user, decltype(session)> users{session};
+    const auto result = cnetmod::sync_wait(users.select_xml(
+        registry, "UserMapper.findById", orm::param_context{}));
+
+    ASSERT_FALSE(result.ok());
+    ASSERT_TRUE(result.error_msg.contains("UserMapper.findById"));
+    ASSERT_TRUE(result.error_msg.contains("missing parameter 'id'"));
+    ASSERT_EQ(client.query_calls, 0U);
 }
 
 TEST(xml_lazy_relation_coalesces_concurrent_first_loads)
@@ -941,10 +1043,21 @@ TEST(orm_logical_delete_supports_nullable_datetime_markers)
     ASSERT_EQ(selected,
         "SELECT * FROM `soft_deleted_records` WHERE `deleted_at` IS NULL AND `id` = 7 ORDER BY `id`");
 
+    std::vector<orm::param_value> delete_parameters;
     const auto removed = interceptor.transform_delete_to_update<orm_soft_deleted_record>(
-        "DELETE FROM `soft_deleted_records` WHERE `id` = 7");
+        "DELETE FROM `soft_deleted_records` WHERE `id` = 7",
+        delete_parameters);
     ASSERT_EQ(removed,
-        "UPDATE `soft_deleted_records` SET `deleted_at` = CURRENT_TIMESTAMP, `updated_at` = CURRENT_TIMESTAMP, `archive_date` = CURRENT_DATE WHERE `id` = 7");
+        "UPDATE `soft_deleted_records` SET `deleted_at` = {}, `updated_at` = {}, `archive_date` = {} WHERE `id` = 7");
+    ASSERT_EQ(delete_parameters.size(), 3U);
+    ASSERT_TRUE(delete_parameters[0].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_TRUE(delete_parameters[1].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_TRUE(delete_parameters[2].kind ==
+        orm::param_value::kind_t::date_kind);
+    ASSERT_EQ(delete_parameters[0].datetime_val.to_string(),
+        delete_parameters[1].datetime_val.to_string());
 
     config.field_name = "deleted_at` = NULL WHERE 1=1 --";
     bool rejected = false;
@@ -974,7 +1087,40 @@ TEST(orm_automatic_logical_delete_policy_is_model_scoped)
     ASSERT_TRUE(selected->sql.contains("`deleted_at` IS NULL"));
     auto removed = (*nullable_chain)->apply(orm::sql_operation::remove, {"DELETE FROM `soft_deleted_records` WHERE `id` = {}", {orm::param_value::from_int(7)}});
     ASSERT_TRUE(removed);
-    ASSERT_TRUE(removed->sql.contains("`deleted_at` = CURRENT_TIMESTAMP"));
+    ASSERT_TRUE(removed->sql.contains("`deleted_at` = {}"));
+    ASSERT_EQ(removed->parameters.size(), 3U);
+    ASSERT_TRUE(removed->parameters[0].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_TRUE(removed->parameters[1].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_EQ(removed->parameters[2].int_val, 7);
+
+    nullable.time_source = orm::logical_delete_time_source::database_session;
+    auto database_clock_chain =
+        orm::make_automatic_interceptor_chain<orm_soft_deleted_record>(
+            {.logical_delete_policy = nullable});
+    ASSERT_TRUE(database_clock_chain);
+    auto database_clock_removed = (*database_clock_chain)->apply(orm::sql_operation::remove, {"DELETE FROM `soft_deleted_records` WHERE `id` = {}", {orm::param_value::from_int(7)}});
+    ASSERT_TRUE(database_clock_removed);
+    ASSERT_TRUE(database_clock_removed->sql.contains(
+        "`deleted_at` = CURRENT_TIMESTAMP"));
+    ASSERT_EQ(database_clock_removed->parameters.size(), 1U);
+
+    orm::logical_delete_config value_marker;
+    value_marker.field_name = "status";
+    value_marker.touch_fields = {{"updated_at",
+        orm::logical_delete_touch_value::current_timestamp}};
+    orm::logical_delete_interceptor value_interceptor{value_marker};
+    std::vector value_parameters{orm::param_value::from_int(7)};
+    const auto value_removed =
+        value_interceptor.transform_delete_to_update<orm_crud_user>(
+            "DELETE FROM `users` WHERE `id` = {}", value_parameters);
+    ASSERT_EQ(value_removed,
+        "UPDATE `users` SET `status` = 1, `updated_at` = {} WHERE `id` = {}");
+    ASSERT_EQ(value_parameters.size(), 2U);
+    ASSERT_TRUE(value_parameters[0].kind ==
+        orm::param_value::kind_t::datetime_kind);
+    ASSERT_EQ(value_parameters[1].int_val, 7);
 
     auto default_chain = orm::make_automatic_interceptor_chain<orm_soft_deleted_record>();
     ASSERT_TRUE(default_chain);
@@ -1104,20 +1250,21 @@ TEST(orm_database_session_unifies_mysql_crud_and_model_mapping)
     ASSERT_TRUE(client.last_sql.contains("WHERE `id` = 73"));
 
     orm::query_wrapper<orm_crud_user> select_wrapper;
-    select_wrapper.eq("status", 1);
+    select_wrapper.eq(orm::runtime_column{"status"}, 1);
     const auto selected = cnetmod::sync_wait(users.select_list(select_wrapper));
     ASSERT_TRUE(selected.ok());
     ASSERT_EQ(selected.first()->name, "Ada");
     ASSERT_TRUE(client.last_sql.starts_with("SELECT"));
 
     orm::query_wrapper<orm_crud_user> delete_wrapper;
-    delete_wrapper.eq("id", 73).as_delete();
+    delete_wrapper.eq(orm::runtime_column{"id"}, 73).as_delete();
     const auto deleted = cnetmod::sync_wait(users.remove(delete_wrapper));
     ASSERT_TRUE(deleted.ok());
     ASSERT_TRUE(client.last_sql.starts_with("DELETE FROM `users`"));
 
     orm::update_wrapper<orm_crud_user> update_wrapper;
-    update_wrapper.set("name", "Ada Lovelace").eq("id", 73);
+    update_wrapper.set(orm::runtime_column{"name"}, "Ada Lovelace")
+        .eq(orm::runtime_column{"id"}, 73);
     const auto conditionally_updated = cnetmod::sync_wait(users.update(update_wrapper));
     ASSERT_TRUE(conditionally_updated.ok());
     ASSERT_TRUE(client.last_sql.starts_with("UPDATE `users` SET"));
@@ -1245,7 +1392,7 @@ TEST(query_wrapper_accepts_optional_condition_values)
     orm::query_wrapper<orm_crud_user> query;
     query.eq(&orm_crud_user::status, active_status)
         .eq(&orm_crud_user::name, absent_name)
-        .eq("id", std::nullopt);
+        .eq(orm::runtime_column{"id"}, std::nullopt);
 
     const auto [sql, parameters] = query.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(sql.contains("\"status\" = $1"));
@@ -1255,26 +1402,48 @@ TEST(query_wrapper_accepts_optional_condition_values)
     ASSERT_TRUE(parameters[0].kind == orm::param_value::kind_t::int64_kind);
 }
 
+TEST(member_pointer_resolution_uses_registered_pointer_identity)
+{
+    ASSERT_EQ(orm::resolve_column_name<orm_crud_user>(&orm_crud_user::id), "id");
+    ASSERT_EQ(orm::resolve_column_name<orm_crud_user>(&orm_crud_user::name), "name");
+    ASSERT_EQ(orm::resolve_column_name<member_identity_record>(
+                  &member_identity_record::first_id),
+        "first_id");
+    ASSERT_EQ(orm::resolve_column_name<member_identity_record>(
+                  &member_identity_record::second_id),
+        "second_id");
+    ASSERT_THROWS((void)orm::resolve_column_name<member_identity_record>(
+        &member_identity_record::transient_id));
+
+    orm::query_wrapper<orm_crud_user> dynamic_query;
+    dynamic_query.eq(orm::runtime_column{"id"}, 7);
+    const auto [sql, parameters] =
+        dynamic_query.build_select_sql(orm::sql_dialect::postgresql);
+    ASSERT_TRUE(sql.contains("\"id\" = $1"));
+    ASSERT_EQ(parameters.size(), 1U);
+}
+
 TEST(query_wrapper_preserves_sql_null_and_collection_semantics)
 {
     std::optional<std::int64_t> absent;
 
     orm::query_wrapper<orm_crud_user> null_query;
-    null_query.ne("id", absent);
+    null_query.ne(orm::runtime_column{"id"}, absent);
     const auto [null_sql, null_parameters] =
         null_query.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(null_sql.contains("\"id\" IS NOT NULL"));
     ASSERT_TRUE(null_parameters.empty());
 
     orm::query_wrapper<orm_crud_user> empty_in;
-    empty_in.in("id", std::vector<std::int64_t>{});
+    empty_in.in(orm::runtime_column{"id"}, std::vector<std::int64_t>{});
     const auto [empty_in_sql, empty_in_parameters] =
         empty_in.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(empty_in_sql.contains("1 = 0"));
     ASSERT_TRUE(empty_in_parameters.empty());
 
     orm::query_wrapper<orm_crud_user> empty_not_in;
-    empty_not_in.not_in("id", std::vector<std::int64_t>{});
+    empty_not_in.not_in(
+        orm::runtime_column{"id"}, std::vector<std::int64_t>{});
     const auto [empty_not_in_sql, empty_not_in_parameters] =
         empty_not_in.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(empty_not_in_sql.contains("1 = 1"));
@@ -1283,7 +1452,7 @@ TEST(query_wrapper_preserves_sql_null_and_collection_semantics)
     const std::vector<std::optional<std::int64_t>> mixed_values{
         std::int64_t{7}, std::nullopt, std::int64_t{9}};
     orm::query_wrapper<orm_crud_user> mixed_in;
-    mixed_in.in("id", mixed_values);
+    mixed_in.in(orm::runtime_column{"id"}, mixed_values);
     const auto [mixed_in_sql, mixed_in_parameters] =
         mixed_in.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(mixed_in_sql.contains("\"id\" IN ($1, $2)"));
@@ -1291,7 +1460,7 @@ TEST(query_wrapper_preserves_sql_null_and_collection_semantics)
     ASSERT_EQ(mixed_in_parameters.size(), 2U);
 
     orm::query_wrapper<orm_crud_user> mixed_not_in;
-    mixed_not_in.not_in("id", mixed_values);
+    mixed_not_in.not_in(orm::runtime_column{"id"}, mixed_values);
     const auto [mixed_not_in_sql, mixed_not_in_parameters] =
         mixed_not_in.build_select_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(mixed_not_in_sql.contains("\"id\" NOT IN ($1, $2)"));
@@ -1299,16 +1468,17 @@ TEST(query_wrapper_preserves_sql_null_and_collection_semantics)
     ASSERT_EQ(mixed_not_in_parameters.size(), 2U);
 
     orm::query_wrapper<orm_crud_user> invalid_between;
-    ASSERT_THROWS(invalid_between.between("id", absent, std::int64_t{10}));
+    ASSERT_THROWS(invalid_between.between(
+        orm::runtime_column{"id"}, absent, std::int64_t{10}));
 }
 
 TEST(query_wrapper_builds_parameterless_conditions_without_overload_ambiguity)
 {
     orm::query_wrapper<orm_crud_user> query;
-    query.is_null("name")
-        .is_not_null("id")
-        .is_true("status")
-        .is_false("id")
+    query.is_null(orm::runtime_column{"name"})
+        .is_not_null(orm::runtime_column{"id"})
+        .is_true(orm::runtime_column{"status"})
+        .is_false(orm::runtime_column{"id"})
         .raw("1 = 1");
 
     const auto [sql, parameters] =
@@ -1431,11 +1601,11 @@ TEST(update_wrapper_preserves_set_order_and_optional_conditions)
 {
     std::optional<std::int64_t> absent_id;
     orm::update_wrapper<orm_crud_user> update;
-    update.set("name", "first")
-        .set("status", 2)
-        .set("name", "replacement")
-        .eq("id", absent_id)
-        .ne("status", std::nullopt);
+    update.set(orm::runtime_column{"name"}, "first")
+        .set(orm::runtime_column{"status"}, 2)
+        .set(orm::runtime_column{"name"}, "replacement")
+        .eq(orm::runtime_column{"id"}, absent_id)
+        .ne(orm::runtime_column{"status"}, std::nullopt);
 
     const auto [sql, parameters] = update.build_sql(orm::sql_dialect::postgresql);
     ASSERT_TRUE(sql.contains(
@@ -1764,6 +1934,28 @@ TEST(mysql_sharded_scoped_workload_joins_on_success_and_exception)
         ASSERT_TRUE(completed);
         ASSERT_EQ(propagated, fail);
     }
+}
+
+TEST(mysql_sharded_pool_rejects_an_unknown_event_loop)
+{
+    auto owner = cnetmod::make_io_context();
+    auto outsider = cnetmod::make_io_context();
+    cnetmod::mysql::pool_params options;
+    options.initial_size = 0;
+    options.max_size = 2;
+    cnetmod::mysql::sharded_connection_pool pool{
+        std::vector<cnetmod::io_context*>{owner.get()}, options};
+    std::error_code observed;
+    auto acquire = [&]() -> cnetmod::task<void>
+    {
+        auto connection = co_await pool.async_get_connection(*outsider);
+        if (!connection)
+            observed = connection.error();
+        outsider->stop();
+    };
+    cnetmod::spawn(*outsider, acquire());
+    outsider->run();
+    ASSERT_EQ(observed, std::make_error_code(std::errc::invalid_argument));
 }
 
 TEST(mysql_sharded_stop_joins_two_event_loop_threads)

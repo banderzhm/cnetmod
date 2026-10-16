@@ -2,6 +2,10 @@ module cnetmod.application.host;
 
 import std;
 import cnetmod.application.auto_configuration;
+import cnetmod.application.components;
+import cnetmod.application.diagnostics;
+import cnetmod.application.modules;
+import cnetmod.application.options;
 import cnetmod.application.recovery_policy;
 import cnetmod.application.service_lifecycle;
 import cnetmod.application.task_supervisor;
@@ -37,126 +41,108 @@ namespace {
         return options;
     }
 
+    class application_event_loops
+    {
+    public:
+        application_event_loops(unsigned workers, thread_pool& cpu_pool)
+        {
+            if (workers <= 1)
+            {
+                single_ = make_io_context();
+                worker_views_.push_back(single_.get());
+            }
+            else
+            {
+                multi_ = std::make_unique<server_context>(workers, cpu_pool);
+                worker_views_ = multi_->worker_ios();
+                all_views_.push_back(&multi_->accept_io());
+            }
+            all_views_.insert(all_views_.end(), worker_views_.begin(),
+                worker_views_.end());
+        }
+
+        [[nodiscard]] auto control() noexcept -> io_context&
+        {
+            return multi_ ? multi_->accept_io() : *single_;
+        }
+
+        [[nodiscard]] auto workers() -> std::vector<io_context*>
+        {
+            return worker_views_;
+        }
+
+        [[nodiscard]] auto all() -> std::vector<io_context*>
+        {
+            return all_views_;
+        }
+
+        [[nodiscard]] auto worker_span() const noexcept
+            -> std::span<io_context* const>
+        {
+            return worker_views_;
+        }
+
+        [[nodiscard]] auto all_span() const noexcept
+            -> std::span<io_context* const>
+        {
+            return all_views_;
+        }
+
+        [[nodiscard]] auto make_business_server()
+            -> std::unique_ptr<http::server>
+        {
+            if (multi_)
+                return std::make_unique<http::server>(*multi_);
+            return std::make_unique<http::server>(*single_);
+        }
+
+        void run()
+        {
+            if (multi_)
+                multi_->run();
+            else
+                single_->run();
+        }
+
+        void stop() noexcept
+        {
+            if (multi_)
+                multi_->stop();
+            else
+                single_->stop();
+        }
+
+        void restart_control()
+        {
+            control().restart();
+        }
+
+    private:
+        std::unique_ptr<io_context> single_;
+        std::unique_ptr<server_context> multi_;
+        std::vector<io_context*> worker_views_;
+        std::vector<io_context*> all_views_;
+    };
+
 } // namespace
 
 class application_host::implementation
 {
 public:
     implementation(application_configuration configuration,
-        http::router routes, service_registry services,
-        std::vector<application_middleware> middlewares,
-        std::vector<runtime_middleware_factory> runtime_middleware_factories,
-        std::vector<managed_service_factory> service_factories,
-        std::vector<runtime_route_configurer> runtime_route_configurers,
+        service_registry services,
+        std::vector<std::shared_ptr<application_module>> modules,
         bool auto_configuration,
-        std::optional<std::filesystem::path> configuration_file)
-        : configuration(std::move(configuration)), network(), io(make_io_context()), cpu_pool(this->configuration.execution.cpu_threads), telemetry(*io, exporter_options(this->configuration.observability)), business_server(*io), management_server(*io), services(std::move(services)), health(this->configuration.health), supervisor(*io), runtime_facade(*io, cpu_pool, supervisor, telemetry, this->services, runtime_stop_source.get_token(), this->configuration), lifecycle(*io, telemetry, this->services, supervisor, health, this->configuration.lifecycle), business_routes(std::move(routes)), business_middlewares(std::move(middlewares)), configuration_file(std::move(configuration_file))
+        std::optional<std::filesystem::path> configuration_file,
+        std::string builder_name,
+        std::vector<configuration_customizer> customizers)
+        : configuration(std::move(configuration)), network(), cpu_pool(this->configuration.execution.cpu_threads), loops(this->configuration.execution.io_threads, cpu_pool), telemetry(loops.control(), exporter_options(this->configuration.observability)), business_server(loops.make_business_server()), management_server(loops.control()), services(std::move(services)), health(this->configuration.health), supervisor(loops.control()), runtime_facade(loops.control(), loops.all_span(), cpu_pool, supervisor, telemetry, runtime_stop_source.get_token(), this->configuration), lifecycle(loops.control(), telemetry, this->services, supervisor, health, this->configuration.lifecycle), configuration_file(std::move(configuration_file)), builder_name(std::move(builder_name)), customizers(std::move(customizers)), modules(std::move(modules)), auto_configuration(auto_configuration)
     {
         telemetry.set_sampling_ratio(this->configuration.observability.sampling_ratio);
-        for (auto& factory : runtime_middleware_factories)
-        {
-            if (!preparation_error)
-                break;
-            try
-            {
-                auto middleware = factory(runtime_facade);
-                if (!middleware)
-                {
-                    preparation_error = std::unexpected(
-                        std::make_error_code(std::errc::invalid_argument));
-                    break;
-                }
-                business_middlewares.push_back(std::move(middleware));
-            }
-            catch (const std::bad_alloc&)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::not_enough_memory));
-            }
-            catch (...)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-            }
-        }
-        application_service_context factory_context{*io, telemetry, supervisor,
-            this->configuration, runtime_facade};
-        for (auto& factory : service_factories)
-        {
-            if (!preparation_error)
-                break;
-            try
-            {
-                auto service = factory(factory_context);
-                if (!service || !*service)
-                {
-                    preparation_error = std::unexpected(service
-                            ? std::make_error_code(std::errc::invalid_argument)
-                            : service.error());
-                    break;
-                }
-                preparation_error = this->services.manage(std::move(*service));
-            }
-            catch (const std::bad_alloc&)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::not_enough_memory));
-            }
-            catch (...)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-            }
-        }
-        if (preparation_error && auto_configuration)
-        {
-            register_builtin_auto_configurations(auto_configurations);
-            auto_configuration_context context{*io, telemetry, supervisor,
-                this->services, business_routes};
-            preparation_error = auto_configurations.apply(this->configuration,
-                context);
-#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
-            if (preparation_error)
-                preparation_error = auto_configure_mysql_sharding(
-                    this->configuration.orm.sharding, this->services);
-#else
-            if (preparation_error && this->configuration.orm.sharding.enabled)
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::not_supported));
-#endif
-        }
-        for (auto& configure_routes : runtime_route_configurers)
-        {
-            if (!preparation_error)
-                break;
-            try
-            {
-                configure_routes(business_routes, runtime_facade);
-            }
-            catch (const std::bad_alloc&)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::not_enough_memory));
-            }
-            catch (...)
-            {
-                preparation_error = std::unexpected(
-                    std::make_error_code(std::errc::invalid_argument));
-            }
-        }
-        this->services.freeze();
-        if (preparation_error)
-        {
-            for (const auto& service : this->services.managed_services())
-            {
-                auto added = health.add(service);
-                if (!added)
-                {
-                    preparation_error = std::unexpected(added.error());
-                    break;
-                }
-            }
-        }
+        business_routes.sse_defaults({
+            .max_duration = this->configuration.http.sse_max_duration,
+            .write_timeout = this->configuration.http.sse_write_timeout,
+        });
         supervisor.on_recovery_exhausted(
             [this](std::string_view task, std::error_code error)
             {
@@ -177,26 +163,327 @@ public:
         root_task = supervise();
     }
 
+    /**
+     * @brief Runs the composition phases in their fixed order.
+     *
+     * options -> registration -> validation -> resolution -> composition.
+     * The first failure is returned with its phase and component; the host is
+     * then discarded by the builder without starting anything.
+     */
+    auto prepare(std::vector<managed_service_factory> service_factories)
+        -> std::expected<void, build_error>
+    {
+        if (auto declared = declare_options(); !declared)
+            return declared;
+        if (auto bound = options.bind(configuration); !bound)
+            return bound;
+        component_collection collection;
+        if (auto registered = register_components(std::move(service_factories),
+                collection);
+            !registered)
+            return registered;
+        if (const auto graph = services.validate_dependencies(); !graph)
+            return std::unexpected(build_error{.phase = build_phase::validation,
+                .component = "managed services",
+                .message = std::format("invalid managed-service dependency graph: {}",
+                    graph.error().message()),
+                .code = graph.error()});
+        auto built = component_container::build(std::move(collection), [this](std::type_index type, std::string_view name)
+            {
+                return services.find_shared(type, name);
+            },
+            loops.all_span());
+        if (!built)
+            return std::unexpected(built.error());
+        components = std::move(*built);
+        if (auto composed = compose_modules(); !composed)
+            return composed;
+        services.freeze();
+        for (const auto& service : services.managed_services())
+        {
+            auto added = health.add(service);
+            if (!added)
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = service->key().canonical_name(),
+                    .message = std::format("health registration failed: {}",
+                        added.error().message()),
+                    .code = added.error()});
+        }
+        return {};
+    }
+
+    /**
+     * @brief Options phase: every module declares its sections.
+     */
+    auto declare_options() -> std::expected<void, build_error>
+    {
+        for (const auto& feature : modules)
+        {
+            try
+            {
+                feature->configure_options(options);
+            }
+            catch (const std::exception& error)
+            {
+                return std::unexpected(build_error{.phase = build_phase::options,
+                    .component = std::string{feature->name()},
+                    .message = error.what()});
+            }
+        }
+        return {};
+    }
+
+    /**
+     * @brief Registration phase: infrastructure, auto-configuration, modules.
+     */
+    auto register_components(std::vector<managed_service_factory> service_factories,
+        component_collection& collection) -> std::expected<void, build_error>
+    {
+        auto event_loops = loops.all();
+        application_service_context factory_context{loops.control(), event_loops,
+            telemetry, supervisor, configuration, runtime_facade};
+        for (auto& factory : service_factories)
+        {
+            std::expected<std::shared_ptr<managed_service>, std::error_code> service;
+            try
+            {
+                service = factory(factory_context);
+            }
+            catch (const std::exception& error)
+            {
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = "service factory",
+                    .message = error.what()});
+            }
+            if (!service || !*service)
+            {
+                const auto code = service ? std::make_error_code(std::errc::invalid_argument)
+                                          : service.error();
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = "service factory",
+                    .message = service ? "factory returned a null service"
+                                       : code.message(),
+                    .code = code});
+            }
+            const auto key = (*service)->key().canonical_name();
+            if (auto managed = services.manage(std::move(*service)); !managed)
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = key,
+                    .message = managed.error().message(),
+                    .code = managed.error()});
+        }
+        if (auto_configuration)
+        {
+            register_builtin_auto_configurations(auto_configurations);
+            auto_configuration_context context{loops.control(), event_loops,
+                telemetry, supervisor, services, business_routes};
+            for (const auto& [binding, service] : configuration.services)
+            {
+                if (!service.enabled)
+                    continue;
+                if (!auto_configurations.contains(service.name))
+                    return std::unexpected(build_error{
+                        .phase = build_phase::registration,
+                        .component = std::format("{}:{}", service.name, service.instance),
+                        .path = std::format("services.{}.type", binding),
+                        .message = std::format(
+                            "integration '{}' is not compiled into this cnetmod build",
+                            service.name),
+                        .code = std::make_error_code(std::errc::not_supported)});
+                if (event_loops.size() > 1 &&
+                    !auto_configurations.supports_multiple_event_loops(
+                        service.name))
+                    return std::unexpected(build_error{
+                        .phase = build_phase::registration,
+                        .component = std::format("{}:{}", service.name,
+                            service.instance),
+                        .path = std::format("services.{}.type", binding),
+                        .message = std::format(
+                            "integration '{}' is not safe with application.io_threads > 1",
+                            service.name),
+                        .code = std::make_error_code(
+                            std::errc::not_supported)});
+            }
+            if (auto applied = auto_configurations.apply(configuration, context);
+                !applied)
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = "auto-configuration",
+                    .path = "services",
+                    .message = std::format(
+                        "an enabled service rejected its configuration: {}",
+                        applied.error().message()),
+                    .code = applied.error()});
+#if defined(CNETMOD_HAS_PROTOCOL_MYSQL) && defined(CNETMOD_HAS_ORM)
+            if (auto sharded = auto_configure_mysql_sharding(
+                    configuration.orm.sharding, services);
+                !sharded)
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = "orm sharding",
+                    .path = "orm.sharding",
+                    .message = sharded.error().message(),
+                    .code = sharded.error()});
+#else
+            if (configuration.orm.sharding.enabled)
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = "orm sharding",
+                    .path = "orm.sharding.enabled",
+                    .message = "ORM sharding requires the MySQL ORM integration",
+                    .code = std::make_error_code(std::errc::not_supported)});
+#endif
+        }
+
+        collection.borrow(runtime_facade);
+        collection.borrow(runtime_facade.executor());
+        collection.borrow(services);
+        collection.borrow(telemetry);
+        options.register_components(collection);
+
+        registration_context context{collection, configuration, options,
+            [this](std::shared_ptr<managed_service> service)
+            {
+                if (!service)
+                    throw std::invalid_argument("managed service must not be null");
+                const auto key = service->key().canonical_name();
+                if (auto managed = services.manage(std::move(service)); !managed)
+                    throw std::system_error(managed.error(),
+                        std::format("managed service {} cannot be registered", key));
+            }};
+        for (const auto& feature : modules)
+        {
+            try
+            {
+                auto registered = feature->register_components(context);
+                if (!registered)
+                    return std::unexpected(build_error{
+                        .phase = build_phase::registration,
+                        .component = std::string{feature->name()},
+                        .message = std::move(registered.error())});
+            }
+            catch (const std::exception& error)
+            {
+                return std::unexpected(build_error{.phase = build_phase::registration,
+                    .component = std::string{feature->name()},
+                    .message = error.what()});
+            }
+        }
+        return {};
+    }
+
+    /**
+     * @brief Composition phase: modules contribute routes and middleware.
+     */
+    auto compose_modules() -> std::expected<void, build_error>
+    {
+        composition_context context{business_routes, business_middlewares,
+            *components, runtime_facade, configuration};
+        for (const auto& feature : modules)
+        {
+            try
+            {
+                auto composed = feature->compose(context);
+                if (!composed)
+                    return std::unexpected(build_error{
+                        .phase = build_phase::composition,
+                        .component = std::string{feature->name()},
+                        .message = std::move(composed.error())});
+            }
+            catch (const std::exception& error)
+            {
+                return std::unexpected(build_error{.phase = build_phase::composition,
+                    .component = std::string{feature->name()},
+                    .message = error.what()});
+            }
+        }
+        for (const auto& middleware : business_middlewares)
+            if (!middleware)
+                return std::unexpected(build_error{.phase = build_phase::composition,
+                    .component = "middleware",
+                    .message = "a module appended an empty middleware"});
+        return {};
+    }
+
+    /**
+     * @brief Runs module start hooks in registration order.
+     */
+    auto start_modules() -> task<std::expected<void, std::error_code>>
+    {
+        for (const auto& feature : modules)
+        {
+            std::expected<void, std::error_code> started;
+            try
+            {
+                started = co_await feature->on_started(runtime_facade);
+            }
+            catch (const std::system_error& error)
+            {
+                started = std::unexpected(error.code());
+            }
+            catch (...)
+            {
+                started = std::unexpected(std::make_error_code(std::errc::io_error));
+            }
+            if (!started)
+            {
+                try
+                {
+                    logger::error("module {} failed to start: {}", feature->name(),
+                        started.error().message());
+                }
+                catch (...)
+                {
+                }
+                co_return started;
+            }
+            ++started_modules;
+        }
+        co_return std::expected<void, std::error_code>{};
+    }
+
+    /**
+     * @brief Runs stop hooks of started modules in reverse order, once.
+     */
+    auto stop_modules() -> task<void>
+    {
+        while (started_modules != 0)
+        {
+            const auto& feature = modules[--started_modules];
+            try
+            {
+                co_await feature->on_stopping(runtime_facade);
+            }
+            catch (...)
+            {
+                try
+                {
+                    logger::warn("module {} failed while stopping", feature->name());
+                }
+                catch (...)
+                {
+                }
+            }
+        }
+    }
+
     void install_application_middleware()
     {
         if (configuration.http.recover_exceptions)
-            business_server.use(recover());
-        business_server.use(shutdown.track_middleware());
+            business_server->use(recover());
+        business_server->use(shutdown.track_middleware());
         if (configuration.http.request_ids)
-            business_server.use(request_id());
+            business_server->use(request_id());
         if (auto options = telemetry.server_tracing(); options.on_end)
-            business_server.use(http::tracing::tracing_middleware(
+            business_server->use(http::tracing::tracing_middleware(
                 std::move(options)));
         if (auto middleware = observability::server_metrics(telemetry.measurements()))
-            business_server.use(std::move(middleware));
+            business_server->use(std::move(middleware));
         if (configuration.http.request_timeout)
-            business_server.use(
+            business_server->use(
                 request_timeout(*configuration.http.request_timeout));
         for (auto& middleware : business_middlewares)
-            business_server.use(std::move(middleware));
+            business_server->use(std::move(middleware));
         business_middlewares.clear();
         if (configuration.http.access_logging)
-            business_server.use(access_log({
+            business_server->use(access_log({
                 .lv = configuration.logging.level,
                 .format = access_log_format::brief,
                 .dump = access_log_dump::error_only,
@@ -242,7 +529,7 @@ public:
         while (!token.is_cancelled())
         {
             const auto policy = health.policy();
-            service_context context{*io, telemetry, supervisor, token,
+            service_context context{loops.control(), telemetry, supervisor, token,
                 deadline::after(policy.timeout)};
             co_await health.refresh(context);
             for (const auto& snapshot : health.snapshots())
@@ -265,7 +552,7 @@ public:
                 }
             }
             telemetry.refresh_exporter_metrics();
-            auto waited = co_await async_timer_wait(*io,
+            auto waited = co_await async_timer_wait(loops.control(),
                 policy.interval, token);
             if (!waited && !token.is_cancelled())
                 co_return std::unexpected(waited.error());
@@ -280,7 +567,7 @@ public:
     {
         try
         {
-            co_await post_awaitable{*io};
+            co_await post_awaitable{loops.control()};
             co_await run_lifecycle();
             co_return;
         }
@@ -303,11 +590,11 @@ public:
             deadline::after(configuration.lifecycle.total_stop_timeout));
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
-        business_server.stop();
+        business_server->stop();
         management_server.stop();
         // Exceptional cleanup cannot wait for another normal drain phase.
         shutdown.cancel_requests();
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         try
         {
@@ -322,7 +609,7 @@ public:
         }
         supervisor.request_stop();
         telemetry.abort();
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         complete();
     }
@@ -355,10 +642,10 @@ public:
             configuration.lifecycle.total_stop_timeout);
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
-        business_server.stop();
+        business_server->stop();
         management_server.stop();
         shutdown.cancel_requests();
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         co_await std::move(finish_task);
     }
@@ -376,12 +663,25 @@ public:
             co_return;
         }
 
-        auto business_listening = business_server.listen(
-            configuration.http.address, configuration.http.port);
+        auto modules_started = co_await start_modules();
+        if (!modules_started)
+        {
+            run_error = modules_started.error();
+            shutdown_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
+            co_await stop_modules();
+            (void)co_await lifecycle.stop(shutdown_cleanup_deadline());
+            co_await std::move(finish_task);
+            co_return;
+        }
+
+        auto business_listening = business_server->listen(
+            configuration.http.address, configuration.http.port,
+            {.reuse_address = true}, configuration.http.backlog);
         if (!business_listening)
         {
             run_error = business_listening.error();
             shutdown_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
+            co_await stop_modules();
             (void)co_await lifecycle.stop(shutdown_cleanup_deadline());
             co_await std::move(finish_task);
             co_return;
@@ -391,9 +691,9 @@ public:
         if (configuration.management.enabled &&
             configuration.management.same_port)
             install_management_routes(business_routes);
-        business_server.set_max_connections(
+        business_server->set_max_connections(
             configuration.http.max_connections);
-        business_server.set_router(std::move(business_routes));
+        business_server->set_router(std::move(business_routes));
 
         if (configuration.management.enabled &&
             !configuration.management.same_port)
@@ -403,12 +703,14 @@ public:
             management_server.set_router(std::move(routes));
             auto listening = management_server.listen(
                 configuration.management.address,
-                configuration.management.port);
+                configuration.management.port, {.reuse_address = true},
+                configuration.management.backlog);
             if (!listening)
             {
                 run_error = listening.error();
                 shutdown_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
-                business_server.stop();
+                business_server->stop();
+                co_await stop_modules();
                 (void)co_await lifecycle.stop(shutdown_cleanup_deadline());
                 co_await std::move(finish_task);
                 co_return;
@@ -425,7 +727,7 @@ public:
             shutdown.install();
         state.store(application_state::running, std::memory_order_release);
         health.mark_running();
-        const auto registered = supervise_listener("application-business-http", business_server);
+        const auto registered = supervise_listener("application-business-http", *business_server);
         if (!registered)
         {
             co_await rollback_registration(registered.error());
@@ -455,7 +757,7 @@ public:
 
         auto sleeper = [this](auto duration)
         {
-            return async_sleep(*io, duration);
+            return async_sleep(loops.control(), duration);
         };
         co_await shutdown.wait_for_signal(sleeper);
         const auto stop_deadline = deadline::after(configuration.lifecycle.total_stop_timeout);
@@ -464,7 +766,7 @@ public:
         runtime_stop_source.request_stop();
         state.store(application_state::stopping, std::memory_order_release);
         health.mark_stopping();
-        business_server.stop();
+        business_server->stop();
         management_server.stop();
         const auto drained = co_await shutdown.drain(sleeper,
             std::min(configuration.lifecycle.http_drain_timeout,
@@ -474,7 +776,7 @@ public:
             if (!run_error)
                 run_error = std::make_error_code(std::errc::timed_out);
             shutdown.cancel_requests();
-            business_server.abort_connections();
+            business_server->abort_connections();
             management_server.abort_connections();
         }
         if (shutdown.in_flight() != 0)
@@ -483,6 +785,7 @@ public:
         auto joined = co_await supervisor.join();
         if (!joined && !run_error)
             run_error = joined.error();
+        co_await stop_modules();
         if (shutdown.in_flight() == 0)
         {
             auto stopped = co_await lifecycle.stop(cleanup_deadline);
@@ -519,7 +822,7 @@ public:
                     run_error = std::make_error_code(std::errc::timed_out);
                 co_return;
             }
-            const auto waited = co_await async_timer_wait(*io,
+            const auto waited = co_await async_timer_wait(loops.control(),
                 std::min(cleanup_deadline.remaining(),
                     std::chrono::duration_cast<deadline::duration>(std::chrono::milliseconds{1})));
             if (!waited)
@@ -543,6 +846,7 @@ public:
         const auto joined = co_await supervisor.join();
         if (!joined && !run_error)
             run_error = joined.error();
+        co_await stop_modules();
         auto retry_delay = std::chrono::milliseconds{1};
         const auto cleanup_deadline = shutdown_cleanup_deadline();
         while (shutdown.in_flight() == 0 && lifecycle.active_service_count() != 0 && !cleanup_deadline.expired())
@@ -572,7 +876,7 @@ public:
                 break;
             try
             {
-                const auto waited = co_await async_timer_wait(*io,
+                const auto waited = co_await async_timer_wait(loops.control(),
                     std::min(cleanup_deadline.remaining(),
                         std::chrono::duration_cast<deadline::duration>(retry_delay)));
                 if (!waited)
@@ -621,7 +925,7 @@ public:
          * both directions prevents an exporter targeting this host from making
          * shutdown wait for its own otherwise-idle collector connection.
          */
-        business_server.abort_connections();
+        business_server->abort_connections();
         management_server.abort_connections();
         // Telemetry may have used this application's HTTP endpoint as its
         // collector. Its client closes during shutdown, so the corresponding
@@ -641,7 +945,7 @@ public:
         try
         {
             while (!telemetry.try_settle_shutdown() ||
-                business_server.active_connections() != 0 ||
+                business_server->active_connections() != 0 ||
                 management_server.active_connections() != 0)
             {
                 const auto remaining = connection_deadline.remaining();
@@ -651,7 +955,7 @@ public:
                         run_error = std::make_error_code(std::errc::timed_out);
                     if (!connections_aborted)
                     {
-                        business_server.abort_connections();
+                        business_server->abort_connections();
                         management_server.abort_connections();
                         connections_aborted = true;
                         connection_deadline = shutdown_deadline.constrain(
@@ -660,7 +964,7 @@ public:
                     }
                     break;
                 }
-                const auto waited = co_await async_timer_wait(*io,
+                const auto waited = co_await async_timer_wait(loops.control(),
                     std::min(remaining, std::chrono::duration_cast<deadline::duration>(std::chrono::milliseconds{1})));
                 if (!waited)
                 {
@@ -724,22 +1028,22 @@ public:
         telemetry.close();
         shutdown.uninstall();
         const bool retained = !telemetry.try_settle_shutdown() || lifecycle.active_service_count() != 0 ||
-            business_server.active_connections() != 0 || management_server.active_connections() != 0;
+            business_server->active_connections() != 0 || management_server.active_connections() != 0;
         if (!retained)
             cpu_pool.request_stop();
         if (retained && !run_error)
             run_error = std::make_error_code(std::errc::timed_out);
         state.store(retained ? application_state::cleanup_failed : application_state::stopped,
             std::memory_order_release);
-        io->stop();
+        loops.stop();
     }
 
     application_configuration configuration;
     net_init network;
-    std::unique_ptr<io_context> io;
     thread_pool cpu_pool;
+    application_event_loops loops;
     observability::telemetry_hub telemetry;
-    http::server business_server;
+    std::unique_ptr<http::server> business_server;
     http::server management_server;
     service_registry services;
     health_registry health;
@@ -748,11 +1052,16 @@ public:
     application_runtime runtime_facade;
     service_lifecycle lifecycle;
     http::router business_routes;
-    std::vector<application_middleware> business_middlewares;
+    std::vector<http::middleware_fn> business_middlewares;
     shutdown_handler shutdown;
     auto_configuration_registry auto_configurations;
     std::optional<std::filesystem::path> configuration_file;
-    std::expected<void, std::error_code> preparation_error{};
+    std::string builder_name;
+    std::vector<configuration_customizer> customizers;
+    options_registry options;
+    std::vector<std::shared_ptr<application_module>> modules;
+    bool auto_configuration = false;
+    std::size_t started_modules = 0;
     std::atomic<application_state> state{application_state::built};
     std::optional<std::error_code> run_error;
     std::error_code cleanup_error;
@@ -760,6 +1069,9 @@ public:
     std::optional<deadline::duration> cleanup_reserve;
     bool logging_owned = false;
     mutable concurrent_containers::atomic_rw_latch configuration_latch;
+    // Components borrow the runtime, managed services and modules; declared
+    // after them so they are destroyed first, newest component first.
+    std::unique_ptr<component_container> components;
     task<void> finish_task;
     task<void> root_task;
 };
@@ -798,15 +1110,13 @@ application_host::~application_host()
 
 auto application_host::run() -> std::expected<void, std::error_code>
 {
-    if (!implementation_->preparation_error)
-        return std::unexpected(implementation_->preparation_error.error());
     auto expected = application_state::built;
     if (!implementation_->state.compare_exchange_strong(expected,
             application_state::starting, std::memory_order_acq_rel))
         return std::unexpected(
             std::make_error_code(std::errc::operation_not_permitted));
     implementation_->root_task.handle().resume();
-    implementation_->io->run();
+    implementation_->loops.run();
     if (!implementation_->root_task.handle().done())
     {
         implementation_->state.store(application_state::cleanup_failed, std::memory_order_release);
@@ -849,9 +1159,9 @@ auto application_host::retry_cleanup(std::chrono::milliseconds timeout)
         host.shutdown_deadline = deadline::after(timeout);
         host.cleanup_reserve = std::chrono::duration_cast<deadline::duration>(timeout) / 5;
         host.root_task = std::move(retry);
-        host.io->restart();
+        host.loops.restart_control();
         host.root_task.handle().resume();
-        host.io->run();
+        host.loops.control().run();
         if (!host.root_task.handle().done())
         {
             host.state.store(application_state::cleanup_failed, std::memory_order_release);
@@ -882,16 +1192,22 @@ auto application_host::retry_cleanup(std::chrono::milliseconds timeout)
 }
 
 auto application_host::reload_configuration()
-    -> std::expected<configuration_reload_result, std::error_code>
+    -> std::expected<configuration_reload_result, configuration_error>
 {
     if (!implementation_->configuration_file)
-        return std::unexpected(
-            std::make_error_code(std::errc::operation_not_supported));
+        return std::unexpected(configuration_error{
+            .code = std::make_error_code(std::errc::operation_not_supported),
+            .message = "the application was built without a configuration file"});
     try
     {
         auto candidate = load_configuration(implementation_->configuration_file);
         if (!candidate)
             return std::unexpected(candidate.error());
+        candidate->name = implementation_->builder_name;
+        for (const auto& customizer : implementation_->customizers)
+            customizer(*candidate);
+        if (auto valid = validate_configuration(*candidate); !valid)
+            return std::unexpected(valid.error());
         std::vector<std::pair<service_key, recovery_policy>> recovery_updates;
         concurrent_containers::exclusive_latch_guard lock{
             implementation_->configuration_latch};
@@ -909,12 +1225,29 @@ auto application_host::reload_configuration()
         auto reloaded = reload_safe_configuration(staged, *candidate);
         if (!reloaded)
             return std::unexpected(reloaded.error());
+        // Validate every changed application section before publishing
+        // anything; runtime-safe sections are published inside reload().
+        auto sections = implementation_->options.reload(
+            *candidate, reloaded->changed_sections);
+        if (!sections)
+            return std::unexpected(sections.error());
+        for (auto& name : sections->published)
+        {
+            reloaded->changed.push_back(name);
+            reloaded->applied = true;
+        }
+        if (!sections->restart_required.empty())
+            reloaded->restart_required = true;
         const bool logging_changed = staged.logging.level != implementation_->configuration.logging.level;
         if (logging_changed)
             (void)logger::dropped_messages();
         auto policies_updated = implementation_->lifecycle.update_recovery_policies(recovery_updates);
         if (!policies_updated)
-            return std::unexpected(policies_updated.error());
+            return std::unexpected(configuration_error{
+                .code = policies_updated.error(),
+                .path = "services",
+                .message = std::format("recovery policies cannot be applied: {}",
+                    policies_updated.error().message())});
         implementation_->health.update_policy(staged.health);
         implementation_->telemetry.set_sampling_ratio(
             staged.observability.sampling_ratio);
@@ -926,11 +1259,15 @@ auto application_host::reload_configuration()
     }
     catch (const std::bad_alloc&)
     {
-        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+        return std::unexpected(configuration_error{
+            .code = std::make_error_code(std::errc::not_enough_memory),
+            .message = "out of memory while reloading configuration"});
     }
-    catch (...)
+    catch (const std::exception& error)
     {
-        return std::unexpected(std::make_error_code(std::errc::io_error));
+        return std::unexpected(configuration_error{
+            .code = std::make_error_code(std::errc::io_error),
+            .message = error.what()});
     }
 }
 
@@ -956,6 +1293,11 @@ auto application_host::configuration() const
 auto application_host::services() noexcept -> service_registry&
 {
     return implementation_->services;
+}
+
+auto application_host::components() const noexcept -> const component_container&
+{
+    return *implementation_->components;
 }
 
 auto application_host::health() noexcept -> health_registry&
@@ -997,44 +1339,6 @@ auto application_builder::configure(configuration_customizer customizer)
     return *this;
 }
 
-auto application_builder::routes(route_configurer configurer)
-    -> application_builder&
-{
-    if (!configurer)
-        throw std::invalid_argument("route configurer cannot be empty");
-    route_configurers_.push_back(std::move(configurer));
-    return *this;
-}
-
-auto application_builder::routes(runtime_route_configurer configurer)
-    -> application_builder&
-{
-    if (!configurer)
-        throw std::invalid_argument("route configurer must not be empty");
-    runtime_route_configurers_.push_back(std::move(configurer));
-    return *this;
-}
-
-auto application_builder::middleware(application_middleware value)
-    -> application_builder&
-{
-    if (!value)
-        throw std::invalid_argument("application middleware cannot be empty");
-    middlewares_.push_back(std::move(value));
-    return *this;
-}
-
-auto application_builder::runtime_middleware(
-    runtime_middleware_factory factory)
-    -> application_builder&
-{
-    if (!factory)
-        throw std::invalid_argument(
-            "runtime middleware factory cannot be empty");
-    runtime_middleware_factories_.push_back(std::move(factory));
-    return *this;
-}
-
 auto application_builder::service(std::shared_ptr<managed_service> service)
     -> application_builder&
 {
@@ -1060,73 +1364,83 @@ auto application_builder::enable_auto_configuration() noexcept
     return *this;
 }
 
-auto application_builder::build()
-    -> std::expected<application_host, std::error_code>
+auto application_builder::add_module(std::shared_ptr<application_module> value)
+    -> application_builder&
 {
-    auto loaded = load_configuration(configuration_file_);
-    if (!loaded)
-        return std::unexpected(loaded.error());
-    loaded->name = name_;
-    try
-    {
-        for (const auto& customizer : customizers_)
-            customizer(*loaded);
-    }
-    catch (...)
-    {
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    }
-    auto valid = validate_configuration(*loaded);
-    if (!valid)
-        return std::unexpected(valid.error());
+    if (!value)
+        throw std::invalid_argument("application module cannot be empty");
+    const auto name = value->name();
+    if (name.empty())
+        throw std::invalid_argument("application module name cannot be empty");
+    if (std::ranges::any_of(modules_,
+            [name](const auto& existing)
+            {
+                return existing->name() == name;
+            }))
+        throw std::logic_error(std::format(
+            "application module '{}' is added more than once", name));
+    modules_.push_back(std::move(value));
+    return *this;
+}
 
-    service_registry registry;
-    for (auto& service : services_)
-    {
-        auto added = registry.manage(service);
-        if (!added)
-            return std::unexpected(added.error());
-    }
-    http::router routes;
-    routes.sse_defaults({
-        .max_duration = loaded->http.sse_max_duration,
-        .write_timeout = loaded->http.sse_write_timeout,
-    });
+auto application_builder::build()
+    -> std::expected<application_host, build_error>
+{
     try
     {
-        for (const auto& configure_routes : route_configurers_)
-            configure_routes(routes);
-    }
-    catch (...)
-    {
-        return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
-    }
-    try
-    {
+        auto loaded = load_configuration(configuration_file_);
+        if (!loaded)
+            return std::unexpected(build_error::from(loaded.error()));
+        loaded->name = name_;
+        for (const auto& customizer : customizers_)
+        {
+            try
+            {
+                customizer(*loaded);
+            }
+            catch (const std::exception& error)
+            {
+                return std::unexpected(build_error{
+                    .phase = build_phase::configuration,
+                    .component = "configuration customizer",
+                    .message = error.what()});
+            }
+        }
+        if (auto valid = validate_configuration(*loaded); !valid)
+            return std::unexpected(build_error::from(valid.error()));
+
+        service_registry registry;
+        for (auto& service : services_)
+        {
+            const auto key = service->key().canonical_name();
+            if (auto added = registry.manage(service); !added)
+                return std::unexpected(build_error{
+                    .phase = build_phase::registration,
+                    .component = key,
+                    .message = added.error().message(),
+                    .code = added.error()});
+        }
         application_host host{std::make_unique<application_host::implementation>(
-            std::move(*loaded), std::move(routes), std::move(registry),
-            std::move(middlewares_),
-            std::move(runtime_middleware_factories_),
-            std::move(service_factories_),
-            std::move(runtime_route_configurers_), auto_configuration_,
-            configuration_file_)};
-        if (!host.implementation_->preparation_error)
-            return std::unexpected(
-                host.implementation_->preparation_error.error());
-        const auto graph = host.implementation_->services.validate_dependencies();
-        if (!graph)
-            return std::unexpected(graph.error());
+            std::move(*loaded), std::move(registry), std::move(modules_),
+            auto_configuration_, configuration_file_, name_,
+            std::move(customizers_))};
+        if (auto prepared = host.implementation_->prepare(
+                std::move(service_factories_));
+            !prepared)
+            return std::unexpected(std::move(prepared.error()));
         return host;
     }
     catch (const std::bad_alloc&)
     {
-        return std::unexpected(std::make_error_code(std::errc::not_enough_memory));
+        return std::unexpected(build_error{
+            .message = "out of memory while building the application",
+            .code = std::make_error_code(std::errc::not_enough_memory)});
     }
     catch (const std::system_error& error)
     {
-        return std::unexpected(error.code());
+        return std::unexpected(build_error{
+            .message = error.what(),
+            .code = error.code()});
     }
 }
 

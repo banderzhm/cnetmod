@@ -79,6 +79,8 @@ public:
         unsigned workers = std::thread::hardware_concurrency(),
         unsigned pool_threads = std::thread::hardware_concurrency(),
         thread_affinity_options affinity = {});
+    server_context(unsigned workers, thread_pool& pool,
+        thread_affinity_options affinity = {});
 
     [[nodiscard]] auto accept_io() noexcept -> io_context&;
     [[nodiscard]] auto next_worker_io() noexcept -> io_context&;
@@ -95,6 +97,10 @@ public:
     void stop();
 };
 ```
+
+第二个构造函数借用调用方已有的 CPU pool；`server_context` 不负责停止它。
+Application 使用该重载，确保整个进程只有 `application.cpu_threads` 配置的一套
+CPU 执行器。独立服务器需要自主管理 CPU pool 时使用第一个构造函数。
 
 ## `blocking_invoke`
 

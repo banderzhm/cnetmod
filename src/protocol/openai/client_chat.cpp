@@ -7,6 +7,8 @@ module;
 module cnetmod.protocol.openai;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.core.error;
 import cnetmod.core.buffer;
 import cnetmod.core.socket;
@@ -17,7 +19,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.executor.async_op;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 #ifdef CNETMOD_HAS_SSL
 import cnetmod.core.ssl;
 #endif

@@ -21,6 +21,21 @@
 
 ## Part 1: OpenAI
 
+### 模块依赖边界
+
+应用代码继续只导入公开聚合模块：
+
+```cpp
+import cnetmod.protocol.openai;
+```
+
+`cnetmod.protocol.openai:model` 保留既有公开类型与源码兼容性。OpenAI 模块内部将高扇入、
+轻量的运行生命周期契约单独放在 `:run`；只需要 `run_config`、listener 或 `run_scope` 的
+Agent 工作流、加载器、规划器和工具单元必须直接导入 `:run`。真正使用聊天、向量、图像、
+审核或模型治理能力的单元才导入 `:model`。不要为理论纯度继续把低扇入模型类型拆成大量
+接口分区；MSVC 会为每个模块单元重复扫描依赖，并提高并行构建内存。这两个分区是框架
+内部编译边界，不是应用侧的新入口。
+
 ### 场景导航
 
 - 我要调用 Chat Completions → [看这里](#场景chat-completions)
@@ -102,7 +117,7 @@ struct chat_response {
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit client(io_context&) noexcept` | |
-| `connect` | `auto connect(connect_options) -> task<std::expected<void, std::string>>` | 连接 API |
+| `connect` | `auto connect(connect_options[, cancel_token&]) -> task<std::expected<void, std::string>>` | 连接 API；可取消重载覆盖 TCP 建连与 TLS 握手 |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
 | `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
@@ -119,25 +134,29 @@ struct chat_response {
 
 #### `chat_model_template` — provider-neutral Application 大模型门面
 
-Application 项目启用 OpenAI 自动装配后，优先使用
-`application_runtime::chat_model(instance, options)`，不要在 route 中自行创建或连接
-`openai::client`。Application 仅依赖 `cnetmod.ai` 的 provider-neutral 合约；
-`openai_service` 作为 adapter 管理多个 client 和固定容量连接池，未来 Claude、Gemini
-与本地模型实现相同的 `chat_model_service` 即可复用模板、会话和路由代码：
+Application 项目启用 OpenAI 自动装配后，注入 `chat_model_service`（按实例名）并调用
+`make_template(options)`；不要在 route 中自行创建或连接 `openai::client`。应用可以显式
+调用 `add_chat_model()` 组合多个实例，但必须声明多实例路由，并单独开启跨实例 fallback；
+只配置多个实例不会隐式启用轮询或换 key。Application 仅
+依赖 `cnetmod.ai` 的 provider-neutral 合约；`openai_service` 作为 adapter 管理多个
+client 和固定容量连接池，未来 Claude、Gemini 与本地模型实现相同的
+`chat_model_service` 即可复用模板、会话和路由代码。`chat_model_template` 实现
+`ai::chat_model`，因此 `routed_chat_model`、`resilient_chat_model`、
+`governed_chat_model` 可以直接装饰托管模型（`resilient_chat_model` 所需的事件循环来自
+`application_runtime::executor().event_loop()`）：
 
 ```cpp
-auto model = runtime.chat_model("assistant",
+auto& service = components.get<application::chat_model_service>("assistant");
+auto model = service.make_template(
     {.request = {.model = "gpt-4o-mini", .temperature = 0.2},
         .system_prompt = "Answer with verified facts."});
-if (!model)
-    co_return;
 
 ai::run_config run{
     .metadata = {{"tenant", "acme"}},
     .cancellation = &cancellation,
     .trace_parent = parent,
 };
-auto response = co_await model->invoke("Summarize the incident", run);
+auto response = co_await model.invoke("Summarize the incident", run);
 ```
 
 | 方法 | 说明 |
@@ -154,11 +173,15 @@ auto response = co_await model->invoke("Summarize the incident", run);
 session 不共享消息且可以并行。成功响应才原子追加 user/assistant 两条记录；store 始终是
 唯一真相，不维护内存影子快照。
 
-`application_runtime::reconfigure_chat_model()` 是 provider-neutral 热重载入口。
+`chat_model_service::reconfigure()` 是 provider-neutral 热重载入口。
 调用方提供完整的 `chat_model_reconfiguration::properties`；OpenAI adapter 接受
 `base_url`、`api_key`、`tls_verify`、`timeout_seconds` 和 `pool_size`。Adapter 会先
-建立并验证全部新连接，再通过连接池 generation swap 一次发布。配置非法或任一连接失败时
-旧 generation 不变；成功发布后，在途请求继续持有旧客户端，新请求只获取新客户端。
+建立并验证全部新连接，验证完成立即关闭探测连接，再通过连接池 generation swap 一次
+发布。运行期按 lease 惰性重连，避免启动到首个请求之间被网关回收的空闲 socket 形成
+一整池假活连接。配置非法或任一连接失败时旧 generation 不变；成功发布后，在途请求继续
+持有旧客户端，新请求只获取新客户端。启动和热重载的建连组统一使用
+`timeout_seconds` 作为完整 generation 的截止时间，并把 Application 生命周期取消信号
+转发给每个 TCP/TLS 建连；上游地址黑洞或停机时不会无限阻塞启动、重载或关闭。
 `chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型
@@ -274,7 +297,11 @@ export struct tool { std::string type; std::string function_name; std::string fu
 
 `run_config.listeners` 可同时安装多个 `run_listener`，以 Observer 方式接收嵌套调用事件；`callback` 作为轻量兼容入口继续保留。每个 `run_event` 带时间戳和结构化 `attributes`，便于映射 OpenTelemetry GenAI 语义字段或指标标签。监听器和兼容回调相互隔离：单个观察者抛出的异常会记录警告但不会中断后续观察者或业务调用；`functional_run_listener` 可将应用函数直接适配为观察者。
 
-`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 对已存在会话返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。record store 的分页、计数、最近读取和删除在会话不存在时返回 `session_not_found`；memory adapter 将读取映射为空历史、将删除映射为幂等成功。无外部会话目录的存储可在首次 append 时创建会话；受外键约束的实现应返回 `session_not_found`。空批次是无副作用成功，不创建会话。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
+`conversation_memory` 同时支持消息数量窗口与 token 窗口。使用 `chat_memory_store` 可以按 session ID 持久化完整快照；使用 `append_only_chat_memory_store` 时，追加直接进入消息表，读取只请求最近窗口，裁剪不会回写数据库。需要保留数据库生成的消息 ID、模型、token 和时间戳时，实现 `append_only_chat_record_store`：`persisted_chat_message` 将协议 `message` 与任意 JSON metadata 分离，追加返回数据库补全后的记录；`load_page(session_id, offset, limit)` 按插入顺序分页，`count(session_id)` 单独返回总数，零 `limit` 对已存在会话返回空页；`chat_record_memory_adapter` 只向模型暴露协议消息，metadata 永远不会进入 OpenAI 请求。记录仓库统一返回 `std::error_code`，可用 `chat_record_store_errc` 区分会话不存在、参数错误、冲突、存储不可用、数据损坏、资源耗尽和原子写失败。record store 的分页、计数、最近读取和删除在会话不存在时返回 `session_not_found`；memory adapter 将读取映射为空历史、将删除映射为幂等成功。无外部会话目录的存储可在首次 append 时创建会话；受外键约束的实现应返回 `session_not_found`。空批次是无副作用成功，不创建会话。`append_batch` 是明确的原子存储边界，实现必须使用数据库原生事务或等效的原子操作，框架不会泄漏一套无法覆盖 SQL 与非 SQL 存储的伪事务对象。
+
+`conversation_summarizer` 是自动摘要压缩的 Strategy 契约，`model_conversation_summarizer` 可将任意 provider-neutral `chat_model` 接入为默认实现；应用也可以用 `functional_conversation_summarizer` 注入自有模型、审计或缓存流程。为 `memory_options::summarizer` 配置实例后，`conversation_memory` 在消息数或 token 超限时先把最旧的可压缩连续历史生成滚动摘要，再执行确定性的硬窗口裁剪。`summary_preserved_messages` 控制近期原文保留数量，系统/开发者提示、pinned 前缀、近期消息和完整工具交换不会被拆开。模型生成的摘要使用带保留名称的 assistant 消息，避免把历史中的不可信用户指令提升为 system/developer 权限。摘要失败默认回退到原有裁剪；配置 `summary_failure_policy::return_error` 时，输入历史保持原样并把错误返回调用方。快照型 Store 会在后续写入时持久化摘要；append-only Store 只压缩发给模型的视图，数据库原始审计消息永不删除。
+
+`trim_messages` 是公开的无持久化纯算法，下游也可以直接复用窗口与工具交换裁剪策略。`compact_messages` 是对应的异步摘要压缩算法。`pinned_prefix_messages` 保护固定前缀并将其排除在消息数和 token 预算之外，`preserved_tail_messages` 默认保护最后一条消息。裁剪返回 `trim_result`，报告删除消息数、删除 token、剩余 token 及预算是否真正满足；摘要压缩返回 `compaction_result`，额外报告摘要覆盖的消息/token、摘要 token、降级裁剪和摘要错误。`remaining_tokens` 只统计受预算约束的后缀，不包含 pinned 前缀，并直接与非零 `max_tokens` 比较。只剩受保护消息时不会为了硬凑预算删除本轮输入。`max_messages` 与 `max_tokens` 的零值均表示不限制。存储失败会沿协程调用链返回；淘汰模型工具调用时会同时清理关联的工具结果，避免产生孤立协议消息。
 
 `prompt_template` 保留 `{name}` 缺失即报错的严格行为，并增加 `{name|default}` 默认值、`{?name}...{/name}` 条件段及 `{#items}...{/items}` 列表 section。列表的每一行使用 `prompt_section`，拥有局部变量和可递归的子 section；变量及子 section 都按“当前行优先、根上下文兜底”解析。富上下文通过 `prompt_context` 和 `format_context()` 显式传入，避免与旧的花括号 `prompt_variables` 调用产生重载歧义。`output_parser` 仍是按需组合的结构化输出边界，普通文本业务不需要为了使用 Prompt 或 Memory 强制接入 Parser。
 
@@ -432,6 +459,9 @@ auto cancellable = co_await client.chat_stream_async(req, callback, cancellation
 避免未消费的增量污染下一次请求。
 每次流式网络读取受 `connect_options::timeout_seconds` 限制；调用方取消、
 读取超时、写入失败和解析失败都会关闭连接，后续请求通过自动重连获得干净会话。
+非流式读取的 EOF 和传输错误也会立即关闭本地 socket，不能仅凭 native handle 仍打开就把
+连接视为可复用。框架不会在请求可能已经写入后偷偷重放 POST；需要重试时应在
+`resilient_chat_model` 层配置，并且流式调用只允许在尚未交付任何 chunk 时重试。
 
 ### 场景：Runnable 与结构化输出
 
@@ -559,6 +589,25 @@ auto trimmed = cn::openai::trim_messages(messages,
      .preserved_tail_messages = 1});
 if (!trimmed.limit_satisfied)
     cn::logger::warn{"Protected prompt messages exceed the configured budget"};
+```
+
+自动摘要压缩使用相同窗口配置，并明确保留最近原文：
+
+```cpp
+cn::openai::model_conversation_summarizer summarizer{model,
+    {.request = {.model = "gpt-4o-mini",
+        .temperature = 0.1,
+        .max_tokens = 1'024}}};
+
+cn::openai::conversation_memory compacting_memory{"session-42", store,
+    {.max_tokens = 256'000,
+        .pinned_prefix_messages = 1,
+        .preserved_tail_messages = 1,
+        .summarizer = &summarizer,
+        .summary_preserved_messages = 16}};
+
+// snapshot() 超过窗口时自动生成滚动摘要；append-only store 的原始记录不变。
+auto compacted_context = co_await compacting_memory.snapshot();
 ```
 
 跨会话用户记忆使用独立的 Long-term Store：

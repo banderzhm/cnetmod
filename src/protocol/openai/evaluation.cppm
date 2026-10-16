@@ -8,6 +8,7 @@ export module cnetmod.protocol.openai:evaluation;
 
 import std;
 import cnetmod.coro.task;
+import :run;
 import :model;
 
 namespace cnetmod::openai {

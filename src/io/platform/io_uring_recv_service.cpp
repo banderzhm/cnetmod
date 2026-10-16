@@ -9,7 +9,8 @@ module;
 module cnetmod.io.platform.io_uring_recv_service;
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&            \
+    defined(IORING_CQE_F_MORE)
 
 import std;
 

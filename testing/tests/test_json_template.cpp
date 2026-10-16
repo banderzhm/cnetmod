@@ -45,8 +45,8 @@ CNETMOD_JSON(cnetmod_test::aggregate_document,
     CNETMOD_JSON_FIELD(children),
     CNETMOD_JSON_FIELD(counters))
 
-using cnetmod_test::sample_document;
 using cnetmod_test::aggregate_document;
+using cnetmod_test::sample_document;
 
 TEST(framework_document_is_the_default_json_codec)
 {
@@ -98,9 +98,22 @@ TEST(framework_document_uses_native_parser_boundaries)
     ASSERT_TRUE(duplicate.has_value());
     ASSERT_EQ(duplicate->at("value").get<std::uint64_t>(), 2U);
 
+    const auto rejected_duplicate = cnetmod::json::parse_document(
+        R"({"outer":{"value":1,"value":2}})",
+        {.reject_duplicate_keys = true});
+    ASSERT_FALSE(rejected_duplicate.has_value());
+
+    const auto accepted_depth = cnetmod::json::parse_document(
+        R"({"outer":[]})", {.max_depth = 2});
+    ASSERT_TRUE(accepted_depth.has_value());
+    const auto rejected_depth = cnetmod::json::parse_document(
+        R"({"outer":[]})", {.max_depth = 1});
+    ASSERT_FALSE(rejected_depth.has_value());
+
     ASSERT_FALSE(cnetmod::json::parse_document("{}{}").has_value());
     ASSERT_FALSE(cnetmod::json::parse_document(
-        std::string(257, '[') + "0" + std::string(257, ']')).has_value());
+        std::string(257, '[') + "0" + std::string(257, ']'))
+            .has_value());
 }
 
 TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
@@ -128,9 +141,21 @@ TEST(framework_json_codec_enforces_schema_and_preserves_aggregate_values)
     ASSERT_EQ(unknown.error(),
         cnetmod::json::make_error_code(cnetmod::json::errc::unknown_field));
 
-    const auto lenient = cnetmod::json::parse_lenient<sample_document>(
+    const auto lenient = cnetmod::json::parse_allow_unknown<sample_document>(
         R"({"name":"orders","count":7,"extra":true})");
     ASSERT_TRUE(lenient.has_value());
+
+    const auto lenient_missing =
+        cnetmod::json::parse_allow_unknown<sample_document>(
+            R"({"name":"orders","extra":true})");
+    ASSERT_FALSE(lenient_missing.has_value());
+    ASSERT_EQ(lenient_missing.error(),
+        cnetmod::json::make_error_code(cnetmod::json::errc::missing_field));
+
+    const auto compatibility_name =
+        cnetmod::json::parse_lenient<sample_document>(
+            R"({"name":"orders","count":7,"extra":true})");
+    ASSERT_TRUE(compatibility_name.has_value());
 
     const auto missing = cnetmod::json::parse<sample_document>(
         R"({"name":"orders"})");

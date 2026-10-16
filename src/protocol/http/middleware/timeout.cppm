@@ -21,9 +21,11 @@
 export module cnetmod.protocol.http.middleware.timeout;
 
 import std;
+
+import cnetmod.protocol.http;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
-import cnetmod.protocol.http;
+import cnetmod.protocol.http.semantics;
 import cnetmod.core.log;
 
 namespace cnetmod {

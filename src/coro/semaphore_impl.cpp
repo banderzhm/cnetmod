@@ -60,6 +60,7 @@ auto async_semaphore::acquire_awaitable::await_suspend(
     std::coroutine_handle<> handle) noexcept -> std::coroutine_handle<>
 {
     node_.handle = handle;
+    node_.event_loop = io_context::current();
     node_.next = nullptr;
     auto_lock guard(sem_.lock_);
     auto count = sem_.count_.load(std::memory_order_acquire);
@@ -97,6 +98,7 @@ auto async_semaphore::acquire() noexcept -> acquire_awaitable
 void async_semaphore::release() noexcept
 {
     std::coroutine_handle<> handle;
+    io_context* event_loop = nullptr;
     {
         auto_lock guard(lock_);
         if (head_)
@@ -106,6 +108,7 @@ void async_semaphore::release() noexcept
             if (!head_)
                 tail_ = nullptr;
             handle = waiter->handle;
+            event_loop = waiter->event_loop;
         }
         else
         {
@@ -113,7 +116,12 @@ void async_semaphore::release() noexcept
         }
     }
     if (handle)
-        handle.resume();
+    {
+        if (event_loop && !event_loop->running_in_this_thread())
+            event_loop->post(handle);
+        else
+            handle.resume();
+    }
 }
 
 void async_semaphore::release(std::size_t count) noexcept

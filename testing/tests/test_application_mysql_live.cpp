@@ -7,6 +7,8 @@ import cnetmod.core;
 import cnetmod.coro.task;
 import cnetmod.coro.timer;
 import cnetmod.coro.cancel;
+import cnetmod.coro.spawn;
+import cnetmod.coro.wait_group;
 import cnetmod.io.io_context;
 import cnetmod.observability;
 import cnetmod.protocol.http;
@@ -23,6 +25,88 @@ namespace {
 std::uint16_t mysql_test_port = 3306;
 std::string mysql_test_host = "127.0.0.1";
 } // namespace
+
+TEST(mysql_live_multi_loop_uses_only_owner_local_pool_shards)
+{
+    cnetmod::net_init network;
+    auto control = cnetmod::make_io_context();
+    auto first = cnetmod::make_io_context();
+    auto second = cnetmod::make_io_context();
+    std::array<cnetmod::io_context*, 3> loops{
+        control.get(), first.get(), second.get()};
+    cnetmod::observability::telemetry_hub telemetry{*control,
+        {.export_traces = false, .export_metrics = false,
+            .export_logs = false}};
+    cnetmod::application::task_supervisor supervisor{*control};
+    cnetmod::mysql::pool_params options;
+    options.host = mysql_test_host;
+    options.port = mysql_test_port;
+    options.username = std::getenv("CNETMOD_MYSQL_TEST_USER");
+    options.password = std::getenv("CNETMOD_MYSQL_TEST_PASSWORD");
+    options.database = std::getenv("CNETMOD_MYSQL_TEST_DATABASE");
+    options.ssl = cnetmod::mysql::ssl_mode::require;
+    options.tls_verify = false;
+    options.initial_size = 3;
+    options.max_size = 3;
+    cnetmod::application::mysql_service service{*control, loops, options,
+        "multi-loop-live", cnetmod::application::service_requirement::required,
+        {}};
+
+    std::jthread first_thread{[&] { first->run(); }};
+    std::jthread second_thread{[&] { second->run(); }};
+    std::array<std::atomic<bool>, 2> succeeded{};
+    cnetmod::async_wait_group completed;
+    completed.add(2);
+
+    auto query = [&](std::size_t index) -> cnetmod::task<void>
+    {
+        struct completion
+        {
+            cnetmod::async_wait_group& group;
+            ~completion() { group.done(); }
+        } ticket{completed};
+        cnetmod::cancel_token cancellation;
+        auto connection = co_await service.acquire(cancellation);
+        if (!connection)
+            co_return;
+        auto result = co_await connection->get().query("SELECT 1");
+        succeeded[index].store(!result.is_err() && result.rows.size() == 1,
+            std::memory_order_release);
+    };
+
+    bool started_ok = false;
+    bool stopped_ok = false;
+    auto orchestrate = [&]() -> cnetmod::task<void>
+    {
+        cnetmod::cancel_token cancellation;
+        cnetmod::application::service_context context{*control, telemetry,
+            supervisor, cancellation,
+            cnetmod::deadline::after(std::chrono::seconds{10})};
+        started_ok = (co_await service.start(context)).has_value();
+        if (started_ok)
+        {
+            cnetmod::spawn(*first, query(0));
+            cnetmod::spawn(*second, query(1));
+            co_await completed.wait();
+            supervisor.request_stop();
+            const auto joined = co_await supervisor.join();
+            stopped_ok = joined.has_value() &&
+                (co_await service.stop(context)).has_value();
+        }
+        first->stop();
+        second->stop();
+        control->stop();
+    };
+    cnetmod::spawn(*control, orchestrate());
+    control->run();
+    first_thread.join();
+    second_thread.join();
+
+    ASSERT_TRUE(started_ok);
+    ASSERT_TRUE(stopped_ok);
+    ASSERT_TRUE(succeeded[0].load(std::memory_order_acquire));
+    ASSERT_TRUE(succeeded[1].load(std::memory_order_acquire));
+}
 
 TEST(mysql_live_authentication_health_and_supervised_stop)
 {

@@ -51,6 +51,7 @@ auto async_shared_mutex::lock_shared_awaitable::await_suspend(
     std::coroutine_handle<> handle) noexcept -> std::coroutine_handle<>
 {
     node_.handle = handle;
+    node_.event_loop = io_context::current();
     node_.next = nullptr;
     auto_lock guard(rw_.lock_);
     if (rw_.state_ >= 0 && !rw_.write_head_)
@@ -82,6 +83,7 @@ auto async_shared_mutex::lock_shared() noexcept -> lock_shared_awaitable
 void async_shared_mutex::unlock_shared() noexcept
 {
     std::coroutine_handle<> handle;
+    io_context* event_loop = nullptr;
     {
         auto_lock guard(lock_);
         --state_;
@@ -93,10 +95,16 @@ void async_shared_mutex::unlock_shared() noexcept
             if (!write_head_)
                 write_tail_ = nullptr;
             handle = waiter->handle;
+            event_loop = waiter->event_loop;
         }
     }
     if (handle)
-        handle.resume();
+    {
+        if (event_loop && !event_loop->running_in_this_thread())
+            event_loop->post(handle);
+        else
+            handle.resume();
+    }
 }
 
 async_shared_mutex::lock_awaitable::lock_awaitable(async_shared_mutex& mutex) noexcept
@@ -119,6 +127,7 @@ auto async_shared_mutex::lock_awaitable::await_suspend(
     std::coroutine_handle<> handle) noexcept -> std::coroutine_handle<>
 {
     node_.handle = handle;
+    node_.event_loop = io_context::current();
     node_.next = nullptr;
     auto_lock guard(rw_.lock_);
     if (rw_.state_ == 0)
@@ -159,6 +168,7 @@ auto async_shared_mutex::try_lock() noexcept -> bool
 void async_shared_mutex::unlock() noexcept
 {
     std::coroutine_handle<> writer;
+    io_context* writer_loop = nullptr;
     waiter_node* readers = nullptr;
     {
         auto_lock guard(lock_);
@@ -169,6 +179,7 @@ void async_shared_mutex::unlock() noexcept
             if (!write_head_)
                 write_tail_ = nullptr;
             writer = waiter->handle;
+            writer_loop = waiter->event_loop;
         }
         else if (read_head_)
         {
@@ -186,13 +197,20 @@ void async_shared_mutex::unlock() noexcept
     }
     if (writer)
     {
-        writer.resume();
+        if (writer_loop && !writer_loop->running_in_this_thread())
+            writer_loop->post(writer);
+        else
+            writer.resume();
         return;
     }
     for (auto* node = readers; node;)
     {
         auto* next = node->next;
-        node->handle.resume();
+        if (node->event_loop &&
+            !node->event_loop->running_in_this_thread())
+            node->event_loop->post(node->handle);
+        else
+            node->handle.resume();
         node = next;
     }
 }

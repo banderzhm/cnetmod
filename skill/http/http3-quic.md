@@ -247,6 +247,11 @@ streams；这避免 Initial flight 与应用帧抢占同一个握手阶段。该
 重新初始化 TLS 或覆盖已建立的 1-RTT 状态。对于被 replay cache 拒绝的 0-RTT，
 仅幂等的完整响应 API 会在新的 1-RTT 连接上重放一次。
 
+TLS 生成的 ClientHello、证书链等 CRYPTO 数据可能超过 1200 字节。传输层会按当前
+最小路径 MTU 将它们拆成多个带连续 offset 的 CRYPTO 帧，并分别纳入丢包恢复；应用层
+不应增大首包 UDP 尺寸，也不应自行拆分 TLS 握手数据。每个客户端 Initial datagram
+仍满足 RFC 9000 要求的至少 1200 字节。
+
 客户端可以通过 `resumption_ticket` 和 `enable_early_data` 显式启用受控 0-RTT；
 自动重试仅适用于幂等请求。服务端必须配置应用拥有的 ticket AEAD 与共享 replay
 cache，默认拒绝 0-RTT。Alt-Svc、ticket 文件均为 opt-in，并应放在权限受限目录。

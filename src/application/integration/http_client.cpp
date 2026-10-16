@@ -5,22 +5,63 @@ import cnetmod.json;
 
 namespace cnetmod::application {
 
+struct http_client_service::client_shard
+{
+    client_shard(io_context& event_loop,
+        observability::telemetry_hub& telemetry,
+        const http::client_options& options)
+        : event_loop(&event_loop), raw(event_loop, options),
+          observed(raw, telemetry.spans(), telemetry.measurements())
+    {
+    }
+
+    io_context* event_loop;
+    http::client raw;
+    observability::instrumented_http_client observed;
+};
+
+http_client_service::~http_client_service() = default;
+
 http_client_service::http_client_service(io_context& io,
     observability::telemetry_hub& telemetry, http::client_options options,
     std::string instance, service_requirement requirement)
-    : raw_client_(io, std::move(options)), client_(raw_client_, telemetry.spans(), telemetry.measurements()), instance_(std::move(instance)), requirement_(requirement)
+    : instance_(std::move(instance)), requirement_(requirement)
 {
+    clients_.push_back(std::make_unique<client_shard>(
+        io, telemetry, options));
 }
 
-auto http_client_service::client() noexcept
+http_client_service::http_client_service(
+    std::span<io_context* const> event_loops,
+    observability::telemetry_hub& telemetry, http::client_options options,
+    std::string instance, service_requirement requirement)
+    : instance_(std::move(instance)), requirement_(requirement)
+{
+    clients_.reserve(event_loops.size());
+    for (auto* event_loop : event_loops)
+        clients_.push_back(std::make_unique<client_shard>(
+            *event_loop, telemetry, options));
+}
+
+auto http_client_service::current_shard() -> client_shard&
+{
+    auto* current = io_context::current();
+    for (auto& shard : clients_)
+        if (shard->event_loop == current)
+            return *shard;
+    throw std::logic_error{
+        "HTTP client requested outside an owning event loop"};
+}
+
+auto http_client_service::client()
     -> observability::instrumented_http_client&
 {
-    return client_;
+    return current_shard().observed;
 }
 
-auto http_client_service::raw_client() noexcept -> http::client&
+auto http_client_service::raw_client() -> http::client&
 {
-    return raw_client_;
+    return current_shard().raw;
 }
 
 auto http_client_service::key() const -> service_key
@@ -45,7 +86,16 @@ auto http_client_service::stop(service_context& context)
     -> task<std::expected<void, std::error_code>>
 {
     (void)context;
-    raw_client_.close();
+    for (auto& shard : clients_)
+    {
+        auto close = [&raw = shard->raw]() -> task<void>
+        {
+            raw.close();
+            co_return;
+        };
+        co_await resume_on(context.io,
+            starts_on(*shard->event_loop, close()));
+    }
     started_ = false;
     co_return {};
 }
@@ -89,9 +139,15 @@ auto auto_configure_http_client(const configured_service& configuration,
         return std::unexpected(
             std::make_error_code(std::errc::invalid_argument));
     }
-    auto service = std::make_shared<http_client_service>(context.io,
-        context.telemetry, std::move(options), configuration.instance,
-        configuration.requirement);
+    std::shared_ptr<http_client_service> service;
+    if (context.event_loops.size() > 1)
+        service = std::make_shared<http_client_service>(context.event_loops,
+            context.telemetry, std::move(options), configuration.instance,
+            configuration.requirement);
+    else
+        service = std::make_shared<http_client_service>(context.io,
+            context.telemetry, std::move(options), configuration.instance,
+            configuration.requirement);
     return context.services.add_managed_named<http_client_service>(
         configuration.instance, std::move(service));
 }

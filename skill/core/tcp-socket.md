@@ -113,7 +113,7 @@
 | `create` | `static auto create(address_family, socket_type) -> expected<socket, error_code>` | 创建 socket |
 | `from_native` | `static auto from_native(native_handle_t) noexcept -> socket` | 从原生句柄接管 |
 | `bind` | `auto bind(const endpoint&) -> expected<void, error_code>` | 绑定地址 |
-| `listen` | `auto listen(int backlog = 128) -> expected<void, error_code>` | 监听 |
+| `listen` | `auto listen(int backlog = 4096) -> expected<void, error_code>` | 监听；内核仍可按 `somaxconn` 截断队列长度 |
 | `set_non_blocking` | `auto set_non_blocking(bool) -> expected<void, error_code>` | 设置非阻塞 |
 | `apply_options` | `auto apply_options(const socket_options&) -> expected<void, error_code>` | 应用选项 |
 | `local_endpoint` | `auto local_endpoint() const -> expected<endpoint, error_code>` | 本地端点 |
@@ -133,9 +133,18 @@
 ### `tcp::acceptor`
 **签名**: `export class acceptor` (命名空间 `cnetmod::tcp`)
 
+`acceptor::open(endpoint, socket_options, backlog)` 将显式 backlog 逐层传给
+`socket::listen()`；默认值为 4096。高并发服务不要把 `max_connections` 当成 backlog：
+前者限制已接纳连接，后者只控制尚未 `accept` 的内核排队连接。
+
+`acceptor::try_accept()` 只获取已经排队的连接，不等待；监听队列已排空时返回空
+`std::optional`。它用于一次异步可读/完成通知后批量排空监听队列，避免为每个连接
+重复注册一次内核等待。调用方必须设置批量上限，避免持续建连压垮定时器和停机任务。
+
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit acceptor(io_context& ctx)` | 绑定 io_context |
+| 尝试接收 | `auto try_accept() -> expected<optional<socket>, error_code>` | 非阻塞获取一个已排队连接 |
 | `open` | `auto open(const endpoint&, const socket_options& = {}) -> expected<void, error_code>` | 打开并绑定监听 |
 | `close` | `void close() noexcept` | 关闭 |
 | `is_open` | `auto is_open() const noexcept -> bool` | 是否打开 |

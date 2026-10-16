@@ -2,6 +2,23 @@
 
 include(CMakeFindDependencyMacro)
 
+if(@CNETMOD_USING_MIMALLOC@)
+    if(WIN32)
+        find_dependency(mimalloc 3.5 CONFIG
+            PATHS "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cmake/mimalloc"
+            NO_DEFAULT_PATH)
+        set(CNETMOD_MIMALLOC_REDIRECT
+            "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/mimalloc-redirect.dll")
+    else()
+        find_dependency(mimalloc 3.5 CONFIG
+            PATHS "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cmake/mimalloc"
+            NO_DEFAULT_PATH)
+        set(CNETMOD_MIMALLOC_OBJECT
+            "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/mimalloc.o")
+    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/cnetmodMimalloc.cmake")
+endif()
+
 if(@CNETMOD_HAS_YAML_CONFIGURATION@)
     find_dependency(yaml_cpp_modules CONFIG)
 endif()
@@ -41,24 +58,7 @@ if(@CNETMOD_HAS_ZLIB@)
     find_dependency(ZLIB)
 endif()
 if(@CNETMOD_HAS_ZSTD@)
-    if("@CNETMOD_ZSTD_TARGET@" STREQUAL "cnetmod_zstd")
-        find_path(_cnetmod_zstd_include_dir zstd.h)
-        find_library(_cnetmod_zstd_library NAMES zstd libzstd)
-        if(NOT _cnetmod_zstd_include_dir OR NOT _cnetmod_zstd_library)
-            set(cnetmod_FOUND FALSE)
-            set(cnetmod_NOT_FOUND_MESSAGE
-                "cnetmod requires the zstd development library")
-            return()
-        endif()
-        if(NOT TARGET cnetmod_zstd)
-            add_library(cnetmod_zstd UNKNOWN IMPORTED)
-            set_target_properties(cnetmod_zstd PROPERTIES
-                IMPORTED_LOCATION "${_cnetmod_zstd_library}"
-                INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_zstd_include_dir}")
-        endif()
-    else()
-        find_dependency(zstd CONFIG)
-    endif()
+    find_dependency(zstd CONFIG)
 endif()
 if(@CNETMOD_HAS_BROTLI@)
     set(_cnetmod_brotli_targets "@CNETMOD_BROTLI_TARGETS@")
@@ -90,20 +90,26 @@ if(@CNETMOD_HAS_BROTLI@)
     endif()
 endif()
 if(@CNETMOD_HAS_ICU@)
-    if(@CNETMOD_BUNDLED_ICU@)
+    if(@CNETMOD_USING_BUNDLED_ICU@)
         if(NOT TARGET ICU::uc)
             add_library(ICU::uc SHARED IMPORTED)
             set_target_properties(ICU::uc PROPERTIES
-                IMPORTED_IMPLIB "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuuc.lib"
-                IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuuc78.dll"
-                INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
+                IMPORTED_IMPLIB
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuuc.lib"
+                IMPORTED_LOCATION
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuuc78.dll"
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@")
         endif()
         if(NOT TARGET ICU::i18n)
             add_library(ICU::i18n SHARED IMPORTED)
             set_target_properties(ICU::i18n PROPERTIES
-                IMPORTED_IMPLIB "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuin.lib"
-                IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuin78.dll"
-                INTERFACE_INCLUDE_DIRECTORIES "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
+                IMPORTED_IMPLIB
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cnetmod/icu/icuin.lib"
+                IMPORTED_LOCATION
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/icuin78.dll"
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_INCLUDEDIR@"
                 INTERFACE_LINK_LIBRARIES ICU::uc)
         endif()
     else()
@@ -126,51 +132,24 @@ if(@CNETMOD_HAS_PUGIXML@)
 endif()
 
 if(@CNETMOD_HAS_LZ4@)
-    if("@CNETMOD_LZ4_TARGET@" STREQUAL "cnetmod_lz4")
-        find_path(_cnetmod_lz4_include_dir lz4frame.h)
-        find_library(_cnetmod_lz4_library NAMES lz4 liblz4)
-        if(NOT _cnetmod_lz4_include_dir OR NOT _cnetmod_lz4_library)
-            set(cnetmod_FOUND FALSE)
-            set(cnetmod_NOT_FOUND_MESSAGE
-                "cnetmod requires the LZ4 development library")
-            return()
-        endif()
-        if(NOT TARGET cnetmod_lz4)
-            add_library(cnetmod_lz4 UNKNOWN IMPORTED)
-            set_target_properties(cnetmod_lz4 PROPERTIES
-                IMPORTED_LOCATION "${_cnetmod_lz4_library}"
-                INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_lz4_include_dir}")
-        endif()
-    else()
-        find_package(lz4 CONFIG QUIET)
-        if(NOT TARGET lz4::lz4 AND NOT TARGET LZ4::lz4 AND
-           NOT TARGET LZ4::LZ4 AND NOT TARGET unofficial::lz4::lz4 AND
-           NOT TARGET lz4_static AND NOT TARGET lz4_shared)
-            find_package(LZ4 CONFIG QUIET)
-        endif()
+    find_package(lz4 CONFIG QUIET)
+    if(NOT TARGET lz4::lz4 AND NOT TARGET LZ4::lz4 AND
+       NOT TARGET LZ4::LZ4 AND NOT TARGET unofficial::lz4::lz4 AND
+       NOT TARGET lz4_static AND NOT TARGET lz4_shared)
+        find_package(LZ4 CONFIG QUIET)
     endif()
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/cnetmodTargets.cmake")
 
-set(cnetmod_SUPPORTED_COMPONENTS "@CNETMOD_PACKAGE_COMPONENTS@")
-foreach(_cnetmod_component IN LISTS cnetmod_SUPPORTED_COMPONENTS)
-    set(cnetmod_${_cnetmod_component}_FOUND TRUE)
-    if(NOT TARGET cnetmod::${_cnetmod_component})
-        add_library(cnetmod::${_cnetmod_component} ALIAS
-            cnetmod::cnetmod_core)
-    endif()
-endforeach()
-if(NOT TARGET cnetmod::all)
+# Build-tree and installed-package spelling stay consistent.  The historical
+# exported target remains available for compatibility.
+if(TARGET cnetmod::cnetmod_core AND NOT TARGET cnetmod::core)
+    add_library(cnetmod::core ALIAS cnetmod::cnetmod_core)
+endif()
+if(TARGET cnetmod::cnetmod_core AND NOT TARGET cnetmod::all)
     add_library(cnetmod::all ALIAS cnetmod::cnetmod_core)
 endif()
-foreach(_cnetmod_component IN LISTS cnetmod_FIND_COMPONENTS)
-    if(NOT _cnetmod_component IN_LIST cnetmod_SUPPORTED_COMPONENTS)
-        set(cnetmod_${_cnetmod_component}_FOUND FALSE)
-        set(cnetmod_NOT_FOUND_MESSAGE
-            "Unsupported cnetmod component '${_cnetmod_component}'. Available components: ${cnetmod_SUPPORTED_COMPONENTS}")
-    endif()
-endforeach()
 
 # libc++ owns the std/std.compat module fragments.  The installed std.cppm
 # interfaces keep those relative includes and therefore consume them directly
@@ -182,6 +161,7 @@ if(UNIX)
         NAMES std/algorithm.inc std.compat/cassert.inc
         PATHS
             "${_cnetmod_compiler_prefix}/share/libc++/v1"
+            "@LIBCXX_MODULE_DIRS@"
             /usr/lib/llvm-22/share/libc++/v1
             /usr/local/lib/llvm-22/share/libc++/v1
             /opt/homebrew/opt/llvm@22/share/libc++/v1
@@ -195,23 +175,19 @@ if(UNIX)
     )
     if(NOT _cnetmod_libcxx_module_dir)
         message(FATAL_ERROR
-            "cnetmod requires libc++ modules matching the consumer compiler")
+            "cnetmod requires the libc++ module directory matching the consumer compiler")
     endif()
-    # Only the module-fragment directory is outside Clang's normal search
-    # paths. Let -stdlib=libc++ select the compiler's own matching headers;
-    # -nostdinc++ would disable that toolchain knowledge and make the SDK guess
-    # version-specific Homebrew/Linux include layouts.
     foreach(_cnetmod_module_target IN ITEMS
-            cnetmod::cnetmod_core yaml_cpp::yaml_cpp)
+            cnetmod::runtime yaml_cpp::yaml_cpp)
         if(TARGET ${_cnetmod_module_target})
             set_property(TARGET ${_cnetmod_module_target} APPEND PROPERTY
                 INTERFACE_INCLUDE_DIRECTORIES
                     "${_cnetmod_libcxx_module_dir}")
         endif()
     endforeach()
-    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+    set_property(TARGET cnetmod::runtime APPEND PROPERTY
         INTERFACE_COMPILE_OPTIONS "-stdlib=libc++")
-    set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+    set_property(TARGET cnetmod::runtime APPEND PROPERTY
         INTERFACE_LINK_OPTIONS "-stdlib=libc++")
     if(APPLE)
         find_library(_cnetmod_libcxx_runtime NAMES c++
@@ -228,10 +204,10 @@ if(UNIX)
             "${_cnetmod_libcxx_runtime}" DIRECTORY)
         get_filename_component(_cnetmod_libunwind_runtime_dir
             "${_cnetmod_libunwind_runtime}" DIRECTORY)
-        set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+        set_property(TARGET cnetmod::runtime APPEND PROPERTY
             INTERFACE_LINK_LIBRARIES
                 "${_cnetmod_libcxx_runtime};${_cnetmod_libunwind_runtime}")
-        set_property(TARGET cnetmod::cnetmod_core APPEND PROPERTY
+        set_property(TARGET cnetmod::runtime APPEND PROPERTY
             INTERFACE_LINK_OPTIONS
                 "-Wl,-rpath,${_cnetmod_libcxx_runtime_dir};-Wl,-rpath,${_cnetmod_libunwind_runtime_dir}")
     endif()
@@ -250,7 +226,7 @@ if(MSVC AND CMAKE_GENERATOR MATCHES "Ninja")
 
     if(EXISTS "${_cnetmod_msvc_modules}/std.ixx" AND
        EXISTS "${_cnetmod_msvc_modules}/std.compat.ixx")
-        target_sources(cnetmod::cnetmod_core INTERFACE
+        target_sources(cnetmod::runtime INTERFACE
             FILE_SET cxx_std_modules TYPE CXX_MODULES
             BASE_DIRS "${_cnetmod_msvc_modules}"
             FILES

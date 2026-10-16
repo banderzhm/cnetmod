@@ -22,7 +22,7 @@ TEST(application_rejects_invalid_client_timeouts_before_registration)
                 .build();
             ASSERT_FALSE(host.has_value());
             if (!host)
-                ASSERT_EQ(host.error(), std::make_error_code(std::errc::invalid_argument));
+                ASSERT_EQ(host.error().code, std::make_error_code(std::errc::invalid_argument));
         }
         auto host = application::application_builder{"valid-timeout"}
             .enable_auto_configuration()
