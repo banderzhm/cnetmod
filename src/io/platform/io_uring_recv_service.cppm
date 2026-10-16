@@ -17,7 +17,8 @@ import cnetmod.io.platform.io_uring_multishot_recv;
 namespace cnetmod {
 
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
+    defined(IORING_RECV_MULTISHOT) && defined(IORING_CQE_F_BUFFER) &&            \
+    defined(IORING_CQE_F_MORE)
 
 /// Context-scoped owner for a shared provided-buffer ring.
 /// Keep one service alive for every io_uring worker context.

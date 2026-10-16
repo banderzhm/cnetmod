@@ -231,7 +231,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     const std::vector<std::pair<std::string, orm::param_value>> filters{
         {"id", orm::param_value::from_int(1)}};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description");
+    query.select(&routed_order::id, &routed_order::description);
     (void)co_await mapper.update_batch(immutable, 1);
     (void)co_await mapper.save_or_update(models[0]);
     (void)co_await mapper.save_or_update_batch(std::span{models}, 1);
@@ -250,7 +250,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     orm::mapper<routed_order, decltype(session)> orders{session};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description");
+    query.select(&routed_order::id, &routed_order::description);
     std::array models{routed_order{1, "one"}, routed_order{2, "two"}};
     (void)co_await orders.exists(query);
     (void)co_await orders.select_by_ids(std::span<const std::int64_t>{ids});
@@ -284,7 +284,7 @@ auto mysql_order_row(std::int64_t id, std::string description) -> mysql::row
     orm::repository<routed_order, gateway_type> orders{gateway};
     std::array ids{std::int64_t{1}, std::int64_t{2}};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description");
+    query.select(&routed_order::id, &routed_order::description);
     std::array filters{std::pair<std::string, orm::param_value>{
         "id", orm::param_value::from_int(1)}};
     (void)co_await orders.list_by_ids(std::span<const std::int64_t>{ids});
@@ -456,7 +456,8 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
         std::make_error_code(std::errc::invalid_argument));
 
     orm::query_wrapper<routed_order> projection;
-    projection.select("id", "description").order_by_asc("id");
+    projection.select(&routed_order::id, &routed_order::description)
+        .order_by_asc(&routed_order::id);
     client.response = routed_order_result({{7, "selected"}, {9, "next"}});
     auto maps = cnetmod::sync_wait(orders.select_maps(projection));
     ASSERT_TRUE(maps.ok());
@@ -465,7 +466,7 @@ TEST(orm_map_filters_and_projection_queries_preserve_shape_and_types)
     ASSERT_EQ(maps.data[1].at("description").get_string(), "next");
 
     orm::query_wrapper<routed_order> ids;
-    ids.select("id").order_by_asc("id");
+    ids.select(&routed_order::id).order_by_asc(&routed_order::id);
     auto objects = cnetmod::sync_wait(orders.select_objects(ids));
     ASSERT_TRUE(objects.ok());
     ASSERT_EQ(objects.data.size(), 2U);
@@ -485,7 +486,8 @@ TEST(orm_projection_page_keeps_count_and_page_query_diagnostics)
         routed_order_result({{3, "third"}}));
 
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description").order_by_asc("id");
+    query.select(&routed_order::id, &routed_order::description)
+        .order_by_asc(&routed_order::id);
     auto page = cnetmod::sync_wait(
         orders.select_maps_page(2, 2, query));
     ASSERT_TRUE(page.ok());
@@ -1237,7 +1239,8 @@ TEST(orm_projection_stream_honors_backpressure_cancellation_and_deadline)
     orm::database_session session{client, orm::sql_dialect::mysql};
     orm::mapper<routed_order, decltype(session)> orders{session};
     orm::query_wrapper<routed_order> query;
-    query.select("id", "description").order_by_asc("id");
+    query.select(&routed_order::id, &routed_order::description)
+        .order_by_asc(&routed_order::id);
     cnetmod::cancel_token cancellation;
     std::size_t seen{};
     auto result = cnetmod::sync_wait(orders.for_each_map(query, [&seen, &cancellation](const orm::projection_row&) -> cnetmod::task<std::expected<void, std::string>>
@@ -1574,7 +1577,8 @@ TEST(orm_strict_tenant_scope_intersects_department_and_preserves_or)
         orm::data_permission_scope{.partition_ids = {100, 101}});
     auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
         orm::automatic_interceptor_options{.data_permission = departments,
-            .tenant_scope_required = true, .tenant = tenant});
+            .tenant_scope_required = true,
+            .tenant = tenant});
     ASSERT_TRUE(chain.has_value());
     auto selected = (*chain)->apply(orm::sql_operation::query,
         {"SELECT * FROM scoped_orders WHERE description = {} OR description = {} ORDER BY id LIMIT {}",
@@ -1672,7 +1676,8 @@ TEST(orm_strict_tenant_scope_numbers_postgresql_parameters)
         orm::data_permission_scope{.partition_ids = {100}});
     auto chain = orm::make_automatic_interceptor_chain<scoped_order>(
         orm::automatic_interceptor_options{.data_permission = departments,
-            .tenant_scope_required = true, .tenant = tenant,
+            .tenant_scope_required = true,
+            .tenant = tenant,
             .dialect = orm::sql_dialect::postgresql});
     ASSERT_TRUE(chain.has_value());
     auto selected = (*chain)->apply(orm::sql_operation::query,
@@ -1741,7 +1746,8 @@ TEST(orm_strict_scopes_can_read_a_subtree_but_write_only_one_department)
         orm::automatic_interceptor_options{
             .data_permission =
                 std::make_shared<const orm::data_permission_scope>(departments),
-            .tenant_scope_required = true, .tenant = tenant});
+            .tenant_scope_required = true,
+            .tenant = tenant});
     ASSERT_TRUE(chain.has_value());
     auto read = (*chain)->apply(orm::sql_operation::query,
         {"SELECT * FROM scoped_orders", {}});

@@ -16,6 +16,26 @@ namespace cnetmod {
 class promise_base
 {
 public:
+    // Clang can place vectorized aggregate initialization in a coroutine frame
+    // and emit aligned AVX/AVX-512 stores for it. The ordinary allocation
+    // function only guarantees max_align_t, which is insufficient for those
+    // frame slots on x86. Keep every task frame cache-line aligned so optimized
+    // CPU targets remain correct without disabling vector code generation.
+    static auto operator new(std::size_t size) -> void*
+    {
+        return ::operator new(size, std::align_val_t{64});
+    }
+
+    static void operator delete(void* address) noexcept
+    {
+        ::operator delete(address, std::align_val_t{64});
+    }
+
+    static void operator delete(void* address, std::size_t size) noexcept
+    {
+        ::operator delete(address, size, std::align_val_t{64});
+    }
+
     auto initial_suspend() noexcept -> std::suspend_always;
 
     struct final_awaiter

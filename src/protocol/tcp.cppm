@@ -35,8 +35,14 @@ public:
     auto operator=(acceptor&&) noexcept -> acceptor& = default;
 
     /// Open and bind to specified endpoint
-    [[nodiscard]] auto open(const endpoint& ep, const socket_options& opts = {})
+    [[nodiscard]] auto open(const endpoint& ep, const socket_options& opts = {},
+        int backlog = 4096)
         -> std::expected<void, std::error_code>;
+
+    /// Accept one already queued connection without waiting.
+    /// An empty optional means that the non-blocking listener has been drained.
+    [[nodiscard]] auto try_accept()
+        -> std::expected<std::optional<socket>, std::error_code>;
 
     /// Close acceptor
     void close() noexcept;

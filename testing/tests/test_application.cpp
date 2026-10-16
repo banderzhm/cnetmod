@@ -66,10 +66,9 @@ CNETMOD_PROJECTION(runtime_record_summary,
     CNETMOD_FIELD(summary, "summary", varchar))
 
 static_assert(std::same_as<decltype(application::repository_factory<
-                                   runtime_repository_record>::create(
-                                   std::declval<application::service_registry&>(),
-                                   std::declval<const application::application_configuration&>(),
-                                   application::repository_options{})),
+                               runtime_repository_record>::create(std::declval<application::service_registry&>(),
+                               std::declval<const application::application_configuration&>(),
+                               application::repository_options{})),
     std::expected<application::repository_factory<runtime_repository_record>,
         std::error_code>>);
 static_assert(std::same_as<decltype(std::declval<const application::repository_factory<
@@ -118,7 +117,8 @@ static_assert(!std::is_copy_constructible_v<
     (void)co_await records.save(model);
     (void)co_await records.update_by_id(model);
     cnetmod::orm::update_wrapper<runtime_repository_record> update;
-    update.set("value", "next").eq("id", 1);
+    update.set(&runtime_repository_record::value, "next")
+        .eq(&runtime_repository_record::id, 1);
     (void)co_await records.update(update);
     (void)co_await records.save_or_update(model);
     (void)co_await records.upsert(model);
@@ -1774,7 +1774,7 @@ TEST(application_builder_validates_before_creating_host)
     ASSERT_FALSE(host.has_value());
 }
 
-#if defined(CNETMOD_HAS_ORM) && \
+#if defined(CNETMOD_HAS_ORM) &&             \
     (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || \
         defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
 TEST(repository_factory_resolves_its_data_source_at_build_time)
@@ -1805,14 +1805,12 @@ TEST(repository_registration_fails_the_build_without_a_data_source)
                             value.logging.manage_lifecycle = false;
                             value.management.enabled = false;
                         })
-                    .add_module(application::make_module("records",
-                        {.register_components = [](application::registration_context& context)
-                                -> std::expected<void, std::string>
-                            {
-                                application::add_repository<runtime_repository_record>(
-                                    context.components, {.instance = "primary"});
-                                return {};
-                            }}))
+                    .add_module(application::make_module("records", {.register_components = [](application::registration_context& context) -> std::expected<void, std::string>
+                                                                        {
+                                                                            application::add_repository<runtime_repository_record>(
+                                                                                context.components, {.instance = "primary"});
+                                                                            return {};
+                                                                        }}))
                     .build();
     ASSERT_FALSE(host.has_value());
     ASSERT_TRUE(host.error().phase == application::build_phase::resolution);
@@ -1963,15 +1961,12 @@ TEST(application_modules_compose_with_the_host_runtime_and_components)
                             {
                                 observed = &context.runtime;
                                 observed_components = &context.components;
-                                context.routes.get("/runtime",
-                                    [](cnetmod::http::request_context& request)
-                                        -> cnetmod::task<void>
+                                context.routes.get("/runtime", [](cnetmod::http::request_context& request) -> cnetmod::task<void>
                                     {
                                         request.text(cnetmod::http::status::ok, "ok");
                                         co_return;
                                     },
-                                    cnetmod::http::endpoint_metadata{
-                                        cnetmod::http::allow_anonymous{}});
+                                    cnetmod::http::endpoint_metadata{cnetmod::http::allow_anonymous{}});
                                 context.middleware.push_back(context.runtime.compression({
                                     .min_size = 128,
                                     .max_concurrency = 2,
@@ -2124,30 +2119,27 @@ TEST(application_builder_executes_ordered_business_middleware)
                             value.observability.metrics = false;
                             value.observability.logs = false;
                         })
-                    .add_module(application::make_module("middleware-order",
-                        {.compose = [&events, first, second](
-                                        application::composition_context& context)
-                                -> std::expected<void, std::string>
-                            {
-                                context.routes.get("/middleware-order",
-                                    [&events](cnetmod::http::request_context& request)
-                                        -> cnetmod::task<void>
-                                    {
-                                        events.push_back("route");
-                                        const auto headers_ok =
-                                            request.get_header("X-Template") == "request" &&
-                                            request.get_header("X-Default") == "present" &&
-                                            request.get_header("X-Request") == "present";
-                                        request.text(headers_ok
-                                                ? cnetmod::http::status::ok
-                                                : cnetmod::http::status::bad_request,
-                                            headers_ok ? "ok" : "missing headers");
-                                        co_return;
-                                    });
-                                context.middleware.push_back(first);
-                                context.middleware.push_back(second);
-                                return {};
-                            }}))
+                    .add_module(application::make_module("middleware-order", {.compose = [&events, first, second](application::composition_context& context) -> std::expected<void, std::string>
+                                                                                 {
+                                                                                     context.routes.get("/middleware-order",
+                                                                                         [&events](cnetmod::http::request_context& request)
+                                                                                             -> cnetmod::task<void>
+                                                                                         {
+                                                                                             events.push_back("route");
+                                                                                             const auto headers_ok =
+                                                                                                 request.get_header("X-Template") == "request" &&
+                                                                                                 request.get_header("X-Default") == "present" &&
+                                                                                                 request.get_header("X-Request") == "present";
+                                                                                             request.text(headers_ok
+                                                                                                     ? cnetmod::http::status::ok
+                                                                                                     : cnetmod::http::status::bad_request,
+                                                                                                 headers_ok ? "ok" : "missing headers");
+                                                                                             co_return;
+                                                                                         });
+                                                                                     context.middleware.push_back(first);
+                                                                                     context.middleware.push_back(second);
+                                                                                     return {};
+                                                                                 }}))
                     .build();
 
     ASSERT_TRUE(host.has_value());
@@ -2240,79 +2232,75 @@ TEST(application_host_distributes_connections_and_restores_worker_affinity)
                             value.observability.logs = false;
                             value.execution.io_threads = 2;
                         })
-                    .add_module(application::make_module("worker-affinity",
-                        {.compose = [&](application::composition_context& context)
-                                -> std::expected<void, std::string>
-                            {
-                                auto* runtime = &context.runtime;
-                                context.routes.get("/worker",
-                                    [&, runtime](cnetmod::http::request_context& request)
-                                        -> cnetmod::task<void>
-                                    {
-                                        auto* before = cnetmod::io_context::current();
-                                        auto* expected = static_cast<cnetmod::io_context*>(nullptr);
-                                        if (!first_worker.compare_exchange_strong(
-                                                expected, before,
-                                                std::memory_order_acq_rel) &&
-                                            expected != before)
-                                            second_worker_seen.store(true,
-                                                std::memory_order_release);
-                                        auto& executor = runtime->executor();
-                                        if (&executor.event_loop() != before ||
-                                            &executor.control_event_loop() == before)
-                                            affinity_preserved.store(false,
-                                                std::memory_order_release);
-                                        co_await executor.post();
-                                        if (cnetmod::io_context::current() != before)
-                                            affinity_preserved.store(false,
-                                                std::memory_order_release);
-                                        cnetmod::cancel_token timer_cancellation;
-                                        auto slept = co_await executor.sleep(
-                                            std::chrono::milliseconds{1},
-                                            timer_cancellation);
-                                        if (!slept ||
-                                            cnetmod::io_context::current() != before)
-                                            affinity_preserved.store(false,
-                                                std::memory_order_release);
-                                        cnetmod::security::jwt_sign_options jwt;
-                                        jwt.issuer = "multi-loop-test";
-                                        jwt.subject = "worker";
-                                        const auto token = co_await
-                                            cnetmod::security::sign_jwt(
-                                                executor.cpu_pool(),
-                                                executor.event_loop(), jwt,
-                                                "multi-loop-test-secret");
-                                        if (!token ||
-                                            cnetmod::io_context::current() != before)
-                                            affinity_preserved.store(false,
-                                                std::memory_order_release);
-                                        if (token)
-                                        {
-                                            const auto claims = co_await
-                                                cnetmod::security::verify_jwt(
-                                                    executor.cpu_pool(),
-                                                    executor.event_loop(),
-                                                    *token,
-                                                    "multi-loop-test-secret");
-                                            if (!claims ||
-                                                claims->subject != "worker" ||
-                                                cnetmod::io_context::current() != before)
-                                                affinity_preserved.store(false,
-                                                    std::memory_order_release);
-                                        }
-                                        const auto value = co_await runtime->offload(
-                                            [] { return 42; });
-                                        if (value != 42 ||
-                                            cnetmod::io_context::current() != before)
-                                            affinity_preserved.store(false,
-                                                std::memory_order_release);
-                                        request.text(cnetmod::http::status::ok, "ok");
-                                        co_return;
-                                    },
-                                    cnetmod::http::endpoint_metadata{
-                                        cnetmod::http::allow_anonymous{}});
-                                return {};
-                            }}))
+                    .add_module(application::make_module("worker-affinity", {.compose = [&](application::composition_context& context) -> std::expected<void, std::string>
+                                                                                {
+                                                                                    auto* runtime = &context.runtime;
+                                                                                    context.routes.get("/worker", [&, runtime](cnetmod::http::request_context& request) -> cnetmod::task<void>
+                                                                                        {
+                                                                                            auto* before = cnetmod::io_context::current();
+                                                                                            auto* expected = static_cast<cnetmod::io_context*>(nullptr);
+                                                                                            if (!first_worker.compare_exchange_strong(
+                                                                                                    expected, before,
+                                                                                                    std::memory_order_acq_rel) &&
+                                                                                                expected != before)
+                                                                                                second_worker_seen.store(true,
+                                                                                                    std::memory_order_release);
+                                                                                            auto& executor = runtime->executor();
+                                                                                            if (&executor.event_loop() != before ||
+                                                                                                &executor.control_event_loop() == before)
+                                                                                                affinity_preserved.store(false,
+                                                                                                    std::memory_order_release);
+                                                                                            co_await executor.post();
+                                                                                            if (cnetmod::io_context::current() != before)
+                                                                                                affinity_preserved.store(false,
+                                                                                                    std::memory_order_release);
+                                                                                            cnetmod::cancel_token timer_cancellation;
+                                                                                            auto slept = co_await executor.sleep(
+                                                                                                std::chrono::milliseconds{1},
+                                                                                                timer_cancellation);
+                                                                                            if (!slept ||
+                                                                                                cnetmod::io_context::current() != before)
+                                                                                                affinity_preserved.store(false,
+                                                                                                    std::memory_order_release);
+                                                                                            cnetmod::security::jwt_sign_options jwt;
+                                                                                            jwt.issuer = "multi-loop-test";
+                                                                                            jwt.subject = "worker";
+                                                                                            const auto token = co_await cnetmod::security::sign_jwt(
+                                                                                                executor.cpu_pool(),
+                                                                                                executor.event_loop(), jwt,
+                                                                                                "multi-loop-test-secret");
+                                                                                            if (!token ||
+                                                                                                cnetmod::io_context::current() != before)
+                                                                                                affinity_preserved.store(false,
+                                                                                                    std::memory_order_release);
+                                                                                            if (token)
+                                                                                            {
+                                                                                                const auto claims = co_await cnetmod::security::verify_jwt(
+                                                                                                    executor.cpu_pool(),
+                                                                                                    executor.event_loop(),
+                                                                                                    *token,
+                                                                                                    "multi-loop-test-secret");
+                                                                                                if (!claims ||
+                                                                                                    claims->subject != "worker" ||
+                                                                                                    cnetmod::io_context::current() != before)
+                                                                                                    affinity_preserved.store(false,
+                                                                                                        std::memory_order_release);
+                                                                                            }
+                                                                                            const auto value = co_await runtime->offload(
+                                                                                                []
+                                                                                                {
+                                                                                                    return 42;
+                                                                                                });
+                                                                                            if (value != 42 ||
+                                                                                                cnetmod::io_context::current() != before)
+                                                                                                affinity_preserved.store(false,
+                                                                                                    std::memory_order_release);
+                                                                                            request.text(cnetmod::http::status::ok, "ok");
+                                                                                            co_return;
+                                                                                        },
+                                                                                        cnetmod::http::endpoint_metadata{cnetmod::http::allow_anonymous{}});
+                                                                                    return {};
+                                                                                }}))
                     .build();
     ASSERT_TRUE(host.has_value());
     if (!host)
@@ -2320,7 +2308,10 @@ TEST(application_host_distributes_connections_and_restores_worker_affinity)
     reservation->close();
 
     std::optional<std::expected<void, std::error_code>> completed;
-    std::jthread runner([&] { completed = host->run(); });
+    std::jthread runner([&]
+        {
+            completed = host->run();
+        });
     const auto startup_timeout = std::chrono::steady_clock::now() +
         std::chrono::seconds{2};
     while (host->state() == application::application_state::built ||
@@ -2376,7 +2367,7 @@ TEST(application_configuration_precedence_and_redaction)
         "cnetmod-application-test.json";
     {
         std::ofstream output{path};
-        output << R"({"application":{"name":"json-name","cpu_threads":3,"io_threads":2},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080,"sse":{"max_duration_ms":45000,"write_timeout_ms":2500}},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
+        output << R"({"application":{"name":"json-name","cpu_threads":3,"io_threads":2},"crash_dump":{"directory":"application-crashes"},"http":{"port":18080,"backlog":8192,"sse":{"max_duration_ms":45000,"write_timeout_ms":2500}},"management":{"backlog":512},"observability":{"otlp":{"capture_framework_logs":true}},"services":{"primary":{"type":"redis","instance":"cache","enabled":false,"password":"secret"}}})";
     }
 #ifdef _WIN32
     _putenv_s("CNETMOD_HTTP_PORT", "18081");
@@ -2416,6 +2407,8 @@ TEST(application_configuration_precedence_and_redaction)
     ASSERT_TRUE(host.has_value());
     ASSERT_EQ(host->configuration().name, "builder-name");
     ASSERT_EQ(host->configuration().http.port, std::uint16_t{18082});
+    ASSERT_EQ(host->configuration().http.backlog, 8192);
+    ASSERT_EQ(host->configuration().management.backlog, 512);
     ASSERT_EQ(host->configuration().http.sse_max_duration,
         std::chrono::milliseconds{45000});
     ASSERT_EQ(host->configuration().http.sse_write_timeout,
@@ -2541,25 +2534,23 @@ TEST(application_module_composition_follows_service_factories)
     auto events = std::make_shared<std::vector<std::string>>();
     auto host = application::application_builder{"runtime-route-order"}
                     .service_factory([&](application::application_service_context&)
-                        -> std::expected<std::shared_ptr<application::managed_service>,
-                            std::error_code>
-                    {
-                        factory_ran = true;
-                        return std::shared_ptr<application::managed_service>{
-                            std::make_shared<fake_service>(
-                                application::service_key{"test", "route-order"},
-                                std::vector<application::service_key>{},
-                                application::service_requirement::required, events)};
-                    })
-                    .add_module(application::make_module("route-order",
-                        {.compose = [&](application::composition_context& context)
-                                -> std::expected<void, std::string>
-                            {
-                                route_saw_service = factory_ran &&
-                                    context.components.find<application::service_registry>() !=
-                                        nullptr;
-                                return {};
-                            }}))
+                                         -> std::expected<std::shared_ptr<application::managed_service>,
+                                             std::error_code>
+                        {
+                            factory_ran = true;
+                            return std::shared_ptr<application::managed_service>{
+                                std::make_shared<fake_service>(
+                                    application::service_key{"test", "route-order"},
+                                    std::vector<application::service_key>{},
+                                    application::service_requirement::required, events)};
+                        })
+                    .add_module(application::make_module("route-order", {.compose = [&](application::composition_context& context) -> std::expected<void, std::string>
+                                                                            {
+                                                                                route_saw_service = factory_ran &&
+                                                                                    context.components.find<application::service_registry>() !=
+                                                                                        nullptr;
+                                                                                return {};
+                                                                            }}))
                     .build();
     ASSERT_TRUE(host.has_value());
     ASSERT_TRUE(route_saw_service);
@@ -2571,13 +2562,7 @@ TEST(application_configuration_reads_jwt_yaml_lifetimes)
         "cnetmod-application-jwt-lifetime-test.yaml";
     {
         std::ofstream output{path};
-        output << "security:\n"
-                  "  jwt:\n"
-                  "    enabled: true\n"
-                  "    issuer: test-issuer\n"
-                  "    secret: 0123456789abcdef0123456789abcdef\n"
-                  "    expires_in_seconds: 7200\n"
-                  "    session_idle_seconds: 300\n";
+        output << "security:\n" "  jwt:\n" "    enabled: true\n" "    issuer: test-issuer\n" "    secret: 0123456789abcdef0123456789abcdef\n" "    expires_in_seconds: 7200\n" "    session_idle_seconds: 300\n";
     }
     auto configuration = application::load_configuration(path);
     std::filesystem::remove(path);

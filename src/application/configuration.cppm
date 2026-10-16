@@ -31,6 +31,7 @@ export struct http_configuration
 {
     std::string address{"0.0.0.0"};
     std::uint16_t port = 8080;
+    int backlog = 4096;
     std::size_t max_connections = 0;
     std::optional<std::chrono::milliseconds> request_timeout;
     std::chrono::milliseconds sse_max_duration{120000};
@@ -48,6 +49,7 @@ export struct management_configuration
     bool enabled = true;
     std::string address{"127.0.0.1"};
     std::uint16_t port = 8081;
+    int backlog = 4096;
     bool same_port = false;
     std::string live_path{"/actuator/live"};
     std::string ready_path{"/actuator/ready"};

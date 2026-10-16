@@ -195,10 +195,11 @@ namespace {
     auto multishot_accept_states()
         -> std::map<multishot_accept_key, std::unique_ptr<multishot_accept_state>>&
     {
-        // io_uring submissions and completion delivery are already serialized by
-        // io_uring_context.  The state is retained for the listener lifetime so a
-        // persistent SQE never points at a coroutine-local object.
-        static std::map<multishot_accept_key, std::unique_ptr<multishot_accept_state>> states;
+        // Each io_context is owned by one event-loop thread. Keeping its accept
+        // subscriptions thread-local avoids a process-wide map race when several
+        // application event loops run concurrently.
+        thread_local std::map<multishot_accept_key,
+            std::unique_ptr<multishot_accept_state>> states;
         return states;
     }
 

@@ -1,6 +1,6 @@
 # Coroutine 并发原语
 
-> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token，全部非阻塞、零堆分配设计。
+> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token；等待路径不阻塞事件循环。
 
 `channel`、`async_mutex`、`async_shared_mutex`、`async_semaphore` 与
 `async_wait_group` 支持跨事件循环唤醒：等待节点记录挂起时的
@@ -87,6 +87,12 @@ int main() {
 `io_context`；不要把 Application 控制循环误当成请求循环。执行域切换、返回目标
 `io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
+
+`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
+构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
+AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
+绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
+并发请求测试，不能只验证编译通过。
 
 ---
 

@@ -8,7 +8,7 @@ import cnetmod.observability.openai;
 import cnetmod.coro.mutex;
 import cnetmod.coro.striped_mutex;
 import cnetmod.coro.task_group;
-import cnetmod.json;
+import cnetmod.coro.timer;
 
 namespace cnetmod::application {
 
@@ -135,19 +135,56 @@ namespace {
         if (cancellation && cancellation->is_cancelled())
             co_return std::unexpected(
                 std::make_error_code(std::errc::operation_canceled));
-        task_group connections{io};
+        task_group connections{io, deadline::after(std::chrono::seconds{
+                                       generation.options.timeout_seconds})};
+        struct cancellation_link
+        {
+            cancel_token* parent;
+            task_group& children;
+            bool registered{};
+
+            cancellation_link(cancel_token* token, task_group& group) noexcept
+                : parent(token), children(group)
+            {
+                if (parent)
+                {
+                    registered = parent->register_callback(this,
+                        [](void* value) noexcept
+                        {
+                            static_cast<cancellation_link*>(value)
+                                ->children.cancel();
+                        });
+                    if (!registered)
+                        children.cancel();
+                }
+            }
+
+            ~cancellation_link()
+            {
+                if (parent && registered)
+                {
+                    (void)parent->complete_callback(this);
+                    parent->finish_callback(this);
+                }
+            }
+        } cancellation_scope{cancellation, connections};
         for (auto& client : generation.clients)
         {
             if (client->is_connected())
                 continue;
             const auto accepted = connections.run(
-                [client, options = generation.options](cancel_token&)
+                [client, options = generation.options](cancel_token& token)
                     -> task<std::expected<void, std::error_code>>
                 {
-                    auto connected = co_await client->connect(options);
+                    auto connected = co_await client->connect(options, token);
                     if (!connected)
+                    {
+                        if (token.is_cancelled())
+                            co_return std::unexpected(std::make_error_code(
+                                std::errc::operation_canceled));
                         co_return std::unexpected(std::make_error_code(
                             std::errc::connection_refused));
+                    }
                     co_return std::expected<void, std::error_code>{};
                 });
             if (!accepted)
@@ -160,6 +197,8 @@ namespace {
                     std::make_error_code(std::errc::not_enough_memory));
             }
         }
+        if (cancellation && cancellation->is_cancelled())
+            connections.cancel();
         auto connected = co_await connections.join();
         if (!connected || (cancellation && cancellation->is_cancelled()))
         {

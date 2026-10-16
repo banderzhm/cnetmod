@@ -177,6 +177,21 @@ TEST(task_int_basic)
     ASSERT_EQ(result, 42);
 }
 
+TEST(task_coroutine_frames_are_cache_line_aligned)
+{
+    std::vector<task<int>> tasks;
+    tasks.reserve(256);
+    for (int index{}; index < 256; ++index)
+        tasks.push_back(return_42());
+
+    for (const auto& operation : tasks)
+    {
+        const auto address = reinterpret_cast<std::uintptr_t>(
+            operation.handle().address());
+        ASSERT_EQ(address % 64U, 0U);
+    }
+}
+
 TEST(task_string_basic)
 {
     auto result = sync_wait(return_string());

@@ -14,6 +14,7 @@
   "http": {
     "address": "0.0.0.0",
     "port": 8080,
+    "backlog": 4096,
     "max_connections": 0,
     "request_timeout_ms": 30000,
     "sse": {
@@ -28,6 +29,7 @@
     "enabled": true,
     "address": "127.0.0.1",
     "port": 8081,
+    "backlog": 4096,
     "same_port": false,
     "live_path": "/actuator/live",
     "ready_path": "/actuator/ready",

@@ -39,6 +39,15 @@ client::~client()
 auto client::connect(connect_options opts)
     -> task<std::expected<void, std::string>>
 {
+    cancel_token cancellation;
+    co_return co_await connect(std::move(opts), cancellation);
+}
+
+auto client::connect(connect_options opts, cancel_token& cancellation)
+    -> task<std::expected<void, std::string>>
+{
+    if (cancellation.is_cancelled())
+        co_return std::unexpected("connect cancelled");
     opts_ = std::move(opts);
 
     auto url_r = http::url::parse(opts_.api_base);
@@ -73,7 +82,8 @@ auto client::connect(connect_options opts)
     }
     sock_ = std::move(*sock_r);
 
-    auto cr = co_await async_connect(ctx_, sock_, endpoint{*addr_r, url_.port});
+    auto cr = co_await async_connect(ctx_, sock_,
+        endpoint{*addr_r, url_.port}, cancellation);
     if (!cr)
     {
         sock_.close();
@@ -110,7 +120,7 @@ auto client::connect(connect_options opts)
         ssl_->set_connect_state();
         ssl_->set_hostname(url_.host);
 
-        auto hs = co_await ssl_->async_handshake();
+        auto hs = co_await ssl_->async_handshake(cancellation);
         if (!hs)
         {
             sock_.close();

@@ -1911,7 +1911,7 @@ if (stream.kernel_tls_active()) {
 | `create` | `static auto create(address_family, socket_type) -> expected<socket, error_code>` | 创建 socket |
 | `from_native` | `static auto from_native(native_handle_t) noexcept -> socket` | 从原生句柄接管 |
 | `bind` | `auto bind(const endpoint&) -> expected<void, error_code>` | 绑定地址 |
-| `listen` | `auto listen(int backlog = 128) -> expected<void, error_code>` | 监听 |
+| `listen` | `auto listen(int backlog = 4096) -> expected<void, error_code>` | 监听；内核仍可按 `somaxconn` 截断队列长度 |
 | `set_non_blocking` | `auto set_non_blocking(bool) -> expected<void, error_code>` | 设置非阻塞 |
 | `apply_options` | `auto apply_options(const socket_options&) -> expected<void, error_code>` | 应用选项 |
 | `local_endpoint` | `auto local_endpoint() const -> expected<endpoint, error_code>` | 本地端点 |
@@ -1931,9 +1931,18 @@ if (stream.kernel_tls_active()) {
 ### `tcp::acceptor`
 **签名**: `export class acceptor` (命名空间 `cnetmod::tcp`)
 
+`acceptor::open(endpoint, socket_options, backlog)` 将显式 backlog 逐层传给
+`socket::listen()`；默认值为 4096。高并发服务不要把 `max_connections` 当成 backlog：
+前者限制已接纳连接，后者只控制尚未 `accept` 的内核排队连接。
+
+`acceptor::try_accept()` 只获取已经排队的连接，不等待；监听队列已排空时返回空
+`std::optional`。它用于一次异步可读/完成通知后批量排空监听队列，避免为每个连接
+重复注册一次内核等待。调用方必须设置批量上限，避免持续建连压垮定时器和停机任务。
+
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit acceptor(io_context& ctx)` | 绑定 io_context |
+| 尝试接收 | `auto try_accept() -> expected<optional<socket>, error_code>` | 非阻塞获取一个已排队连接 |
 | `open` | `auto open(const endpoint&, const socket_options& = {}) -> expected<void, error_code>` | 打开并绑定监听 |
 | `close` | `void close() noexcept` | 关闭 |
 | `is_open` | `auto is_open() const noexcept -> bool` | 是否打开 |
@@ -2426,7 +2435,7 @@ API instead of repeating `system_clock::now()` conversions in each adapter.
 
 # Coroutine 并发原语
 
-> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token，全部非阻塞、零堆分配设计。
+> C++20 协程原语集合：task、channel、mutex、semaphore、wait_group、cancel_token；等待路径不阻塞事件循环。
 
 `channel`、`async_mutex`、`async_shared_mutex`、`async_semaphore` 与
 `async_wait_group` 支持跨事件循环唤醒：等待节点记录挂起时的
@@ -2513,6 +2522,12 @@ int main() {
 `io_context`；不要把 Application 控制循环误当成请求循环。执行域切换、返回目标
 `io_context` 及生命周期要求见
 [Executor 与 Bridge](executor-bridge.md)。
+
+`task<T>` 的协程帧按 64 字节分配。这不是要求业务对象手工对齐，而是框架对优化
+构建的正确性保证：Clang 可能在 `x86-64-v3`/`native` 下对帧内聚合初始化生成
+AVX/AVX-512 对齐写入，普通 `operator new` 的 `max_align_t` 保证不足。不要删除或
+绕过 promise 的对齐分配；Release CPU 目标、LTO、mimalloc 开关组合必须保留真实
+并发请求测试，不能只验证编译通过。
 
 ---
 
@@ -7926,11 +7941,26 @@ ignored and never changes the database or Redis operation outcome.
 - `sctx` — 多核服务器上下文（多线程模式）
 
 #### `server::listen`
-**签名**: `auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true}) -> std::expected<void, std::error_code>`
+**签名**: `auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true}, int backlog = 4096) -> std::expected<void, std::error_code>`
 **参数**:
 - `host` — 监听地址（如 `"0.0.0.0"`）
 - `port` — 监听端口
 - `opts` — 套接字选项
+- `backlog` — 等待 `accept` 的内核连接队列长度；必须为正，最终值可被操作系统上限截断
+
+Application 项目用 `http.backlog` 配置业务端口、用 `management.backlog` 配置独立管理端口；
+默认均为 4096，也可通过 `CNETMOD_HTTP_BACKLOG` 覆盖业务端口。`max_connections`
+限制的是已经接纳的并发连接，与 backlog 不是同一个概念。
+
+HTTP accept 循环收到首个异步完成后，会限量排空最多 64 个已经排队的连接，再回到
+事件循环公平点。Linux 使用 `accept4(SOCK_NONBLOCK | SOCK_CLOEXEC)`，Windows 使用
+非阻塞监听 socket 的 `accept`；没有排队连接时不会自旋。不要在业务层再创建并行
+accept 循环或重复实现这一批处理。
+
+在支持 provided buffer ring 与 multishot recv 的 io_uring 内核上，`server` 会为每个
+事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
+不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
+框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
 
 #### `server::set_router`
 **签名**: `void set_router(router r)`
@@ -7988,7 +8018,8 @@ auto main() -> int {
     });
 
     server srv(*ctx);
-    auto result = srv.listen("0.0.0.0", 8080);
+    auto result = srv.listen("0.0.0.0", 8080,
+        {.reuse_address = true}, 8192);
     if (!result) {
         std::println("Listen failed: {}", result.error().message());
         return 1;
@@ -8018,6 +8049,11 @@ auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 - `metadata` — 端点策略，按类型存取（同类型后加覆盖先加）。标准类型：
   `allow_anonymous`、`optional_authentication`、`required_permissions{all_of, any_of}`、
   `endpoint_name{"orders.list"}`；应用可添加任意自定义类型
+
+不需要等待异步操作的端点使用 `get_sync / post_sync / put_sync / del_sync /
+patch_sync / any_sync`，其 handler 为 `std::function<void(request_context&)>`。在没有
+中间件时服务器直接调用它，不创建 handler 或中间件链协程帧；有中间件时框架才按需
+适配成 `task<void>`。不要为了使用 sync API 在 handler 内执行阻塞 I/O 或 CPU 重任务。
 
 路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
 `endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
@@ -8115,8 +8151,15 @@ r.get("/static/*filepath", [](request_context& ctx) -> task<void> {
 #### `request_context::get_header`
 **签名**: `[[nodiscard]] auto get_header(std::string_view key) const -> std::string_view`
 
+**说明**: 首选接口。名称匹配不区分大小写；常用 header 使用固定槽位，其他 header 使用
+大小写无关哈希索引，返回值直接引用本次请求的 header backing buffer，不会为名称和值
+逐项创建 `std::string`。返回的视图只在当前请求生命周期内有效，不要跨请求保存。
+
 #### `request_context::headers`
-**签名**: `[[nodiscard]] auto headers() const noexcept -> const header_map&`
+**签名**: `[[nodiscard]] auto headers() const -> const header_map&`
+
+**说明**: 兼容需要遍历全部 header 的场景，首次调用时才物化 `header_map`，因此会产生
+字符串分配。中间件和 handler 只读取少量已知 header 时必须使用 `get_header()`。
 
 #### `request_context::body`
 **签名**: `[[nodiscard]] auto body() const -> std::string_view`
@@ -8530,6 +8573,7 @@ r.get("/static/*filepath", serve_dir({
 |---------|---------|
 | 先 `use()` 注册中间件，再 `set_router()` | 在 `run()` 之后注册路由 |
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
+| 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
 | SSE 时使用 `sse_begin()`、`sse_send()` 与 `sse_heartbeat()` | `sse_started()` 后回退使用 `ctx.json()` |
 | 使用 `co_return` 结束 handler | 忘记 `co_return` 导致未定义行为 |
@@ -8563,11 +8607,17 @@ class server_context {
 **架构**：
 | 线程 | 角色 | 说明 |
 |------|------|------|
-| Thread 0（main） | `accept_io()` | 专用 accept 循环，不参与请求处理 |
-| Thread 1..N | `next_worker_io()` | 每个 worker 独立 `io_context`，round-robin 分配连接 |
+| Thread 0（main） | `accept_io()` | 控制循环；Linux 多 worker HTTP 不在这里接纳连接 |
+| Thread 1..N | `worker_ios()` | 每个 worker 独立 `io_context`，连接全生命周期归属该循环 |
 | Thread Pool | `pool()` | cnetmod `thread_pool`，用于 CPU 密集型任务卸载 |
 
-**IOCP 特性**：accept 后的新 socket 尚未关联 IOCP，首次 `async_read/write` 时自动绑定到 worker 的 IOCP。
+Linux 多 worker HTTP 为每个 worker 创建 `SO_REUSEPORT` listener，内核把连接直接分配给
+最终所属的循环，不再经过控制循环 round-robin 转交；每个循环同时持有自己的 multishot
+recv 注册缓冲区。单循环、Windows 和不支持该能力的平台保持原有 listener/dispatch 模型。
+
+HTTP/1 解析器会保留同一次 receive 中第一个消息之后的未消费字节，并连续处理完整的
+pipelined 请求。普通响应在该 receive 批次内顺序序列化到连接级缓冲区，再一次提交；遇到
+SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响应，保证线上顺序不变。
 
 ---
 
@@ -8674,7 +8724,7 @@ auto main() -> int {
 | 使用 `server_context` 构造 `server` 启用多核 | 在多核场景手动创建多个 `server` 实例 |
 | CPU 密集任务通过 `pool_post_awaitable` 卸载到 `pool()` | 在 handler 中直接执行耗时计算阻塞 worker |
 | 卸载后用 `post_awaitable{ctx.io_ctx()}` 切回 worker | 在 pool 线程上直接调用 `ctx.json()` |
-| `spawn(sctx.accept_io(), srv.run())` 启动 accept | 在 worker 线程上运行 accept 循环 |
+| `spawn(sctx.accept_io(), srv.run())` 启动服务器编排 | 业务代码跨 worker 写另一个循环的 socket |
 
 ---
 
@@ -8940,6 +8990,11 @@ streams；这避免 Initial flight 与应用帧抢占同一个握手阶段。该
 握手完成后延迟抵达的 QUIC Initial/Handshake UDP 包会按 RFC 9001 丢弃；它们不能
 重新初始化 TLS 或覆盖已建立的 1-RTT 状态。对于被 replay cache 拒绝的 0-RTT，
 仅幂等的完整响应 API 会在新的 1-RTT 连接上重放一次。
+
+TLS 生成的 ClientHello、证书链等 CRYPTO 数据可能超过 1200 字节。传输层会按当前
+最小路径 MTU 将它们拆成多个带连续 offset 的 CRYPTO 帧，并分别纳入丢包恢复；应用层
+不应增大首包 UDP 尺寸，也不应自行拆分 TLS 握手数据。每个客户端 Initial datagram
+仍满足 RFC 9000 要求的至少 1200 字节。
 
 客户端可以通过 `resumption_ticket` 和 `enable_early_data` 显式启用受控 0-RTT；
 自动重试仅适用于幂等请求。服务端必须配置应用拥有的 ticket AEAD 与共享 replay
@@ -9600,6 +9655,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   "http": {
     "address": "0.0.0.0",
     "port": 8080,
+    "backlog": 4096,
     "request_timeout_ms": 30000,
     "sse": {
       "max_duration_ms": 120000,
@@ -9610,6 +9666,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
     "enabled": true,
     "address": "127.0.0.1",
     "port": 8081,
+    "backlog": 4096,
     "same_port": false
   },
   "observability": {
@@ -9704,7 +9761,7 @@ MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`
 
 支持的环境变量包括：
 
-- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_LOG_LEVEL`
+- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_HTTP_BACKLOG`、`CNETMOD_LOG_LEVEL`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`、`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
 - `OTEL_SERVICE_NAME`、`OTEL_SERVICE_VERSION`
@@ -10050,6 +10107,7 @@ cnetmod/
 ├── 3rdparty/               # 第三方依赖
 │   ├── json/               # Backend-neutral JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
+│   ├── mimalloc/            # 进程级高性能内存分配器
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
 │   └── stdexec/            # P2300 std::execution 实现
@@ -10184,6 +10242,19 @@ benchmark、示例、C API 或 Python Binding。应用必须按实际需求显�
 
 CMake 会自动验证依赖关系：若启用了某协议但未启用其依赖，构建会报 `FATAL_ERROR`。
 
+### 组件目标与精简构建
+
+下游只链接实际使用的组件目标，例如 `cnetmod::runtime`、`cnetmod::http`、
+`cnetmod::redis` 或 `cnetmod::application`。`cnetmod::core` 与 `cnetmod::all`
+是保留给旧消费者和完整工具的全功能兼容门面，会传递当前配置中所有已启用组件；
+不应把它用于只需要协程、HTTP 或单一协议的精简目标。
+
+项目测试也遵守同一依赖边界：协程与基础设施测试只链接 runtime，HTTP 测试只
+链接 HTTP，ORM 和各协议测试链接各自组件。这样构建单个测试不会触发无关协议。
+关闭 `CNETMOD_ENABLE_ORM` 时，Application 不提供或编译
+`cnetmod.application.data`、`application.orm_repository` 及数据库 ORM 适配器；
+普通 Application 和数据库协议客户端仍可独立使用。
+
 ## 构建命令
 
 ```bash
@@ -10223,6 +10294,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 |------|------|------|
 | nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
+| mimalloc | `3rdparty/mimalloc` | 最终可执行程序的进程级内存分配器 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
 | spdlog | `3rdparty/spdlog` | 日志后端 |
 | stdexec | `3rdparty/stdexec` | P2300 std::execution 实现 |
@@ -10234,7 +10306,46 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 | 优化项 | CMake Option | 说明 |
 |--------|-------------|------|
 | mold 链接器 | `CNETMOD_USE_MOLD=ON` | Linux 下 10-20x 更快链接 |
-| mimalloc 分配器 | `CNETMOD_USE_MIMALLOC=ON` | 2-3x 更快内存分配 |
+| mimalloc 分配器 | `CNETMOD_USE_MIMALLOC=ON` | 构建并随 SDK 分发；框架自身 executable 自动启用 |
+| CPU 指令集契约 | `CNETMOD_CPU_TARGET=portable\|x86-64-v3\|native` | SDK 默认 portable；固定 benchmark/部署机器可显式选 v3 或 native |
+| ThinLTO / IPO | `CNETMOD_ENABLE_THIN_LTO=ON` | 默认关闭以控制构建时间和内存；最终性能构建显式开启 |
+
+可复现的 x86-64 性能构建使用：
+
+```bash
+cmake -S . -B build-perf -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCNETMOD_CPU_TARGET=x86-64-v3 \
+  -DCNETMOD_ENABLE_THIN_LTO=ON
+```
+
+不要把 `native` 产物作为通用 SDK 发布；它可能包含构建机独有指令。性能比较必须记录
+CPU target、LTO、allocator、worker 数量和线程亲和性，不能拿 portable 与 native 产物直接排名。
+
+### 下游启用 mimalloc
+
+`mimalloc` 固定由 `3rdparty/mimalloc` 构建，不从 vcpkg、Conan 或系统目录
+静默获取。安装 cnetmod 时会把对应平台的库、头文件和运行时一起放进 SDK。
+分配器替换必须发生在最终可执行程序，不能靠静态库的传递链接保证，因此下游
+应用需要显式调用：
+
+```cmake
+find_package(cnetmod 2 CONFIG REQUIRED)
+
+add_executable(my_service main.cpp)
+target_link_libraries(my_service PRIVATE cnetmod::http)
+cnetmod_enable_mimalloc(my_service)
+```
+
+`cnetmod_enable_mimalloc()` 只接受 executable target，并负责平台差异：
+
+- Windows：链接 SDK 内的 `mimalloc.dll` 导入库，强制引入初始化符号，并在
+  构建后把 `mimalloc.dll`、`mimalloc-redirect.dll` 复制到程序旁边。
+- Linux/WSL/macOS：把 SDK 内的 `mimalloc.o` 直接加入最终链接，避免静态
+  archive 因链接顺序或 `--as-needed` 未真正接管 `malloc/new`。
+
+不调用该函数时，下游继续使用平台默认分配器；无需修改业务源码，也不会因
+链接 cnetmod 的任一静态组件而隐式开启。
 
 ## 参考源码
 - `CMakeLists.txt` — 根构建文件（项目配置、平台检测、目标定义）
@@ -14989,7 +15100,7 @@ struct chat_response {
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit client(io_context&) noexcept` | |
-| `connect` | `auto connect(connect_options) -> task<std::expected<void, std::string>>` | 连接 API |
+| `connect` | `auto connect(connect_options[, cancel_token&]) -> task<std::expected<void, std::string>>` | 连接 API；可取消重载覆盖 TCP 建连与 TLS 握手 |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
 | `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
@@ -15051,7 +15162,9 @@ session 不共享消息且可以并行。成功响应才原子追加 user/assist
 建立并验证全部新连接，验证完成立即关闭探测连接，再通过连接池 generation swap 一次
 发布。运行期按 lease 惰性重连，避免启动到首个请求之间被网关回收的空闲 socket 形成
 一整池假活连接。配置非法或任一连接失败时旧 generation 不变；成功发布后，在途请求继续
-持有旧客户端，新请求只获取新客户端。
+持有旧客户端，新请求只获取新客户端。启动和热重载的建连组统一使用
+`timeout_seconds` 作为完整 generation 的截止时间，并把 Application 生命周期取消信号
+转发给每个 TCP/TLS 建连；上游地址黑洞或停机时不会无限阻塞启动、重载或关闭。
 `chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型

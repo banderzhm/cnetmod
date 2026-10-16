@@ -1,6 +1,14 @@
 
 cmake_minimum_required(VERSION 3.28)
 
+# CMake 4.2 preserves backslashes passed through macros. Component extraction
+# regexes intentionally match both Windows and POSIX separators, so use the
+# non-lossy argument semantics when the policy is available while retaining
+# compatibility with the declared 3.28 minimum.
+if(POLICY CMP0219)
+    cmake_policy(SET CMP0219 NEW)
+endif()
+
 project(cnetmod
     VERSION 2.0.0
     DESCRIPTION "Cross-platform asynchronous network library with C++23 modules"
@@ -51,7 +59,7 @@ if(CNETMOD_USE_MOLD)
     cnetmod_use_mold()
 endif()
 # ==============================================================================
-# Memory Allocator Optimization: Use mimalloc if available
+# Memory Allocator Optimization: bundled mimalloc, enabled on final executables
 # ==============================================================================
 option(CNETMOD_USE_MIMALLOC "Use mimalloc allocator for better performance" ON)
 set(CNETMOD_DEPENDENCY_MODE "system" CACHE STRING
@@ -62,6 +70,7 @@ if(NOT CNETMOD_DEPENDENCY_MODE MATCHES "^(system|vcpkg|conan)$")
         "CNETMOD_DEPENDENCY_MODE must be system, vcpkg, or conan")
 endif()
 include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/3rdparty/Mimalloc.cmake)
+set(CNETMOD_USING_MIMALLOC FALSE CACHE BOOL "Using bundled mimalloc" FORCE)
 if(CNETMOD_USE_MIMALLOC)
     cnetmod_use_mimalloc()
 endif()
@@ -116,6 +125,78 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     add_compile_options(-Wall -Wextra)
 endif()
+
+# ==============================================================================
+# Release code-generation profile
+# ==============================================================================
+# Keep distributed SDK objects portable by default. Performance deployments and
+# reproducible benchmark builds can select a declared CPU contract instead of
+# relying on the build host's accidental `-march=native` feature set.
+set(CNETMOD_CPU_TARGET "portable" CACHE STRING
+    "Release CPU target: portable, x86-64-v3, or native")
+set_property(CACHE CNETMOD_CPU_TARGET PROPERTY STRINGS portable x86-64-v3 native)
+option(CNETMOD_ENABLE_THIN_LTO
+    "Enable ThinLTO/IPO for optimized cnetmod targets" OFF)
+
+if(NOT CNETMOD_CPU_TARGET MATCHES "^(portable|x86-64-v3|native)$")
+    message(FATAL_ERROR
+        "CNETMOD_CPU_TARGET must be portable, x86-64-v3, or native")
+endif()
+
+function(cnetmod_enable_release_codegen target)
+    if(NOT TARGET ${target})
+        return()
+    endif()
+    if(CNETMOD_CPU_TARGET STREQUAL "x86-64-v3")
+        if(MSVC)
+            message(FATAL_ERROR
+                "CNETMOD_CPU_TARGET=x86-64-v3 requires Clang or GCC")
+        elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-march=x86-64-v3>")
+            if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+                # Clang 22 may widen aggregate initialization inside a
+                # coroutine frame to an aligned 256-bit store even though the
+                # frame returned by the ordinary allocation function is only
+                # max_align_t-aligned. Prefer 128-bit vectors until LLVM makes
+                # that lowering alignment-safe; scalar AVX2 instructions and
+                # the rest of the x86-64-v3 contract remain available.
+                target_compile_options(${target} PRIVATE
+                    "$<$<CONFIG:Release,RelWithDebInfo>:-mprefer-vector-width=128>")
+            endif()
+        else()
+            message(FATAL_ERROR
+                "x86-64-v3 was selected for a non-x86_64 target")
+        endif()
+    elseif(CNETMOD_CPU_TARGET STREQUAL "native")
+        if(MSVC)
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:/arch:AVX2>")
+        else()
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-march=native>")
+            if(CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND
+                CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|amd64)$")
+                target_compile_options(${target} PRIVATE
+                    "$<$<CONFIG:Release,RelWithDebInfo>:-mprefer-vector-width=128>")
+            endif()
+        endif()
+    endif()
+
+    if(CNETMOD_ENABLE_THIN_LTO)
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            target_compile_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-flto=thin>")
+            target_link_options(${target} PRIVATE
+                "$<$<CONFIG:Release,RelWithDebInfo>:-flto=thin>")
+        else()
+            set_property(TARGET ${target} PROPERTY
+                INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+            set_property(TARGET ${target} PROPERTY
+                INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO TRUE)
+        endif()
+    endif()
+endfunction()
 
 # ==============================================================================
 # C++20 Module Scanning Configuration
@@ -405,6 +486,21 @@ endforeach()
 cnetmod_extract_component(CNETMOD_APPLICATION
     "[/\\\\]src[/\\\\](application([/\\\\]|\\.(cppm|ixx|cpp)$)|ai\\.(cppm|ixx|cpp)$)")
 
+# Repository composition is an optional Application capability.  Do not leave
+# its module interfaces in the Application target when ORM is disabled: an
+# empty/preprocessor-guarded facade is insufficient because
+# application.orm_repository itself imports concrete ORM modules during CMake's
+# dependency scan.
+if(NOT CNETMOD_ENABLE_ORM)
+    foreach(_kind MODULE_INTERFACE_FILES MODULE_IMPLEMENTATION_CPP_FILES
+            REGULAR_CPP_SOURCES)
+        list(FILTER CNETMOD_APPLICATION_${_kind} EXCLUDE REGEX
+            "[/\\\\]src[/\\\\]application[/\\\\](data|orm_repository)\\.(cppm|ixx|cpp)$")
+        list(FILTER CNETMOD_APPLICATION_${_kind} EXCLUDE REGEX
+            "[/\\\\]src[/\\\\]application[/\\\\]integration[/\\\\](mysql_orm|postgresql_orm)\\.(cppm|ixx|cpp)$")
+    endforeach()
+endif()
+
 set(CNETMOD_RUNTIME_MODULE_INTERFACE_FILES
     ${MODULE_INTERFACE_FILES}
     ${CNETMOD_MONITORING_CORE_MODULE_INTERFACE_FILES})
@@ -507,8 +603,6 @@ cnetmod_link_stdexec(cnetmod_runtime)
 cnetmod_link_nlohmann_json(cnetmod_runtime)
 cnetmod_link_boringssl(cnetmod_runtime)
 cnetmod_link_selected_stdlib(cnetmod_runtime)
-cnetmod_link_mimalloc(cnetmod_runtime)
-
 configure_cxx_modules(
     TARGET cnetmod_runtime
     MODULE_INTERFACE_FILES ${CNETMOD_RUNTIME_MODULE_INTERFACE_FILES}
@@ -632,6 +726,10 @@ add_library(cnetmod_core STATIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/component_facade.cpp")
 cnetmod_configure_component(cnetmod_core cnetmod_core)
 target_link_libraries(cnetmod_core PUBLIC ${CNETMOD_COMPONENT_TARGETS})
+foreach(_cnetmod_component IN LISTS CNETMOD_COMPONENT_TARGETS)
+    cnetmod_enable_release_codegen(${_cnetmod_component})
+endforeach()
+cnetmod_enable_release_codegen(cnetmod_core)
 add_library(cnetmod::core ALIAS cnetmod_core)
 add_library(cnetmod::all ALIAS cnetmod_core)
 
@@ -789,6 +887,11 @@ configure_package_config_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
     INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
 )
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/cnetmodMimalloc.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodMimalloc.cmake"
+    @ONLY
+)
 write_basic_package_version_file(
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfigVersion.cmake"
     VERSION "${PROJECT_VERSION}"
@@ -802,6 +905,7 @@ install(EXPORT cnetmodTargets
 install(FILES
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfig.cmake"
     "${CMAKE_CURRENT_BINARY_DIR}/cnetmodConfigVersion.cmake"
+    "${CMAKE_CURRENT_BINARY_DIR}/cnetmodMimalloc.cmake"
     DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/cnetmod"
 )
 
@@ -820,6 +924,9 @@ set(CNETMOD_LINK_TARGET cnetmod_core)
 
 add_executable(cnetmod_app src/main.cpp)
 target_link_libraries(cnetmod_app PRIVATE ${CNETMOD_LINK_TARGET})
+if(CNETMOD_USING_MIMALLOC)
+    cnetmod_enable_mimalloc(cnetmod_app)
+endif()
 set_property(TARGET cnetmod_app PROPERTY
     CXX_MODULE_GENERATION_MODE "SEPARATE"
 )
@@ -880,6 +987,29 @@ if(TARGET cnetmod_python)
 endif()
 
 list(REMOVE_DUPLICATES CNETMOD_ALL_TARGETS)
+
+foreach(_cnetmod_target IN LISTS CNETMOD_ALL_TARGETS)
+    if(NOT _cnetmod_target STREQUAL "cnetmod_core")
+        cnetmod_enable_release_codegen(${_cnetmod_target})
+    endif()
+endforeach()
+
+# Allocator replacement is a property of the completed process. Apply it to
+# every executable owned by this build; libraries remain allocator-neutral so
+# downstream applications can opt in explicitly on their final target.
+if(CNETMOD_USING_MIMALLOC)
+    foreach(_cnetmod_target IN LISTS CNETMOD_ALL_TARGETS)
+        if(TARGET ${_cnetmod_target})
+            get_target_property(_cnetmod_target_type ${_cnetmod_target} TYPE)
+            get_target_property(_cnetmod_disable_mimalloc
+                ${_cnetmod_target} CNETMOD_DISABLE_MIMALLOC)
+            if(_cnetmod_target_type STREQUAL "EXECUTABLE" AND
+                    NOT _cnetmod_disable_mimalloc)
+                cnetmod_enable_mimalloc(${_cnetmod_target})
+            endif()
+        endif()
+    endforeach()
+endif()
 
 add_custom_target(cnetmod_build_all
     DEPENDS ${CNETMOD_ALL_TARGETS}

@@ -29,6 +29,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.timer;
 import cnetmod.coro.spawn;
+import cnetmod.coro.wait_group;
 import cnetmod.executor.async_op;
 import cnetmod.executor.pool;
 import cnetmod.protocol.tcp;
@@ -444,8 +445,7 @@ namespace detail {
             context.resp().set_header("Allow", allow);
             if (custom)
             {
-                co_await custom(context, unmatched_request{
-                    .status = status::method_not_allowed, .allowed = methods});
+                co_await custom(context, unmatched_request{.status = status::method_not_allowed, .allowed = methods});
                 co_return;
             }
             context.text(status::method_not_allowed,
@@ -534,6 +534,25 @@ struct server::conn_count_guard
         counter->fetch_add(1, std::memory_order_relaxed);
     }
 
+    conn_count_guard(std::atomic<std::size_t>& c, std::adopt_lock_t) noexcept
+        : counter(&c) {}
+
+    [[nodiscard]] static auto try_acquire(
+        std::atomic<std::size_t>& counter, std::size_t limit) noexcept
+        -> std::optional<conn_count_guard>
+    {
+        if (limit == 0)
+            return conn_count_guard{counter};
+        auto current = counter.load(std::memory_order_relaxed);
+        while (current < limit)
+        {
+            if (counter.compare_exchange_weak(current, current + 1,
+                    std::memory_order_acquire, std::memory_order_relaxed))
+                return conn_count_guard{counter, std::adopt_lock};
+        }
+        return std::nullopt;
+    }
+
     ~conn_count_guard()
     {
         if (counter)
@@ -591,11 +610,68 @@ struct server::connection_registration
     auto operator=(const connection_registration&) -> connection_registration& = delete;
 };
 
+struct server::recv_service_state
+{
+#if defined(CNETMOD_HAS_IO_URING) &&             \
+    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+    struct shard
+    {
+        io_context* owner{};
+        std::unique_ptr<io_uring_recv_service> service;
+    };
+
+    void add(io_context& owner)
+    {
+        auto* uring = dynamic_cast<io_uring_context*>(&owner);
+        if (!uring)
+            return;
+        static std::atomic<std::uint32_t> next_group{1};
+        const auto group = static_cast<std::uint16_t>(
+            next_group.fetch_add(1, std::memory_order_relaxed));
+        try
+        {
+            shards.push_back({&owner,
+                std::make_unique<io_uring_recv_service>(
+                    *uring, group, 8192, 256)});
+        }
+        catch (const std::exception& error)
+        {
+            logger::warn("HTTP multishot recv disabled for event loop: {}",
+                error.what());
+        }
+    }
+
+    [[nodiscard]] auto find(io_context& owner) noexcept
+        -> io_uring_recv_service*
+    {
+        for (auto& shard : shards)
+            if (shard.owner == &owner)
+                return shard.service.get();
+        return nullptr;
+    }
+
+    std::vector<shard> shards;
+#else
+    void add(io_context&) noexcept {}
+#endif
+};
+
 server::server(io_context& ctx)
-    : ctx_(ctx) {}
+    : ctx_(ctx), recv_services_(std::make_unique<recv_service_state>())
+{
+    recv_services_->add(ctx_);
+}
 
 server::server(server_context& sctx)
-    : ctx_(sctx.accept_io()), sctx_(&sctx) {}
+    : ctx_(sctx.accept_io()), sctx_(&sctx), recv_services_(std::make_unique<recv_service_state>())
+{
+    for (auto* worker : sctx.worker_ios())
+        recv_services_->add(*worker);
+}
+
+server::~server() = default;
 
 #ifdef CNETMOD_HAS_SSL
 void server::set_ssl_context(ssl_context& ssl_ctx)
@@ -605,17 +681,56 @@ void server::set_ssl_context(ssl_context& ssl_ctx)
 #endif
 
 auto server::listen(std::string_view host, std::uint16_t port,
-    socket_options opts)
+    socket_options opts, int backlog)
     -> std::expected<void, std::error_code>
 {
     auto addr_r = ip_address::from_string(host);
     if (!addr_r)
         return std::unexpected(addr_r.error());
 
-    acc_ = std::make_unique<tcp::acceptor>(ctx_);
     auto ep = cnetmod::endpoint{*addr_r, port};
     opts.reuse_address = true;
-    auto r = acc_->open(ep, opts);
+
+#ifdef CNETMOD_PLATFORM_LINUX
+    if (sctx_ && sctx_->worker_count() > 1)
+    {
+        // Shared-nothing admission: the kernel hashes each flow directly to a
+        // listener owned by its final event loop. No accepted socket or
+        // connection coroutine crosses threads.
+        opts.reuse_port = true;
+        auto workers = sctx_->worker_ios();
+        worker_acceptors_.reserve(workers.size());
+        worker_accept_cancellations_.reserve(workers.size());
+        auto selected_endpoint = ep;
+        for (std::size_t index{}; index < workers.size(); ++index)
+        {
+            auto listener = std::make_unique<tcp::acceptor>(*workers[index]);
+            auto opened = listener->open(selected_endpoint, opts, backlog);
+            if (!opened)
+            {
+                worker_acceptors_.clear();
+                worker_accept_cancellations_.clear();
+                return std::unexpected(opened.error());
+            }
+            if (index == 0 && port == 0)
+            {
+                auto local = listener->native_socket().local_endpoint();
+                if (!local)
+                    return std::unexpected(local.error());
+                selected_endpoint = *local;
+            }
+            worker_acceptors_.push_back(std::move(listener));
+            worker_accept_cancellations_.push_back(
+                std::make_unique<cancel_token>());
+        }
+        host_ = std::string(host);
+        port_ = selected_endpoint.port();
+        return {};
+    }
+#endif
+
+    acc_ = std::make_unique<tcp::acceptor>(ctx_);
+    auto r = acc_->open(ep, opts, backlog);
     if (!r)
         return std::unexpected(r.error());
 
@@ -627,6 +742,8 @@ auto server::listen(std::string_view host, std::uint16_t port,
 auto server::local_endpoint()
     -> std::expected<cnetmod::endpoint, std::error_code>
 {
+    if (!worker_acceptors_.empty())
+        return worker_acceptors_.front()->native_socket().local_endpoint();
     if (!acc_)
         return std::unexpected(make_error_code(errc::bad_descriptor));
     return acc_->native_socket().local_endpoint();
@@ -663,6 +780,8 @@ void server::stop()
 {
     running_ = false;
     accept_cancellation_.cancel();
+    for (auto& cancellation : worker_accept_cancellations_)
+        cancellation->cancel();
     if (acc_ && !accept_cancellation_.pending_.load(std::memory_order_acquire))
         acc_->close();
 }
@@ -674,9 +793,14 @@ void server::abort_connections() noexcept
     for (auto* connection = connections_; connection; connection = connection->next)
     {
         // Cancellation adapters marshal kernel cancellation to the operation's
-        // owning io_context. Do not close a worker-owned socket from the accept
-        // or control loop: IOCP and io_uring registrations are loop-affine.
+        // owning io_context. shutdown() is deliberately issued as well: a
+        // persistent multishot receive is not the token's currently registered
+        // one-shot operation, so token cancellation alone cannot wake it. The
+        // descriptor remains owned by the connection coroutine and is closed
+        // there after the terminal receive completion; this avoids destroying a
+        // worker-loop registration from the control loop.
         connection->cancellation.cancel();
+        connection->client.shutdown_both();
     }
 }
 
@@ -748,6 +872,26 @@ namespace {
 
 auto server::run() -> task<void>
 {
+    constexpr std::size_t accept_batch_limit = 64;
+
+    if (!worker_acceptors_.empty())
+    {
+        async_wait_group completed;
+        completed.add(static_cast<int>(worker_acceptors_.size()));
+        running_ = true;
+        for (std::size_t index{}; index < worker_acceptors_.size(); ++index)
+        {
+            auto* listener = worker_acceptors_[index].get();
+            auto* cancellation = worker_accept_cancellations_[index].get();
+            auto* owner = &listener->context();
+            spawn_guarded<report_connection_failure>(*owner,
+                run_accept_shard(
+                    *listener, *owner, *cancellation, completed));
+        }
+        co_await completed.wait();
+        co_return;
+    }
+
     accept_cancellation_.reset();
     running_ = true;
     while (running_)
@@ -778,29 +922,121 @@ auto server::run() -> task<void>
             continue;
         }
 
-        if (sctx_)
+        dispatch_connection(std::move(*r));
+
+        // One readiness/completion notification can represent many queued
+        // connections. Drain a bounded batch before submitting the next
+        // asynchronous accept, while retaining a fairness point for timers and
+        // shutdown work after at most accept_batch_limit admissions.
+        for (std::size_t accepted = 1;
+            running_ && accepted < accept_batch_limit; ++accepted)
         {
-            // Multi-core mode: round-robin dispatch to worker io_context
-            auto& worker = sctx_->next_worker_io();
-            spawn_guarded<report_connection_failure>(worker,
-                handle_connection(std::move(*r), worker, conn_count_guard{active_connections_}));
-        }
-        else
-        {
-            // Single-threaded mode: handle on current io_context
-            spawn_guarded<report_connection_failure>(ctx_,
-                handle_connection(std::move(*r), ctx_, conn_count_guard{active_connections_}));
+            if (max_connections_ > 0 &&
+                active_connections_.load(std::memory_order_relaxed) >=
+                    max_connections_)
+                break;
+            auto next = acc_->try_accept();
+            if (!next || !*next)
+                break;
+            dispatch_connection(std::move(**next));
         }
     }
     if (acc_)
         acc_->close();
 }
 
+auto server::run_accept_shard(tcp::acceptor& listener, io_context& owner,
+    cancel_token& cancellation, async_wait_group& completed) -> task<void>
+{
+    struct completion_guard
+    {
+        async_wait_group& group;
+
+        ~completion_guard()
+        {
+            group.done();
+        }
+    } completion{completed};
+
+    constexpr std::size_t accept_batch_limit = 64;
+    cancellation.reset();
+    while (running_)
+    {
+        auto accepted = co_await async_accept(
+            owner, listener.native_socket(), cancellation);
+        if (!accepted)
+        {
+            if (!running_)
+                break;
+            continue;
+        }
+        if (!running_)
+            break;
+
+        auto admit = [&](socket client, conn_count_guard slot)
+        {
+            spawn_guarded<report_connection_failure>(owner,
+                handle_connection(
+                    std::move(client), owner, std::move(slot)));
+        };
+
+        auto slot = conn_count_guard::try_acquire(
+            active_connections_, max_connections_);
+        if (slot)
+            admit(std::move(*accepted), std::move(*slot));
+        else
+        {
+            (void)co_await with_timeout(owner, std::chrono::seconds{1},
+                reject_connection(owner, *accepted, cancellation),
+                cancellation);
+            accepted->close();
+            if (running_)
+                cancellation.reset();
+        }
+
+        for (std::size_t count = 1;
+            running_ && count < accept_batch_limit; ++count)
+        {
+            auto next = listener.try_accept();
+            if (!next || !*next)
+                break;
+            auto next_slot = conn_count_guard::try_acquire(
+                active_connections_, max_connections_);
+            if (!next_slot)
+            {
+                (**next).close();
+                break;
+            }
+            admit(std::move(**next), std::move(*next_slot));
+        }
+    }
+    listener.close();
+}
+
+void server::dispatch_connection(socket client)
+{
+    if (sctx_)
+    {
+        // Multi-core mode: round-robin dispatch to worker io_context.
+        auto& worker = sctx_->next_worker_io();
+        spawn_guarded<report_connection_failure>(worker,
+            handle_connection(std::move(client), worker,
+                conn_count_guard{active_connections_}));
+        return;
+    }
+
+    // Single-threaded mode: handle on the listener io_context.
+    spawn_guarded<report_connection_failure>(ctx_,
+        handle_connection(std::move(client), ctx_,
+            conn_count_guard{active_connections_}));
+}
+
 // =============================================================================
 // Connection Handling
 // =============================================================================
 
-auto server::handle_connection(socket client, io_context& io, conn_count_guard ownership) -> task<void>
+auto server::handle_connection(socket client, io_context& io,
+    conn_count_guard /* ownership */) -> task<void>
 {
     connection_registration registration{*this, client};
 
@@ -1020,35 +1256,25 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 {
     bool keep_alive = true;
     response resp(status::ok);
-    std::string response_wire;
+    std::string pending_responses;
     request_parser parser;
     std::array<std::byte, 8192> buf;
+    bool parse_buffered_request = false;
 
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
-    std::unique_ptr<io_uring_recv_service> recv_service;
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
     std::unique_ptr<io_uring_multishot_recv> recv_stream;
-    if (const auto* enabled = std::getenv("CNETMOD_HTTP_MULTISHOT_RECV");
-        enabled && enabled[0] != '\0' && enabled[0] != '0')
+    if (auto* service = recv_services_->find(io))
     {
-        if (auto* uring = dynamic_cast<io_uring_context*>(&io))
+        try
         {
-            // This per-connection adapter is deliberately opt-in.  The next
-            // iteration promotes the service to worker-context ownership.
-            static std::atomic<unsigned> next_group{1};
-            const auto group = static_cast<std::uint16_t>(
-                next_group.fetch_add(1, std::memory_order_relaxed));
-            try
-            {
-                recv_service =
-                    std::make_unique<io_uring_recv_service>(*uring, group, 4096, 16);
-                recv_stream = recv_service->make_receiver(client);
-            }
-            catch (...)
-            {
-                recv_service.reset();
-            }
+            recv_stream = service->make_receiver(client);
+        }
+        catch (...)
+        {
+            recv_stream.reset();
         }
     }
 
@@ -1059,205 +1285,362 @@ auto server::handle_h1_clear(socket& client, io_context& io,
     };
 #endif
 
-    while (keep_alive)
+#if defined(CNETMOD_HAS_IO_URING) &&             \
+    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+    // Keep every early return inside a child task so the owning coroutine can
+    // always join the persistent io_uring receive before its operation state
+    // is destroyed.  Handler and middleware exceptions are preserved after
+    // the kernel operation has settled. Other backends retain the direct loop
+    // below and therefore pay no additional coroutine-frame cost.
+    auto serve_connection = [&]() -> task<void>
     {
-        parser.reset();
-
-        // Feed pre-read data on first iteration
-        if (initial_data && initial_len > 0)
-        {
-            auto consumed = parser.consume(initial_data, initial_len);
-            if (!consumed)
-                co_return;
-            initial_data = nullptr;
-            initial_len = 0;
-        }
-
-        auto receive_more = [&]() -> task<bool>
-        {
-#if defined(CNETMOD_HAS_IO_URING) &&             \
-    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
-            if (recv_stream)
-            {
-                auto rd = co_await recv_stream->async_next();
-                if (!rd || rd->size() == 0)
-                {
-                    co_await stop_recv();
-                    co_return false;
-                }
-                auto data = rd->data();
-                auto consumed =
-                    parser.consume(static_cast<const char*>(data.data), data.size);
-                rd->release();
-                if (!consumed)
-                {
-                    co_await stop_recv();
-                    co_return false;
-                }
-                co_return true;
-            }
 #endif
-            auto rd = co_await async_read(io, client,
-                mutable_buffer{buf.data(), buf.size()}, cancellation);
-            if (!rd || *rd == 0)
-            {
-#if defined(CNETMOD_HAS_IO_URING) &&             \
-    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
-                co_await stop_recv();
-#endif
-                co_return false;
-            }
-
-            auto consumed =
-                parser.consume(reinterpret_cast<const char*>(buf.data()), *rd);
-            if (!consumed)
-            {
-#if defined(CNETMOD_HAS_IO_URING) &&             \
-    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
-                co_await stop_recv();
-#endif
-                co_return false;
-            }
-            co_return true;
-        };
-
-        while (!parser.headers_ready())
-            if (!(co_await receive_more()))
-                co_return;
-
-        // Route matching
-        auto uri = parser.uri();
-        auto qpos = uri.find('?');
-        auto path = (qpos != std::string_view::npos) ? uri.substr(0, qpos) : uri;
-
-        auto mr = router_.match(parser.method(), path);
-
-        resp.reset(status::ok, parser.version());
-        if (response_headers_.emit_server)
-            resp.set_header("Server", "cnetmod");
-        if (response_headers_.emit_date)
-            resp.set_cached_date_header(date_cache_.get());
-        route_params rp;
-        handler_fn handler;
-
-        if (mr)
+        while (keep_alive)
         {
-            handler = std::move(mr->handler);
-            rp = std::move(mr->params);
-        }
-        else
-        {
-            handler = detail::unmatched_route_handler(router_, path);
-        }
-
-        if (mr && mr->request_stream)
-        {
-            const auto options = *mr->request_stream;
-            auto body_stream = std::make_shared<request_body_stream>(
-                options.chunk_capacity, options.max_bytes);
-            request_context rctx(io, client, parser.method(), parser.uri(),
-                parser.headers(), {}, resp, std::move(rp), body_stream);
-            auto pump_body = [&]() -> task<void>
+            if (parse_buffered_request)
             {
-                for (;;)
-                {
-                    auto data = parser.take_body_chunk();
-                    if (!data.empty() && !body_stream->is_closed())
-                    {
-                        request_body_chunk chunk(
-                            reinterpret_cast<const std::byte*>(data.data()),
-                            reinterpret_cast<const std::byte*>(data.data()) +
-                                data.size());
-                        (void)co_await body_stream->send(std::move(chunk));
-                    }
-                    if (parser.ready())
-                    {
-                        body_stream->close();
-                        co_return;
-                    }
-                    if (!(co_await receive_more()))
-                    {
-                        body_stream->fail(
-                            std::make_error_code(std::errc::connection_aborted));
-                        co_return;
-                    }
-                }
-            };
-            auto invoke_handler = [&]() -> task<void>
-            {
-                co_await execute_chain(rctx, handler);
-                body_stream->close();
-            };
-            co_await when_all(invoke_handler(), pump_body());
-            if (body_stream->error() ==
-                    std::make_error_code(std::errc::message_size) &&
-                resp.get_header("X-Streamed") != "1")
-                rctx.text(status::payload_too_large,
-                    "Request body exceeds the route limit");
-        }
-        else
-        {
-            while (!parser.ready())
-                if (!(co_await receive_more()))
+                parse_buffered_request = false;
+                if (!parser.reset_for_next_message())
                     co_return;
-            request_context rctx(io, client, parser, resp, std::move(rp));
-            co_await execute_chain(rctx, handler);
-        }
-        // Check if chunked encoding is needed
-        bool use_chunked = false;
-        if (resp.get_header("X-Streamed") != "1")
-        {
-            // If no Content-Length and body not empty, use chunked
-            if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
-                parser.version() == http_version::http_1_1)
-            {
-                use_chunked = true;
-                resp.set_header("Transfer-Encoding", "chunked");
-            }
-
-            if (use_chunked)
-            {
-                // Send chunked response
-                co_await send_chunked_response(io, client, resp, cancellation);
+                if (auto parsed = parser.consume_buffered(); !parsed)
+                {
+                    if (!pending_responses.empty())
+                        (void)co_await async_write_all(io, client,
+                            const_buffer{pending_responses.data(),
+                                pending_responses.size()},
+                            cancellation);
+                    co_return;
+                }
+                // Only coalesce responses while complete requests are already in
+                // memory. If the next pipelined request is fragmented, release the
+                // valid preceding responses before waiting for more input.
+                if (!parser.ready() && !pending_responses.empty())
+                {
+                    auto pending = co_await async_write_all(io, client,
+                        const_buffer{pending_responses.data(),
+                            pending_responses.size()},
+                        cancellation);
+                    if (!pending)
+                        co_return;
+                    pending_responses.clear();
+                }
             }
             else
             {
-                // Send normal response
-                resp.serialize_to(response_wire);
-                auto wr = co_await async_write_all(
-                    io, client,
-                    const_buffer{response_wire.data(), response_wire.size()},
-                    cancellation);
-                if (!wr)
+                parser.reset();
+            }
+
+            // Feed pre-read data on first iteration
+            if (initial_data && initial_len > 0)
+            {
+                auto consumed = parser.consume(initial_data, initial_len);
+                if (!consumed)
+                    co_return;
+                initial_data = nullptr;
+                initial_len = 0;
+            }
+
+            auto receive_more = [&]() -> task<bool>
+            {
+#if defined(CNETMOD_HAS_IO_URING) &&             \
+    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+                if (recv_stream)
+                {
+                    auto rd = co_await recv_stream->async_next();
+                    if (!rd)
+                    {
+                        co_await stop_recv();
+                        recv_stream.reset();
+                    }
+                    else if (rd->size() == 0)
+                    {
+                        co_await stop_recv();
+                        co_return false;
+                    }
+                    else
+                    {
+                        auto data = rd->data();
+                        auto consumed = parser.consume(
+                            static_cast<const char*>(data.data), data.size);
+                        rd->release();
+                        if (!consumed)
+                        {
+                            co_await stop_recv();
+                            co_return false;
+                        }
+                        co_return true;
+                    }
+                }
+#endif
+                auto rd = co_await async_read(io, client,
+                    mutable_buffer{buf.data(), buf.size()}, cancellation);
+                if (!rd || *rd == 0)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
                     co_await stop_recv();
 #endif
-                    co_return;
+                    co_return false;
                 }
-            }
-        }
 
-        auto conn_hdr = parser.get_header("Connection");
-        if (parser.version() == http_version::http_1_1)
-        {
-            keep_alive = (conn_hdr != "close");
-        }
-        else
-        {
-            keep_alive = false;
-        }
-    }
-
+                auto consumed =
+                    parser.consume(reinterpret_cast<const char*>(buf.data()), *rd);
+                if (!consumed)
+                {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
     defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
-    defined(IORING_RECV_MULTISHOT)
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+                    co_await stop_recv();
+#endif
+                    co_return false;
+                }
+                co_return true;
+            };
+
+            while (!parser.headers_ready())
+                if (!(co_await receive_more()))
+                    co_return;
+
+            // Route matching
+            auto uri = parser.uri();
+            auto qpos = uri.find('?');
+            auto path = (qpos != std::string_view::npos) ? uri.substr(0, qpos) : uri;
+
+            auto mr = router_.match(parser.method(), path);
+
+            resp.reset(status::ok, parser.version());
+            if (response_headers_.emit_server)
+                resp.set_header("Server", "cnetmod");
+            if (response_headers_.emit_date)
+                resp.set_cached_date_header(date_cache_.get());
+            route_params rp;
+            handler_fn handler;
+            sync_handler_fn sync_handler;
+
+            if (mr)
+            {
+                handler = std::move(mr->handler);
+                sync_handler = std::move(mr->sync_handler);
+                rp = std::move(mr->params);
+            }
+            else
+            {
+                handler = detail::unmatched_route_handler(router_, path);
+            }
+
+            if (mr && mr->request_stream)
+            {
+                const auto options = *mr->request_stream;
+                auto body_stream = std::make_shared<request_body_stream>(
+                    options.chunk_capacity, options.max_bytes);
+                request_context rctx(io, client, parser, resp, std::move(rp),
+                    body_stream);
+                rctx.set_stream_writer(
+                    [&io, &client, &pending_responses](std::string_view bytes,
+                        cancel_token& token)
+                        -> task<std::expected<void, std::error_code>>
+                    {
+                        if (!pending_responses.empty())
+                        {
+                            auto pending = co_await async_write_all(io, client,
+                                const_buffer{pending_responses.data(),
+                                    pending_responses.size()},
+                                token);
+                            if (!pending)
+                                co_return std::unexpected(pending.error());
+                            pending_responses.clear();
+                        }
+                        co_return co_await async_write_all(io, client,
+                            const_buffer{bytes.data(), bytes.size()}, token);
+                    });
+                auto pump_body = [&]() -> task<void>
+                {
+                    for (;;)
+                    {
+                        auto data = parser.take_body_chunk();
+                        if (!data.empty() && !body_stream->is_closed())
+                        {
+                            request_body_chunk chunk(
+                                reinterpret_cast<const std::byte*>(data.data()),
+                                reinterpret_cast<const std::byte*>(data.data()) +
+                                    data.size());
+                            (void)co_await body_stream->send(std::move(chunk));
+                        }
+                        if (parser.ready())
+                        {
+                            body_stream->close();
+                            co_return;
+                        }
+                        if (!(co_await receive_more()))
+                        {
+                            body_stream->fail(
+                                std::make_error_code(std::errc::connection_aborted));
+                            co_return;
+                        }
+                    }
+                };
+                auto invoke_handler = [&]() -> task<void>
+                {
+                    if (middlewares_.empty())
+                        co_await handler(rctx);
+                    else
+                        co_await execute_chain(rctx, handler);
+                    body_stream->close();
+                };
+                co_await when_all(invoke_handler(), pump_body());
+                if (body_stream->error() ==
+                        std::make_error_code(std::errc::message_size) &&
+                    resp.get_header("X-Streamed") != "1")
+                    rctx.text(status::payload_too_large,
+                        "Request body exceeds the route limit");
+            }
+            else
+            {
+                while (!parser.ready())
+                    if (!(co_await receive_more()))
+                        co_return;
+                request_context rctx(io, client, parser, resp, std::move(rp));
+                rctx.set_stream_writer(
+                    [&io, &client, &pending_responses](std::string_view bytes,
+                        cancel_token& token)
+                        -> task<std::expected<void, std::error_code>>
+                    {
+                        if (!pending_responses.empty())
+                        {
+                            auto pending = co_await async_write_all(io, client,
+                                const_buffer{pending_responses.data(),
+                                    pending_responses.size()},
+                                token);
+                            if (!pending)
+                                co_return std::unexpected(pending.error());
+                            pending_responses.clear();
+                        }
+                        co_return co_await async_write_all(io, client,
+                            const_buffer{bytes.data(), bytes.size()}, token);
+                    });
+                if (middlewares_.empty() && sync_handler)
+                    sync_handler(rctx);
+                else if (middlewares_.empty())
+                    co_await handler(rctx);
+                else
+                {
+                    handler_fn adapted;
+                    auto* selected = &handler;
+                    if (sync_handler)
+                    {
+                        adapted = [&sync_handler](request_context& context)
+                            -> task<void>
+                        {
+                            sync_handler(context);
+                            co_return;
+                        };
+                        selected = &adapted;
+                    }
+                    co_await execute_chain(rctx, *selected);
+                }
+            }
+            // Check if chunked encoding is needed
+            bool use_chunked = false;
+            if (resp.get_header("X-Streamed") != "1")
+            {
+                // If no Content-Length and body not empty, use chunked
+                if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
+                    parser.version() == http_version::http_1_1)
+                {
+                    use_chunked = true;
+                    resp.set_header("Transfer-Encoding", "chunked");
+                }
+
+                if (use_chunked)
+                {
+                    if (!pending_responses.empty())
+                    {
+                        auto pending = co_await async_write_all(io, client,
+                            const_buffer{pending_responses.data(),
+                                pending_responses.size()},
+                            cancellation);
+                        if (!pending)
+                            co_return;
+                        pending_responses.clear();
+                    }
+                    // Send chunked response
+                    co_await send_chunked_response(io, client, resp, cancellation);
+                }
+                else
+                {
+                    // Keep complete pipelined responses in connection-owned
+                    // storage. They are submitted together when the receive batch
+                    // is drained, reducing write SQEs without changing ordering.
+                    resp.append_serialized_to(pending_responses);
+                }
+            }
+
+            auto conn_hdr = parser.get_header("Connection");
+            if (parser.version() == http_version::http_1_1)
+            {
+                keep_alive = (conn_hdr != "close");
+            }
+            else
+            {
+                keep_alive = false;
+            }
+
+            if (keep_alive && parser.has_buffered_data())
+            {
+                parse_buffered_request = true;
+                continue;
+            }
+
+            if (!pending_responses.empty())
+            {
+                // Small HTTP responses normally complete in one send. Avoid the
+                // async_write_all coroutine frame on that hot path, retaining its
+                // correctness loop only for an actual partial write.
+                auto written = co_await async_write(io, client,
+                    const_buffer{pending_responses.data(),
+                        pending_responses.size()},
+                    cancellation);
+                if (!written)
+                    co_return;
+                if (*written < pending_responses.size())
+                {
+                    auto remainder = co_await async_write_all(io, client,
+                        const_buffer{pending_responses.data() + *written,
+                            pending_responses.size() - *written},
+                        cancellation);
+                    if (!remainder)
+                        co_return;
+                }
+                pending_responses.clear();
+            }
+        }
+#if defined(CNETMOD_HAS_IO_URING) &&             \
+    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+    };
+
+    std::exception_ptr failure;
+    try
+    {
+        co_await serve_connection();
+    }
+    catch (...)
+    {
+        failure = std::current_exception();
+    }
+
     co_await stop_recv();
+
+    if (failure)
+        std::rethrow_exception(failure);
 #endif
 }
 
@@ -1290,15 +1673,27 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
 {
     bool keep_alive = true;
     response resp(status::ok);
-    std::string response_wire;
+    std::string pending_responses;
     request_parser parser;
     std::array<std::byte, 8192> buf;
-    auto configure_stream_writer = [&ssl](request_context& context)
+    bool parse_buffered_request = false;
+    auto configure_stream_writer = [&ssl, &pending_responses](
+                                       request_context& context)
     {
         context.set_stream_writer(
-            [&ssl](std::string_view bytes, cancel_token& token)
+            [&ssl, &pending_responses](std::string_view bytes,
+                cancel_token& token)
                 -> task<std::expected<void, std::error_code>>
             {
+                if (!pending_responses.empty())
+                {
+                    auto pending = co_await ssl.async_write_all(const_buffer{
+                                                                    pending_responses.data(), pending_responses.size()},
+                        token);
+                    if (!pending)
+                        co_return std::unexpected(pending.error());
+                    pending_responses.clear();
+                }
                 co_return co_await ssl.async_write_all(
                     const_buffer{bytes.data(), bytes.size()}, token);
             });
@@ -1306,7 +1701,33 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
 
     while (keep_alive)
     {
-        parser.reset();
+        if (parse_buffered_request)
+        {
+            parse_buffered_request = false;
+            if (!parser.reset_for_next_message())
+                co_return;
+            if (auto parsed = parser.consume_buffered(); !parsed)
+            {
+                if (!pending_responses.empty())
+                    (void)co_await ssl.async_write_all(const_buffer{
+                                                           pending_responses.data(), pending_responses.size()},
+                        cancellation);
+                co_return;
+            }
+            if (!parser.ready() && !pending_responses.empty())
+            {
+                auto pending = co_await ssl.async_write_all(const_buffer{
+                                                                pending_responses.data(), pending_responses.size()},
+                    cancellation);
+                if (!pending)
+                    co_return;
+                pending_responses.clear();
+            }
+        }
+        else
+        {
+            parser.reset();
+        }
 
         auto receive_more = [&]() -> task<bool>
         {
@@ -1339,10 +1760,12 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             resp.set_cached_date_header(date_cache_.get());
         route_params rp;
         handler_fn handler;
+        sync_handler_fn sync_handler;
 
         if (mr)
         {
             handler = std::move(mr->handler);
+            sync_handler = std::move(mr->sync_handler);
             rp = std::move(mr->params);
         }
         else
@@ -1355,8 +1778,8 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             const auto options = *mr->request_stream;
             auto body_stream = std::make_shared<request_body_stream>(
                 options.chunk_capacity, options.max_bytes);
-            request_context rctx(io, client, parser.method(), parser.uri(),
-                parser.headers(), {}, resp, std::move(rp), body_stream);
+            request_context rctx(io, client, parser, resp, std::move(rp),
+                body_stream);
             configure_stream_writer(rctx);
             auto pump_body = [&]() -> task<void>
             {
@@ -1386,7 +1809,10 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
             };
             auto invoke_handler = [&]() -> task<void>
             {
-                co_await execute_chain(rctx, handler);
+                if (middlewares_.empty())
+                    co_await handler(rctx);
+                else
+                    co_await execute_chain(rctx, handler);
                 body_stream->close();
             };
             co_await when_all(invoke_handler(), pump_body());
@@ -1403,7 +1829,26 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                     co_return;
             request_context rctx(io, client, parser, resp, std::move(rp));
             configure_stream_writer(rctx);
-            co_await execute_chain(rctx, handler);
+            if (middlewares_.empty() && sync_handler)
+                sync_handler(rctx);
+            else if (middlewares_.empty())
+                co_await handler(rctx);
+            else
+            {
+                handler_fn adapted;
+                auto* selected = &handler;
+                if (sync_handler)
+                {
+                    adapted = [&sync_handler](request_context& context)
+                        -> task<void>
+                    {
+                        sync_handler(context);
+                        co_return;
+                    };
+                    selected = &adapted;
+                }
+                co_await execute_chain(rctx, *selected);
+            }
         }
         // Check if chunked encoding is needed
         bool use_chunked = false;
@@ -1419,18 +1864,21 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
 
             if (use_chunked)
             {
+                if (!pending_responses.empty())
+                {
+                    auto pending = co_await ssl.async_write_all(const_buffer{
+                                                                    pending_responses.data(), pending_responses.size()},
+                        cancellation);
+                    if (!pending)
+                        co_return;
+                    pending_responses.clear();
+                }
                 // Send chunked response (TLS)
                 co_await send_chunked_response_tls(io, ssl, resp, cancellation);
             }
             else
             {
-                // Send normal response
-                resp.serialize_to(response_wire);
-                auto wr = co_await ssl.async_write_all(
-                    const_buffer{response_wire.data(), response_wire.size()},
-                    cancellation);
-                if (!wr)
-                    co_return;
+                resp.append_serialized_to(pending_responses);
             }
         }
 
@@ -1442,6 +1890,21 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         else
         {
             keep_alive = false;
+        }
+
+        if (keep_alive && parser.has_buffered_data())
+        {
+            parse_buffered_request = true;
+            continue;
+        }
+        if (!pending_responses.empty())
+        {
+            auto written = co_await ssl.async_write_all(const_buffer{
+                                                            pending_responses.data(), pending_responses.size()},
+                cancellation);
+            if (!written)
+                co_return;
+            pending_responses.clear();
         }
     }
 }

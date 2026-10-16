@@ -109,38 +109,29 @@ namespace {
         {
             auto loaded = load_yaml_configuration_document(path);
             if (!loaded)
-                fail({}, std::format("cannot load YAML configuration '{}': {}",
-                             location, loaded.error().message()),
+                fail({}, std::format("cannot load YAML configuration '{}': {}", location, loaded.error().message()),
                     loaded.error());
             if (!loaded->is_object())
-                fail({}, std::format(
-                             "configuration '{}' must contain a mapping at the root",
-                             location));
+                fail({}, std::format("configuration '{}' must contain a mapping at the root", location));
             return std::move(*loaded);
         }
 #else
         if (extension == ".yaml" || extension == ".yml")
-            fail({}, std::format(
-                         "configuration '{}' is YAML but YAML support was not built",
-                         location),
+            fail({}, std::format("configuration '{}' is YAML but YAML support was not built", location),
                 std::errc::not_supported);
 #endif
         std::ifstream input{path, std::ios::binary};
         if (!input)
-            fail({}, std::format("configuration file '{}' cannot be opened",
-                         location),
+            fail({}, std::format("configuration file '{}' cannot be opened", location),
                 std::errc::no_such_file_or_directory);
         const std::string text{std::istreambuf_iterator<char>{input},
             std::istreambuf_iterator<char>{}};
         auto parsed = cnetmod::json::parse_document(text);
         if (!parsed)
-            fail({}, std::format("configuration '{}' is not valid JSON: {}",
-                         location, parsed.error().message()),
+            fail({}, std::format("configuration '{}' is not valid JSON: {}", location, parsed.error().message()),
                 parsed.error());
         if (!parsed->is_object())
-            fail({}, std::format(
-                         "configuration '{}' must contain an object at the root",
-                         location));
+            fail({}, std::format("configuration '{}' must contain an object at the root", location));
         return std::move(*parsed);
     }
 
@@ -188,8 +179,7 @@ namespace {
             return;
         auto decoded = cnetmod::json::from_document<Value>(*found);
         if (!decoded)
-            fail(join(path, key), std::format("invalid value of type {}",
-                                      type_name(*found)));
+            fail(join(path, key), std::format("invalid value of type {}", type_name(*found)));
         destination = std::move(*decoded);
     }
 
@@ -201,9 +191,7 @@ namespace {
         if (found == nullptr)
             return;
         if (!found->is_int64() && !found->is_uint64())
-            fail(join(path, key), std::format(
-                                      "expected an integer number of milliseconds, got {}",
-                                      type_name(*found)));
+            fail(join(path, key), std::format("expected an integer number of milliseconds, got {}", type_name(*found)));
         destination = std::chrono::milliseconds{found->as<std::int64_t>()};
     }
 
@@ -331,8 +319,7 @@ namespace {
                 result.append(reference.substr(separator + 2U));
             else
                 fail(std::string{path},
-                    std::format("environment variable '{}' is not set and has "
-                                "no ${{{}:-default}}",
+                    std::format("environment variable '{}' is not set and has " "no ${{{}:-default}}",
                         name, name),
                     std::errc::no_such_file_or_directory);
             position = close + 1U;
@@ -393,10 +380,7 @@ namespace {
             const auto text = string_value(*level, "logging.level");
             const auto parsed = parse_log_level(text);
             if (!parsed)
-                fail("logging.level", std::format(
-                                          "unknown level '{}' (expected trace, debug, "
-                                          "info, warn, error, critical or off)",
-                                          text));
+                fail("logging.level", std::format("unknown level '{}' (expected trace, debug, " "info, warn, error, critical or off)", text));
             result.logging.level = *parsed;
         }
         if (const auto* format = cnetmod::json::find(item, "format"))
@@ -415,11 +399,10 @@ namespace {
         const cnetmod::json::document& item)
     {
         constexpr std::string_view path = "http";
-        require_known(item, path, {"address", "port", "max_connections",
-                                      "request_timeout_ms", "sse", "request_ids",
-                                      "access_logging", "recover_exceptions"});
+        require_known(item, path, {"address", "port", "backlog", "max_connections", "request_timeout_ms", "sse", "request_ids", "access_logging", "recover_exceptions"});
         assign(item, path, "address", result.http.address);
         assign(item, path, "port", result.http.port);
+        assign(item, path, "backlog", result.http.backlog);
         assign(item, path, "max_connections", result.http.max_connections);
         if (cnetmod::json::find(item, "request_timeout_ms") != nullptr)
         {
@@ -446,12 +429,11 @@ namespace {
         const cnetmod::json::document& item)
     {
         constexpr std::string_view path = "management";
-        require_known(item, path, {"enabled", "address", "port", "same_port",
-                                      "live_path", "ready_path", "health_path",
-                                      "metrics_path"});
+        require_known(item, path, {"enabled", "address", "port", "backlog", "same_port", "live_path", "ready_path", "health_path", "metrics_path"});
         assign(item, path, "enabled", result.management.enabled);
         assign(item, path, "address", result.management.address);
         assign(item, path, "port", result.management.port);
+        assign(item, path, "backlog", result.management.backlog);
         assign(item, path, "same_port", result.management.same_port);
         assign(item, path, "live_path", result.management.live_path);
         assign(item, path, "ready_path", result.management.ready_path);
@@ -540,8 +522,7 @@ namespace {
         const cnetmod::json::document& item)
     {
         constexpr std::string_view path = "health";
-        require_known(item, path, {"interval_ms", "timeout_ms",
-                                      "failures_before_down", "successes_before_up"});
+        require_known(item, path, {"interval_ms", "timeout_ms", "failures_before_down", "successes_before_up"});
         assign_duration(item, path, "interval_ms", result.health.interval);
         assign_duration(item, path, "timeout_ms", result.health.timeout);
         assign(item, path, "failures_before_down",
@@ -611,8 +592,7 @@ namespace {
         if (jwt == nullptr)
             return;
         constexpr std::string_view path = "security.jwt";
-        require_known(*jwt, path, {"enabled", "issuer", "secret",
-                                      "expires_in_seconds", "session_idle_seconds"});
+        require_known(*jwt, path, {"enabled", "issuer", "secret", "expires_in_seconds", "session_idle_seconds"});
         auto& configured = result.security.jwt;
         assign(*jwt, path, "enabled", configured.enabled);
         assign(*jwt, path, "issuer", configured.issuer);
@@ -744,6 +724,10 @@ namespace {
         if (auto parsed = environment_unsigned<unsigned>(
                 "CNETMOD_HTTP_PORT", 1U, 65535U))
             result.http.port = static_cast<std::uint16_t>(*parsed);
+        if (auto parsed = environment_unsigned<unsigned>(
+                "CNETMOD_HTTP_BACKLOG", 1U,
+                static_cast<unsigned>(std::numeric_limits<int>::max())))
+            result.http.backlog = static_cast<int>(*parsed);
         if (auto value = environment("CNETMOD_LOG_LEVEL"))
         {
             const auto level = parse_log_level(*value);
@@ -849,6 +833,10 @@ namespace {
             fail("http.address", "must not be empty");
         if (value.http.port == 0U)
             fail("http.port", "must be in [1, 65535]");
+        if (value.http.backlog <= 0)
+            fail("http.backlog", "must be positive");
+        if (value.management.backlog <= 0)
+            fail("management.backlog", "must be positive");
         if (value.http.request_timeout)
             require_positive(*value.http.request_timeout, "http.request_timeout_ms");
         require_positive(value.http.sse_max_duration, "http.sse.max_duration_ms");
@@ -927,7 +915,7 @@ namespace {
                 !positive_duration(service.recovery.budget))
                 fail(join(path, "recovery"), "invalid recovery policy");
             if (!service_keys.emplace(service_key{service.name, service.instance})
-                     .second)
+                    .second)
                 fail(path,
                     std::format("duplicate service {}:{}", service.name,
                         service.instance),
@@ -1012,7 +1000,10 @@ auto configuration_error::describe() const -> std::string
 auto expand_environment_references(std::string_view source)
     -> std::expected<std::string, configuration_error>
 {
-    return guarded([source] { return expand_string(source, {}); });
+    return guarded([source]
+        {
+            return expand_string(source, {});
+        });
 }
 
 auto configured_service::string_property(std::string_view path) const
@@ -1102,7 +1093,10 @@ auto load_configuration(const std::optional<std::filesystem::path>& file)
 auto validate_configuration(const application_configuration& value)
     -> std::expected<void, configuration_error>
 {
-    return guarded([&value] { check_configuration(value); });
+    return guarded([&value]
+        {
+            check_configuration(value);
+        });
 }
 
 static auto prepare_configuration_reload(application_configuration& active,
@@ -1204,6 +1198,7 @@ static auto prepare_configuration_reload(application_configuration& active,
         active.logging.format != candidate.logging.format ||
         active.http.address != candidate.http.address ||
         active.http.port != candidate.http.port ||
+        active.http.backlog != candidate.http.backlog ||
         active.http.max_connections != candidate.http.max_connections ||
         active.http.request_timeout != candidate.http.request_timeout ||
         active.http.sse_max_duration != candidate.http.sse_max_duration ||
@@ -1214,6 +1209,7 @@ static auto prepare_configuration_reload(application_configuration& active,
         active.management.enabled != candidate.management.enabled ||
         active.management.address != candidate.management.address ||
         active.management.port != candidate.management.port ||
+        active.management.backlog != candidate.management.backlog ||
         active.management.same_port != candidate.management.same_port ||
         active.management.live_path != candidate.management.live_path ||
         active.management.ready_path != candidate.management.ready_path ||

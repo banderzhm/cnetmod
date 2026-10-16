@@ -228,7 +228,8 @@ export class request_context
 {
 public:
     request_context(io_context& ctx, socket& sock, const request_parser& parser,
-        response& resp, route_params params);
+        response& resp, route_params params,
+        std::shared_ptr<request_body_stream> body_stream = {});
     request_context(io_context& ctx, socket& sock, std::string_view method,
         std::string_view uri, const header_map& headers,
         std::string_view body, response& resp, route_params params,
@@ -238,7 +239,7 @@ public:
     [[nodiscard]] auto path() const noexcept -> std::string_view;
     [[nodiscard]] auto query_string() const noexcept -> std::string_view;
     [[nodiscard]] auto uri() const noexcept -> std::string_view;
-    [[nodiscard]] auto headers() const noexcept -> const header_map&;
+    [[nodiscard]] auto headers() const -> const header_map&;
     [[nodiscard]] auto body() const -> std::string_view;
     [[nodiscard]] auto has_body_stream() const noexcept -> bool;
     [[nodiscard]] auto receive_body_chunk()
@@ -388,6 +389,7 @@ private:
     socket& sock_;
     response& resp_;
     route_params params_;
+    const request_parser* parser_{};
     const header_map* headers_ptr_{};
     std::string_view method_;
     mutable std::string body_storage_;
@@ -506,6 +508,7 @@ private:
 };
 
 export using handler_fn = std::function<task<void>(request_context&)>;
+export using sync_handler_fn = std::function<void(request_context&)>;
 export using next_fn = std::function<task<void>()>;
 export using middleware_fn =
     std::function<task<void>(request_context&, next_fn)>;
@@ -538,6 +541,7 @@ namespace detail {
 export struct match_result
 {
     handler_fn handler;
+    sync_handler_fn sync_handler;
     route_params params;
     std::optional<request_body_stream_options> request_stream;
 };
@@ -588,6 +592,22 @@ public:
     auto patch(std::string_view pattern, handler_fn fn,
         endpoint_metadata metadata = {}) -> router&;
     auto any(std::string_view pattern, handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+
+    /// Register allocation-free handlers for endpoints that complete without
+    /// suspension. Middleware still works; without middleware the server calls
+    /// these directly and creates no handler coroutine frame.
+    auto get_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto post_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto put_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto del_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto patch_sync(std::string_view pattern, sync_handler_fn fn,
+        endpoint_metadata metadata = {}) -> router&;
+    auto any_sync(std::string_view pattern, sync_handler_fn fn,
         endpoint_metadata metadata = {}) -> router&;
 
     /**
@@ -661,6 +681,7 @@ private:
         std::vector<detail::segment> segments;
         std::string canonical_path;
         handler_fn handler;
+        sync_handler_fn sync_handler;
         std::optional<request_body_stream_options> request_stream;
         detail::route_score score;
         std::uint64_t order = 0;
@@ -669,12 +690,15 @@ private:
 
     auto add(http_method method, std::string_view pattern, handler_fn fn,
         endpoint_metadata metadata) -> router&;
+    auto add_sync(std::optional<http_method> method, std::string_view pattern,
+        sync_handler_fn fn, endpoint_metadata metadata) -> router&;
     auto add_sse(http_method method, std::string_view pattern,
         sse_handler_fn fn, std::optional<sse_stream_options> options,
         endpoint_metadata metadata) -> router&;
     auto add_route(std::optional<http_method> method, std::string_view pattern,
         handler_fn fn, endpoint_metadata metadata,
-        std::optional<request_body_stream_options> request_stream = {}) -> router&;
+        std::optional<request_body_stream_options> request_stream = {},
+        sync_handler_fn sync_handler = {}) -> router&;
     [[nodiscard]] auto find_exact(http_method method,
         std::string_view canonical_path) const
         -> const route_entry*;

@@ -1,180 +1,86 @@
-# ==============================================================================
-# Mimalloc.cmake
-# Automatically detect and use mimalloc allocator if available
-# ==============================================================================
+# Configure the mimalloc source pinned in 3rdparty/mimalloc.
+#
+# Allocator replacement belongs to the final executable. This file prepares
+# the bundled implementation; cnetmodMimalloc.cmake exposes the public helper
+# used by cnetmod and by installed-SDK consumers.
 
-# Function: cnetmod_use_mimalloc
-# 
-# Detects if mimalloc is available and configures the project to use it.
-# mimalloc is a high-performance memory allocator from Microsoft that can
-# significantly improve performance for multi-threaded applications.
-#
-# Benefits:
-#   - 2-3x faster allocation/deallocation compared to system malloc
-#   - Better multi-threaded scalability
-#   - Lower memory fragmentation
-#   - Especially beneficial for network servers with many concurrent connections
-#
-# Usage:
-#   include(${CMAKE_SOURCE_DIR}/cmake/3rdparty/Mimalloc.cmake)
-#   cnetmod_use_mimalloc()
-#
-# The function will:
-#   1. Try to find mimalloc via find_package
-#   2. If found, link all targets to mimalloc
-#   3. Print status message
-#
-# Installation:
-#   Ubuntu/Debian: sudo apt install libmimalloc-dev
-#   Arch Linux: sudo pacman -S mimalloc
-#   macOS: brew install mimalloc
-#   From source: https://github.com/microsoft/mimalloc
-#
 function(cnetmod_use_mimalloc)
-    if(CNETMOD_USE_SYSTEM_DEPS)
-        find_package(mimalloc CONFIG QUIET)
+    set(_cnetmod_mimalloc_source "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/mimalloc")
+    if(NOT EXISTS "${_cnetmod_mimalloc_source}/CMakeLists.txt")
+        message(FATAL_ERROR
+            "CNETMOD_USE_MIMALLOC=ON requires 3rdparty/mimalloc. "
+            "Run: git submodule update --init 3rdparty/mimalloc")
     endif()
-    
-    if(mimalloc_FOUND)
-        message(STATUS "Found mimalloc: ${mimalloc_DIR}")
 
-        # vcpkg's imported mimalloc target provides Debug and Release
-        # locations only. Without an explicit mapping, Visual Studio selects
-        # mimalloc-debug.dll for RelWithDebInfo; that DLL uses the Debug CRT
-        # while cnetmod uses /MD, so mimalloc-redirect initializes too late
-        # and allocation interception is disabled. RelWithDebInfo is an
-        # optimized /MD configuration and must use the Release DLL.
-        if(WIN32 AND TARGET mimalloc)
-            set_property(TARGET mimalloc APPEND PROPERTY
-                MAP_IMPORTED_CONFIG_RELWITHDEBINFO Release)
-            set_property(TARGET mimalloc APPEND PROPERTY
-                MAP_IMPORTED_CONFIG_MINSIZEREL Release)
-        endif()
-        
-        # Create an interface library to propagate mimalloc to all targets
-        if(NOT TARGET cnetmod::mimalloc)
-            add_library(cnetmod::mimalloc INTERFACE IMPORTED GLOBAL)
-            target_link_libraries(cnetmod::mimalloc INTERFACE mimalloc)
-        endif()
-        
-        # Set cache variable to indicate mimalloc is being used
-        set(CNETMOD_USING_MIMALLOC TRUE CACHE BOOL "Using mimalloc allocator" FORCE)
-        set(CNETMOD_MIMALLOC_TARGET "mimalloc" CACHE STRING "mimalloc target name" FORCE)
-        
-        message(STATUS "Configured to use mimalloc allocator")
-        
-    elseif(CNETMOD_DEPENDENCY_MODE STREQUAL "system" AND CNETMOD_USE_SYSTEM_DEPS)
-        # Try to find mimalloc library directly (fallback for systems without CMake config)
-        find_library(MIMALLOC_LIBRARY NAMES mimalloc)
-        find_path(MIMALLOC_INCLUDE_DIR NAMES mimalloc.h)
-        
-        if(MIMALLOC_LIBRARY AND MIMALLOC_INCLUDE_DIR)
-            message(STATUS "Found mimalloc library: ${MIMALLOC_LIBRARY}")
-            message(STATUS "Found mimalloc headers: ${MIMALLOC_INCLUDE_DIR}")
-            
-            # Create an interface library
-            if(NOT TARGET cnetmod::mimalloc)
-                add_library(cnetmod::mimalloc INTERFACE IMPORTED GLOBAL)
-                target_link_libraries(cnetmod::mimalloc INTERFACE ${MIMALLOC_LIBRARY})
-                target_include_directories(cnetmod::mimalloc INTERFACE ${MIMALLOC_INCLUDE_DIR})
-            endif()
-            
-            set(CNETMOD_USING_MIMALLOC TRUE CACHE BOOL "Using mimalloc allocator" FORCE)
-            set(CNETMOD_MIMALLOC_TARGET "cnetmod::mimalloc" CACHE STRING "mimalloc target name" FORCE)
-            
-            message(STATUS "Configured to use mimalloc allocator (via direct library)")
-            
-        else()
-            message(STATUS "mimalloc not found, using system allocator")
-            set(CNETMOD_USING_MIMALLOC FALSE CACHE BOOL "Using mimalloc allocator" FORCE)
-        endif()
+    # cnetmod is a C++-only project. Build mimalloc with the active C++
+    # toolchain so embedding it does not require enabling a second compiler.
+    set(MI_USE_CXX ON CACHE STRING "Build bundled mimalloc with C++" FORCE)
+    set(MI_OVERRIDE ON CACHE BOOL "Override the process allocator" FORCE)
+    # The upstream defaults keep allocation statistics and sampled profiling
+    # enabled even in Release builds. Both add work to every hot allocation,
+    # which is the opposite of what an opt-in production allocator should do.
+    # Diagnostics belong in an explicitly configured mimalloc build instead.
+    set(MI_DEBUG OFF CACHE STRING "Disable mimalloc assertions" FORCE)
+    set(MI_GUARDED OFF CACHE STRING "Disable sampled guard pages" FORCE)
+    set(MI_STATS OFF CACHE STRING "Disable allocation statistics" FORCE)
+    set(MI_PROFILE OFF CACHE STRING "Disable allocation profiling" FORCE)
+    set(MI_BUILD_TESTS OFF CACHE BOOL "Do not build mimalloc tests" FORCE)
+    set(MI_INSTALL_TOPLEVEL ON CACHE BOOL "Install mimalloc in the cnetmod SDK" FORCE)
+
+    if(WIN32)
+        # Windows allocator replacement requires the DLL and redirect DLL.
+        set(MI_BUILD_SHARED ON CACHE BOOL "Build the mimalloc runtime DLL" FORCE)
+        set(MI_BUILD_STATIC OFF CACHE BOOL "Do not build unused static mimalloc" FORCE)
+        set(MI_BUILD_OBJECT OFF CACHE BOOL "Do not build unused mimalloc object" FORCE)
+        set(MI_WIN_REDIRECT ON CACHE BOOL "Enable Windows CRT redirection" FORCE)
     else()
-        message(STATUS "mimalloc package unavailable; using system allocator")
-        set(CNETMOD_USING_MIMALLOC FALSE CACHE BOOL "Using mimalloc allocator" FORCE)
+        # Unix linkers can discard allocator symbols from an archive. The
+        # upstream-recommended single object gives deterministic process-wide
+        # malloc/new replacement when attached to the final executable.
+        set(MI_BUILD_SHARED OFF CACHE BOOL "Do not build unused shared mimalloc" FORCE)
+        set(MI_BUILD_STATIC ON CACHE BOOL "Build mimalloc object dependency" FORCE)
+        set(MI_BUILD_OBJECT ON CACHE BOOL "Build mimalloc override object" FORCE)
     endif()
+
+    add_subdirectory("${_cnetmod_mimalloc_source}"
+        "${CMAKE_CURRENT_BINARY_DIR}/3rdparty/mimalloc")
+
+    set(CNETMOD_USING_MIMALLOC TRUE CACHE BOOL "Using bundled mimalloc" FORCE)
+    set(CNETMOD_MIMALLOC_BUNDLED TRUE CACHE INTERNAL "mimalloc is bundled" FORCE)
+
+    if(WIN32)
+        set(CNETMOD_MIMALLOC_TARGET mimalloc CACHE INTERNAL "mimalloc runtime target" FORCE)
+        set(CNETMOD_MIMALLOC_REDIRECT
+            "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect${MIMALLOC_REDIRECT_SUFFIX}.dll"
+            CACHE INTERNAL "mimalloc redirect DLL" FORCE)
+    else()
+        set(CNETMOD_MIMALLOC_OBJECT "$<TARGET_OBJECTS:mimalloc-obj>"
+            CACHE INTERNAL "mimalloc override object" FORCE)
+    endif()
+
+    include("${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../cnetmodMimalloc.cmake")
+    message(STATUS "Memory allocator: bundled mimalloc 3.5.3")
 endfunction()
 
-# Function: cnetmod_link_mimalloc
-#
-# Links a target to mimalloc if it's available
-#
-# Parameters:
-#   target - The target to link mimalloc to
-#
-# Usage:
-#   cnetmod_link_mimalloc(my_executable)
-#
+# Compatibility wrappers for existing in-tree CMake files. Both now perform
+# the correct final-executable operation rather than linking a static library.
 function(cnetmod_link_mimalloc target)
-    if(CNETMOD_USING_MIMALLOC)
-        if(TARGET mimalloc)
-            # cnetmod_core is static. Its allocator dependency must reach
-            # final executables; PRIVATE linkage would otherwise leave the
-            # import library out of a consumer's link step.
-            target_link_libraries(${target} PUBLIC mimalloc)
-        elseif(TARGET cnetmod::mimalloc)
-            target_link_libraries(${target} PUBLIC cnetmod::mimalloc)
-        endif()
-
+    get_target_property(_cnetmod_target_type ${target} TYPE)
+    if(_cnetmod_target_type STREQUAL "EXECUTABLE")
+        cnetmod_enable_mimalloc(${target})
     endif()
 endfunction()
 
-# Dynamic mimalloc on Windows uses a redirect DLL beside the executable.  CMake
-# propagates the import library through a static cnetmod_core target, but does
-# not copy imported runtime DLLs for Visual Studio projects automatically.
-# Attach this to executable targets so command-line runs work as well as IDE
-# launches; copying both files is required for CRT allocation redirection.
 function(cnetmod_deploy_mimalloc_runtime target)
-    if(NOT (WIN32 AND CNETMOD_USING_MIMALLOC AND TARGET mimalloc))
-        return()
+    if(CNETMOD_USING_MIMALLOC)
+        cnetmod_enable_mimalloc(${target})
     endif()
-
-    get_target_property(_cnetmod_mimalloc_type mimalloc TYPE)
-    if(NOT _cnetmod_mimalloc_type STREQUAL "SHARED_LIBRARY")
-        return()
-    endif()
-
-    # mimalloc's Windows redirect DLL activates only when the main executable
-    # imports a mimalloc API. Keep that requirement on the executable which
-    # also receives the DLLs; a static cnetmod_core must not make unrelated
-    # tests and applications unloadable.
-    if(MSVC)
-        target_link_options(${target} PRIVATE "LINKER:/INCLUDE:mi_version")
-    endif()
-
-    add_custom_command(TARGET ${target} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE:mimalloc>"
-            "$<TARGET_FILE_DIR:${target}>"
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "$<TARGET_FILE_DIR:mimalloc>/mimalloc-redirect.dll"
-            "$<TARGET_FILE_DIR:${target}>"
-        VERBATIM)
 endfunction()
 
-# Function: cnetmod_print_allocator_info
-#
-# Prints information about the memory allocator being used
-#
 function(cnetmod_print_allocator_info)
     if(CNETMOD_USING_MIMALLOC)
-        message(STATUS "===========================================")
-        message(STATUS "Memory Allocator: mimalloc (high-performance)")
-        message(STATUS "Expected performance improvement: 2-3x")
-        message(STATUS "===========================================")
+        message(STATUS "Memory allocator: bundled mimalloc (enabled per executable)")
     else()
-        message(STATUS "===========================================")
-        message(STATUS "Memory Allocator: system default")
-        if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-            message(STATUS "Tip: Install mimalloc for better performance")
-            message(STATUS "  Ubuntu/Debian: sudo apt install libmimalloc-dev")
-            message(STATUS "  Arch Linux: sudo pacman -S mimalloc")
-        elseif(APPLE)
-            message(STATUS "Tip: Install mimalloc for better performance")
-            message(STATUS "  macOS: brew install mimalloc")
-        elseif(WIN32)
-            message(STATUS "Tip: Install mimalloc for better performance")
-            message(STATUS "  Windows: vcpkg install mimalloc")
-        endif()
-        message(STATUS "===========================================")
+        message(STATUS "Memory allocator: system default")
     endif()
 endfunction()

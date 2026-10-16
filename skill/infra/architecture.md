@@ -40,6 +40,7 @@ cnetmod/
 ├── 3rdparty/               # 第三方依赖
 │   ├── json/               # Backend-neutral JSON module facade
 │   ├── leveldb/            # LevelDB 嵌入式存储
+│   ├── mimalloc/            # 进程级高性能内存分配器
 │   ├── pugixml/            # XML 解析
 │   ├── spdlog/             # 日志（内部使用）
 │   └── stdexec/            # P2300 std::execution 实现
@@ -174,6 +175,19 @@ benchmark、示例、C API 或 Python Binding。应用必须按实际需求显�
 
 CMake 会自动验证依赖关系：若启用了某协议但未启用其依赖，构建会报 `FATAL_ERROR`。
 
+### 组件目标与精简构建
+
+下游只链接实际使用的组件目标，例如 `cnetmod::runtime`、`cnetmod::http`、
+`cnetmod::redis` 或 `cnetmod::application`。`cnetmod::core` 与 `cnetmod::all`
+是保留给旧消费者和完整工具的全功能兼容门面，会传递当前配置中所有已启用组件；
+不应把它用于只需要协程、HTTP 或单一协议的精简目标。
+
+项目测试也遵守同一依赖边界：协程与基础设施测试只链接 runtime，HTTP 测试只
+链接 HTTP，ORM 和各协议测试链接各自组件。这样构建单个测试不会触发无关协议。
+关闭 `CNETMOD_ENABLE_ORM` 时，Application 不提供或编译
+`cnetmod.application.data`、`application.orm_repository` 及数据库 ORM 适配器；
+普通 Application 和数据库协议客户端仍可独立使用。
+
 ## 构建命令
 
 ```bash
@@ -213,6 +227,7 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 |------|------|------|
 | nlohmann/json | `3rdparty/json` | Official `nlohmann.json` dependency module imported privately by `cnetmod.json` |
 | LevelDB | `3rdparty/leveldb` | 嵌入式键值存储 |
+| mimalloc | `3rdparty/mimalloc` | 最终可执行程序的进程级内存分配器 |
 | pugixml | `3rdparty/pugixml` | XML 解析（ORM mapper） |
 | spdlog | `3rdparty/spdlog` | 日志后端 |
 | stdexec | `3rdparty/stdexec` | P2300 std::execution 实现 |
@@ -224,7 +239,46 @@ MSVC 构建使用 `rebuild_install.bat` 脚本。
 | 优化项 | CMake Option | 说明 |
 |--------|-------------|------|
 | mold 链接器 | `CNETMOD_USE_MOLD=ON` | Linux 下 10-20x 更快链接 |
-| mimalloc 分配器 | `CNETMOD_USE_MIMALLOC=ON` | 2-3x 更快内存分配 |
+| mimalloc 分配器 | `CNETMOD_USE_MIMALLOC=ON` | 构建并随 SDK 分发；框架自身 executable 自动启用 |
+| CPU 指令集契约 | `CNETMOD_CPU_TARGET=portable\|x86-64-v3\|native` | SDK 默认 portable；固定 benchmark/部署机器可显式选 v3 或 native |
+| ThinLTO / IPO | `CNETMOD_ENABLE_THIN_LTO=ON` | 默认关闭以控制构建时间和内存；最终性能构建显式开启 |
+
+可复现的 x86-64 性能构建使用：
+
+```bash
+cmake -S . -B build-perf -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCNETMOD_CPU_TARGET=x86-64-v3 \
+  -DCNETMOD_ENABLE_THIN_LTO=ON
+```
+
+不要把 `native` 产物作为通用 SDK 发布；它可能包含构建机独有指令。性能比较必须记录
+CPU target、LTO、allocator、worker 数量和线程亲和性，不能拿 portable 与 native 产物直接排名。
+
+### 下游启用 mimalloc
+
+`mimalloc` 固定由 `3rdparty/mimalloc` 构建，不从 vcpkg、Conan 或系统目录
+静默获取。安装 cnetmod 时会把对应平台的库、头文件和运行时一起放进 SDK。
+分配器替换必须发生在最终可执行程序，不能靠静态库的传递链接保证，因此下游
+应用需要显式调用：
+
+```cmake
+find_package(cnetmod 2 CONFIG REQUIRED)
+
+add_executable(my_service main.cpp)
+target_link_libraries(my_service PRIVATE cnetmod::http)
+cnetmod_enable_mimalloc(my_service)
+```
+
+`cnetmod_enable_mimalloc()` 只接受 executable target，并负责平台差异：
+
+- Windows：链接 SDK 内的 `mimalloc.dll` 导入库，强制引入初始化符号，并在
+  构建后把 `mimalloc.dll`、`mimalloc-redirect.dll` 复制到程序旁边。
+- Linux/WSL/macOS：把 SDK 内的 `mimalloc.o` 直接加入最终链接，避免静态
+  archive 因链接顺序或 `--as-needed` 未真正接管 `malloc/new`。
+
+不调用该函数时，下游继续使用平台默认分配器；无需修改业务源码，也不会因
+链接 cnetmod 的任一静态组件而隐式开启。
 
 ## 参考源码
 - `CMakeLists.txt` — 根构建文件（项目配置、平台检测、目标定义）

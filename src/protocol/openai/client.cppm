@@ -56,6 +56,11 @@ public:
     /// Connect to OpenAI API endpoint (TCP + TLS handshake)
     auto connect(connect_options opts) -> task<std::expected<void, std::string>>;
 
+    /// Connect with caller-controlled cancellation for DNS-independent socket
+    /// establishment and the TLS handshake.
+    auto connect(connect_options opts, cancel_token& cancellation)
+        -> task<std::expected<void, std::string>>;
+
     /// Check if connected
     [[nodiscard]] auto is_connected() const noexcept -> bool;
 

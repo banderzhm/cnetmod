@@ -118,6 +118,22 @@ TEST(router_any_method)
     ASSERT_TRUE(r.match(http_method::DELETE_, "/health").has_value());
 }
 
+TEST(router_sync_handler_is_preserved_without_coroutine_adapter)
+{
+    router routes;
+    bool called = false;
+    routes.get_sync("/health", [&called](request_context& context)
+        {
+            called = true;
+            context.text(status::ok, "ok");
+        });
+
+    auto matched = routes.match(http_method::GET, "/health");
+    ASSERT_TRUE(matched.has_value());
+    ASSERT_TRUE(static_cast<bool>(matched->sync_handler));
+    ASSERT_FALSE(static_cast<bool>(matched->handler));
+}
+
 // =============================================================================
 // Param match (:id)
 // =============================================================================

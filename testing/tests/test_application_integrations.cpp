@@ -1061,10 +1061,20 @@ TEST(application_database_start_rejects_cancelled_and_expired_context_before_war
             const auto result = cnetmod::sync_wait(service.start(context));
             ASSERT_FALSE(result.has_value());
             ASSERT_EQ(result.error(), std::make_error_code(cancelled ? std::errc::operation_canceled : std::errc::timed_out));
-            ASSERT_EQ(service.pool().size(), std::size_t{0});
             const auto health = cnetmod::sync_wait(service.probe(context));
             ASSERT_TRUE(health.status == application::service_health::down);
             ASSERT_TRUE(cnetmod::sync_wait(service.stop(context)).has_value());
+            bool pool_empty{};
+            auto inspect_pool = [&]() -> cnetmod::task<void>
+            {
+                co_await cnetmod::post_awaitable{*io};
+                pool_empty = service.pool().size() == 0;
+                io->stop();
+            };
+            cnetmod::spawn(*io, inspect_pool());
+            io->run();
+            io->restart();
+            ASSERT_TRUE(pool_empty);
         };
     #ifdef CNETMOD_HAS_PROTOCOL_MYSQL
         cnetmod::mysql::pool_params mysql_options;

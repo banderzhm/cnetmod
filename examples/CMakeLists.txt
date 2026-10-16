@@ -205,6 +205,9 @@ foreach(example_path ${ALL_EXAMPLES})
     add_executable(${target_name} ${example_path}.cpp)
     list(APPEND CNETMOD_EXAMPLE_TARGETS ${target_name})
     target_link_libraries(${target_name} PRIVATE ${CNETMOD_LINK_TARGET})
+    if(CNETMOD_USING_MIMALLOC)
+        cnetmod_enable_mimalloc(${target_name})
+    endif()
     set_property(TARGET ${target_name} PROPERTY
         CXX_MODULE_GENERATION_MODE "SEPARATE"
     )

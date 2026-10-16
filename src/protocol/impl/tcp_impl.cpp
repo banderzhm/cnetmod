@@ -48,7 +48,7 @@ auto acceptor::context() noexcept -> io_context&
     return *ctx_;
 }
 
-auto acceptor::open(const endpoint& ep, const socket_options& opts)
+auto acceptor::open(const endpoint& ep, const socket_options& opts, int backlog)
     -> std::expected<void, std::error_code>
 {
     auto family =
@@ -61,11 +61,47 @@ auto acceptor::open(const endpoint& ep, const socket_options& opts)
         return r;
     if (auto r = sock->bind(ep); !r)
         return r;
-    if (auto r = sock->listen(); !r)
+    if (auto r = sock->listen(backlog); !r)
         return r;
 
     socket_ = std::move(*sock);
     return {};
+}
+
+auto acceptor::try_accept()
+    -> std::expected<std::optional<socket>, std::error_code>
+{
+#ifdef CNETMOD_PLATFORM_WINDOWS
+    const auto handle = ::accept(socket_.native_handle(), nullptr, nullptr);
+    if (handle == INVALID_SOCKET)
+#elif defined(CNETMOD_PLATFORM_LINUX)
+    const auto handle = ::accept4(static_cast<int>(socket_.native_handle()),
+        nullptr, nullptr, SOCK_NONBLOCK | SOCK_CLOEXEC);
+    if (handle < 0)
+#else
+    const auto handle = ::accept(static_cast<int>(socket_.native_handle()),
+        nullptr, nullptr);
+    if (handle < 0)
+#endif
+    {
+        const auto native_error =
+#ifdef CNETMOD_PLATFORM_WINDOWS
+            ::WSAGetLastError();
+#else
+            errno;
+#endif
+        const auto error = make_error_code(from_native_error(native_error));
+        if (error == make_error_code(errc::operation_would_block))
+            return std::optional<socket>{};
+        return std::unexpected(error);
+    }
+
+    auto accepted = socket::from_native(handle);
+#if !defined(CNETMOD_PLATFORM_LINUX)
+    if (auto configured = accepted.set_non_blocking(true); !configured)
+        return std::unexpected(configured.error());
+#endif
+    return std::optional<socket>{std::move(accepted)};
 }
 
 // =============================================================================

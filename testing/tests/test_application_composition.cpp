@@ -24,8 +24,10 @@ public:
     {
         write(content);
     }
+
     temporary_configuration(const temporary_configuration&) = delete;
     auto operator=(const temporary_configuration&) -> temporary_configuration& = delete;
+
     ~temporary_configuration()
     {
         std::error_code ignored;
@@ -164,15 +166,18 @@ struct pricing_service
     explicit pricing_service(clock_source& clock) : clock(&clock)
     {
     }
+
     clock_source* clock;
 };
 
 struct cycle_a;
 struct cycle_b;
+
 struct cycle_a
 {
     cycle_b* peer = nullptr;
 };
+
 struct cycle_b
 {
     cycle_a* peer = nullptr;
@@ -198,10 +203,12 @@ struct destruction_probe
         : log(&log), name(std::move(name))
     {
     }
+
     ~destruction_probe()
     {
         log->push_back(name);
     }
+
     std::vector<std::string>* log;
     std::string name;
 };
@@ -217,6 +224,7 @@ struct second_probe : destruction_probe
         : destruction_probe(log, "second"), first(&first)
     {
     }
+
     first_probe* first;
 };
 
@@ -239,6 +247,12 @@ TEST(configuration_errors_carry_the_document_path)
     ASSERT_FALSE(invalid.has_value());
     if (!invalid)
         ASSERT_EQ(invalid.error().path, "http.port");
+
+    temporary_configuration backlog{R"({"http":{"backlog":0}})"};
+    auto invalid_backlog = application::load_configuration(backlog.path());
+    ASSERT_FALSE(invalid_backlog.has_value());
+    if (!invalid_backlog)
+        ASSERT_EQ(invalid_backlog.error().path, "http.backlog");
 
     temporary_configuration level{R"({"logging":{"level":"loud"}})"};
     auto rejected = application::load_configuration(level.path());
@@ -264,8 +278,7 @@ TEST(environment_references_support_defaults_and_escapes)
     set_variable("CNETMOD_COMPOSITION_SET", "value");
     clear_variable("CNETMOD_COMPOSITION_UNSET");
     auto expanded = application::expand_environment_references(
-        "a=${CNETMOD_COMPOSITION_SET} b=${CNETMOD_COMPOSITION_UNSET:-fallback} "
-        "c=${CNETMOD_COMPOSITION_SET:-ignored} d=$${literal} e=$5");
+        "a=${CNETMOD_COMPOSITION_SET} b=${CNETMOD_COMPOSITION_UNSET:-fallback} " "c=${CNETMOD_COMPOSITION_SET:-ignored} d=$${literal} e=$5");
     ASSERT_TRUE(expanded.has_value());
     if (expanded)
         ASSERT_EQ(*expanded,
@@ -314,7 +327,7 @@ TEST(options_sections_apply_defaults_overrides_and_validation)
                             {
                                 options.section<pricing_options>("pricing")
                                     .validate([](const pricing_options& value)
-                                            -> std::expected<void, std::string>
+                                                  -> std::expected<void, std::string>
                                         {
                                             if (value.max_items <= 0)
                                                 return std::unexpected(
@@ -323,8 +336,7 @@ TEST(options_sections_apply_defaults_overrides_and_validation)
                                         });
                                 options.section<feature_flags>("features");
                             },
-                            .compose = [&observed](application::composition_context& context)
-                                -> std::expected<void, std::string>
+                            .compose = [&observed](application::composition_context& context) -> std::expected<void, std::string>
                             {
                                 observed = context.components
                                                .get<application::options_monitor<pricing_options>>(
@@ -344,9 +356,9 @@ TEST(options_sections_apply_defaults_overrides_and_validation)
     }
     if (host)
         ASSERT_TRUE(host->components()
-                        .get<application::options_monitor<feature_flags>>("features")
-                        .current()
-                        ->beta);
+                .get<application::options_monitor<feature_flags>>("features")
+                .current()
+                ->beta);
 }
 
 TEST(options_sections_apply_defaults_inside_array_elements)
@@ -357,7 +369,9 @@ TEST(options_sections_apply_defaults_inside_array_elements)
                     .configure(quiet)
                     .add_module(application::make_module("nested",
                         {.configure_options = [](application::options_registry& options)
-                            { options.section<nested_options>("nested"); }}))
+                            {
+                                options.section<nested_options>("nested");
+                            }}))
                     .build();
     ASSERT_TRUE(host.has_value());
     if (host)
@@ -379,7 +393,9 @@ TEST(options_sections_apply_defaults_inside_array_elements)
                         .configure(quiet)
                         .add_module(application::make_module("nested",
                             {.configure_options = [](application::options_registry& options)
-                                { options.section<nested_options>("nested"); }}))
+                                {
+                                    options.section<nested_options>("nested");
+                                }}))
                         .build();
     ASSERT_FALSE(rejected.has_value());
 }
@@ -396,9 +412,7 @@ TEST(options_sections_drive_conditional_registration)
                                 options.section<pricing_options>("pricing");
                                 options.section<feature_flags>("features");
                             },
-                            .register_components =
-                                [](application::registration_context& context)
-                                -> std::expected<void, std::string>
+                            .register_components = [](application::registration_context& context) -> std::expected<void, std::string>
                             {
                                 const auto pricing =
                                     context.options.current<pricing_options>("pricing");
@@ -420,10 +434,10 @@ TEST(options_sections_drive_conditional_registration)
                         .configure(quiet)
                         .add_module(application::make_module("regions",
                             {.configure_options = [](application::options_registry& options)
-                                { options.section<pricing_options>("pricing"); },
-                                .register_components =
-                                    [](application::registration_context& context)
-                                    -> std::expected<void, std::string>
+                                {
+                                    options.section<pricing_options>("pricing");
+                                },
+                                .register_components = [](application::registration_context& context) -> std::expected<void, std::string>
                                 {
                                     (void)context.options.current<feature_flags>("pricing");
                                     return {};
@@ -460,7 +474,7 @@ TEST(options_sections_report_unknown_keys_unclaimed_sections_and_failures)
                     {
                         options.section<pricing_options>("pricing", required)
                             .validate([](const pricing_options& value)
-                                    -> std::expected<void, std::string>
+                                          -> std::expected<void, std::string>
                                 {
                                     if (value.max_items <= 0)
                                         return std::unexpected(
@@ -522,8 +536,7 @@ TEST(options_runtime_safe_sections_are_republished_on_reload)
                                     .reload(application::options_reload::runtime_safe);
                                 options.section<pricing_options>("pricing");
                             },
-                            .compose = [&](application::composition_context& context)
-                                -> std::expected<void, std::string>
+                            .compose = [&](application::composition_context& context) -> std::expected<void, std::string>
                             {
                                 subscription = context.components
                                                    .get<application::options_monitor<feature_flags>>(
@@ -637,8 +650,14 @@ TEST(components_detect_cycles_duplicates_and_factory_failures)
         ASSERT_TRUE(cycle.error().message.contains("dependency cycle"));
 
     application::component_collection duplicated;
-    duplicated.singleton<clock_source>([](application::component_resolver&) { return clock_source{}; });
-    duplicated.singleton<clock_source>([](application::component_resolver&) { return clock_source{}; });
+    duplicated.singleton<clock_source>([](application::component_resolver&)
+        {
+            return clock_source{};
+        });
+    duplicated.singleton<clock_source>([](application::component_resolver&)
+        {
+            return clock_source{};
+        });
     auto duplicate = application::component_container::build(std::move(duplicated));
     ASSERT_FALSE(duplicate.has_value());
     if (!duplicate)
@@ -690,7 +709,7 @@ TEST(components_support_names_aliases_borrowing_and_registry_fallback)
     ASSERT_EQ(&container.get<greeting>(),
         static_cast<greeting*>(&container.get<english_greeting>()));
     ASSERT_TRUE(container.find<clock_source>("absent") == nullptr);
-    ASSERT_THROWS(container.get<clock_source>("absent"));
+    ASSERT_THROWS((void)container.get<clock_source>("absent"));
 }
 
 TEST(module_phases_run_in_order_around_the_service_lifecycle)
@@ -712,28 +731,24 @@ TEST(module_phases_run_in_order_around_the_service_lifecycle)
                 {
                     events.push_back(name + ":options");
                 },
-                .register_components = [&events, name](application::registration_context&)
-                    -> std::expected<void, std::string>
+                .register_components = [&events, name](application::registration_context&) -> std::expected<void, std::string>
                 {
                     events.push_back(name + ":register");
                     return {};
                 },
-                .compose = [&events, name](application::composition_context&)
-                    -> std::expected<void, std::string>
+                .compose = [&events, name](application::composition_context&) -> std::expected<void, std::string>
                 {
                     events.push_back(name + ":compose");
                     return {};
                 },
-                .on_started = [&events, &running, name](application::application_runtime&)
-                    -> cnetmod::task<std::expected<void, std::error_code>>
+                .on_started = [&events, &running, name](application::application_runtime&) -> cnetmod::task<std::expected<void, std::error_code>>
                 {
                     events.push_back(name + ":started");
                     if (name == "second" && running != nullptr)
                         running->request_stop();
                     co_return std::expected<void, std::error_code>{};
                 },
-                .on_stopping = [&events, name](application::application_runtime&)
-                    -> cnetmod::task<void>
+                .on_stopping = [&events, name](application::application_runtime&) -> cnetmod::task<void>
                 {
                     events.push_back(name + ":stopping");
                     co_return;
@@ -752,17 +767,12 @@ TEST(module_phases_run_in_order_around_the_service_lifecycle)
     ASSERT_TRUE(host.has_value());
     if (!host)
         return;
-    ASSERT_TRUE(events == std::vector<std::string>({"first:options", "second:options",
-                              "first:register", "second:register", "first:compose",
-                              "second:compose"}));
+    ASSERT_TRUE(events == std::vector<std::string>({"first:options", "second:options", "first:register", "second:register", "first:compose", "second:compose"}));
     reservation->close();
     running = &*host;
     auto result = host->run();
     ASSERT_TRUE(result.has_value());
-    ASSERT_TRUE(events == std::vector<std::string>({"first:options", "second:options",
-                              "first:register", "second:register", "first:compose",
-                              "second:compose", "first:started", "second:started",
-                              "second:stopping", "first:stopping"}));
+    ASSERT_TRUE(events == std::vector<std::string>({"first:options", "second:options", "first:register", "second:register", "first:compose", "second:compose", "first:started", "second:started", "second:stopping", "first:stopping"}));
 }
 
 TEST(build_errors_describe_phase_component_and_path)
@@ -803,6 +813,7 @@ TEST(component_container_builds_one_instance_per_event_loop)
         [[nodiscard]] virtual auto owner() const noexcept
             -> cnetmod::io_context* = 0;
     };
+
     struct loop_identity final : loop_identity_interface
     {
         explicit loop_identity(cnetmod::io_context& value) noexcept

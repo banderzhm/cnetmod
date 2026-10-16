@@ -262,6 +262,9 @@ auto socket::bind(const endpoint& ep) -> std::expected<void, std::error_code>
 
 auto socket::listen(int backlog) -> std::expected<void, std::error_code>
 {
+    if (backlog <= 0)
+        return std::unexpected(
+            std::make_error_code(std::errc::invalid_argument));
     if (::listen(handle_, backlog) != 0)
         return std::unexpected(make_error_code(from_native_error(last_error())));
     return {};

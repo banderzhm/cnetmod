@@ -188,11 +188,11 @@ public:
                 .message = std::format("invalid managed-service dependency graph: {}",
                     graph.error().message()),
                 .code = graph.error()});
-        auto built = component_container::build(std::move(collection),
-            [this](std::type_index type, std::string_view name)
+        auto built = component_container::build(std::move(collection), [this](std::type_index type, std::string_view name)
             {
                 return services.find_shared(type, name);
-            }, loops.all_span());
+            },
+            loops.all_span());
         if (!built)
             return std::unexpected(built.error());
         components = std::move(*built);
@@ -675,7 +675,8 @@ public:
         }
 
         auto business_listening = business_server->listen(
-            configuration.http.address, configuration.http.port);
+            configuration.http.address, configuration.http.port,
+            {.reuse_address = true}, configuration.http.backlog);
         if (!business_listening)
         {
             run_error = business_listening.error();
@@ -702,7 +703,8 @@ public:
             management_server.set_router(std::move(routes));
             auto listening = management_server.listen(
                 configuration.management.address,
-                configuration.management.port);
+                configuration.management.port, {.reuse_address = true},
+                configuration.management.backlog);
             if (!listening)
             {
                 run_error = listening.error();
@@ -1371,7 +1373,10 @@ auto application_builder::add_module(std::shared_ptr<application_module> value)
     if (name.empty())
         throw std::invalid_argument("application module name cannot be empty");
     if (std::ranges::any_of(modules_,
-            [name](const auto& existing) { return existing->name() == name; }))
+            [name](const auto& existing)
+            {
+                return existing->name() == name;
+            }))
         throw std::logic_error(std::format(
             "application module '{}' is added more than once", name));
     modules_.push_back(std::move(value));
@@ -1434,7 +1439,8 @@ auto application_builder::build()
     catch (const std::system_error& error)
     {
         return std::unexpected(build_error{
-            .message = error.what(), .code = error.code()});
+            .message = error.what(),
+            .code = error.code()});
     }
 }
 

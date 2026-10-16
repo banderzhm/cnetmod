@@ -12,7 +12,10 @@ export import cnetmod.application.diagnostics;
 export import cnetmod.application.components;
 export import cnetmod.application.options;
 export import cnetmod.application.modules;
+#if defined(CNETMOD_HAS_ORM) && \
+    (defined(CNETMOD_HAS_PROTOCOL_MYSQL) || defined(CNETMOD_HAS_PROTOCOL_POSTGRESQL))
 export import cnetmod.application.data;
+#endif
 export import cnetmod.application.managed_service;
 export import cnetmod.application.recovery_policy;
 export import cnetmod.application.service_registry;

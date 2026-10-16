@@ -471,6 +471,10 @@ private:
     /// Packet-owner fast path for the common single-path case. It batches only
     /// datagrams already admitted by the congestion controller and pacer.
     [[nodiscard]] auto pack_and_send_packets() -> task<void>;
+    [[nodiscard]] auto send_initial_packets()
+        -> task<std::expected<std::size_t, std::error_code>>;
+    [[nodiscard]] auto send_handshake_packets()
+        -> task<std::expected<std::size_t, std::error_code>>;
     [[nodiscard]] auto pack_initial_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_zero_rtt_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_handshake_packet() -> std::vector<std::byte>;

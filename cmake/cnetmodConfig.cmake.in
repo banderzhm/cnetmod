@@ -2,6 +2,23 @@
 
 include(CMakeFindDependencyMacro)
 
+if(@CNETMOD_USING_MIMALLOC@)
+    if(WIN32)
+        find_dependency(mimalloc 3.5 CONFIG
+            PATHS "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cmake/mimalloc"
+            NO_DEFAULT_PATH)
+        set(CNETMOD_MIMALLOC_REDIRECT
+            "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_BINDIR@/mimalloc-redirect.dll")
+    else()
+        find_dependency(mimalloc 3.5 CONFIG
+            PATHS "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/cmake/mimalloc"
+            NO_DEFAULT_PATH)
+        set(CNETMOD_MIMALLOC_OBJECT
+            "${PACKAGE_PREFIX_DIR}/@CMAKE_INSTALL_LIBDIR@/mimalloc.o")
+    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/cnetmodMimalloc.cmake")
+endif()
+
 if(@CNETMOD_HAS_YAML_CONFIGURATION@)
     find_dependency(yaml_cpp_modules CONFIG)
 endif()

@@ -84,6 +84,10 @@ set(TEST_SOURCES
     test_http3_frame.cpp
 )
 
+if(CNETMOD_USING_MIMALLOC)
+    list(APPEND TEST_SOURCES test_mimalloc_runtime.cpp)
+endif()
+
 if(CNETMOD_ENABLE_SSL)
     list(APPEND TEST_SOURCES test_security_token.cpp)
 endif()
@@ -151,6 +155,10 @@ endif()
 if(NOT CNETMOD_ENABLE_ORM OR NOT CNETMOD_ENABLE_MYSQL)
     list(REMOVE_ITEM TEST_SOURCES test_orm_json_result_map.cpp)
 endif()
+if(NOT CNETMOD_ENABLE_ORM)
+    list(FILTER TEST_SOURCES EXCLUDE REGEX
+        "^(test_orm_|test_database_datetime\\.cpp$)")
+endif()
 
 if(CNETMOD_ENABLE_REDIS AND CNETMOD_ENABLE_HTTP)
     list(APPEND TEST_SOURCES test_application_redis.cpp test_application_redis_live.cpp
@@ -169,16 +177,90 @@ if(CNETMOD_HAS_SSL)
     endif()
 endif()
 
+# Most unit tests exercise one physical component.  Linking every executable to
+# the compatibility `cnetmod_core`/`cnetmod::all` facade makes even a coroutine
+# test build every enabled protocol and Application integration.  Keep the
+# facade unchanged for downstream compatibility, but make test dependencies
+# express their real architectural boundary.
+function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
+    set(_target cnetmod_runtime)
+
+    if(TEST_NAME MATCHES "^test_application($|_)" OR
+            TEST_NAME MATCHES "^(test_configuration_properties|test_json_template|test_otlp_exporter|test_http_observability|test_http_disabled_overhead|test_grpc)$")
+        set(_target cnetmod_application)
+    elseif(TEST_NAME MATCHES
+            "^(test_orm_json_result_map|test_orm_sharding_sessions|test_orm_tenant_live)$")
+        # These repository/session tests import the concrete MySQL adapter in
+        # addition to provider-neutral ORM modules. cnetmod_mysql already
+        # carries the cnetmod_orm dependency when ORM is enabled.
+        set(_target cnetmod_mysql)
+    elseif(TEST_NAME MATCHES "^(test_database_datetime|test_orm_)")
+        set(_target cnetmod_orm)
+    elseif(TEST_NAME STREQUAL "test_quic_early_data")
+        # This QUIC scenario also exercises the HTTP/3 server/session layer.
+        set(_target cnetmod_http)
+    elseif(TEST_NAME MATCHES "^test_quic")
+        set(_target cnetmod_quic)
+    elseif(TEST_NAME MATCHES "^(test_http|http_client_test|test_metrics|test_tfb)")
+        set(_target cnetmod_http)
+    elseif(TEST_NAME MATCHES "^test_openai")
+        # The suite also validates the Application-owned OpenAI observability
+        # adapter, not only the wire protocol component.
+        set(_target cnetmod_application)
+    elseif(TEST_NAME MATCHES "^test_grpc")
+        set(_target cnetmod_grpc)
+    elseif(TEST_NAME MATCHES "^test_redis")
+        set(_target cnetmod_redis)
+    elseif(TEST_NAME MATCHES "^test_mysql")
+        set(_target cnetmod_mysql)
+    elseif(TEST_NAME MATCHES "^test_mongodb")
+        set(_target cnetmod_mongodb)
+    elseif(TEST_NAME MATCHES "^test_mqtt")
+        set(_target cnetmod_mqtt)
+    elseif(TEST_NAME MATCHES "^test_raft")
+        set(_target cnetmod_raft)
+    elseif(TEST_NAME STREQUAL "test_dns")
+        set(_target cnetmod_dns)
+    elseif(TEST_NAME STREQUAL "test_coap")
+        set(_target cnetmod_coap)
+    elseif(TEST_NAME MATCHES "^test_socks5")
+        set(_target cnetmod_socks5)
+    elseif(TEST_NAME MATCHES "^test_mail")
+        set(_target cnetmod_mail)
+    endif()
+
+    if(NOT TARGET ${_target})
+        message(FATAL_ERROR
+            "Test ${TEST_NAME} requires unavailable component ${_target}")
+    endif()
+    set(${OUTPUT_VARIABLE} ${_target} PARENT_SCOPE)
+endfunction()
+
 foreach(test_src ${TEST_SOURCES})
     # Extract test name from filename (e.g. test_task.cpp → test_task)
     get_filename_component(test_name ${test_src} NAME_WE)
 
     add_executable(${test_name} ${test_src})
     list(APPEND CNETMOD_TEST_TARGETS ${test_name})
-    if(test_name STREQUAL "test_c_api")
+    if(test_name STREQUAL "test_http_disabled_overhead")
+        set_property(TARGET ${test_name} PROPERTY
+            CNETMOD_DISABLE_MIMALLOC TRUE)
+    endif()
+    if(test_name STREQUAL "test_mimalloc_runtime")
+        # Standalone process-level allocator verification. It deliberately
+        # does not inherit mimalloc through a cnetmod library target.
+    elseif(test_name STREQUAL "test_c_api")
         target_link_libraries(${test_name} PRIVATE cnetmod_c)
     else()
-        target_link_libraries(${test_name} PRIVATE cnetmod_core)
+        cnetmod_test_component(${test_name} test_component)
+        target_link_libraries(${test_name} PRIVATE ${test_component})
+    endif()
+    # The disabled-overhead suite owns the process allocator so it can count
+    # exact new/delete calls. Every other executable, including the dedicated
+    # mimalloc runtime check, uses the production allocator path.
+    if(CNETMOD_USING_MIMALLOC AND
+            NOT test_name STREQUAL "test_http_disabled_overhead")
+        cnetmod_enable_mimalloc(${test_name})
     endif()
     target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
     set_property(TARGET ${test_name} PROPERTY
@@ -235,7 +317,7 @@ if(MSVC AND TARGET test_openai)
         list(GET _cnetmod_openai_test_shards ${_index} _suffix)
         set(_target "test_openai_${_suffix}")
         add_executable(${_target} test_openai.cpp)
-        target_link_libraries(${_target} PRIVATE cnetmod_core)
+        target_link_libraries(${_target} PRIVATE cnetmod_application)
         target_include_directories(${_target} PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR})
         target_compile_definitions(${_target} PRIVATE

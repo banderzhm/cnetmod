@@ -117,7 +117,7 @@ struct chat_response {
 | 方法 | 签名 | 说明 |
 |------|------|------|
 | 构造 | `explicit client(io_context&) noexcept` | |
-| `connect` | `auto connect(connect_options) -> task<std::expected<void, std::string>>` | 连接 API |
+| `connect` | `auto connect(connect_options[, cancel_token&]) -> task<std::expected<void, std::string>>` | 连接 API；可取消重载覆盖 TCP 建连与 TLS 握手 |
 | `chat` | `auto chat(chat_request) -> task<std::expected<chat_response, std::string>>` | Chat Completions |
 | `responses` | `auto responses(response_request) -> task<std::expected<response_result, std::string>>` | Responses API |
 | `chat_stream` | `auto chat_stream(chat_request, on_chunk_fn[, cancel_token&]) -> task<std::expected<std::string, std::string>>` | SSE 流式，可取消 |
@@ -179,7 +179,9 @@ session 不共享消息且可以并行。成功响应才原子追加 user/assist
 建立并验证全部新连接，验证完成立即关闭探测连接，再通过连接池 generation swap 一次
 发布。运行期按 lease 惰性重连，避免启动到首个请求之间被网关回收的空闲 socket 形成
 一整池假活连接。配置非法或任一连接失败时旧 generation 不变；成功发布后，在途请求继续
-持有旧客户端，新请求只获取新客户端。
+持有旧客户端，新请求只获取新客户端。启动和热重载的建连组统一使用
+`timeout_seconds` 作为完整 generation 的截止时间，并把 Application 生命周期取消信号
+转发给每个 TCP/TLS 建连；上游地址黑洞或停机时不会无限阻塞启动、重载或关闭。
 `chat_model_pool::reset()` 是 provider 实现原语，不是 route 或领域代码的配置 API。
 
 #### 多模态与 Function Calling 类型

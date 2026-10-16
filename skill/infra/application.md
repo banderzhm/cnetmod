@@ -577,6 +577,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
   "http": {
     "address": "0.0.0.0",
     "port": 8080,
+    "backlog": 4096,
     "request_timeout_ms": 30000,
     "sse": {
       "max_duration_ms": 120000,
@@ -587,6 +588,7 @@ host 显式持有预先创建的顶层编排协程，以协程帧内队列节点
     "enabled": true,
     "address": "127.0.0.1",
     "port": 8081,
+    "backlog": 4096,
     "same_port": false
   },
   "observability": {
@@ -681,7 +683,7 @@ MySQL 服务还支持 `ssl`（`disable`、`enable`、`require`）、`tls_verify`
 
 支持的环境变量包括：
 
-- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_LOG_LEVEL`
+- `CNETMOD_APPLICATION_NAME`、`CNETMOD_HTTP_ADDRESS`、`CNETMOD_HTTP_PORT`、`CNETMOD_HTTP_BACKLOG`、`CNETMOD_LOG_LEVEL`
 - `OTEL_EXPORTER_OTLP_ENDPOINT`、`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`
 - `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`、`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`
 - `OTEL_SERVICE_NAME`、`OTEL_SERVICE_VERSION`
