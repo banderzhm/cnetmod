@@ -47,6 +47,8 @@ session::session(cnetmod::io_context& context, cnetmod::socket& socket,
     outbound_.reserve(4U * 1024U);
     write_buffer_.reserve(4U * 1024U);
     header_block_.reserve(4U * 1024U);
+    response_headers_.reserve(8);
+    encoded_headers_.reserve(256);
     if (!reader_)
     {
         reader_ = [this](cnetmod::mutable_buffer buffer)
@@ -184,9 +186,9 @@ auto session::validate_headers(std::span<const header_field> fields) const
 
 void session::queue_response(std::uint32_t stream_id, server_response response)
 {
-    std::vector<header_field> headers;
-    headers.reserve(response.headers.size() + 2);
-    headers.push_back({":status", std::to_string(response.status)});
+    response_headers_.clear();
+    response_headers_.reserve(response.headers.size() + 2);
+    response_headers_.push_back({":status", std::to_string(response.status)});
     bool has_length = false;
     for (auto& header : response.headers)
     {
@@ -194,11 +196,12 @@ void session::queue_response(std::uint32_t stream_id, server_response response)
             header.name == "transfer-encoding" || header.name == "upgrade")
             continue;
         has_length |= header.name == "content-length";
-        headers.push_back(std::move(header));
+        response_headers_.push_back(std::move(header));
     }
     if (!response.body.empty() && !has_length)
-        headers.push_back({"content-length", std::to_string(response.body.size())});
-    auto encoded = encoder_.encode(headers);
+        response_headers_.push_back(
+            {"content-length", std::to_string(response.body.size())});
+    auto encoded = encoder_.encode(response_headers_, encoded_headers_);
     if (!encoded)
         return;
     const auto has_trailers = !response.trailers.empty();
@@ -207,7 +210,7 @@ void session::queue_response(std::uint32_t stream_id, server_response response)
                     .flags = static_cast<std::uint8_t>(
                         flag_end_headers | (end_on_headers ? flag_end_stream : 0)),
                     .stream_id = stream_id},
-        *encoded);
+        encoded_headers_);
     std::size_t offset = 0;
     while (offset < response.body.size())
     {
@@ -403,7 +406,7 @@ void session::start_streaming_request(std::uint32_t stream_id)
                 });
         });
     server_request request{.stream_id = stream_id,
-        .headers = found->second.headers(),
+        .headers = found->second.take_headers(),
         .body_stream = body};
     (void)background_->run(
         [this, stream_id, request = std::move(request)](cnetmod::cancel_token& token) mutable
@@ -444,11 +447,20 @@ auto session::dispatch_ready() -> cnetmod::task<void>
         if (found == streams_.end())
             continue;
         server_response response;
-        if (handler_)
+        if (streaming_handler_)
         {
             server_request request{
                 .stream_id = stream_id,
-                .headers = found->second.headers(),
+                .headers = found->second.take_headers()};
+            cancel_token cancellation;
+            response = co_await streaming_handler_(
+                std::move(request), cancellation);
+        }
+        else if (handler_)
+        {
+            server_request request{
+                .stream_id = stream_id,
+                .headers = found->second.take_headers(),
                 .body = {found->second.body().begin(), found->second.body().end()}};
             response = co_await handler_(std::move(request));
         }
@@ -461,55 +473,7 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 co_return;
             continue;
         }
-        std::vector<header_field> headers;
-        headers.reserve(response.headers.size() + 2);
-        headers.push_back({":status", std::to_string(response.status)});
-        bool has_length = false;
-        for (auto& header : response.headers)
-        {
-            if (header.name.starts_with(':') || header.name == "connection" ||
-                header.name == "transfer-encoding" || header.name == "upgrade")
-                continue;
-            has_length |= header.name == "content-length";
-            headers.push_back(std::move(header));
-        }
-        if (!response.body.empty() && !has_length)
-            headers.push_back(
-                {"content-length", std::to_string(response.body.size())});
-        auto encoded = encoder_.encode(headers);
-        if (!encoded)
-            co_return;
-        const auto has_trailers = !response.trailers.empty();
-        const auto end_on_headers = response.body.empty() && !has_trailers;
-        queue_frame({.type = frame_type::headers,
-                        .flags = static_cast<std::uint8_t>(
-                            flag_end_headers | (end_on_headers ? flag_end_stream : 0)),
-                        .stream_id = stream_id},
-            *encoded);
-        std::size_t offset = 0;
-        while (offset < response.body.size())
-        {
-            const auto size = std::min<std::size_t>(peer_.max_frame_size,
-                response.body.size() - offset);
-            const auto final = offset + size == response.body.size();
-            queue_frame({.type = frame_type::data,
-                            .flags = static_cast<std::uint8_t>(
-                                final && !has_trailers ? flag_end_stream : 0),
-                            .stream_id = stream_id},
-                {response.body.data() + offset, size});
-            offset += size;
-        }
-        if (has_trailers)
-        {
-            auto encoded_trailers = encoder_.encode(response.trailers);
-            if (!encoded_trailers)
-                co_return;
-            queue_frame({.type = frame_type::headers,
-                            .flags = static_cast<std::uint8_t>(flag_end_headers |
-                                flag_end_stream),
-                            .stream_id = stream_id},
-                *encoded_trailers);
-        }
+        queue_response(stream_id, std::move(response));
         // This request has already supplied END_STREAM and its complete
         // response has been queued. Retaining it makes the per-connection
         // stream map grow without bound for ordinary sequential RPC traffic.
@@ -638,11 +602,9 @@ auto session::process_frame(frame_header header,
         if (!inserted ||
             !it->second.receive_headers(std::move(*decoded), end_stream))
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        if (streaming_handler_)
+        if (streaming_handler_ && !end_stream)
         {
             start_streaming_request(header.stream_id);
-            if (end_stream && it->second.body_stream())
-                it->second.body_stream()->close();
         }
         else if (end_stream)
         {

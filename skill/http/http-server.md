@@ -144,7 +144,8 @@ auto endpoints() const -> std::vector<std::shared_ptr<const endpoint>>;
 不需要等待异步操作的端点使用 `get_sync / post_sync / put_sync / del_sync /
 patch_sync / any_sync`，其 handler 为 `std::function<void(request_context&)>`。在没有
 中间件时服务器直接调用它，不创建 handler 或中间件链协程帧；有中间件时框架才按需
-适配成 `task<void>`。不要为了使用 sync API 在 handler 内执行阻塞 I/O 或 CPU 重任务。
+适配成 `task<void>`。该语义对 HTTP/1.1 和 HTTP/2 一致；HTTP/2 不会忽略
+`sync_handler`。不要为了使用 sync API 在 handler 内执行阻塞 I/O 或 CPU 重任务。
 
 路由在中间件之前完成匹配；中间件与 handler 通过 `request_context::endpoint()` 读取匹配的
 `endpoint{method, pattern, name, metadata}`，未匹配时为空指针。
@@ -547,6 +548,10 @@ r.get("/docs", swagger_ui_handler());
 服务器自动检测 TLS 连接上的 ALPN 协商，透明支持 HTTP/2（RFC 9113）。客户端通过 `h2` 前缀连接时，服务器使用 `v2::session` 处理帧和多路复用。
 
 **配置**: 启用 SSL 后，HTTP/2 自动通过 ALPN 协商。无需额外配置。
+
+已经携带 `END_STREAM` 的完整请求由连接协程批量分发并合并刷出响应；只有请求正文仍在
+到达的流才启动后台流式任务。应用无需为了吞吐手工创建 task 或绕过 router，正文流式
+端点继续使用 `stream_*` 路由即可。
 
 ```cpp
 import std;

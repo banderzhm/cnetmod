@@ -8,6 +8,7 @@ import cnetmod.coro.task;
 import cnetmod.executor.async_op;
 import cnetmod.io;
 import cnetmod.protocol.http.semantics;
+import cnetmod.protocol.http;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.header_compression;
 import cnetmod.protocol.http.v2.session;
@@ -32,6 +33,105 @@ auto bytes(std::string_view value) -> std::span<const std::byte>
     return {reinterpret_cast<const std::byte*>(value.data()), value.size()};
 }
 } // namespace
+
+TEST(http2_server_dispatches_sync_router_handlers)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::http::server http_server{*io};
+    cnetmod::http::router routes;
+    routes.get_sync("/sync", [](cnetmod::http::request_context& request)
+        { request.text(cnetmod::http::status::ok, "sync"); });
+    http_server.set_router(std::move(routes));
+    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+    const auto endpoint = http_server.local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+    auto listener = http_server.run();
+    listener.handle().resume();
+
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
+                .has_value());
+
+        header_compression encoder;
+        const std::array request_headers{
+            header_field{":method", "GET"},
+            header_field{":scheme", "http"},
+            header_field{":authority", "localhost"},
+            header_field{":path", "/sync"}};
+        auto encoded = encoder.encode(request_headers);
+        ASSERT_TRUE(encoded.has_value());
+
+        std::vector<std::byte> request{
+            reinterpret_cast<const std::byte*>(preface.data()),
+            reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
+        auto settings = framed({.type = frame_type::settings}, {});
+        request.insert(request.end(), settings.begin(), settings.end());
+        auto headers = framed({.type = frame_type::headers,
+                                  .flags = 0x5,
+                                  .stream_id = 1},
+            *encoded);
+        request.insert(request.end(), headers.begin(), headers.end());
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                         cnetmod::const_buffer{request.data(), request.size()}))
+                .has_value());
+
+        std::vector<std::byte> wire;
+        std::string body;
+        bool ended{};
+        std::array<std::byte, 4096> buffer{};
+        while (!ended)
+        {
+            auto read = co_await cnetmod::async_read(*io, *peer,
+                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+            ASSERT_TRUE(read.has_value() && *read > 0);
+            if (!read || *read == 0)
+                break;
+            wire.insert(wire.end(), buffer.begin(), buffer.begin() + *read);
+
+            std::size_t offset{};
+            while (offset + frame_header_size <= wire.size())
+            {
+                auto header = decode_frame_header(
+                    std::span{wire.data() + offset, frame_header_size});
+                ASSERT_TRUE(header.has_value());
+                if (!header ||
+                    offset + frame_header_size + header->length > wire.size())
+                    break;
+                if (header->type == frame_type::data &&
+                    header->stream_id == 1)
+                {
+                    body.append(reinterpret_cast<const char*>(wire.data() +
+                                    offset + frame_header_size),
+                        header->length);
+                    ended = (header->flags & 0x1U) != 0;
+                }
+                offset += frame_header_size + header->length;
+            }
+            if (offset != 0)
+                wire.erase(wire.begin(), wire.begin() + offset);
+        }
+
+        ASSERT_EQ(body, std::string{"sync"});
+        peer->close();
+        http_server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::post_awaitable{*io};
+        listener.handle().promise().result();
+        while (http_server.active_connections() != 0)
+            co_await cnetmod::post_awaitable{*io};
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+}
 
 TEST(http2_streams_deliver_interleaved_bodies_and_return_consumed_credit)
 {

@@ -76,54 +76,60 @@ namespace {
         {"www-authenticate", ""},
     };
 
+    struct static_lookup
+    {
+        std::uint32_t index{};
+        bool known_name{};
+    };
+
     auto common_static_index(std::string_view name, std::string_view value,
-        bool exact) noexcept -> std::uint32_t
+        bool exact) noexcept -> static_lookup
     {
         if (name == ":method")
         {
             if (!exact || value == "GET")
-                return 2;
-            return value == "POST" ? 3 : 0;
+                return {2, true};
+            return {value == "POST" ? 3U : 0U, true};
         }
         if (name == ":path")
         {
             if (!exact || value == "/")
-                return 4;
-            return value == "/index.html" ? 5 : 0;
+                return {4, true};
+            return {value == "/index.html" ? 5U : 0U, true};
         }
         if (name == ":scheme")
         {
             if (!exact || value == "http")
-                return 6;
-            return value == "https" ? 7 : 0;
+                return {6, true};
+            return {value == "https" ? 7U : 0U, true};
         }
         if (name == ":status")
         {
             if (!exact || value == "200")
-                return 8;
+                return {8, true};
             if (value == "204")
-                return 9;
+                return {9, true};
             if (value == "206")
-                return 10;
+                return {10, true};
             if (value == "304")
-                return 11;
+                return {11, true};
             if (value == "400")
-                return 12;
+                return {12, true};
             if (value == "404")
-                return 13;
-            return value == "500" ? 14 : 0;
+                return {13, true};
+            return {value == "500" ? 14U : 0U, true};
         }
         if (name == ":authority")
-            return exact && !value.empty() ? 0 : 1;
+            return {exact && !value.empty() ? 0U : 1U, true};
         if (name == "content-length")
-            return exact && !value.empty() ? 0 : 28;
+            return {exact && !value.empty() ? 0U : 28U, true};
         if (name == "content-type")
-            return exact && !value.empty() ? 0 : 31;
+            return {exact && !value.empty() ? 0U : 31U, true};
         if (name == "host")
-            return exact && !value.empty() ? 0 : 38;
+            return {exact && !value.empty() ? 0U : 38U, true};
         if (name == "user-agent")
-            return exact && !value.empty() ? 0 : 58;
-        return 0;
+            return {exact && !value.empty() ? 0U : 58U, true};
+        return {};
     }
 
     void encode_integer(std::vector<std::byte>& out, std::uint32_t value,
@@ -246,12 +252,14 @@ auto header_compression::at(std::uint32_t index) const -> std::optional<entry>
 auto header_compression::find(std::string_view name, std::string_view value,
     bool exact) const -> std::uint32_t
 {
-    if (const auto common = common_static_index(name, value, exact))
-        return common;
-    for (std::uint32_t i = 1; i < std::size(static_table); ++i)
-        if (static_table[i].name == name &&
-            (!exact || static_table[i].value == value))
-            return i;
+    const auto common = common_static_index(name, value, exact);
+    if (common.index != 0)
+        return common.index;
+    if (!common.known_name)
+        for (std::uint32_t i = 1; i < std::size(static_table); ++i)
+            if (static_table[i].name == name &&
+                (!exact || static_table[i].value == value))
+                return i;
     for (std::size_t i = 0; i < dynamic_table_.size(); ++i)
         if (dynamic_table_[i].name == name &&
             (!exact || dynamic_table_[i].value == value))
@@ -336,27 +344,37 @@ auto header_compression::encode(std::span<const header_field> fields)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
     std::vector<std::byte> result;
-    result.reserve(fields.size() * 16U);
+    if (auto encoded = encode(fields, result); !encoded)
+        return std::unexpected(encoded.error());
+    return result;
+}
+
+auto header_compression::encode(std::span<const header_field> fields,
+    std::vector<std::byte>& output)
+    -> std::expected<void, std::error_code>
+{
+    output.clear();
+    output.reserve(fields.size() * 16U);
     for (const auto& field : fields)
     {
         if (field.name.empty())
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         if (const auto exact = find(field.name, field.value, true))
         {
-            encode_integer(result, exact, 7, 0x80);
+            encode_integer(output, exact, 7, 0x80);
             continue;
         }
         const auto indexed = !field.sensitive && field.name != "authorization" &&
             field.name != "cookie" && field.name != "set-cookie";
         const auto name = find(field.name, {}, false);
-        encode_integer(result, name, indexed ? 6 : 4,
+        encode_integer(output, name, indexed ? 6 : 4,
             indexed ? 0x40 : (field.sensitive ? 0x10 : 0));
         if (!name)
-            encode_string(result, field.name);
-        encode_string(result, field.value);
+            encode_string(output, field.name);
+        encode_string(output, field.value);
         if (indexed)
             insert({field.name, field.value});
     }
-    return result;
+    return {};
 }
 } // namespace cnetmod::http::v2

@@ -1134,18 +1134,18 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
     return [this, &io, &client](v2::server_request request,
                cancel_token& cancellation) -> task<v2::server_response>
     {
-        std::string method = "GET";
-        std::string uri = "/";
+        std::string_view method = "GET";
+        std::string_view uri = "/";
         header_map headers;
         headers.reserve(request.headers.size());
-        for (const auto& field : request.headers)
+        for (auto& field : request.headers)
         {
             if (field.name == ":method")
                 method = field.value;
             else if (field.name == ":path")
                 uri = field.value;
             else if (!field.name.starts_with(':'))
-                headers[field.name] = field.value;
+                headers[std::move(field.name)] = std::move(field.value);
         }
         const auto query = uri.find('?');
         const auto path = query == std::string::npos
@@ -1159,14 +1159,23 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
             output.set_cached_date_header(date_cache_.get());
         route_params params;
         handler_fn route;
+        sync_handler_fn sync_route;
         if (match)
         {
             route = std::move(match->handler);
+            sync_route = std::move(match->sync_handler);
             params = std::move(match->params);
         }
         else
         {
             route = detail::unmatched_route_handler(router_, path);
+        }
+        if (!request.body_stream && match && match->request_stream)
+        {
+            request.body_stream = std::make_shared<request_body_stream>(
+                match->request_stream->chunk_capacity,
+                match->request_stream->max_bytes);
+            request.body_stream->close();
         }
         std::string buffered_body;
         if (request.body_stream && (!match || !match->request_stream))
@@ -1185,7 +1194,22 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
             std::move(params), match && match->request_stream ? request.body_stream : std::shared_ptr<request_body_stream>{});
         if (cancellation.is_cancelled())
             context.cancel_pending_operations();
-        co_await execute_chain(context, route);
+        if (middlewares_.empty() && sync_route)
+            sync_route(context);
+        else if (middlewares_.empty())
+            co_await route(context);
+        else if (sync_route)
+        {
+            handler_fn adapted = [&sync_route](request_context& request_context)
+                -> task<void>
+            {
+                sync_route(request_context);
+                co_return;
+            };
+            co_await execute_chain(context, adapted);
+        }
+        else
+            co_await execute_chain(context, route);
         v2::server_response result;
         if (request.body_stream && request.body_stream->error() == std::make_error_code(std::errc::message_size))
             output.set_status(status::payload_too_large);
@@ -1202,11 +1226,10 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
         result.headers.reserve(output.headers().size());
         for (const auto& [name, value] : output.headers())
         {
-            std::string lowercase;
-            lowercase.reserve(name.size());
-            for (const auto character : name)
-                lowercase.push_back(static_cast<char>(
-                    std::tolower(static_cast<unsigned char>(character))));
+            std::string lowercase{name};
+            for (auto& character : lowercase)
+                if (character >= 'A' && character <= 'Z')
+                    character = static_cast<char>(character + ('a' - 'A'));
             result.headers.push_back({std::move(lowercase), value});
         }
         if (const auto date = output.cached_date_header(); !date.empty())
@@ -1214,11 +1237,10 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
         result.trailers.reserve(output.trailers().size());
         for (const auto& [name, value] : output.trailers())
         {
-            std::string lowercase;
-            lowercase.reserve(name.size());
-            for (const auto character : name)
-                lowercase.push_back(static_cast<char>(
-                    std::tolower(static_cast<unsigned char>(character))));
+            std::string lowercase{name};
+            for (auto& character : lowercase)
+                if (character >= 'A' && character <= 'Z')
+                    character = static_cast<char>(character + ('a' - 'A'));
             result.trailers.push_back({std::move(lowercase), value});
         }
         co_return result;

@@ -111,6 +111,8 @@ private:
     std::vector<std::byte> outbound_;
     std::vector<std::byte> write_buffer_;
     std::vector<std::byte> header_block_;
+    std::vector<header_field> response_headers_;
+    std::vector<std::byte> encoded_headers_;
     std::uint32_t continuation_stream_id_ = 0;
     bool continuation_end_stream_ = false;
     std::uint32_t last_peer_stream_id_ = 0;

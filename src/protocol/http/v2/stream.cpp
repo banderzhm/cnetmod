@@ -21,6 +21,11 @@ auto stream::headers() const noexcept -> const std::vector<header_field>&
     return headers_;
 }
 
+auto stream::take_headers() noexcept -> std::vector<header_field>
+{
+    return std::move(headers_);
+}
+
 auto stream::body() const noexcept -> std::span<const std::byte>
 {
     return body_;

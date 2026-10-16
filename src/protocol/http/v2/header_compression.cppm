@@ -20,6 +20,9 @@ public:
         -> std::expected<std::vector<header_field>, std::error_code>;
     [[nodiscard]] auto encode(std::span<const header_field> fields)
         -> std::expected<std::vector<std::byte>, std::error_code>;
+    [[nodiscard]] auto encode(std::span<const header_field> fields,
+        std::vector<std::byte>& output)
+        -> std::expected<void, std::error_code>;
 
     void set_dynamic_table_limit(std::size_t bytes);
     [[nodiscard]] auto dynamic_table_limit() const noexcept -> std::size_t;

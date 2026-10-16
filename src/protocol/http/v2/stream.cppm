@@ -28,6 +28,8 @@ public:
         bool end_stream) -> bool;
     [[nodiscard]] auto headers() const noexcept
         -> const std::vector<header_field>&;
+    [[nodiscard]] auto take_headers() noexcept
+        -> std::vector<header_field>;
     [[nodiscard]] auto body() const noexcept -> std::span<const std::byte>;
     void attach_body_stream(
         std::shared_ptr<cnetmod::http::request_body_stream> body_stream);
