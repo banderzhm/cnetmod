@@ -3,6 +3,9 @@
 #include "test_framework.hpp"
 
 import std;
+import cnetmod.core.buffer;
+import cnetmod.coro.cancel;
+import cnetmod.coro.task;
 import cnetmod.protocol.http;
 import cnetmod.utils;
 
@@ -139,6 +142,43 @@ TEST(response_set_body_string)
     resp.set_body(std::string("world!"));
     ASSERT_EQ(resp.body(), std::string_view("world!"));
     ASSERT_EQ(resp.get_header("Content-Length"), std::string_view("6"));
+}
+
+TEST(response_body_source_is_exclusive_and_sets_length)
+{
+    response resp;
+    auto source = std::make_shared<response_body_source>(
+        [](cnetmod::cancel_token&)
+            -> cnetmod::task<std::optional<request_body_chunk>>
+        {
+            co_return std::nullopt;
+        },
+        42U);
+    resp.set_body(std::string_view{"buffered"});
+    resp.set_body_source(source);
+    ASSERT_TRUE(resp.body().empty());
+    ASSERT_TRUE(resp.body_source() == source);
+    ASSERT_EQ(resp.get_header("Content-Length"), std::string_view{"42"});
+
+    resp.set_body(std::string_view{"replacement"});
+    ASSERT_FALSE(resp.body_source());
+    ASSERT_EQ(resp.body(), std::string_view{"replacement"});
+
+    auto unknown_length = std::make_shared<response_body_source>(
+        [](cnetmod::cancel_token&)
+            -> cnetmod::task<std::optional<request_body_chunk>>
+        {
+            co_return std::nullopt;
+        });
+    resp.set_body_source(std::move(unknown_length));
+    ASSERT_TRUE(resp.get_header("Content-Length").empty());
+
+    resp.set_body_source(std::move(source));
+    auto taken = resp.take_body_source();
+    ASSERT_TRUE(taken);
+    ASSERT_FALSE(resp.body_source());
+    resp.reset();
+    ASSERT_FALSE(resp.body_source());
 }
 
 // =============================================================================

@@ -15,6 +15,7 @@ import cnetmod.core.socket;
 import cnetmod.io.io_context;
 import cnetmod.coro.task;
 import cnetmod.coro.cancel;
+import cnetmod.coro.mutex;
 
 namespace cnetmod {
 
@@ -302,6 +303,11 @@ private:
     SSL* ssl_ = nullptr;
     BIO* rbio_ = nullptr; // Network -> SSL (receive direction)
     BIO* wbio_ = nullptr; // SSL -> Network (send direction)
+    // SSL_read and SSL_write may both append post-handshake records to wbio_.
+    // Keep the SSL engine and a memory-BIO flush atomic across coroutine
+    // suspension so HTTP/2 read/write coroutines cannot invalidate the BIO
+    // storage being submitted to the socket.
+    async_mutex engine_mutex_;
     bool direct_socket_bio_ = false;
     bool kernel_tls_active_ = false;
 };

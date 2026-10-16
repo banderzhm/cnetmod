@@ -184,7 +184,7 @@ namespace detail {
 
         auto range_hdr = ctx.get_header("Range");
         std::uint64_t range_start = 0;
-        std::uint64_t range_end = file_size - 1;
+        std::uint64_t range_end = file_size == 0 ? 0 : file_size - 1;
         bool is_range = false;
 
         if (!range_hdr.empty() && range_hdr.starts_with("bytes="))
@@ -205,7 +205,8 @@ namespace detail {
                     std::from_chars(end_str.data(), end_str.data() + end_str.size(),
                         range_end);
                 }
-                if (range_start <= range_end && range_end < file_size)
+                if (file_size != 0 && range_start <= range_end &&
+                    range_end < file_size)
                 {
                     is_range = true;
                 }
@@ -225,42 +226,38 @@ namespace detail {
             resp.set_status(status::ok);
             resp.set_header("Content-Length", std::to_string(file_size));
             range_start = 0;
-            range_end = file_size - 1;
+            range_end = file_size == 0 ? 0 : file_size - 1;
         }
         resp.set_header("Content-Type", mime);
         resp.set_header("Accept-Ranges", "bytes");
 
-        auto header_data = resp.serialize();
-        auto wr = co_await async_write_all(
-            ctx.io_ctx(), ctx.raw_socket(),
-            const_buffer{header_data.data(), header_data.size()});
-        if (!wr)
-            co_return;
-
-        constexpr std::size_t CHUNK_SIZE = 65536;
-        std::vector<std::byte> buf(CHUNK_SIZE);
-        std::uint64_t offset = range_start;
-        std::uint64_t remaining = range_end - range_start + 1;
-
-        while (remaining > 0)
-        {
-            auto to_read = static_cast<std::size_t>(
-                std::min<std::uint64_t>(remaining, CHUNK_SIZE));
-            auto rd = co_await async_file_read(
-                ctx.io_ctx(), *f, mutable_buffer{buf.data(), to_read}, offset);
-            if (!rd || *rd == 0)
-                break;
-
-            auto wf = co_await async_write_all(ctx.io_ctx(), ctx.raw_socket(),
-                const_buffer{buf.data(), *rd});
-            if (!wf)
-                break;
-
-            offset += *rd;
-            remaining -= *rd;
-        }
-
-        resp.set_header("X-Streamed", "1");
+        const auto content_length = file_size == 0
+            ? std::uint64_t{0}
+            : range_end - range_start + 1;
+        auto source_file = std::make_shared<file>(std::move(*f));
+        auto offset = std::make_shared<std::uint64_t>(range_start);
+        auto remaining = std::make_shared<std::uint64_t>(content_length);
+        auto* io = &ctx.io_ctx();
+        constexpr std::size_t chunk_size = 64U * 1024U;
+        resp.set_body_source(std::make_shared<response_body_source>(
+            [source_file, offset, remaining, io, chunk_size](cancel_token& token)
+                -> task<std::optional<request_body_chunk>>
+            {
+                if (token.is_cancelled() || *remaining == 0)
+                    co_return std::nullopt;
+                const auto read_size = static_cast<std::size_t>(
+                    std::min<std::uint64_t>(*remaining, chunk_size));
+                request_body_chunk chunk(read_size);
+                auto read = co_await async_file_read(*io, *source_file,
+                    chunk.writable_view(), *offset, token);
+                if (!read || *read == 0)
+                    co_return std::nullopt;
+                chunk.resize(*read);
+                *offset += *read;
+                *remaining -= *read;
+                co_return chunk;
+            },
+            content_length));
         co_return;
     }
 
@@ -1197,6 +1194,7 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
             reinterpret_cast<const std::byte*>(output.body().data()),
             reinterpret_cast<const std::byte*>(output.body().data()) +
                 output.body().size());
+        result.body_source = output.take_body_source();
         // HTTP/2 owns this response until HPACK has encoded it, so reserve the
         // exact number of application headers before copying them.  The usual
         // response has Date, Server and Content-Length; growing from an empty
@@ -1546,9 +1544,26 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     co_await execute_chain(rctx, *selected);
                 }
             }
+            const bool has_body_source = static_cast<bool>(resp.body_source());
+            if (has_body_source)
+            {
+                if (!pending_responses.empty())
+                {
+                    auto pending = co_await async_write_all(io, client,
+                        const_buffer{pending_responses.data(),
+                            pending_responses.size()},
+                        cancellation);
+                    if (!pending)
+                        co_return;
+                    pending_responses.clear();
+                }
+                if (!(co_await send_body_source(
+                        io, client, resp, cancellation)))
+                    co_return;
+            }
             // Check if chunked encoding is needed
             bool use_chunked = false;
-            if (resp.get_header("X-Streamed") != "1")
+            if (!has_body_source && resp.get_header("X-Streamed") != "1")
             {
                 // If no Content-Length and body not empty, use chunked
                 if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
@@ -1850,9 +1865,25 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 co_await execute_chain(rctx, *selected);
             }
         }
+        const bool has_body_source = static_cast<bool>(resp.body_source());
+        if (has_body_source)
+        {
+            if (!pending_responses.empty())
+            {
+                auto pending = co_await ssl.async_write_all(const_buffer{
+                                                                pending_responses.data(), pending_responses.size()},
+                    cancellation);
+                if (!pending)
+                    co_return;
+                pending_responses.clear();
+            }
+            if (!(co_await send_body_source_tls(
+                    ssl, resp, cancellation)))
+                co_return;
+        }
         // Check if chunked encoding is needed
         bool use_chunked = false;
-        if (resp.get_header("X-Streamed") != "1")
+        if (!has_body_source && resp.get_header("X-Streamed") != "1")
         {
             // If no Content-Length and body not empty, use chunked
             if (resp.get_header("Content-Length").empty() && !resp.body().empty() &&
@@ -1985,7 +2016,98 @@ auto server::send_chunked_response(io_context& io, socket& client,
     (void)wr_end;
 }
 
+auto server::send_body_source(io_context& io, socket& client, response& resp,
+    cancel_token& cancellation) -> task<bool>
+{
+    auto source = resp.take_body_source();
+    if (!source)
+        co_return false;
+    const bool chunked = !source->content_length() &&
+        resp.version() == http_version::http_1_1;
+    if (chunked)
+        resp.set_header("Transfer-Encoding", "chunked");
+    auto header = resp.serialize();
+    auto written = co_await async_write_all(io, client,
+        const_buffer{header.data(), header.size()}, cancellation);
+    if (!written)
+        co_return false;
+    std::uint64_t total = 0;
+    while (auto chunk = co_await source->next(cancellation))
+    {
+        if (chunk->empty())
+            continue;
+        std::string framed;
+        const_buffer bytes{chunk->data(), chunk->size()};
+        if (chunked)
+        {
+            framed = std::format("{:x}\r\n", chunk->size());
+            framed.append(reinterpret_cast<const char*>(chunk->data()),
+                chunk->size());
+            framed += "\r\n";
+            bytes = {framed.data(), framed.size()};
+        }
+        auto result = co_await async_write_all(
+            io, client, bytes, cancellation);
+        if (!result)
+            co_return false;
+        total += chunk->size();
+    }
+    if (chunked)
+    {
+        auto ended = co_await async_write_all(io, client,
+            const_buffer{"0\r\n\r\n", 5}, cancellation);
+        if (!ended)
+            co_return false;
+    }
+    co_return !source->content_length() || total == *source->content_length();
+}
+
 #ifdef CNETMOD_HAS_SSL
+auto server::send_body_source_tls(ssl_stream& ssl, response& resp,
+    cancel_token& cancellation) -> task<bool>
+{
+    auto source = resp.take_body_source();
+    if (!source)
+        co_return false;
+    const bool chunked = !source->content_length() &&
+        resp.version() == http_version::http_1_1;
+    if (chunked)
+        resp.set_header("Transfer-Encoding", "chunked");
+    auto header = resp.serialize();
+    auto written = co_await ssl.async_write_all(
+        const_buffer{header.data(), header.size()}, cancellation);
+    if (!written)
+        co_return false;
+    std::uint64_t total = 0;
+    while (auto chunk = co_await source->next(cancellation))
+    {
+        if (chunk->empty())
+            continue;
+        std::string framed;
+        const_buffer bytes{chunk->data(), chunk->size()};
+        if (chunked)
+        {
+            framed = std::format("{:x}\r\n", chunk->size());
+            framed.append(reinterpret_cast<const char*>(chunk->data()),
+                chunk->size());
+            framed += "\r\n";
+            bytes = {framed.data(), framed.size()};
+        }
+        auto result = co_await ssl.async_write_all(bytes, cancellation);
+        if (!result)
+            co_return false;
+        total += chunk->size();
+    }
+    if (chunked)
+    {
+        auto ended = co_await ssl.async_write_all(
+            const_buffer{"0\r\n\r\n", 5}, cancellation);
+        if (!ended)
+            co_return false;
+    }
+    co_return !source->content_length() || total == *source->content_length();
+}
+
 auto server::send_chunked_response_tls(io_context&, ssl_stream& ssl,
     response& resp, cancel_token& cancellation) -> task<void>
 {

@@ -95,6 +95,12 @@ Redis 开关；它与 test_redis_tls 共用证书设施。Arch Clang 22 的 SSL-
 ORM 均关闭）也已运行通过。当前仓库强制使用内置 BoringSSL，其头文件未提供 SSL_OP_ENABLE_KTLS，
 因此该配置实际使用 memory BIO；不能将结果当作 direct socket BIO/kTLS 的运行证据。
 
+HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
+`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
+不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
+清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
+串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
+
 ### 错误处理
 **签名**:
 ```cpp

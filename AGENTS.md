@@ -1584,6 +1584,12 @@ Redis 开关；它与 test_redis_tls 共用证书设施。Arch Clang 22 的 SSL-
 ORM 均关闭）也已运行通过。当前仓库强制使用内置 BoringSSL，其头文件未提供 SSL_OP_ENABLE_KTLS，
 因此该配置实际使用 memory BIO；不能将结果当作 direct socket BIO/kTLS 的运行证据。
 
+HTTP/2 会在同一个 `ssl_stream` 上同时挂起读取协程和串行化的写入协程。框架在每次
+`SSL_read` / `SSL_write` 到对应 memory BIO 密文刷出完成之间持有协程锁，保证另一协程
+不会使 `BIO_get_mem_data()` 返回的内部存储失效，也不会在刷出后被错误的 `BIO_reset()`
+清掉新记录。应用层不需要再给一个读协程加锁；多个业务写入仍应由上层协议按帧顺序
+串行化。禁止绕过 `ssl_stream` 直接操作 `native()` 返回的 `SSL*`，否则该并发保证失效。
+
 ### 错误处理
 **签名**:
 ```cpp
@@ -8224,6 +8230,19 @@ auto set_cookie(std::string_view name, std::string_view value,
 auto set_cookie(const cookie& c) -> response&;
 ```
 
+#### `response::set_body_source`
+**签名**:
+```cpp
+auto set_body_source(std::shared_ptr<response_body_source> source)
+    -> response&;
+```
+
+用于文件、对象存储或动态生成的大响应体。传输层会按背压逐块拉取，HTTP/1
+明文、HTTP/1 TLS 与 HTTP/2 都走各自的协议写入路径；handler 不得通过
+`request_context::raw_socket()` 自行发送 HTTP 字节。`set_body()` 与
+`set_body_source()` 互斥，后调用者替换前一种响应体。提供
+`content_length` 时框架自动生成 `Content-Length`，并在发送结束时核对实际字节数。
+
 **示例**:
 ```cpp
 import std;
@@ -8568,6 +8587,11 @@ r.get("/static/*filepath", serve_dir({
 }));
 ```
 
+`serve_dir()` 使用协议无关的 pull-based response body：文件分块异步读取，
+HTTP/1 明文、TLS 和 HTTP/2 由服务器传输层分别编码。不要为了零拷贝或性能在
+静态文件 handler 中直接调用 `raw_socket()`；那会绕过 TLS 加密与 HTTP/2
+帧编码。框架会保持每次请求重新打开、stat 文件，因此替换静态资源后无需重启。
+
 ---
 
 ## Do's & Don'ts
@@ -8577,6 +8601,7 @@ r.get("/static/*filepath", serve_dir({
 | 用 `ctx.json()` 返回 JSON | 手动拼接 `Content-Type` header |
 | 用 `ctx.get_header()` 读取已知 header | 为读取单个值调用 `ctx.headers()` 物化整张表 |
 | 使用 `save_upload()` 处理大文件上传 | 在 handler 中手动读取整个 body 到内存 |
+| 大响应使用 `response_body_source` 或 `serve_dir()` | handler 直接写 `raw_socket()` 绕过 TLS/H2 |
 | SSE 时使用 `sse_begin()`、`sse_send()` 与 `sse_heartbeat()` | `sse_started()` 后回退使用 `ctx.json()` |
 | 使用 `co_return` 结束 handler | 忘记 `co_return` 导致未定义行为 |
 
