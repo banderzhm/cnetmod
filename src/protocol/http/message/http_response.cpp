@@ -162,6 +162,7 @@ auto response::remove_header(std::string_view key) -> response&
 
 auto response::set_body(std::string_view body) -> response&
 {
+    body_source_.reset();
     body_.assign(body);
     std::array<char, 24> length{};
     const auto [end, error] = std::to_chars(
@@ -173,6 +174,7 @@ auto response::set_body(std::string_view body) -> response&
 
 auto response::set_body(std::string body) -> response&
 {
+    body_source_.reset();
     std::array<char, 24> length{};
     const auto [end, error] = std::to_chars(
         length.data(), length.data() + length.size(), body.size());
@@ -184,7 +186,20 @@ auto response::set_body(std::string body) -> response&
 
 auto response::set_body_preserve_headers(std::string body) -> response&
 {
+    body_source_.reset();
     body_ = std::move(body);
+    return *this;
+}
+
+auto response::set_body_source(std::shared_ptr<response_body_source> source)
+    -> response&
+{
+    body_.clear();
+    body_source_ = std::move(source);
+    remove_header("Content-Length");
+    if (body_source_ && body_source_->content_length())
+        set_header("Content-Length",
+            std::to_string(*body_source_->content_length()));
     return *this;
 }
 
@@ -202,6 +217,7 @@ void response::reset(int status_code, http_version version) noexcept
     invalidate_headers_snapshot();
     trailers_.clear();
     body_.clear();
+    body_source_.reset();
     has_cached_date_header_ = false;
 }
 
@@ -256,6 +272,18 @@ auto response::body() const noexcept -> std::string_view
 auto response::take_body() noexcept -> std::string
 {
     return std::move(body_);
+}
+
+auto response::body_source() const noexcept
+    -> const std::shared_ptr<response_body_source>&
+{
+    return body_source_;
+}
+
+auto response::take_body_source() noexcept
+    -> std::shared_ptr<response_body_source>
+{
+    return std::exchange(body_source_, {});
 }
 
 auto response::get_header(std::string_view key) const -> std::string_view

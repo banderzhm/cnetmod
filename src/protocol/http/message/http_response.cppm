@@ -51,6 +51,13 @@ public:
 
     auto set_body_preserve_headers(std::string body) -> response&;
 
+    /// Install a pull-based response body. The transport consumes the source
+    /// with back-pressure after the handler returns; this keeps file and
+    /// generated streaming responses protocol-neutral across HTTP/1, HTTP/2,
+    /// and TLS.
+    auto set_body_source(std::shared_ptr<response_body_source> source)
+        -> response&;
+
     /// Reset this builder while retaining allocated storage for connection-local
     /// response reuse.
     void reset(int status_code = 200,
@@ -74,6 +81,10 @@ public:
     [[nodiscard]] auto body() const noexcept -> std::string_view;
 
     [[nodiscard]] auto take_body() noexcept -> std::string;
+    [[nodiscard]] auto body_source() const noexcept
+        -> const std::shared_ptr<response_body_source>&;
+    [[nodiscard]] auto take_body_source() noexcept
+        -> std::shared_ptr<response_body_source>;
 
     [[nodiscard]] auto get_header(std::string_view key) const -> std::string_view;
 
@@ -100,6 +111,7 @@ public:
 
 private:
     static constexpr std::size_t common_header_count = 10;
+
     struct common_header_value
     {
         std::string value;
@@ -126,6 +138,7 @@ private:
     mutable bool headers_snapshot_valid_{};
     header_map trailers_;
     std::string body_;
+    std::shared_ptr<response_body_source> body_source_;
     std::array<char, 29U> cached_date_header_{};
     bool has_cached_date_header_ = false;
 };

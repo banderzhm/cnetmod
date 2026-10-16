@@ -36,6 +36,17 @@ session::session(cnetmod::io_context& context, cnetmod::socket& socket,
     transport_writer writer)
     : context_(&context), socket_(&socket), reader_(std::move(reader)), writer_(std::move(writer)), handler_(std::move(handler))
 {
+    // Avoid both ends of the allocation trade-off: the common case should not
+    // grow on its first multiplexed batch, while thousands of mostly-idle H2
+    // connections must not each reserve the peer's full 100-stream limit.
+    const auto initial_stream_capacity = std::min<std::uint32_t>(
+        local_.max_concurrent_streams, 32U);
+    streams_.reserve(initial_stream_capacity);
+    ready_streams_.reserve(initial_stream_capacity);
+    input_.reserve(16U * 1024U);
+    outbound_.reserve(4U * 1024U);
+    write_buffer_.reserve(4U * 1024U);
+    header_block_.reserve(4U * 1024U);
     if (!reader_)
     {
         reader_ = [this](cnetmod::mutable_buffer buffer)
@@ -227,25 +238,123 @@ auto session::flush_outbound()
 {
     co_await writer_mutex_.lock();
     cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
-    auto output = take_outbound();
-    if (output.empty())
+    co_return co_await write_outbound_locked();
+}
+
+auto session::write_outbound_locked()
+    -> cnetmod::task<std::expected<void, std::error_code>>
+{
+    if (outbound_.empty())
         co_return std::expected<void, std::error_code>{};
-    co_return co_await writer_({output.data(), output.size()});
+    write_buffer_.clear();
+    write_buffer_.swap(outbound_);
+    auto result = co_await writer_({write_buffer_.data(), write_buffer_.size()});
+    write_buffer_.clear();
+    if (outbound_.empty())
+        outbound_.swap(write_buffer_);
+    co_return result;
 }
 
 auto session::write_response(std::uint32_t stream_id,
-    server_response response)
+    server_response response, cnetmod::cancel_token& cancellation)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
     co_await cnetmod::post_awaitable{*context_};
+    if (response.body_source)
+    {
+        if (!response.body.empty())
+            co_return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+        std::vector<header_field> headers;
+        headers.reserve(response.headers.size() + 2);
+        headers.push_back({":status", std::to_string(response.status)});
+        bool has_length = false;
+        for (auto& header : response.headers)
+        {
+            if (header.name.starts_with(':') || header.name == "connection" ||
+                header.name == "transfer-encoding" || header.name == "upgrade")
+                continue;
+            has_length |= header.name == "content-length";
+            headers.push_back(std::move(header));
+        }
+        const auto expected_length = response.body_source->content_length();
+        if (expected_length && !has_length)
+            headers.push_back(
+                {"content-length", std::to_string(*expected_length)});
+        auto encoded = encoder_.encode(headers);
+        if (!encoded)
+            co_return std::unexpected(encoded.error());
+        {
+            co_await writer_mutex_.lock();
+            cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
+            queue_frame({.type = frame_type::headers,
+                            .flags = flag_end_headers,
+                            .stream_id = stream_id},
+                *encoded);
+            auto written = co_await write_outbound_locked();
+            if (!written)
+                co_return written;
+        }
+        std::uint64_t total = 0;
+        while (auto chunk = co_await response.body_source->next(cancellation))
+        {
+            std::size_t offset = 0;
+            while (offset < chunk->size())
+            {
+                const auto size = std::min<std::size_t>(
+                    peer_.max_frame_size, chunk->size() - offset);
+                if (expected_length &&
+                    (total > *expected_length ||
+                        size > *expected_length - total))
+                    co_return std::unexpected(
+                        std::make_error_code(std::errc::message_size));
+                co_await writer_mutex_.lock();
+                cnetmod::async_lock_guard guard{
+                    writer_mutex_, std::adopt_lock};
+                queue_frame({.type = frame_type::data,
+                                .stream_id = stream_id},
+                    {chunk->data() + offset, size});
+                auto written = co_await write_outbound_locked();
+                if (!written)
+                    co_return written;
+                offset += size;
+                total += size;
+            }
+        }
+        if (expected_length && total != *expected_length)
+            co_return std::unexpected(
+                std::make_error_code(std::errc::message_size));
+        {
+            co_await writer_mutex_.lock();
+            cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
+            if (response.trailers.empty())
+                queue_frame({.type = frame_type::data,
+                                .flags = flag_end_stream,
+                                .stream_id = stream_id},
+                    {});
+            else
+            {
+                auto trailers = encoder_.encode(response.trailers);
+                if (!trailers)
+                    co_return std::unexpected(trailers.error());
+                queue_frame({.type = frame_type::headers,
+                                .flags = static_cast<std::uint8_t>(
+                                    flag_end_headers | flag_end_stream),
+                                .stream_id = stream_id},
+                    *trailers);
+            }
+            auto written = co_await write_outbound_locked();
+            if (!written)
+                co_return written;
+        }
+        streams_.erase(stream_id);
+        co_return std::expected<void, std::error_code>{};
+    }
     co_await writer_mutex_.lock();
     cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
     queue_response(stream_id, std::move(response));
     streams_.erase(stream_id);
-    auto output = take_outbound();
-    if (output.empty())
-        co_return std::expected<void, std::error_code>{};
-    co_return co_await writer_({output.data(), output.size()});
+    co_return co_await write_outbound_locked();
 }
 
 auto session::return_flow_credit(std::uint32_t stream_id, std::size_t bytes)
@@ -273,8 +382,7 @@ auto session::return_flow_credit(std::uint32_t stream_id, std::size_t bytes)
         queue_frame(
             {.type = frame_type::window_update, .stream_id = stream_id}, update);
     queue_frame({.type = frame_type::window_update, .stream_id = 0}, update);
-    auto output = take_outbound();
-    co_return co_await writer_({output.data(), output.size()});
+    co_return co_await write_outbound_locked();
 }
 
 void session::start_streaming_request(std::uint32_t stream_id)
@@ -302,7 +410,8 @@ void session::start_streaming_request(std::uint32_t stream_id)
             -> cnetmod::task<std::expected<void, std::error_code>>
         {
             auto response = co_await streaming_handler_(std::move(request), token);
-            co_return co_await write_response(stream_id, std::move(response));
+            co_return co_await write_response(
+                stream_id, std::move(response), token);
         });
 }
 
@@ -342,6 +451,15 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 .headers = found->second.headers(),
                 .body = {found->second.body().begin(), found->second.body().end()}};
             response = co_await handler_(std::move(request));
+        }
+        if (response.body_source)
+        {
+            cancel_token cancellation;
+            auto written = co_await write_response(
+                stream_id, std::move(response), cancellation);
+            if (!written)
+                co_return;
+            continue;
         }
         std::vector<header_field> headers;
         headers.reserve(response.headers.size() + 2);
@@ -572,12 +690,26 @@ auto session::process_frame(frame_header header,
         if (payload.size() != 4)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
         const auto increment = read_u32(payload) & 0x7fff'ffffU;
-        if (increment == 0 ||
-            increment >
-                static_cast<std::uint32_t>(
-                    std::numeric_limits<std::int32_t>::max() - send_window_))
+        if (increment == 0)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        send_window_ += static_cast<std::int32_t>(increment);
+        if (header.stream_id == 0)
+        {
+            if (increment > static_cast<std::uint32_t>(
+                                std::numeric_limits<std::int32_t>::max() - send_window_))
+                return std::unexpected(
+                    std::make_error_code(std::errc::protocol_error));
+            send_window_ += static_cast<std::int32_t>(increment);
+            return {};
+        }
+        // A stream-level update never changes the connection window. Updates
+        // racing with local stream retirement are harmless; applying them to
+        // the connection window eventually overflowed long-lived multiplexed
+        // connections and closed otherwise healthy HTTP/2 sessions.
+        if (auto found = streams_.find(header.stream_id);
+            found != streams_.end() &&
+            !found->second.send_window().increase(increment))
+            return std::unexpected(
+                std::make_error_code(std::errc::protocol_error));
         return {};
     }
     if (header.type == frame_type::rst_stream)

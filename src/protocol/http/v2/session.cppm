@@ -29,6 +29,7 @@ struct server_response
     std::vector<header_field> headers;
     std::vector<header_field> trailers;
     std::vector<std::byte> body;
+    std::shared_ptr<cnetmod::http::response_body_source> body_source;
 };
 
 using server_handler =
@@ -73,10 +74,12 @@ private:
     [[nodiscard]] auto dispatch_ready() -> cnetmod::task<void>;
     void start_streaming_request(std::uint32_t stream_id);
     [[nodiscard]] auto write_response(std::uint32_t stream_id,
-        server_response response)
+        server_response response, cnetmod::cancel_token& cancellation)
         -> cnetmod::task<std::expected<void, std::error_code>>;
     void queue_response(std::uint32_t stream_id, server_response response);
     [[nodiscard]] auto flush_outbound()
+        -> cnetmod::task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto write_outbound_locked()
         -> cnetmod::task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto return_flow_credit(std::uint32_t stream_id,
         std::size_t bytes)
@@ -106,6 +109,7 @@ private:
     std::vector<std::byte> input_;
     std::size_t input_offset_ = 0;
     std::vector<std::byte> outbound_;
+    std::vector<std::byte> write_buffer_;
     std::vector<std::byte> header_block_;
     std::uint32_t continuation_stream_id_ = 0;
     bool continuation_end_stream_ = false;

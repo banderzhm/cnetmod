@@ -207,10 +207,14 @@ private:
 
     auto send_chunked_response(io_context& io, socket& client, response& resp,
         cancel_token& cancellation) -> task<void>;
+    auto send_body_source(io_context& io, socket& client, response& resp,
+        cancel_token& cancellation) -> task<bool>;
 
 #ifdef CNETMOD_HAS_SSL
     auto send_chunked_response_tls(io_context& io, ssl_stream& ssl,
         response& resp, cancel_token& cancellation) -> task<void>;
+    auto send_body_source_tls(ssl_stream& ssl, response& resp,
+        cancel_token& cancellation) -> task<bool>;
 #endif
 
     io_context& ctx_;

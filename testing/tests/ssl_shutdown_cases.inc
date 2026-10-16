@@ -84,3 +84,97 @@ TEST(tls_shutdown_deadline_cancels_a_silent_peer)
     ASSERT_TRUE(received_shutdown_bytes);
     ASSERT_TRUE(observed_eof);
 }
+
+TEST(tls_memory_bio_supports_concurrent_read_and_serialized_write)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto identity = cnetmod::ssl_context::server();
+    ASSERT_TRUE(identity.has_value());
+    ASSERT_TRUE(identity->load_cert_file(CNETMOD_TLS_TEST_CERT).has_value());
+    ASSERT_TRUE(identity->load_key_file(CNETMOD_TLS_TEST_KEY).has_value());
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    constexpr std::size_t rounds = 256;
+    constexpr std::size_t payload_size = 4096;
+    const std::string payload(payload_size, 'x');
+    unsigned finished{};
+    auto finish = [&]
+    {
+        if (++finished == 2)
+            io->stop();
+    };
+    auto peer = [&]() -> cnetmod::task<void>
+    {
+        auto socket = co_await cnetmod::async_accept(*io, *listener);
+        ASSERT_TRUE(socket.has_value());
+        cnetmod::ssl_stream stream{*identity, *io, *socket};
+        stream.set_accept_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        auto write = [&]() -> cnetmod::task<void>
+        {
+            for (std::size_t index = 0; index < rounds; ++index)
+                ASSERT_TRUE((co_await stream.async_write_all(
+                                 cnetmod::const_buffer{payload.data(), payload.size()}))
+                        .has_value());
+        };
+        auto read = [&]() -> cnetmod::task<void>
+        {
+            std::array<std::byte, 1> marker{};
+            auto received = co_await stream.async_read(cnetmod::buffer(marker));
+            ASSERT_TRUE(received.has_value());
+            if (received)
+                ASSERT_EQ(*received, std::size_t{1});
+        };
+        co_await cnetmod::when_all(write(), read());
+        finish();
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto socket = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(socket.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(
+                         *io, *socket, *endpoint))
+                .has_value());
+        auto context = cnetmod::ssl_context::client();
+        ASSERT_TRUE(context.has_value());
+        context->set_verify_peer(false);
+        cnetmod::ssl_stream stream{*context, *io, *socket};
+        stream.set_connect_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        std::array<std::byte, 16U * 1024U> buffer{};
+        std::size_t total{};
+        while (total < rounds * payload_size)
+        {
+            auto received = co_await stream.async_read(cnetmod::buffer(buffer));
+            ASSERT_TRUE(received.has_value());
+            if (!received || *received == 0)
+                break;
+            total += *received;
+        }
+        ASSERT_EQ(total, rounds * payload_size);
+        const std::array marker{std::byte{1}};
+        ASSERT_TRUE((co_await stream.async_write_all(
+                         cnetmod::const_buffer{marker.data(), marker.size()}))
+                .has_value());
+        finish();
+    };
+    auto peer_task = peer();
+    auto exercise_task = exercise();
+    io->post(peer_task.handle());
+    io->post(exercise_task.handle());
+    io->run();
+    ASSERT_TRUE(peer_task.handle().done());
+    ASSERT_TRUE(exercise_task.handle().done());
+    peer_task.handle().promise().result();
+    exercise_task.handle().promise().result();
+}
