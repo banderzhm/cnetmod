@@ -5,7 +5,7 @@ module;
 module cnetmod.protocol.quic;
 
 import std;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 

@@ -176,6 +176,28 @@ TEST(http3_server_idle_timeout_rejects_only_negative_durations)
     ASSERT_TRUE(server->set_idle_timeout(std::chrono::seconds{5}).has_value());
 }
 
+TEST(http3_server_udp_payload_size_enforces_quic_datagram_bounds)
+{
+    auto tls = cnetmod::ssl_context::quic_server();
+    ASSERT_TRUE(tls.has_value());
+    auto context = cnetmod::make_io_context();
+    auto address = cnetmod::ip_address::from_string("127.0.0.1");
+    ASSERT_TRUE(address.has_value());
+    auto server = cnetmod::http::v3::make_http3_server(*context, *tls,
+        cnetmod::endpoint{*address, 0},
+        [](cnetmod::http::v3::http3_request&, cnetmod::http::v3::http3_response&)
+            -> std::error_code
+        {
+            return {};
+        });
+
+    ASSERT_FALSE(server->set_max_udp_payload_size(1199U).has_value());
+    ASSERT_TRUE(server->set_max_udp_payload_size(1200U).has_value());
+    ASSERT_TRUE(server->set_max_udp_payload_size(1472U).has_value());
+    ASSERT_TRUE(server->set_max_udp_payload_size(65527U).has_value());
+    ASSERT_FALSE(server->set_max_udp_payload_size(65528U).has_value());
+}
+
 TEST(application_key_update_requires_authenticated_1rtt_secrets)
 {
     auto context = cnetmod::ssl_context::quic_client();

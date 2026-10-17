@@ -226,6 +226,19 @@ TEST(cubic_reduces_window_and_preserves_minimum)
     ASSERT_TRUE(cc.congestion_window() >= 2944ULL);
 }
 
+TEST(cubic_congestion_event_does_not_reduce_twice_during_recovery)
+{
+    auto config = make_cc_config();
+    cnetmod::quic::cubic_congestion_controller cc(config);
+
+    cc.on_packet_sent(12000);
+    cc.on_congestion_event(1000);
+    const auto after_first_loss = cc.congestion_window();
+    cc.on_congestion_event(1000);
+
+    ASSERT_EQ(cc.congestion_window(), after_first_loss);
+}
+
 TEST(congestion_controller_selects_configured_cubic_without_heap_polymorphism)
 {
     auto config = make_cc_config();
@@ -240,11 +253,11 @@ TEST(congestion_controller_selects_configured_cubic_without_heap_polymorphism)
     ASSERT_TRUE(cc.congestion_window() < before_loss);
 }
 
-TEST(congestion_controller_keeps_newreno_as_the_default)
+TEST(congestion_controller_uses_cubic_as_the_default)
 {
     auto cc = cnetmod::quic::create_congestion_controller(make_cc_config());
 
-    ASSERT_TRUE(cc.algorithm() == cnetmod::quic::quic_congestion_algorithm::new_reno);
+    ASSERT_TRUE(cc.algorithm() == cnetmod::quic::quic_congestion_algorithm::cubic);
 }
 
 TEST(bbr_selects_model_based_controller_and_tracks_acknowledgements)

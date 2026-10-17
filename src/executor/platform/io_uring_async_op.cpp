@@ -1626,6 +1626,52 @@ auto async_sendto(io_context& ctx, socket& sock,
     }
 }
 
+namespace {
+
+auto drain_recvfrom_batch_now(socket& sock,
+    std::vector<udp_received_datagram>& result,
+    std::size_t maximum, std::size_t max_datagram_size)
+    -> std::expected<std::size_t, std::error_code>
+{
+    constexpr std::size_t stack_batch_capacity = 64U;
+    const auto count_to_receive = std::min(maximum, stack_batch_capacity);
+    if (count_to_receive == 0U)
+        return std::size_t{};
+
+    std::array<udp_received_datagram, stack_batch_capacity> storage{};
+    std::array<::iovec, stack_batch_capacity> iovecs{};
+    std::array<::sockaddr_storage, stack_batch_capacity> peers{};
+    std::array<::mmsghdr, stack_batch_capacity> messages{};
+    for (std::size_t i = 0; i < count_to_receive; ++i)
+    {
+        storage[i].bytes = udp_datagram_buffer{max_datagram_size};
+        iovecs[i] = {storage[i].bytes.data(), storage[i].bytes.size()};
+        messages[i].msg_hdr.msg_name = &peers[i];
+        messages[i].msg_hdr.msg_namelen = sizeof(peers[i]);
+        messages[i].msg_hdr.msg_iov = &iovecs[i];
+        messages[i].msg_hdr.msg_iovlen = 1;
+    }
+    const int count = ::recvmmsg(static_cast<int>(sock.native_handle()),
+        messages.data(), static_cast<unsigned int>(count_to_receive),
+        MSG_DONTWAIT, nullptr);
+    if (count < 0)
+    {
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return std::size_t{};
+        return std::unexpected(make_error_code(from_native_error(errno)));
+    }
+    for (int i = 0; i < count; ++i)
+    {
+        auto& packet = storage[static_cast<std::size_t>(i)];
+        packet.bytes.resize(messages[static_cast<std::size_t>(i)].msg_len);
+        packet.peer = endpoint_from_sockaddr(peers[static_cast<std::size_t>(i)]);
+        result.push_back(std::move(packet));
+    }
+    return static_cast<std::size_t>(count);
+}
+
+} // namespace
+
 auto async_recvfrom_batch(io_context& ctx, socket& sock,
     std::size_t max_datagrams, std::size_t max_datagram_size)
     -> task<std::expected<std::vector<udp_received_datagram>, std::error_code>>
@@ -1651,36 +1697,10 @@ auto async_recvfrom_batch(io_context& ctx, socket& sock,
     if (remaining == 0U)
         co_return result;
 
-    std::vector<udp_received_datagram> storage;
-    storage.reserve(remaining);
-    for (std::size_t i = 0; i < remaining; ++i)
-        storage.push_back({udp_datagram_buffer{max_datagram_size}, {}});
-    std::vector<::iovec> iovecs(remaining);
-    std::vector<::sockaddr_storage> peers(remaining);
-    std::vector<::mmsghdr> messages(remaining);
-    for (std::size_t i = 0; i < remaining; ++i)
-    {
-        iovecs[i] = {storage[i].bytes.data(), storage[i].bytes.size()};
-        messages[i].msg_hdr.msg_name = &peers[i];
-        messages[i].msg_hdr.msg_namelen = sizeof(peers[i]);
-        messages[i].msg_hdr.msg_iov = &iovecs[i];
-        messages[i].msg_hdr.msg_iovlen = 1;
-    }
-    const int count = ::recvmmsg(static_cast<int>(sock.native_handle()), messages.data(),
-        static_cast<unsigned int>(messages.size()), MSG_DONTWAIT, nullptr);
-    if (count < 0)
-    {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            co_return result;
-        co_return std::unexpected(make_error_code(from_native_error(errno)));
-    }
-    for (int i = 0; i < count; ++i)
-    {
-        auto& packet = storage[static_cast<std::size_t>(i)];
-        packet.bytes.resize(messages[static_cast<std::size_t>(i)].msg_len);
-        packet.peer = endpoint_from_sockaddr(peers[static_cast<std::size_t>(i)]);
-        result.push_back(std::move(packet));
-    }
+    auto drained = drain_recvfrom_batch_now(sock, result, remaining,
+        max_datagram_size);
+    if (!drained)
+        co_return std::unexpected(drained.error());
     co_return result;
 }
 
@@ -1691,8 +1711,33 @@ auto async_sendto_batch(io_context& ctx, socket& sock,
     if (datagrams.empty())
         co_return std::size_t{0};
 
-    // Submit one message through io_uring to provide proper readiness and
-    // backpressure semantics, then sendmmsg the already-ready remainder.
+    // UDP send queues are normally writable. Submit the complete batch first
+    // and enter io_uring only when the kernel reports actual backpressure;
+    // waiting for a single probe send on every hot-path batch adds one event
+    // loop turn even though sendmmsg could accept the whole burst immediately.
+    constexpr std::size_t stack_batch_capacity = 16U;
+    const auto initial_count = std::min(datagrams.size(), stack_batch_capacity);
+    std::array<::iovec, stack_batch_capacity> initial_iovecs{};
+    std::array<::sockaddr_storage, stack_batch_capacity> initial_peers{};
+    std::array<::mmsghdr, stack_batch_capacity> initial_messages{};
+    for (std::size_t i = 0; i < initial_count; ++i)
+    {
+        initial_iovecs[i] = {const_cast<void*>(datagrams[i].bytes.data),
+            datagrams[i].bytes.size};
+        initial_messages[i].msg_hdr.msg_name = &initial_peers[i];
+        initial_messages[i].msg_hdr.msg_namelen = fill_sockaddr(
+            datagrams[i].peer, initial_peers[i]);
+        initial_messages[i].msg_hdr.msg_iov = &initial_iovecs[i];
+        initial_messages[i].msg_hdr.msg_iovlen = 1;
+    }
+    const int initially_sent = ::sendmmsg(static_cast<int>(sock.native_handle()),
+        initial_messages.data(), static_cast<unsigned int>(initial_count),
+        MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (initially_sent > 0)
+        co_return static_cast<std::size_t>(initially_sent);
+    if (initially_sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
+        co_return std::unexpected(make_error_code(from_native_error(errno)));
+
     auto first = co_await async_sendto(ctx, sock, datagrams.front().bytes, datagrams.front().peer);
     if (!first)
         co_return std::unexpected(first.error());
@@ -1744,36 +1789,10 @@ auto async_recvfrom_batch(io_context& ctx, socket& sock,
         co_return result;
 
     const auto remaining = max_datagrams - result.size();
-    std::vector<udp_received_datagram> storage;
-    storage.reserve(remaining);
-    for (std::size_t i = 0; i < remaining; ++i)
-        storage.push_back({udp_datagram_buffer{max_datagram_size}, {}});
-    std::vector<::iovec> iovecs(remaining);
-    std::vector<::sockaddr_storage> peers(remaining);
-    std::vector<::mmsghdr> messages(remaining);
-    for (std::size_t i = 0; i < remaining; ++i)
-    {
-        iovecs[i] = {storage[i].bytes.data(), storage[i].bytes.size()};
-        messages[i].msg_hdr.msg_name = &peers[i];
-        messages[i].msg_hdr.msg_namelen = sizeof(peers[i]);
-        messages[i].msg_hdr.msg_iov = &iovecs[i];
-        messages[i].msg_hdr.msg_iovlen = 1;
-    }
-    const int count = ::recvmmsg(static_cast<int>(sock.native_handle()), messages.data(),
-        static_cast<unsigned int>(messages.size()), MSG_DONTWAIT, nullptr);
-    if (count < 0)
-    {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            co_return result;
-        co_return std::unexpected(make_error_code(from_native_error(errno)));
-    }
-    for (int i = 0; i < count; ++i)
-    {
-        auto& packet = storage[static_cast<std::size_t>(i)];
-        packet.bytes.resize(messages[static_cast<std::size_t>(i)].msg_len);
-        packet.peer = endpoint_from_sockaddr(peers[static_cast<std::size_t>(i)]);
-        result.push_back(std::move(packet));
-    }
+    auto drained = drain_recvfrom_batch_now(sock, result, remaining,
+        max_datagram_size);
+    if (!drained)
+        co_return std::unexpected(drained.error());
     co_return result;
 }
 

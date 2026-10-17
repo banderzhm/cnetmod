@@ -19,7 +19,7 @@ import cnetmod.coro.channel;
 import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
 import cnetmod.protocol.udp;
-import :types;
+import :foundation;
 import :frame;
 import :packet;
 import :crypto;

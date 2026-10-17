@@ -10,7 +10,7 @@ import std;
 import cnetmod.core.ssl;
 import cnetmod.core.buffer;
 import cnetmod.utils.concurrent_containers.atomic_hash_map;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 

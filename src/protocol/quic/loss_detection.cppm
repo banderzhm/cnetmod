@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.quic:loss_detection;
 
 import std;
-import :types;
+import :foundation;
 import :frame;
 
 namespace cnetmod::quic {

@@ -5,7 +5,7 @@ module;
 export module cnetmod.protocol.quic:congestion_control;
 
 import std;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 
@@ -77,6 +77,7 @@ private:
     std::uint64_t ssthresh_{(std::numeric_limits<std::uint64_t>::max)()};
     std::uint64_t bytes_in_flight_{};
     std::uint64_t w_max_{cwnd_};
+    bool in_recovery_{};
     static constexpr std::uint64_t mtu_{1472};
     static constexpr double beta_{0.7};
     static constexpr double cubic_c_{0.4};

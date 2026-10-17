@@ -229,7 +229,13 @@ namespace detail {
     /// context while they are queued in a connection inbox.  Leaking this bounded
     /// cache on process shutdown prevents static-destruction ordering from racing
     /// a final cross-worker lease return.
-    inline auto udp_datagram_pool() noexcept -> buffer_pool&
+    inline auto small_udp_datagram_pool() noexcept -> buffer_pool&
+    {
+        static auto* const pool = new buffer_pool{2048U, 32768U};
+        return *pool;
+    }
+
+    inline auto large_udp_datagram_pool() noexcept -> buffer_pool&
     {
         static auto* const pool = new buffer_pool{65536U, 512U};
         return *pool;
@@ -239,10 +245,12 @@ namespace detail {
 
 inline udp_datagram_buffer::udp_datagram_buffer(size_type requested_capacity)
 {
-    auto& pool = detail::udp_datagram_pool();
-    if (requested_capacity <= pool.block_size())
+    auto* pool = std::addressof(detail::small_udp_datagram_pool());
+    if (requested_capacity > pool->block_size())
+        pool = std::addressof(detail::large_udp_datagram_pool());
+    if (requested_capacity <= pool->block_size())
     {
-        pooled_ = pool.acquire();
+        pooled_ = pool->acquire();
         size_ = requested_capacity;
         return;
     }

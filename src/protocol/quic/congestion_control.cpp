@@ -119,6 +119,12 @@ void cubic_congestion_controller::on_packet_sent(std::uint64_t bytes)
 void cubic_congestion_controller::on_packet_acked(std::uint64_t bytes)
 {
     bytes_in_flight_ -= std::min(bytes, bytes_in_flight_);
+    if (in_recovery_)
+    {
+        in_recovery_ = false;
+        update_pacing_rate_estimator();
+        return;
+    }
     if (cwnd_ < ssthresh_)
     {
         cwnd_ += bytes;
@@ -152,10 +158,13 @@ void cubic_congestion_controller::on_packets_discarded(std::uint64_t bytes)
 void cubic_congestion_controller::on_congestion_event(std::uint64_t lost_bytes)
 {
     bytes_in_flight_ -= std::min(lost_bytes, bytes_in_flight_);
+    if (in_recovery_)
+        return;
     w_max_ = cwnd_;
     cwnd_ = std::max<std::uint64_t>(
         static_cast<std::uint64_t>(static_cast<double>(cwnd_) * beta_), min_congestion_window);
     ssthresh_ = cwnd_;
+    in_recovery_ = true;
     epoch_start_.reset();
     update_pacing_rate_estimator();
 }

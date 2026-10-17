@@ -655,7 +655,11 @@ struct quic_connection::quic_connection_impl
     // move already-owned bytes into this bounded lock-free queue; the packet
     // owner validates stream state and flow control before publishing the
     // completion.  Bounded capacity is explicit backpressure, not loss.
-    static constexpr std::size_t stream_write_queue_capacity{4096U};
+    // This queue is per connection. The default peer stream window is far
+    // below 512 concurrent writers; larger bursts wait for a completion slot
+    // and therefore retain lossless backpressure without reserving thousands
+    // of command and completion objects for every idle connection.
+    static constexpr std::size_t stream_write_queue_capacity{512U};
 
     struct stream_write_completion
     {
@@ -724,7 +728,7 @@ struct quic_connection::quic_connection_impl
 
         [[nodiscard]] auto receive() noexcept -> receiver
         {
-            return receiver{*this};
+            return receiver{*this, std::nullopt};
         }
 
         auto complete(std::expected<void, std::error_code> value) noexcept -> void
@@ -887,6 +891,9 @@ struct quic_connection::quic_connection_impl
         // normal ack-eliciting QUIC traffic, so acknowledgement is the only
         // success signal we trust; no ICMP dependency is required.
         std::optional<std::size_t> path_mtu_probe_target;
+        // PTO probes copy outstanding frames while the original packet stays
+        // in flight. Ordinary packets have no sibling retransmission record.
+        bool retransmission_alias{};
     };
 
     std::array<std::map<std::uint64_t, sent_packet_metadata>,
@@ -1657,10 +1664,12 @@ auto quic_connection::next_timer_deadline() const
     if (const auto pto = impl_->earliest_application_pto())
         consider(std::get<1>(*pto));
 
-    if (impl_->send_flush_requested.load(std::memory_order_acquire) ||
-        !impl_->encoded_send_frames.empty() || impl_->has_prioritized_stream_frames() ||
-        !impl_->unreliable_send_frames.empty() ||
-        impl_->path_with_pending_ack() || impl_->path_with_pending_mtu_probe())
+    // A producer or packet-processing pass publishes this edge when fresh
+    // work can be attempted immediately. Frames left queued after a flush are
+    // congestion-blocked; scheduling them at `now` spins the listener timer
+    // until an ACK arrives. Their recovery PTO is already considered above,
+    // and processing that ACK publishes a new flush edge.
+    if (impl_->send_flush_requested.load(std::memory_order_acquire))
         consider(now);
     return earliest;
 }
@@ -2240,7 +2249,6 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             for (std::size_t index = 0; index < *pn_length; ++index)
                 truncated_packet_number = (truncated_packet_number << 8) |
                     std::to_integer<std::uint8_t>(wire[offset + index]);
-            const auto level = encryption_level::application;
             impl_->receiving_application_path_id = 0U;
             auto& application_path = impl_->receiving_application_path();
             const auto packet_number = packet_number_decode(
@@ -2972,6 +2980,9 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
         co_return;
     }
 
+    std::vector<std::vector<std::byte>> delivered_frames;
+    delivered_frames.reserve(acknowledged->size());
+    bool acknowledged_retransmission_alias{};
     for (const auto packet_number : *acknowledged)
     {
         const auto it = sent.find(packet_number);
@@ -3000,10 +3011,25 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
         // sibling packet is later declared lost (RFC 9002 section 6.2.4).
         // Keep the sibling packet itself in flight for congestion accounting;
         // only retire its now-obsolete retransmission metadata.
-        const auto delivered_frames = it->second.retransmittable_frames;
-        for (auto& [other_packet_number, metadata] : sent)
+        for (auto& delivered : it->second.retransmittable_frames)
+            delivered_frames.push_back(std::move(delivered));
+        acknowledged_retransmission_alias =
+            acknowledged_retransmission_alias || it->second.retransmission_alias;
+        congestion.on_packet_acked(it->second.bytes);
+        sent.erase(it);
+    }
+    // One ACK frame commonly covers a range of packet numbers. Retire PTO
+    // aliases once for the union of frames delivered by the whole ACK rather
+    // than rescanning every outstanding packet for every acknowledged packet.
+    if (!delivered_frames.empty())
+    {
+        for (auto& [_, metadata] : sent)
         {
-            if (other_packet_number == packet_number)
+            // A regular packet can only have a duplicate in a PTO probe. If a
+            // regular copy was acknowledged, skip every other regular packet;
+            // if the acknowledged copy was itself a probe, its original may
+            // be regular and the complete outstanding set must be considered.
+            if (!acknowledged_retransmission_alias && !metadata.retransmission_alias)
                 continue;
             std::erase_if(metadata.retransmittable_frames,
                 [&delivered_frames](const auto& candidate)
@@ -3012,8 +3038,6 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
                         delivered_frames.end();
                 });
         }
-        congestion.on_packet_acked(it->second.bytes);
-        sent.erase(it);
     }
     congestion.update_rtt(recovery.rtt_estimate().smoothed_rtt_);
 
@@ -3021,6 +3045,7 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
     // frames that are retransmittable; ACKs are deliberately excluded when a
     // packet is recorded below.
     const auto lost = recovery.detect_lost_packets(now, space);
+    std::uint64_t lost_bytes{};
     for (const auto packet_number : lost)
     {
         const auto it = sent.find(packet_number);
@@ -3037,7 +3062,7 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
                     impl_->config.path_mtu_probe_interval;
             }
         }
-        congestion.on_congestion_event(it->second.bytes);
+        lost_bytes += it->second.bytes;
         for (auto frame = it->second.retransmittable_frames.rbegin();
             frame != it->second.retransmittable_frames.rend(); ++frame)
         {
@@ -3049,6 +3074,8 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
         }
         sent.erase(it);
     }
+    if (lost_bytes != 0U)
+        congestion.on_congestion_event(lost_bytes);
     if (level == encryption_level::initial)
     {
         (void)co_await send_initial_packets();
@@ -3517,6 +3544,7 @@ auto quic_connection::handle_pto() -> task<void>
         if (path_scoped)
         {
             const auto now = std::chrono::steady_clock::now();
+            std::uint64_t lost_bytes{};
             for (auto packet = sent.begin(); packet != sent.end();)
             {
                 const auto packet_number = packet->first;
@@ -3534,9 +3562,11 @@ auto quic_connection::handle_pto() -> task<void>
                 }
                 recovery.discard_inflight_packet(packet_number,
                     pn_space::application);
-                application_path.congestion.on_congestion_event(bytes);
+                lost_bytes += bytes;
                 packet = sent.erase(packet);
             }
+            if (lost_bytes != 0U)
+                application_path.congestion.on_congestion_event(lost_bytes);
         }
         co_return;
     }
@@ -3690,38 +3720,29 @@ auto quic_connection::pack_and_send_packets() -> task<void>
     if (pending.empty())
         co_return;
 
-    // Only packets covered by credit already available now are submitted as
-    // one burst. The first packet that needs a timer keeps the normal paced
-    // path, so batching cannot pull a future packet ahead of its deadline.
-    std::size_t immediately_admitted{};
-    while (immediately_admitted != pending.size() &&
-        try_reserve_application_pacing(pending[immediately_admitted].packet.size()))
-    {
-        ++immediately_admitted;
-    }
-
-    if (immediately_admitted != 0U)
-    {
-        std::vector<udp_send_datagram> datagrams;
-        datagrams.reserve(immediately_admitted);
-        for (std::size_t index{}; index < immediately_admitted; ++index)
+    // The packer has already limited this burst to the path's available
+    // congestion window. Reserve its aggregate pacing credit with one timer,
+    // then submit the admitted packets together. Sleeping once for the total
+    // byte budget preserves the controller's average rate without creating a
+    // timer and an io_uring wakeup for every UDP packet.
+    const auto paced_bytes = std::accumulate(pending.begin(), pending.end(),
+        std::size_t{}, [](std::size_t total, const pending_datagram& item)
         {
-            const auto& item = pending[index];
-            datagrams.push_back({const_buffer{item.packet.data(), item.packet.size()},
-                item.peer});
-        }
-        // async_sendto_batch preserves partial submission and retries the
-        // unsent suffix after readiness. Packet metadata was already marked
-        // in-flight by the packer, exactly as on the pre-existing single-send
-        // path; no retransmission state is dropped between partial submits.
-        (void)co_await send_datagram_batch(datagrams);
-    }
+            return total + item.packet.size();
+        });
+    co_await await_application_pacing(paced_bytes);
 
-    for (std::size_t index = immediately_admitted; index < pending.size(); ++index)
+    std::vector<udp_send_datagram> datagrams;
+    datagrams.reserve(pending.size());
+    for (const auto& item : pending)
     {
-        co_await await_application_pacing(pending[index].packet.size());
-        (void)co_await send_datagram(pending[index].packet, pending[index].peer);
+        datagrams.push_back({const_buffer{item.packet.data(), item.packet.size()},
+            item.peer});
     }
+    // async_sendto_batch preserves partial submission and retries the unsent
+    // suffix after readiness. Packet metadata was already marked in-flight by
+    // the packer, exactly as on the pre-existing single-send path.
+    (void)co_await send_datagram_batch(datagrams);
     co_return;
 }
 
@@ -3830,6 +3851,13 @@ auto quic_connection::pack_zero_rtt_packet() -> std::vector<std::byte>
 auto quic_connection::await_application_pacing(std::size_t packet_size) -> task<void>
 {
     auto& path = impl_->sending_application_path();
+    const auto& peer_address = path.peer.address();
+    // Loopback has no physical bottleneck queue to protect with timer-based
+    // pacing. Congestion-window admission still bounds each burst, while
+    // avoiding sub-millisecond timer wakeups that only delay local IPC.
+    if ((peer_address.is_v4() && peer_address.to_v4().is_loopback()) ||
+        (peer_address.is_v6() && peer_address.to_v6().is_loopback()))
+        co_return;
     const auto rate = path.congestion.pacing_rate();
     if (!rate || !std::isfinite(*rate) || *rate <= 0.0)
         co_return;
@@ -3876,6 +3904,10 @@ auto quic_connection::try_reserve_application_pacing(std::size_t packet_size)
     -> bool
 {
     auto& path = impl_->sending_application_path();
+    const auto& peer_address = path.peer.address();
+    if ((peer_address.is_v4() && peer_address.to_v4().is_loopback()) ||
+        (peer_address.is_v6() && peer_address.to_v6().is_loopback()))
+        return true;
     const auto rate = path.congestion.pacing_rate();
     if (!rate || !std::isfinite(*rate) || *rate <= 0.0)
         return true;
@@ -4006,7 +4038,9 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
     {
         impl_->congestion.on_packet_sent(header.size());
         impl_->sent_packets[level_index(encryption_level::initial)].emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), header.size()});
+            packet_number, quic_connection_impl::sent_packet_metadata{
+                std::move(retransmittable_frames), header.size(), std::nullopt,
+                false});
     }
     return header;
 }
@@ -4095,7 +4129,9 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
     {
         impl_->congestion.on_packet_sent(header.size());
         impl_->sent_packets[level_index(encryption_level::handshake)].emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), header.size()});
+            packet_number, quic_connection_impl::sent_packet_metadata{
+                std::move(retransmittable_frames), header.size(), std::nullopt,
+                false});
     }
     return header;
 }
@@ -4130,7 +4166,12 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
         payload = impl_->multipath_negotiated
             ? encode_frame(path_ack_frame{ack_source->id, *ack})
             : encode_frame(*ack);
+    // A normal 1-RTT packet grows to the negotiated datagram payload. Reserve
+    // that exact bound once so appending a STREAM frame does not repeatedly
+    // reallocate and copy the plaintext before AEAD sealing.
+    payload.reserve(payload_budget);
     std::vector<std::vector<std::byte>> retransmittable_frames;
+    retransmittable_frames.reserve(2U);
 
     // Keep the priority metadata separate from the retransmission bytes. It
     // lets a packet rejected by congestion control return a STREAM frame to
@@ -4143,7 +4184,32 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
         bool default_fifo{};
     };
 
-    std::vector<std::optional<scheduled_stream_frame_metadata>> scheduled_frame_metadata;
+    using scheduled_metadata_entry =
+        std::pair<std::size_t, scheduled_stream_frame_metadata>;
+    std::optional<scheduled_metadata_entry> first_scheduled_frame_metadata;
+    std::vector<scheduled_metadata_entry> additional_scheduled_frame_metadata;
+    const auto remember_scheduled_metadata =
+        [&first_scheduled_frame_metadata, &additional_scheduled_frame_metadata](
+            std::size_t index, scheduled_stream_frame_metadata metadata)
+        {
+            if (!first_scheduled_frame_metadata)
+                first_scheduled_frame_metadata.emplace(index, metadata);
+            else
+                additional_scheduled_frame_metadata.emplace_back(index, metadata);
+        };
+    const auto scheduled_metadata_for =
+        [&first_scheduled_frame_metadata, &additional_scheduled_frame_metadata](
+            std::size_t index) -> const scheduled_stream_frame_metadata*
+        {
+            if (first_scheduled_frame_metadata &&
+                first_scheduled_frame_metadata->first == index)
+                return std::addressof(first_scheduled_frame_metadata->second);
+            const auto found = std::ranges::find(additional_scheduled_frame_metadata,
+                index, &scheduled_metadata_entry::first);
+            return found == additional_scheduled_frame_metadata.end()
+                ? nullptr
+                : std::addressof(found->second);
+        };
     const auto path_mtu_probe_target = path.path_mtu_probe_target;
     const bool contains_path_mtu_probe = path_mtu_probe_target.has_value();
     if (contains_path_mtu_probe)
@@ -4163,7 +4229,6 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             retransmit_crypto.pop_front();
             payload.insert(payload.end(), frame.begin(), frame.end());
             retransmittable_frames.push_back(std::move(frame));
-            scheduled_frame_metadata.emplace_back(std::nullopt);
         }
         else
         {
@@ -4175,7 +4240,6 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
                 impl_->next_send_crypto_offset[application_level] += crypto.size();
                 payload.insert(payload.end(), frame.begin(), frame.end());
                 retransmittable_frames.push_back(std::move(frame));
-                scheduled_frame_metadata.emplace_back(std::nullopt);
             }
         }
     }
@@ -4183,11 +4247,11 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
         payload.size() < payload_budget)
     {
         std::vector<std::byte> frame;
+        std::optional<scheduled_stream_frame_metadata> frame_metadata;
         if (!impl_->encoded_send_frames.empty())
         {
             frame = std::move(impl_->encoded_send_frames.front());
             impl_->encoded_send_frames.pop_front();
-            scheduled_frame_metadata.emplace_back(std::nullopt);
         }
         else
         {
@@ -4195,7 +4259,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             if (!scheduled)
                 break;
             frame = std::move(scheduled->bytes);
-            scheduled_frame_metadata.emplace_back(scheduled_stream_frame_metadata{
+            frame_metadata.emplace(scheduled_stream_frame_metadata{
                 scheduled->stream, scheduled->urgency, scheduled->default_fifo});
         }
         // The next frame must fit as a whole. Checking only the current
@@ -4203,13 +4267,12 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
         // oversized UDP datagram and strand a multi-packet response.
         if (frame.size() > payload_budget - payload.size())
         {
-            const auto metadata = scheduled_frame_metadata.back();
-            scheduled_frame_metadata.pop_back();
-            if (metadata)
+            if (frame_metadata)
             {
                 impl_->requeue_prioritized_stream_frame(
                     quic_connection_impl::scheduled_stream_frame{
-                        metadata->stream, metadata->urgency, metadata->default_fifo,
+                        frame_metadata->stream, frame_metadata->urgency,
+                        frame_metadata->default_fifo,
                         std::move(frame)});
             }
             else
@@ -4219,6 +4282,8 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             break;
         }
         payload.insert(payload.end(), frame.begin(), frame.end());
+        if (frame_metadata)
+            remember_scheduled_metadata(retransmittable_frames.size(), *frame_metadata);
         retransmittable_frames.push_back(std::move(frame));
     }
     bool contains_unreliable_datagram = false;
@@ -4256,7 +4321,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
         {
             auto& frame = retransmittable_frames[index - 1U];
-            const auto& metadata = scheduled_frame_metadata[index - 1U];
+            const auto* metadata = scheduled_metadata_for(index - 1U);
             if (metadata)
             {
                 impl_->requeue_prioritized_stream_frame(
@@ -4279,7 +4344,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
         {
             auto& frame = retransmittable_frames[index - 1U];
-            const auto& metadata = scheduled_frame_metadata[index - 1U];
+            const auto* metadata = scheduled_metadata_for(index - 1U);
             if (metadata)
             {
                 impl_->requeue_prioritized_stream_frame(
@@ -4332,7 +4397,9 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
     {
         path.congestion.on_packet_sent(packet.size());
         path.sent_packets.emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), packet.size(), path_mtu_probe_target});
+            packet_number, quic_connection_impl::sent_packet_metadata{
+                std::move(retransmittable_frames), packet.size(),
+                path_mtu_probe_target, pto_probe});
     }
     return packet;
 }
@@ -4374,7 +4441,9 @@ auto quic_connection::pack_path_validation_packet(std::span<const std::byte> fra
         std::chrono::steady_clock::now(), true, pn_space::application);
     path.congestion.on_packet_sent(packet.size());
     path.sent_packets.emplace(
-        packet_number, quic_connection_impl::sent_packet_metadata{{std::vector<std::byte>(frame.begin(), frame.end())}, packet.size()});
+        packet_number, quic_connection_impl::sent_packet_metadata{
+            {std::vector<std::byte>(frame.begin(), frame.end())}, packet.size(),
+            std::nullopt, false});
     return packet;
 }
 
@@ -4452,7 +4521,7 @@ auto quic_connection::flush_send_queue() -> task<void>
                 impl_->prioritized_stream_frame_count() +
                 impl_->unreliable_send_frames.size() +
                 impl_->early_data_send_frames.size();
-            co_await pack_and_send_packet();
+            co_await pack_and_send_packets();
             send_ack = false;
             if (impl_->encoded_send_frames.size() + impl_->prioritized_stream_frame_count() +
                     impl_->unreliable_send_frames.size() +
@@ -4521,7 +4590,18 @@ auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::b
     // STREAM frame.  Fragment the write so one application datagram never
     // exceeds the UDP payload budget.
     const auto first_offset = it->second.value->bytes_sent() - payload.size();
-    constexpr std::size_t max_stream_payload = max_udp_payload - 96;
+    auto send_datagram_payload = max_udp_payload;
+    for (const auto& [_, path] : impl_->application_paths)
+    {
+        if (!path->locally_abandoned && !path->peer_abandoned && path->validated)
+            send_datagram_payload = std::min(send_datagram_payload == max_udp_payload
+                    ? path->discovered_max_datagram_payload
+                    : send_datagram_payload,
+                path->discovered_max_datagram_payload);
+    }
+    const auto max_stream_payload = send_datagram_payload > 96U
+        ? send_datagram_payload - 96U
+        : std::size_t{1U};
     const auto use_early_data = impl_->connection_role == quic_role::client &&
         (impl_->connection_state == connection_state::idle ||
             impl_->connection_state == connection_state::handshaking) &&
@@ -4647,8 +4727,6 @@ auto quic_connection::async_send_fragments(stream_id sid,
 auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_data,
     bool fin) -> task<std::expected<void, std::error_code>>
 {
-    if (owned_data.size() > max_udp_payload - 96U)
-        co_return co_await async_send_fragments(sid, std::move(owned_data), fin);
     for (;;)
     {
         auto* const completion = impl_->stream_write_completions.try_acquire();
@@ -4671,9 +4749,10 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
         if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
             impl_->receive_wait_token.cancel();
 
-        // The producer never enters the connection state domain.  The flush
-        // owner drains the command queue and completes this request only after it
-        // has validated and encoded the stream write.
+        // Submit the complete application write first. apply_stream_write()
+        // fragments it into UDP-sized STREAM frames under one state lock and
+        // one completion. Only a real flow-control rejection needs the slower
+        // credit-aware fragment loop below.
         co_await flush_send_queue();
         const auto result = co_await completion->receive();
         owned_data = std::exchange(completion->rejected_bytes, {});

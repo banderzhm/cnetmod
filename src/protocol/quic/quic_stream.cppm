@@ -9,7 +9,7 @@ import std;
 import cnetmod.core.buffer;
 import cnetmod.coro.task;
 import cnetmod.coro.channel;
-import :types;
+import :foundation;
 
 namespace cnetmod::quic {
 

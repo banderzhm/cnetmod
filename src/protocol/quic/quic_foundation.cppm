@@ -2,7 +2,7 @@ module;
 
 #include <cnetmod/config.hpp>
 
-export module cnetmod.protocol.quic:types;
+export module cnetmod.protocol.quic:foundation;
 
 import std;
 
@@ -217,9 +217,9 @@ export struct server_early_data_ticket_callbacks
 // QUIC Configuration
 // =============================================================================
 
-/// Congestion controller used by a QUIC connection. NewReno remains the
-/// interoperable default; CUBIC can be selected for long-lived, high-bandwidth
-/// paths where its faster probing is beneficial.
+/// Congestion controller used by a QUIC connection. CUBIC is the default;
+/// NewReno remains available for conservative deployments and BBR for
+/// explicitly selected model-based control.
 export enum class quic_congestion_algorithm : std::uint8_t
 {
     new_reno,
@@ -261,7 +261,7 @@ export struct quic_config
     /// Selected once at connection construction. It never changes while a
     /// connection is live, so packet processing does not require locking.
     quic_congestion_algorithm congestion_algorithm{
-        quic_congestion_algorithm::new_reno};
+        quic_congestion_algorithm::cubic};
     std::uint8_t cid_length{8};
     /// Maximum locally issued CIDs kept active in parallel.  The peer's
     /// active_connection_id_limit remains the authoritative upper bound.

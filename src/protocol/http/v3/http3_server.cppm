@@ -113,6 +113,10 @@ public:
         std::chrono::milliseconds probe_interval = std::chrono::seconds{1},
         std::chrono::milliseconds initial_probe_delay = {})
         -> std::expected<void, std::error_code>;
+    /// Set the largest UDP payload this listener advertises and accepts.
+    /// Configure this before start; the RFC 9000 minimum is 1200 bytes.
+    auto set_max_udp_payload_size(std::uint64_t bytes)
+        -> std::expected<void, std::error_code>;
     /// Opt in to QPACK dynamic-table compression for newly accepted HTTP/3
     /// connections.  Both values must be zero to retain the static-table-only
     /// default; a non-zero capacity requires a non-zero blocked-stream limit.

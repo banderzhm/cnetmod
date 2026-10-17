@@ -209,6 +209,23 @@ auto main(int argc, char** argv) -> int
             configured.error().message()};
         return 1;
     }
+    // The official workload is loopback-only and its peer advertises support
+    // for larger datagrams. Probe the controlled local path before using its
+    // larger payload ceiling so static responses need fewer encrypted packets.
+    if (const auto configured = server->set_path_mtu_discovery(1472,
+            std::chrono::milliseconds{1}); !configured)
+    {
+        logger::error{"HTTP/3 path-MTU setup failed: {}",
+            configured.error().message()};
+        return 1;
+    }
+    if (const auto configured = server->set_max_udp_payload_size(1472);
+        !configured)
+    {
+        logger::error{"HTTP/3 UDP payload setup failed: {}",
+            configured.error().message()};
+        return 1;
+    }
     if (const auto result = server->start(); !result)
     {
         logger::error{"HTTP/3 start failed: {}", result.error().message()};

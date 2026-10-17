@@ -896,6 +896,20 @@ public:
         return {};
     }
 
+    auto set_max_udp_payload_size(std::uint64_t bytes)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (bytes < quic::min_initial_pkt_size ||
+            bytes > quic::max_udp_receive_payload)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.max_udp_payload_size = bytes;
+        for (auto& shard : shards_)
+            shard->transport_config_.max_udp_payload_size = bytes;
+        return {};
+    }
+
     auto set_qpack_settings(std::uint64_t max_table_capacity,
         std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
     {
@@ -1650,7 +1664,8 @@ private:
                                                           : std::size_t{8U};
             auto received = co_await async_recvfrom_batch(context_,
                 socket_.native_socket(), receive_batch_size,
-                quic::max_udp_receive_payload, listener_receive_wakeup_);
+                static_cast<std::size_t>(transport_config_.max_udp_payload_size),
+                listener_receive_wakeup_);
             if (!received)
             {
 
@@ -1739,7 +1754,8 @@ private:
         while (running_)
         {
             auto received = co_await async_recvfrom_batch(context_,
-                socket_.native_socket(), 64U, quic::max_udp_receive_payload,
+                socket_.native_socket(), 64U,
+                static_cast<std::size_t>(transport_config_.max_udp_payload_size),
                 listener_receive_wakeup_);
             if (!received)
             {
@@ -1909,6 +1925,12 @@ auto http3_server::set_path_mtu_discovery(std::uint64_t maximum_payload,
 {
     return impl_->set_path_mtu_discovery(maximum_payload, probe_interval,
         initial_probe_delay);
+}
+
+auto http3_server::set_max_udp_payload_size(std::uint64_t bytes)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_max_udp_payload_size(bytes);
 }
 
 auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,

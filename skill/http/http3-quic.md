@@ -65,6 +65,22 @@ auto configured = server->set_idle_timeout(std::chrono::seconds{10});
 `CONNECTION_CLOSE`，服务端无法从静默中区分断线与合法空闲，应由应用按连接复用策略选择
 合适的有限超时。
 
+受控网络可在 `start()` 前同时设置接收上限和逐路径 MTU 探测：
+
+```cpp
+auto payload = server->set_max_udp_payload_size(1472);
+auto pmtud = server->set_path_mtu_discovery(
+    1472, std::chrono::milliseconds{10});
+```
+
+`set_max_udp_payload_size()` 接受 `1200..65527`，并同步应用到所有 worker；它决定本端
+接收缓冲区大小及向 peer 通告的 QUIC UDP payload 上限。发送路径仍从 RFC 9000 的
+1200 字节安全基线开始，只有 padded PING 被确认后才提升到探测值。公网部署应按实际
+链路选择保守上限，避免 IP 分片。
+
+QUIC 新连接默认使用 CUBIC 拥塞控制。真实网络仍按 RTT 和拥塞窗口 pacing；loopback
+没有物理瓶颈队列，因此只保留拥塞窗口限制，省去本机进程间通信的短定时器唤醒。
+
 同步 handler 适合纯内存、快速响应；涉及数据库、缓存或 RPC 时使用协程 handler：
 
 ```cpp
