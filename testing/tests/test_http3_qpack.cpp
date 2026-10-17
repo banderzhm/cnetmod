@@ -127,6 +127,93 @@ TEST(qpack_decoder_applies_local_maximum_table_capacity)
     ASSERT_EQ(decoder.get_dynamic_table_size(), 1U);
 }
 
+TEST(qpack_acknowledged_entries_stay_pinned_until_each_section_ack)
+{
+    qpack_encoder encoder{128U};
+    qpack_decoder decoder{128U};
+    const auto original = fields({{"x-original", std::string(40U, 'a')}});
+    const auto first = encoder.encode(original, 0U);
+    ASSERT_TRUE(first.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    // Acknowledging insertion is not acknowledgement of either field section.
+    ASSERT_TRUE(encoder.process_decoder_instructions(
+        decoder.take_decoder_instructions()).has_value());
+    const auto delayed = encoder.encode(original, 4U);
+    ASSERT_TRUE(delayed.has_value());
+    ASSERT_TRUE(decoder.decode(*first, 0U).has_value());
+    ASSERT_TRUE(encoder.process_decoder_instructions(
+        decoder.take_decoder_instructions()).has_value());
+    const auto replacement = encoder.encode(
+        fields({{"x-replacement", std::string(40U, 'b')}}), 8U);
+    ASSERT_TRUE(replacement.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    const auto decoded = decoder.decode(*delayed, 4U);
+    ASSERT_TRUE(decoded.has_value());
+    if (!decoded)
+        return;
+    ASSERT_EQ(decoded->front().name, original.front().name);
+    ASSERT_EQ(decoded->front().value, original.front().value);
+}
+
+TEST(qpack_static_section_has_zero_required_insert_count_after_dynamic_use)
+{
+    qpack_encoder encoder{128U};
+    ASSERT_TRUE(encoder.encode(fields({{"x-seed", "one"}}), 0U).has_value());
+    const auto block = encoder.encode(fields({{":status", "200"}}), 4U);
+    ASSERT_TRUE(block.has_value());
+    // RFC 9204 section 2.1.2 requires zero when no dynamic entry is referenced.
+    ASSERT_EQ(std::to_integer<unsigned>(block->front()), 0U);
+}
+
+TEST(qpack_small_table_does_not_evict_an_insert_in_the_same_section)
+{
+    qpack_encoder encoder{64U};
+    qpack_decoder decoder{64U};
+    const auto input = fields({{"x-first", "value-one"}, {"x-second", "value-two"}});
+    const auto block = encoder.encode(input, 0U);
+    ASSERT_TRUE(block.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    const auto decoded = decoder.decode(*block, 0U);
+    ASSERT_TRUE(decoded.has_value());
+    if (!decoded)
+        return;
+    ASSERT_EQ(decoded->size(), input.size());
+    for (std::size_t index{}; index < input.size(); ++index)
+    {
+        ASSERT_EQ((*decoded)[index].name, input[index].name);
+        ASSERT_EQ((*decoded)[index].value, input[index].value);
+    }
+}
+
+TEST(qpack_section_ack_releases_only_the_oldest_section_on_a_stream)
+{
+    qpack_encoder encoder{128U};
+    qpack_decoder decoder{128U};
+    const auto input = fields({{"x-original", std::string(40U, 'a')}});
+    const auto headers = encoder.encode(input, 0U);
+    ASSERT_TRUE(headers.has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    const auto trailers = encoder.encode(input, 0U);
+    ASSERT_TRUE(trailers.has_value());
+    ASSERT_TRUE(decoder.decode(*headers, 0U).has_value());
+    ASSERT_TRUE(encoder.process_decoder_instructions(
+        decoder.take_decoder_instructions()).has_value());
+    ASSERT_TRUE(encoder.encode(fields({{"x-new", std::string(40U, 'b')}}), 4U).has_value());
+    ASSERT_TRUE(decoder.process_encoder_instructions(
+        encoder.take_encoder_instructions()).has_value());
+    const auto decoded = decoder.decode(*trailers, 0U);
+    ASSERT_TRUE(decoded.has_value());
+    if (!decoded)
+        return;
+    ASSERT_EQ(decoded->front().value, input.front().value);
+    ASSERT_TRUE(encoder.process_decoder_instructions(
+        decoder.take_decoder_instructions()).has_value());
+}
+
 TEST(qpack_huffman_strings_round_trip)
 {
     qpack_encoder encoder;
@@ -220,7 +307,9 @@ TEST(qpack_enforces_blocked_stream_limit_and_cancellation)
     ASSERT_TRUE(first.has_value());
     ASSERT_EQ(decoder.decode(*first, 28).error(), std::make_error_code(std::errc::resource_unavailable_try_again));
 
-    const auto second = encoder.encode(fields({{"x-second", "two"}}), 32);
+    // Reuse the inserted name so this is an actually blocked dynamic
+    // reference. An unrelated literal must carry RIC zero and cannot block.
+    const auto second = encoder.encode(fields({{"x-first", "two"}}), 32);
     ASSERT_TRUE(second.has_value());
     ASSERT_FALSE(decoder.decode(*second, 32).has_value());
 

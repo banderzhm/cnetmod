@@ -79,4 +79,39 @@ TEST(quic_stream_initial_peer_send_credit_can_exceed_fallback)
     ASSERT_EQ(stream.bytes_sent(), size);
 }
 
+TEST(quic_retired_stream_history_coalesces_without_reopening_old_ids)
+{
+    cnetmod::quic::retired_stream_history history;
+    for (std::uint64_t index{}; index < 100000U; ++index)
+        for (std::uint64_t type{}; type < 4U; ++type)
+            history.insert(index * 4U + type, {index, index * 2U});
+    ASSERT_EQ(history.range_count(), 4U);
+    ASSERT_EQ(history.final_size_count(), history.final_size_capacity);
+    ASSERT_TRUE(history.contains(0U));
+    ASSERT_TRUE(history.contains(399999U));
+    ASSERT_FALSE(history.contains(400000U));
+    ASSERT_FALSE(history.find_final_sizes(0U).has_value());
+    const auto latest = history.find_final_sizes(399999U);
+    ASSERT_TRUE(latest.has_value());
+    ASSERT_EQ(latest->received_final_size, 99999U);
+    ASSERT_EQ(latest->sent_final_size, 199998U);
+}
+
+TEST(quic_retired_stream_history_preserves_gaps_and_merges_out_of_order)
+{
+    cnetmod::quic::retired_stream_history history;
+    history.insert(12U, {3U, 30U});
+    history.insert(0U, {0U, 0U});
+    history.insert(8U, {2U, 20U});
+    ASSERT_EQ(history.range_count(), 2U);
+    ASSERT_FALSE(history.contains(4U));
+    ASSERT_FALSE(history.contains(1U));
+    history.insert(4U, {1U, 10U});
+    ASSERT_EQ(history.range_count(), 1U);
+    ASSERT_TRUE(history.contains(4U));
+    history.insert(4U, {99U, 99U});
+    ASSERT_EQ(history.find_final_sizes(4U)->received_final_size, 1U);
+    ASSERT_EQ(history.final_size_count(), 4U);
+}
+
 RUN_TESTS();

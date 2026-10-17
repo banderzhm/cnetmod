@@ -234,11 +234,11 @@ auto main(int argc, char** argv) -> int
             response.body = "get-ok";
             co_return {};
         }
-        if (request.path == "/buffered-large")
+        if (request.path == "/buffered-small" || request.path == "/buffered-large")
         {
             response.status = 200;
             response.headers["content-type"] = "application/octet-stream";
-            response.body.assign(300U * 1024U, 'x');
+            response.body.assign(request.path == "/buffered-small" ? 512U : 300U * 1024U, 'x');
             co_return {};
         }
         if (request.path == "/push")

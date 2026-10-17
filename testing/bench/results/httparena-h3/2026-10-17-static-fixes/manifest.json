@@ -1,0 +1,42 @@
+{
+  "phase": "repair and low-load regression only",
+  "benchmark_token": "not received; no official load rerun",
+  "branch": "fix/http3-arena-performance",
+  "parent_commit": "410d641e2ab6d32f1c94c5424ca9cd7ec07098c0",
+  "sources_sha256": {
+    "src/protocol/http/v3/http3_session.cpp": "75f8128ecf0b51de77b4ca57512debf7a8b84fd9e18d79dc98b0df80ef7c731a",
+    "src/protocol/http/v3/qpack.cpp": "826b192ed59ccd31b61826e94a2360ab0308f188143e883504acef97183ebb0e",
+    "src/protocol/quic/quic_connection.cpp": "1c617b414221d32d34ee9680c1fd5561c551fa3d45a5c16216c9a440f60fab9a",
+    "src/protocol/quic/quic_connection.cppm": "a4cc9a124cdd11db21890edb5057ff113dd51e51f648243e38065735cb5c63bf",
+    "testing/http3/http_client_e2e.cpp": "bd796feee4a9fdb5e66e4fb1b39e115aecd33feabcaffe98098bf2e0996fadbd",
+    "testing/http3/http_client_e2e_server.cpp": "5ddd082a363c5a48399e511a4b6b8fdc6ab34e3df9b2c3f39768ba1da05f063b",
+    "testing/tests/test_http3_qpack.cpp": "b0a5f70cb22001bff0b261cc2d1d1da402dbe5fe4886873a22c67b0aba8f996c",
+    "testing/tests/test_quic_stream.cpp": "9d9b1903869949f6d1c917a6aebb448a976fc25540dfc09901d4316a6ae40d59"
+  },
+  "records_sha256": {
+    ".gitattributes": "155348a89d5e749f50d336f8f164a39bf8415179177b36e8b51766f3ab9a16d3",
+    "linux-all-peers-1.json": "9b34f646535f8906b6a85d3fe2dfb62d37642889e5016edf8c6b8d3f6e76bb88",
+    "linux-all-peers-1.log": "493795b59d05af95bf2e6078f7c498e2b4add671fa2ad5876e4246f371fe0f77",
+    "linux-all-peers-command.json": "ca5ff9bc59fec91b360eb00e0fcc26dd33b1762a969f88f813737c1d645bfc6f",
+    "linux-all-peers.log": "5f55cf42bd17f1f9433d652506a20e33d03fd3beddaa97cd98ab2b19abd1dd3a",
+    "linux-all-peers.py": "a4fcac5f5d6cbd0218e72e821ad25aa23522ac9f7fe144706bceac6601476f8b",
+    "linux-ctest.log": "09e0fe86cb1c43cc256bb7769d55c4a75ae49a0c4225f3072494207ecec2b5ce",
+    "qpack-after-fix.log": "be8a892ededf120aa6d1b70374ddbd813249dd28176948c8f06ec64ab104c95a",
+    "qpack-before-fix.log": "fea7d62f4e33b98de239bc16ce9a52708d0bcaa13b50954d334ddf1f47a3dadc",
+    "qpack-intermediate-literal-fixture.log": "09633bc782e45aded7e665a7e3a01ae1f27c30d06a321fe8002c6ca913f7790d",
+    "README.md": "40210204e0f6cf14b9524c74470bb74dc0b2a5a04527678f023a9ec2042d09ba",
+    "static-correctness-curl.log": "afe96c2b8cf60d24377155d8ba132d6ce66101eb4d6d36664723b8f3a2ecf9ae",
+    "static-correctness-server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "static-correctness.json": "117275da39b56318d3d88f4f97f2d5d27fff878c3637624b5fe9f4ebbba766db",
+    "static-correctness.log": "0b0abc99315855f9e9d946b00c163d997c956ca14e9d47e6725c2a8d66faf8d4",
+    "static-correctness.py": "5c9442a475759c24a06fa511e89f9d698ddea7fceee8d98631719bd2543105a0",
+    "windows-build.log": "2d639e61555ca466a63d8f0f5d37d1633365514bc36352466a510dfda8a2de2a",
+    "windows-ctest.log": "8744634d930fff37edc7e98696b6c79719d6a8c30832945404477513bd517aef",
+    "windows-interop-multi-worker.json": "e8bfb97d8bfb5dc5a5e2d74bd6f22ce2d702ff7f04b1ff0978547dc481d6a589"
+  },
+  "binaries_sha256": {
+    "linux-arena_h3_server": "802d4fe7ed28a76ccf1a3735cd1dece1c6e447004155bc7e0e0119011d60781c",
+    "windows-http3_e2e_server": "5b31bb16ac2b058a42ca23e1b8b603ed18ffd339a35a33a6dc762086c349407d",
+    "windows-http_client_http3_e2e": "512b5ac5130d05f973c939fccc260e4d8dac7145f51ae522a3db7a2cd7acc501"
+  }
+}

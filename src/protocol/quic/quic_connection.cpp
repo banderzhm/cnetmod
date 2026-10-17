@@ -20,6 +20,66 @@ import cnetmod.utils.concurrent_containers.queue;
 
 namespace cnetmod::quic {
 
+void retired_stream_history::insert(stream_id id, final_sizes sizes)
+{
+    auto& ranges = ranges_[id & 3U];
+    auto low = id / 4U;
+    auto high = low;
+    auto next = ranges.upper_bound(low);
+    if (next != ranges.begin())
+    {
+        const auto previous = std::prev(next);
+        if (previous->second >= low)
+            return;
+        if (previous->second + 1U == low)
+        {
+            low = previous->first;
+            ranges.erase(previous);
+        }
+    }
+    if (next != ranges.end() && high + 1U == next->first)
+    {
+        high = next->second;
+        ranges.erase(next);
+    }
+    ranges.emplace(low, high);
+    recent_.emplace(id, sizes);
+    order_.push_back(id);
+    if (order_.size() > final_size_capacity)
+    {
+        recent_.erase(order_.front());
+        order_.pop_front();
+    }
+}
+
+auto retired_stream_history::contains(stream_id id) const -> bool
+{
+    const auto& ranges = ranges_[id & 3U];
+    const auto next = ranges.upper_bound(id / 4U);
+    return next != ranges.begin() && std::prev(next)->second >= id / 4U;
+}
+
+auto retired_stream_history::find_final_sizes(stream_id id) const
+    -> std::optional<final_sizes>
+{
+    const auto found = recent_.find(id);
+    return found == recent_.end() ? std::nullopt
+                                 : std::optional{found->second};
+}
+
+auto retired_stream_history::range_count() const -> std::size_t
+{
+    std::size_t result{};
+    for (const auto& ranges : ranges_)
+        result += ranges.size();
+    return result;
+}
+
+auto retired_stream_history::final_size_count() const -> std::size_t
+{
+    return recent_.size();
+}
+
 namespace {
 
     struct stream_wait_cancel_state
@@ -342,13 +402,7 @@ struct quic_connection::quic_connection_impl
      */
     std::set<stream_id> remotely_cancelled_streams;
 
-    struct retired_stream_info
-    {
-        std::uint64_t received_final_size{};
-        std::uint64_t sent_final_size{};
-    };
-
-    std::unordered_map<stream_id, retired_stream_info> retired_streams;
+    retired_stream_history retired_streams;
     channel<stream_id> accepted_streams;
     std::uint64_t peer_max_data;
     std::uint64_t sent_stream_data{};
@@ -605,6 +659,9 @@ struct quic_connection::quic_connection_impl
 
     struct stream_write_completion
     {
+        // Returned only for a rejected flow-control reservation. The bytes
+        // have not been accounted or queued and can be retried without copy.
+        std::vector<std::byte> rejected_bytes;
         class spin_lock
         {
         public:
@@ -3257,10 +3314,12 @@ auto quic_connection::process_retire_connection_id_frame(const retire_connection
 
 auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<void>
 {
-    if (const auto retired = impl_->retired_streams.find(frame.stream_id);
-        retired != impl_->retired_streams.end())
+    if (impl_->retired_streams.contains(frame.stream_id))
     {
-        const auto final_size = retired->second.received_final_size;
+        const auto sizes = impl_->retired_streams.find_final_sizes(frame.stream_id);
+        if (!sizes)
+            co_return;
+        const auto final_size = sizes->received_final_size;
         if (frame.offset > final_size || frame.data.size() > final_size - frame.offset ||
             (frame.fin && frame.offset + frame.data.size() != final_size))
             impl_->connection_state = connection_state::closing;
@@ -3318,17 +3377,18 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
 
 auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>
 {
-    impl_->remotely_cancelled_streams.insert(frame.stream_id);
+    if (!impl_->retired_streams.contains(frame.stream_id))
+        impl_->remotely_cancelled_streams.insert(frame.stream_id);
     if (const auto observer = impl_->stream_cancellation_observers.find(frame.stream_id);
         observer != impl_->stream_cancellation_observers.end())
     {
         observer->second->cancel();
         impl_->stream_cancellation_observers.erase(observer);
     }
-    if (const auto retired = impl_->retired_streams.find(frame.stream_id);
-        retired != impl_->retired_streams.end())
+    if (impl_->retired_streams.contains(frame.stream_id))
     {
-        if (frame.final_size != retired->second.received_final_size)
+        if (const auto sizes = impl_->retired_streams.find_final_sizes(frame.stream_id);
+            sizes && frame.final_size != sizes->received_final_size)
             impl_->connection_state = connection_state::closing;
         co_return;
     }
@@ -3350,7 +3410,8 @@ auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame
 
 auto quic_connection::process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>
 {
-    impl_->remotely_cancelled_streams.insert(frame.stream_id);
+    if (!impl_->retired_streams.contains(frame.stream_id))
+        impl_->remotely_cancelled_streams.insert(frame.stream_id);
     if (const auto observer = impl_->stream_cancellation_observers.find(frame.stream_id);
         observer != impl_->stream_cancellation_observers.end())
     {
@@ -3360,12 +3421,12 @@ auto quic_connection::process_stop_sending_frame(const stop_sending_frame& frame
     const auto it = impl_->streams.find(frame.stream_id);
     if (it == impl_->streams.end())
     {
-        if (const auto retired = impl_->retired_streams.find(frame.stream_id);
-            retired != impl_->retired_streams.end())
+        if (impl_->retired_streams.contains(frame.stream_id))
         {
-            impl_->encoded_send_frames.push_back(encode_frame(reset_stream_frame{
-                frame.stream_id, frame.application_error_code,
-                retired->second.sent_final_size}));
+            if (const auto sizes = impl_->retired_streams.find_final_sizes(frame.stream_id))
+                impl_->encoded_send_frames.push_back(encode_frame(reset_stream_frame{
+                    frame.stream_id, frame.application_error_code,
+                    sizes->sent_final_size}));
         }
         else
             impl_->connection_state = connection_state::closing;
@@ -4362,7 +4423,10 @@ auto quic_connection::flush_send_queue() -> task<void>
                     quic_connection_impl::stream_write_command::operation::datagram
                 ? co_await apply_application_datagram(std::move(command->bytes))
                 : co_await apply_stream_write(command->stream,
-                      std::move(command->bytes), command->fin);
+                      command->bytes, command->fin);
+            if (!result && result.error() == make_error_code(quic_errc::flow_control_error) &&
+                command->completion)
+                command->completion->rejected_bytes = std::move(command->bytes);
             if (command->completion)
                 command->completion->complete(std::move(result));
         }
@@ -4419,17 +4483,22 @@ auto quic_connection::flush_send_queue() -> task<void>
     }
 }
 
-auto quic_connection::apply_stream_write(stream_id sid, std::vector<std::byte> data,
+auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
     bool fin) -> task<std::expected<void, std::error_code>>
 {
     const std::span<const std::byte> payload{data.data(), data.size()};
     if (is_closed() || impl_->connection_state == connection_state::draining)
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+    if (impl_->retired_streams.contains(sid))
+        co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     auto [it, inserted] = impl_->streams.try_emplace(sid);
     if (inserted)
     {
         if (is_client_initiated(sid) != (impl_->connection_role == quic_role::client))
+        {
+            impl_->streams.erase(it);
             co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+        }
         it->second.value = std::make_unique<quic_stream>(sid, impl_->connection_role,
             is_bidirectional(sid));
         it->second.value->update_send_limit(impl_->config.max_stream_data);
@@ -4437,7 +4506,8 @@ auto quic_connection::apply_stream_write(stream_id sid, std::vector<std::byte> d
         it->second.value->init();
         it->second.readiness = std::make_unique<channel<std::monostate>>(1);
     }
-    if (payload.size() > impl_->peer_max_data - impl_->sent_stream_data)
+    if (payload.size() > impl_->peer_max_data -
+            std::min(impl_->peer_max_data, impl_->sent_stream_data))
         co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
     auto sent = co_await it->second.value->send(payload);
     if (!sent)
@@ -4520,84 +4590,105 @@ auto quic_connection::async_send(stream_id sid, std::span<const std::byte> data,
     co_return co_await async_send(sid, std::move(owned_data), fin);
 }
 
+auto quic_connection::async_send_fragments(stream_id sid,
+    std::vector<std::byte> owned_data, bool fin)
+    -> task<std::expected<void, std::error_code>>
+{
+    constexpr std::size_t fragment_size = max_udp_payload - 96U;
+    // A complete application write need not fit the peer's current
+    // stream/connection credit. Submit bounded fragments, allowing the
+    // receive driver to process MAX_DATA/MAX_STREAM_DATA between them.
+    // Keep the small-write path below unchanged.
+    std::size_t offset{};
+    while (offset < owned_data.size())
+    {
+        std::uint64_t credit{};
+        {
+            co_await impl_->receive_mutex.lock();
+            async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+            if (is_closed() || impl_->connection_state == connection_state::draining)
+                co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+            const auto stream = impl_->streams.find(sid);
+            if (stream == impl_->streams.end())
+                co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+            if (stream->second.value->state() == stream_state::closed ||
+                stream->second.value->state() == stream_state::half_closed_local)
+                co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+            const auto connection_credit = impl_->peer_max_data > impl_->sent_stream_data
+                ? impl_->peer_max_data - impl_->sent_stream_data : 0U;
+            credit = std::min(connection_credit,
+                stream->second.value->remaining_send_window());
+        }
+        if (credit == 0U)
+        {
+            co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+            continue;
+        }
+        const auto count = std::min<std::size_t>({fragment_size,
+            owned_data.size() - offset, static_cast<std::size_t>(credit)});
+        std::vector<std::byte> fragment(owned_data.begin() + offset,
+            owned_data.begin() + offset + count);
+        const auto sent = co_await async_send(sid, std::move(fragment),
+            fin && offset + count == owned_data.size());
+        if (!sent)
+        {
+            // Another producer may consume credit after the snapshot.
+            // Retry only a rejected write; no bytes have been committed.
+            if (sent.error() != make_error_code(quic_errc::flow_control_error))
+                co_return std::unexpected(sent.error());
+            co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+            continue;
+        }
+        offset += count;
+    }
+    co_return {};
+}
+
 auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_data,
     bool fin) -> task<std::expected<void, std::error_code>>
 {
-    constexpr std::size_t fragment_size = max_udp_payload - 96U;
-    if (owned_data.size() > fragment_size)
+    if (owned_data.size() > max_udp_payload - 96U)
+        co_return co_await async_send_fragments(sid, std::move(owned_data), fin);
+    for (;;)
     {
-        // A complete application write need not fit the peer's current
-        // stream/connection credit. Submit bounded fragments, allowing the
-        // receive driver to process MAX_DATA/MAX_STREAM_DATA between them.
-        // Keep the small-write path below unchanged.
-        std::size_t offset{};
-        while (offset < owned_data.size())
+        auto* const completion = impl_->stream_write_completions.try_acquire();
+        if (!completion)
         {
-            std::uint64_t credit{};
-            {
-                co_await impl_->receive_mutex.lock();
-                async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
-                if (is_closed() || impl_->connection_state == connection_state::draining)
-                    co_return std::unexpected(std::make_error_code(std::errc::not_connected));
-                const auto stream = impl_->streams.find(sid);
-                if (stream == impl_->streams.end())
-                    co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
-                if (stream->second.value->state() == stream_state::closed ||
-                    stream->second.value->state() == stream_state::half_closed_local)
-                    co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
-                const auto connection_credit = impl_->peer_max_data > impl_->sent_stream_data
-                    ? impl_->peer_max_data - impl_->sent_stream_data : 0U;
-                credit = std::min(connection_credit,
-                    stream->second.value->remaining_send_window());
-            }
-            if (credit == 0U)
-            {
-                co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
-                continue;
-            }
-            const auto count = std::min<std::size_t>({fragment_size,
-                owned_data.size() - offset, static_cast<std::size_t>(credit)});
-            std::vector<std::byte> fragment(owned_data.begin() + offset,
-                owned_data.begin() + offset + count);
-            const auto sent = co_await async_send(sid, std::move(fragment),
-                fin && offset + count == owned_data.size());
-            if (!sent)
-            {
-                // Another producer may consume credit after the snapshot.
-                // Retry only a rejected write; no bytes have been committed.
-                if (sent.error() != make_error_code(quic_errc::flow_control_error))
-                    co_return std::unexpected(sent.error());
-                co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
-                continue;
-            }
-            offset += count;
+            if (is_closed() || impl_->connection_state == connection_state::draining)
+                co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+            co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+            continue;
         }
+        if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::write,
+                sid, std::move(owned_data), fin, 0U, false, completion}))
+        {
+            impl_->stream_write_completions.release(*completion);
+            co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
+        }
+
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+        impl_->receive_rearm_requested.store(true, std::memory_order_release);
+        if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
+            impl_->receive_wait_token.cancel();
+
+        // The producer never enters the connection state domain.  The flush
+        // owner drains the command queue and completes this request only after it
+        // has validated and encoded the stream write.
+        co_await flush_send_queue();
+        const auto result = co_await completion->receive();
+        owned_data = std::exchange(completion->rejected_bytes, {});
+        impl_->stream_write_completions.release(*completion);
+        if (!result && result.error() == make_error_code(quic_errc::flow_control_error))
+        {
+            // Short HEADERS/DATA writes need the same backpressure as large
+            // responses. A transient credit shortage must not abandon a response
+            // with no FIN (which previously left the client waiting indefinitely).
+            co_return co_await async_send_fragments(sid, std::move(owned_data), fin);
+        }
+        if (!result)
+            co_return std::unexpected(result.error());
         co_return {};
     }
-    auto* const completion = impl_->stream_write_completions.try_acquire();
-    if (!completion)
-        co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
-    if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::write,
-            sid, std::move(owned_data), fin, 0U, false, completion}))
-    {
-        impl_->stream_write_completions.release(*completion);
-        co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
-    }
-
-    impl_->send_flush_requested.store(true, std::memory_order_release);
-    impl_->receive_rearm_requested.store(true, std::memory_order_release);
-    if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
-        impl_->receive_wait_token.cancel();
-
-    // The producer never enters the connection state domain.  The flush
-    // owner drains the command queue and completes this request only after it
-    // has validated and encoded the stream write.
-    co_await flush_send_queue();
-    const auto result = co_await completion->receive();
-    impl_->stream_write_completions.release(*completion);
-    if (!result)
-        co_return std::unexpected(result.error());
-    co_return {};
 }
 
 auto quic_connection::set_stream_priority(stream_id sid, std::uint8_t urgency,
@@ -4841,8 +4932,8 @@ auto quic_connection::retire_stream(stream_id sid)
     if (stream->second.value->state() != stream_state::closed)
         return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
 
-    impl_->retired_streams.insert_or_assign(sid,
-        quic_connection_impl::retired_stream_info{
+    impl_->retired_streams.insert(sid,
+        retired_stream_history::final_sizes{
             stream->second.value->bytes_received(), stream->second.value->bytes_sent()});
     impl_->remotely_cancelled_streams.erase(sid);
     stream->second.readiness->close();

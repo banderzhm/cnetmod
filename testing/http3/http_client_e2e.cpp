@@ -93,6 +93,51 @@ auto require_response(test_state& state,
     return true;
 }
 
+// A sub-packet response must make partial progress when the peer's initial
+// stream window is smaller than the encoded HEADERS + DATA. Previously only
+// writes larger than 1104 bytes waited for credit; shorter writes were dropped.
+auto run_small_window_semantics(cnetmod::io_context& context,
+    std::uint16_t port, test_state& state) -> cnetmod::task<void>
+{
+    auto tls_result = cnetmod::ssl_context::quic_client();
+    if (!tls_result)
+    {
+        state.fail("small-window TLS context failed");
+        co_return;
+    }
+    auto tls = std::move(*tls_result);
+    cnetmod::http::v3::http3_client_options options;
+    options.verify_certificate = false;
+    options.h3_initial_max_stream_data = 128U;
+    options.h3_initial_max_data = 512U;
+    options.request_timeout = std::chrono::seconds{5};
+    cnetmod::http::v3::http3_client client{context, tls, options};
+    const auto connected = co_await client.connect("127.0.0.1", port);
+    if (!connected)
+    {
+        state.fail("small-window connect failed: " + connected.error().message());
+        co_return;
+    }
+    // Serial correctness checks, not a load test. Reuse the connection so
+    // subsequent replies also cross connection-level credit boundaries.
+    for (unsigned index{}; index < 8U; ++index)
+    {
+        cnetmod::http::v3::http3_request request;
+        request.host = "127.0.0.1";
+        request.port = port;
+        request.path = "/buffered-small";
+        const auto response = co_await client.send_request(request);
+        if (!response || response->status != 200 ||
+            response->body != std::string(512U, 'x'))
+        {
+            state.fail("small-window response " + std::to_string(index) +
+                (response ? " corrupted" : ": " + response.error().message()));
+            break;
+        }
+    }
+    co_await client.close();
+}
+
 auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
     test_state& state) -> cnetmod::task<void>
 {
@@ -1012,6 +1057,12 @@ auto run_suite(cnetmod::io_context& context, std::uint16_t port, test_state& sta
     // This keeps the HTTP/3 request regression independent from the separate
     // 0-RTT lifecycle and still exercises close_async() on both paths.
     co_await run_http_semantics(context, port, state);
+    if (!state.ok)
+    {
+        context.stop();
+        co_return;
+    }
+    co_await run_small_window_semantics(context, port, state);
     if (!state.ok)
     {
         context.stop();

@@ -1244,8 +1244,13 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     bool stream_classified = !webtransport_handler_;
     if (!unidirectional)
         ++active_streams_;
-    scope_guard completion{[this, unidirectional]
+    scope_guard completion{[this, id, unidirectional]
         {
+            // operator[] during header decoding also inserts an empty queue
+            // for unblocked requests. Release it on every exit, including
+            // cancellation/error paths, rather than retaining one per request.
+            completed_headers_.erase(id);
+            qpack_waiters_.erase(id);
             if (!unidirectional)
             {
                 --active_streams_;

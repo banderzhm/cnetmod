@@ -1,5 +1,10 @@
 # HttpArena official HTTP/3 profiles: local reproduction
 
+Follow-up repairs and low-load regression evidence are recorded in
+[static-h3 repair checks](results/httparena-h3/2026-10-17-static-fixes/README.md).
+Those repairs have not yet received a benchmark token for official retesting;
+the measurements below remain the original results, including all failures.
+
 This record supersedes the performance conclusions from the earlier custom
 [local harness](arena_h3.md). It runs the official `baseline-h3` and `static-h3`
 profiles at HttpArena commit

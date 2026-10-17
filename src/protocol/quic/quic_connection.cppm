@@ -98,6 +98,30 @@ private:
 // QUIC Connection - Main async coordinator
 // =============================================================================
 
+/// Closed IDs remain closed for the connection lifetime. Adjacent IDs of each
+/// stream type coalesce; only a bounded recent window retains final sizes.
+/// RFC 9000 section 4.5 permits forgetting final sizes of closed streams.
+export class retired_stream_history
+{
+public:
+    struct final_sizes
+    {
+        std::uint64_t received_final_size{};
+        std::uint64_t sent_final_size{};
+    };
+    static constexpr std::size_t final_size_capacity{1024U};
+    void insert(stream_id id, final_sizes sizes);
+    [[nodiscard]] auto contains(stream_id id) const -> bool;
+    [[nodiscard]] auto find_final_sizes(stream_id id) const -> std::optional<final_sizes>;
+    [[nodiscard]] auto range_count() const -> std::size_t;
+    [[nodiscard]] auto final_size_count() const -> std::size_t;
+
+private:
+    std::array<std::map<std::uint64_t, std::uint64_t>, 4> ranges_;
+    std::map<stream_id, final_sizes> recent_;
+    std::deque<stream_id> order_;
+};
+
 export class quic_connection
 {
 public:
@@ -504,9 +528,12 @@ private:
     /// Executed only by the connection packet-owner after a producer command
     /// has been dequeued.  It is deliberately separate from async_send(), so
     /// callers never mutate stream or flow-control state directly.
-    [[nodiscard]] auto apply_stream_write(stream_id sid, std::vector<std::byte> data,
+    [[nodiscard]] auto apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
         bool fin) -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
+        -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto async_send_fragments(stream_id sid,
+        std::vector<std::byte> data, bool fin)
         -> task<std::expected<void, std::error_code>>;
     /// Send queued frames
     auto flush_send_queue() -> task<void>;
