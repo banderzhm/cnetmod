@@ -90,13 +90,11 @@ struct scored_document
             return contract_error(cnetmod::json::errc::missing_field);
         if (source.size() != 2U)
             return contract_error(cnetmod::json::errc::unknown_field);
-        if ((!index_value->holds<std::uint64_t>() &&
-                !index_value->holds<std::int64_t>()) ||
-            !score_value->is_number())
+        if (!index_value->is_number_integer() || !score_value->is_number())
             return contract_error(cnetmod::json::errc::type_mismatch);
 
         std::uint64_t index{};
-        if (index_value->holds<std::uint64_t>())
+        if (index_value->is_number_unsigned())
             index = index_value->get<std::uint64_t>();
         else
         {
