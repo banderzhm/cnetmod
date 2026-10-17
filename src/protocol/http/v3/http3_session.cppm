@@ -100,13 +100,17 @@ export struct http3_response
     http_version version{http_version::http_3};
     header_map headers;
     std::string body;
+    /// Optional immutable buffered body storage. Servers can share preloaded
+    /// content across responses while the session builds the wire image.
+    /// `body`, `shared_body`, and `body_source` are mutually exclusive.
+    std::shared_ptr<const std::string> shared_body;
     /// Explicit opt-in streaming response body.  It is populated only for
     /// `streaming_client_response_handler`; the legacy response API continues
     /// to collect the complete body in `body`.
     std::shared_ptr<request_body_stream> body_stream;
     /// Optional pull-based response body producer. It is explicit so the
     /// legacy `body` response remains allocation-free for small payloads.
-    /// `body` and `body_source` must not be used together.
+    /// `body`, `shared_body`, and `body_source` must not be used together.
     std::shared_ptr<response_body_source> body_source;
     header_map trailers;
     /// Optional resources promised before this response's final HEADERS.

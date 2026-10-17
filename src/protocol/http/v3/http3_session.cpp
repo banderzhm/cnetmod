@@ -52,6 +52,16 @@ namespace {
         return length;
     }
 
+    auto buffered_response_body(const http3_response& response)
+        -> std::expected<std::string_view, std::error_code>
+    {
+        if (response.shared_body && !response.body.empty())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        if (response.shared_body)
+            return std::string_view{*response.shared_body};
+        return std::string_view{response.body};
+    }
+
     // RFC 9297 uses a Quarter Stream ID as the HTTP Datagram context ID for
     // request/response streams. A WebTransport session is identified by its
     // CONNECT stream, so its context ID is the QUIC stream ID divided by four.
@@ -571,11 +581,16 @@ namespace {
         if (!block)
             return std::unexpected(block.error());
         auto result = encode_http3_frame(headers_frame{*block});
-        if (!suppress_body && !response.body.empty())
+        const auto body = buffered_response_body(response);
+        if (!body)
+            return std::unexpected(body.error());
+        if (!suppress_body && !body->empty())
         {
-            auto data = encode_http3_frame(
-                data_frame{::utils::conv::to_bytes(response.body)});
-            result.insert(result.end(), data.begin(), data.end());
+            result.reserve(result.size() + body->size() + 16U);
+            append_varint(static_cast<std::uint64_t>(http3_frame_type::data), result);
+            append_varint(static_cast<std::uint64_t>(body->size()), result);
+            const auto bytes = ::utils::conv::to_bytes(*body);
+            result.insert(result.end(), bytes.begin(), bytes.end());
         }
         if (!response.trailers.empty())
         {
@@ -1774,6 +1789,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             else if (!request_token.is_cancelled())
                 response.status = status::internal_server_error;
             response.body.clear();
+            response.shared_body.reset();
         }
     }
     else if (async_handler_)
@@ -1796,12 +1812,14 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             }
             response.status = status::internal_server_error;
             response.body.clear();
+            response.shared_body.reset();
         }
     }
     else if (handler_(*request, response))
     {
         response.status = status::internal_server_error;
         response.body.clear();
+        response.shared_body.reset();
     }
 
     // PUSH_PROMISE frames are part of the parent request stream and must
@@ -1838,8 +1856,14 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         (void)co_await conn_.async_cancel_stream(id);
         co_return;
     }
+    const auto buffered_body = buffered_response_body(response);
+    if (!buffered_body || (response.body_source && response.shared_body))
+    {
+        (void)co_await conn_.async_cancel_stream(id);
+        co_return;
+    }
     if (!suppress_response_body && !response.body_source && declared_length &&
-        *declared_length && **declared_length != response.body.size())
+        *declared_length && **declared_length != buffered_body->size())
     {
         (void)co_await conn_.async_cancel_stream(id);
         co_return;
@@ -1847,7 +1871,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 
     if (response.body_source)
     {
-        if (!response.body.empty())
+        if (!response.body.empty() || response.shared_body)
         {
             (void)co_await conn_.async_cancel_stream(id);
             co_return;
@@ -2345,7 +2369,9 @@ auto http3_server_session::send_pushes(stream_id parent_stream,
     for (const auto& push : pushes)
     {
         if (!push.response ||
-            (!push.response->body.empty() && push.response->body_source))
+            ((!push.response->body.empty() || push.response->shared_body) &&
+                push.response->body_source) ||
+            !buffered_response_body(*push.response))
             co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
 
         std::uint64_t push_id{};

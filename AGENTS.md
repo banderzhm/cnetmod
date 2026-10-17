@@ -8925,6 +8925,19 @@ h3::streaming_server_request_handler handler =
 
 handler 提前返回会关闭 body pump；消费者慢时，传输层不会无限制缓存上传数据。
 
+### 共享缓冲响应体
+
+服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，
+会话直接构建一次 HEADERS + DATA + FIN 写入，适合静态资源热路径：
+
+```cpp
+auto cached = std::make_shared<const std::string>("cached asset");
+response.shared_body = cached;
+response.headers.emplace("content-length", std::to_string(cached->size()));
+```
+
+`body`、`shared_body` 与 `body_source` 三者只能设置一个。
+
 ### 响应体流式发送
 
 服务端可设置 `response.body_source`。服务端先发送 HEADERS，再按 producer 发送
@@ -8947,7 +8960,7 @@ response.body_source = std::make_shared<cn::http::response_body_source>(
     }, 18);
 ```
 
-`body` 与 `body_source` 不能同时设置。声明的长度必须与实际发送长度一致；HEAD、
+`body`、`shared_body` 与 `body_source` 不能同时设置。声明的长度必须与实际发送长度一致；HEAD、
 1xx、204、304 响应禁止发送 DATA。
 
 ### 显式 Server Push

@@ -92,10 +92,9 @@ auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& re
     response.headers.emplace("vary", "Accept-Encoding");
     if (use_brotli)
         response.headers.emplace("content-encoding", "br");
-    // Keep the protocol's one-write HEADERS + DATA + FIN fast path. The
-    // immutable fixture remains shared; only the response-owned bytes needed
-    // until QUIC accepts the write are copied per active request.
-    response.body = *content;
+    // Keep the protocol's one-write HEADERS + DATA + FIN fast path while the
+    // immutable fixture storage remains shared across active requests.
+    response.shared_body = content;
     co_return std::expected<void, std::error_code>{};
 }
 
