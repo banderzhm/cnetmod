@@ -34,6 +34,8 @@ if(NOT CNETMOD_ENABLE_HTTP)
 endif()
 if(NOT CNETMOD_ENABLE_GRPC)
     list(REMOVE_ITEM BENCH_TARGETS bench_grpc)
+else()
+    list(APPEND BENCH_TARGETS grpc_arena_server)
 endif()
 if(NOT CNETMOD_ENABLE_WEBSOCKET)
     list(REMOVE_ITEM BENCH_TARGETS bench_ws)
@@ -74,7 +76,9 @@ foreach(bench_name ${BENCH_TARGETS})
     elseif(bench_name STREQUAL "bench_http_disabled")
         target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_DISABLED_ONLY=1)
     endif()
-    if(bench_name STREQUAL "crosslang_cnetmod_server")
+    if(bench_name STREQUAL "grpc_arena_server")
+        target_link_libraries(${bench_name} PRIVATE cnetmod_grpc)
+    elseif(bench_name STREQUAL "crosslang_cnetmod_server")
         # The cross-language server exercises the HTTP stack directly. Keep
         # Application, ORM and unrelated protocols out of the benchmark binary
         # so allocator and transport measurements are not configuration-bound.
@@ -98,6 +102,23 @@ foreach(bench_name ${BENCH_TARGETS})
         target_compile_options(${bench_name} PRIVATE -O3)
     endif()
 endforeach()
+
+if(CNETMOD_BUILD_TESTS AND TARGET grpc_arena_server)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME test_grpc_arena_harness
+            COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+                -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_grpc_arena_bench.py)
+        set(_grpc_arena_tls_args)
+        if(CNETMOD_HAS_SSL AND CNETMOD_TEST_OPENSSL_EXECUTABLE)
+            list(APPEND _grpc_arena_tls_args --openssl "${CNETMOD_TEST_OPENSSL_EXECUTABLE}")
+        endif()
+        add_test(NAME test_grpc_arena_smoke
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/grpc_arena_smoke.py"
+                "$<TARGET_FILE:grpc_arena_server>" ${_grpc_arena_tls_args})
+        set_tests_properties(test_grpc_arena_smoke PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 60)
+    endif()
+endif()
 
 if(TARGET bench_http_parser)
     if(MSVC AND (CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|amd64|x86_64"))
