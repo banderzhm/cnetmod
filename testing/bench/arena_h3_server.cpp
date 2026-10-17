@@ -7,8 +7,6 @@ import cnetmod.core.ssl;
 import cnetmod.executor.pool;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
-import cnetmod.coro.task;
-import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.server;
@@ -64,14 +62,13 @@ auto load_assets(const std::filesystem::path& root) -> asset_cache
 }
 
 auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& request,
-    cnetmod::http::v3::http3_response& response, cnetmod::cancel_token&)
-    -> cnetmod::task<std::expected<void, std::error_code>>
+    cnetmod::http::v3::http3_response& response) -> std::error_code
 {
     const auto found = assets.find(request.path.substr(0, request.path.find('?')));
     if (found == assets.end())
     {
         response.status = 404;
-        co_return std::expected<void, std::error_code>{};
+        return {};
     }
     // This adapter accepts the official profile's exact negotiation or an
     // identity request for independent byte validation. Other negotiations
@@ -83,19 +80,18 @@ auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& re
         encoding->second != "identity" && !brotli)
     {
         response.status = 406;
-        co_return std::expected<void, std::error_code>{};
+        return {};
     }
     const auto& asset = found->second;
     const auto use_brotli = brotli && static_cast<bool>(asset.brotli);
     const auto& content = use_brotli ? asset.brotli : asset.identity;
+    response.headers.reserve(3U);
     response.headers.emplace("content-type", asset.content_type);
     response.headers.emplace("vary", "Accept-Encoding");
     if (use_brotli)
         response.headers.emplace("content-encoding", "br");
-    // Keep the protocol's one-write HEADERS + DATA + FIN fast path while the
-    // immutable fixture storage remains shared across active requests.
     response.shared_body = content;
-    co_return std::expected<void, std::error_code>{};
+    return {};
 }
 
 auto handle_request(cnetmod::http::v3::http3_request& request,
@@ -180,24 +176,19 @@ auto main(int argc, char** argv) -> int
             return 1;
         }
     }
-    cnetmod::http::v3::async_server_request_handler handler = [&assets](
-                                                                  cnetmod::http::v3::http3_request& request,
-                                                                  cnetmod::http::v3::http3_response& response, cnetmod::cancel_token& token)
-        -> cnetmod::task<std::expected<void, std::error_code>>
+    cnetmod::http::v3::server_request_handler handler = [&assets](
+                                                            cnetmod::http::v3::http3_request& request,
+                                                            cnetmod::http::v3::http3_response& response) -> std::error_code
     {
         if (request.path.starts_with("/static/") &&
             request.method == cnetmod::http::http_method::GET)
-            co_return co_await serve_asset(assets, request, response, token);
-        const auto error = handle_request(request, response);
-        if (error)
-            co_return std::unexpected(error);
-        co_return std::expected<void, std::error_code>{};
+            return serve_asset(assets, request, response);
+        return handle_request(request, response);
     };
     cnetmod::server_context context{workers, workers};
     const cnetmod::endpoint endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)};
-    auto server = argc == 6
-        ? cnetmod::http::v3::make_http3_server(context, *tls, endpoint, std::move(handler))
-        : cnetmod::http::v3::make_http3_server(context, *tls, endpoint, handle_request);
+    auto server = cnetmod::http::v3::make_http3_server(
+        context, *tls, endpoint, std::move(handler));
     // HttpArena creates fresh h2load connections for every short run and the
     // load generator leaves them silent instead of sending CONNECTION_CLOSE.
     // Reclaim those connections within the official two-second round cooldown
@@ -213,7 +204,8 @@ auto main(int argc, char** argv) -> int
     // for larger datagrams. Probe the controlled local path before using its
     // larger payload ceiling so static responses need fewer encrypted packets.
     if (const auto configured = server->set_path_mtu_discovery(1472,
-            std::chrono::milliseconds{1}); !configured)
+            std::chrono::milliseconds{1});
+        !configured)
     {
         logger::error{"HTTP/3 path-MTU setup failed: {}",
             configured.error().message()};

@@ -231,6 +231,45 @@ TEST(quic_priority_service_budget_bounds_background_starvation)
     ASSERT_EQ(*next_epoch, 0U);
 }
 
+TEST(quic_shared_send_frame_renders_without_owning_body_copy)
+{
+    const auto body = std::make_shared<const std::string>("body");
+    const std::array header{std::byte{0x0a}, std::byte{0x04}, std::byte{0x04}};
+    const auto frame = cnetmod::quic::quic_send_frame::shared_stream(
+        header, body, 0U, body->size(), 4U);
+    const auto alias = frame;
+
+    std::vector<std::byte> encoded;
+    frame.append_to(encoded);
+    const auto decoded = cnetmod::quic::decode_frame(encoded);
+
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(std::holds_alternative<cnetmod::quic::stream_frame>(decoded->first));
+    const auto& stream = std::get<cnetmod::quic::stream_frame>(decoded->first);
+    ASSERT_EQ(stream.stream_id, 4U);
+    ASSERT_EQ(stream.data.size(), body->size());
+    ASSERT_TRUE(frame == alias);
+}
+
+TEST(quic_stream_scheduler_preserves_default_fifo_across_payload_strategies)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    scheduler.enqueue(0U,
+        cnetmod::quic::quic_send_frame::owned({std::byte{0x01}}, 0U));
+    const auto body = std::make_shared<const std::string>("x");
+    const std::array header{std::byte{0x0a}, std::byte{0x04}, std::byte{0x01}};
+    scheduler.enqueue(4U, cnetmod::quic::quic_send_frame::shared_stream(
+                              header, body, 0U, 1U, 4U));
+
+    const auto first = scheduler.take();
+    const auto second = scheduler.take();
+    ASSERT_TRUE(first.has_value());
+    ASSERT_TRUE(second.has_value());
+    ASSERT_EQ(first->stream, 0U);
+    ASSERT_EQ(second->stream, 4U);
+    ASSERT_TRUE(scheduler.empty());
+}
+
 TEST(quic_empty_stream_frame)
 {
     // Test empty stream frame (no data)

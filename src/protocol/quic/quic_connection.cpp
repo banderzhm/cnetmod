@@ -17,6 +17,7 @@ import cnetmod.core.error;
 import cnetmod.coro.mutex;
 import cnetmod.coro.channel;
 import cnetmod.utils.concurrent_containers.queue;
+import cnetmod.protocol.quic.send_pipeline;
 
 namespace cnetmod::quic {
 
@@ -64,7 +65,7 @@ auto retired_stream_history::find_final_sizes(stream_id id) const
 {
     const auto found = recent_.find(id);
     return found == recent_.end() ? std::nullopt
-                                 : std::optional{found->second};
+                                  : std::optional{found->second};
 }
 
 auto retired_stream_history::range_count() const -> std::size_t
@@ -391,7 +392,7 @@ struct quic_connection::quic_connection_impl
         std::unique_ptr<channel<std::monostate>> readiness;
     };
 
-    std::map<stream_id, stream_entry> streams;
+    std::unordered_map<stream_id, stream_entry> streams;
     // Request handlers own these tokens; entries are removed before a handler
     // returns. QUIC packet processing and handlers share the same io_context,
     // so raw observer pointers need no cross-thread synchronization.
@@ -419,217 +420,45 @@ struct quic_connection::quic_connection_impl
     std::uint64_t next_bidi_stream;
     std::uint64_t next_uni_stream;
     std::deque<quic_frame_variant> send_queue;
-    std::deque<std::vector<std::byte>> encoded_send_frames;
-
-    struct stream_priority
-    {
-        std::uint8_t urgency{3U};
-        bool incremental{};
-    };
-
-    struct scheduled_stream_frame
-    {
-        stream_id stream{};
-        std::uint8_t urgency{};
-        // The overwhelming common case is the RFC 9218 default
-        // (urgency=3, non-incremental). Keep it in one FIFO with no per-stream
-        // map/deque allocation on the hot path for short HTTP/3 responses.
-        bool default_fifo{};
-        std::vector<std::byte> bytes;
-    };
-
-    std::map<stream_id, stream_priority> stream_priorities;
-    std::deque<scheduled_stream_frame> default_stream_frames;
-    std::array<std::map<stream_id, std::deque<std::vector<std::byte>>>, 8>
-        prioritized_stream_frames;
-    std::array<std::deque<stream_id>, 8> priority_ready_streams;
-    // Keep the first packet latency of urgency 0, but distribute each epoch
-    // with a bounded weighted budget so a continuously busy foreground class
-    // cannot starve background streams.
-    priority_service_budget priority_budget;
+    std::deque<quic_send_frame> encoded_send_frames;
+    quic_stream_scheduler stream_scheduler;
 
     [[nodiscard]] auto has_prioritized_stream_frames() const noexcept -> bool
     {
-        return !default_stream_frames.empty() || std::ranges::any_of(priority_ready_streams, [](const auto& streams)
-                                                     {
-                                                         return !streams.empty();
-                                                     });
+        return !stream_scheduler.empty();
     }
 
     [[nodiscard]] auto prioritized_stream_frame_count() const noexcept -> std::size_t
     {
-        std::size_t count{default_stream_frames.size()};
-        for (const auto& bucket : prioritized_stream_frames)
-            for (const auto& [_, frames] : bucket)
-                count += frames.size();
-        return count;
+        return stream_scheduler.size();
     }
 
-    auto enqueue_stream_frame(stream_id stream, std::vector<std::byte> frame) -> void
+    auto enqueue_stream_frame(stream_id stream, quic_send_frame frame) -> void
     {
-        const auto priority = stream_priorities.find(stream);
-        if (priority == stream_priorities.end())
-        {
-            default_stream_frames.push_back(
-                scheduled_stream_frame{stream, 3U, true, std::move(frame)});
-            return;
-        }
-        auto& frames = prioritized_stream_frames[priority->second.urgency][stream];
-        if (frames.empty())
-            priority_ready_streams[priority->second.urgency].push_back(stream);
-        frames.push_back(std::move(frame));
+        stream_scheduler.enqueue(stream, std::move(frame));
     }
 
     [[nodiscard]] auto take_prioritized_stream_frame()
-        -> std::optional<scheduled_stream_frame>
+        -> std::optional<scheduled_quic_frame>
     {
-        for (;;)
-        {
-            std::array<bool, 8> ready{};
-            for (std::size_t urgency{}; urgency < ready.size(); ++urgency)
-                ready[urgency] = !priority_ready_streams[urgency].empty();
-            ready[3] = ready[3] || !default_stream_frames.empty();
-            const auto selected = priority_budget.take_next(ready);
-            if (!selected)
-                return std::nullopt;
-
-            const auto urgency = *selected;
-            if (urgency == 3U && !default_stream_frames.empty())
-            {
-                auto frame = std::move(default_stream_frames.front());
-                default_stream_frames.pop_front();
-                return frame;
-            }
-            auto& streams = priority_ready_streams[urgency];
-            while (!streams.empty())
-            {
-                const auto stream = streams.front();
-                streams.pop_front();
-                auto frames = prioritized_stream_frames[urgency].find(stream);
-                if (frames == prioritized_stream_frames[urgency].end() || frames->second.empty())
-                    continue;
-                auto frame = std::move(frames->second.front());
-                frames->second.pop_front();
-                const auto priority = stream_priorities.contains(stream)
-                    ? stream_priorities[stream]
-                    : stream_priority{};
-                if (!frames->second.empty())
-                {
-                    if (priority.incremental)
-                        streams.push_back(stream);
-                    else
-                        streams.push_front(stream);
-                }
-                else
-                {
-                    prioritized_stream_frames[urgency].erase(frames);
-                }
-                return scheduled_stream_frame{stream, urgency, false, std::move(frame)};
-            }
-            // A stale ready entry does not consume a scheduler quantum.
-            priority_budget.restore(urgency);
-        }
+        return stream_scheduler.take();
     }
 
-    auto requeue_prioritized_stream_frame(scheduled_stream_frame frame) -> void
+    auto requeue_prioritized_stream_frame(scheduled_quic_frame frame) -> void
     {
-        priority_budget.restore(frame.urgency);
-        if (frame.default_fifo)
-        {
-            default_stream_frames.push_front(std::move(frame));
-            return;
-        }
-        auto& frames = prioritized_stream_frames[frame.urgency][frame.stream];
-        if (frames.empty())
-            priority_ready_streams[frame.urgency].push_front(frame.stream);
-        frames.push_front(std::move(frame.bytes));
+        stream_scheduler.requeue(std::move(frame));
     }
 
-    auto requeue_application_frame(std::vector<std::byte> frame) -> void
+    auto requeue_application_frame(quic_send_frame frame) -> void
     {
-        // Retransmission metadata stores encoded frame bytes. Decode only the
-        // STREAM identifier here so loss recovery can preserve the RFC 9218
-        // class that originally selected the frame; all other frame types
-        // remain on the control FIFO.
-        const auto decoded = decode_frame(
-            std::span<const std::byte>{frame.data(), frame.size()});
-        if (decoded && std::holds_alternative<stream_frame>(decoded->first))
-        {
-            const auto stream = std::get<stream_frame>(decoded->first).stream_id;
-            const auto priority = stream_priorities.find(stream);
-            requeue_prioritized_stream_frame(
-                priority == stream_priorities.end()
-                    ? scheduled_stream_frame{stream, 3U, true, std::move(frame)}
-                    : scheduled_stream_frame{stream, priority->second.urgency, false,
-                          std::move(frame)});
-            return;
-        }
-        encoded_send_frames.push_front(std::move(frame));
+        if (!stream_scheduler.requeue_retransmission(frame))
+            encoded_send_frames.push_front(std::move(frame));
     }
 
     auto set_stream_priority(stream_id stream, std::uint8_t urgency,
         bool incremental) noexcept -> void
     {
-        urgency = std::min<std::uint8_t>(urgency, 7U);
-        const auto previous = stream_priorities.find(stream);
-        const auto previous_priority = previous == stream_priorities.end()
-            ? stream_priority{}
-            : previous->second;
-        const bool default_priority = urgency == 3U && !incremental;
-
-        if (default_priority)
-        {
-            if (previous == stream_priorities.end())
-                return;
-            stream_priorities.erase(previous);
-            auto pending = prioritized_stream_frames[previous_priority.urgency].find(stream);
-            if (pending == prioritized_stream_frames[previous_priority.urgency].end())
-                return;
-            auto frames = std::move(pending->second);
-            prioritized_stream_frames[previous_priority.urgency].erase(pending);
-            std::erase(priority_ready_streams[previous_priority.urgency], stream);
-            for (auto& frame : frames)
-                default_stream_frames.push_back(
-                    scheduled_stream_frame{stream, 3U, true, std::move(frame)});
-            return;
-        }
-
-        stream_priorities.insert_or_assign(stream, stream_priority{urgency, incremental});
-        if (previous != stream_priorities.end() &&
-            previous_priority.urgency == urgency)
-            return;
-
-        std::deque<std::vector<std::byte>> moved;
-        if (previous != stream_priorities.end())
-        {
-            auto pending = prioritized_stream_frames[previous_priority.urgency].find(stream);
-            if (pending == prioritized_stream_frames[previous_priority.urgency].end())
-                return;
-            moved = std::move(pending->second);
-            prioritized_stream_frames[previous_priority.urgency].erase(pending);
-            std::erase(priority_ready_streams[previous_priority.urgency], stream);
-        }
-        else
-        {
-            for (auto frame = default_stream_frames.begin(); frame != default_stream_frames.end();)
-            {
-                if (frame->stream != stream)
-                {
-                    ++frame;
-                    continue;
-                }
-                moved.push_back(std::move(frame->bytes));
-                frame = default_stream_frames.erase(frame);
-            }
-            if (moved.empty())
-                return;
-        }
-        auto& destination = prioritized_stream_frames[urgency][stream];
-        const bool was_empty = destination.empty();
-        destination.insert(destination.end(), std::make_move_iterator(moved.begin()),
-            std::make_move_iterator(moved.end()));
-        if (was_empty && !destination.empty())
-            priority_ready_streams[urgency].push_back(stream);
+        stream_scheduler.set_priority(stream, urgency, incremental);
     }
 
     // One coroutine-owned state domain serializes packet numbers, stream
@@ -650,6 +479,15 @@ struct quic_connection::quic_connection_impl
     // bit and must never be a plain bool.
     async_mutex flush_mutex;
     std::atomic<bool> send_flush_requested{};
+    static constexpr std::size_t max_send_batch_datagrams{16U};
+    // The packet owner is unique for a connection, including across the
+    // asynchronous socket submission below. Keep its MTU-sized ciphertext
+    // allocations and reuse them on the next burst instead of allocating one
+    // vector for every packet of every static response.
+    std::array<std::vector<std::byte>, max_send_batch_datagrams>
+        application_packet_storage;
+    std::array<std::vector<std::byte>, max_send_batch_datagrams>
+        application_payload_storage;
 
     // Stream coroutines are producers, never owners of QUIC state.  They
     // move already-owned bytes into this bounded lock-free queue; the packet
@@ -666,6 +504,8 @@ struct quic_connection::quic_connection_impl
         // Returned only for a rejected flow-control reservation. The bytes
         // have not been accounted or queued and can be retried without copy.
         std::vector<std::byte> rejected_bytes;
+        std::shared_ptr<const std::string> rejected_shared_bytes;
+
         class spin_lock
         {
         public:
@@ -763,7 +603,11 @@ struct quic_connection::quic_connection_impl
         [[nodiscard]] auto try_acquire() noexcept -> stream_write_completion*
         {
             const auto completion = available_.try_dequeue();
-            return completion ? *completion : nullptr;
+            if (!completion)
+                return nullptr;
+            (*completion)->rejected_bytes.clear();
+            (*completion)->rejected_shared_bytes.reset();
+            return *completion;
         }
 
         auto release(stream_write_completion& completion) noexcept -> void
@@ -796,6 +640,7 @@ struct quic_connection::quic_connection_impl
         std::uint8_t urgency{};
         bool incremental{};
         stream_write_completion* completion{};
+        std::shared_ptr<const std::string> shared_bytes;
     };
 
     concurrent_containers::bounded_mpmc_queue<stream_write_command>
@@ -883,9 +728,110 @@ struct quic_connection::quic_connection_impl
         return tls->reset_after_early_data_rejection();
     }
 
+    struct retransmittable_frame_storage
+    {
+        quic_send_frame first;
+        std::vector<quic_send_frame> additional;
+
+        retransmittable_frame_storage() = default;
+
+        explicit retransmittable_frame_storage(quic_send_frame frame)
+            : first(std::move(frame))
+        {
+        }
+
+        [[nodiscard]] auto empty() const noexcept -> bool
+        {
+            return first.empty();
+        }
+
+        [[nodiscard]] auto size() const noexcept -> std::size_t
+        {
+            return first.empty() ? 0U : 1U + additional.size();
+        }
+
+        auto push_back(quic_send_frame frame) -> void
+        {
+            if (first.empty())
+                first = std::move(frame);
+            else
+                additional.push_back(std::move(frame));
+        }
+
+        [[nodiscard]] auto operator[](std::size_t index) -> quic_send_frame&
+        {
+            return index == 0U ? first : additional[index - 1U];
+        }
+
+        [[nodiscard]] auto operator[](std::size_t index) const
+            -> const quic_send_frame&
+        {
+            return index == 0U ? first : additional[index - 1U];
+        }
+
+        template <class Function>
+        auto for_each(Function&& function) -> void
+        {
+            if (!first.empty())
+                function(first);
+            for (auto& frame : additional)
+                function(frame);
+        }
+
+        template <class Function>
+        auto for_each(Function&& function) const -> void
+        {
+            if (!first.empty())
+                function(first);
+            for (const auto& frame : additional)
+                function(frame);
+        }
+
+        template <class Function>
+        auto for_each_reverse(Function&& function) -> void
+        {
+            for (auto frame = additional.rbegin(); frame != additional.rend(); ++frame)
+                function(*frame);
+            if (!first.empty())
+                function(first);
+        }
+
+        template <class Function>
+        auto for_each_reverse(Function&& function) const -> void
+        {
+            for (auto frame = additional.rbegin(); frame != additional.rend(); ++frame)
+                function(*frame);
+            if (!first.empty())
+                function(first);
+        }
+
+        template <class Predicate>
+        auto erase_if(Predicate&& predicate) -> void
+        {
+            std::erase_if(additional, predicate);
+            if (!first.empty() && predicate(first))
+            {
+                if (additional.empty())
+                    first.clear();
+                else
+                {
+                    first = std::move(additional.front());
+                    additional.erase(additional.begin());
+                }
+            }
+        }
+
+        template <class Predicate>
+        [[nodiscard]] auto any_of(Predicate&& predicate) const -> bool
+        {
+            return (!first.empty() && predicate(first)) ||
+                std::ranges::any_of(additional, predicate);
+        }
+    };
+
     struct sent_packet_metadata
     {
-        std::vector<std::vector<std::byte>> retransmittable_frames;
+        retransmittable_frame_storage retransmittable_frames;
         std::size_t bytes{};
         // Set only for a padded PING used by Datagram PLPMTUD. The probe is
         // normal ack-eliciting QUIC traffic, so acknowledgement is the only
@@ -899,6 +845,7 @@ struct quic_connection::quic_connection_impl
     std::array<std::map<std::uint64_t, sent_packet_metadata>,
         encryption_level_count>
         sent_packets{};
+    std::array<std::size_t, encryption_level_count> retransmission_alias_counts{};
 
     // Initial and Handshake packet number spaces remain connection-wide.
     // draft-ietf-quic-multipath-12 creates a separate Application Data packet
@@ -931,6 +878,7 @@ struct quic_connection::quic_connection_impl
         std::optional<std::uint64_t> largest_received_packet_number;
         std::set<std::uint64_t> received_ack_eliciting_packet_numbers;
         std::map<std::uint64_t, sent_packet_metadata> sent_packets;
+        std::size_t retransmission_alias_count{};
         loss_detector recovery;
         congestion_controller congestion;
         std::optional<time_point> pacing_credit_updated_at;
@@ -1078,10 +1026,14 @@ struct quic_connection::quic_connection_impl
     [[nodiscard]] auto packet_payload_budget(const application_path_state& path) const noexcept
         -> std::size_t
     {
-        // Short header + CID + packet number + AEAD tag, with a small reserve
-        // for variable-length frame fields. Never underflow on malformed
-        // application configuration.
-        constexpr std::size_t overhead = 64U;
+        const auto* destination_cid = path_peer_connection_id(path);
+        const auto* keys = tls ? tls->write_keys(encryption_level::application) : nullptr;
+        // Frame encodings are already part of the plaintext payload. Only the
+        // short header, packet number, and AEAD tag sit outside it, so account
+        // their exact negotiated sizes instead of leaving unused bytes in
+        // every application datagram.
+        const auto overhead = 1U + (destination_cid ? destination_cid->size() : 20U) +
+            4U + (keys ? keys->tag_len : 16U);
         return path.discovered_max_datagram_payload > overhead
             ? path.discovered_max_datagram_payload - overhead
             : 0U;
@@ -1219,9 +1171,11 @@ struct quic_connection::quic_connection_impl
             for (auto packet = state.sent_packets.rbegin();
                 packet != state.sent_packets.rend(); ++packet)
             {
-                for (auto frame = packet->second.retransmittable_frames.rbegin();
-                    frame != packet->second.retransmittable_frames.rend(); ++frame)
-                    encoded_send_frames.push_front(*frame);
+                packet->second.retransmittable_frames.for_each_reverse(
+                    [this](const auto& frame)
+                    {
+                        encoded_send_frames.push_front(frame);
+                    });
             }
             state.congestion.on_packets_discarded(
                 state.recovery.discard_packet_number_space(pn_space::application));
@@ -1277,6 +1231,8 @@ struct quic_connection::quic_connection_impl
         ssl_context* supplied_tls_context = nullptr)
         : ctx(context), socket_context(context), owned_socket(std::move(udp_socket)), receive_storage(max_udp_receive_payload), socket(std::addressof(*owned_socket)), peer(std::move(remote)), connection_role(role), config(options), accepted_streams(std::max<std::uint64_t>(1U, std::min(options.max_streams_bidi, std::uint64_t{1024}) + std::min(options.max_streams_uni, std::uint64_t{1024}))), peer_max_data(options.max_data), local_advertised_max_data(options.max_data), peer_max_streams_bidi(options.max_streams_bidi), peer_max_streams_uni(options.max_streams_uni), local_max_streams_bidi(options.max_streams_bidi), local_max_streams_uni(options.max_streams_uni), next_bidi_stream(role == quic_role::client ? 0U : 1U), next_uni_stream(role == quic_role::client ? 2U : 3U), recovery(options), congestion(options)
     {
+        streams.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(128U,
+            options.max_streams_bidi + options.max_streams_uni)));
         if (config.multipath_initial_max_path_id && config.cid_length == 0U)
             throw std::system_error(std::make_error_code(std::errc::invalid_argument),
                 "Multipath QUIC requires non-empty connection IDs");
@@ -1354,6 +1310,8 @@ struct quic_connection::quic_connection_impl
         quic_config options, ssl_context& supplied_tls_context)
         : ctx(context), socket_context(datagram_context), socket(std::addressof(shared_socket)), peer(std::move(remote)), connection_role(role), config(options), accepted_streams(std::max<std::uint64_t>(1U, std::min(options.max_streams_bidi, std::uint64_t{1024}) + std::min(options.max_streams_uni, std::uint64_t{1024}))), peer_max_data(options.max_data), local_advertised_max_data(options.max_data), peer_max_streams_bidi(options.max_streams_bidi), peer_max_streams_uni(options.max_streams_uni), local_max_streams_bidi(options.max_streams_bidi), local_max_streams_uni(options.max_streams_uni), next_bidi_stream(role == quic_role::client ? 0U : 1U), next_uni_stream(role == quic_role::client ? 2U : 3U), recovery(options), congestion(options)
     {
+        streams.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(128U,
+            options.max_streams_bidi + options.max_streams_uni)));
         if (config.multipath_initial_max_path_id && config.cid_length == 0U)
             throw std::system_error(std::make_error_code(std::errc::invalid_argument),
                 "Multipath QUIC requires non-empty connection IDs");
@@ -1851,27 +1809,31 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     (void)sender; // path validation consumes sender in the next transport layer step
     if (packet.empty())
         co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
-    // A UDP datagram may carry several long-header packets.  Process every
-    // packet in wire order so a Handshake flight coalesced with an Initial is
-    // not silently discarded.
-    auto coalesced = split_coalesced_packets(packet);
-    if (!coalesced)
-        co_return std::unexpected(coalesced.error());
-    const bool packet_boundary_changed = coalesced->packets.size() != 1U ||
-        coalesced->packets.front().data() != packet.data() ||
-        coalesced->packets.front().size() != packet.size();
-    if (packet_boundary_changed)
+    const auto first = std::to_integer<std::uint8_t>(packet.front());
+    // Only long-header packets can be coalesced before another packet. A
+    // short-header packet always consumes the remainder of its UDP datagram
+    // (RFC 9000 section 12.2), so bypass the splitter and its packet-vector
+    // allocation on the established-connection hot path.
+    if ((first & 0x80U) != 0U)
     {
-        for (const auto individual : coalesced->packets)
+        auto coalesced = split_coalesced_packets(packet);
+        if (!coalesced)
+            co_return std::unexpected(coalesced.error());
+        const bool packet_boundary_changed = coalesced->packets.size() != 1U ||
+            coalesced->packets.front().data() != packet.data() ||
+            coalesced->packets.front().size() != packet.size();
+        if (packet_boundary_changed)
         {
-            auto processed = co_await process_packet(individual, sender);
-            if (!processed)
-                co_return std::unexpected(processed.error());
+            for (const auto individual : coalesced->packets)
+            {
+                auto processed = co_await process_packet(individual, sender);
+                if (!processed)
+                    co_return std::unexpected(processed.error());
+            }
+            co_return {};
         }
-        co_return {};
     }
 
-    const auto first = std::to_integer<std::uint8_t>(packet.front());
     if ((first & 0x80U) != 0U)
     {
         auto header = decode_long_header(packet);
@@ -1914,8 +1876,11 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             impl_->initial_keys = std::move(*keys);
             auto& pending = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
             for (auto& [_, sent] : impl_->sent_packets[level_index(encryption_level::initial)])
-                for (const auto& frame : sent.retransmittable_frames)
-                    pending.push_back(frame);
+                sent.retransmittable_frames.for_each(
+                    [&pending](const auto& frame)
+                    {
+                        pending.push_back(frame.owned_bytes());
+                    });
             impl_->sent_packets[level_index(encryption_level::initial)].clear();
             impl_->next_send_packet_number[level_index(encryption_level::initial)] = 0;
             auto sent = co_await send_initial_packets();
@@ -1957,8 +1922,11 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             impl_->largest_received_packet_number[level_index(encryption_level::initial)].reset();
             auto& pending = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
             for (auto& [_, sent] : impl_->sent_packets[level_index(encryption_level::initial)])
-                for (const auto& frame : sent.retransmittable_frames)
-                    pending.push_back(frame);
+                sent.retransmittable_frames.for_each(
+                    [&pending](const auto& frame)
+                    {
+                        pending.push_back(frame.owned_bytes());
+                    });
             impl_->sent_packets[level_index(encryption_level::initial)].clear();
             impl_->retry_received = true;
             auto sent = co_await send_initial_packets();
@@ -2421,7 +2389,10 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             co_return std::unexpected(frame ? std::make_error_code(std::errc::bad_message)
                                             : frame.error());
         ack_eliciting = ack_eliciting || is_ack_eliciting(frame->first);
-        co_await process_frames(frame->first);
+        if (const auto* acknowledgment = std::get_if<ack_frame>(&frame->first))
+            (void)process_ack_frame_state(*acknowledgment);
+        else
+            co_await process_frames(frame->first);
 
         frame_offset += frame->second;
     }
@@ -2961,7 +2932,8 @@ auto quic_connection::process_frames(const quic_frame_variant& frame) -> task<vo
     co_return;
 }
 
-auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
+auto quic_connection::process_ack_frame_state(const ack_frame& frame)
+    -> encryption_level
 {
     const auto level = impl_->receiving_level;
     const auto space = packet_number_space_for(level);
@@ -2971,17 +2943,26 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
     auto& congestion = path_scoped ? application_path.congestion : impl_->congestion;
     auto& sent = path_scoped ? application_path.sent_packets
                              : impl_->sent_packets[level_index(level)];
+    auto& retransmission_alias_count = path_scoped
+        ? application_path.retransmission_alias_count
+        : impl_->retransmission_alias_counts[level_index(level)];
     const auto now = std::chrono::steady_clock::now();
     auto acknowledged = recovery.on_ack_received(frame, frame.largest_acked,
         now, space);
     if (!acknowledged)
     {
         impl_->connection_state = connection_state::closing;
-        co_return;
+        return level;
     }
 
-    std::vector<std::vector<std::byte>> delivered_frames;
-    delivered_frames.reserve(acknowledged->size());
+    // PTO aliases are exceptional. In ordinary traffic every frame has one
+    // packet record, so collecting delivered bytes and walking the complete
+    // outstanding map cannot resolve anything. Avoid that O(ACKed * in-flight)
+    // work on the static-response hot path.
+    const bool resolve_retransmission_aliases = retransmission_alias_count != 0U;
+    std::vector<quic_send_frame> delivered_frames;
+    if (resolve_retransmission_aliases)
+        delivered_frames.reserve(acknowledged->size());
     bool acknowledged_retransmission_alias{};
     for (const auto packet_number : *acknowledged)
     {
@@ -3011,10 +2992,18 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
         // sibling packet is later declared lost (RFC 9002 section 6.2.4).
         // Keep the sibling packet itself in flight for congestion accounting;
         // only retire its now-obsolete retransmission metadata.
-        for (auto& delivered : it->second.retransmittable_frames)
-            delivered_frames.push_back(std::move(delivered));
+        if (resolve_retransmission_aliases)
+        {
+            it->second.retransmittable_frames.for_each(
+                [&delivered_frames](auto& delivered)
+                {
+                    delivered_frames.push_back(std::move(delivered));
+                });
+        }
         acknowledged_retransmission_alias =
             acknowledged_retransmission_alias || it->second.retransmission_alias;
+        if (it->second.retransmission_alias)
+            --retransmission_alias_count;
         congestion.on_packet_acked(it->second.bytes);
         sent.erase(it);
     }
@@ -3031,7 +3020,7 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
             // be regular and the complete outstanding set must be considered.
             if (!acknowledged_retransmission_alias && !metadata.retransmission_alias)
                 continue;
-            std::erase_if(metadata.retransmittable_frames,
+            metadata.retransmittable_frames.erase_if(
                 [&delivered_frames](const auto& candidate)
                 {
                     return std::ranges::find(delivered_frames, candidate) !=
@@ -3063,27 +3052,31 @@ auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
             }
         }
         lost_bytes += it->second.bytes;
-        for (auto frame = it->second.retransmittable_frames.rbegin();
-            frame != it->second.retransmittable_frames.rend(); ++frame)
-        {
-            if (path_scoped)
-                impl_->requeue_application_frame(std::move(*frame));
-            else
-                impl_->retransmit_crypto_frames[level_index(level)].push_front(
-                    std::move(*frame));
-        }
+        it->second.retransmittable_frames.for_each_reverse(
+            [this, path_scoped, level](auto& encoded)
+            {
+                if (path_scoped)
+                    impl_->requeue_application_frame(std::move(encoded));
+                else
+                    impl_->retransmit_crypto_frames[level_index(level)].push_front(
+                        encoded.release_owned_bytes());
+            });
+        if (it->second.retransmission_alias)
+            --retransmission_alias_count;
         sent.erase(it);
     }
     if (lost_bytes != 0U)
         congestion.on_congestion_event(lost_bytes);
+    return level;
+}
+
+auto quic_connection::process_ack_frame(const ack_frame& frame) -> task<void>
+{
+    const auto level = process_ack_frame_state(frame);
     if (level == encryption_level::initial)
-    {
         (void)co_await send_initial_packets();
-    }
     else if (level == encryption_level::handshake)
-    {
         (void)co_await send_handshake_packets();
-    }
     co_return;
 }
 
@@ -3578,8 +3571,11 @@ auto quic_connection::handle_pto() -> task<void>
     {
         if (level == encryption_level::application)
         {
-            for (auto frame = probe_frames.rbegin(); frame != probe_frames.rend(); ++frame)
-                impl_->encoded_send_frames.push_front(*frame);
+            probe_frames.for_each_reverse(
+                [this](const auto& frame)
+                {
+                    impl_->encoded_send_frames.push_front(frame);
+                });
             // MAX_STREAMS carries absolute monotonic state and a peer is not
             // required to emit STREAMS_BLOCKED when the newest update is
             // lost.  Include the current limits in every application PTO so
@@ -3597,8 +3593,11 @@ auto quic_connection::handle_pto() -> task<void>
         else
         {
             auto& pending = impl_->retransmit_crypto_frames[level_index(level)];
-            for (auto frame = probe_frames.rbegin(); frame != probe_frames.rend(); ++frame)
-                pending.push_front(*frame);
+            probe_frames.for_each_reverse(
+                [&pending](const auto& frame)
+                {
+                    pending.push_front(frame.owned_bytes());
+                });
             auto packet = level == encryption_level::initial
                 ? pack_initial_packet()
                 : pack_handshake_packet();
@@ -3672,8 +3671,6 @@ auto quic_connection::pack_and_send_packet() -> task<void>
 
 auto quic_connection::pack_and_send_packets() -> task<void>
 {
-    constexpr std::size_t max_batch_datagrams = 16U;
-
     struct pending_datagram
     {
         std::vector<std::byte> packet;
@@ -3681,7 +3678,7 @@ auto quic_connection::pack_and_send_packets() -> task<void>
     };
 
     std::vector<pending_datagram> pending;
-    pending.reserve(max_batch_datagrams);
+    pending.reserve(quic_connection_impl::max_send_batch_datagrams);
     bool primary_socket_only{};
     {
         co_await impl_->receive_mutex.lock();
@@ -3700,13 +3697,19 @@ auto quic_connection::pack_and_send_packets() -> task<void>
         {
             primary_socket_only = true;
             impl_->sending_application_path_id = 0U;
-            for (std::size_t index{}; index < max_batch_datagrams; ++index)
+            for (std::size_t index{};
+                index < quic_connection_impl::max_send_batch_datagrams; ++index)
             {
                 auto packet = pack_zero_rtt_packet();
                 if (packet.empty())
-                    packet = pack_one_rtt_packet();
+                    packet = pack_one_rtt_packet(false,
+                        std::move(impl_->application_packet_storage[index]),
+                        std::addressof(impl_->application_payload_storage[index]));
                 if (packet.empty())
+                {
+                    impl_->application_packet_storage[index] = std::move(packet);
                     break;
+                }
                 pending.push_back({std::move(packet),
                     impl_->sending_application_path().peer});
             }
@@ -3743,6 +3746,12 @@ auto quic_connection::pack_and_send_packets() -> task<void>
     // suffix after readiness. Packet metadata was already marked in-flight by
     // the packer, exactly as on the pre-existing single-send path.
     (void)co_await send_datagram_batch(datagrams);
+    for (std::size_t index{}; index < pending.size(); ++index)
+    {
+        pending[index].packet.clear();
+        impl_->application_packet_storage[index] =
+            std::move(pending[index].packet);
+    }
     co_return;
 }
 
@@ -3959,14 +3968,12 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
         length_field_size - pn_length - tag_length;
 
     std::vector<std::byte> payload;
-    std::vector<std::vector<std::byte>> retransmittable_frames;
+    quic_connection_impl::retransmittable_frame_storage retransmittable_frames;
     auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
     if (retransmit.empty())
     {
         const auto crypto = impl_->tls->take_handshake_data(encryption_level::initial);
-        if (!crypto.empty() && !queue_crypto_frames(crypto,
-                impl_->next_send_crypto_offset[level_index(encryption_level::initial)],
-                maximum_payload, retransmit))
+        if (!crypto.empty() && !queue_crypto_frames(crypto, impl_->next_send_crypto_offset[level_index(encryption_level::initial)], maximum_payload, retransmit))
             return {};
     }
     if (!retransmit.empty())
@@ -3994,7 +4001,7 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
     // Initial datagrams must be at least 1200 octets (RFC 9000 §14.1).  The
     // padding is authenticated and therefore added before sealing.
     const auto minimum_payload = min_initial_pkt_size > fixed_header +
-            length_field_size + pn_length + tag_length
+                length_field_size + pn_length + tag_length
         ? min_initial_pkt_size - fixed_header - length_field_size - pn_length - tag_length
         : 0;
     if (payload.size() < minimum_payload)
@@ -4038,9 +4045,7 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
     {
         impl_->congestion.on_packet_sent(header.size());
         impl_->sent_packets[level_index(encryption_level::initial)].emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{
-                std::move(retransmittable_frames), header.size(), std::nullopt,
-                false});
+            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), header.size(), std::nullopt, false});
     }
     return header;
 }
@@ -4063,14 +4068,12 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
         length_field_size - pn_length - tag_length;
 
     std::vector<std::byte> payload;
-    std::vector<std::vector<std::byte>> retransmittable_frames;
+    quic_connection_impl::retransmittable_frame_storage retransmittable_frames;
     auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)];
     if (retransmit.empty())
     {
         const auto crypto = impl_->tls->take_handshake_data(encryption_level::handshake);
-        if (!crypto.empty() && !queue_crypto_frames(crypto,
-                impl_->next_send_crypto_offset[level_index(encryption_level::handshake)],
-                maximum_payload, retransmit))
+        if (!crypto.empty() && !queue_crypto_frames(crypto, impl_->next_send_crypto_offset[level_index(encryption_level::handshake)], maximum_payload, retransmit))
             return {};
     }
     if (!retransmit.empty())
@@ -4129,14 +4132,14 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
     {
         impl_->congestion.on_packet_sent(header.size());
         impl_->sent_packets[level_index(encryption_level::handshake)].emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{
-                std::move(retransmittable_frames), header.size(), std::nullopt,
-                false});
+            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), header.size(), std::nullopt, false});
     }
     return header;
 }
 
-auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::byte>
+auto quic_connection::pack_one_rtt_packet(bool pto_probe,
+    std::vector<std::byte> packet_storage,
+    std::vector<std::byte>* payload_storage) -> std::vector<std::byte>
 {
     if (!impl_->tls)
         return {};
@@ -4149,9 +4152,15 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
     if (!destination_cid || path.locally_abandoned || path.peer_abandoned)
         return {};
 
-    std::vector<std::byte> payload;
+    std::vector<std::byte> local_payload;
+    auto& payload = payload_storage ? *payload_storage : local_payload;
+    payload.clear();
     const auto application_level = level_index(encryption_level::application);
     const auto payload_budget = impl_->packet_payload_budget(path);
+    payload.reserve(payload_budget);
+    packet_storage.clear();
+    packet_storage.reserve(1U + destination_cid->size() + 4U +
+        payload_budget + keys->tag_len);
     // PATH_ACK explicitly identifies the source packet-number space.  This
     // matters during PATH_ABANDON: the source can be in its three-PTO grace
     // period while this packet is sent on a different validated path.
@@ -4163,15 +4172,13 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
     }
     const auto ack = take_ack_frame(ack_source->received_ack_eliciting_packet_numbers);
     if (ack)
-        payload = impl_->multipath_negotiated
+    {
+        const auto encoded_ack = impl_->multipath_negotiated
             ? encode_frame(path_ack_frame{ack_source->id, *ack})
             : encode_frame(*ack);
-    // A normal 1-RTT packet grows to the negotiated datagram payload. Reserve
-    // that exact bound once so appending a STREAM frame does not repeatedly
-    // reallocate and copy the plaintext before AEAD sealing.
-    payload.reserve(payload_budget);
-    std::vector<std::vector<std::byte>> retransmittable_frames;
-    retransmittable_frames.reserve(2U);
+        payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
+    }
+    quic_connection_impl::retransmittable_frame_storage retransmittable_frames;
 
     // Keep the priority metadata separate from the retransmission bytes. It
     // lets a packet rejected by congestion control return a STREAM frame to
@@ -4191,25 +4198,25 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
     const auto remember_scheduled_metadata =
         [&first_scheduled_frame_metadata, &additional_scheduled_frame_metadata](
             std::size_t index, scheduled_stream_frame_metadata metadata)
-        {
-            if (!first_scheduled_frame_metadata)
-                first_scheduled_frame_metadata.emplace(index, metadata);
-            else
-                additional_scheduled_frame_metadata.emplace_back(index, metadata);
-        };
+    {
+        if (!first_scheduled_frame_metadata)
+            first_scheduled_frame_metadata.emplace(index, metadata);
+        else
+            additional_scheduled_frame_metadata.emplace_back(index, metadata);
+    };
     const auto scheduled_metadata_for =
         [&first_scheduled_frame_metadata, &additional_scheduled_frame_metadata](
             std::size_t index) -> const scheduled_stream_frame_metadata*
-        {
-            if (first_scheduled_frame_metadata &&
-                first_scheduled_frame_metadata->first == index)
-                return std::addressof(first_scheduled_frame_metadata->second);
-            const auto found = std::ranges::find(additional_scheduled_frame_metadata,
-                index, &scheduled_metadata_entry::first);
-            return found == additional_scheduled_frame_metadata.end()
-                ? nullptr
-                : std::addressof(found->second);
-        };
+    {
+        if (first_scheduled_frame_metadata &&
+            first_scheduled_frame_metadata->first == index)
+            return std::addressof(first_scheduled_frame_metadata->second);
+        const auto found = std::ranges::find(additional_scheduled_frame_metadata,
+            index, &scheduled_metadata_entry::first);
+        return found == additional_scheduled_frame_metadata.end()
+            ? nullptr
+            : std::addressof(found->second);
+    };
     const auto path_mtu_probe_target = path.path_mtu_probe_target;
     const bool contains_path_mtu_probe = path_mtu_probe_target.has_value();
     if (contains_path_mtu_probe)
@@ -4228,7 +4235,8 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             auto frame = std::move(retransmit_crypto.front());
             retransmit_crypto.pop_front();
             payload.insert(payload.end(), frame.begin(), frame.end());
-            retransmittable_frames.push_back(std::move(frame));
+            retransmittable_frames.push_back(
+                quic_send_frame{std::move(frame)});
         }
         else
         {
@@ -4239,14 +4247,15 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
                     impl_->next_send_crypto_offset[application_level], crypto});
                 impl_->next_send_crypto_offset[application_level] += crypto.size();
                 payload.insert(payload.end(), frame.begin(), frame.end());
-                retransmittable_frames.push_back(std::move(frame));
+                retransmittable_frames.push_back(
+                    quic_send_frame{std::move(frame)});
             }
         }
     }
     while ((!impl_->encoded_send_frames.empty() || impl_->has_prioritized_stream_frames()) &&
         payload.size() < payload_budget)
     {
-        std::vector<std::byte> frame;
+        quic_send_frame frame;
         std::optional<scheduled_stream_frame_metadata> frame_metadata;
         if (!impl_->encoded_send_frames.empty())
         {
@@ -4258,7 +4267,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             auto scheduled = impl_->take_prioritized_stream_frame();
             if (!scheduled)
                 break;
-            frame = std::move(scheduled->bytes);
+            frame = std::move(scheduled->frame);
             frame_metadata.emplace(scheduled_stream_frame_metadata{
                 scheduled->stream, scheduled->urgency, scheduled->default_fifo});
         }
@@ -4270,7 +4279,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             if (frame_metadata)
             {
                 impl_->requeue_prioritized_stream_frame(
-                    quic_connection_impl::scheduled_stream_frame{
+                    scheduled_quic_frame{
                         frame_metadata->stream, frame_metadata->urgency,
                         frame_metadata->default_fifo,
                         std::move(frame)});
@@ -4281,7 +4290,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             }
             break;
         }
-        payload.insert(payload.end(), frame.begin(), frame.end());
+        frame.append_to(payload);
         if (frame_metadata)
             remember_scheduled_metadata(retransmittable_frames.size(), *frame_metadata);
         retransmittable_frames.push_back(std::move(frame));
@@ -4307,12 +4316,11 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             payload.resize(required_payload, std::byte{0});
     }
     if (payload.empty())
-        return {};
-    const auto contains_connection_close = std::ranges::any_of(
-        retransmittable_frames, [](const auto& frame)
+        return packet_storage;
+    const auto contains_connection_close = retransmittable_frames.any_of(
+        [](const auto& frame)
         {
-            return !frame.empty() &&
-                (frame.front() == std::byte{0x1c} || frame.front() == std::byte{0x1d});
+            return frame.is_connection_close();
         });
     const auto estimated_packet_size = 1 + destination_cid->size() + 4 +
         payload.size() + keys->tag_len;
@@ -4325,7 +4333,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             if (metadata)
             {
                 impl_->requeue_prioritized_stream_frame(
-                    quic_connection_impl::scheduled_stream_frame{
+                    scheduled_quic_frame{
                         metadata->stream, metadata->urgency, metadata->default_fifo,
                         std::move(frame)});
             }
@@ -4334,7 +4342,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
                 impl_->encoded_send_frames.push_front(std::move(frame));
             }
         }
-        return {};
+        return packet_storage;
     }
     if (!pto_probe && (!retransmittable_frames.empty() || contains_path_mtu_probe) &&
         !contains_connection_close &&
@@ -4348,7 +4356,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             if (metadata)
             {
                 impl_->requeue_prioritized_stream_frame(
-                    quic_connection_impl::scheduled_stream_frame{
+                    scheduled_quic_frame{
                         metadata->stream, metadata->urgency, metadata->default_fifo,
                         std::move(frame)});
             }
@@ -4357,11 +4365,11 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
                 impl_->encoded_send_frames.push_front(std::move(frame));
             }
         }
-        return {};
+        return packet_storage;
     }
     constexpr std::size_t pn_length = 4;
     const auto packet_number = path.next_send_packet_number++;
-    std::vector<std::byte> packet;
+    auto packet = std::move(packet_storage);
     packet.reserve(estimated_packet_size);
     packet.push_back(impl_->tls->application_write_key_phase()
             ? std::byte{0x47}
@@ -4397,9 +4405,9 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
     {
         path.congestion.on_packet_sent(packet.size());
         path.sent_packets.emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{
-                std::move(retransmittable_frames), packet.size(),
-                path_mtu_probe_target, pto_probe});
+            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), packet.size(), path_mtu_probe_target, pto_probe});
+        if (pto_probe)
+            ++path.retransmission_alias_count;
     }
     return packet;
 }
@@ -4441,9 +4449,7 @@ auto quic_connection::pack_path_validation_packet(std::span<const std::byte> fra
         std::chrono::steady_clock::now(), true, pn_space::application);
     path.congestion.on_packet_sent(packet.size());
     path.sent_packets.emplace(
-        packet_number, quic_connection_impl::sent_packet_metadata{
-            {std::vector<std::byte>(frame.begin(), frame.end())}, packet.size(),
-            std::nullopt, false});
+        packet_number, quic_connection_impl::sent_packet_metadata{quic_connection_impl::retransmittable_frame_storage{quic_send_frame{std::vector<std::byte>(frame.begin(), frame.end())}}, packet.size(), std::nullopt, false});
     return packet;
 }
 
@@ -4491,11 +4497,18 @@ auto quic_connection::flush_send_queue() -> task<void>
             auto result = command->type ==
                     quic_connection_impl::stream_write_command::operation::datagram
                 ? co_await apply_application_datagram(std::move(command->bytes))
+                : command->shared_bytes
+                ? co_await apply_stream_write(command->stream,
+                      command->bytes, command->shared_bytes, command->fin)
                 : co_await apply_stream_write(command->stream,
                       command->bytes, command->fin);
             if (!result && result.error() == make_error_code(quic_errc::flow_control_error) &&
                 command->completion)
+            {
                 command->completion->rejected_bytes = std::move(command->bytes);
+                command->completion->rejected_shared_bytes =
+                    std::move(command->shared_bytes);
+            }
             if (command->completion)
                 command->completion->complete(std::move(result));
         }
@@ -4555,7 +4568,19 @@ auto quic_connection::flush_send_queue() -> task<void>
 auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
     bool fin) -> task<std::expected<void, std::error_code>>
 {
-    const std::span<const std::byte> payload{data.data(), data.size()};
+    co_return co_await apply_stream_write(sid, data, {}, fin);
+}
+
+auto quic_connection::apply_stream_write(stream_id sid,
+    const std::vector<std::byte>& prefix,
+    const std::shared_ptr<const std::string>& shared_data, bool fin)
+    -> task<std::expected<void, std::error_code>>
+{
+    const std::span<const std::byte> prefix_payload{prefix.data(), prefix.size()};
+    const auto shared_payload = shared_data
+        ? std::as_bytes(std::span{shared_data->data(), shared_data->size()})
+        : std::span<const std::byte>{};
+    const auto payload_size = prefix_payload.size() + shared_payload.size();
     if (is_closed() || impl_->connection_state == connection_state::draining)
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
     if (impl_->retired_streams.contains(sid))
@@ -4575,52 +4600,132 @@ auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::b
         it->second.value->init();
         it->second.readiness = std::make_unique<channel<std::monostate>>(1);
     }
-    if (payload.size() > impl_->peer_max_data -
+    if (payload_size > impl_->peer_max_data -
             std::min(impl_->peer_max_data, impl_->sent_stream_data))
         co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
-    auto sent = co_await it->second.value->send(payload);
-    if (!sent)
-        co_return std::unexpected(sent.error());
+    // Reserve the whole logical write before mutating stream accounting. A
+    // shared response is submitted as a small prefix followed by its cached
+    // body; accepting the prefix and then rejecting the body would otherwise
+    // leave a partial HTTP/3 frame on the stream.
+    if (payload_size > it->second.value->remaining_send_window())
+        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
+    if (!prefix_payload.empty())
+    {
+        auto sent = co_await it->second.value->send(prefix_payload);
+        if (!sent)
+            co_return std::unexpected(sent.error());
+    }
+    if (!shared_payload.empty())
+    {
+        auto sent = co_await it->second.value->send(shared_payload);
+        if (!sent)
+            co_return std::unexpected(sent.error());
+    }
+    if (payload_size == 0U)
+    {
+        auto sent = co_await it->second.value->send({});
+        if (!sent)
+            co_return std::unexpected(sent.error());
+    }
     if (fin)
         co_await it->second.value->close_local();
-    impl_->sent_stream_data += payload.size();
+    impl_->sent_stream_data += payload_size;
 
     // `quic_stream::send` accounts bytes before this point.  The wire offset
     // must therefore be the beginning of this write, not zero for every
     // STREAM frame.  Fragment the write so one application datagram never
     // exceeds the UDP payload budget.
-    const auto first_offset = it->second.value->bytes_sent() - payload.size();
-    auto send_datagram_payload = max_udp_payload;
+    const auto first_offset = it->second.value->bytes_sent() - payload_size;
+    auto send_packet_payload = max_udp_payload;
     for (const auto& [_, path] : impl_->application_paths)
     {
         if (!path->locally_abandoned && !path->peer_abandoned && path->validated)
-            send_datagram_payload = std::min(send_datagram_payload == max_udp_payload
-                    ? path->discovered_max_datagram_payload
-                    : send_datagram_payload,
-                path->discovered_max_datagram_payload);
+            send_packet_payload = std::min(send_packet_payload == max_udp_payload
+                    ? impl_->packet_payload_budget(*path)
+                    : send_packet_payload,
+                impl_->packet_payload_budget(*path));
     }
-    const auto max_stream_payload = send_datagram_payload > 96U
-        ? send_datagram_payload - 96U
-        : std::size_t{1U};
     const auto use_early_data = impl_->connection_role == quic_role::client &&
         (impl_->connection_state == connection_state::idle ||
             impl_->connection_state == connection_state::handshaking) &&
         impl_->tls->early_data_status() == early_data_state::pending;
     if (use_early_data)
         impl_->early_data_streams.insert(sid);
-    for (std::size_t sent_offset = 0; sent_offset < payload.size();)
+    for (std::size_t sent_offset = 0; sent_offset < payload_size;)
     {
-        const auto chunk = std::min(max_stream_payload, payload.size() - sent_offset);
+        const auto stream_offset = first_offset + sent_offset;
+        const auto fixed_frame_size = 1U +
+            static_cast<std::size_t>(varint_size(sid)) +
+            static_cast<std::size_t>(varint_size(stream_offset));
+        if (send_packet_payload <= fixed_frame_size + 1U)
+            co_return std::unexpected(std::make_error_code(std::errc::message_size));
+        auto chunk = std::min(payload_size - sent_offset,
+            send_packet_payload - fixed_frame_size - 1U);
+        while (fixed_frame_size + static_cast<std::size_t>(varint_size(chunk)) +
+                chunk >
+            send_packet_payload)
+            --chunk;
+        const auto frame_fin = fin && sent_offset + chunk == payload_size;
+        if (!use_early_data && sent_offset >= prefix_payload.size() && shared_data)
+        {
+            std::array<std::byte, 32> header{};
+            std::size_t header_size{};
+            const auto append_varint = [&header, &header_size](std::uint64_t value)
+            {
+                const auto encoded = encode_varint_to(value,
+                    std::span{header}.subspan(header_size));
+                if (!encoded)
+                    std::terminate();
+                header_size += *encoded;
+            };
+            std::uint64_t frame_type = 0x0aU;
+            if (stream_offset != 0U)
+                frame_type |= 0x04U;
+            if (frame_fin)
+                frame_type |= 0x01U;
+            append_varint(frame_type);
+            append_varint(sid);
+            if (stream_offset != 0U)
+                append_varint(stream_offset);
+            append_varint(chunk);
+            impl_->enqueue_stream_frame(sid,
+                quic_send_frame::shared_stream(
+                    std::span{header}.first(header_size), shared_data,
+                    sent_offset - prefix_payload.size(), chunk, sid));
+            sent_offset += chunk;
+            continue;
+        }
+        std::vector<std::byte> boundary_chunk;
+        std::span<const std::byte> chunk_payload;
+        if (sent_offset + chunk <= prefix_payload.size())
+        {
+            chunk_payload = prefix_payload.subspan(sent_offset, chunk);
+        }
+        else if (sent_offset >= prefix_payload.size())
+        {
+            chunk_payload = shared_payload.subspan(
+                sent_offset - prefix_payload.size(), chunk);
+        }
+        else
+        {
+            const auto prefix_count = prefix_payload.size() - sent_offset;
+            boundary_chunk.reserve(chunk);
+            boundary_chunk.insert(boundary_chunk.end(),
+                prefix_payload.begin() + sent_offset, prefix_payload.end());
+            boundary_chunk.insert(boundary_chunk.end(), shared_payload.begin(),
+                shared_payload.begin() + (chunk - prefix_count));
+            chunk_payload = boundary_chunk;
+        }
         auto frame = encode_frame(stream_frame{
-            sid, first_offset + sent_offset, payload.subspan(sent_offset, chunk),
-            fin && sent_offset + chunk == payload.size()});
+            sid, stream_offset, chunk_payload,
+            frame_fin});
         if (use_early_data)
             impl_->early_data_send_frames.push_back(std::move(frame));
         else
             impl_->enqueue_stream_frame(sid, std::move(frame));
         sent_offset += chunk;
     }
-    if (payload.empty() && fin)
+    if (payload_size == 0U && fin)
     {
         auto frame = encode_frame(stream_frame{sid, first_offset, {}, true});
         if (use_early_data)
@@ -4695,7 +4800,8 @@ auto quic_connection::async_send_fragments(stream_id sid,
                 stream->second.value->state() == stream_state::half_closed_local)
                 co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
             const auto connection_credit = impl_->peer_max_data > impl_->sent_stream_data
-                ? impl_->peer_max_data - impl_->sent_stream_data : 0U;
+                ? impl_->peer_max_data - impl_->sent_stream_data
+                : 0U;
             credit = std::min(connection_credit,
                 stream->second.value->remaining_send_window());
         }
@@ -4738,7 +4844,7 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
             continue;
         }
         if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::write,
-                sid, std::move(owned_data), fin, 0U, false, completion}))
+                sid, std::move(owned_data), fin, 0U, false, completion, {}}))
         {
             impl_->stream_write_completions.release(*completion);
             co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
@@ -4770,6 +4876,61 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
     }
 }
 
+auto quic_connection::async_send_shared(stream_id sid,
+    std::vector<std::byte>&& prefix,
+    std::shared_ptr<const std::string> shared_data, bool fin)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (!shared_data)
+        co_return co_await async_send(sid, std::move(prefix), fin);
+    for (;;)
+    {
+        auto* const completion = impl_->stream_write_completions.try_acquire();
+        if (!completion)
+        {
+            if (is_closed() || impl_->connection_state == connection_state::draining)
+                co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+            co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+            continue;
+        }
+        if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::write,
+                sid, std::move(prefix), fin, 0U, false, completion,
+                std::move(shared_data)}))
+        {
+            impl_->stream_write_completions.release(*completion);
+            co_return std::unexpected(
+                std::make_error_code(std::errc::resource_unavailable_try_again));
+        }
+
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+        impl_->receive_rearm_requested.store(true, std::memory_order_release);
+        if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
+            impl_->receive_wait_token.cancel();
+        co_await flush_send_queue();
+        const auto result = co_await completion->receive();
+        prefix = std::exchange(completion->rejected_bytes, {});
+        shared_data = std::exchange(completion->rejected_shared_bytes, {});
+        impl_->stream_write_completions.release(*completion);
+        if (!result && result.error() == make_error_code(quic_errc::flow_control_error))
+        {
+            std::vector<std::byte> owned_data;
+            owned_data.reserve(prefix.size() +
+                (shared_data ? shared_data->size() : 0U));
+            owned_data.insert(owned_data.end(), prefix.begin(), prefix.end());
+            if (shared_data)
+            {
+                const auto bytes = std::as_bytes(
+                    std::span{shared_data->data(), shared_data->size()});
+                owned_data.insert(owned_data.end(), bytes.begin(), bytes.end());
+            }
+            co_return co_await async_send_fragments(sid, std::move(owned_data), fin);
+        }
+        if (!result)
+            co_return std::unexpected(result.error());
+        co_return {};
+    }
+}
+
 auto quic_connection::set_stream_priority(stream_id sid, std::uint8_t urgency,
     bool incremental) noexcept -> bool
 {
@@ -4777,7 +4938,7 @@ auto quic_connection::set_stream_priority(stream_id sid, std::uint8_t urgency,
     // ordered before later writes from the same coroutine and never race the
     // owner while it traverses the RFC 9218 queues.
     if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::set_priority,
-            sid, {}, false, urgency, incremental, {}}))
+            sid, {}, false, urgency, incremental, {}, {}}))
         return false;
     impl_->send_flush_requested.store(true, std::memory_order_release);
     impl_->receive_rearm_requested.store(true, std::memory_order_release);
@@ -4811,7 +4972,7 @@ auto quic_connection::async_send_datagram(std::span<const std::byte> data)
         co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
     std::vector<std::byte> owned_data{data.begin(), data.end()};
     if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::datagram,
-            {}, std::move(owned_data), false, 0U, false, completion}))
+            {}, std::move(owned_data), false, 0U, false, completion, {}}))
     {
         impl_->stream_write_completions.release(*completion);
         co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));

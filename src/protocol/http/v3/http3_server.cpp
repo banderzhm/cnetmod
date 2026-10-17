@@ -706,7 +706,7 @@ public:
             return tokens->issue_stateless_reset_token(cid);
         };
         shards_.reserve(context.worker_count());
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
         dispatcher_ = std::make_shared<dispatch_state>();
         for (unsigned index{}; index < context.worker_count(); ++index)
         {
@@ -716,7 +716,7 @@ public:
             shard->route_epoch_slot_ = dispatcher_->add_worker(*shard);
             shards_.push_back(std::move(shard));
         }
-        #else
+#else
         for (unsigned index{}; index < context.worker_count(); ++index)
         {
             auto& worker = context.next_worker_io();
@@ -725,7 +725,7 @@ public:
             shard->inbox_budget_ = inbox_budget_;
             shards_.push_back(std::move(shard));
         }
-        #endif
+#endif
     }
 
     impl(server_context& context, ssl_context& tls, endpoint listen_endpoint,
@@ -790,7 +790,7 @@ public:
         listener_receive_wakeup_.reset();
         if (!shards_.empty())
         {
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
             if (!retry_tokens_->ready())
                 return std::unexpected(std::make_error_code(std::errc::io_error));
             tls_.configure_alpn_server({"h3"});
@@ -810,13 +810,16 @@ public:
                 return std::unexpected(opened.error());
             for (auto& shard : shards_)
             {
+                const auto inbox_capacity = std::bit_ceil(std::max<std::size_t>(
+                    8U, shard->inbox_limits_.max_connection_inboxes * 4U));
+                shard->inboxes_ = std::make_unique<inbox_map>(inbox_capacity);
                 shard->running_ = true;
                 spawn(shard->context_, shard->run_timer_loop());
             }
             running_ = true;
             spawn(context_, run_dispatch_loop());
             return {};
-        #else
+#else
             for (auto& shard : shards_)
             {
                 auto started = shard->start();
@@ -825,7 +828,7 @@ public:
             }
             running_ = true;
             return {};
-        #endif
+#endif
         }
         if (!retry_tokens_->ready())
             return std::unexpected(std::make_error_code(std::errc::io_error));
@@ -978,7 +981,9 @@ public:
             return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
         if (limits.per_connection_datagrams < 2U ||
             limits.max_queued_datagrams < 2U ||
-            limits.max_connection_inboxes == 0U)
+            limits.max_connection_inboxes == 0U ||
+            limits.max_connection_inboxes >
+                std::numeric_limits<std::size_t>::max() / 4U)
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         inbox_limits_ = limits;
         for (auto& shard : shards_)
@@ -997,9 +1002,9 @@ public:
         timer_wakeup_.cancel();
         if (!shards_.empty())
         {
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
             socket_.close();
-        #endif
+#endif
             for (auto& shard : shards_)
                 co_await shard->stop();
             co_return;
@@ -1053,7 +1058,7 @@ public:
             inbox_budget_->creation_dropped.load(std::memory_order_relaxed),
             pooled_receive_datagrams_.load(std::memory_order_relaxed),
             heap_receive_datagrams_.load(std::memory_order_relaxed)};
-        #ifdef CNETMOD_PLATFORM_WINDOWS
+#ifdef CNETMOD_PLATFORM_WINDOWS
         if (!processor_only_ && datagram_socket_ != nullptr)
         {
             const auto socket_statistics = datagram_socket_->native_socket().async_statistics();
@@ -1062,7 +1067,7 @@ public:
             result.rio_receive_queue_dropped_datagrams = socket_statistics.receive_queue_drops;
             result.rio_fallbacks = socket_statistics.registered_io_fallback ? 1U : 0U;
         }
-        #endif
+#endif
         result.active_connections = active_connections_.load(std::memory_order_relaxed);
         for (const auto& shard : shards_)
         {
@@ -1155,7 +1160,7 @@ private:
             concurrent_containers::exclusive_latch_guard state_guard{state_latch_};
             reset_routes_.insert_or_assign(route.cid, stateless_reset_route{route.stateless_reset_token, std::chrono::steady_clock::now() + stateless_reset_retention});
         }
-        if (dispatcher_)
+        if (dispatcher_ && inboxes_)
             dispatcher_->retain_reset_route(*this, route.cid);
     }
 
@@ -1238,12 +1243,12 @@ private:
                     dispatcher_->erase(*this, entry.first);
                 return true;
             });
-        if (dispatcher_)
+        if (dispatcher_ && inboxes_)
         {
             const auto stale_before = now - std::chrono::seconds{10};
-            const auto removed = inboxes_.erase_if([stale_before](
-                                                       const inbox_key& key,
-                                                       const std::shared_ptr<connection_inbox>& inbox)
+            const auto removed = inboxes_->erase_if([stale_before](
+                                                        const inbox_key& key,
+                                                        const std::shared_ptr<connection_inbox>& inbox)
                 {
                     return key.connection == nullptr &&
                         inbox->promoted_connection.load(std::memory_order_acquire) == nullptr &&
@@ -1383,21 +1388,21 @@ private:
                         co_return;
                     if (std::addressof(context_) != std::addressof(socket_context_))
                         co_await post_awaitable{socket_context_};
-                        // A shared Windows RIO receive ring is kept persistent,
-                        // but stateless Retry is a control-plane packet and must
-                        // remain available even if the provider rejects RIO send
-                        // registration. Submit it explicitly through the socket
-                        // context's IOCP and resume there; this also avoids
-                        // mixing a Retry with a connection worker's send queue.
-        #ifdef CNETMOD_HAS_IOCP
+                    // A shared Windows RIO receive ring is kept persistent,
+                    // but stateless Retry is a control-plane packet and must
+                    // remain available even if the provider rejects RIO send
+                    // registration. Submit it explicitly through the socket
+                    // context's IOCP and resume there; this also avoids
+                    // mixing a Retry with a connection worker's send queue.
+#ifdef CNETMOD_HAS_IOCP
                     (void)co_await async_sendto_on(socket_context_, socket_context_,
                         datagram_socket_->native_socket(),
                         const_buffer{retry->data(), retry->size()}, sender);
-        #else
+#else
                     (void)co_await async_sendto(socket_context_,
                         datagram_socket_->native_socket(),
                         const_buffer{retry->data(), retry->size()}, sender);
-        #endif
+#endif
 
                     if (std::addressof(context_) != std::addressof(socket_context_))
                         co_await post_awaitable{context_};
@@ -1539,8 +1544,10 @@ private:
     auto promote_pending_inbox(const quic::connection_id& pending_cid,
         quic::quic_connection& connection) -> void
     {
+        if (!inboxes_)
+            std::terminate();
         const auto pending_key = inbox_key{nullptr, pending_cid};
-        const auto pending = inboxes_.find(pending_key);
+        const auto pending = inboxes_->find(pending_key);
         if (!pending)
             return;
         // Keep the pending CID as an alias until the connection closes. A
@@ -1550,18 +1557,20 @@ private:
         (*pending)->promoted_connection.store(std::addressof(connection),
             std::memory_order_release);
         const inbox_key connection_key{std::addressof(connection), {}};
-        if (inboxes_.try_emplace(connection_key, *pending))
+        if (inboxes_->try_emplace(connection_key, *pending))
             return;
-        const auto existing = inboxes_.find(connection_key);
+        const auto existing = inboxes_->find(connection_key);
         if (!existing || *existing != *pending)
             logger::error{"HTTP/3 failed to preserve the pending inbox during CID promotion"};
     }
 
     auto remove_connection_inboxes(quic::quic_connection& connection) -> void
     {
-        const auto removed = inboxes_.erase_if([target = std::addressof(connection)](
-                                                   const inbox_key& key,
-                                                   const std::shared_ptr<connection_inbox>& inbox)
+        if (!inboxes_)
+            std::terminate();
+        const auto removed = inboxes_->erase_if([target = std::addressof(connection)](
+                                                    const inbox_key& key,
+                                                    const std::shared_ptr<connection_inbox>& inbox)
             {
                 return key.connection == target ||
                     inbox->promoted_connection.load(std::memory_order_acquire) == target;
@@ -1573,8 +1582,10 @@ private:
     auto enqueue(quic::quic_connection* connection,
         const quic::connection_id& dcid, udp_received_datagram incoming) -> void
     {
+        if (!inboxes_)
+            std::terminate();
         const inbox_key key{connection, connection ? quic::connection_id{} : dcid};
-        auto inbox = inboxes_.find(key);
+        auto inbox = inboxes_->find(key);
         if (!inbox)
         {
             const auto previous = inbox_budget_->active_inboxes.fetch_add(1U,
@@ -1587,12 +1598,12 @@ private:
             }
             auto candidate = std::make_shared<connection_inbox>(
                 inbox_limits_.per_connection_datagrams);
-            if (inboxes_.try_emplace(key, candidate))
+            if (inboxes_->try_emplace(key, candidate))
                 inbox = std::move(candidate);
             else
             {
                 inbox_budget_->active_inboxes.fetch_sub(1U, std::memory_order_release);
-                inbox = inboxes_.find(key);
+                inbox = inboxes_->find(key);
             }
         }
         if (!inbox)
@@ -1836,9 +1847,12 @@ private:
     // shard receives its own epoch slot before the listener starts.
     std::size_t route_epoch_slot_{};
     std::vector<std::unique_ptr<impl>> shards_;
-    concurrent_containers::atomic_hash_map<inbox_key, std::shared_ptr<connection_inbox>,
-        inbox_key_hash>
-        inboxes_{dispatch_state::route_capacity};
+    using inbox_map = concurrent_containers::atomic_hash_map<inbox_key,
+        std::shared_ptr<connection_inbox>, inbox_key_hash>;
+    // Only Windows shared-socket workers dispatch across execution contexts.
+    // Linux SO_REUSEPORT shards process their own socket and never allocate
+    // this fixed-capacity table.
+    std::unique_ptr<inbox_map> inboxes_;
     bool processor_only_{};
     bool shared_port_{};
     std::atomic<bool> running_{false};

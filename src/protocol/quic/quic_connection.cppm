@@ -18,6 +18,7 @@ import cnetmod.coro.cancel;
 import cnetmod.coro.channel;
 import cnetmod.coro.mutex;
 import cnetmod.coro.shared_mutex;
+export import cnetmod.protocol.quic.send_pipeline;
 import cnetmod.protocol.udp;
 import :foundation;
 import :frame;
@@ -43,57 +44,6 @@ export enum class connection_state
     closed       // Closed completely
 };
 
-/// Weighted RFC 9218 service budget used by the connection-local stream
-/// scheduler. Urgency 0 keeps its first-packet preference, while every
-/// non-empty lower-priority class receives service in the same bounded epoch.
-/// It contains no synchronization: one QUIC connection owns it through its
-/// serialized protocol execution domain.
-export class priority_service_budget
-{
-public:
-    static constexpr std::array<std::uint8_t, 8> quantum{
-        16U, 8U, 4U, 2U, 1U, 1U, 1U, 1U};
-
-    [[nodiscard]] auto take_next(const std::array<bool, 8>& ready)
-        -> std::optional<std::uint8_t>
-    {
-        for (unsigned epoch{}; epoch < 2U; ++epoch)
-        {
-            for (std::uint8_t urgency{}; urgency < credits_.size(); ++urgency)
-            {
-                if (ready[urgency] && credits_[urgency] != 0U)
-                {
-                    --credits_[urgency];
-                    return urgency;
-                }
-            }
-            if (!std::ranges::any_of(ready, [](bool value)
-                    {
-                        return value;
-                    }))
-                return std::nullopt;
-            credits_ = quantum;
-        }
-        return std::nullopt;
-    }
-
-    /// Return a reservation when packet construction did not consume it.
-    void restore(std::uint8_t urgency) noexcept
-    {
-        urgency = std::min<std::uint8_t>(urgency, 7U);
-        credits_[urgency] = std::min<std::uint8_t>(quantum[urgency],
-            static_cast<std::uint8_t>(credits_[urgency] + 1U));
-    }
-
-    void reset() noexcept
-    {
-        credits_ = quantum;
-    }
-
-private:
-    std::array<std::uint8_t, 8> credits_{quantum};
-};
-
 // =============================================================================
 // QUIC Connection - Main async coordinator
 // =============================================================================
@@ -109,6 +59,7 @@ public:
         std::uint64_t received_final_size{};
         std::uint64_t sent_final_size{};
     };
+
     static constexpr std::size_t final_size_capacity{1024U};
     void insert(stream_id id, final_sizes sizes);
     [[nodiscard]] auto contains(stream_id id) const -> bool;
@@ -199,6 +150,15 @@ public:
     [[nodiscard]] auto async_send(
         stream_id sid,
         std::vector<std::byte>&& data,
+        bool fin = false)
+        -> task<std::expected<void, std::error_code>>;
+
+    /// Send an owned wire prefix followed by immutable shared storage without
+    /// copying the complete logical write into one temporary buffer.
+    [[nodiscard]] auto async_send_shared(
+        stream_id sid,
+        std::vector<std::byte>&& prefix,
+        std::shared_ptr<const std::string> shared_data,
         bool fin = false)
         -> task<std::expected<void, std::error_code>>;
 
@@ -461,6 +421,7 @@ private:
 
     /// Frame handlers
     [[nodiscard]] auto process_ack_frame(const ack_frame& frame) -> task<void>;
+    auto process_ack_frame_state(const ack_frame& frame) -> encryption_level;
     [[nodiscard]] auto process_stream_frame(const stream_frame& frame) -> task<void>;
     [[nodiscard]] auto process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>;
     [[nodiscard]] auto process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>;
@@ -502,7 +463,9 @@ private:
     [[nodiscard]] auto pack_initial_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_zero_rtt_packet() -> std::vector<std::byte>;
     [[nodiscard]] auto pack_handshake_packet() -> std::vector<std::byte>;
-    [[nodiscard]] auto pack_one_rtt_packet(bool pto_probe = false)
+    [[nodiscard]] auto pack_one_rtt_packet(bool pto_probe = false,
+        std::vector<std::byte> packet_storage = {},
+        std::vector<std::byte>* payload_storage = nullptr)
         -> std::vector<std::byte>;
     [[nodiscard]] auto pack_path_validation_packet(std::span<const std::byte> frame)
         -> std::vector<std::byte>;
@@ -530,6 +493,10 @@ private:
     /// callers never mutate stream or flow-control state directly.
     [[nodiscard]] auto apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
         bool fin) -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto apply_stream_write(stream_id sid,
+        const std::vector<std::byte>& prefix,
+        const std::shared_ptr<const std::string>& shared_data, bool fin)
+        -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto async_send_fragments(stream_id sid,

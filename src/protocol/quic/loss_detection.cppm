@@ -168,10 +168,15 @@ public:
         for (auto it = space_state.in_flight_packets_.begin();
             it != space_state.in_flight_packets_.end();)
         {
+            // Both RFC 9002 loss tests apply only at or below the largest
+            // acknowledged packet number. The map is ordered, so every later
+            // entry is ineligible in this pass. Avoid walking the whole newer
+            // flight on every ACK during a high-bandwidth transfer.
+            if (it->first > space_state.largest_acked_pn_)
+                break;
             const bool packet_threshold = it->first + 3 <= space_state.largest_acked_pn_;
             const bool time_threshold = it->second.sent_time + loss_threshold <= now;
-            if (it->first <= space_state.largest_acked_pn_ &&
-                (packet_threshold || time_threshold))
+            if (packet_threshold || time_threshold)
             {
                 lost.push_back(it->first);
                 space_state.bytes_in_flight_ -= it->second.bytes;

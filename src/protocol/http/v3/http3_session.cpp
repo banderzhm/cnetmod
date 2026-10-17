@@ -1996,11 +1996,15 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 
     std::expected<void, std::error_code> response_sent;
     std::optional<byte_buffer> prepared_response;
+    std::shared_ptr<const std::string> prepared_shared_body;
     {
         co_await response_header_mutex_.lock();
         cnetmod::async_lock_guard header_guard{
             response_header_mutex_, std::adopt_lock};
-        auto encoded = response_frames(encoder_, response, id, suppress_response_body);
+        auto encoded = response.shared_body && !suppress_response_body &&
+                response.trailers.empty()
+            ? response_headers_frame(encoder_, response, id)
+            : response_frames(encoder_, response, id, suppress_response_body);
         if (!encoded)
         {
             co_await conn_.async_close(encoded.error(),
@@ -2030,10 +2034,31 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 co_return;
             }
         }
+        if (response.shared_body && !suppress_response_body &&
+            response.trailers.empty())
+        {
+            append_varint(static_cast<std::uint64_t>(http3_frame_type::data), *encoded);
+            append_varint(static_cast<std::uint64_t>(response.shared_body->size()), *encoded);
+            prepared_shared_body = response.shared_body;
+        }
         prepared_response.emplace(std::move(*encoded));
     }
     if (prepared_response)
-        response_sent = co_await conn_.async_send(id, std::move(*prepared_response), true);
+    {
+        if (prepared_shared_body)
+        {
+            std::vector<std::byte> prefix(
+                std::make_move_iterator(prepared_response->begin()),
+                std::make_move_iterator(prepared_response->end()));
+            response_sent = co_await conn_.async_send_shared(id,
+                std::move(prefix), std::move(prepared_shared_body), true);
+        }
+        else
+        {
+            response_sent = co_await conn_.async_send(
+                id, std::move(*prepared_response), true);
+        }
+    }
     if (response_sent)
         (void)conn_.retire_stream(id);
 }
