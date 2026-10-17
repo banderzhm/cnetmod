@@ -27,6 +27,18 @@ struct intercepted_statement
 };
 
 /**
+ * @brief Stable policy identity used by per-statement controls.
+ */
+enum class interceptor_kind : std::uint8_t
+{
+    custom,
+    tenant_isolation,
+    data_permission,
+    logical_delete,
+    sql_safety,
+};
+
+/**
  * @brief Per-statement controls that cannot disable isolation or SQL safety.
  */
 struct statement_interceptor_options
@@ -57,7 +69,8 @@ public:
     interceptor_chain(const interceptor_chain&) = delete;
     auto operator=(const interceptor_chain&) -> interceptor_chain& = delete;
 
-    auto add(std::string name, int priority, sql_interceptor_function function)
+    auto add(std::string name, int priority, sql_interceptor_function function,
+        interceptor_kind kind = interceptor_kind::custom)
         -> std::expected<void, std::string>;
     auto freeze() -> std::expected<void, std::string>;
     [[nodiscard]] auto frozen() const noexcept -> bool;

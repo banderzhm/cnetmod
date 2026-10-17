@@ -177,12 +177,40 @@ if(UNIX)
         message(FATAL_ERROR
             "cnetmod requires the libc++ module directory matching the consumer compiler")
     endif()
+    foreach(_cnetmod_module_target IN ITEMS
+            cnetmod::runtime yaml_cpp::yaml_cpp)
+        if(TARGET ${_cnetmod_module_target})
+            set_property(TARGET ${_cnetmod_module_target} APPEND PROPERTY
+                INTERFACE_INCLUDE_DIRECTORIES
+                    "${_cnetmod_libcxx_module_dir}")
+        endif()
+    endforeach()
     set_property(TARGET cnetmod::runtime APPEND PROPERTY
-        INTERFACE_INCLUDE_DIRECTORIES "${_cnetmod_libcxx_module_dir}")
-    set_property(TARGET cnetmod::runtime APPEND PROPERTY
-        INTERFACE_COMPILE_OPTIONS "-stdlib=libc++;-nostdinc++")
+        INTERFACE_COMPILE_OPTIONS "-stdlib=libc++")
     set_property(TARGET cnetmod::runtime APPEND PROPERTY
         INTERFACE_LINK_OPTIONS "-stdlib=libc++")
+    if(APPLE)
+        find_library(_cnetmod_libcxx_runtime NAMES c++
+            PATHS "${_cnetmod_compiler_prefix}/lib/c++"
+            NO_DEFAULT_PATH)
+        find_library(_cnetmod_libunwind_runtime NAMES unwind
+            PATHS "${_cnetmod_compiler_prefix}/lib/unwind"
+            NO_DEFAULT_PATH)
+        if(NOT _cnetmod_libcxx_runtime OR NOT _cnetmod_libunwind_runtime)
+            message(FATAL_ERROR
+                "cnetmod requires the libc++ and libunwind runtimes matching the consumer compiler")
+        endif()
+        get_filename_component(_cnetmod_libcxx_runtime_dir
+            "${_cnetmod_libcxx_runtime}" DIRECTORY)
+        get_filename_component(_cnetmod_libunwind_runtime_dir
+            "${_cnetmod_libunwind_runtime}" DIRECTORY)
+        set_property(TARGET cnetmod::runtime APPEND PROPERTY
+            INTERFACE_LINK_LIBRARIES
+                "${_cnetmod_libcxx_runtime};${_cnetmod_libunwind_runtime}")
+        set_property(TARGET cnetmod::runtime APPEND PROPERTY
+            INTERFACE_LINK_OPTIONS
+                "-Wl,-rpath,${_cnetmod_libcxx_runtime_dir};-Wl,-rpath,${_cnetmod_libunwind_runtime_dir}")
+    endif()
 endif()
 
 # MSBuild supplies `import std` itself, but Ninja has no equivalent implicit

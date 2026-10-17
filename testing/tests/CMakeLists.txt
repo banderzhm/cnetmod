@@ -105,6 +105,7 @@ if(NOT CNETMOD_ENABLE_HTTP)
         "^(test_http|test_tfb|test_metrics)")
     list(REMOVE_ITEM TEST_SOURCES test_application.cpp
         test_application_integrations.cpp test_application_composition.cpp
+        test_configuration_properties.cpp test_json_template.cpp
         test_otlp_exporter.cpp http_client_test.cpp)
 endif()
 if(NOT CNETMOD_ENABLE_DNS)
@@ -185,7 +186,12 @@ endif()
 function(cnetmod_test_component TEST_NAME OUTPUT_VARIABLE)
     set(_target cnetmod_runtime)
 
-    if(TEST_NAME MATCHES "^test_application($|_)" OR
+    if(TEST_NAME STREQUAL "test_application_result")
+        # R<T, E> is exported by cnetmod.utils and belongs to the runtime
+        # component.  Keep this test available in the protocol-free core
+        # profile where cnetmod_application is intentionally not built.
+        set(_target cnetmod_runtime)
+    elseif(TEST_NAME MATCHES "^test_application($|_)" OR
             TEST_NAME MATCHES "^(test_configuration_properties|test_json_template|test_otlp_exporter|test_http_observability|test_http_disabled_overhead|test_grpc)$")
         set(_target cnetmod_application)
     elseif(TEST_NAME MATCHES

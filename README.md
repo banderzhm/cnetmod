@@ -22,6 +22,16 @@ English | [简体中文](README_zh.md)
 
 The [`skill/`](skill/) directory contains the project-specific instructions for AI-assisted development. AI agents should read [`skill/SKILL.md`](skill/SKILL.md) first, then consult the topic-specific guidance under `skill/core`, `skill/coro`, `skill/database`, `skill/http`, `skill/infra`, `skill/protocols`, and `skill/security` as needed.
 
+### Prebuilt SDK releases
+
+Versioned releases publish exact-target SDK archives for Windows, Linux, and
+macOS. Each archive contains installable CMake package metadata, module
+interfaces, libraries, a machine-readable ABI manifest, checksums, an SPDX
+SBOM, and build provenance. See
+[`skill/infra/distribution.md`](skill/infra/distribution.md) for target naming,
+download verification, branch policy, and `find_package(... COMPONENTS ...)`
+usage.
+
 ### Engineering Evidence
 
 - **Architecture**: C++23 module interfaces with platform-specific implementations selected by CMake; native IOCP, io_uring, epoll, and kqueue backends share the same coroutine-facing APIs.

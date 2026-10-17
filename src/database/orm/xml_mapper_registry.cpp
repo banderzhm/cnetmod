@@ -114,9 +114,9 @@ auto mapper_registry::statement_result_map(std::string_view id) const
 auto mapper_registry::statement_logical_delete(std::string_view id) const
     -> bool
 {
-    if (auto* stmt = find_statement(id);
-        stmt && stmt->has_attr("logicalDelete"))
-        return stmt->attr("logicalDelete") == "true";
+    if (auto* statement = find_statement(id);
+        statement && statement->has_attr("logicalDelete"))
+        return statement->attr("logicalDelete") == "true";
     return true;
 }
 

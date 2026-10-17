@@ -707,6 +707,35 @@ TEST(orm_interceptor_chain_rewrites_typed_sql_before_protocol_client)
         "SELECT * FROM `tenant_orders` WHERE `id` = {}");
 }
 
+TEST(orm_statement_options_filter_by_policy_kind_not_display_name)
+{
+    orm::interceptor_chain chain;
+    std::size_t logical_calls{};
+    std::size_t custom_calls{};
+    ASSERT_TRUE(chain.add("renamed-policy", 10, [&logical_calls](orm::sql_operation, orm::intercepted_statement statement) -> std::expected<orm::intercepted_statement, std::string>
+        {
+            ++logical_calls;
+            return statement;
+        },
+        orm::interceptor_kind::logical_delete));
+    ASSERT_TRUE(chain.add("logical_delete", 20,
+        [&custom_calls](orm::sql_operation,
+            orm::intercepted_statement statement)
+            -> std::expected<orm::intercepted_statement, std::string>
+        {
+            ++custom_calls;
+            return statement;
+        }));
+    ASSERT_TRUE(chain.freeze());
+
+    const auto result = chain.apply(orm::sql_operation::query,
+        {"SELECT 1", {}},
+        orm::statement_interceptor_options{.logical_delete = false});
+    ASSERT_TRUE(result);
+    ASSERT_EQ(logical_calls, 0U);
+    ASSERT_EQ(custom_calls, 1U);
+}
+
 TEST(orm_interceptor_chain_rejection_short_circuits_protocol_client)
 {
     recording_session_client client;

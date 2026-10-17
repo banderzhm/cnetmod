@@ -122,12 +122,12 @@ namespace detail {
         }
 
         /**
-     * @brief Creates a session pinned to one routed physical table.
-     *
-     * Model metadata remains unchanged. Every typed CRUD statement generated
-     * by this session uses the supplied physical table, while raw SQL methods
-     * keep their original behavior.
-     */
+         * @brief Creates a session pinned to one routed physical table.
+         *
+         * Model metadata remains unchanged. Every typed CRUD statement generated
+         * by this session uses the supplied physical table, while raw SQL methods
+         * keep their original behavior.
+         */
         mapper_operations(Client& client, std::string physical_table,
             sql_dialect dialect = sql_dialect::mysql,
             std::shared_ptr<const interceptor_chain> interceptors = {})
@@ -203,12 +203,12 @@ namespace detail {
 
     private:
         /**
-     * @brief Builds an intercepted SELECT statement without executing it.
-     *
-     * Protocol-specific streaming adapters use this boundary to share routed
-     * table names, dialect placeholders and the session interceptor chain. The
-     * returned object owns both SQL text and bind values across suspension.
-     */
+         * @brief Builds an intercepted SELECT statement without executing it.
+         *
+         * Protocol-specific streaming adapters use this boundary to share routed
+         * table names, dialect placeholders and the session interceptor chain. The
+         * returned object owns both SQL text and bind values across suspension.
+         */
         template <Model T>
         auto prepare_select(const query_wrapper<T>& query) const
             -> std::expected<parameterized_query, std::string>
@@ -220,8 +220,8 @@ namespace detail {
         }
 
         /**
-     * @brief Opens a stateful cursor over a typed query.
-     */
+         * @brief Opens a stateful cursor over a typed query.
+         */
         template <Model T>
         auto open_cursor(query_wrapper<T> query = {}, cursor_options options = {})
             -> cursor<T>
@@ -231,15 +231,15 @@ namespace detail {
         }
 
         /**
-     * @brief Installs the standard tenant, logical-delete and SQL-safety chain.
-     *
-     * Installation is explicit so low-level sessions retain their historical
-     * behavior. Application repositories and gateways can call this once at
-     * composition time; all subsequent typed and raw operations share the
-     * same frozen chain. Model-stage field filling and optimistic locking are
-     * installed from the same options so disabling a policy is effective for
-     * every operation performed by this session.
-     */
+         * @brief Installs the standard tenant, logical-delete and SQL-safety chain.
+         *
+         * Installation is explicit so low-level sessions retain their historical
+         * behavior. Application repositories and gateways can call this once at
+         * composition time; all subsequent typed and raw operations share the
+         * same frozen chain. Model-stage field filling and optimistic locking are
+         * installed from the same options so disabling a policy is effective for
+         * every operation performed by this session.
+         */
         template <Model T>
         auto enable_automatic_interceptors(automatic_interceptor_options options = {})
             -> std::expected<void, std::string>
@@ -357,13 +357,13 @@ namespace detail {
         }
 
         /**
-     * @brief Finds one model while enforcing an explicit cardinality policy.
-     *
-     * The strict policy requests at most two rows, which detects ambiguous
-     * results without materializing the entire result set. Database diagnostics
-     * are preserved unchanged. An ambiguity is reported through
-     * `framework_error` and never masquerades as an empty result.
-     */
+         * @brief Finds one model while enforcing an explicit cardinality policy.
+         *
+         * The strict policy requests at most two rows, which detects ambiguous
+         * results without materializing the entire result set. Database diagnostics
+         * are preserved unchanged. An ambiguity is reported through
+         * `framework_error` and never masquerades as an empty result.
+         */
         template <Model T>
         auto find_one(const query_wrapper<T>& query,
             single_result_policy policy = single_result_policy::require_unique)
@@ -385,8 +385,8 @@ namespace detail {
         }
 
         /**
-     * @brief Finds the first matching model without asserting uniqueness.
-     */
+         * @brief Finds the first matching model without asserting uniqueness.
+         */
         template <Model T>
         auto find_first(const query_wrapper<T>& query) -> task<model_result<T>>
         {
@@ -394,11 +394,11 @@ namespace detail {
         }
 
         /**
-     * @brief Consumes rows in bounded pages with cooperative backpressure.
-     *
-     * The next page is not requested until the handler completes, keeping
-     * memory bounded for clients without a wire-level cursor.
-     */
+         * @brief Consumes rows in bounded pages with cooperative backpressure.
+         *
+         * The next page is not requested until the handler completes, keeping
+         * memory bounded for clients without a wire-level cursor.
+         */
         template <Model T>
         auto for_each(const query_wrapper<T>& query,
             std::function<task<std::expected<void, std::string>>(const T&)> handler,
@@ -441,8 +441,8 @@ namespace detail {
         }
 
         /**
-     * @brief Streams dynamic projection maps in bounded pages.
-     */
+         * @brief Streams dynamic projection maps in bounded pages.
+         */
         template <Model T>
         auto for_each_map(const query_wrapper<T>& query,
             std::function<task<std::expected<void, std::string>>(
@@ -488,8 +488,8 @@ namespace detail {
         }
 
         /**
-     * @brief Streams dynamic projection maps with cooperative cancellation.
-     */
+         * @brief Streams dynamic projection maps with cooperative cancellation.
+         */
         template <Model T>
         auto for_each_map(const query_wrapper<T>& query,
             std::function<task<std::expected<void, std::string>>(
@@ -540,8 +540,8 @@ namespace detail {
         }
 
         /**
-     * @brief Cancellable overload of the bounded row stream.
-     */
+         * @brief Cancellable overload of the bounded row stream.
+         */
         template <Model T>
         auto for_each(const query_wrapper<T>& query,
             std::function<task<std::expected<void, std::string>>(const T&)> handler,
@@ -589,8 +589,8 @@ namespace detail {
         }
 
         /**
-     * @brief Finds models whose primary keys occur in @p ids.
-     */
+         * @brief Finds models whose primary keys occur in @p ids.
+         */
         template <Model T, typename Id>
         auto find_by_ids(std::span<const Id> ids) -> task<model_result<T>>
         {
@@ -608,10 +608,10 @@ namespace detail {
         }
 
         /**
-     * @brief Finds models matching a set of mapped column equalities.
-     *
-     * Unknown columns are rejected before I/O. Null values use `IS NULL`.
-     */
+         * @brief Finds models matching a set of mapped column equalities.
+         *
+         * Unknown columns are rejected before I/O. Null values use `IS NULL`.
+         */
         template <Model T>
         auto find_by_map(std::span<const std::pair<std::string, param_value>> values)
             -> task<model_result<T>>
@@ -625,8 +625,8 @@ namespace detail {
         }
 
         /**
-     * @brief Tests whether at least one row matches while preserving errors.
-     */
+         * @brief Tests whether at least one row matches while preserving errors.
+         */
         template <Model T>
         auto exists(const query_wrapper<T>& query) -> task<model_result<bool>>
         {
@@ -644,8 +644,8 @@ namespace detail {
         }
 
         /**
-     * @brief Executes a projection and returns each row as a named field map.
-     */
+         * @brief Executes a projection and returns each row as a named field map.
+         */
         template <Model T>
         auto select_maps(const query_wrapper<T>& query) -> task<model_result<projection_row>>
         {
@@ -655,8 +655,8 @@ namespace detail {
         }
 
         /**
-     * @brief Returns the first projected column from every matching row.
-     */
+         * @brief Returns the first projected column from every matching row.
+         */
         template <Model T>
         auto select_objects(const query_wrapper<T>& query) -> task<model_result<field_value>>
         {
@@ -674,8 +674,8 @@ namespace detail {
         }
 
         /**
-     * @brief Executes a projection page while retaining count/select failures.
-     */
+         * @brief Executes a projection page while retaining count/select failures.
+         */
         template <Model T>
         auto page_maps(std::size_t page, std::size_t page_size,
             const query_wrapper<T>& query = {}) -> task<page_result<projection_row>>
@@ -721,8 +721,8 @@ namespace detail {
         }
 
         /**
-     * @brief Executes a typed model page with count and query diagnostics.
-     */
+         * @brief Executes a typed model page with count and query diagnostics.
+         */
         template <Model T>
         auto page(std::size_t page, std::size_t page_size,
             const query_wrapper<T>& query = {}) -> task<page_result<T>>
@@ -815,11 +815,11 @@ namespace detail {
         }
 
         /**
-     * @brief Inserts or updates a model using the database native upsert form.
-     *
-     * MySQL uses `ON DUPLICATE KEY UPDATE`; PostgreSQL uses `ON CONFLICT`.
-     * Values remain bound parameters and database diagnostics are preserved.
-     */
+         * @brief Inserts or updates a model using the database native upsert form.
+         *
+         * MySQL uses `ON DUPLICATE KEY UPDATE`; PostgreSQL uses `ON CONFLICT`.
+         * Values remain bound parameters and database diagnostics are preserved.
+         */
         template <Model T> auto upsert(T& model) -> task<model_result<T>>
         {
             if (field_fill_enabled_)
@@ -906,8 +906,8 @@ namespace detail {
         }
 
         /**
-     * @brief Executes native upserts in one transaction.
-     */
+         * @brief Executes native upserts in one transaction.
+         */
         template <Model T>
         auto upsert_batch(std::span<T> models, std::size_t batch_size = 256)
             -> task<model_result<T>>
@@ -1072,11 +1072,11 @@ namespace detail {
 
     public:
         /**
-     * @brief Inserts a missing model or updates the row identified by its key.
-     *
-     * Auto-increment keys with an unset value are inserted directly. Other
-     * keys are checked on the same session before choosing INSERT or UPDATE.
-     */
+         * @brief Inserts a missing model or updates the row identified by its key.
+         *
+         * Auto-increment keys with an unset value are inserted directly. Other
+         * keys are checked on the same session before choosing INSERT or UPDATE.
+         */
         template <Model T> auto save_or_update(T& model) -> task<model_result<T>>
         {
             const auto* primary_key = model_traits<T>::meta().pk();
@@ -1096,8 +1096,8 @@ namespace detail {
         }
 
         /**
-     * @brief Updates models by primary key in one transaction.
-     */
+         * @brief Updates models by primary key in one transaction.
+         */
         template <Model T>
         auto update_batch_by_id(std::span<const T> models,
             std::size_t batch_size = 256) -> task<model_result<T>>
@@ -1142,8 +1142,8 @@ namespace detail {
         }
 
         /**
-     * @brief Saves or updates models atomically on the current session.
-     */
+         * @brief Saves or updates models atomically on the current session.
+         */
         template <Model T>
         auto save_or_update_batch(std::span<T> models,
             std::size_t batch_size = 256) -> task<model_result<T>>
@@ -1224,8 +1224,8 @@ namespace detail {
         }
 
         /**
-     * @brief Removes rows whose primary keys occur in @p ids.
-     */
+         * @brief Removes rows whose primary keys occur in @p ids.
+         */
         template <Model T, typename Id>
         auto remove_by_ids(std::span<const Id> ids) -> task<model_result<T>>
         {
@@ -1242,8 +1242,8 @@ namespace detail {
         }
 
         /**
-     * @brief Removes rows matching mapped column equalities.
-     */
+         * @brief Removes rows matching mapped column equalities.
+         */
         template <Model T>
         auto remove_by_map(std::span<const std::pair<std::string, param_value>> values)
             -> task<model_result<T>>
@@ -1290,8 +1290,8 @@ namespace detail {
         }
 
         /**
-     * @brief Counts rows while preserving native database diagnostics.
-     */
+         * @brief Counts rows while preserving native database diagnostics.
+         */
         template <Model T>
         auto count_result(const query_wrapper<T>& query)
             -> task<model_result<std::int64_t>>
@@ -1316,11 +1316,11 @@ namespace detail {
         }
 
         /**
-     * @brief Inserts models in transactionally bounded batches.
-     *
-     * A failed item rolls the active transaction back and reports both its
-     * batch and absolute item position in the returned result.
-     */
+         * @brief Inserts models in transactionally bounded batches.
+         *
+         * A failed item rolls the active transaction back and reports both its
+         * batch and absolute item position in the returned result.
+         */
         template <Model T>
         auto insert_batch(std::span<T> models, std::size_t batch_size = 256)
             -> task<model_result<T>>
@@ -1380,8 +1380,8 @@ namespace detail {
         }
 
         /**
-     * @brief Executes DELETE with explicit authorization for an empty filter.
-     */
+         * @brief Executes DELETE with explicit authorization for an empty filter.
+         */
         template <Model T>
         auto remove(const query_wrapper<T>& query, allow_full_table_t)
             -> task<model_result<T>>
@@ -1404,8 +1404,8 @@ namespace detail {
         }
 
         /**
-     * @brief Executes UPDATE with explicit authorization for an empty filter.
-     */
+         * @brief Executes UPDATE with explicit authorization for an empty filter.
+         */
         template <Model T>
         auto update(const update_wrapper<T>& update, allow_full_table_t)
             -> task<model_result<T>>
@@ -1447,9 +1447,9 @@ namespace detail {
 
     public:
         /**
-     * @brief Observes a query without coupling the database to HTTP or OTEL.
-     * An empty sink returns the original task without an observation frame.
-     */
+         * @brief Observes a query without coupling the database to HTTP or OTEL.
+         * An empty sink returns the original task without an observation frame.
+         */
         auto query(std::string_view sql, const instrumentation::trace_context& parent,
             const instrumentation::span_exporter& on_end,
             sql_observation_options options = {}) -> task<query_result>
@@ -1460,8 +1460,8 @@ namespace detail {
         }
 
         /**
-     * @brief Observes execution while preserving results and exceptions.
-     */
+         * @brief Observes execution while preserving results and exceptions.
+         */
         auto execute(std::string_view sql, const instrumentation::trace_context& parent,
             const instrumentation::span_exporter& on_end,
             sql_observation_options options = {}) -> task<query_result>
@@ -1472,9 +1472,9 @@ namespace detail {
         }
 
         /**
-     * @brief Observes bound execution without capturing parameter values.
-     * The statement retains ownership of its bindings across suspension.
-     */
+         * @brief Observes bound execution without capturing parameter values.
+         * The statement retains ownership of its bindings across suspension.
+         */
         auto execute(parameterized_query statement, const instrumentation::trace_context& parent,
             const instrumentation::span_exporter& on_end,
             sql_observation_options options = {}) -> task<query_result>
@@ -1609,8 +1609,8 @@ namespace detail {
         }
 
         /**
-     * @brief Owns observation inputs without starting an unexecuted operation.
-     */
+         * @brief Owns observation inputs without starting an unexecuted operation.
+         */
         struct pending_observation
         {
             instrumentation::trace_context parent;
@@ -1619,8 +1619,8 @@ namespace detail {
         };
 
         /**
-     * @brief Captures sink ownership before returning the lazy database task.
-     */
+         * @brief Captures sink ownership before returning the lazy database task.
+         */
         template <typename Statement>
         auto observe_sql(Statement sql, const instrumentation::trace_context& parent,
             const instrumentation::span_exporter& sink, sql_observation_options options,
@@ -1647,10 +1647,10 @@ namespace detail {
         }
 
         /**
-     * @brief Starts and completes observation within the executing coroutine.
-     * The caller primes ownership transfer before returning this task. Source
-     * references are never accessed after the explicit ownership suspension.
-     */
+         * @brief Starts and completes observation within the executing coroutine.
+         * The caller primes ownership transfer before returning this task. Source
+         * references are never accessed after the explicit ownership suspension.
+         */
         template <typename Statement>
         auto execute_observed(Statement& source, std::optional<pending_observation>& pending,
             bool execution) -> task<query_result>
@@ -1874,12 +1874,12 @@ namespace detail {
         }
 
         /**
-     * @brief Keeps raw SQL alive while a lazy fallback operation executes.
-     *
-     * Observation setup can fail before its coroutine frame takes ownership.
-     * This coroutine owns the SQL string so the string_view accepted by the
-     * public raw methods cannot outlive its storage.
-     */
+         * @brief Keeps raw SQL alive while a lazy fallback operation executes.
+         *
+         * Observation setup can fail before its coroutine frame takes ownership.
+         * This coroutine owns the SQL string so the string_view accepted by the
+         * public raw methods cannot outlive its storage.
+         */
         auto execute_owned(std::string sql, bool execution) -> task<query_result>
         {
             if (execution)
