@@ -1,0 +1,424 @@
+{
+  "official_revision": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "purpose": "Preparation only; no official benchmark or peer build has run",
+  "planned_gcannon_revision": "11c802b2bdfe9af2fac4ac2571ae2de4c530cc62",
+  "profiles": [
+    {
+      "id": "echo-ws",
+      "label": "Echo",
+      "category": "WebSocket",
+      "conns": [
+        512,
+        4096,
+        16384
+      ],
+      "scoredConns": [
+        512,
+        4096,
+        16384
+      ],
+      "scored": true,
+      "engineScored": true,
+      "infraScored": false
+    },
+    {
+      "id": "echo-ws-pipeline",
+      "label": "Echo Pipelined",
+      "category": "WebSocket",
+      "conns": [
+        512,
+        4096,
+        16384
+      ],
+      "scoredConns": [
+        512,
+        4096,
+        16384
+      ],
+      "scored": true,
+      "engineScored": true,
+      "infraScored": false
+    },
+    {
+      "id": "echo-ws-limited",
+      "label": "Echo Short-lived",
+      "category": "WebSocket",
+      "conns": [
+        512,
+        4096
+      ],
+      "scoredConns": [
+        512,
+        4096
+      ],
+      "scored": true,
+      "engineScored": true,
+      "infraScored": false
+    }
+  ],
+  "workload": {
+    "endpoint": "http://localhost:8080/ws",
+    "payload": "hello",
+    "tls": false,
+    "quic": false,
+    "compression": false,
+    "threads": 64,
+    "duration": "5s",
+    "runs": 3,
+    "selection": "best received-frame throughput of three, with all rounds retained",
+    "server_cpu_set": "0-31,64-95 (official fallback on smaller hosts)",
+    "warmup": "gcannon implementation; freeze source/image before running"
+  },
+  "ranking": {
+    "frameworks": [
+      {
+        "rank": 1,
+        "name": "genhttp-ioxide",
+        "directory": "genhttp-ioxide",
+        "score": 2850.9403637582373,
+        "type": "emerging"
+      },
+      {
+        "rank": 2,
+        "name": "wtx",
+        "directory": "wtx-ws",
+        "score": 2447.817109076696,
+        "type": "emerging"
+      },
+      {
+        "rank": 3,
+        "name": "fulmine.js",
+        "directory": "fulmine",
+        "score": 2431.213868400559,
+        "type": "emerging"
+      }
+    ],
+    "engines": [
+      {
+        "rank": 1,
+        "name": "zix",
+        "directory": "zix-ws",
+        "score": 2958.0119300394504,
+        "type": "engine"
+      },
+      {
+        "rank": 2,
+        "name": "mongoose",
+        "directory": "mongoose",
+        "score": 2759.3953134050707,
+        "type": "engine"
+      },
+      {
+        "rank": 3,
+        "name": "vanilla-epoll",
+        "directory": "vanilla-epoll",
+        "score": 2362.484738572076,
+        "type": "engine"
+      }
+    ]
+  },
+  "sha256": {
+    "scripts/benchmark.sh": "068d619526f2578d495797ef7e4e7c06a35ae5ac703ff53f7d3f65b477633c2a",
+    "scripts/validate.sh": "ca1266b63b979e2491df96e78aeb7f3077c694dd6ffe4ba4ba12123a86ff4f48",
+    "scripts/validate-ws.py": "3006009bf6b63e67b5faabc2653aa73335546ae4c4a9754f6200aa0fd8b727f6",
+    "scripts/lib/common.sh": "c5aa2702125f12bbb321ead36feb1612b8a0a023de9d13ebd04fbaff1622c6dd",
+    "scripts/lib/profiles.sh": "5c5850418b3e3af407556a75b86f2ccf232a684ae743f0af4b9470a52d05de11",
+    "scripts/lib/framework.sh": "7b9a7610fecb4755ac025ccb8b0e14499161763f3abd7b437a5d9a90480d70f2",
+    "scripts/lib/stats.sh": "f1fb80b99011bfcc8113ae9347e2b1b8888256dce7a17049c4ca7178ef509883",
+    "scripts/lib/system.sh": "6c5b0e0fdbbe5690b29c8064529ffad4961ca21e7d4a1ec205c5b8041f22280b",
+    "scripts/lib/tools/gcannon.sh": "aa924e1618d3a23f19e920c47fce3318ca85fd3cd0403811251d702b0722357d",
+    "scripts/gen_leaderboard_data.py": "7592e6aa6739911ddd495793b8c80880e40a60eaa2238d5936c1ad3a83d3ccc8",
+    "docker/gcannon.Dockerfile": "66f2f944cc9aa7015672dbe9163bad32bfbab0e5416cbba1306b1f3b69859e96",
+    "site/data/current.json": "a1a9cb75eabe14e7a91efe304a39a8a866229acdf826e0115ddc2608ceb1f22c",
+    "site/data/frameworks.json": "137d46ac26703216dccdea4ed37e687b542716595d0d88b4258a13065ec33dbd",
+    "site/content/docs/test-profiles/ws/echo/implementation.md": "9cdbcb80b2591af7fc86389be1c2110e1a76771a5b5ef6e8c4090920b162b2ab",
+    "site/content/docs/test-profiles/ws/echo-pipeline/implementation.md": "2aa2956af2a8751b5582331beaeecb27fe14deb0123140bf8a1c92e6a2d01ce2",
+    "site/content/docs/test-profiles/ws/echo-limited/implementation.md": "92677c663c5da38fe406d96ddb3bb3eacbb0e6a89373110ea408806cf45ae3d0",
+    "frameworks/genhttp-ioxide/.dockerignore": "e7a61b3e23077bbde8dac22c453207fdd445727b92680b491c07931d0db86956",
+    "frameworks/genhttp-ioxide/Dockerfile": "5c1f8dd8141cb73164ac1d64f6cf874b6b88636986fc88a533d2b4e02764d81c",
+    "frameworks/genhttp-ioxide/Infrastructure/Postgres.cs": "ab691adaf0a9b610997c4d5ecdb71c53d44587b59751ac9facbbd574982fb6df",
+    "frameworks/genhttp-ioxide/Model.cs": "1a0d10defa30308fecbd43121f4d4f71b16ac1a1d64973868f202bb583f21cb7",
+    "frameworks/genhttp-ioxide/Program.cs": "34eb7bf81d3dbf72dc197a1cb8c8bf405bd756778acfb7a9e48a7e7f03a8c843",
+    "frameworks/genhttp-ioxide/Project.cs": "670d72885d8bc8156b51fbaa7394c9723be592ed6f8b00fcf2a4d158ac6c827c",
+    "frameworks/genhttp-ioxide/README.md": "1914118dc8c9e009b41fa1c4cb3f1b42cb26ae2b768e488ede6189111ed7aa0c",
+    "frameworks/genhttp-ioxide/Tests/AsyncDatabase.cs": "0fc2750095a7c6504902458c9432e42a5e6abd121e26dc92cc83e9c4c1dede55",
+    "frameworks/genhttp-ioxide/Tests/Baseline.cs": "9d121cedccb8fdd0fc3cb54ee23b50106a7e8ad832a409650e26a1b2739c0d42",
+    "frameworks/genhttp-ioxide/Tests/Crud.cs": "cca0bdd013d954a081d764746b3745d34fe2ac5a962cf1f0cf8ae8fc3efb6533",
+    "frameworks/genhttp-ioxide/Tests/Delay.cs": "8a6dd07dee1fdb759a9cf3bba422a258c0afa5d65d95f61bfc907333151790ea",
+    "frameworks/genhttp-ioxide/Tests/Echo.cs": "e85e677b4330cb4b539ca28d34248aaebb850f4026a6a90f80c13c0322aa4314",
+    "frameworks/genhttp-ioxide/Tests/EchoHandler.cs": "c74a7c01ecdb4f9596cfb2d1601ea7928586716ec076708a668075a95bbdecb6",
+    "frameworks/genhttp-ioxide/Tests/Json.cs": "3476eb9e133263982c05acb207ddd32ae20dfc843649929f6e7bf5dc936306b9",
+    "frameworks/genhttp-ioxide/genhttp.csproj": "66bbb07b6079ee02eef1b3eafab1d6067b4e1bcd120cc7e59ad941345ff468d1",
+    "frameworks/genhttp-ioxide/meta.json": "1f8c79f2798c718e5e8b6881442acef9a3a1330e79af7f284e2b91dc8ae56b64",
+    "frameworks/wtx-ws/Cargo.lock": "ef31842c510eac53024e7cbccd2469d61a742424f69cc4a9e3ff5aa13099f3eb",
+    "frameworks/wtx-ws/Cargo.toml": "49802e96fc5d958d75a5a797a3f27567972662a10f8b899a6cc9ffb7168a106d",
+    "frameworks/wtx-ws/Dockerfile": "67efa4f808ca1ef0759695e2c1084a8fb520925a5edb7c3a67c545121c728aa4",
+    "frameworks/wtx-ws/meta.json": "5e0be44fbab7da6ed941b4ab3dc9934e51d61f7f578ec409b5ddc32d2f3f2ea3",
+    "frameworks/wtx-ws/src/main.rs": "a521996b6ad9b549824388c1cd8ea762d5bbdd70657c7461f5b6bb1dfdfaa9ee",
+    "frameworks/fulmine/Dockerfile": "bfd0360720d200b489f07b42c4f74a9e35d7de59bb5727cb4e5e1fa43d96b20c",
+    "frameworks/fulmine/README.md": "1d50f26e2d9043accbabf054375c2984a16f552a48ac10f7348c8d2dc871e692",
+    "frameworks/fulmine/app.js": "bd86345d0c9476739651c3fdb5bddb4d0b4b8eb0d2a6300bada05600128701fb",
+    "frameworks/fulmine/compose.gateway-h3.yml": "25f7a8ac11457b2b948db8abdba92d2ac7584e174a768da536310d23e5ba697f",
+    "frameworks/fulmine/compose.gateway.yml": "be4be594c90750c84093cfc6195c0c3a493a3fc62d49c54b63e6c352cf11a795",
+    "frameworks/fulmine/compose.production-stack.yml": "4377a3f4fc853fba1a80e866f0759786e7c013a4d54224c7855547e8b4dd73e7",
+    "frameworks/fulmine/meta.json": "8e04170ef14cbacc28aa768c6c9b6f22d85c29afdf60479704f261497fa2ce9f",
+    "frameworks/fulmine/package.json": "9ac1ce9053447a2b2492b77cb0f7091322f19719a455e3b260ee23dae65ff450",
+    "frameworks/fulmine/proxy/Caddyfile": "b049c7d99c032f6a33020722b06f19e891f0451798f82f8c3a34cd9998dfe8cc",
+    "frameworks/fulmine/proxy/Dockerfile": "709b27dc2fea516fe1ae22affb57534c3b6eca726e0affa2c14e84475d8f5ab3",
+    "frameworks/fulmine/proxy-nginx/Dockerfile": "3f5ae54ce8fb401f2c43a59c6d5c90375d6d4b14c1ac0985ad879a6d9bd2907b",
+    "frameworks/fulmine/proxy-nginx/nginx.conf": "1d688c81e0c773536212a7fa79b9bc2805da6f88c877f2cf3c8075f4ae5e11e5",
+    "frameworks/fulmine/proxy-production/Dockerfile": "120ebbd3d713b556fe764acc23fce3dffe9aabe5ed7c4e8f023b62b40323be86",
+    "frameworks/fulmine/proxy-production/nginx.conf": "97aa4c0045ae2a0a6e1e42ddfec11fe177a491aae3c67f7eaca6ee824c0c5ccd",
+    "frameworks/fulmine/views/fortunes.ejs": "ac11051d67431ae8ae133b42474baa87f2a6f15d69cffb508b711707afc3adf8",
+    "frameworks/zix-ws/.gitignore": "005ed5b95e98713844fc54ef4f9554f941ea3edd3b00485fdb74dfaccec09715",
+    "frameworks/zix-ws/Dockerfile": "dc086bae73484eafdeb0e97a52fbc3f2da129c6a1219f83e6470d286c8486771",
+    "frameworks/zix-ws/build.zig": "76817e572731852d1720f10e8af6ecb1573eb44cb27ca124ffc7fcb7043a077a",
+    "frameworks/zix-ws/build.zig.zon": "d9534b86c730e5d43fde2a4ca4713824ea892f3f1766d80a25c10d1743a54bc0",
+    "frameworks/zix-ws/build.zig.zon.template": "258918ecc0f09e8e81c9e540d97f68980dfb903fcb0537eb1a0edbdd441399a3",
+    "frameworks/zix-ws/meta.json": "2bc3ffa5c00e0e86958b2c1f5d3764f8f6e616828a2d31a73aecbc8cf402c78f",
+    "frameworks/zix-ws/src/handlers/ws.zig": "fcaab380c94f7596445ecbc13532b4c6f55ac2a7ac61c4397c191debd7205bbe",
+    "frameworks/zix-ws/src/main.zig": "a91cce259d0c754c413baa612642a4d7fbb5ea3b093aa852605685b5b3b0f09e",
+    "frameworks/mongoose/Dockerfile": "e56bfc08a04d9cd6fc6424b03d012a8584b36d97638490763ed4113967c19f0a",
+    "frameworks/mongoose/README.md": "1008f169b82ce5643ac56a67a35abc50a703e5dd02c899284d04e7f220aa8db5",
+    "frameworks/mongoose/main.c": "dd4abca251d1db06f534b9b8ca7dfb2efd895807c4f319dbdff9e602b37ebeda",
+    "frameworks/mongoose/meta.json": "df5e168bf8e6d18684fefe8d10a4245edbe2b68485b51d6f3a42404610ec56ad",
+    "frameworks/vanilla-epoll/.gitignore": "d91eddb44a677acdba54bb1380d88c930faf002cf409d013f9df5a82e7f2e6d2",
+    "frameworks/vanilla-epoll/Dockerfile": "45440a6a83de27c6af2a14a2ce8318aece5a55ee29fd9274e43360b50eabd4d2",
+    "frameworks/vanilla-epoll/README.md": "6dd2c58c11686302720e71f26f42d6fb7eb45b5814eacdae7e647a4948f8081e",
+    "frameworks/vanilla-epoll/main.v": "730a64f1df487b38b49f6ed81ac5ca617150a7f74c6befb6e6b57cc8ce714b19",
+    "frameworks/vanilla-epoll/mbedtls-rsa-sign-cache.patch": "644e08c89e6d94532a9b500e1c930c60b285d5d9d0419c276b7151a29ea28ae6",
+    "frameworks/vanilla-epoll/meta.json": "d0d5ccda47e568c84adfc00c8bfb575f9c72ef6c7aaaa08e6bb29fc3a80a8eba",
+    "site/data/results/fulmine.js.json": "859750677db41d41962a7b69ebb6e3f2ccdd7bd4a28a34d3150d9c7ff6289784",
+    "site/data/results/genhttp-ioxide.json": "748f509572fdd7c22c3dd69532aeec616e765596b1e9d1e035f849550a7a5369",
+    "site/data/results/mongoose.json": "f90a04644332bb7c7ed592110fe53febb8ddc16fb346abe48fbeea1464f68b34",
+    "site/data/results/vanilla-epoll.json": "15a5aa3ad8a6d2be0a0ea928c2a926ce040051b732a6afd5c74af0e03d16a57c",
+    "site/data/results/wtx.json": "749e8bbf0ac5eb5d02fa713e0517898a04facbb73699e7aae715dc5c58a4d9a6",
+    "site/data/results/zix.json": "a6f0bcc10433039ea8707e2a7b9ac817a38f667af1d6cc7640c14296b0728860"
+  },
+  "commands_after_token": {
+    "cnetmod-ws-baseline": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "cnetmod-ws-baseline"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "cnetmod-ws-baseline",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "cnetmod-ws-baseline",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "cnetmod-ws-baseline",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "cnetmod-ws-candidate": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "cnetmod-ws-candidate"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "cnetmod-ws-candidate",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "cnetmod-ws-candidate",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "cnetmod-ws-candidate",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "genhttp-ioxide": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "genhttp-ioxide"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "genhttp-ioxide",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "genhttp-ioxide",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "genhttp-ioxide",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "wtx-ws": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "wtx-ws"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "wtx-ws",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "wtx-ws",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "wtx-ws",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "fulmine": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "fulmine"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "fulmine",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "fulmine",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "fulmine",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "zix-ws": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "zix-ws"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "zix-ws",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "zix-ws",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "zix-ws",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "mongoose": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "mongoose"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "mongoose",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "mongoose",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "mongoose",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ],
+    "vanilla-epoll": [
+      [
+        "bash",
+        "scripts/validate.sh",
+        "vanilla-epoll"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "vanilla-epoll",
+        "echo-ws",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "vanilla-epoll",
+        "echo-ws-pipeline",
+        "--save"
+      ],
+      [
+        "bash",
+        "scripts/benchmark.sh",
+        "vanilla-epoll",
+        "echo-ws-limited",
+        "--save"
+      ]
+    ]
+  }
+}

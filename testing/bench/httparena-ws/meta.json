@@ -1,0 +1,11 @@
+{
+  "display_name": "cnetmod WS",
+  "language": "C++",
+  "type": "emerging",
+  "mode": "standard",
+  "engine": "cnetmod",
+  "repo": "https://github.com/banderzhm/cnetmod",
+  "description": "Public ws::server API, default connection buffers, exact text/binary echo at /ws; no custom parser, batching, compression or cached handshake response.",
+  "enabled": true,
+  "tests": ["echo-ws", "echo-ws-pipeline", "echo-ws-limited"]
+}

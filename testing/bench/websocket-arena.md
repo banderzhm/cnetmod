@@ -1,5 +1,11 @@
 # Reproducible WebSocket measurements
 
+**Diagnostic harness only.** Under the task's official-test requirement,
+`run_ws_arena.py`, `bench_ws_codec` and their scaled parameters cannot supply
+the final performance comparison. Use [the official test plan](websocket-official-plan.md)
+and HttpArena's unchanged driver, profiles, client and statistics for that
+comparison. The commands below remain useful for isolating regressions.
+
 Use an exclusive benchmark slot on the host. Do not run other protocol
 benchmarks, full builds or stress tests concurrently. Builds use at most `-j4`.
 
