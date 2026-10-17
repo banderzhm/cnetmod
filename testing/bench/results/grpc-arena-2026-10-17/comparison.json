@@ -1,0 +1,50 @@
+[
+  {
+    "profile": "clear-1024",
+    "baseline_rps": 210823.8,
+    "candidate_rps": 314842.2,
+    "gain_pct": 49.33902149567555,
+    "baseline_p99_ms": 600.726,
+    "candidate_p99_ms": 376.958,
+    "baseline_cpu_percent": 397.75139092219644,
+    "candidate_cpu_percent": 397.09247040513026,
+    "baseline_cpu_us": 19.53824954915416,
+    "candidate_cpu_us": 13.045659175362724
+  },
+  {
+    "profile": "clear-256",
+    "baseline_rps": 281876.8,
+    "candidate_rps": 382114.2,
+    "gain_pct": 35.56071304910515,
+    "baseline_p99_ms": 119.316,
+    "candidate_p99_ms": 86.649,
+    "baseline_cpu_percent": 397.85171232437517,
+    "candidate_cpu_percent": 395.5690951323301,
+    "baseline_cpu_us": 14.446027484347772,
+    "candidate_cpu_us": 10.58322354939963
+  },
+  {
+    "profile": "tls-1024",
+    "baseline_rps": 221111.2,
+    "candidate_rps": 373495.6,
+    "gain_pct": 68.91754013365218,
+    "baseline_p99_ms": 603.345,
+    "candidate_p99_ms": 377.084,
+    "baseline_cpu_percent": 395.2865017191505,
+    "candidate_cpu_percent": 393.12144234509844,
+    "baseline_cpu_us": 18.832153233305252,
+    "candidate_cpu_us": 10.87027531248026
+  },
+  {
+    "profile": "tls-256",
+    "baseline_rps": 304981.2,
+    "candidate_rps": 422747.6,
+    "gain_pct": 38.61431458725979,
+    "baseline_p99_ms": 124.064,
+    "candidate_p99_ms": 88.263,
+    "baseline_cpu_percent": 397.46160273437425,
+    "candidate_cpu_percent": 394.64549345190767,
+    "baseline_cpu_us": 13.253275939631688,
+    "candidate_cpu_us": 9.547067801212828
+  }
+]

@@ -1,0 +1,990 @@
+{
+  "baseline": {
+    "clear-1024": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "d3bf57de58f39e5607babaaac5ee357d3101574f",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "20aa07970b5fae3edafaad6c822bcbf7ce97b4b4cf0536de3e8cab6c9cf729f0",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/baseline-server 18123 4 ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 1024,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 1072434,
+          "started": 1174834,
+          "done": 1072434,
+          "http_2xx": 1072434,
+          "succeeded": 1072434,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 214486.8,
+          "latency_samples": 1072434,
+          "latency_ms": {
+            "mean": 445.0556428013286,
+            "p50": 461.313,
+            "p95": 554.156,
+            "p99": 600.726,
+            "max": 800.929
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/clear-1024/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.650000000000006,
+          "command_wall_seconds": 5.171608003001893,
+          "server_cpu_percent": 399.29553802247926,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1054119,
+          "started": 1156519,
+          "done": 1054119,
+          "http_2xx": 1054119,
+          "succeeded": 1054119,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 210823.8,
+          "latency_samples": 1054119,
+          "latency_ms": {
+            "mean": 451.1401844412253,
+            "p50": 471.009,
+            "p95": 558.779,
+            "p99": 600.068,
+            "max": 879.741
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/clear-1024/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.610000000000014,
+          "command_wall_seconds": 5.181628643011209,
+          "server_cpu_percent": 397.75139092219644,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1043594,
+          "started": 1145994,
+          "done": 1043594,
+          "http_2xx": 1043594,
+          "succeeded": 1043594,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 208718.8,
+          "latency_samples": 1043594,
+          "latency_ms": {
+            "mean": 461.67038256352566,
+            "p50": 475.954,
+            "p95": 558.44,
+            "p99": 723.098,
+            "max": 884.397
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/clear-1024/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.389999999999986,
+          "command_wall_seconds": 5.186747726998874,
+          "server_cpu_percent": 393.11724944444,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 210823.8,
+      "best_rps": 214486.8
+    },
+    "clear-256": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "d3bf57de58f39e5607babaaac5ee357d3101574f",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "20aa07970b5fae3edafaad6c822bcbf7ce97b4b4cf0536de3e8cab6c9cf729f0",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/baseline-server 18123 4 ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 256,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 1457972,
+          "started": 1483572,
+          "done": 1457972,
+          "http_2xx": 1457972,
+          "succeeded": 1457972,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 291594.4,
+          "latency_samples": 1457972,
+          "latency_ms": {
+            "mean": 86.63325438760141,
+            "p50": 86.594,
+            "p95": 102.407,
+            "p99": 111.096,
+            "max": 155.978
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/clear-256/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.34,
+          "command_wall_seconds": 5.1124575739959255,
+          "server_cpu_percent": 397.85171232437517,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1409384,
+          "started": 1434984,
+          "done": 1409384,
+          "http_2xx": 1409384,
+          "succeeded": 1409384,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 281876.8,
+          "latency_samples": 1409384,
+          "latency_ms": {
+            "mean": 89.65331018444938,
+            "p50": 90.037,
+            "p95": 110.024,
+            "p99": 119.316,
+            "max": 195.069
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/clear-256/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.36,
+          "command_wall_seconds": 5.109898320995853,
+          "server_cpu_percent": 398.4423704938242,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1402586,
+          "started": 1428186,
+          "done": 1402586,
+          "http_2xx": 1402586,
+          "succeeded": 1402586,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 280517.2,
+          "latency_samples": 1402586,
+          "latency_ms": {
+            "mean": 89.22025809968159,
+            "p50": 88.882,
+            "p95": 120.32,
+            "p99": 137.451,
+            "max": 205.821
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/clear-256/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.310000000000002,
+          "command_wall_seconds": 5.111015051996219,
+          "server_cpu_percent": 397.3770335907637,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 281876.8,
+      "best_rps": 291594.4
+    },
+    "tls-1024": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "d3bf57de58f39e5607babaaac5ee357d3101574f",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "20aa07970b5fae3edafaad6c822bcbf7ce97b4b4cf0536de3e8cab6c9cf729f0",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/baseline-server 18123 4 /root/cnetmod-grpc-artifacts/cert.pem /root/cnetmod-grpc-artifacts/key.pem ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 1024,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 990282,
+          "started": 1092682,
+          "done": 990282,
+          "http_2xx": 990282,
+          "succeeded": 990282,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 198056.4,
+          "latency_samples": 990282,
+          "latency_ms": {
+            "mean": 481.35817398377435,
+            "p50": 504.947,
+            "p95": 588.407,
+            "p99": 603.345,
+            "max": 853.596
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/tls-1024/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.560000000000002,
+          "command_wall_seconds": 5.2122472810006,
+          "server_cpu_percent": 394.455575332049,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1110445,
+          "started": 1212845,
+          "done": 1110445,
+          "http_2xx": 1110445,
+          "succeeded": 1110445,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 222089.0,
+          "latency_samples": 1110445,
+          "latency_ms": {
+            "mean": 424.61780410466076,
+            "p50": 427.5,
+            "p95": 582.965,
+            "p99": 625.082,
+            "max": 857.512
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/tls-1024/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.610000000000014,
+          "command_wall_seconds": 5.213939740002388,
+          "server_cpu_percent": 395.2865017191505,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1105556,
+          "started": 1207956,
+          "done": 1105556,
+          "http_2xx": 1105556,
+          "succeeded": 1105556,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 221111.2,
+          "latency_samples": 1105556,
+          "latency_ms": {
+            "mean": 429.7630026231145,
+            "p50": 437.813,
+            "p95": 524.796,
+            "p99": 599.425,
+            "max": 760.935
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/tls-1024/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.82000000000002,
+          "command_wall_seconds": 5.207573317995411,
+          "server_cpu_percent": 399.80234033487244,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 221111.2,
+      "best_rps": 222089.0
+    },
+    "tls-256": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "d3bf57de58f39e5607babaaac5ee357d3101574f",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "20aa07970b5fae3edafaad6c822bcbf7ce97b4b4cf0536de3e8cab6c9cf729f0",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/baseline-server 18123 4 /root/cnetmod-grpc-artifacts/cert.pem /root/cnetmod-grpc-artifacts/key.pem ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 256,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 1524906,
+          "started": 1550506,
+          "done": 1524906,
+          "http_2xx": 1524906,
+          "succeeded": 1524906,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 304981.2,
+          "latency_samples": 1524906,
+          "latency_ms": {
+            "mean": 82.32813853247347,
+            "p50": 82.632,
+            "p95": 113.428,
+            "p99": 124.064,
+            "max": 172.243
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/tls-256/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.21,
+          "command_wall_seconds": 5.1224553900101455,
+          "server_cpu_percent": 394.53735486723235,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1563238,
+          "started": 1588838,
+          "done": 1563238,
+          "http_2xx": 1563238,
+          "succeeded": 1563238,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 312647.6,
+          "latency_samples": 1563238,
+          "latency_ms": {
+            "mean": 80.41315810708286,
+            "p50": 79.612,
+            "p95": 108.717,
+            "p99": 119.605,
+            "max": 174.24
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/tls-256/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.330000000000005,
+          "command_wall_seconds": 5.108995310991304,
+          "server_cpu_percent": 397.9255951999563,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1492250,
+          "started": 1517850,
+          "done": 1492250,
+          "http_2xx": 1492250,
+          "succeeded": 1492250,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 298450.0,
+          "latency_samples": 1492250,
+          "latency_ms": {
+            "mean": 84.14984781169375,
+            "p50": 84.554,
+            "p95": 115.719,
+            "p99": 129.549,
+            "max": 203.181
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/baseline/tls-256/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/baseline/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.33,
+          "command_wall_seconds": 5.1149594980088295,
+          "server_cpu_percent": 397.46160273437425,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 304981.2,
+      "best_rps": 312647.6
+    }
+  },
+  "candidate-clean": {
+    "clear-1024": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "eaac67735ae542de082765d2110212324adc2d40",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "aa8e82af1bde912f0d2a2f09ef0be1b5788ca5d72ba6a6c2f4f5542ffd2ea9bf",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/candidate-server 18123 4 ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 1024,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 1565453,
+          "started": 1667853,
+          "done": 1565453,
+          "http_2xx": 1565453,
+          "succeeded": 1565453,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 313090.6,
+          "latency_samples": 1565453,
+          "latency_ms": {
+            "mean": 312.9326835746586,
+            "p50": 323.246,
+            "p95": 377.384,
+            "p99": 393.885,
+            "max": 411.399
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.49000000000001,
+          "command_wall_seconds": 5.160007183993002,
+          "server_cpu_percent": 397.09247040513026,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1574211,
+          "started": 1676611,
+          "done": 1574211,
+          "http_2xx": 1574211,
+          "succeeded": 1574211,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 314842.2,
+          "latency_samples": 1574211,
+          "latency_ms": {
+            "mean": 311.06149141951107,
+            "p50": 317.823,
+            "p95": 365.186,
+            "p99": 376.958,
+            "max": 394.487
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.51000000000002,
+          "command_wall_seconds": 5.164370810991386,
+          "server_cpu_percent": 397.1442166071492,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1582902,
+          "started": 1685302,
+          "done": 1582902,
+          "http_2xx": 1582902,
+          "succeeded": 1582902,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 316580.4,
+          "latency_samples": 1582902,
+          "latency_ms": {
+            "mean": 310.1396002885839,
+            "p50": 319.079,
+            "p95": 359.448,
+            "p99": 366.929,
+            "max": 490.949
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.650000000000006,
+          "command_wall_seconds": 5.212515749997692,
+          "server_cpu_percent": 396.16187250866625,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 314842.2,
+      "best_rps": 316580.4
+    },
+    "clear-256": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "eaac67735ae542de082765d2110212324adc2d40",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "aa8e82af1bde912f0d2a2f09ef0be1b5788ca5d72ba6a6c2f4f5542ffd2ea9bf",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/candidate-server 18123 4 ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 256,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 2004163,
+          "started": 2029763,
+          "done": 2004163,
+          "http_2xx": 2004163,
+          "succeeded": 2004163,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 400832.6,
+          "latency_samples": 2004163,
+          "latency_ms": {
+            "mean": 63.074669440559475,
+            "p50": 64.72,
+            "p95": 72.558,
+            "p99": 76.739,
+            "max": 105.595
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.200000000000003,
+          "command_wall_seconds": 5.1065667789953295,
+          "server_cpu_percent": 395.5690951323301,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1910571,
+          "started": 1936171,
+          "done": 1910571,
+          "http_2xx": 1910571,
+          "succeeded": 1910571,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 382114.2,
+          "latency_samples": 1910571,
+          "latency_ms": {
+            "mean": 66.05499702392635,
+            "p50": 66.338,
+            "p95": 79.514,
+            "p99": 86.649,
+            "max": 118.813
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.22,
+          "command_wall_seconds": 5.111035112990066,
+          "server_cpu_percent": 395.6145781235078,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1868098,
+          "started": 1893698,
+          "done": 1868098,
+          "http_2xx": 1868098,
+          "succeeded": 1868098,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 373619.6,
+          "latency_samples": 1868098,
+          "latency_ms": {
+            "mean": 67.56703662869936,
+            "p50": 66.509,
+            "p95": 88.1,
+            "p99": 95.263,
+            "max": 116.153
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/clear-256/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load http://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/clear-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -p h2c -D 2",
+          "server_cpu_seconds": 20.22,
+          "command_wall_seconds": 5.112441739998758,
+          "server_cpu_percent": 395.5057295186881,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 382114.2,
+      "best_rps": 400832.6
+    },
+    "tls-1024": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "eaac67735ae542de082765d2110212324adc2d40",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "aa8e82af1bde912f0d2a2f09ef0be1b5788ca5d72ba6a6c2f4f5542ffd2ea9bf",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/candidate-server 18123 4 /root/cnetmod-grpc-artifacts/cert.pem /root/cnetmod-grpc-artifacts/key.pem ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 1024,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 1902957,
+          "started": 2005357,
+          "done": 1902957,
+          "http_2xx": 1902957,
+          "succeeded": 1902957,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 380591.4,
+          "latency_samples": 1902957,
+          "latency_ms": {
+            "mean": 255.8426328908115,
+            "p50": 259.165,
+            "p95": 314.166,
+            "p99": 336.534,
+            "max": 447.487
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.25,
+          "command_wall_seconds": 5.159994595989701,
+          "server_cpu_percent": 392.44227146551873,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1867478,
+          "started": 1969878,
+          "done": 1867478,
+          "http_2xx": 1867478,
+          "succeeded": 1867478,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 373495.6,
+          "latency_samples": 1867478,
+          "latency_ms": {
+            "mean": 256.38084054751914,
+            "p50": 249.368,
+            "p95": 342.773,
+            "p99": 377.084,
+            "max": 576.258
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.30000000000001,
+          "command_wall_seconds": 5.16379871800018,
+          "server_cpu_percent": 393.12144234509844,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 1696540,
+          "started": 1798940,
+          "done": 1696540,
+          "http_2xx": 1696540,
+          "succeeded": 1696540,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 339308.0,
+          "latency_samples": 1696540,
+          "latency_ms": {
+            "mean": 285.01070597804943,
+            "p50": 288.091,
+            "p95": 356.893,
+            "p99": 386.816,
+            "max": 459.201
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-1024/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 1024 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.30000000000001,
+          "command_wall_seconds": 5.149743390007643,
+          "server_cpu_percent": 394.19439887799695,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 373495.6,
+      "best_rps": 380591.4
+    },
+    "tls-256": {
+      "environment": {
+        "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.44",
+        "revision": "eaac67735ae542de082765d2110212324adc2d40",
+        "h2load": "h2load nghttp2/1.68.0",
+        "server_sha256": "aa8e82af1bde912f0d2a2f09ef0be1b5788ca5d72ba6a6c2f4f5542ffd2ea9bf",
+        "server_cmdline": "/root/cnetmod-grpc-artifacts/candidate-server 18123 4 /root/cnetmod-grpc-artifacts/cert.pem /root/cnetmod-grpc-artifacts/key.pem ",
+        "server_cpus": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "client_cpus": [
+          4,
+          5,
+          6,
+          7
+        ],
+        "cpuinfo_snapshot": "environment-cpuinfo.txt"
+      },
+      "parameters": {
+        "connections": 256,
+        "streams_per_connection": 100,
+        "duration_seconds": 5,
+        "warmup_seconds": 2,
+        "request_bytes": 9,
+        "response_bytes": 7
+      },
+      "grpc_status": "grpcio canary before/after each round; h2load itself checks HTTP only",
+      "comparison_eligible": true,
+      "rounds": [
+        {
+          "total": 1978721,
+          "started": 2004321,
+          "done": 1978721,
+          "http_2xx": 1978721,
+          "succeeded": 1978721,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 395744.2,
+          "latency_samples": 1978721,
+          "latency_ms": {
+            "mean": 63.507483937856826,
+            "p50": 63.224,
+            "p95": 80.259,
+            "p99": 88.263,
+            "max": 118.718
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/1-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.21,
+          "command_wall_seconds": 5.121051762995194,
+          "server_cpu_percent": 394.64549345190767,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 2113738,
+          "started": 2139338,
+          "done": 2113738,
+          "http_2xx": 2113738,
+          "succeeded": 2113738,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 422747.6,
+          "latency_samples": 2113738,
+          "latency_ms": {
+            "mean": 59.402210671332014,
+            "p50": 58.466,
+            "p95": 79.521,
+            "p99": 92.748,
+            "max": 132.008
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/2-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.18,
+          "command_wall_seconds": 5.109969847006141,
+          "server_cpu_percent": 394.91426768052605,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        },
+        {
+          "total": 2132456,
+          "started": 2158056,
+          "done": 2132456,
+          "http_2xx": 2132456,
+          "succeeded": 2132456,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0,
+          "http_error_rate": 0.0,
+          "request_failure_rate": 0.0,
+          "network_error_rate": 0.0,
+          "rps_http_2xx": 426491.2,
+          "latency_samples": 2132456,
+          "latency_ms": {
+            "mean": 58.71819088037456,
+            "p50": 58.266,
+            "p95": 75.929,
+            "p99": 82.229,
+            "max": 106.246
+          },
+          "command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 5 --log-file=/root/cnetmod-grpc-artifacts/candidate-clean/tls-256/3-requests.tsv",
+          "warmup_command": "taskset -c 4-7 /root/cnetmod-grpc-artifacts/h2load https://localhost:18123/benchmark.BenchmarkService/GetSum -d /root/cnetmod-grpc-artifacts/candidate-clean/tls-256/grpc-sum.bin -H 'content-type: application/grpc' -H 'te: trailers' -c 256 -m 100 -t 4 --alpn-list=h2 -D 2",
+          "server_cpu_seconds": 20.039999999999992,
+          "command_wall_seconds": 5.10843003699847,
+          "server_cpu_percent": 392.29273680676215,
+          "grpc_canary_before": true,
+          "grpc_canary_after": true
+        }
+      ],
+      "median_rps": 422747.6,
+      "best_rps": 426491.2
+    }
+  }
+}

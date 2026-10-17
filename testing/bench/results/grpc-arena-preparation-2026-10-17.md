@@ -1,5 +1,8 @@
 # gRPC Arena preparation — 2026-10-17
 
+This preparation snapshot was followed by the completed
+[same-host benchmark and perf comparison](grpc-arena-2026-10-17/README.md).
+
 Status: tooling and correctness validated; performance measurement is pending
 the shared host's explicit test token. No RPS, latency improvement or CPU
 hotspot claim has been measured. No production protocol code has changed.
@@ -14,7 +17,7 @@ Environment:
 - Windows host; local Arch Linux WSL2, kernel
   `6.18.33.2-microsoft-standard-WSL2`, x86_64.
 - Intel Core i9-14900K exposed as 32 logical CPUs by WSL.
-- Clang/libc++ 23.1.3, CMake 4.4.3, Ninja, mold, bundled mimalloc.
+- Clang 23.1.3, libc++/libc++abi 22.1.8, CMake 4.4.3, Ninja, mold, bundled mimalloc.
 - Release: `-O3 -DNDEBUG -g -fno-omit-frame-pointer`, portable CPU target,
   no ThinLTO, HTTP and gRPC enabled, ORM and YAML configuration disabled.
 - Build parallelism limited to four jobs.
