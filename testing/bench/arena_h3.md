@@ -8,7 +8,7 @@ zero non-2xx responses.
 
 Baseline: remote `origin/develop`, fetched before branching, commit
 `5c969d4ac3b772963df80ff66c93fc8165901dc1`.
-Branch: `codex/http3-arena-performance`. The same new benchmark adapter is used
+Branch: `fix/http3-arena-performance`. The same new benchmark adapter is used
 with the baseline and optimized library, so application work is held constant.
 
 ## Method and limits

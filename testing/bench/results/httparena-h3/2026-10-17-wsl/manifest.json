@@ -1,6 +1,6 @@
 {
   "baseline_commit": "5c969d4ac3b772963df80ff66c93fc8165901dc1",
-  "branch": "codex/http3-arena-performance",
+  "branch": "fix/http3-arena-performance",
   "reference_commit": "8977be2721a5aba7b320345cddfcd6f6b654e698",
   "loadgen_commit": "68cb6900fde14c77f0cd7add0e094a862960eb99",
   "loadgen_version": "nghttp2 1.69.0",
