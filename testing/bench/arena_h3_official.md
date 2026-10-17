@@ -1,8 +1,13 @@
 # HttpArena official HTTP/3 profiles: local reproduction
 
-The [e20010d2 six-round retest](results/httparena-h3/2026-10-17-official-h3-idle-retest/README.md)
-records the latest measured revision, including three static failures and
-continuing increases in three-round memory peaks. No stability claim follows.
+The [static-h3 final retest](results/httparena-h3/2026-10-17-static-cache-final/README.md)
+records the latest measured revision. Its six final official rounds have zero
+failed, errored, timed-out, or non-2xx requests; static memory peaks converge at
+1.0/1.1/1.1 GiB instead of the earlier 975 MiB/1.1/1.3 GiB progression.
+
+The earlier [e20010d2 six-round retest](results/httparena-h3/2026-10-17-official-h3-idle-retest/README.md)
+retains its three static failures and increasing memory peaks as the pre-fix
+comparison.
 
 Follow-up repairs and low-load regression evidence are recorded in
 [static-h3 repair checks](results/httparena-h3/2026-10-17-static-fixes/README.md).
