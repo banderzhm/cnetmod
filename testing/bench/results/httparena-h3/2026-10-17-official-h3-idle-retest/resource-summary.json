@@ -1,0 +1,16 @@
+{
+  "httparena-bench-cnetmod-official-optimized": {
+    "samples": 17,
+    "first_rss_mib": 647.3,
+    "last_rss_mib": 939.42,
+    "max_rss_mib": 939.42,
+    "sample_span_s": 28.33
+  },
+  "httparena-bench-cnetmod-official-static": {
+    "samples": 20,
+    "first_rss_mib": 619.47,
+    "last_rss_mib": 1254.55,
+    "max_rss_mib": 1273.06,
+    "sample_span_s": 29.39
+  }
+}

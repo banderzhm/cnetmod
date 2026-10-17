@@ -1,0 +1,248 @@
+{
+  "cnetmod-official-optimized/baseline-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "official_rps": 1573045,
+        "completed_rps": 1573041,
+        "elapsed_s": 5.68,
+        "requests": {
+          "total": 8934873,
+          "started": 8938969,
+          "done": 8934873,
+          "succeeded": 8934873,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0
+        },
+        "status_codes": {
+          "2xx": 8934897,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "success_fraction": 1.0,
+        "success_per_started": 0.9995417816081474,
+        "unfinished_started": 4096,
+        "headers_ahead_of_completions": 24,
+        "failure_fraction": 0.0,
+        "sampled_cpu": "1562.9%",
+        "peak_memory": "790MiB",
+        "p50": "1.80ms",
+        "p95": "4.71ms",
+        "p99": "7.22ms",
+        "mean": "2.14ms",
+        "valid": true
+      },
+      {
+        "round": 2,
+        "official_rps": 1510440,
+        "completed_rps": 1510438,
+        "elapsed_s": 5.68,
+        "requests": {
+          "total": 8579289,
+          "started": 8583385,
+          "done": 8579289,
+          "succeeded": 8579289,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0
+        },
+        "status_codes": {
+          "2xx": 8579300,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "success_fraction": 1.0,
+        "success_per_started": 0.999522798988977,
+        "unfinished_started": 4096,
+        "headers_ahead_of_completions": 11,
+        "failure_fraction": 0.0,
+        "sampled_cpu": "1598.3%",
+        "peak_memory": "856MiB",
+        "p50": "1.91ms",
+        "p95": "4.95ms",
+        "p99": "7.45ms",
+        "mean": "2.25ms",
+        "valid": true
+      },
+      {
+        "round": 3,
+        "official_rps": 1557222,
+        "completed_rps": 1557222,
+        "elapsed_s": 5.68,
+        "requests": {
+          "total": 8845025,
+          "started": 8849121,
+          "done": 8845025,
+          "succeeded": 8845025,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0
+        },
+        "status_codes": {
+          "2xx": 8845025,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "success_fraction": 1.0,
+        "success_per_started": 0.9995371291679704,
+        "unfinished_started": 4096,
+        "headers_ahead_of_completions": 0,
+        "failure_fraction": 0.0,
+        "sampled_cpu": "1648.1%",
+        "peak_memory": "944MiB",
+        "p50": "1.88ms",
+        "p95": "4.84ms",
+        "p99": "7.36ms",
+        "mean": "2.23ms",
+        "valid": true
+      }
+    ],
+    "official_selected": {
+      "framework": "cnetmod-official-optimized",
+      "language": "C++",
+      "rps": 1573045,
+      "avg_latency": "2.14ms",
+      "p99_latency": "7.22ms",
+      "cpu": "1562.9%",
+      "memory": "790MiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "15.34MB/s",
+      "reconnects": 0,
+      "status_2xx": 8934897,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    },
+    "valid": true
+  },
+  "cnetmod-official-static/static-h3": {
+    "rounds": [
+      {
+        "round": 1,
+        "official_rps": 4991,
+        "completed_rps": 4849,
+        "elapsed_s": 5.75,
+        "requests": {
+          "total": 27885,
+          "started": 31981,
+          "done": 27885,
+          "succeeded": 27882,
+          "failed": 3,
+          "errored": 0,
+          "timeout": 0
+        },
+        "status_codes": {
+          "2xx": 28703,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "success_fraction": 0.9998924152770307,
+        "success_per_started": 0.8718301491510584,
+        "unfinished_started": 4096,
+        "headers_ahead_of_completions": 821,
+        "failure_fraction": 0.00010758472296933836,
+        "sampled_cpu": "2213.1%",
+        "peak_memory": "975MiB",
+        "p50": "46.45ms",
+        "p95": "122.23ms",
+        "p99": "198.17ms",
+        "mean": "54.61ms",
+        "valid": false
+      },
+      {
+        "round": 2,
+        "official_rps": 9216,
+        "completed_rps": 9076,
+        "elapsed_s": 5.79,
+        "requests": {
+          "total": 52551,
+          "started": 56647,
+          "done": 52551,
+          "succeeded": 52551,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0
+        },
+        "status_codes": {
+          "2xx": 53362,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "success_fraction": 1.0,
+        "success_per_started": 0.9276925521210302,
+        "unfinished_started": 4096,
+        "headers_ahead_of_completions": 811,
+        "failure_fraction": 0.0,
+        "sampled_cpu": "2666.5%",
+        "peak_memory": "1.1GiB",
+        "p50": "55.27ms",
+        "p95": "139.65ms",
+        "p99": "221.51ms",
+        "mean": "63.95ms",
+        "valid": true
+      },
+      {
+        "round": 3,
+        "official_rps": 6846,
+        "completed_rps": 6682,
+        "elapsed_s": 5.94,
+        "requests": {
+          "total": 39692,
+          "started": 43788,
+          "done": 39692,
+          "succeeded": 39692,
+          "failed": 0,
+          "errored": 0,
+          "timeout": 0
+        },
+        "status_codes": {
+          "2xx": 40670,
+          "3xx": 0,
+          "4xx": 0,
+          "5xx": 0
+        },
+        "success_fraction": 1.0,
+        "success_per_started": 0.9064583904266009,
+        "unfinished_started": 4096,
+        "headers_ahead_of_completions": 978,
+        "failure_fraction": 0.0,
+        "sampled_cpu": "2880.9%",
+        "peak_memory": "1.3GiB",
+        "p50": "47.74ms",
+        "p95": "139.12ms",
+        "p99": "244.48ms",
+        "mean": "58.91ms",
+        "valid": true
+      }
+    ],
+    "official_selected": {
+      "framework": "cnetmod-official-static",
+      "language": "C++",
+      "rps": 9216,
+      "avg_latency": "63.95ms",
+      "p99_latency": "221.51ms",
+      "cpu": "2666.5%",
+      "memory": "1.1GiB",
+      "connections": 64,
+      "threads": 64,
+      "duration": "5s",
+      "pipeline": 1,
+      "bandwidth": "163.12MB/s",
+      "reconnects": 0,
+      "status_2xx": 53362,
+      "status_3xx": 0,
+      "status_4xx": 0,
+      "status_5xx": 0
+    },
+    "valid": false
+  }
+}
