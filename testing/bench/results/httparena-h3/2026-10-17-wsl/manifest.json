@@ -38,7 +38,7 @@
       "--workload-only"
     ]
   },
-  "known_gate_failure": "aioquic WebTransport Datagram echo times out on original develop and optimized build",
+  "known_gate_failure": "Initial Datagram timeout resolved: the aioquic test peer parsed raw child echo as H3 frames; see webtransport-followup.",
   "notes": [
     "All timings are local WSL guest measurements, not leaderboard results.",
     "No per-request log I/O in final runs.",
@@ -94,6 +94,35 @@
     "optimized-perf-report.txt": "a1ef5d44e5c2342162d6a5a7ee7506650dede7478bcf66f0ad9f4c693ae93bae",
     "optimized-profile-load.txt": "c2fb382f4da0697f905d024b467a61fb62479dcab4c4152cd325cd9b6e9d259e",
     "optimized-server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "optimized-summary.log": "ac5801448c4323d228107fe8d18e617f4164423640d5450188f3d769ad417bba"
+    "optimized-summary.log": "ac5801448c4323d228107fe8d18e617f4164423640d5450188f3d769ad417bba",
+    "webtransport-followup/baseline-corrected-probe.json": "398b38fe6cc5abff49173f3ae525d6bd1ad086a92d45bed03e2d628397ea8f3c",
+    "webtransport-followup/baseline-corrected-probe.log": "7e38601865a34bd74cef17b0642b9f672fe7050669114a1852e8563b4325d98f",
+    "webtransport-followup/client-before-fix.json": "3b8099c1d0551b75867047634d37a5178d0b1ea4dac5531f1e07ca52033b67c1",
+    "webtransport-followup/client-before-fix.log": "445037985a788f683edceccb7874bb4dc11e942ea6dbef11fc0c855b5b65b179",
+    "webtransport-followup/ctest-release-gate.json": "e0c3739b5bd4d3f40f73cdc6624bd1ca3740c1d0f320a3c832fc1ef8541917b4",
+    "webtransport-followup/ctest.log": "6afa2cd5e937c11793471e2ab6deaf3cf06de3afec5500f930385ce59cc7ecb5",
+    "webtransport-followup/optimized-1.command.txt": "1095116d3f1d59572457b666560ee4cb93a9c6a40b8f0be7e68b774b7900b1ed",
+    "webtransport-followup/optimized-1.json": "83b47b4e3523d957fc02cb62511ba388661467eb7e56f09953d9731ebc86f237",
+    "webtransport-followup/optimized-1.log": "7e38601865a34bd74cef17b0642b9f672fe7050669114a1852e8563b4325d98f",
+    "webtransport-followup/optimized-2.command.txt": "839741a905561b1863712155e15334471c7f59f2d5b65a435aab5cc329bb266e",
+    "webtransport-followup/optimized-2.json": "2518fda4b0ccddcb589d6d513fc85efabd3be6b0013659eb0ca11e153360b878",
+    "webtransport-followup/optimized-2.log": "7e38601865a34bd74cef17b0642b9f672fe7050669114a1852e8563b4325d98f",
+    "webtransport-followup/optimized-3.command.txt": "1618586c39c7a4b0fbe99d85957774a47ca5670bf43d605b54248dc415e9eed5",
+    "webtransport-followup/optimized-3.json": "c203b94b71df10dce360568075f6254c260f32413cbcaf41a990c611efc79069",
+    "webtransport-followup/optimized-3.log": "7e38601865a34bd74cef17b0642b9f672fe7050669114a1852e8563b4325d98f"
+  },
+  "webtransport_followup": {
+    "production_code_changed_for_gate_fix": false,
+    "ctest_passed": 12,
+    "ctest_failed": 0,
+    "probe_unit_cases": 6,
+    "optimized_acceptance_repetitions": 3,
+    "baseline_acceptance_repetitions": 1,
+    "optional_peers_not_supplied": [
+      "Rust wtransport",
+      "nghttp3 client",
+      "nghttp3 server"
+    ],
+    "record_directory": "webtransport-followup"
   }
 }

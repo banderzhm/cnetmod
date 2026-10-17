@@ -50,6 +50,12 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
+    add_test(NAME h3_webtransport_aioquic_probe_unit
+        COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+            -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_webtransport_aioquic_probe.py)
+    set_tests_properties(h3_webtransport_aioquic_probe_unit PROPERTIES
+        LABELS "http3;interop;webtransport;unit"
+        TIMEOUT 30)
     set(CNETMOD_WTRANSPORT_PROBE "" CACHE FILEPATH
         "Rust wtransport_probe executable used by the HTTP/3 acceptance gate")
     set(H3_ACCEPTANCE_WTRANSPORT_ARGS)

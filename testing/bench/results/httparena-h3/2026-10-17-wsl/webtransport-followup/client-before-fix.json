@@ -1,0 +1,38 @@
+[
+  {
+    "name": "aioquic-server_to_cnetmod-client",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 1067
+  },
+  {
+    "name": "aioquic-webtransport_to_cnetmod-server",
+    "status": "failed",
+    "detail": "FAILED: timed out waiting for HTTP Datagram echo; received HTTP/3 events: ['HeadersReceived(stream=0)', 'DataReceived(stream=0)', 'HeadersReceived(stream=4)', \"ConnectionTerminated(error_code=<ErrorCode.H3_FRAME_ERROR: 262>, frame_type=None, reason_phrase='Frame is truncated by the end of the stream')\"]\ncnetmod server stderr:\n[2026-10-17 08:34:53.527] [info] [123455640912384] [h3_interop_server.cpp:176] HTTP/3 interop listener started on UDP 44098 with 1 worker\n",
+    "elapsed_ms": 6243
+  },
+  {
+    "name": "wtransport-webtransport_to_cnetmod-server",
+    "status": "skipped",
+    "detail": "--wtransport-probe or --wtransport-probe-command was not supplied",
+    "elapsed_ms": 0
+  },
+  {
+    "name": "cnetmod-server_to_curl-http3",
+    "status": "passed",
+    "detail": "request and response validated",
+    "elapsed_ms": 1033
+  },
+  {
+    "name": "cnetmod-server_to_nghttp3-client",
+    "status": "skipped",
+    "detail": "--nghttp3-client-command was not supplied",
+    "elapsed_ms": 0
+  },
+  {
+    "name": "nghttp3-server_to_cnetmod-client",
+    "status": "skipped",
+    "detail": "--nghttp3-server-command was not supplied",
+    "elapsed_ms": 0
+  }
+]

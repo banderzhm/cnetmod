@@ -1,0 +1,6 @@
+[PASSED] aioquic-server_to_cnetmod-client: request and response validated
+[PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+[SKIPPED] wtransport-webtransport_to_cnetmod-server: --wtransport-probe or --wtransport-probe-command was not supplied
+[PASSED] cnetmod-server_to_curl-http3: request and response validated
+[SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+[SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied

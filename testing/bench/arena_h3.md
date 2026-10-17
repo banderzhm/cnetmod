@@ -182,14 +182,37 @@ all final comparisons; they remain in `/tmp/cnetmod-h3-arena-verified/`.
 - Ordinary HTTP/3 client E2E and dynamic-QPACK E2E pass after the final build.
 - Independent aioquic query/fragmentation/concurrency probes pass in all phases.
 - aioquic-server → cnetmod-client and cnetmod-server → curl HTTP/3 pass.
-- **Full release acceptance is not green**: aioquic WebTransport HTTP Datagram
-  echo times out on both the original develop implementation rebuilt during
-  this task and the optimized build. Both JSON records are retained. Optional
-  Rust wtransport/nghttp3 peers were not supplied and are recorded as skipped.
+- Initial acceptance reported an aioquic WebTransport HTTP Datagram timeout on
+  both original develop and optimized builds. The follow-up below resolves the
+  test-peer bug; both original failure JSON records are retained. Optional Rust
+  wtransport/nghttp3 peers were not supplied and remain recorded as skipped.
 - Windows/MSVC and weak-network/long-duration tests were not run in this task.
 - `git diff --check`, generated AGENTS consistency and version checks pass.
 
 The production diff is confined to ordinary HTTP/3 receive-buffer sizing. It
-is suitable for review as an isolated portable optimization, but this report
-does not waive the failing release gate or claim cross-platform release
-qualification. Nothing has been pushed to `main` or merged.
+is suitable for review as an isolated portable optimization. The corrected
+peer passes the available acceptance gate, but this report does not claim
+cross-platform release qualification. Nothing has been pushed to `main` or merged.
+
+### WebTransport gate follow-up
+
+The apparent Datagram failure was preceded by the aioquic client closing the
+connection with `H3_FRAME_ERROR` 262, reporting a truncated HTTP/3 frame. The
+client had created a WebTransport bidirectional child but then passed its raw
+echo bytes (`strm`) to the HTTP/3 frame parser. aioquic 1.7.0's stream-creation
+helper does not initialize that local child's receive classification.
+
+The probe now routes only its own registered child stream's QUIC data to an
+explicit echo check, waits for FIN, and requires the complete exact
+payload before checking Datagram/close. All unrelated streams still use
+aioquic H3 parsing. Six focused regression cases cover complete/fragmented
+echoes, truncation, extra bytes, unrelated streams, and diagnostic errors.
+No production transport/session code changes were needed for this fix; no
+additional high-load measurements were run after releasing the test token.
+Follow-up validation passed all 12 selected CTest entries (including the
+acceptance gate and both client E2E modes). The corrected probe also passed
+against the preserved original develop server and on three fresh optimized
+acceptance runs. Each acceptance run has three passed cases and three explicitly
+skipped optional peers; Windows and weak-network coverage remain outstanding.
+See [acceptance details](../http3/ACCEPTANCE.md) and the `webtransport-followup`
+records in the result directory for the corrected baseline and optimized runs.

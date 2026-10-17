@@ -88,6 +88,36 @@ so a cancelled session cannot contaminate the next result.
 If Rust/Cargo is not available, this case is recorded as `skipped`, not
 `passed`.
 
+### aioquic locally initiated bidirectional children
+
+The aioquic probe explicitly associates its locally created WebTransport child
+stream with the session. In
+[aioquic 1.7.0](https://github.com/aiortc/aioquic/blob/1.7.0/src/aioquic/h3/connection.py),
+`create_webtransport_stream()` writes the outgoing preface but does not classify
+that stream's receive half. Passing its raw application echo back into the H3
+frame parser closes the connection with `H3_FRAME_ERROR` (262, truncated frame),
+which previously appeared as a later Datagram timeout. The initiator's preface
+does not appear again in the echoed application data; see the
+[WebTransport draft's bidirectional stream format](https://www.ietf.org/archive/id/draft-ietf-webtrans-http3-14.html#section-4.3).
+
+Only the exact locally created child stream bypasses H3 frame parsing in this
+test peer. CONNECT, ordinary HTTP/3 requests, control streams and Datagrams
+still use aioquic's parsers. The probe collects the full child echo until FIN
+and validates `strm` before accepting the Datagram and Close Capsule, so a
+partial, truncated or extra-byte echo cannot produce a passing gate. QUIC
+connection/reset errors are included in timeout diagnostics.
+
+The focused regression suite uses actual aioquic protocol objects without a
+network connection:
+
+```sh
+python3 -m unittest discover -s testing/http3 -p test_webtransport_aioquic_probe.py
+```
+
+CTest registers this as `h3_webtransport_aioquic_probe_unit` when QUIC tests are
+enabled. Like the required acceptance peer, it requires aioquic to be installed
+in the configured `Python3_EXECUTABLE` environment.
+
 ### Connection migration regression
 
 The CTest target `http3_connection_migration` runs the cnetmod client and
