@@ -194,6 +194,11 @@ void quic_stream::update_send_limit(std::uint64_t maximum) noexcept
     impl_->max_send_data_ = std::max(impl_->max_send_data_, maximum);
 }
 
+void quic_stream::set_initial_send_limit(std::uint64_t maximum) noexcept
+{
+    impl_->max_send_data_ = maximum;
+}
+
 void quic_stream::set_initial_receive_limit(std::uint64_t maximum) noexcept
 {
     // Called during stream creation, before authenticated bytes are accepted.
@@ -417,6 +422,12 @@ auto quic_stream::is_writable() const noexcept -> bool
 {
     return impl_->state_ != stream_state::half_closed_local &&
         impl_->state_ != stream_state::closed;
+}
+
+auto quic_stream::remaining_send_window() const noexcept -> std::uint64_t
+{
+    return impl_->max_send_data_ > impl_->total_sent_
+        ? impl_->max_send_data_ - impl_->total_sent_ : 0U;
 }
 
 auto quic_stream::remaining_receive_window() const noexcept -> std::uint64_t

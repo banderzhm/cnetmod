@@ -87,6 +87,8 @@ public:
     /// Set peer-advertised send credit.  This is independent from the local
     /// receive window used by push_received().
     void update_send_limit(std::uint64_t maximum) noexcept;
+    /// Set the peer's initial credit during stream creation, before sending.
+    void set_initial_send_limit(std::uint64_t maximum) noexcept;
     void set_initial_receive_limit(std::uint64_t maximum) noexcept;
     void extend_receive_limit(std::uint64_t maximum) noexcept;
 
@@ -108,6 +110,7 @@ public:
 
     /// Get remaining receive window
     [[nodiscard]] auto remaining_receive_window() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto remaining_send_window() const noexcept -> std::uint64_t;
 
     /// Total bytes received
     [[nodiscard]] auto bytes_received() const noexcept -> std::uint64_t;

@@ -113,6 +113,11 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
     auto get = co_await client.get(url("/get"));
     require_response(state, get, 200, "get-ok", "GET");
 
+    auto buffered_large = co_await client.get(url("/buffered-large"));
+    const std::string large_body(300U * 1024U, 'x');
+    require_response(state, buffered_large, 200, large_body,
+        "buffered response spanning multiple QUIC packets");
+
     // The unified client does not opt into server push by default. A server
     // may still prepare pushes, but its primary response must remain valid
     // and no unsolicited resource is accepted on the connection.

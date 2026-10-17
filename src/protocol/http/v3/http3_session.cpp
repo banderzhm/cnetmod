@@ -1966,7 +1966,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     }
 
     std::expected<void, std::error_code> response_sent;
-    std::optional<byte_buffer> static_response;
+    std::optional<byte_buffer> prepared_response;
     {
         co_await response_header_mutex_.lock();
         cnetmod::async_lock_guard header_guard{
@@ -1979,18 +1979,12 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             co_return;
         }
 
-        // The usual response is represented entirely by QPACK static-table
-        // entries.  Its bytes no longer touch encoder state after
-        // response_frames(), so do not serialize every handler behind the
-        // packet-owner acknowledgement.  A dynamic-table update still keeps
-        // the mutex across encoder-stream then request-stream submission: the
-        // two writes must retain their RFC 9204 ordering.
+        // Publish encoder instructions before exposing the referring HEADERS,
+        // but release encoder state before sending the response body. A large
+        // response can wait for flow credit while peer decoder instructions
+        // need this same mutex. QPACK retains referenced entries until ACK.
         auto instructions = encoder_.take_encoder_instructions();
-        if (instructions.empty())
-        {
-            static_response.emplace(std::move(*encoded));
-        }
-        else
+        if (!instructions.empty())
         {
             if (!qpack_encoder_stream_)
             {
@@ -2006,11 +2000,11 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                     "HTTP/3 QPACK encoder stream failed");
                 co_return;
             }
-            response_sent = co_await conn_.async_send(id, std::move(*encoded), true);
         }
+        prepared_response.emplace(std::move(*encoded));
     }
-    if (static_response)
-        response_sent = co_await conn_.async_send(id, std::move(*static_response), true);
+    if (prepared_response)
+        response_sent = co_await conn_.async_send(id, std::move(*prepared_response), true);
     if (response_sent)
         (void)conn_.retire_stream(id);
 }

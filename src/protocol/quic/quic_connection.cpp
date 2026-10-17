@@ -3282,6 +3282,13 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
         }
         it->second.value = std::make_unique<quic_stream>(frame.stream_id,
             impl_->connection_role, is_bidirectional(frame.stream_id));
+        // A peer-opened bidirectional stream uses the peer's bidi_local
+        // credit for our replies. The local receive window is independent.
+        // Retaining the stream's fallback cap stranded responses larger than
+        // 256 KiB even when the authenticated peer advertised more credit.
+        it->second.value->set_initial_send_limit(is_bidirectional(frame.stream_id)
+                ? impl_->tls->received_transport_params().initial_max_stream_data_bidi_local
+                : 0U);
         it->second.value->set_initial_receive_limit(impl_->config.max_stream_data);
         it->second.value->init();
         it->second.readiness = std::make_unique<channel<std::monostate>>(1);
@@ -4130,6 +4137,26 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe) -> std::vector<std::by
             scheduled_frame_metadata.emplace_back(scheduled_stream_frame_metadata{
                 scheduled->stream, scheduled->urgency, scheduled->default_fifo});
         }
+        // The next frame must fit as a whole. Checking only the current
+        // payload length can coalesce two full STREAM fragments into an
+        // oversized UDP datagram and strand a multi-packet response.
+        if (frame.size() > payload_budget - payload.size())
+        {
+            const auto metadata = scheduled_frame_metadata.back();
+            scheduled_frame_metadata.pop_back();
+            if (metadata)
+            {
+                impl_->requeue_prioritized_stream_frame(
+                    quic_connection_impl::scheduled_stream_frame{
+                        metadata->stream, metadata->urgency, metadata->default_fifo,
+                        std::move(frame)});
+            }
+            else
+            {
+                impl_->encoded_send_frames.push_front(std::move(frame));
+            }
+            break;
+        }
         payload.insert(payload.end(), frame.begin(), frame.end());
         retransmittable_frames.push_back(std::move(frame));
     }
@@ -4496,6 +4523,57 @@ auto quic_connection::async_send(stream_id sid, std::span<const std::byte> data,
 auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_data,
     bool fin) -> task<std::expected<void, std::error_code>>
 {
+    constexpr std::size_t fragment_size = max_udp_payload - 96U;
+    if (owned_data.size() > fragment_size)
+    {
+        // A complete application write need not fit the peer's current
+        // stream/connection credit. Submit bounded fragments, allowing the
+        // receive driver to process MAX_DATA/MAX_STREAM_DATA between them.
+        // Keep the small-write path below unchanged.
+        std::size_t offset{};
+        while (offset < owned_data.size())
+        {
+            std::uint64_t credit{};
+            {
+                co_await impl_->receive_mutex.lock();
+                async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+                if (is_closed() || impl_->connection_state == connection_state::draining)
+                    co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+                const auto stream = impl_->streams.find(sid);
+                if (stream == impl_->streams.end())
+                    co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
+                if (stream->second.value->state() == stream_state::closed ||
+                    stream->second.value->state() == stream_state::half_closed_local)
+                    co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+                const auto connection_credit = impl_->peer_max_data > impl_->sent_stream_data
+                    ? impl_->peer_max_data - impl_->sent_stream_data : 0U;
+                credit = std::min(connection_credit,
+                    stream->second.value->remaining_send_window());
+            }
+            if (credit == 0U)
+            {
+                co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+                continue;
+            }
+            const auto count = std::min<std::size_t>({fragment_size,
+                owned_data.size() - offset, static_cast<std::size_t>(credit)});
+            std::vector<std::byte> fragment(owned_data.begin() + offset,
+                owned_data.begin() + offset + count);
+            const auto sent = co_await async_send(sid, std::move(fragment),
+                fin && offset + count == owned_data.size());
+            if (!sent)
+            {
+                // Another producer may consume credit after the snapshot.
+                // Retry only a rejected write; no bytes have been committed.
+                if (sent.error() != make_error_code(quic_errc::flow_control_error))
+                    co_return std::unexpected(sent.error());
+                co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+                continue;
+            }
+            offset += count;
+        }
+        co_return {};
+    }
     auto* const completion = impl_->stream_write_completions.try_acquire();
     if (!completion)
         co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));

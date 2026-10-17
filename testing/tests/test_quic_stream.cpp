@@ -1,7 +1,7 @@
 #include "test_framework.hpp"
 
-#include <array>
-
+import std;
+import cnetmod.coro.task;
 import cnetmod.protocol.quic;
 
 TEST(quic_stream_out_of_order_gap_is_not_readable)
@@ -46,6 +46,37 @@ TEST(quic_stream_duplicate_fin_is_idempotent)
     ASSERT_EQ(beyond_final_size.error(),
         cnetmod::quic::make_error_code(
             cnetmod::quic::quic_errc::final_size_error));
+}
+
+TEST(quic_stream_initial_peer_send_credit_can_be_zero)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_send_limit(0);
+    stream.init();
+    const std::array data{std::byte{'x'}};
+    const auto rejected = cnetmod::sync_wait(stream.send(data));
+    ASSERT_FALSE(rejected.has_value());
+    ASSERT_EQ(stream.bytes_sent(), 0U);
+    stream.update_send_limit(1);
+    const auto sent = cnetmod::sync_wait(stream.send(data));
+    ASSERT_TRUE(sent.has_value());
+    ASSERT_EQ(stream.bytes_sent(), 1U);
+}
+
+TEST(quic_stream_initial_peer_send_credit_can_exceed_fallback)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    constexpr std::size_t size = 300U * 1024U;
+    stream.set_initial_send_limit(size);
+    stream.init();
+    const std::vector<std::byte> data(size, std::byte{'x'});
+    const auto sent = cnetmod::sync_wait(stream.send(data));
+    ASSERT_TRUE(sent.has_value());
+    ASSERT_EQ(stream.bytes_sent(), size);
+    const std::array extra{std::byte{'y'}};
+    const auto rejected = cnetmod::sync_wait(stream.send(extra));
+    ASSERT_FALSE(rejected.has_value());
+    ASSERT_EQ(stream.bytes_sent(), size);
 }
 
 RUN_TESTS();
