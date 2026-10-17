@@ -219,6 +219,7 @@ TEST(http2_streams_deliver_interleaved_bodies_and_return_consumed_credit)
 
     std::size_t offset{};
     std::size_t connection_updates{};
+    std::uint32_t connection_credit{};
     std::size_t stream_updates{};
     while (offset + frame_header_size <= output.size())
     {
@@ -230,17 +231,128 @@ TEST(http2_streams_deliver_interleaved_bodies_and_return_consumed_credit)
         if (header->type == frame_type::window_update)
         {
             if (header->stream_id == 0)
+            {
                 ++connection_updates;
+                std::uint32_t increment{};
+                for (std::size_t index = 0; index < 4; ++index)
+                    increment = (increment << 8) |
+                        std::to_integer<std::uint32_t>(output[offset + frame_header_size + index]);
+                connection_credit += increment;
+            }
             else
                 ++stream_updates;
         }
         offset += frame_header_size + header->length;
     }
-    ASSERT_EQ(connection_updates, std::size_t{3});
+    ASSERT_TRUE(connection_updates >= std::size_t{1});
+    ASSERT_EQ(connection_credit, std::uint32_t{9});
     // Stream 1 remains open after its first DATA frame, so at least that
     // consumed credit must be returned. Credit after END_STREAM is only
     // returned to the connection because the stream window no longer matters.
     ASSERT_TRUE(stream_updates >= std::size_t{1});
+}
+
+TEST(http2_borrowed_consumers_batch_credit_without_returning_unconsumed_bytes)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket unused;
+    header_compression encoder;
+    const std::array request_headers{
+        header_field{":method", "POST"}, header_field{":scheme", "http"},
+        header_field{":path", "/upload"}};
+    auto encoded = encoder.encode(request_headers);
+    ASSERT_TRUE(encoded.has_value());
+    std::vector<std::byte> input{
+        reinterpret_cast<const std::byte*>(preface.data()),
+        reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
+    auto append = [&](frame_header header, std::span<const std::byte> payload)
+    {
+        auto frame = framed(header, payload);
+        input.insert(input.end(), frame.begin(), frame.end());
+    };
+    append({.type = frame_type::settings}, {});
+    append({.type = frame_type::headers, .flags = 0x4, .stream_id = 1}, *encoded);
+    append({.type = frame_type::headers, .flags = 0x4, .stream_id = 3}, *encoded);
+    const std::string payload(16 * 1024, 'x');
+    append({.type = frame_type::data, .stream_id = 1}, bytes(payload));
+    append({.type = frame_type::data, .flags = 0x1, .stream_id = 1}, bytes(payload));
+    append({.type = frame_type::data, .flags = 0x1, .stream_id = 3}, bytes(payload));
+
+    std::vector<std::byte> output;
+    std::size_t consumed{};
+    auto reader = [&](cnetmod::mutable_buffer)
+        -> cnetmod::task<std::expected<std::size_t, std::error_code>>
+    {
+        // Give the two consumers and their shared credit task time to finish
+        // before EOF cancels the connection's structured task group.
+        for (unsigned turn = 0; turn < 8; ++turn)
+            co_await cnetmod::post_awaitable{*io};
+        co_return std::size_t{};
+    };
+    auto writer = [&](cnetmod::const_buffer source)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        const auto* first = static_cast<const std::byte*>(source.data);
+        output.insert(output.end(), first, first + source.size);
+        co_return std::expected<void, std::error_code>{};
+    };
+    borrowed_streaming_server_handler handler =
+        [&](server_request& request, cnetmod::cancel_token&)
+        -> cnetmod::task<server_response>
+    {
+        while (auto chunk = co_await request.body_stream->receive())
+            consumed += chunk->size();
+        co_return server_response{.status = 204};
+    };
+    session connection{*io, unused, std::move(handler),
+        {.max_bytes = 64 * 1024, .chunk_capacity = 4}, std::move(reader),
+        std::move(writer)};
+    ASSERT_TRUE(connection.receive(input).has_value());
+    // Crossing half the connection window must not grant borrowed-stream
+    // credit before the application has consumed any body bytes.
+    const auto unconsumed = connection.take_outbound();
+    for (std::size_t offset = 0; offset + frame_header_size <= unconsumed.size();)
+    {
+        const auto header = decode_frame_header(std::span{unconsumed}.subspan(offset, frame_header_size));
+        ASSERT_TRUE(header.has_value());
+        if (!header)
+            break;
+        ASSERT_TRUE(header->type != frame_type::window_update);
+        offset += frame_header_size + header->length;
+    }
+    auto execute = [&]() -> cnetmod::task<void>
+    {
+        co_await connection.run();
+        io->stop();
+    };
+    auto operation = execute();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+    ASSERT_EQ(consumed, std::size_t{49152});
+    std::size_t updates{};
+    std::uint32_t credit{};
+    for (std::size_t offset = 0; offset + frame_header_size <= output.size();)
+    {
+        const auto header = decode_frame_header(std::span{output}.subspan(offset, frame_header_size));
+        ASSERT_TRUE(header.has_value());
+        if (!header || offset + frame_header_size + header->length > output.size())
+            break;
+        if (header->type == frame_type::window_update && header->stream_id == 0)
+        {
+            ++updates;
+            std::uint32_t increment{};
+            for (std::size_t index = 0; index < 4; ++index)
+                increment = (increment << 8) |
+                    std::to_integer<std::uint32_t>(output[offset + frame_header_size + index]);
+            credit += increment;
+        }
+        offset += frame_header_size + header->length;
+    }
+    ASSERT_EQ(updates, std::size_t{1});
+    ASSERT_EQ(credit, std::uint32_t{49152});
 }
 
 TEST(http2_borrowed_handler_is_not_dispatched_twice_after_streamed_body)

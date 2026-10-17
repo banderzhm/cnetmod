@@ -8,6 +8,7 @@ import cnetmod.coro.task;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task_group;
 import cnetmod.coro.mutex;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.settings;
@@ -101,8 +102,8 @@ private:
         -> cnetmod::task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto write_outbound_locked()
         -> cnetmod::task<std::expected<void, std::error_code>>;
-    [[nodiscard]] auto return_flow_credit(std::uint32_t stream_id,
-        std::size_t bytes)
+    void schedule_flow_credit(std::uint32_t stream_id, std::size_t bytes);
+    [[nodiscard]] auto return_flow_credit()
         -> cnetmod::task<std::expected<void, std::error_code>>;
     void close_streaming_bodies() noexcept;
     [[nodiscard]] auto shutdown_streaming()
@@ -138,6 +139,9 @@ private:
     std::vector<header_field> response_headers_;
     std::vector<std::byte> encoded_headers_;
     std::vector<std::vector<header_field>> request_header_pool_;
+    std::vector<std::pair<std::uint32_t, std::size_t>> pending_flow_credit_;
+    cnetmod::concurrent_containers::atomic_rw_latch flow_credit_latch_;
+    bool flow_credit_scheduled_ = false;
     std::uint32_t continuation_stream_id_ = 0;
     bool continuation_end_stream_ = false;
     std::uint32_t last_peer_stream_id_ = 0;

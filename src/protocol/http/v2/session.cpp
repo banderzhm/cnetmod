@@ -1,6 +1,7 @@
 module cnetmod.protocol.http.v2.session;
 
 import std;
+import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.core.buffer;
 import cnetmod.coro.task;
 import cnetmod.coro.task_group;
@@ -387,31 +388,75 @@ auto session::write_response(std::uint32_t stream_id,
     co_return co_await write_outbound_locked();
 }
 
-auto session::return_flow_credit(std::uint32_t stream_id, std::size_t bytes)
+void session::schedule_flow_credit(std::uint32_t stream_id, std::size_t bytes)
+{
+    if (bytes == 0)
+        return;
+    {
+        cnetmod::concurrent_containers::exclusive_latch_guard lock{flow_credit_latch_};
+        pending_flow_credit_.emplace_back(stream_id, bytes);
+        if (flow_credit_scheduled_)
+            return;
+        flow_credit_scheduled_ = true;
+    }
+    (void)background_->run([this](cnetmod::cancel_token&)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            co_return co_await return_flow_credit();
+        });
+}
+
+auto session::return_flow_credit()
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
-    if (bytes == 0 || bytes > 0x7fff'ffffU)
-        co_return std::unexpected(
-            std::make_error_code(std::errc::invalid_argument));
+    // Defer to the owner loop once, allowing consumers in this turn to share
+    // one task and transport write. The short queue latch also permits a
+    // consumer on another loop, just as the previous task_group::run path did.
     co_await cnetmod::post_awaitable{*context_};
-    auto found = streams_.find(stream_id);
-    const bool stream_open = found != streams_.end();
-    if (stream_open &&
-        !found->second.receive_window().increase(
-            static_cast<std::uint32_t>(bytes)))
-        co_return std::unexpected(
-            std::make_error_code(std::errc::operation_canceled));
-    receive_window_ += static_cast<std::int32_t>(bytes);
-    std::array<std::byte, 4> update{
-        static_cast<std::byte>(bytes >> 24),
-        static_cast<std::byte>(bytes >> 16),
-        static_cast<std::byte>(bytes >> 8), static_cast<std::byte>(bytes)};
     co_await writer_mutex_.lock();
     cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
-    if (stream_open)
-        queue_frame(
-            {.type = frame_type::window_update, .stream_id = stream_id}, update);
-    queue_frame({.type = frame_type::window_update, .stream_id = 0}, update);
+    std::vector<std::pair<std::uint32_t, std::size_t>> credits;
+    {
+        cnetmod::concurrent_containers::exclusive_latch_guard lock{flow_credit_latch_};
+        credits.swap(pending_flow_credit_);
+        flow_credit_scheduled_ = false;
+    }
+    std::uint32_t connection_credit{};
+    for (const auto& [stream_id, bytes] : credits)
+    {
+        if (bytes > 0x7fff'ffffU - connection_credit)
+            co_return std::unexpected(
+                std::make_error_code(std::errc::invalid_argument));
+        auto found = streams_.find(stream_id);
+        if (found != streams_.end())
+        {
+            if (!found->second.receive_window().increase(
+                    static_cast<std::uint32_t>(bytes)))
+                co_return std::unexpected(
+                    std::make_error_code(std::errc::operation_canceled));
+            std::array<std::byte, 4> update{
+                static_cast<std::byte>(bytes >> 24),
+                static_cast<std::byte>(bytes >> 16),
+                static_cast<std::byte>(bytes >> 8), static_cast<std::byte>(bytes)};
+            queue_frame({.type = frame_type::window_update, .stream_id = stream_id}, update);
+        }
+        connection_credit += static_cast<std::uint32_t>(bytes);
+    }
+    if (connection_credit > static_cast<std::uint32_t>(
+                                std::numeric_limits<std::int32_t>::max() - receive_window_))
+        co_return std::unexpected(std::make_error_code(std::errc::protocol_error));
+    receive_window_ += static_cast<std::int32_t>(connection_credit);
+    std::array<std::byte, 4> update{
+        static_cast<std::byte>(connection_credit >> 24),
+        static_cast<std::byte>(connection_credit >> 16),
+        static_cast<std::byte>(connection_credit >> 8), static_cast<std::byte>(connection_credit)};
+    queue_frame({.type = frame_type::window_update}, update);
+    credits.clear();
+    {
+        cnetmod::concurrent_containers::exclusive_latch_guard lock{flow_credit_latch_};
+        if (pending_flow_credit_.empty())
+            pending_flow_credit_.swap(credits);
+    }
     co_return co_await write_outbound_locked();
 }
 
@@ -425,12 +470,7 @@ void session::start_streaming_request(std::uint32_t stream_id)
     found->second.attach_body_stream(body);
     body->observe_consumption([this, stream_id](std::size_t bytes)
         {
-            (void)background_->run(
-                [this, stream_id, bytes](cnetmod::cancel_token&)
-                    -> cnetmod::task<std::expected<void, std::error_code>>
-                {
-                    co_return co_await return_flow_credit(stream_id, bytes);
-                });
+            schedule_flow_credit(stream_id, bytes);
         });
     server_request request{.stream_id = stream_id,
         .headers = found->second.take_headers(),
@@ -771,7 +811,8 @@ auto session::process_frame(frame_header header,
                 (header.flags & flag_end_stream) != 0))
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
         receive_window_ -= static_cast<std::int32_t>(payload.size());
-        if (!streaming_handler_ && receive_window_ <= 32'767)
+        if (!streaming_handler_ && !borrowed_streaming_handler_ &&
+            receive_window_ <= 32'767)
         {
             const auto increment =
                 static_cast<std::uint32_t>(65'535 - receive_window_);
