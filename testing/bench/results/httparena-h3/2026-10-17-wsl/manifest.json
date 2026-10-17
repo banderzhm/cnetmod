@@ -1,0 +1,99 @@
+{
+  "baseline_commit": "5c969d4ac3b772963df80ff66c93fc8165901dc1",
+  "branch": "codex/http3-arena-performance",
+  "reference_commit": "8977be2721a5aba7b320345cddfcd6f6b654e698",
+  "loadgen_commit": "68cb6900fde14c77f0cd7add0e094a862960eb99",
+  "loadgen_version": "nghttp2 1.69.0",
+  "packages": {
+    "clang": "23.1.3-2",
+    "libc++": "22.1.8-1",
+    "libc++abi": "22.1.8-1",
+    "cmake": "4.4.3-2",
+    "ninja": "1.13.2-3",
+    "liburing": "2.15-1",
+    "ngtcp2": "1.25.0",
+    "nghttp3": "1.18.0",
+    "openssl": "3.6.4",
+    "aioquic": "1.7.0"
+  },
+  "certificate_sha256": "42D0E2BE6601438BEB6225D5C00502FB3001E6FBE54B18A8DA4135369A30C1D9",
+  "comparator_image": "sha256:72d6de94308798c44f38e98576f132ea1daf4bba07463011eadbb2f859beb8be",
+  "comparator_packages": {
+    "GenHTTP": "11.0.5",
+    "ioxide": "0.15.251"
+  },
+  "local_binary_profiles": {
+    "/tmp/cnetmod-h3-arena-169/baseline.perf.data": "4afb82776f07cfc321ec5a6589072875a461c339a996cb2c99d831da099776cb",
+    "/tmp/cnetmod-h3-arena-169/optimized.perf.data": "50d66731d218cfa933743a7213da0a33e8cb82ff004f09a6be134abdd043b492"
+  },
+  "executable_sha256": {
+    "baseline": "52b25c068ce05b55f452d91a09f39e03f8371cfe891b70e2bb0b551dea8fe404",
+    "optimized": "b1ca1e7568c71b17a89b887141e09b7eff716f4fa2d2c94ae1a76e3b7ecfe25a",
+    "h2load169": "9a35cefa52e809a32f1898d65575a2cbbf54555031604830b852e2f6b5a4484f"
+  },
+  "probe_options": {
+    "baseline": [],
+    "optimized": [],
+    "compare": [
+      "--workload-only"
+    ]
+  },
+  "known_gate_failure": "aioquic WebTransport Datagram echo times out on original develop and optimized build",
+  "notes": [
+    "All timings are local WSL guest measurements, not leaderboard results.",
+    "No per-request log I/O in final runs.",
+    "CPU includes 2s warmup and 5s measurement; RPS excludes warmup.",
+    "status_counter_delta exposes independently gated h2load headers/completions.",
+    "Full original/optimized acceptance JSON records are included; optional peers skipped."
+  ],
+  "record_sha256": {
+    ".gitattributes": "ecabaa566057a3c1f5be1c4aca38a7889ca8f14fc81ef297594b314d39dae693",
+    "baseline/environment.json": "7bf6692b44a1b65838743c72f77285e73ff5b6a98acd2ed7fc92675a3e93202f",
+    "baseline/run1.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "baseline/run1.txt": "3c0cdd74bbfc166960f6991551f15cab5c5bceac2e03ab1245a25f410282553c",
+    "baseline/run2.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "baseline/run2.txt": "678adb5dc81668c20e993c8facce5d928e847751e6cec4b315e9d8298a881960",
+    "baseline/run3.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "baseline/run3.txt": "2259281f9ba9be1694e4737142c6f8905fb9825b6376615c4a5b937816648345",
+    "baseline/summary.json": "db0458e544c3a0411ba058fbd8fbc03976676c6aa6d90db5bccc42cf0efcfe1c",
+    "baseline-correctness.txt": "6383b049b2a137cc7d186f2edbe0a5f5908b4628ea78a45703e798a9092f703c",
+    "baseline-perf-record.txt": "137c6ffc4873b5a0cc7e9f4d3bee916ea176fdcd624315abb96a76fb8ec9a0c4",
+    "baseline-perf-report.txt": "2e4d60e83d42c7c349de36cd5621b0e223baca495839531a022cbd5076e9d30b",
+    "baseline-profile-load.txt": "9a280a2d16da2ea039d14fd1642d3717bff06a286f70487619bd211081974115",
+    "baseline-server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "baseline-summary.log": "42df7439af50d2570b78faf68eadd2e21d8863132c858172000623c4a8976db9",
+    "cnetmod-h3-acceptance-baseline.json": "5ae15ac998ca83247bb5e292e0d35739930074fe1b0fbe6ce56d3f63042c92b4",
+    "cnetmod-h3-acceptance-wt-original.json": "1b197258fcf76e37e261524dbc855c1d41cb1f98711c73628bd284f09af0275d",
+    "cnetmod-h3-arena-optimized-confirmed-build.log": "88957d59b86f23c0ea725a515f9ec67cc4affca8174082528a8e20e49207e03b",
+    "cnetmod-h3-comparator-deps.json": "dbf2284a38b849906660ad3e34997f22599bf924a986657e49a41277b2735d14",
+    "cnetmod-h3-final-dynamic-e2e.log": "44cf4afdd38dc7724a7c95b15418eb5df6ed44ace425c555ffda2bec4861fec1",
+    "cnetmod-h3-final-e2e.log": "1c983c010d30ad1feb81a5d8fc24d57484d141867b16beba42889f1a6cb7f908",
+    "cnetmod-h3-final-unit-tests.log": "c81b31569c691028708f613258932313e08d5458a3221645ae12b7ff571cc64d",
+    "compare/environment.json": "53ac17c31b0b15fc090015f7911812401a2106e2059b5b269b72114f277996ea",
+    "compare/run1.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "compare/run1.txt": "e385ee55acc8f5601c9411b7213fb5a249a6e3fced6bbd142fc2618aa52299f8",
+    "compare/run2.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "compare/run2.txt": "17a4f4572aa5ba6e74cf4ca5b185ec3f9edd9676bca82851d1ecc42e324a8bf7",
+    "compare/run3.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "compare/run3.txt": "e0072623ee45706414efda06af0e1a179797d0f47d90a1daa38d257ce7a4bb95",
+    "compare/summary.json": "b915d37553882514f3aeb7ccb9581ca6102a3bcbb829473ba61fdddb656be986",
+    "compare-correctness.txt": "6383b049b2a137cc7d186f2edbe0a5f5908b4628ea78a45703e798a9092f703c",
+    "compare-image.json": "a58f92e530e1193b7db0b7df7ee9782a9e7a014177e4523e0cbf08e2e5d01a09",
+    "compare-server.log": "4aabcbed340741b2996cf25fb4c0416857834ff73d280ac718cca5ab20a4ccec",
+    "compare-summary.log": "ee3b13885bcf84ea392966d333ccc2b6857cf588644cc5b45a9411475352d012",
+    "optimized/environment.json": "e591ecf0a50e3a4711a60ec21f3927335abe54f5646ef2fddd329c0eee2161de",
+    "optimized/run1.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "optimized/run1.txt": "27bdfcdc0742b36b1ad5518aca57625d20b5709f81aabd257854b15457f99399",
+    "optimized/run2.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "optimized/run2.txt": "f1bc0911fb97bf14681063443cc66f95a670938583034ac622962274a84a8ec1",
+    "optimized/run3.command.txt": "b5b22410615cfbb1668777f210e1434fc055f814d74a645b0586706e828201bc",
+    "optimized/run3.txt": "1be49335e348dcc08274bfa83df0bc89f4ceef84cdf04d95e1a969c7ad345441",
+    "optimized/summary.json": "790e5ff8ab3b662f1a4fa7f2c0f198be68a2f6b8bc6d48b1516bfa11444a8dca",
+    "optimized-correctness.txt": "6383b049b2a137cc7d186f2edbe0a5f5908b4628ea78a45703e798a9092f703c",
+    "optimized-perf-record.txt": "388f20f39a949c88b7d8c6d10104f98f794c85e2e0bc973b250dbffc3adf4312",
+    "optimized-perf-report.txt": "a1ef5d44e5c2342162d6a5a7ee7506650dede7478bcf66f0ad9f4c693ae93bae",
+    "optimized-profile-load.txt": "c2fb382f4da0697f905d024b467a61fb62479dcab4c4152cd325cd9b6e9d259e",
+    "optimized-server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "optimized-summary.log": "ac5801448c4323d228107fe8d18e617f4164423640d5450188f3d769ad417bba"
+  }
+}

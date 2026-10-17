@@ -1,0 +1,26 @@
+Test project /tmp/cnetmod-h3-arena-build
+    Start 48: test_quic_frame
+1/8 Test #48: test_quic_frame ..................   Passed    0.00 sec
+    Start 49: test_quic_packet
+2/8 Test #49: test_quic_packet .................   Passed    0.00 sec
+    Start 50: test_quic_stream
+3/8 Test #50: test_quic_stream .................   Passed    0.00 sec
+    Start 51: test_quic_loss_detection
+4/8 Test #51: test_quic_loss_detection .........   Passed    0.00 sec
+    Start 52: test_quic_congestion
+5/8 Test #52: test_quic_congestion .............   Passed    0.00 sec
+    Start 54: test_http3_qpack
+6/8 Test #54: test_http3_qpack .................   Passed    0.00 sec
+    Start 55: test_http3_frame
+7/8 Test #55: test_http3_frame .................   Passed    0.00 sec
+    Start 62: arena_h3_measurement_unit
+8/8 Test #62: arena_h3_measurement_unit ........   Passed    0.31 sec
+
+100% tests passed out of 8
+
+Label Time Summary:
+benchmark    =   0.31 sec*proc (1 test)
+http3        =   0.31 sec*proc (1 test)
+unit         =   0.31 sec*proc (1 test)
+
+Total Test time (real) =   0.33 sec

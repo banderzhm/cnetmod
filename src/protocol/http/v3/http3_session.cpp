@@ -129,6 +129,7 @@ namespace {
     constexpr std::uint64_t qpack_encoder_stream_type = 0x02;
     constexpr std::uint64_t qpack_decoder_stream_type = 0x03;
     constexpr std::size_t stream_read_chunk_size = 2048;
+    constexpr std::size_t initial_request_read_size = 256;
 
     auto append_varint(std::uint64_t value, byte_buffer& out) -> void
     {
@@ -1223,7 +1224,7 @@ auto http3_server_session::run() -> task<void>
 auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
 {
 
-    dynamic_buffer wire{stream_read_chunk_size};
+    dynamic_buffer wire{webtransport_handler_ ? stream_read_chunk_size : initial_request_read_size};
     // Explicit streaming handlers can start once the request HEADERS frame is
     // complete. Keep the remaining DATA/trailer frames in `wire` for the
     // concurrent body pump below; synchronous and legacy async handlers retain
@@ -1265,8 +1266,15 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
     for (;;)
     {
 
+        // Most request HEADERS fit in the first small allocation. Reuse its
+        // unwritten tail when checking FIN instead of growing by a full 2 KiB
+        // before learning that no bytes remain. Larger/fragmented requests
+        // retain the normal read chunk and complete-body validation below.
+        const auto read_size = !webtransport_handler_ && wire.readable_bytes() < initial_request_read_size
+            ? initial_request_read_size - wire.readable_bytes()
+            : stream_read_chunk_size;
         auto received = co_await conn_.async_recv(
-            id, wire.prepare(stream_classified ? stream_read_chunk_size : 1U));
+            id, wire.prepare(stream_classified ? read_size : 1U));
         if (!received)
         {
 

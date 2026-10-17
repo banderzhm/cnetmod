@@ -53,7 +53,7 @@ endif()
 
 # HTTP/3 over QUIC benchmark (requires QUIC + SSL support)
 if(CNETMOD_HAS_QUIC AND CNETMOD_HAS_SSL)
-    list(APPEND BENCH_TARGETS h3_benchmark)
+    list(APPEND BENCH_TARGETS h3_benchmark arena_h3_server)
 endif()
 
 # Map target name to source file (most targets use <name>.cpp)
@@ -74,7 +74,8 @@ foreach(bench_name ${BENCH_TARGETS})
     elseif(bench_name STREQUAL "bench_http_disabled")
         target_compile_definitions(${bench_name} PRIVATE CNETMOD_BENCH_DISABLED_ONLY=1)
     endif()
-    if(bench_name STREQUAL "crosslang_cnetmod_server")
+    if(bench_name STREQUAL "crosslang_cnetmod_server" OR
+            bench_name STREQUAL "arena_h3_server")
         # The cross-language server exercises the HTTP stack directly. Keep
         # Application, ORM and unrelated protocols out of the benchmark binary
         # so allocator and transport measurements are not configuration-bound.
@@ -112,5 +113,16 @@ endif()
 # configuration.  They are intentionally not CTest tests: a benchmark that
 # cannot make real requests must never contribute a green test result.  See
 # testing/http3/ACCEPTANCE.md and h3_performance_gate.py.
+
+if(CNETMOD_BUILD_TESTS AND CNETMOD_HAS_QUIC)
+    find_package(Python3 COMPONENTS Interpreter QUIET)
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME arena_h3_measurement_unit
+            COMMAND "${Python3_EXECUTABLE}" -m unittest discover
+                -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_arena_h3_measure.py)
+        set_tests_properties(arena_h3_measurement_unit PROPERTIES
+            LABELS "http3;benchmark;unit")
+    endif()
+endif()
 
 set(CNETMOD_BENCH_TARGETS ${BENCH_TARGETS} PARENT_SCOPE)
