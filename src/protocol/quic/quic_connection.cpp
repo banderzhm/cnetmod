@@ -16,8 +16,9 @@ import :stream;
 import cnetmod.core.error;
 import cnetmod.coro.mutex;
 import cnetmod.coro.channel;
-import cnetmod.utils.concurrent_containers.queue;
+import :write_queue;
 import cnetmod.protocol.quic.send_pipeline;
+import :recovery;
 
 namespace cnetmod::quic {
 
@@ -489,170 +490,9 @@ struct quic_connection::quic_connection_impl
     std::array<std::vector<std::byte>, max_send_batch_datagrams>
         application_payload_storage;
 
-    // Stream coroutines are producers, never owners of QUIC state.  They
-    // move already-owned bytes into this bounded lock-free queue; the packet
-    // owner validates stream state and flow control before publishing the
-    // completion.  Bounded capacity is explicit backpressure, not loss.
-    // This queue is per connection. The default peer stream window is far
-    // below 512 concurrent writers; larger bursts wait for a completion slot
-    // and therefore retain lossless backpressure without reserving thousands
-    // of command and completion objects for every idle connection.
-    static constexpr std::size_t stream_write_queue_capacity{512U};
-
-    struct stream_write_completion
-    {
-        // Returned only for a rejected flow-control reservation. The bytes
-        // have not been accounted or queued and can be retried without copy.
-        std::vector<std::byte> rejected_bytes;
-        std::shared_ptr<const std::string> rejected_shared_bytes;
-
-        class spin_lock
-        {
-        public:
-            auto lock() noexcept -> void
-            {
-                while (flag_.test_and_set(std::memory_order_acquire))
-                    flag_.wait(true, std::memory_order_relaxed);
-            }
-
-            auto unlock() noexcept -> void
-            {
-                flag_.clear(std::memory_order_release);
-                flag_.notify_one();
-            }
-
-        private:
-            std::atomic_flag flag_{};
-        };
-
-        struct receiver
-        {
-            stream_write_completion& owner;
-            std::optional<std::expected<void, std::error_code>> value;
-
-            auto await_ready() noexcept -> bool
-            {
-                std::scoped_lock guard{owner.lock_};
-                if (!owner.value_)
-                    return false;
-                value = std::move(owner.value_);
-                owner.value_.reset();
-                return true;
-            }
-
-            auto await_suspend(std::coroutine_handle<> handle) noexcept
-                -> std::coroutine_handle<>
-            {
-                std::scoped_lock guard{owner.lock_};
-                if (owner.value_)
-                {
-                    value = std::move(owner.value_);
-                    owner.value_.reset();
-                    return handle;
-                }
-                owner.waiter_ = handle;
-                return std::noop_coroutine();
-            }
-
-            auto await_resume() noexcept -> std::expected<void, std::error_code>
-            {
-                if (!value)
-                {
-                    std::scoped_lock guard{owner.lock_};
-                    value = std::move(owner.value_);
-                    owner.value_.reset();
-                }
-                return std::move(*value);
-            }
-        };
-
-        [[nodiscard]] auto receive() noexcept -> receiver
-        {
-            return receiver{*this, std::nullopt};
-        }
-
-        auto complete(std::expected<void, std::error_code> value) noexcept -> void
-        {
-            std::coroutine_handle<> waiter;
-            {
-                std::scoped_lock guard{lock_};
-                value_ = std::move(value);
-                waiter = std::exchange(waiter_, {});
-            }
-            if (waiter)
-                waiter.resume();
-        }
-
-    private:
-        spin_lock lock_;
-        std::optional<std::expected<void, std::error_code>> value_;
-        std::coroutine_handle<> waiter_{};
-    };
-
-    class stream_write_completion_pool
-    {
-    public:
-        stream_write_completion_pool()
-            : slots_(std::make_unique<stream_write_completion[]>(stream_write_queue_capacity)),
-              available_(stream_write_queue_capacity)
-        {
-            for (std::size_t index{}; index < stream_write_queue_capacity; ++index)
-                (void)available_.try_enqueue(std::addressof(slots_[index]));
-        }
-
-        [[nodiscard]] auto try_acquire() noexcept -> stream_write_completion*
-        {
-            const auto completion = available_.try_dequeue();
-            if (!completion)
-                return nullptr;
-            (*completion)->rejected_bytes.clear();
-            (*completion)->rejected_shared_bytes.reset();
-            return *completion;
-        }
-
-        auto release(stream_write_completion& completion) noexcept -> void
-        {
-            // A completion is returned only after its one-slot channel was
-            // consumed. A failed enqueue means a pool invariant violation,
-            // because each acquired slot has exactly one matching release.
-            if (!available_.try_enqueue(std::addressof(completion)))
-                std::terminate();
-        }
-
-    private:
-        std::unique_ptr<stream_write_completion[]> slots_;
-        concurrent_containers::bounded_mpmc_queue<stream_write_completion*> available_;
-    };
-
-    struct stream_write_command
-    {
-        enum class operation : std::uint8_t
-        {
-            write,
-            datagram,
-            set_priority
-        };
-
-        operation type{operation::write};
-        stream_id stream{};
-        std::vector<std::byte> bytes;
-        bool fin{};
-        std::uint8_t urgency{};
-        bool incremental{};
-        stream_write_completion* completion{};
-        std::shared_ptr<const std::string> shared_bytes;
-    };
-
-    concurrent_containers::bounded_mpmc_queue<stream_write_command>
-        stream_write_commands{stream_write_queue_capacity};
-    stream_write_completion_pool stream_write_completions;
-
-    auto fail_pending_stream_writes(std::error_code error) noexcept -> void
-    {
-        while (auto command = stream_write_commands.try_dequeue())
-            if (command->completion)
-                command->completion->complete(std::unexpected(error));
-    }
+    // Application coroutines publish Command objects to the single packet
+    // owner. The queue owns its fixed completion Object Pool.
+    quic_write_queue write_commands;
 
     // A client connection may be blocked in a UDP receive with no outstanding
     // packet when a request coroutine creates new retransmittable data. Wake
@@ -728,125 +568,6 @@ struct quic_connection::quic_connection_impl
         return tls->reset_after_early_data_rejection();
     }
 
-    struct retransmittable_frame_storage
-    {
-        quic_send_frame first;
-        std::vector<quic_send_frame> additional;
-
-        retransmittable_frame_storage() = default;
-
-        explicit retransmittable_frame_storage(quic_send_frame frame)
-            : first(std::move(frame))
-        {
-        }
-
-        [[nodiscard]] auto empty() const noexcept -> bool
-        {
-            return first.empty();
-        }
-
-        [[nodiscard]] auto size() const noexcept -> std::size_t
-        {
-            return first.empty() ? 0U : 1U + additional.size();
-        }
-
-        auto push_back(quic_send_frame frame) -> void
-        {
-            if (first.empty())
-                first = std::move(frame);
-            else
-                additional.push_back(std::move(frame));
-        }
-
-        [[nodiscard]] auto operator[](std::size_t index) -> quic_send_frame&
-        {
-            return index == 0U ? first : additional[index - 1U];
-        }
-
-        [[nodiscard]] auto operator[](std::size_t index) const
-            -> const quic_send_frame&
-        {
-            return index == 0U ? first : additional[index - 1U];
-        }
-
-        template <class Function>
-        auto for_each(Function&& function) -> void
-        {
-            if (!first.empty())
-                function(first);
-            for (auto& frame : additional)
-                function(frame);
-        }
-
-        template <class Function>
-        auto for_each(Function&& function) const -> void
-        {
-            if (!first.empty())
-                function(first);
-            for (const auto& frame : additional)
-                function(frame);
-        }
-
-        template <class Function>
-        auto for_each_reverse(Function&& function) -> void
-        {
-            for (auto frame = additional.rbegin(); frame != additional.rend(); ++frame)
-                function(*frame);
-            if (!first.empty())
-                function(first);
-        }
-
-        template <class Function>
-        auto for_each_reverse(Function&& function) const -> void
-        {
-            for (auto frame = additional.rbegin(); frame != additional.rend(); ++frame)
-                function(*frame);
-            if (!first.empty())
-                function(first);
-        }
-
-        template <class Predicate>
-        auto erase_if(Predicate&& predicate) -> void
-        {
-            std::erase_if(additional, predicate);
-            if (!first.empty() && predicate(first))
-            {
-                if (additional.empty())
-                    first.clear();
-                else
-                {
-                    first = std::move(additional.front());
-                    additional.erase(additional.begin());
-                }
-            }
-        }
-
-        template <class Predicate>
-        [[nodiscard]] auto any_of(Predicate&& predicate) const -> bool
-        {
-            return (!first.empty() && predicate(first)) ||
-                std::ranges::any_of(additional, predicate);
-        }
-    };
-
-    struct sent_packet_metadata
-    {
-        retransmittable_frame_storage retransmittable_frames;
-        std::size_t bytes{};
-        // Set only for a padded PING used by Datagram PLPMTUD. The probe is
-        // normal ack-eliciting QUIC traffic, so acknowledgement is the only
-        // success signal we trust; no ICMP dependency is required.
-        std::optional<std::size_t> path_mtu_probe_target;
-        // PTO probes copy outstanding frames while the original packet stays
-        // in flight. Ordinary packets have no sibling retransmission record.
-        bool retransmission_alias{};
-    };
-
-    std::array<std::map<std::uint64_t, sent_packet_metadata>,
-        encryption_level_count>
-        sent_packets{};
-    std::array<std::size_t, encryption_level_count> retransmission_alias_counts{};
-
     // Initial and Handshake packet number spaces remain connection-wide.
     // draft-ietf-quic-multipath-12 creates a separate Application Data packet
     // number space for every Path ID; all mutable 1-RTT recovery state lives
@@ -877,10 +598,7 @@ struct quic_connection::quic_connection_impl
         std::uint64_t next_send_packet_number{};
         std::optional<std::uint64_t> largest_received_packet_number;
         std::set<std::uint64_t> received_ack_eliciting_packet_numbers;
-        std::map<std::uint64_t, sent_packet_metadata> sent_packets;
-        std::size_t retransmission_alias_count{};
-        loss_detector recovery;
-        congestion_controller congestion;
+        quic_recovery_controller recovery;
         std::optional<time_point> pacing_credit_updated_at;
         double pacing_credit_bytes{};
         // RFC 9000 starts every path at the 1200-byte minimum. The ceiling is
@@ -893,7 +611,7 @@ struct quic_connection::quic_connection_impl
 
         application_path_state(std::uint32_t path_id, endpoint remote,
             const quic_config& options)
-            : id(path_id), peer(std::move(remote)), recovery(options), congestion(options)
+            : id(path_id), peer(std::move(remote)), recovery(options)
         {
         }
     };
@@ -1168,17 +886,11 @@ struct quic_connection::quic_connection_impl
             // records cannot be useful anymore.  Preserve application data by
             // treating every outstanding packet as lost and returning its
             // retransmittable frames to a surviving path's send queue.
-            for (auto packet = state.sent_packets.rbegin();
-                packet != state.sent_packets.rend(); ++packet)
-            {
-                packet->second.retransmittable_frames.for_each_reverse(
-                    [this](const auto& frame)
-                    {
-                        encoded_send_frames.push_front(frame);
-                    });
-            }
-            state.congestion.on_packets_discarded(
-                state.recovery.discard_packet_number_space(pn_space::application));
+            auto outstanding = state.recovery.take_outstanding_frames(
+                pn_space::application);
+            for (auto frame = outstanding.rbegin(); frame != outstanding.rend(); ++frame)
+                encoded_send_frames.push_front(std::move(*frame));
+            state.recovery.discard_packet_number_space(pn_space::application);
 
             if (const auto local = local_path_connection_ids.find(path_id);
                 local != local_path_connection_ids.end())
@@ -1198,8 +910,7 @@ struct quic_connection::quic_connection_impl
         }
     }
 
-    loss_detector recovery;
-    congestion_controller congestion;
+    quic_recovery_controller recovery;
     std::optional<time_point> pacing_credit_updated_at;
     double pacing_credit_bytes{};
     std::array<std::uint64_t, encryption_level_count> next_send_packet_number{};
@@ -1229,7 +940,7 @@ struct quic_connection::quic_connection_impl
     quic_connection_impl(io_context& context, udp::udp_socket&& udp_socket,
         endpoint remote, quic_role role, quic_config options,
         ssl_context* supplied_tls_context = nullptr)
-        : ctx(context), socket_context(context), owned_socket(std::move(udp_socket)), receive_storage(max_udp_receive_payload), socket(std::addressof(*owned_socket)), peer(std::move(remote)), connection_role(role), config(options), accepted_streams(std::max<std::uint64_t>(1U, std::min(options.max_streams_bidi, std::uint64_t{1024}) + std::min(options.max_streams_uni, std::uint64_t{1024}))), peer_max_data(options.max_data), local_advertised_max_data(options.max_data), peer_max_streams_bidi(options.max_streams_bidi), peer_max_streams_uni(options.max_streams_uni), local_max_streams_bidi(options.max_streams_bidi), local_max_streams_uni(options.max_streams_uni), next_bidi_stream(role == quic_role::client ? 0U : 1U), next_uni_stream(role == quic_role::client ? 2U : 3U), recovery(options), congestion(options)
+        : ctx(context), socket_context(context), owned_socket(std::move(udp_socket)), receive_storage(max_udp_receive_payload), socket(std::addressof(*owned_socket)), peer(std::move(remote)), connection_role(role), config(options), accepted_streams(std::max<std::uint64_t>(1U, std::min(options.max_streams_bidi, std::uint64_t{1024}) + std::min(options.max_streams_uni, std::uint64_t{1024}))), peer_max_data(options.max_data), local_advertised_max_data(options.max_data), peer_max_streams_bidi(options.max_streams_bidi), peer_max_streams_uni(options.max_streams_uni), local_max_streams_bidi(options.max_streams_bidi), local_max_streams_uni(options.max_streams_uni), next_bidi_stream(role == quic_role::client ? 0U : 1U), next_uni_stream(role == quic_role::client ? 2U : 3U), recovery(options)
     {
         streams.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(128U,
             options.max_streams_bidi + options.max_streams_uni)));
@@ -1308,7 +1019,7 @@ struct quic_connection::quic_connection_impl
     quic_connection_impl(io_context& context, io_context& datagram_context,
         udp::udp_socket& shared_socket, endpoint remote, quic_role role,
         quic_config options, ssl_context& supplied_tls_context)
-        : ctx(context), socket_context(datagram_context), socket(std::addressof(shared_socket)), peer(std::move(remote)), connection_role(role), config(options), accepted_streams(std::max<std::uint64_t>(1U, std::min(options.max_streams_bidi, std::uint64_t{1024}) + std::min(options.max_streams_uni, std::uint64_t{1024}))), peer_max_data(options.max_data), local_advertised_max_data(options.max_data), peer_max_streams_bidi(options.max_streams_bidi), peer_max_streams_uni(options.max_streams_uni), local_max_streams_bidi(options.max_streams_bidi), local_max_streams_uni(options.max_streams_uni), next_bidi_stream(role == quic_role::client ? 0U : 1U), next_uni_stream(role == quic_role::client ? 2U : 3U), recovery(options), congestion(options)
+        : ctx(context), socket_context(datagram_context), socket(std::addressof(shared_socket)), peer(std::move(remote)), connection_role(role), config(options), accepted_streams(std::max<std::uint64_t>(1U, std::min(options.max_streams_bidi, std::uint64_t{1024}) + std::min(options.max_streams_uni, std::uint64_t{1024}))), peer_max_data(options.max_data), local_advertised_max_data(options.max_data), peer_max_streams_bidi(options.max_streams_bidi), peer_max_streams_uni(options.max_streams_uni), local_max_streams_bidi(options.max_streams_bidi), local_max_streams_uni(options.max_streams_uni), next_bidi_stream(role == quic_role::client ? 0U : 1U), next_uni_stream(role == quic_role::client ? 2U : 3U), recovery(options)
     {
         streams.reserve(static_cast<std::size_t>(std::min<std::uint64_t>(128U,
             options.max_streams_bidi + options.max_streams_uni)));
@@ -1498,7 +1209,7 @@ auto quic_connection::run() -> task<std::expected<void, std::error_code>>
     if (!result && !is_closed())
     {
         impl_->connection_state = connection_state::closed;
-        impl_->fail_pending_stream_writes(result.error());
+        impl_->write_commands.fail_all(result.error());
         impl_->accepted_streams.close();
         close_stream_readiness();
         // A readiness backend (notably epoll) does not promise to complete a
@@ -1875,13 +1586,9 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
                 co_return std::unexpected(keys.error());
             impl_->initial_keys = std::move(*keys);
             auto& pending = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
-            for (auto& [_, sent] : impl_->sent_packets[level_index(encryption_level::initial)])
-                sent.retransmittable_frames.for_each(
-                    [&pending](const auto& frame)
-                    {
-                        pending.push_back(frame.owned_bytes());
-                    });
-            impl_->sent_packets[level_index(encryption_level::initial)].clear();
+            for (auto& frame : impl_->recovery.take_outstanding_frames(pn_space::initial))
+                pending.push_back(frame.release_owned_bytes());
+            impl_->recovery.discard_packet_number_space(pn_space::initial);
             impl_->next_send_packet_number[level_index(encryption_level::initial)] = 0;
             auto sent = co_await send_initial_packets();
             if (!sent)
@@ -1921,13 +1628,9 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             impl_->next_send_packet_number[level_index(encryption_level::initial)] = 0;
             impl_->largest_received_packet_number[level_index(encryption_level::initial)].reset();
             auto& pending = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
-            for (auto& [_, sent] : impl_->sent_packets[level_index(encryption_level::initial)])
-                sent.retransmittable_frames.for_each(
-                    [&pending](const auto& frame)
-                    {
-                        pending.push_back(frame.owned_bytes());
-                    });
-            impl_->sent_packets[level_index(encryption_level::initial)].clear();
+            for (auto& frame : impl_->recovery.take_outstanding_frames(pn_space::initial))
+                pending.push_back(frame.release_owned_bytes());
+            impl_->recovery.discard_packet_number_space(pn_space::initial);
             impl_->retry_received = true;
             auto sent = co_await send_initial_packets();
             if (!sent)
@@ -2140,9 +1843,7 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             impl_->initial_keys.reset();
             impl_->crypto_fragments[level_index(encryption_level::initial)].clear();
             impl_->retransmit_crypto_frames[level_index(encryption_level::initial)].clear();
-            impl_->sent_packets[level_index(encryption_level::initial)].clear();
-            impl_->congestion.on_packets_discarded(
-                impl_->recovery.discard_packet_number_space(pn_space::initial));
+            impl_->recovery.discard_packet_number_space(pn_space::initial);
             auto& largest = impl_->largest_received_packet_number[level_index(level)];
             if (!largest || packet_number > *largest)
                 largest = packet_number;
@@ -2501,9 +2202,7 @@ auto quic_connection::handle_short_header_packet(short_header)
             co_return std::unexpected(settled.error());
         impl_->tls->discard_keys(encryption_level::handshake);
         impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)].clear();
-        impl_->sent_packets[level_index(encryption_level::handshake)].clear();
-        impl_->congestion.on_packets_discarded(
-            impl_->recovery.discard_packet_number_space(pn_space::handshake));
+        impl_->recovery.discard_packet_number_space(pn_space::handshake);
         auto parameters_valid = validate_peer_transport_parameters();
         if (!parameters_valid)
             co_return std::unexpected(parameters_valid.error());
@@ -2940,133 +2639,50 @@ auto quic_connection::process_ack_frame_state(const ack_frame& frame)
     const bool path_scoped = space == pn_space::application;
     auto& application_path = impl_->receiving_application_path();
     auto& recovery = path_scoped ? application_path.recovery : impl_->recovery;
-    auto& congestion = path_scoped ? application_path.congestion : impl_->congestion;
-    auto& sent = path_scoped ? application_path.sent_packets
-                             : impl_->sent_packets[level_index(level)];
-    auto& retransmission_alias_count = path_scoped
-        ? application_path.retransmission_alias_count
-        : impl_->retransmission_alias_counts[level_index(level)];
     const auto now = std::chrono::steady_clock::now();
-    auto acknowledged = recovery.on_ack_received(frame, frame.largest_acked,
-        now, space);
-    if (!acknowledged)
+    auto update = recovery.on_ack_received(frame, now, space);
+    if (!update)
     {
         impl_->connection_state = connection_state::closing;
         return level;
     }
 
-    // PTO aliases are exceptional. In ordinary traffic every frame has one
-    // packet record, so collecting delivered bytes and walking the complete
-    // outstanding map cannot resolve anything. Avoid that O(ACKed * in-flight)
-    // work on the static-response hot path.
-    const bool resolve_retransmission_aliases = retransmission_alias_count != 0U;
-    std::vector<quic_send_frame> delivered_frames;
-    if (resolve_retransmission_aliases)
-        delivered_frames.reserve(acknowledged->size());
-    bool acknowledged_retransmission_alias{};
-    for (const auto packet_number : *acknowledged)
+    if (path_scoped)
     {
-        const auto it = sent.find(packet_number);
-        if (it == sent.end())
-            continue;
-        if (path_scoped && it->second.path_mtu_probe_target)
+        for (const auto target : update->acknowledged_path_mtu_probes)
         {
-            const auto target = *it->second.path_mtu_probe_target;
-            if (application_path.path_mtu_probe_in_flight &&
-                *application_path.path_mtu_probe_in_flight == target)
-            {
-                application_path.discovered_max_datagram_payload = std::max(
-                    application_path.discovered_max_datagram_payload, target);
-                application_path.path_mtu_probe_in_flight.reset();
-                if (application_path.discovered_max_datagram_payload <
-                    impl_->path_mtu_probe_limit())
-                {
-                    application_path.next_path_mtu_probe_at = now +
-                        impl_->config.path_mtu_probe_interval;
-                }
-            }
-        }
-        // A PTO can carry copies of frames that are still recorded against
-        // their original packets.  Once any copy is acknowledged, those
-        // frames have been delivered and must never be queued again when a
-        // sibling packet is later declared lost (RFC 9002 section 6.2.4).
-        // Keep the sibling packet itself in flight for congestion accounting;
-        // only retire its now-obsolete retransmission metadata.
-        if (resolve_retransmission_aliases)
-        {
-            it->second.retransmittable_frames.for_each(
-                [&delivered_frames](auto& delivered)
-                {
-                    delivered_frames.push_back(std::move(delivered));
-                });
-        }
-        acknowledged_retransmission_alias =
-            acknowledged_retransmission_alias || it->second.retransmission_alias;
-        if (it->second.retransmission_alias)
-            --retransmission_alias_count;
-        congestion.on_packet_acked(it->second.bytes);
-        sent.erase(it);
-    }
-    // One ACK frame commonly covers a range of packet numbers. Retire PTO
-    // aliases once for the union of frames delivered by the whole ACK rather
-    // than rescanning every outstanding packet for every acknowledged packet.
-    if (!delivered_frames.empty())
-    {
-        for (auto& [_, metadata] : sent)
-        {
-            // A regular packet can only have a duplicate in a PTO probe. If a
-            // regular copy was acknowledged, skip every other regular packet;
-            // if the acknowledged copy was itself a probe, its original may
-            // be regular and the complete outstanding set must be considered.
-            if (!acknowledged_retransmission_alias && !metadata.retransmission_alias)
+            if (!application_path.path_mtu_probe_in_flight ||
+                *application_path.path_mtu_probe_in_flight != target)
                 continue;
-            metadata.retransmittable_frames.erase_if(
-                [&delivered_frames](const auto& candidate)
-                {
-                    return std::ranges::find(delivered_frames, candidate) !=
-                        delivered_frames.end();
-                });
-        }
-    }
-    congestion.update_rtt(recovery.rtt_estimate().smoothed_rtt_);
-
-    // RFC 9002 loss detection is packet-number-space scoped.  Requeue only
-    // frames that are retransmittable; ACKs are deliberately excluded when a
-    // packet is recorded below.
-    const auto lost = recovery.detect_lost_packets(now, space);
-    std::uint64_t lost_bytes{};
-    for (const auto packet_number : lost)
-    {
-        const auto it = sent.find(packet_number);
-        if (it == sent.end())
-            continue;
-        if (path_scoped && it->second.path_mtu_probe_target)
-        {
-            const auto target = *it->second.path_mtu_probe_target;
-            if (application_path.path_mtu_probe_in_flight &&
-                *application_path.path_mtu_probe_in_flight == target)
+            application_path.discovered_max_datagram_payload = std::max(
+                application_path.discovered_max_datagram_payload, target);
+            application_path.path_mtu_probe_in_flight.reset();
+            if (application_path.discovered_max_datagram_payload <
+                impl_->path_mtu_probe_limit())
             {
-                application_path.path_mtu_probe_in_flight.reset();
                 application_path.next_path_mtu_probe_at = now +
                     impl_->config.path_mtu_probe_interval;
             }
         }
-        lost_bytes += it->second.bytes;
-        it->second.retransmittable_frames.for_each_reverse(
-            [this, path_scoped, level](auto& encoded)
-            {
-                if (path_scoped)
-                    impl_->requeue_application_frame(std::move(encoded));
-                else
-                    impl_->retransmit_crypto_frames[level_index(level)].push_front(
-                        encoded.release_owned_bytes());
-            });
-        if (it->second.retransmission_alias)
-            --retransmission_alias_count;
-        sent.erase(it);
+        for (const auto target : update->lost_path_mtu_probes)
+        {
+            if (!application_path.path_mtu_probe_in_flight ||
+                *application_path.path_mtu_probe_in_flight != target)
+                continue;
+            application_path.path_mtu_probe_in_flight.reset();
+            application_path.next_path_mtu_probe_at = now +
+                impl_->config.path_mtu_probe_interval;
+        }
     }
-    if (lost_bytes != 0U)
-        congestion.on_congestion_event(lost_bytes);
+
+    for (auto& frame_to_retry : update->lost_frames)
+    {
+        if (path_scoped)
+            impl_->requeue_application_frame(std::move(frame_to_retry));
+        else
+            impl_->retransmit_crypto_frames[level_index(level)].push_front(
+                frame_to_retry.release_owned_bytes());
+    }
     return level;
 }
 
@@ -3508,10 +3124,6 @@ auto quic_connection::handle_pto() -> task<void>
         impl_->sending_application_path_id = std::get<0>(*application_due);
     auto& application_path = impl_->sending_application_path();
     auto& recovery = path_scoped ? application_path.recovery : impl_->recovery;
-    auto& sent = path_scoped ? application_path.sent_packets
-                             : impl_->sent_packets[level_index(level)];
-    if (sent.empty())
-        co_return;
 
     // RFC 9002 §6.2.4: PTO sends probes and retains the original packets as
     // in-flight.  Do not erase their metadata here; a later ACK may still
@@ -3521,12 +3133,8 @@ auto quic_connection::handle_pto() -> task<void>
     // value can leave a peer blocked even though a newer limit is already in
     // flight.  Packets whose frames were delivered through another PTO copy
     // remain in the map only for congestion accounting and are skipped.
-    const auto probe_packet = std::ranges::find_if(sent.rbegin(), sent.rend(),
-        [](const auto& entry)
-        {
-            return !entry.second.retransmittable_frames.empty();
-        });
-    if (probe_packet == sent.rend())
+    const auto probe_frames = recovery.newest_probe_frames(due->second);
+    if (!probe_frames)
     {
         // Packets containing only PMTU PING/padding or RFC 9221 DATAGRAM
         // data have no retransmittable application frame. Retire them at
@@ -3537,33 +3145,20 @@ auto quic_connection::handle_pto() -> task<void>
         if (path_scoped)
         {
             const auto now = std::chrono::steady_clock::now();
-            std::uint64_t lost_bytes{};
-            for (auto packet = sent.begin(); packet != sent.end();)
+            for (const auto target : recovery.discard_non_retransmittable(
+                     pn_space::application))
             {
-                const auto packet_number = packet->first;
-                const auto bytes = packet->second.bytes;
-                if (packet->second.path_mtu_probe_target)
+                if (application_path.path_mtu_probe_in_flight &&
+                    *application_path.path_mtu_probe_in_flight == target)
                 {
-                    const auto target = *packet->second.path_mtu_probe_target;
-                    if (application_path.path_mtu_probe_in_flight &&
-                        *application_path.path_mtu_probe_in_flight == target)
-                    {
-                        application_path.path_mtu_probe_in_flight.reset();
-                        application_path.next_path_mtu_probe_at = now +
-                            impl_->config.path_mtu_probe_interval;
-                    }
+                    application_path.path_mtu_probe_in_flight.reset();
+                    application_path.next_path_mtu_probe_at = now +
+                        impl_->config.path_mtu_probe_interval;
                 }
-                recovery.discard_inflight_packet(packet_number,
-                    pn_space::application);
-                lost_bytes += bytes;
-                packet = sent.erase(packet);
             }
-            if (lost_bytes != 0U)
-                application_path.congestion.on_congestion_event(lost_bytes);
         }
         co_return;
     }
-    const auto probe_frames = probe_packet->second.retransmittable_frames;
     recovery.on_pto_expired(due->second);
 
     constexpr std::size_t probe_count = 2;
@@ -3571,7 +3166,7 @@ auto quic_connection::handle_pto() -> task<void>
     {
         if (level == encryption_level::application)
         {
-            probe_frames.for_each_reverse(
+            probe_frames->for_each_reverse(
                 [this](const auto& frame)
                 {
                     impl_->encoded_send_frames.push_front(frame);
@@ -3593,7 +3188,7 @@ auto quic_connection::handle_pto() -> task<void>
         else
         {
             auto& pending = impl_->retransmit_crypto_frames[level_index(level)];
-            probe_frames.for_each_reverse(
+            probe_frames->for_each_reverse(
                 [&pending](const auto& frame)
                 {
                     pending.push_front(frame.owned_bytes());
@@ -3867,12 +3462,12 @@ auto quic_connection::await_application_pacing(std::size_t packet_size) -> task<
     if ((peer_address.is_v4() && peer_address.to_v4().is_loopback()) ||
         (peer_address.is_v6() && peer_address.to_v6().is_loopback()))
         co_return;
-    const auto rate = path.congestion.pacing_rate();
+    const auto rate = path.recovery.pacing_rate();
     if (!rate || !std::isfinite(*rate) || *rate <= 0.0)
         co_return;
 
     const auto now = std::chrono::steady_clock::now();
-    const auto burst_capacity = static_cast<double>(path.congestion.congestion_window());
+    const auto burst_capacity = static_cast<double>(path.recovery.congestion_window());
     if (!path.pacing_credit_updated_at)
     {
         path.pacing_credit_updated_at = now;
@@ -3917,12 +3512,12 @@ auto quic_connection::try_reserve_application_pacing(std::size_t packet_size)
     if ((peer_address.is_v4() && peer_address.to_v4().is_loopback()) ||
         (peer_address.is_v6() && peer_address.to_v6().is_loopback()))
         return true;
-    const auto rate = path.congestion.pacing_rate();
+    const auto rate = path.recovery.pacing_rate();
     if (!rate || !std::isfinite(*rate) || *rate <= 0.0)
         return true;
 
     const auto now = std::chrono::steady_clock::now();
-    const auto burst_capacity = static_cast<double>(path.congestion.congestion_window());
+    const auto burst_capacity = static_cast<double>(path.recovery.congestion_window());
     if (!path.pacing_credit_updated_at)
     {
         path.pacing_credit_updated_at = now;
@@ -3968,7 +3563,7 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
         length_field_size - pn_length - tag_length;
 
     std::vector<std::byte> payload;
-    quic_connection_impl::retransmittable_frame_storage retransmittable_frames;
+    retransmittable_frame_storage retransmittable_frames;
     auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::initial)];
     if (retransmit.empty())
     {
@@ -4040,13 +3635,8 @@ auto quic_connection::pack_initial_packet() -> std::vector<std::byte>
         return {};
     const auto ack_eliciting = !retransmittable_frames.empty();
     impl_->recovery.on_packet_sent(packet_number, header.size(),
-        std::chrono::steady_clock::now(), ack_eliciting, pn_space::initial);
-    if (ack_eliciting)
-    {
-        impl_->congestion.on_packet_sent(header.size());
-        impl_->sent_packets[level_index(encryption_level::initial)].emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), header.size(), std::nullopt, false});
-    }
+        std::chrono::steady_clock::now(), ack_eliciting, pn_space::initial,
+        std::move(retransmittable_frames));
     return header;
 }
 
@@ -4068,7 +3658,7 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
         length_field_size - pn_length - tag_length;
 
     std::vector<std::byte> payload;
-    quic_connection_impl::retransmittable_frame_storage retransmittable_frames;
+    retransmittable_frame_storage retransmittable_frames;
     auto& retransmit = impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)];
     if (retransmit.empty())
     {
@@ -4127,13 +3717,8 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
         return {};
     const auto ack_eliciting = !retransmittable_frames.empty();
     impl_->recovery.on_packet_sent(packet_number, header.size(),
-        std::chrono::steady_clock::now(), ack_eliciting, pn_space::handshake);
-    if (ack_eliciting)
-    {
-        impl_->congestion.on_packet_sent(header.size());
-        impl_->sent_packets[level_index(encryption_level::handshake)].emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), header.size(), std::nullopt, false});
-    }
+        std::chrono::steady_clock::now(), ack_eliciting, pn_space::handshake,
+        std::move(retransmittable_frames));
     return header;
 }
 
@@ -4178,7 +3763,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
             : encode_frame(*ack);
         payload.insert(payload.end(), encoded_ack.begin(), encoded_ack.end());
     }
-    quic_connection_impl::retransmittable_frame_storage retransmittable_frames;
+    retransmittable_frame_storage retransmittable_frames;
 
     // Keep the priority metadata separate from the retransmission bytes. It
     // lets a packet rejected by congestion control return a STREAM frame to
@@ -4346,7 +3931,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
     }
     if (!pto_probe && (!retransmittable_frames.empty() || contains_path_mtu_probe) &&
         !contains_connection_close &&
-        !path.congestion.can_send_datagram(estimated_packet_size))
+        !path.recovery.can_send_datagram(estimated_packet_size))
     {
 
         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
@@ -4400,15 +3985,8 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
         !contains_connection_close;
     path.recovery.on_packet_sent(packet_number, packet.size(),
         std::chrono::steady_clock::now(), recovery_tracked,
-        pn_space::application);
-    if (recovery_tracked)
-    {
-        path.congestion.on_packet_sent(packet.size());
-        path.sent_packets.emplace(
-            packet_number, quic_connection_impl::sent_packet_metadata{std::move(retransmittable_frames), packet.size(), path_mtu_probe_target, pto_probe});
-        if (pto_probe)
-            ++path.retransmission_alias_count;
-    }
+        pn_space::application, std::move(retransmittable_frames),
+        path_mtu_probe_target, pto_probe);
     return packet;
 }
 
@@ -4446,10 +4024,9 @@ auto quic_connection::pack_path_validation_packet(std::span<const std::byte> fra
         return {};
     impl_->account_path_send(path, packet.size());
     path.recovery.on_packet_sent(packet_number, packet.size(),
-        std::chrono::steady_clock::now(), true, pn_space::application);
-    path.congestion.on_packet_sent(packet.size());
-    path.sent_packets.emplace(
-        packet_number, quic_connection_impl::sent_packet_metadata{quic_connection_impl::retransmittable_frame_storage{quic_send_frame{std::vector<std::byte>(frame.begin(), frame.end())}}, packet.size(), std::nullopt, false});
+        std::chrono::steady_clock::now(), true, pn_space::application,
+        retransmittable_frame_storage{quic_send_frame{
+            std::vector<std::byte>(frame.begin(), frame.end())}});
     return packet;
 }
 
@@ -4486,16 +4063,16 @@ auto quic_connection::flush_send_queue() -> task<void>
         // stay outside it so receive processing remains responsive.
         co_await impl_->receive_mutex.lock();
         async_lock_guard state_guard{impl_->receive_mutex, std::adopt_lock};
-        while (auto command = impl_->stream_write_commands.try_dequeue())
+        while (auto command = impl_->write_commands.try_dequeue())
         {
-            if (command->type == quic_connection_impl::stream_write_command::operation::set_priority)
+            if (command->type == quic_write_command::operation::set_priority)
             {
                 impl_->set_stream_priority(command->stream, command->urgency,
                     command->incremental);
                 continue;
             }
             auto result = command->type ==
-                    quic_connection_impl::stream_write_command::operation::datagram
+                    quic_write_command::operation::datagram
                 ? co_await apply_application_datagram(std::move(command->bytes))
                 : command->shared_bytes
                 ? co_await apply_stream_write(command->stream,
@@ -4547,7 +4124,7 @@ auto quic_connection::flush_send_queue() -> task<void>
         // both a command and an existing frame, which could leave a producer
         // waiting until a later timer tick.
         if (impl_->send_flush_requested.load(std::memory_order_acquire) ||
-            impl_->stream_write_commands.approximate_size() != 0U)
+            impl_->write_commands.approximate_size() != 0U)
             continue;
 
         // Do not transfer the owner token through a long coroutine waiter
@@ -4557,7 +4134,7 @@ auto quic_connection::flush_send_queue() -> task<void>
         flush_guard.release();
         impl_->flush_mutex.unlock();
         if (!impl_->send_flush_requested.load(std::memory_order_acquire) &&
-            impl_->stream_write_commands.approximate_size() == 0U)
+            impl_->write_commands.approximate_size() == 0U)
             co_return;
         if (!impl_->flush_mutex.try_lock())
             co_return;
@@ -4835,7 +4412,7 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
 {
     for (;;)
     {
-        auto* const completion = impl_->stream_write_completions.try_acquire();
+        auto* const completion = impl_->write_commands.try_acquire();
         if (!completion)
         {
             if (is_closed() || impl_->connection_state == connection_state::draining)
@@ -4843,10 +4420,10 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
             co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
             continue;
         }
-        if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::write,
+        if (!impl_->write_commands.try_enqueue({quic_write_command::operation::write,
                 sid, std::move(owned_data), fin, 0U, false, completion, {}}))
         {
-            impl_->stream_write_completions.release(*completion);
+            impl_->write_commands.release(*completion);
             co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
         }
 
@@ -4862,7 +4439,7 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
         co_await flush_send_queue();
         const auto result = co_await completion->receive();
         owned_data = std::exchange(completion->rejected_bytes, {});
-        impl_->stream_write_completions.release(*completion);
+        impl_->write_commands.release(*completion);
         if (!result && result.error() == make_error_code(quic_errc::flow_control_error))
         {
             // Short HEADERS/DATA writes need the same backpressure as large
@@ -4885,7 +4462,7 @@ auto quic_connection::async_send_shared(stream_id sid,
         co_return co_await async_send(sid, std::move(prefix), fin);
     for (;;)
     {
-        auto* const completion = impl_->stream_write_completions.try_acquire();
+        auto* const completion = impl_->write_commands.try_acquire();
         if (!completion)
         {
             if (is_closed() || impl_->connection_state == connection_state::draining)
@@ -4893,11 +4470,11 @@ auto quic_connection::async_send_shared(stream_id sid,
             co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
             continue;
         }
-        if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::write,
+        if (!impl_->write_commands.try_enqueue({quic_write_command::operation::write,
                 sid, std::move(prefix), fin, 0U, false, completion,
                 std::move(shared_data)}))
         {
-            impl_->stream_write_completions.release(*completion);
+            impl_->write_commands.release(*completion);
             co_return std::unexpected(
                 std::make_error_code(std::errc::resource_unavailable_try_again));
         }
@@ -4910,7 +4487,7 @@ auto quic_connection::async_send_shared(stream_id sid,
         const auto result = co_await completion->receive();
         prefix = std::exchange(completion->rejected_bytes, {});
         shared_data = std::exchange(completion->rejected_shared_bytes, {});
-        impl_->stream_write_completions.release(*completion);
+        impl_->write_commands.release(*completion);
         if (!result && result.error() == make_error_code(quic_errc::flow_control_error))
         {
             std::vector<std::byte> owned_data;
@@ -4937,7 +4514,7 @@ auto quic_connection::set_stream_priority(stream_id sid, std::uint8_t urgency,
     // Priority updates share the producer path with stream writes.  They are
     // ordered before later writes from the same coroutine and never race the
     // owner while it traverses the RFC 9218 queues.
-    if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::set_priority,
+    if (!impl_->write_commands.try_enqueue({quic_write_command::operation::set_priority,
             sid, {}, false, urgency, incremental, {}, {}}))
         return false;
     impl_->send_flush_requested.store(true, std::memory_order_release);
@@ -4967,14 +4544,14 @@ auto quic_connection::apply_application_datagram(std::vector<std::byte> data)
 auto quic_connection::async_send_datagram(std::span<const std::byte> data)
     -> task<std::expected<void, std::error_code>>
 {
-    auto* const completion = impl_->stream_write_completions.try_acquire();
+    auto* const completion = impl_->write_commands.try_acquire();
     if (!completion)
         co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
     std::vector<std::byte> owned_data{data.begin(), data.end()};
-    if (!impl_->stream_write_commands.try_enqueue({quic_connection_impl::stream_write_command::operation::datagram,
+    if (!impl_->write_commands.try_enqueue({quic_write_command::operation::datagram,
             {}, std::move(owned_data), false, 0U, false, completion, {}}))
     {
-        impl_->stream_write_completions.release(*completion);
+        impl_->write_commands.release(*completion);
         co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
     }
     impl_->send_flush_requested.store(true, std::memory_order_release);
@@ -4983,7 +4560,7 @@ auto quic_connection::async_send_datagram(std::span<const std::byte> data)
         impl_->receive_wait_token.cancel();
     co_await flush_send_queue();
     const auto result = co_await completion->receive();
-    impl_->stream_write_completions.release(*completion);
+    impl_->write_commands.release(*completion);
     if (!result)
         co_return std::unexpected(result.error());
     co_return {};
@@ -5200,7 +4777,7 @@ auto quic_connection::async_close(std::error_code error, std::string_view reason
     impl_->encoded_send_frames.clear();
     impl_->unreliable_send_frames.clear();
     impl_->early_data_send_frames.clear();
-    impl_->fail_pending_stream_writes(std::make_error_code(std::errc::operation_canceled));
+    impl_->write_commands.fail_all(std::make_error_code(std::errc::operation_canceled));
     impl_->encoded_send_frames.push_back(encode_frame(connection_close_frame{
         static_cast<std::uint64_t>(error.value()), 0, std::string(reason), false}));
     impl_->connection_state = connection_state::closing;
@@ -5602,7 +5179,7 @@ void quic_connection::handle_idle_timeout()
     // a CONNECTION_CLOSE frame, because the peer may already be unreachable.
 
     impl_->connection_state = connection_state::closed;
-    impl_->fail_pending_stream_writes(std::make_error_code(std::errc::timed_out));
+    impl_->write_commands.fail_all(std::make_error_code(std::errc::timed_out));
     impl_->accepted_streams.close();
     close_stream_readiness();
     // The receive may be armed without a PTO or idle timer.  Cancel it before

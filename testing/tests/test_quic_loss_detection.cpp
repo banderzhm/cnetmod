@@ -319,4 +319,61 @@ TEST(loss_detector_rtt_sample_fields)
     ASSERT_EQ(min_s, 60);
 }
 
+TEST(quic_recovery_controller_removes_acknowledged_pto_aliases)
+{
+    auto config = make_test_config();
+    cnetmod::quic::quic_recovery_controller recovery(config);
+    const auto now = std::chrono::steady_clock::now();
+    const auto frame_bytes = std::vector<std::byte>{
+        std::byte{0x08}, std::byte{0x01}, std::byte{0x00}};
+
+    recovery.on_packet_sent(1U, 1200U, now, true,
+        cnetmod::quic::pn_space::application,
+        cnetmod::quic::retransmittable_frame_storage{
+            cnetmod::quic::quic_send_frame{frame_bytes}});
+    recovery.on_packet_sent(2U, 1200U, now + 1ms, true,
+        cnetmod::quic::pn_space::application,
+        cnetmod::quic::retransmittable_frame_storage{
+            cnetmod::quic::quic_send_frame{frame_bytes}},
+        std::nullopt, true);
+
+    cnetmod::quic::ack_frame ack;
+    ack.largest_acked = 1U;
+    auto update = recovery.on_ack_received(
+        ack, now + 20ms, cnetmod::quic::pn_space::application);
+
+    ASSERT_TRUE(update.has_value());
+    ASSERT_TRUE(update->lost_frames.empty());
+    ASSERT_FALSE(recovery.newest_probe_frames(
+                             cnetmod::quic::pn_space::application)
+            .has_value());
+}
+
+TEST(quic_recovery_controller_emits_lost_frames)
+{
+    auto config = make_test_config();
+    cnetmod::quic::quic_recovery_controller recovery(config);
+    const auto now = std::chrono::steady_clock::now();
+
+    for (std::uint64_t packet = 1U; packet <= 4U; ++packet)
+    {
+        recovery.on_packet_sent(packet, 1200U, now, true,
+            cnetmod::quic::pn_space::application,
+            cnetmod::quic::retransmittable_frame_storage{
+                cnetmod::quic::quic_send_frame{std::vector<std::byte>{
+                    std::byte{0x08}, static_cast<std::byte>(packet)}}});
+    }
+
+    cnetmod::quic::ack_frame ack;
+    ack.largest_acked = 4U;
+    auto update = recovery.on_ack_received(
+        ack, now + 20ms, cnetmod::quic::pn_space::application);
+
+    ASSERT_TRUE(update.has_value());
+    ASSERT_EQ(update->lost_frames.size(), 1U);
+    ASSERT_EQ(std::to_integer<unsigned>(
+                  update->lost_frames.front().owned_bytes().back()),
+        1U);
+}
+
 RUN_TESTS();

@@ -26,6 +26,7 @@ export import :stream;
 export import :loss_detection;
 export import :congestion_control;
 export import :flow_control;
+export import :recovery;
 
 #else
 
