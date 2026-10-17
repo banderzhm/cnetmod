@@ -43,6 +43,8 @@ export struct http3_server_statistics
     std::uint64_t rio_send_datagrams{};
     std::uint64_t rio_receive_queue_dropped_datagrams{};
     std::uint64_t rio_fallbacks{};
+    /// Live connections retained by CID routing, independent of CID count.
+    std::size_t active_connections{};
 };
 
 /// Bounded listener-side buffering. These limits apply before a UDP datagram

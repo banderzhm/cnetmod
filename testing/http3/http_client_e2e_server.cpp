@@ -120,13 +120,20 @@ auto main(int argc, char** argv) -> int
     auto priority = std::make_shared<priority_fixture>();
     auto batch = std::make_shared<batch_fixture>();
     auto cancelled_push_frames = std::make_shared<std::atomic<std::size_t>>();
+    auto server_observer = std::make_shared<cnetmod::http::v3::http3_server*>(nullptr);
     cnetmod::http::v3::streaming_server_request_handler handler =
         [context_ptr, early_data_cache, priority, batch,
-            cancelled_push_frames](cnetmod::http::v3::http3_request& request,
+            cancelled_push_frames, server_observer](cnetmod::http::v3::http3_request& request,
             cnetmod::http::v3::http3_response& response,
             cnetmod::http::request_body_stream& body_stream,
             cnetmod::cancel_token& token) -> cnetmod::task<std::expected<void, std::error_code>>
     {
+        if (request.path == "/active-connections")
+        {
+            response.status = 200;
+            response.body = std::to_string((*server_observer)->statistics().active_connections);
+            co_return {};
+        }
         if (request.path.starts_with("/priority/"))
         {
             priority->arrivals.fetch_add(1U, std::memory_order_acq_rel);
@@ -487,6 +494,7 @@ auto main(int argc, char** argv) -> int
 
     auto server = cnetmod::http::v3::make_http3_server(*context, tls,
         cnetmod::endpoint{*address, arguments.port}, std::move(handler));
+    *server_observer = server.get();
     if (auto configured = server->set_push_cancellation_observer(
             [cancelled_push_frames](std::uint64_t)
             {

@@ -990,6 +990,7 @@ public:
             sessions_.clear();
             connections_.clear();
             published_route_generations_.clear();
+            active_connections_.store(0U, std::memory_order_relaxed);
             timer_generations_.clear();
             timer_queue_ = {};
             timer_wait_deadline_.reset();
@@ -1035,6 +1036,7 @@ public:
             result.rio_fallbacks = socket_statistics.registered_io_fallback ? 1U : 0U;
         }
         #endif
+        result.active_connections = active_connections_.load(std::memory_order_relaxed);
         for (const auto& shard : shards_)
         {
             const auto shard_result = shard->statistics();
@@ -1044,6 +1046,7 @@ public:
             result.inbox_dropped_datagrams += shard_result.inbox_dropped_datagrams;
             result.pooled_receive_datagrams += shard_result.pooled_receive_datagrams;
             result.heap_receive_datagrams += shard_result.heap_receive_datagrams;
+            result.active_connections += shard_result.active_connections;
         }
         return result;
     }
@@ -1179,6 +1182,8 @@ private:
                 published_route_generations_.erase(connection.get());
                 timer_generations_.erase(connection.get());
             }
+            active_connections_.store(published_route_generations_.size(),
+                std::memory_order_relaxed);
         }
         if (replace_dispatcher_routes)
             dispatcher_->replace_connection_routes(*this, *connection, routes);
@@ -1687,6 +1692,10 @@ private:
             for (auto& connection : expired)
             {
                 co_await connection->async_poll_timers();
+                // Idle/PTO processing can retire a connection without any
+                // further peer datagram. Reconcile ownership here as well as
+                // on receive, otherwise CID routes retain timed-out peers.
+                refresh_connection_routes(connection);
                 schedule_connection_timer(connection);
             }
 
@@ -1773,6 +1782,7 @@ private:
     // guard only their short, non-awaiting mutations with the project-owned
     // atomic latch. Packet processing and UDP I/O remain outside this latch.
     concurrent_containers::atomic_rw_latch state_latch_;
+    std::atomic<std::size_t> active_connections_{};
     std::unordered_map<quic::connection_id, std::shared_ptr<quic::quic_connection>> connections_;
     std::unordered_map<quic::quic_connection*, std::uint64_t> published_route_generations_;
     std::unordered_map<quic::quic_connection*, timer_schedule> timer_generations_;

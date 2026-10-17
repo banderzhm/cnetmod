@@ -93,6 +93,12 @@ if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
     endif()
 
     if(TARGET http3_e2e_server AND TARGET http_client_http3_e2e)
+        add_test(NAME http3_idle_connection_cleanup
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/http3_idle_cleanup.py"
+                "$<TARGET_FILE:http3_e2e_server>")
+        set_tests_properties(http3_idle_connection_cleanup PROPERTIES
+            TIMEOUT 65 LABELS "http3;quic;lifecycle" SKIP_RETURN_CODE 77)
         add_test(NAME http_client_http3_end_to_end
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/http_client_e2e.py"
