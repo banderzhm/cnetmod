@@ -31,15 +31,12 @@ namespace {
             std::to_integer<std::uint32_t>(value[3]);
     }
 
-    constexpr std::size_t input_compaction_threshold = 4096;
 } // namespace
 
 session::session(cnetmod::io_context& context, cnetmod::socket& socket,
     server_handler handler, transport_reader reader,
     transport_writer writer)
-    : context_(&context), socket_(&socket), reader_(std::move(reader)),
-      writer_(std::move(writer)), streams_(&stream_pool_),
-      handler_(std::move(handler))
+    : context_(&context), socket_(&socket), reader_(std::move(reader)), writer_(std::move(writer)), streams_(&stream_pool_), handler_(std::move(handler))
 {
     // Avoid both ends of the allocation trade-off: the common case should not
     // grow on its first multiplexed batch, while thousands of mostly-idle H2
@@ -110,31 +107,6 @@ void session::queue_frame(frame_header header,
     const auto encoded = encode_frame_header(header);
     outbound_.insert(outbound_.end(), encoded.begin(), encoded.end());
     outbound_.insert(outbound_.end(), payload.begin(), payload.end());
-}
-
-void session::compact_input()
-{
-    if (input_offset_ == 0)
-        return;
-
-    if (input_offset_ == input_.size())
-    {
-        input_.clear();
-        input_offset_ = 0;
-        return;
-    }
-
-    // Keep an unread tail in place until enough consumed prefix has accrued.
-    // Erasing from a vector for every small HTTP/2 frame turns a coalesced
-    // receive into repeated memmoves on the connection hot path.
-    if (input_offset_ < input_compaction_threshold && input_offset_ * 2 < input_.size())
-        return;
-
-    const auto unread = input_.size() - input_offset_;
-    std::move(input_.begin() + static_cast<std::ptrdiff_t>(input_offset_), input_.end(),
-        input_.begin());
-    input_.resize(unread);
-    input_offset_ = 0;
 }
 
 void session::queue_connection_error(std::uint32_t code)
@@ -448,7 +420,8 @@ auto session::shutdown_streaming() -> cnetmod::task<void>
 
 auto session::dispatch_ready() -> cnetmod::task<void>
 {
-    auto ready = std::exchange(ready_streams_, {});
+    std::vector<std::uint32_t> ready;
+    ready.swap(ready_streams_);
     auto batch_started = std::chrono::steady_clock::now();
     std::size_t batched_responses{};
     for (const auto stream_id : ready)
@@ -505,38 +478,49 @@ auto session::dispatch_ready() -> cnetmod::task<void>
             batched_responses = 0;
         }
     }
+    ready.clear();
+    ready_streams_.swap(ready);
 }
 
 auto session::receive(std::span<const std::byte> bytes)
     -> std::expected<void, std::error_code>
 {
-    compact_input();
-    input_.insert(input_.end(), bytes.begin(), bytes.end());
+    // Parse complete transport reads in place. The owned buffer is only needed
+    // when a preface or frame crosses a read boundary.
+    const bool has_buffered_tail = !input_.empty();
+    if (has_buffered_tail)
+        input_.insert(input_.end(), bytes.begin(), bytes.end());
+    const auto source = has_buffered_tail
+        ? std::span<const std::byte>{input_}
+        : bytes;
+    std::size_t offset = 0;
+
     if (!received_preface_)
     {
-        if (input_.size() - input_offset_ < client_preface.size())
+        if (source.size() < client_preface.size())
+        {
+            if (!has_buffered_tail)
+                input_.assign(source.begin(), source.end());
             return {};
-        if (std::string_view(reinterpret_cast<const char*>(input_.data() + input_offset_),
+        }
+        if (std::string_view(reinterpret_cast<const char*>(source.data()),
                 client_preface.size()) != client_preface)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        input_offset_ += client_preface.size();
+        offset = client_preface.size();
         received_preface_ = true;
         queue_frame({.type = frame_type::settings, .stream_id = 0},
             encode_settings(local_));
     }
-    while (input_.size() - input_offset_ >= frame_header_size)
+    while (source.size() - offset >= frame_header_size)
     {
         auto header =
-            decode_frame_header(std::span{input_.data() + input_offset_, frame_header_size});
+            decode_frame_header(source.subspan(offset, frame_header_size));
         if (!header)
             return std::unexpected(header.error());
-        if (input_.size() - input_offset_ < frame_header_size + header->length)
-        {
-            compact_input();
-            return {};
-        }
-        auto payload = std::span{input_.data() + input_offset_ + frame_header_size,
-            static_cast<std::size_t>(header->length)};
+        if (source.size() - offset < frame_header_size + header->length)
+            break;
+        auto payload = source.subspan(
+            offset + frame_header_size, header->length);
         auto result = process_frame(*header, payload);
         if (!result)
         {
@@ -546,9 +530,17 @@ auto session::receive(std::span<const std::byte> bytes)
                     : error_protocol);
             return result;
         }
-        input_offset_ += frame_header_size + header->length;
+        offset += frame_header_size + header->length;
     }
-    compact_input();
+
+    if (offset == source.size())
+        input_.clear();
+    else if (has_buffered_tail)
+        input_.erase(input_.begin(),
+            input_.begin() + static_cast<std::ptrdiff_t>(offset));
+    else
+        input_.assign(source.begin() + static_cast<std::ptrdiff_t>(offset),
+            source.end());
     return {};
 }
 

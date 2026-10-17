@@ -237,15 +237,16 @@ void header_compression::insert(entry item)
     evict();
 }
 
-auto header_compression::at(std::uint32_t index) const -> std::optional<entry>
+auto header_compression::at(std::uint32_t index) const
+    -> std::optional<entry_view>
 {
     if (index > 0 && index < std::size(static_table))
-        return entry{std::string(static_table[index].name),
-            std::string(static_table[index].value)};
+        return entry_view{static_table[index].name, static_table[index].value};
     const auto dynamic =
         static_cast<std::size_t>(index) - std::size(static_table);
     if (index >= std::size(static_table) && dynamic < dynamic_table_.size())
-        return dynamic_table_[dynamic];
+        return entry_view{
+            dynamic_table_[dynamic].name, dynamic_table_[dynamic].value};
     return std::nullopt;
 }
 
@@ -305,7 +306,8 @@ auto header_compression::decode(std::span<const std::byte> block,
             auto value = index ? at(*index) : std::nullopt;
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            output.push_back({std::move(value->name), std::move(value->value)});
+            output.push_back(
+                {std::string{value->name}, std::string{value->value}});
             continue;
         }
         if ((first & 0xe0) == 0x20)
@@ -330,7 +332,7 @@ auto header_compression::decode(std::span<const std::byte> block,
             auto value = at(*index);
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            name = std::move(value->name);
+            name = value->name;
         }
         else
         {

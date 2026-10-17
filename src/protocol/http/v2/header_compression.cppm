@@ -37,9 +37,16 @@ private:
         std::string value;
     };
 
+    struct entry_view
+    {
+        std::string_view name;
+        std::string_view value;
+    };
+
     void evict();
     void insert(entry item);
-    [[nodiscard]] auto at(std::uint32_t index) const -> std::optional<entry>;
+    [[nodiscard]] auto at(std::uint32_t index) const
+        -> std::optional<entry_view>;
     [[nodiscard]] auto find(std::string_view name, std::string_view value,
         bool exact) const -> std::uint32_t;
     std::deque<entry> dynamic_table_;

@@ -998,6 +998,25 @@ auto ssl_stream::async_write(const_buffer buffer, cancel_token& token)
 auto ssl_stream::async_write_all(const_buffer buffer)
     -> task<std::expected<void, std::error_code>>
 {
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+    if (kernel_tls_active_)
+    {
+        const auto* data = static_cast<const std::byte*>(buffer.data);
+        std::size_t written = 0;
+        while (written < buffer.size)
+        {
+            auto result = co_await cnetmod::async_write(io_ctx_, sock_,
+                const_buffer{data + written, buffer.size - written});
+            if (!result)
+                co_return std::unexpected(result.error());
+            if (*result == 0)
+                co_return std::unexpected(make_error_code(errc::broken_pipe));
+            written += *result;
+        }
+        co_return {};
+    }
+    #endif
+
     #ifdef CNETMOD_PLATFORM_WINDOWS
     const auto* data = static_cast<const std::byte*>(buffer.data);
     std::size_t written = 0;
@@ -1023,6 +1042,23 @@ auto ssl_stream::async_write_all(const_buffer buffer, cancel_token& token)
 {
     const auto* data = static_cast<const std::byte*>(buffer.data);
     std::size_t written = 0;
+    #if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+    if (kernel_tls_active_)
+    {
+        while (written < buffer.size)
+        {
+            auto result = co_await cnetmod::async_write(io_ctx_, sock_,
+                const_buffer{data + written, buffer.size - written}, token);
+            if (!result)
+                co_return std::unexpected(result.error());
+            if (*result == 0)
+                co_return std::unexpected(make_error_code(errc::broken_pipe));
+            written += *result;
+        }
+        co_return {};
+    }
+    #endif
+
     while (written < buffer.size)
     {
         auto result = co_await async_write(

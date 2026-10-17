@@ -90,7 +90,6 @@ private:
         -> cnetmod::task<void>;
     void queue_connection_error(std::uint32_t code);
     void queue_frame(frame_header header, std::span<const std::byte> payload);
-    void compact_input();
 
     cnetmod::io_context* context_{};
     cnetmod::socket* socket_{};
@@ -109,7 +108,6 @@ private:
     std::unique_ptr<cnetmod::task_group> background_;
     cnetmod::async_mutex writer_mutex_;
     std::vector<std::byte> input_;
-    std::size_t input_offset_ = 0;
     std::vector<std::byte> outbound_;
     std::vector<std::byte> write_buffer_;
     std::vector<std::byte> header_block_;
