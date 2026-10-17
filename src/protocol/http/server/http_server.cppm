@@ -185,7 +185,8 @@ private:
     auto handle_connection(socket client, io_context& io, conn_count_guard ownership) -> task<void>;
 
     auto handle_h1_clear(socket& client, io_context& io,
-        const char* initial_data, std::size_t initial_len,
+        std::unique_ptr<std::array<std::byte, 8192>> initial_buffer,
+        std::size_t initial_len,
         cancel_token& cancellation) -> task<void>;
 
     auto handle_h2(socket& client, io_context& io,
@@ -193,7 +194,9 @@ private:
         cancel_token& cancellation) -> task<void>;
 
     auto make_h2_streaming_handler(io_context& io, socket& client)
-        -> v2::streaming_server_handler;
+        -> v2::borrowed_streaming_server_handler;
+    auto make_h2_sync_handler(io_context& io, socket& client)
+        -> v2::sync_server_handler;
 
 #ifdef CNETMOD_HAS_SSL
     auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,

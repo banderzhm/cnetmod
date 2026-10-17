@@ -171,13 +171,14 @@ namespace {
         return std::nullopt;
     }
 
-    void encode_string(std::vector<std::byte>& out, std::string_view value)
+    void encode_string(std::vector<std::byte>& out, std::string_view value,
+        std::vector<std::byte>& scratch)
     {
-        auto encoded = huffman_encode(value);
-        if (encoded.size() < value.size())
+        huffman_encode(value, scratch);
+        if (scratch.size() < value.size())
         {
-            encode_integer(out, static_cast<std::uint32_t>(encoded.size()), 7, 0x80);
-            out.insert(out.end(), encoded.begin(), encoded.end());
+            encode_integer(out, static_cast<std::uint32_t>(scratch.size()), 7, 0x80);
+            out.insert(out.end(), scratch.begin(), scratch.end());
             return;
         }
         encode_integer(out, static_cast<std::uint32_t>(value.size()), 7);
@@ -185,27 +186,24 @@ namespace {
             out.push_back(static_cast<std::byte>(ch));
     }
 
-    auto decode_string(std::span<const std::byte> input, std::size_t& offset)
-        -> std::optional<std::string>
+    auto decode_string(std::span<const std::byte> input, std::size_t& offset,
+        std::string& output) -> bool
     {
         if (offset == input.size())
-            return std::nullopt;
+            return false;
         const bool huffman =
             (std::to_integer<std::uint8_t>(input[offset]) & 0x80) != 0;
         auto size = decode_integer(input, offset, 7);
         if (!size || *size > input.size() - offset)
-            return std::nullopt;
+            return false;
         const auto value = input.subspan(offset, *size);
         offset += *size;
         if (huffman)
         {
-            auto decoded = huffman_decode(value);
-            if (!decoded)
-                return std::nullopt;
-            return std::move(*decoded);
+            return huffman_decode(value, output).has_value();
         }
-        return std::string(reinterpret_cast<const char*>(value.data()),
-            value.size());
+        output.assign(reinterpret_cast<const char*>(value.data()), value.size());
+        return true;
     }
 } // namespace
 
@@ -288,12 +286,24 @@ auto header_compression::decode(std::span<const std::byte> block)
     return result;
 }
 
-auto header_compression::decode(std::span<const std::byte> block,
-    std::vector<header_field>& output)
+template <typename Container>
+auto header_compression::decode_into(std::span<const std::byte> block,
+    Container& output)
     -> std::expected<void, std::error_code>
 {
-    output.clear();
-    output.reserve(std::min<std::size_t>(block.size(), 16U));
+    // Header blocks are measured in encoded bytes, not field count. Reserving
+    // one element per byte substantially over-allocates the ordinary 4-8 field
+    // request. Eight covers the common request while retaining capacity in the
+    // connection-local header pool for later streams.
+    if (output.capacity() < 8U)
+        output.reserve(8U);
+    std::size_t output_size{};
+    const auto next_field = [&]() -> header_field&
+    {
+        if (output_size == output.size())
+            output.emplace_back();
+        return output[output_size++];
+    };
     std::size_t offset = 0;
     bool can_resize = true;
     while (offset < block.size())
@@ -306,8 +316,10 @@ auto header_compression::decode(std::span<const std::byte> block,
             auto value = index ? at(*index) : std::nullopt;
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            output.push_back(
-                {std::string{value->name}, std::string{value->value}});
+            auto& field = next_field();
+            field.name.assign(value->name);
+            field.value.assign(value->value);
+            field.sensitive = false;
             continue;
         }
         if ((first & 0xe0) == 0x20)
@@ -326,30 +338,35 @@ auto header_compression::decode(std::span<const std::byte> block,
         auto index = decode_integer(block, offset, incremental ? 6 : 4);
         if (!index)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        std::string name;
+        auto& field = next_field();
         if (*index)
         {
             auto value = at(*index);
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            name = value->name;
+            field.name.assign(value->name);
         }
         else
         {
-            auto value = decode_string(block, offset);
-            if (!value || value->empty())
+            if (!decode_string(block, offset, field.name) ||
+                field.name.empty())
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            name = std::move(*value);
         }
-        auto value = decode_string(block, offset);
-        if (!value)
+        if (!decode_string(block, offset, field.value))
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        header_field field{std::move(name), std::move(*value), sensitive};
+        field.sensitive = sensitive;
         if (incremental)
             insert({field.name, field.value});
-        output.push_back(std::move(field));
     }
+    output.resize(output_size);
     return {};
+}
+
+auto header_compression::decode(std::span<const std::byte> block,
+    std::vector<header_field>& output)
+    -> std::expected<void, std::error_code>
+{
+    return decode_into(block, output);
 }
 
 auto header_compression::encode(std::span<const header_field> fields)
@@ -382,8 +399,8 @@ auto header_compression::encode(std::span<const header_field> fields,
         encode_integer(output, name, indexed ? 6 : 4,
             indexed ? 0x40 : (field.sensitive ? 0x10 : 0));
         if (!name)
-            encode_string(output, field.name);
-        encode_string(output, field.value);
+            encode_string(output, field.name, huffman_scratch_);
+        encode_string(output, field.value, huffman_scratch_);
         if (indexed)
             insert({field.name, field.value});
     }

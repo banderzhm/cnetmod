@@ -24,7 +24,8 @@ io_uring_context::io_uring_context(unsigned queue_depth)
     params.flags = IORING_SETUP_CQSIZE;
     params.cq_entries = queue_depth * 2;
     #ifdef IORING_SETUP_COOP_TASKRUN
-    const auto coop_taskrun = env_enabled("CNETMOD_IOURING_COOP_TASKRUN");
+    const auto coop_taskrun =
+        env_enabled("CNETMOD_IOURING_COOP_TASKRUN", true);
     if (coop_taskrun)
         params.flags |= IORING_SETUP_COOP_TASKRUN;
     #endif
@@ -175,10 +176,13 @@ auto io_uring_context::submit_batch_size_from_env() noexcept -> unsigned
     return static_cast<unsigned>(value);
 }
 
-auto io_uring_context::env_enabled(const char* name) noexcept -> bool
+auto io_uring_context::env_enabled(
+    const char* name, bool default_value) noexcept -> bool
 {
     const auto* value = std::getenv(name);
-    return value && value[0] != '\0' && value[0] != '0';
+    if (!value || value[0] == '\0')
+        return default_value;
+    return value[0] != '0';
 }
 
 auto io_uring_context::cqe_tick_limit_from_env() noexcept -> unsigned

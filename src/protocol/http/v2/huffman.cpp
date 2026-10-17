@@ -233,65 +233,89 @@ auto huffman_decode(std::span<const std::byte> input)
     -> std::expected<std::string, std::error_code>
 {
     std::string result;
-    result.reserve(input.size() + input.size() / 2U);
+    if (auto decoded = huffman_decode(input, result); !decoded)
+        return std::unexpected(decoded.error());
+    return result;
+}
+
+auto huffman_decode(std::span<const std::byte> input, std::string& output)
+    -> std::expected<void, std::error_code>
+{
     const auto& tree = decoder_tree();
     std::size_t node{};
     unsigned pending_bits{};
     bool pending_all_ones{true};
-    for (const auto byte : input)
-    {
-        const auto value = std::to_integer<std::uint8_t>(byte);
-        if (node == 0U)
+    bool valid{true};
+
+    // The shortest HPACK code is five bits, therefore two output bytes per
+    // encoded byte is a strict upper bound. resize_and_overwrite grows the
+    // reusable string once without value-initializing it, and lets the decoder
+    // write sequentially instead of paying a capacity branch per symbol.
+    output.resize_and_overwrite(input.size() * 2U,
+        [&](char* destination, std::size_t) -> std::size_t
         {
-            const auto& step = tree.root_byte_steps[value];
-            if (step.next < 0)
-                return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            node = static_cast<std::size_t>(step.next);
-            if (step.emitted >= 0)
+            std::size_t written{};
+            const auto apply = [&](const decode_step& step) -> bool
             {
-                result.push_back(static_cast<char>(step.emitted));
-                pending_bits = step.trailing_bits;
-                pending_all_ones = step.trailing_all_ones;
-            }
-            else
+                if (step.next < 0)
+                    return false;
+                node = static_cast<std::size_t>(step.next);
+                if (step.emitted >= 0)
+                {
+                    destination[written++] = static_cast<char>(step.emitted);
+                    pending_bits = step.trailing_bits;
+                    pending_all_ones = step.trailing_all_ones;
+                }
+                else
+                {
+                    pending_bits += step.trailing_bits;
+                    pending_all_ones = pending_all_ones &&
+                        step.trailing_all_ones;
+                }
+                return true;
+            };
+
+            for (const auto byte : input)
             {
-                pending_bits += step.trailing_bits;
-                pending_all_ones = pending_all_ones && step.trailing_all_ones;
+                const auto value = std::to_integer<std::uint8_t>(byte);
+                if (node == 0U)
+                {
+                    if (!apply(tree.root_byte_steps[value]))
+                    {
+                        valid = false;
+                        return std::size_t{};
+                    }
+                    continue;
+                }
+                if (!apply(tree.nibble_steps[node][value >> 4U]) ||
+                    !apply(tree.nibble_steps[node][value & 0x0fU]))
+                {
+                    valid = false;
+                    return std::size_t{};
+                }
             }
-            continue;
-        }
-        const auto apply_nibble = [&](std::size_t nibble) -> bool
-        {
-            const auto& step = tree.nibble_steps[node][nibble];
-            if (step.next < 0)
-                return false;
-            node = static_cast<std::size_t>(step.next);
-            if (step.emitted >= 0)
-            {
-                result.push_back(static_cast<char>(step.emitted));
-                pending_bits = step.trailing_bits;
-                pending_all_ones = step.trailing_all_ones;
-            }
-            else
-            {
-                pending_bits += step.trailing_bits;
-                pending_all_ones = pending_all_ones && step.trailing_all_ones;
-            }
-            return true;
-        };
-        if (!apply_nibble(value >> 4U) || !apply_nibble(value & 0x0fU))
-            return std::unexpected(std::make_error_code(std::errc::protocol_error));
-    }
+            return written;
+        });
+    if (!valid)
+        return std::unexpected(std::make_error_code(std::errc::protocol_error));
     // RFC 7541 ?5.2: padding is at most seven one bits and must be an EOS prefix.
     if (pending_bits != 0U &&
         (pending_bits > 7U || !pending_all_ones))
         return std::unexpected(std::make_error_code(std::errc::protocol_error));
-    return result;
+    return {};
 }
 
 auto huffman_encode(std::string_view input) -> std::vector<std::byte>
 {
     std::vector<std::byte> result;
+    huffman_encode(input, result);
+    return result;
+}
+
+void huffman_encode(std::string_view input, std::vector<std::byte>& output)
+{
+    output.clear();
+    output.reserve(input.size());
     std::uint64_t bits = 0;
     unsigned length = 0;
     for (const auto character : input)
@@ -302,12 +326,11 @@ auto huffman_encode(std::string_view input) -> std::vector<std::byte>
         while (length >= 8)
         {
             length -= 8;
-            result.push_back(static_cast<std::byte>(bits >> length));
+            output.push_back(static_cast<std::byte>(bits >> length));
         }
     }
     if (length != 0)
-        result.push_back(static_cast<std::byte>((bits << (8 - length)) |
+        output.push_back(static_cast<std::byte>((bits << (8 - length)) |
             ((1U << (8 - length)) - 1U)));
-    return result;
 }
 } // namespace cnetmod::http::v2

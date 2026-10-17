@@ -81,6 +81,49 @@ public:
     [[nodiscard]] auto body() const noexcept -> std::string_view;
 
     [[nodiscard]] auto take_headers() -> header_map;
+
+    /// Move every response header directly into a transport-owned
+    /// representation without first materializing the compatibility
+    /// `header_map` snapshot. Transports should prefer this overload on their
+    /// hot path; `headers()` and the no-argument `take_headers()` remain the
+    /// associative-container API for applications.
+    template <typename Visitor>
+    void take_headers(Visitor&& visitor)
+    {
+        if (has_cached_date_header_)
+            std::invoke(visitor, std::string{"Date"},
+                std::string{cached_date_header_.data(),
+                    cached_date_header_.size()});
+        auto active = active_common_headers_;
+        while (active != 0)
+        {
+            const auto slot = static_cast<std::size_t>(std::countr_zero(active));
+            auto& header = common_headers_[slot];
+            std::invoke(visitor,
+                std::string{common_header_name(slot)},
+                std::move(header.value));
+            active &= static_cast<std::uint16_t>(active - 1U);
+        }
+        for (auto& [name, value] : headers_)
+            std::invoke(visitor, std::move(name), std::move(value));
+
+        headers_.clear();
+        active = active_common_headers_;
+        while (active != 0)
+        {
+            const auto slot = static_cast<std::size_t>(std::countr_zero(active));
+            auto& header = common_headers_[slot];
+            header.value.clear();
+            header.present = false;
+            active &= static_cast<std::uint16_t>(active - 1U);
+        }
+        active_common_headers_ = 0;
+        headers_snapshot_.clear();
+        headers_snapshot_valid_ = false;
+        has_cached_date_header_ = false;
+    }
+
+    [[nodiscard]] auto header_count() const noexcept -> std::size_t;
     [[nodiscard]] auto take_trailers() noexcept -> header_map;
     [[nodiscard]] auto take_body() noexcept -> std::string;
     [[nodiscard]] auto body_source() const noexcept
@@ -136,6 +179,7 @@ private:
     http_version version_ = http_version::http_1_1;
     header_map headers_;
     std::array<common_header_value, common_header_count> common_headers_{};
+    std::uint16_t active_common_headers_{};
     mutable header_map headers_snapshot_;
     mutable bool headers_snapshot_valid_{};
     header_map trailers_;

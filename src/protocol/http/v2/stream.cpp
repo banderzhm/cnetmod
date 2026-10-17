@@ -6,6 +6,11 @@ namespace cnetmod::http::v2 {
 stream::stream(std::uint32_t id, std::int32_t initial_window) noexcept
     : id_(id), receive_window_(initial_window), send_window_(initial_window) {}
 
+stream::stream(std::uint32_t id, std::int32_t initial_window,
+    std::vector<header_field> reusable_headers) noexcept
+    : id_(id), receive_window_(initial_window), send_window_(initial_window), headers_(std::move(reusable_headers))
+{}
+
 auto stream::id() const noexcept -> std::uint32_t
 {
     return id_;
@@ -68,7 +73,6 @@ auto stream::prepare_headers(bool end_stream) noexcept
 {
     if (state_ != stream_state::idle && state_ != stream_state::open)
         return nullptr;
-    headers_.clear();
     state_ = end_stream ? stream_state::half_closed_remote : stream_state::open;
     return &headers_;
 }

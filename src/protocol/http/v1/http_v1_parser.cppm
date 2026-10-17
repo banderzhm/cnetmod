@@ -71,7 +71,7 @@ private:
         bool duplicate{};
     };
 
-    static constexpr std::size_t common_header_count = 17;
+    static constexpr std::size_t common_header_count = 18;
     static constexpr std::size_t missing_header =
         std::numeric_limits<std::size_t>::max();
 

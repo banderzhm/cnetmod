@@ -451,6 +451,36 @@ namespace detail {
         };
     }
 
+    auto take_h2_response(response& output) -> v2::server_response
+    {
+        v2::server_response result;
+        result.status = static_cast<std::uint32_t>(output.status_code());
+        result.body_text = output.take_body();
+        result.body_source = output.take_body_source();
+        result.headers.reserve(output.header_count());
+        output.take_headers(
+            [&result](std::string name, std::string value)
+            {
+                for (auto& character : name)
+                    if (character >= 'A' && character <= 'Z')
+                        character = static_cast<char>(
+                            character + ('a' - 'A'));
+                result.headers.push_back(
+                    {std::move(name), std::move(value)});
+            });
+        auto trailers = output.take_trailers();
+        result.trailers.reserve(trailers.size());
+        for (auto& [name, value] : trailers)
+        {
+            for (auto& character : name)
+                if (character >= 'A' && character <= 'Z')
+                    character = static_cast<char>(character + ('a' - 'A'));
+            result.trailers.push_back(
+                {std::move(name), std::move(value)});
+        }
+        return result;
+    }
+
 } // namespace detail
 
 auto save_upload(upload_options opts) -> handler_fn
@@ -1076,9 +1106,9 @@ auto server::handle_connection(socket client, io_context& io,
     // Read initial data and check for HTTP/2 client connection preface
     constexpr std::string_view h2_client_magic =
         "PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n";
-    std::array<std::byte, 8192> peek_buf{};
+    auto peek_buf = std::make_unique<std::array<std::byte, 8192>>();
     auto peek_rd = co_await async_read(
-        io, client, mutable_buffer{peek_buf.data(), peek_buf.size()},
+        io, client, mutable_buffer{peek_buf->data(), peek_buf->size()},
         registration.cancellation);
     if (!peek_rd || *peek_rd == 0)
     {
@@ -1091,7 +1121,7 @@ auto server::handle_connection(socket client, io_context& io,
         if (peek_len > h2_client_magic.size())
             return false;
         auto view = std::string_view{
-            reinterpret_cast<const char*>(peek_buf.data()),
+            reinterpret_cast<const char*>(peek_buf->data()),
             peek_len,
         };
         return h2_client_magic.starts_with(view);
@@ -1101,7 +1131,8 @@ auto server::handle_connection(socket client, io_context& io,
     {
         auto rd = co_await async_read(
             io, client,
-            mutable_buffer{peek_buf.data() + peek_len, peek_buf.size() - peek_len},
+            mutable_buffer{peek_buf->data() + peek_len,
+                peek_buf->size() - peek_len},
             registration.cancellation);
         if (!rd || *rd == 0)
         {
@@ -1111,27 +1142,27 @@ auto server::handle_connection(socket client, io_context& io,
     }
 
     if (peek_len >= h2_client_magic.size() &&
-        std::string_view{reinterpret_cast<const char*>(peek_buf.data()),
+        std::string_view{reinterpret_cast<const char*>(peek_buf->data()),
             h2_client_magic.size()} == h2_client_magic)
     {
         // TCP_NODELAY reduces latency for HTTP/2 multiplexed frames
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
-        co_await handle_h2(client, io, {peek_buf.data(), peek_len},
+        co_await handle_h2(client, io, {peek_buf->data(), peek_len},
             registration.cancellation);
         co_return;
     }
 
     // HTTP/1.1 cleartext — feed already-read bytes to parser
     co_await handle_h1_clear(
-        client, io, reinterpret_cast<const char*>(peek_buf.data()), peek_len,
+        client, io, std::move(peek_buf), peek_len,
         registration.cancellation);
 }
 
 auto server::make_h2_streaming_handler(io_context& io, socket& client)
-    -> v2::streaming_server_handler
+    -> v2::borrowed_streaming_server_handler
 {
-    return [this, &io, &client](v2::server_request request,
+    return [this, &io, &client](v2::server_request& request,
                cancel_token& cancellation) -> task<v2::server_response>
     {
         std::string_view method = "GET";
@@ -1234,41 +1265,64 @@ auto server::make_h2_streaming_handler(io_context& io, socket& client)
         }
         else
             co_await execute_chain(context, route);
-        v2::server_response result;
         if (request.body_stream && request.body_stream->error() == std::make_error_code(std::errc::message_size))
             output.set_status(status::payload_too_large);
-        result.status = static_cast<std::uint32_t>(output.status_code());
-        result.body_text = output.take_body();
-        result.body_source = output.take_body_source();
-        // HTTP/2 owns this response until HPACK has encoded it, so reserve the
-        // exact number of application headers before copying them.  The usual
-        // response has Date, Server and Content-Length; growing from an empty
-        // vector otherwise allocates repeatedly on every request.
-        auto output_headers = output.take_headers();
-        result.headers.reserve(output_headers.size());
-        for (auto& [name, value] : output_headers)
+        co_return detail::take_h2_response(output);
+    };
+}
+
+auto server::make_h2_sync_handler(io_context& io, socket& client)
+    -> v2::sync_server_handler
+{
+    return [this, &io, &client](v2::server_request& request,
+               cancel_token& cancellation)
+               -> std::optional<v2::server_response>
+    {
+        if (!middlewares_.empty() || request.body_stream)
+            return std::nullopt;
+
+        std::string_view method = "GET";
+        std::string_view uri = "/";
+        std::array<request_header_view, 32> headers{};
+        std::size_t header_count{};
+        for (const auto& field : request.headers)
         {
-            std::string lowercase{name};
-            for (auto& character : lowercase)
-                if (character >= 'A' && character <= 'Z')
-                    character = static_cast<char>(character + ('a' - 'A'));
-            result.headers.push_back(
-                {std::move(lowercase), std::move(value)});
+            if (field.name == ":method")
+                method = field.value;
+            else if (field.name == ":path")
+                uri = field.value;
+            else if (!field.name.starts_with(':'))
+            {
+                if (header_count == headers.size())
+                    return std::nullopt;
+                headers[header_count++] = {field.name, field.value};
+            }
         }
-        if (const auto date = output.cached_date_header(); !date.empty())
-            result.headers.push_back({"date", std::string{date}});
-        auto output_trailers = output.take_trailers();
-        result.trailers.reserve(output_trailers.size());
-        for (auto& [name, value] : output_trailers)
-        {
-            std::string lowercase{name};
-            for (auto& character : lowercase)
-                if (character >= 'A' && character <= 'Z')
-                    character = static_cast<char>(character + ('a' - 'A'));
-            result.trailers.push_back(
-                {std::move(lowercase), std::move(value)});
-        }
-        co_return result;
+        const auto query = uri.find('?');
+        const auto path = query == std::string_view::npos
+            ? uri
+            : uri.substr(0, query);
+        auto match = router_.match_borrowed(method, path);
+        if (!match || !match->route->sync_handler ||
+            match->route->request_stream)
+            return std::nullopt;
+
+        response output(status::ok, http_version::http_2);
+        if (response_headers_.emit_server)
+            output.set_header("Server", "cnetmod");
+        if (response_headers_.emit_date)
+            output.set_cached_date_header(date_cache_.get());
+        const auto body = std::string_view{
+            reinterpret_cast<const char*>(request.body.data()),
+            request.body.size()};
+        request_context context(io, client, method, uri,
+            std::span<const request_header_view>{headers.data(), header_count},
+            body, output, std::move(match->params), {});
+        if (cancellation.is_cancelled())
+            context.cancel_pending_operations();
+        match->route->sync_handler(context);
+
+        return detail::take_h2_response(output);
     };
 }
 
@@ -1286,7 +1340,8 @@ auto server::handle_h2(socket& client, io_context& io,
         co_return co_await async_write_all(io, client, buffer, cancellation);
     };
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
-        std::move(reader), std::move(writer));
+        std::move(reader), std::move(writer),
+        make_h2_sync_handler(io, client));
     co_await session.run(initial);
 }
 
@@ -1295,15 +1350,17 @@ auto server::handle_h2(socket& client, io_context& io,
 // =============================================================================
 
 auto server::handle_h1_clear(socket& client, io_context& io,
-    const char* initial_data, std::size_t initial_len,
+    std::unique_ptr<std::array<std::byte, 8192>> initial_buffer,
+    std::size_t initial_len,
     cancel_token& cancellation)
     -> task<void>
 {
+    auto* initial_data = reinterpret_cast<const char*>(initial_buffer->data());
     bool keep_alive = true;
     response resp(status::ok);
     std::string pending_responses;
     request_parser parser;
-    std::array<std::byte, 8192> buf;
+    std::unique_ptr<std::array<std::byte, 8192>> fallback_buffer;
     bool parse_buffered_request = false;
 
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1385,6 +1442,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     co_return;
                 initial_data = nullptr;
                 initial_len = 0;
+                initial_buffer.reset();
             }
 
             auto receive_more = [&]() -> task<bool>
@@ -1421,8 +1479,12 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     }
                 }
 #endif
+                if (!fallback_buffer)
+                    fallback_buffer =
+                        std::make_unique<std::array<std::byte, 8192>>();
                 auto rd = co_await async_read(io, client,
-                    mutable_buffer{buf.data(), buf.size()}, cancellation);
+                    mutable_buffer{fallback_buffer->data(),
+                        fallback_buffer->size()}, cancellation);
                 if (!rd || *rd == 0)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1435,7 +1497,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                 }
 
                 auto consumed =
-                    parser.consume(reinterpret_cast<const char*>(buf.data()), *rd);
+                    parser.consume(reinterpret_cast<const char*>(
+                        fallback_buffer->data()), *rd);
                 if (!consumed)
                 {
 #if defined(CNETMOD_HAS_IO_URING) &&             \
@@ -1552,43 +1615,46 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     if (!(co_await receive_more()))
                         co_return;
                 request_context rctx(io, client, parser, resp, std::move(rp));
-                rctx.set_stream_writer(
-                    [&io, &client, &pending_responses](std::string_view bytes,
-                        cancel_token& token)
-                        -> task<std::expected<void, std::error_code>>
-                    {
-                        if (!pending_responses.empty())
-                        {
-                            auto pending = co_await async_write_all(io, client,
-                                const_buffer{pending_responses.data(),
-                                    pending_responses.size()},
-                                token);
-                            if (!pending)
-                                co_return std::unexpected(pending.error());
-                            pending_responses.clear();
-                        }
-                        co_return co_await async_write_all(io, client,
-                            const_buffer{bytes.data(), bytes.size()}, token);
-                    });
                 if (middlewares_.empty() && sync_handler)
                     sync_handler(rctx);
-                else if (middlewares_.empty())
-                    co_await handler(rctx);
                 else
                 {
-                    handler_fn adapted;
-                    auto* selected = &handler;
-                    if (sync_handler)
-                    {
-                        adapted = [&sync_handler](request_context& context)
-                            -> task<void>
+                    rctx.set_stream_writer(
+                        [&io, &client, &pending_responses](
+                            std::string_view bytes, cancel_token& token)
+                            -> task<std::expected<void, std::error_code>>
                         {
-                            sync_handler(context);
-                            co_return;
-                        };
-                        selected = &adapted;
+                            if (!pending_responses.empty())
+                            {
+                                auto pending = co_await async_write_all(io, client,
+                                    const_buffer{pending_responses.data(),
+                                        pending_responses.size()},
+                                    token);
+                                if (!pending)
+                                    co_return std::unexpected(pending.error());
+                                pending_responses.clear();
+                            }
+                            co_return co_await async_write_all(io, client,
+                                const_buffer{bytes.data(), bytes.size()}, token);
+                        });
+                    if (middlewares_.empty())
+                        co_await handler(rctx);
+                    else
+                    {
+                        handler_fn adapted;
+                        auto* selected = &handler;
+                        if (sync_handler)
+                        {
+                            adapted = [&sync_handler](request_context& context)
+                                -> task<void>
+                            {
+                                sync_handler(context);
+                                co_return;
+                            };
+                            selected = &adapted;
+                        }
+                        co_await execute_chain(rctx, *selected);
                     }
-                    co_await execute_chain(rctx, *selected);
                 }
             }
             const bool has_body_source = static_cast<bool>(resp.body_source());
@@ -1726,7 +1792,8 @@ auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
         co_return co_await ssl.async_write_all(buffer, cancellation);
     };
     v2::session session(io, client, make_h2_streaming_handler(io, client), {},
-        std::move(reader), std::move(writer));
+        std::move(reader), std::move(writer),
+        make_h2_sync_handler(io, client));
     co_await session.run();
 }
 
@@ -1890,26 +1957,29 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
                 if (!(co_await receive_more()))
                     co_return;
             request_context rctx(io, client, parser, resp, std::move(rp));
-            configure_stream_writer(rctx);
             if (middlewares_.empty() && sync_handler)
                 sync_handler(rctx);
-            else if (middlewares_.empty())
-                co_await handler(rctx);
             else
             {
-                handler_fn adapted;
-                auto* selected = &handler;
-                if (sync_handler)
+                configure_stream_writer(rctx);
+                if (middlewares_.empty())
+                    co_await handler(rctx);
+                else
                 {
-                    adapted = [&sync_handler](request_context& context)
-                        -> task<void>
+                    handler_fn adapted;
+                    auto* selected = &handler;
+                    if (sync_handler)
                     {
-                        sync_handler(context);
-                        co_return;
-                    };
-                    selected = &adapted;
+                        adapted = [&sync_handler](request_context& context)
+                            -> task<void>
+                        {
+                            sync_handler(context);
+                            co_return;
+                        };
+                        selected = &adapted;
+                    }
+                    co_await execute_chain(rctx, *selected);
                 }
-                co_await execute_chain(rctx, *selected);
             }
         }
         const bool has_body_source = static_cast<bool>(resp.body_source());
@@ -1977,11 +2047,20 @@ auto server::handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         }
         if (!pending_responses.empty())
         {
-            auto written = co_await ssl.async_write_all(const_buffer{
-                                                            pending_responses.data(), pending_responses.size()},
+            auto written = co_await ssl.async_write(const_buffer{
+                                                        pending_responses.data(), pending_responses.size()},
                 cancellation);
             if (!written)
                 co_return;
+            if (*written < pending_responses.size())
+            {
+                auto remainder = co_await ssl.async_write_all(const_buffer{
+                                                                  pending_responses.data() + *written,
+                                                                  pending_responses.size() - *written},
+                    cancellation);
+                if (!remainder)
+                    co_return;
+            }
             pending_responses.clear();
         }
     }

@@ -263,7 +263,7 @@ public:
      * can enforce policy declared on the route.
      */
     [[nodiscard]] auto endpoint() const noexcept -> const http::endpoint*;
-    [[nodiscard]] auto scope() noexcept -> request_scope&;
+    [[nodiscard]] auto scope() -> request_scope&;
     [[nodiscard]] auto scope() const noexcept -> const request_scope&;
     void text(int status_code, std::string_view text_body);
     void json(int status_code, std::string_view json_body);
@@ -320,7 +320,7 @@ public:
     /// instead of starting independent relative timeouts.
     [[nodiscard]] auto request_deadline() const noexcept -> const cnetmod::deadline&;
     void set_deadline(cnetmod::deadline value) noexcept;
-    [[nodiscard]] auto cancellation_token() noexcept -> cnetmod::cancel_token&;
+    [[nodiscard]] auto cancellation_token() -> cnetmod::cancel_token&;
 
     /**
      * @brief Cancels direct and registered downstream operations of this request.
@@ -382,7 +382,7 @@ private:
     using stream_write_fn = std::function<task<
         std::expected<void, std::error_code>>(
         std::string_view, cnetmod::cancel_token&)>;
-    void configure_sse(sse_stream_options options) noexcept;
+    void configure_sse(sse_stream_options options);
     void set_stream_writer(stream_write_fn writer);
     void expire_sse() noexcept;
     auto write_sse_bytes(std::string_view bytes) -> task<bool>;
@@ -405,16 +405,32 @@ private:
     std::string_view uri_;
     std::string_view path_;
     std::string_view query_;
-    std::optional<form_data> form_cache_;
     mutable bool body_stream_drained_ = false;
-    sse_stream_state sse_state_ = sse_stream_state::not_started;
-    bool sse_chunked_ = false;
-    stream_write_fn stream_writer_;
-    deadline sse_deadline_{};
-    std::chrono::milliseconds sse_write_timeout_{5000};
     cnetmod::deadline deadline_{};
-    cnetmod::cancel_token cancellation_;
-    request_scope scope_;
+
+    struct operation_registration;
+    struct extended_state
+    {
+        std::optional<form_data> form_cache;
+        sse_stream_state sse_state = sse_stream_state::not_started;
+        bool sse_chunked = false;
+        stream_write_fn stream_writer;
+        deadline sse_deadline{};
+        std::chrono::milliseconds sse_write_timeout{5000};
+        cnetmod::cancel_token cancellation;
+        request_scope scope;
+        concurrent_containers::atomic_rw_latch operations_latch;
+        operation_registration* operations{};
+        std::atomic<bool> operations_cancelled{false};
+        std::string trace_id;
+        std::string trace_span_id;
+        std::string trace_state;
+        std::uint8_t trace_flags{};
+    };
+
+    [[nodiscard]] auto extended() -> extended_state&;
+    [[nodiscard]] auto extended_if() noexcept -> extended_state*;
+    [[nodiscard]] auto extended_if() const noexcept -> const extended_state*;
 
     struct operation_registration
     {
@@ -428,13 +444,7 @@ private:
         auto operator=(const operation_registration&) -> operation_registration& = delete;
     };
 
-    concurrent_containers::atomic_rw_latch operations_latch_;
-    operation_registration* operations_{};
-    std::atomic<bool> operations_cancelled_{false};
-    std::string trace_id_;
-    std::string trace_span_id_;
-    std::string trace_state_;
-    std::uint8_t trace_flags_{};
+    std::unique_ptr<extended_state> extended_;
 };
 
 /**
@@ -682,6 +692,8 @@ public:
         -> std::vector<std::shared_ptr<const endpoint>>;
 
 private:
+    friend class server;
+
     struct route_entry
     {
         std::optional<http_method> method;
@@ -693,6 +705,12 @@ private:
         detail::route_score score;
         std::uint64_t order = 0;
         std::shared_ptr<const endpoint> described;
+    };
+
+    struct borrowed_match_result
+    {
+        const route_entry* route{};
+        route_params params;
     };
 
     auto add(http_method method, std::string_view pattern, handler_fn fn,
@@ -709,6 +727,10 @@ private:
     [[nodiscard]] auto find_exact(http_method method,
         std::string_view canonical_path) const
         -> const route_entry*;
+    [[nodiscard]] auto match_borrowed(http_method method,
+        std::string_view path) const -> std::optional<borrowed_match_result>;
+    [[nodiscard]] auto match_borrowed(std::string_view method,
+        std::string_view path) const -> std::optional<borrowed_match_result>;
     static auto try_match(const std::vector<detail::segment>& segs,
         const std::vector<std::string_view>& parts,
         route_params& out) -> bool;

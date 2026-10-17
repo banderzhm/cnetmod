@@ -20,6 +20,8 @@ class stream
 public:
     explicit stream(std::uint32_t id,
         std::int32_t initial_window = 65'535) noexcept;
+    stream(std::uint32_t id, std::int32_t initial_window,
+        std::vector<header_field> reusable_headers) noexcept;
     [[nodiscard]] auto id() const noexcept -> std::uint32_t;
     [[nodiscard]] auto state() const noexcept -> stream_state;
     [[nodiscard]] auto receive_headers(std::vector<header_field> fields,

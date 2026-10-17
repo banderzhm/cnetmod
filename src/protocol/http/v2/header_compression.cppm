@@ -31,6 +31,10 @@ public:
     [[nodiscard]] auto dynamic_table_limit() const noexcept -> std::size_t;
 
 private:
+    template <typename Container>
+    [[nodiscard]] auto decode_into(std::span<const std::byte> block,
+        Container& output) -> std::expected<void, std::error_code>;
+
     struct entry
     {
         std::string name;
@@ -50,6 +54,7 @@ private:
     [[nodiscard]] auto find(std::string_view name, std::string_view value,
         bool exact) const -> std::uint32_t;
     std::deque<entry> dynamic_table_;
+    std::vector<std::byte> huffman_scratch_;
     std::size_t dynamic_table_bytes_ = 0;
     std::size_t dynamic_table_limit_ = 4096;
 };

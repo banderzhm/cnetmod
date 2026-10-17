@@ -38,6 +38,14 @@ I/O 执行上下文抽象基类，封装平台特定 I/O 多路复用机制（IO
 
 创建平台默认的 io_context 实例。
 
+Linux `io_uring` 后端默认启用内核支持时的
+`IORING_SETUP_COOP_TASKRUN`，并将同一事件循环轮次内产生的 SQE 以最多 8 个为一批
+提交，减少短小网络操作产生的 `io_uring_enter`。事件循环在等待 CQE 前总会刷新剩余
+SQE，因此不会为了凑满批次而无限等待。可用
+`CNETMOD_IOURING_COOP_TASKRUN=0` 禁用 cooperative task running，或用
+`CNETMOD_IOURING_SUBMIT_BATCH=1..128` 覆盖批量大小；这些是诊断和平台调优开关，
+应用通常不应设置。旧内核不接受 cooperative task running 时会自动回退，不影响启动。
+
 ### `post_awaitable`
 **签名**: `export struct post_awaitable`
 

@@ -52,6 +52,9 @@ accept 循环或重复实现这一批处理。
 事件循环创建一份共享接收服务：注册缓冲区归事件循环所有，连接只持有轻量 receiver，
 不会逐连接注册 buffer ring。能力不可用、ring 注册失败或某条 multishot 接收终止时，
 框架自动退回普通 `async_read`；应用层不需要环境变量，也不应自行创建接收适配器。
+HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通读取的 8 KiB 回退缓冲只在
+共享 multishot 接收不可用时按需分配。不要在 handler 或中间件中再为每个 keep-alive
+连接常驻同尺寸接收缓冲，否则高连接数下会把固定内存成本重新放大。
 
 #### `server::set_router`
 **签名**: `void set_router(router r)`
@@ -551,7 +554,9 @@ r.get("/docs", swagger_ui_handler());
 
 已经携带 `END_STREAM` 的完整请求由连接协程批量分发并合并刷出响应；只有请求正文仍在
 到达的流才启动后台流式任务。应用无需为了吞吐手工创建 task 或绕过 router，正文流式
-端点继续使用 `stream_*` 路由即可。
+端点继续使用 `stream_*` 路由即可。单个 `HEADERS + END_STREAM` 的常见 GET/RPC 请求会
+直接进入就绪队列，不创建 `stream` 映射节点；连接会复用 HPACK 解码后的请求头容量，且在
+归还容量前主动清零 `Authorization`、`Proxy-Authorization`、`Cookie` 等凭证值。
 
 ```cpp
 import std;
@@ -730,9 +735,23 @@ Linux 多 worker HTTP 为每个 worker 创建 `SO_REUSEPORT` listener，内核�
 最终所属的循环，不再经过控制循环 round-robin 转交；每个循环同时持有自己的 multishot
 recv 注册缓冲区。单循环、Windows 和不支持该能力的平台保持原有 listener/dispatch 模型。
 
+worker 数量不是固定等于逻辑核数。HTTP/2/HTTP/3 在一条连接上已经并发复用大量流，过多
+worker 会增加 listener、内核唤醒和缓存迁移，却不能把同一连接拆给多个循环。生产环境应按
+实际连接数、每连接并发流数和 handler 开销压测选择；CPU 密集工作继续交给 `pool()`，不要
+靠增加 I/O worker 掩盖阻塞。对于少量高复用连接，通常从 2–4 个 I/O worker 起测；大量独立
+连接再逐步增加。框架不擅自覆盖应用显式传入的 worker 数量。
+
 HTTP/1 解析器会保留同一次 receive 中第一个消息之后的未消费字节，并连续处理完整的
 pipelined 请求。普通响应在该 receive 批次内顺序序列化到连接级缓冲区，再一次提交；遇到
 SSE、手工流式输出或 chunked 响应时，框架先刷出此前普通响应，保证线上顺序不变。
+常见请求头使用固定槽位，只有出现扩展头时才建立回退哈希索引；普通同步路由不会安装未使用
+的流式写回调。响应对象只清理本次实际写入的固定头，TLS 小响应也先尝试单次写入，只有平台
+返回部分写入时才进入完整写循环。这些均为传输层内部优化，应用不要为它们复制一套 handler。
+
+HTTP/2 的普通同步请求同样走内部借用式路由匹配，不复制已注册的 handler；请求上下文中的
+SSE、表单、追踪、取消与 request-scope 扩展状态仅在实际调用对应能力时创建。应用仍只使用
+公开的 `router::match()`、`request_context` 和 `get_sync()` 等接口，不得依赖这些内部视图，
+也不要为了追求吞吐绕过 endpoint metadata 或自行管理请求上下文生命周期。
 
 ---
 

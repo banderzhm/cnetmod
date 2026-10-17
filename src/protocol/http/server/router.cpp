@@ -211,88 +211,113 @@ void request_context::set_deadline(cnetmod::deadline value) noexcept
     deadline_ = deadline_.constrain(value);
 }
 
-auto request_context::cancellation_token() noexcept -> cnetmod::cancel_token&
+auto request_context::extended() -> extended_state&
 {
-    return cancellation_;
+    if (!extended_)
+        extended_ = std::make_unique<extended_state>();
+    return *extended_;
+}
+
+auto request_context::extended_if() noexcept -> extended_state*
+{
+    return extended_.get();
+}
+
+auto request_context::extended_if() const noexcept -> const extended_state*
+{
+    return extended_.get();
+}
+
+auto request_context::cancellation_token() -> cnetmod::cancel_token&
+{
+    return extended().cancellation;
 }
 
 request_context::operation_registration::operation_registration(request_context& request,
     cnetmod::cancel_token& cancellation) noexcept
     : token(cancellation)
 {
-    if (request.operations_cancelled_.load(std::memory_order_acquire))
+    auto& state = request.extended();
+    if (state.operations_cancelled.load(std::memory_order_acquire))
     {
         token.cancel();
         return;
     }
-    concurrent_containers::exclusive_latch_guard lock{request.operations_latch_};
-    if (request.operations_cancelled_.load(std::memory_order_acquire))
+    concurrent_containers::exclusive_latch_guard lock{state.operations_latch};
+    if (state.operations_cancelled.load(std::memory_order_acquire))
     {
         token.cancel();
         return;
     }
     owner = &request;
-    next = owner->operations_;
+    next = state.operations;
     if (next)
         next->previous = this;
-    owner->operations_ = this;
+    state.operations = this;
 }
 
 request_context::operation_registration::~operation_registration()
 {
     if (!owner)
         return;
-    concurrent_containers::exclusive_latch_guard lock{owner->operations_latch_};
+    auto& state = *owner->extended_;
+    concurrent_containers::exclusive_latch_guard lock{state.operations_latch};
     if (previous)
         previous->next = next;
     else
-        owner->operations_ = next;
+        state.operations = next;
     if (next)
         next->previous = previous;
 }
 
 void request_context::cancel_pending_operations() noexcept
 {
-    if (operations_cancelled_.exchange(true, std::memory_order_acq_rel))
+    auto& state = extended();
+    if (state.operations_cancelled.exchange(true, std::memory_order_acq_rel))
         return;
-    cancellation_.cancel();
-    concurrent_containers::exclusive_latch_guard lock{operations_latch_};
-    for (auto* operation = operations_; operation; operation = operation->next)
+    state.cancellation.cancel();
+    concurrent_containers::exclusive_latch_guard lock{state.operations_latch};
+    for (auto* operation = state.operations; operation; operation = operation->next)
         operation->token.cancel();
 }
 
 auto request_context::trace_id() const noexcept -> std::string_view
 {
-    return trace_id_;
+    const auto* state = extended_if();
+    return state ? std::string_view{state->trace_id} : std::string_view{};
 }
 
 void request_context::set_trace_id(std::string value)
 {
-    trace_id_ = std::move(value);
+    extended().trace_id = std::move(value);
 }
 
 auto request_context::trace_span_id() const noexcept -> std::string_view
 {
-    return trace_span_id_;
+    const auto* state = extended_if();
+    return state ? std::string_view{state->trace_span_id} : std::string_view{};
 }
 
 auto request_context::trace_flags() const noexcept -> std::uint8_t
 {
-    return trace_flags_;
+    const auto* state = extended_if();
+    return state ? state->trace_flags : std::uint8_t{};
 }
 
 auto request_context::trace_state() const noexcept -> std::string_view
 {
-    return trace_state_;
+    const auto* state = extended_if();
+    return state ? std::string_view{state->trace_state} : std::string_view{};
 }
 
 void request_context::set_trace_context(std::string trace_id, std::string span_id,
     std::uint8_t flags, std::string state)
 {
-    trace_id_ = std::move(trace_id);
-    trace_span_id_ = std::move(span_id);
-    trace_flags_ = flags;
-    trace_state_ = std::move(state);
+    auto& extended_state = extended();
+    extended_state.trace_id = std::move(trace_id);
+    extended_state.trace_span_id = std::move(span_id);
+    extended_state.trace_flags = flags;
+    extended_state.trace_state = std::move(state);
 }
 
 auto request_context::client_address() const -> std::string
@@ -411,14 +436,16 @@ auto request_context::params() const noexcept -> const route_params&
     return params_;
 }
 
-auto request_context::scope() noexcept -> request_scope&
+auto request_context::scope() -> request_scope&
 {
-    return scope_;
+    return extended().scope;
 }
 
 auto request_context::scope() const noexcept -> const request_scope&
 {
-    return scope_;
+    static const request_scope empty;
+    const auto* state = extended_if();
+    return state ? state->scope : empty;
 }
 
 void request_context::text(int s, std::string_view b)
@@ -455,71 +482,77 @@ void request_context::not_found()
 
 auto request_context::sse_begin(int s) -> task<bool>
 {
-    if (sse_state_ == sse_stream_state::open)
+    auto& state = extended();
+    if (state.sse_state == sse_stream_state::open)
         co_return true;
-    if (sse_state_ != sse_stream_state::not_started)
+    if (state.sse_state != sse_stream_state::not_started)
         co_return false;
     resp_.set_status(s);
     sse::prepare(resp_, sse::response_options{.status_code = s});
-    sse_chunked_ = resp_.version() == http_version::http_1_1;
-    if (sse_chunked_)
+    state.sse_chunked = resp_.version() == http_version::http_1_1;
+    if (state.sse_chunked)
         resp_.set_header("Transfer-Encoding", "chunked");
     else
         resp_.set_header("Connection", "close");
     auto h = resp_.serialize();
-    sse_state_ = sse_stream_state::committing;
+    state.sse_state = sse_stream_state::committing;
     if (!(co_await write_sse_bytes(h)))
     {
-        sse_state_ = sse_stream_state::failed;
+        state.sse_state = sse_stream_state::failed;
         co_return false;
     }
-    sse_state_ = sse_stream_state::open;
+    state.sse_state = sse_stream_state::open;
     co_return true;
 }
 
 auto request_context::sse_started() const noexcept -> bool
 {
-    return sse_state_ != sse_stream_state::not_started;
+    const auto* state = extended_if();
+    return state && state->sse_state != sse_stream_state::not_started;
 }
 
 auto request_context::sse_state() const noexcept -> sse_stream_state
 {
-    return sse_state_;
+    const auto* state = extended_if();
+    return state ? state->sse_state : sse_stream_state::not_started;
 }
 
-void request_context::configure_sse(sse_stream_options options) noexcept
+void request_context::configure_sse(sse_stream_options options)
 {
-    sse_deadline_ = deadline::after(options.max_duration);
-    sse_write_timeout_ = options.write_timeout;
-    deadline_ = sse_deadline_;
+    auto& state = extended();
+    state.sse_deadline = deadline::after(options.max_duration);
+    state.sse_write_timeout = options.write_timeout;
+    deadline_ = state.sse_deadline;
 }
 
 void request_context::set_stream_writer(stream_write_fn writer)
 {
-    stream_writer_ = std::move(writer);
+    extended().stream_writer = std::move(writer);
 }
 
 void request_context::expire_sse() noexcept
 {
-    if (sse_state_ != sse_stream_state::closed)
-        sse_state_ = sse_stream_state::failed;
+    auto& state = extended();
+    if (state.sse_state != sse_stream_state::closed)
+        state.sse_state = sse_stream_state::failed;
     cancel_pending_operations();
     sock_.close();
 }
 
 auto request_context::write_sse_bytes(std::string_view bytes) -> task<bool>
 {
-    if (sse_deadline_.expired())
+    auto& state = extended();
+    if (state.sse_deadline.expired())
     {
         expire_sse();
         co_return false;
     }
     cancel_token write_cancellation;
     operation_registration registration{*this, write_cancellation};
-    const auto write_deadline = sse_deadline_.constrain(
-        deadline::after(sse_write_timeout_));
-    auto operation = stream_writer_
-        ? stream_writer_(bytes, write_cancellation)
+    const auto write_deadline = state.sse_deadline.constrain(
+        deadline::after(state.sse_write_timeout));
+    auto operation = state.stream_writer
+        ? state.stream_writer(bytes, write_cancellation)
         : async_write_all(ctx_, sock_,
               const_buffer{bytes.data(), bytes.size()}, write_cancellation);
     auto written = co_await cnetmod::with_deadline(ctx_, write_deadline,
@@ -536,7 +569,7 @@ auto request_context::write_sse_frame(std::string frame) -> task<bool>
 {
     if (!(co_await sse_begin()))
         co_return false;
-    if (sse_chunked_)
+    if (extended().sse_chunked)
     {
         auto chunk = std::format("{:x}\r\n", frame.size());
         chunk += frame;
@@ -572,9 +605,10 @@ auto request_context::sse_done() -> task<bool>
 {
     if (!(co_await write_sse_frame(sse::done())))
         co_return false;
-    if (sse_chunked_ && !(co_await write_sse_bytes("0\r\n\r\n")))
+    auto& state = extended();
+    if (state.sse_chunked && !(co_await write_sse_bytes("0\r\n\r\n")))
         co_return false;
-    sse_state_ = sse_stream_state::closed;
+    state.sse_state = sse_stream_state::closed;
     co_return true;
 }
 
@@ -615,16 +649,17 @@ auto request_context::with_sse(sse_handler_fn handler,
 auto request_context::parse_form()
     -> std::expected<const form_data*, std::error_code>
 {
-    if (form_cache_)
-        return &*form_cache_;
+    if (const auto* state = extended_if(); state && state->form_cache)
+        return &*state->form_cache;
     auto ct = get_header("Content-Type");
     if (ct.empty())
         return std::unexpected(make_error_code(http_errc::invalid_multipart));
     auto r = http::parse_form(ct, body());
     if (!r)
         return std::unexpected(r.error());
-    form_cache_ = std::move(*r);
-    return &*form_cache_;
+    auto& cache = extended().form_cache;
+    cache = std::move(*r);
+    return &*cache;
 }
 
 auto request_context::resp() noexcept -> response&
@@ -948,14 +983,13 @@ auto router::try_match(const std::vector<detail::segment>& s,
     return pi == p.size();
 }
 
-auto router::match(http_method m, std::string_view p) const
-    -> std::optional<match_result>
+auto router::match_borrowed(http_method m, std::string_view p) const
+    -> std::optional<borrowed_match_result>
 {
     const auto matched = [](const route_entry& entry, route_params params)
     {
         params.matched = entry.described;
-        return match_result{entry.handler, entry.sync_handler, std::move(params),
-            entry.request_stream};
+        return borrowed_match_result{&entry, std::move(params)};
     };
     if (auto x = find_exact(m, p))
         return matched(*x, {});
@@ -999,6 +1033,24 @@ auto router::match(http_method m, std::string_view p) const
     return {};
 }
 
+auto router::match_borrowed(std::string_view m, std::string_view p) const
+    -> std::optional<borrowed_match_result>
+{
+    auto x = string_to_method(m);
+    return x ? match_borrowed(*x, p) : std::nullopt;
+}
+
+auto router::match(http_method m, std::string_view p) const
+    -> std::optional<match_result>
+{
+    auto matched = match_borrowed(m, p);
+    if (!matched)
+        return {};
+    const auto& route = *matched->route;
+    return match_result{route.handler, route.sync_handler,
+        std::move(matched->params), route.request_stream};
+}
+
 auto router::allowed_methods(std::string_view p) const
     -> std::vector<http_method>
 {
@@ -1030,7 +1082,11 @@ auto router::endpoints() const -> std::vector<std::shared_ptr<const endpoint>>
 auto router::match(std::string_view m, std::string_view p) const
     -> std::optional<match_result>
 {
-    auto x = string_to_method(m);
-    return x ? match(*x, p) : std::nullopt;
+    auto matched = match_borrowed(m, p);
+    if (!matched)
+        return {};
+    const auto& route = *matched->route;
+    return match_result{route.handler, route.sync_handler,
+        std::move(matched->params), route.request_stream};
 }
 } // namespace cnetmod::http

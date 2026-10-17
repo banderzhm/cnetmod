@@ -41,7 +41,9 @@ TEST(http2_server_dispatches_sync_router_handlers)
     cnetmod::http::server http_server{*io};
     cnetmod::http::router routes;
     routes.get_sync("/sync", [](cnetmod::http::request_context& request)
-        { request.text(cnetmod::http::status::ok, "sync"); });
+        {
+            request.text(cnetmod::http::status::ok, "sync");
+        });
     http_server.set_router(std::move(routes));
     ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
     const auto endpoint = http_server.local_endpoint();
@@ -71,10 +73,15 @@ TEST(http2_server_dispatches_sync_router_handlers)
             reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
         auto settings = framed({.type = frame_type::settings}, {});
         request.insert(request.end(), settings.begin(), settings.end());
+        std::vector<std::byte> padded_headers{
+            static_cast<std::byte>(7)};
+        padded_headers.insert(
+            padded_headers.end(), encoded->begin(), encoded->end());
+        padded_headers.insert(padded_headers.end(), 7, std::byte{});
         auto headers = framed({.type = frame_type::headers,
-                                  .flags = 0x5,
+                                  .flags = 0xD,
                                   .stream_id = 1},
-            *encoded);
+            padded_headers);
         request.insert(request.end(), headers.begin(), headers.end());
         ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
                          cnetmod::const_buffer{request.data(), request.size()}))
@@ -234,6 +241,77 @@ TEST(http2_streams_deliver_interleaved_bodies_and_return_consumed_credit)
     // consumed credit must be returned. Credit after END_STREAM is only
     // returned to the connection because the stream window no longer matters.
     ASSERT_TRUE(stream_updates >= std::size_t{1});
+}
+
+TEST(http2_borrowed_handler_is_not_dispatched_twice_after_streamed_body)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket unused;
+    header_compression encoder;
+    const std::array request_headers{
+        header_field{":method", "POST"}, header_field{":scheme", "http"},
+        header_field{":path", "/upload"}};
+    auto encoded = encoder.encode(request_headers);
+    ASSERT_TRUE(encoded.has_value());
+
+    std::vector<std::vector<std::byte>> input;
+    std::vector<std::byte> opening{
+        reinterpret_cast<const std::byte*>(preface.data()),
+        reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
+    auto settings = framed({.type = frame_type::settings}, {});
+    opening.insert(opening.end(), settings.begin(), settings.end());
+    input.push_back(std::move(opening));
+    input.push_back(framed(
+        {.type = frame_type::headers, .flags = 0x4, .stream_id = 1},
+        *encoded));
+    input.push_back(framed(
+        {.type = frame_type::data, .flags = 0x1, .stream_id = 1},
+        bytes("payload")));
+
+    std::size_t next_input{};
+    std::size_t calls{};
+    std::string body;
+    auto reader = [&](cnetmod::mutable_buffer destination)
+        -> cnetmod::task<std::expected<std::size_t, std::error_code>>
+    {
+        co_await cnetmod::post_awaitable{*io};
+        if (next_input == input.size())
+            co_return std::size_t{};
+        const auto& source = input[next_input++];
+        std::memcpy(destination.data, source.data(), source.size());
+        co_return source.size();
+    };
+    auto writer = [](cnetmod::const_buffer)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        co_return std::expected<void, std::error_code>{};
+    };
+    borrowed_streaming_server_handler handler =
+        [&](server_request& request, cnetmod::cancel_token&)
+        -> cnetmod::task<server_response>
+    {
+        ++calls;
+        while (auto chunk = co_await request.body_stream->receive())
+            body.append(reinterpret_cast<const char*>(chunk->data()),
+                chunk->size());
+        co_return server_response{.status = 204};
+    };
+    session connection{*io, unused, std::move(handler),
+        {.max_bytes = 64, .chunk_capacity = 4}, std::move(reader),
+        std::move(writer)};
+    auto execute = [&]() -> cnetmod::task<void>
+    {
+        co_await connection.run();
+        io->stop();
+    };
+    auto operation = execute();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
+    ASSERT_EQ(calls, std::size_t{1});
+    ASSERT_EQ(body, std::string{"payload"});
 }
 
 TEST(http2_streaming_response_source_is_framed_without_buffering_the_body)

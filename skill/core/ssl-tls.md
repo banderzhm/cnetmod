@@ -302,6 +302,8 @@ if (stream.kernel_tls_active()) {
 这是面向大吞吐或基准测试的显式取舍：在 bundled BoringSSL 下启用它会从默认 TLS 1.3
 降到 TLS 1.2 AES-GCM。不要仅凭配置项判断已经卸载，必须在握手后检查
 `kernel_tls_active()`；Linux 上还可用 `/proc/net/tls_stat` 的 `TlsTxSw` 验证实际连接。
+kTLS 主要减少大块发送的用户态记录处理；小 HTTP 响应可能因 TLS 1.2 协议选择和系统调用
+成本而更慢，所以保持显式关闭的默认值，并用应用的真实响应尺寸与连接复用方式做 A/B。
 
 ## Do's & Don'ts
 | ✅ 正确 | ❌ 错误 |

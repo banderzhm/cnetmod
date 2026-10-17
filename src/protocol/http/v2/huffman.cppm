@@ -6,8 +6,11 @@ export namespace cnetmod::http::v2 {
 
 [[nodiscard]] auto huffman_decode(std::span<const std::byte> input)
     -> std::expected<std::string, std::error_code>;
+[[nodiscard]] auto huffman_decode(std::span<const std::byte> input,
+    std::string& output) -> std::expected<void, std::error_code>;
 
 [[nodiscard]] auto huffman_encode(std::string_view input)
     -> std::vector<std::byte>;
+void huffman_encode(std::string_view input, std::vector<std::byte>& output);
 
 } // namespace cnetmod::http::v2
