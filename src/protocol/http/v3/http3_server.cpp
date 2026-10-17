@@ -1060,7 +1060,10 @@ private:
     struct timer_entry
     {
         std::chrono::steady_clock::time_point deadline;
-        std::shared_ptr<quic::quic_connection> connection;
+        // Superseded idle/PTO entries can remain in the heap until their old
+        // deadline. Routing/session state owns live connections; stale timers
+        // must not retain a retired connection's streams, TLS and write pool.
+        std::weak_ptr<quic::quic_connection> connection;
         std::uint64_t generation{};
     };
 
@@ -1670,12 +1673,15 @@ private:
                 {
                     auto entry = timer_queue_.top();
                     timer_queue_.pop();
-                    const auto scheduled = timer_generations_.find(entry.connection.get());
+                    auto connection = entry.connection.lock();
+                    if (!connection)
+                        continue;
+                    const auto scheduled = timer_generations_.find(connection.get());
                     if (scheduled == timer_generations_.end() ||
                         scheduled->second.generation != entry.generation)
                         continue;
                     timer_generations_.erase(scheduled);
-                    expired.push_back(std::move(entry.connection));
+                    expired.push_back(std::move(connection));
                 }
             }
             for (auto& connection : expired)
