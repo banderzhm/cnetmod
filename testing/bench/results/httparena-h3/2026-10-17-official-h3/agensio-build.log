@@ -1,0 +1,57 @@
+DEPRECATED: The legacy builder is deprecated and will be removed in a future release.
+            Install the buildx component to build images with BuildKit:
+            https://docs.docker.com/go/buildx/
+
+Sending build context to Docker daemon  12.29kB
+Step 1/14 : ARG AGENSIO_REF=v0.1.0-alpha.23
+Step 2/14 : FROM debian:trixie AS build
+trixie: Pulling from library/debian
+4846f2900730: Pulling fs layer
+50f5607b0ccc: Download complete
+4846f2900730: Download complete
+4846f2900730: Pull complete
+Digest: sha256:913f6706df59a68922d1dd08f78c2476560a8d367897200a6005b00e5f67c2d5
+Status: Downloaded newer image for debian:trixie
+ ---> 913f6706df59
+Step 3/14 : ENV CMAKE_BUILD_PARALLEL_LEVEL=4
+ ---> Running in 2d0d3327d79d
+ ---> Removed intermediate container 2d0d3327d79d
+ ---> fc06d3326252
+Step 4/14 : RUN apt-get update && apt-get install -y --no-install-recommends         build-essential cmake ninja-build git ca-certificates libssl-dev zlib1g-dev     && rm -rf /var/lib/apt/lists/*
+ ---> Running in 6a174b9adc06
+Ign:1 http://deb.debian.org/debian trixie InRelease
+Ign:2 http://deb.debian.org/debian trixie-updates InRelease
+Ign:3 http://deb.debian.org/debian-security trixie-security InRelease
+Ign:3 http://deb.debian.org/debian-security trixie-security InRelease
+Ign:2 http://deb.debian.org/debian trixie-updates InRelease
+Ign:1 http://deb.debian.org/debian trixie InRelease
+Ign:1 http://deb.debian.org/debian trixie InRelease
+Ign:2 http://deb.debian.org/debian trixie-updates InRelease
+Ign:3 http://deb.debian.org/debian-security trixie-security InRelease
+Err:3 http://deb.debian.org/debian-security trixie-security InRelease
+  Unable to connect to 127.0.0.1:7897:
+Err:2 http://deb.debian.org/debian trixie-updates InRelease
+  Unable to connect to 127.0.0.1:7897:
+Err:1 http://deb.debian.org/debian trixie InRelease
+  Could not connect to 127.0.0.1:7897 (127.0.0.1). - connect (111: Connection refused)
+  Unable to connect to 127.0.0.1:7897:
+Reading package lists...
+[91mW: Failed to fetch http://deb.debian.org/debian/dists/trixie/InRelease  Unable to connect to 127.0.0.1:7897:
+W: Failed to fetch http://deb.debian.org/debian/dists/trixie-updates/InRelease  Unable to connect to 127.0.0.1:7897:
+W: Failed to fetch http://deb.debian.org/debian-security/dists/trixie-security/InRelease  Unable to connect to 127.0.0.1:7897:
+W: Some index files failed to download. They have been ignored, or old ones used instead.
+[0mReading package lists...
+Building dependency tree...
+Reading state information...
+Package ca-certificates is not available, but is referred to by another package.
+This may mean that the package is missing, has been obsoleted, or
+is only available from another source
+
+[91mE: Unable to locate package build-essential
+E: Unable to locate package cmake
+E: Unable to locate package ninja-build
+E: Unable to locate package git
+E: Package 'ca-certificates' has no installation candidate
+E: Unable to locate package libssl-dev
+E: Unable to locate package zlib1g-dev
+[0mThe command '/bin/sh -c apt-get update && apt-get install -y --no-install-recommends         build-essential cmake ninja-build git ca-certificates libssl-dev zlib1g-dev     && rm -rf /var/lib/apt/lists/*' returned a non-zero code: 100

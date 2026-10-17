@@ -1,5 +1,10 @@
 # HTTP/3 / QUIC release acceptance
 
+The [2026-10-17 official-profile reproduction](../bench/arena_h3_official.md)
+includes the large buffered-response/QPACK fixes and final Windows Release
+and six-peer Linux checks. Low-load correctness passes there; the static
+high-load rounds still report failures and do not establish release stability.
+
 No script in this directory treats a missing peer, privileges, or a failed
 request as a pass.  CTest uses exit status `77` for an environmental skip;
 only an actual response validated by the test is a pass.

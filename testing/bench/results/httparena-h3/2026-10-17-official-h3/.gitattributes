@@ -1,0 +1,4 @@
+* -text
+*.txt -whitespace
+*.log -whitespace
+*.patch -whitespace

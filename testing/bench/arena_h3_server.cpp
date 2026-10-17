@@ -1,16 +1,90 @@
-// HttpArena baseline-h3 adapter. Keep the application workload identical when
+// HttpArena HTTP/3 adapter. Keep the application workload identical when
 // comparing transport revisions; do not replace query parsing with a constant.
 import std;
 import cnetmod.core;
 import cnetmod.core.log;
 import cnetmod.core.ssl;
 import cnetmod.executor.pool;
+import cnetmod.executor.async_op;
+import cnetmod.io.io_context;
+import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.v3.session;
 
 namespace {
+
+struct static_asset
+{
+    std::filesystem::path identity;
+    std::filesystem::path brotli;
+    std::string content_type;
+};
+
+using asset_cache = std::unordered_map<std::string, static_asset>;
+
+// Index the official fixture before starting event loops. Contents are read
+// asynchronously for each request, so file updates cannot produce stale data.
+auto load_assets(const std::filesystem::path& root) -> asset_cache
+{
+    asset_cache assets;
+    for (const auto& entry : std::filesystem::directory_iterator{root})
+    {
+        if (!entry.is_regular_file() || entry.path().extension() == ".br" ||
+            entry.path().extension() == ".gz")
+            continue;
+        static_asset asset;
+        asset.identity = entry.path();
+        asset.content_type = cnetmod::http::guess_mime_type(entry.path().extension().string());
+        auto compressed = entry.path();
+        compressed += ".br";
+        if (std::filesystem::exists(compressed))
+            asset.brotli = compressed;
+        assets.emplace("/static/" + entry.path().filename().string(), std::move(asset));
+    }
+    return assets;
+}
+
+auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& request,
+    cnetmod::http::v3::http3_response& response, cnetmod::cancel_token& token)
+    -> cnetmod::task<std::expected<void, std::error_code>>
+{
+    const auto found = assets.find(request.path.substr(0, request.path.find('?')));
+    if (found == assets.end())
+    {
+        response.status = 404;
+        co_return std::expected<void, std::error_code>{};
+    }
+    // This adapter accepts the official profile's exact negotiation or an
+    // identity request for independent byte validation. Other negotiations
+    // are rejected explicitly rather than silently misinterpreting q-values.
+    const auto encoding = request.headers.find("accept-encoding");
+    const bool brotli = encoding != request.headers.end() &&
+        (encoding->second == "br;q=1, gzip;q=0.8" || encoding->second == "br");
+    if (encoding != request.headers.end() && !encoding->second.empty() &&
+        encoding->second != "identity" && !brotli)
+    {
+        response.status = 406;
+        co_return std::expected<void, std::error_code>{};
+    }
+    const auto& asset = found->second;
+    const auto use_brotli = brotli && !asset.brotli.empty();
+    auto content = co_await cnetmod::async_file_read_all(*cnetmod::io_context::current(),
+        use_brotli ? asset.brotli : asset.identity, token);
+    if (!content)
+    {
+        response.status = content.error() == std::errc::no_such_file_or_directory ? 404 : 500;
+        co_return std::expected<void, std::error_code>{};
+    }
+    response.headers.emplace("content-type", asset.content_type);
+    response.headers.emplace("vary", "Accept-Encoding");
+    if (use_brotli)
+        response.headers.emplace("content-encoding", "br");
+    response.body = std::move(*content);
+    co_return std::expected<void, std::error_code>{};
+}
 
 auto handle_request(cnetmod::http::v3::http3_request& request,
     cnetmod::http::v3::http3_response& response) -> std::error_code
@@ -62,9 +136,9 @@ auto main(int argc, char** argv) -> int
 {
     cnetmod::net_init network;
     logger::init("arena-h3", logger::level::warn);
-    if (argc != 5)
+    if (argc != 5 && argc != 6)
     {
-        logger::error{"usage: arena_h3_server CERT KEY PORT WORKERS"};
+        logger::error{"usage: arena_h3_server CERT KEY PORT WORKERS [OFFICIAL_STATIC_DIR]"};
         return 2;
     }
     unsigned port{}, workers{};
@@ -81,9 +155,37 @@ auto main(int argc, char** argv) -> int
     tls->configure_alpn_server({"h3"});
     if (!tls->load_cert_file(argv[1]) || !tls->load_key_file(argv[2]))
         return 1;
+    asset_cache assets;
+    if (argc == 6)
+    {
+        try
+        {
+            assets = load_assets(argv[5]);
+        }
+        catch (const std::exception& error)
+        {
+            logger::error{"{}", error.what()};
+            return 1;
+        }
+    }
+    cnetmod::http::v3::async_server_request_handler handler = [&assets](
+                                                                  cnetmod::http::v3::http3_request& request,
+                                                                  cnetmod::http::v3::http3_response& response, cnetmod::cancel_token& token)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        if (request.path.starts_with("/static/") &&
+            request.method == cnetmod::http::http_method::GET)
+            co_return co_await serve_asset(assets, request, response, token);
+        const auto error = handle_request(request, response);
+        if (error)
+            co_return std::unexpected(error);
+        co_return std::expected<void, std::error_code>{};
+    };
     cnetmod::server_context context{workers, workers};
-    auto server = cnetmod::http::v3::make_http3_server(context, *tls,
-        cnetmod::endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)}, handle_request);
+    const cnetmod::endpoint endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)};
+    auto server = argc == 6
+        ? cnetmod::http::v3::make_http3_server(context, *tls, endpoint, std::move(handler))
+        : cnetmod::http::v3::make_http3_server(context, *tls, endpoint, handle_request);
     if (const auto result = server->start(); !result)
     {
         logger::error{"HTTP/3 start failed: {}", result.error().message()};

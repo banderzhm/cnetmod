@@ -1,5 +1,10 @@
 # HTTP/3 HttpArena baseline, 2026-10-17
 
+This is a historical custom-harness record, not an official HttpArena result.
+The subsequent [official HTTP/3 reproduction](arena_h3_official.md) uses the
+pinned official driver, both profiles, three-round errors and comparison
+entries. Its conclusions supersede the earlier comparison below.
+
 The ordinary HTTP/3 receive-buffer change improves median throughput by **5.62%**
 in this local three-run experiment. It does not establish a leaderboard rank.
 Median server CPU usage rises by 4.88%; this is not a demonstrated CPU-saving

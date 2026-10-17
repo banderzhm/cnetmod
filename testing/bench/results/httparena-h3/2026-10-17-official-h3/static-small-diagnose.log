@@ -1,0 +1,2 @@
+[2026-10-17 10:52:07.501] [warn] [130553210459840] [arena_h3_server.cpp:74] static read begin: /var/tmp/cnetmod-h3-official/smallstatic/reset.css
+[2026-10-17 10:52:07.503] [warn] [130553210459840] [arena_h3_server.cpp:77] static read complete: true

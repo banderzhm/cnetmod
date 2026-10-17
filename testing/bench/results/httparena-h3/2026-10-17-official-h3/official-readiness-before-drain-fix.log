@@ -1,0 +1,10 @@
+=== Validating: cnetmod-official-optimized ===
+[info] Subscribed tests: baseline-h3
+[build] Building Docker image...
+e79322894248e60f662932b8028fbdf79fb3ecd28c721329124d028a85743055
+[wait] Waiting for server...
+FAIL: Server did not start within 30s
+
+─── cnetmod-official-optimized — status=running exit=0 oom=false error=
+─── cnetmod-official-optimized — the container produced no output at all
+httparena-validate-cnetmod-official-optimized
