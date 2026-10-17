@@ -22,6 +22,14 @@ project(cnetmod
     LANGUAGES CXX
 )
 
+set(CNETMOD_GENERATED_INCLUDE_DIR
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/include")
+file(MAKE_DIRECTORY "${CNETMOD_GENERATED_INCLUDE_DIR}/cnetmod")
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/cnetmod/version.hpp.in"
+    "${CNETMOD_GENERATED_INCLUDE_DIR}/cnetmod/version.hpp"
+    @ONLY)
+
 # Cloud-sync clients can transiently lock Visual Studio's generated
 # ZERO_CHECK.lastbuildstate file.  CLion/CMake already reconfigures explicitly
 # when project inputs change, so avoid a redundant regeneration target on
@@ -520,6 +528,7 @@ set(CNETMOD_RUNTIME_REGULAR_CPP_SOURCES
 
 function(cnetmod_configure_component TARGET_NAME EXPORT_NAME)
     target_include_directories(${TARGET_NAME} PUBLIC
+        $<BUILD_INTERFACE:${CNETMOD_GENERATED_INCLUDE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
     target_compile_features(${TARGET_NAME} PUBLIC cxx_std_23)
@@ -557,6 +566,7 @@ cnetmod_configure_component(cnetmod_runtime runtime)
 add_library(cnetmod::runtime ALIAS cnetmod_runtime)
 
 target_include_directories(cnetmod_runtime PUBLIC
+    $<BUILD_INTERFACE:${CNETMOD_GENERATED_INCLUDE_DIR}>
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
@@ -760,6 +770,7 @@ if(CNETMOD_BUILD_C_API AND CNETMOD_ENABLE_HTTP)
     target_compile_features(cnetmod_c PRIVATE cxx_std_23)
     target_compile_definitions(cnetmod_c PUBLIC CNETMOD_C_API_STATIC)
     target_include_directories(cnetmod_c PUBLIC
+        $<BUILD_INTERFACE:${CNETMOD_GENERATED_INCLUDE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
     set_property(TARGET cnetmod_c PROPERTY
@@ -883,6 +894,8 @@ if(TARGET cnetmod_c)
 endif()
 install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/include/"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
+install(FILES "${CNETMOD_GENERATED_INCLUDE_DIR}/cnetmod/version.hpp"
+    DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/cnetmod")
 install(DIRECTORY "${CNETMOD_NLOHMANN_JSON_SOURCE_DIR}/include/nlohmann"
     DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}")
 
