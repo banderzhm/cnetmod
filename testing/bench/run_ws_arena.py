@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import resource
 import socket
 import subprocess
 import time
@@ -166,11 +167,19 @@ def main():
         parser.error("connections must be at least the generator thread count")
     if any(name not in PROFILES for name in profiles):
         parser.error("unknown profile")
+    nofile = resource.getrlimit(resource.RLIMIT_NOFILE)
+    port_range = list(map(int, Path("/proc/sys/net/ipv4/ip_local_port_range").read_text().split()))
+    if max(connections) + 128 >= nofile[0]:
+        parser.error("file descriptor soft limit too small; set ulimit -n before running")
+    if max(connections) + 128 >= port_range[1] - port_range[0] + 1:
+        parser.error("ephemeral port range too small for this connection matrix")
     args.output.mkdir(parents=True, exist_ok=False)
     environment = {"arguments": {k: str(v) if isinstance(v, Path) else v for k, v in vars(args).items()},
                    "kernel": platform.uname()._asdict(), "cpuinfo": Path("/proc/cpuinfo").read_text(),
                    "binaries_sha256": {path: sha256(path) for path in
                                        (args.baseline, args.candidate, args.gcannon)},
+                   "nofile": nofile, "ephemeral_port_range": port_range,
+                   "tcp_tw_reuse": Path("/proc/sys/net/ipv4/tcp_tw_reuse").read_text().strip(),
                    "clock_ticks": os.sysconf("SC_CLK_TCK")}
     (args.output / "environment.json").write_text(json.dumps(environment, indent=2) + "\n")
     samples = []

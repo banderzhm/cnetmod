@@ -81,6 +81,12 @@ python testing/bench/run_ws_arena.py \
 
 CPU sets must be disjoint and available. Record SMT sibling placement and the
 virtualization environment; guest CPU affinity cannot control host scheduling.
+Set the invoking shell's descriptor limit high enough (for example,
+`ulimit -n 65536`). The runner also rejects an ephemeral-port range too small
+for the matrix. The WSL host initially had only 4096 ephemeral ports; a
+16384-connection run requires a larger range. Any global network setting
+change must happen within the exclusive test window, be recorded, and be
+restored after the run. Do not change it while another task owns that window.
 The output directory must be new. The runner preserves environment, exact
 commands, executable hashes, every raw JSON result, warmups, server logs and
 derived samples. It fails on process failures, absent responses, absent latency
