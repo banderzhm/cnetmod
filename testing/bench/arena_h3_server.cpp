@@ -18,15 +18,32 @@ namespace {
 
 struct static_asset
 {
-    std::filesystem::path identity;
-    std::filesystem::path brotli;
+    std::shared_ptr<const std::string> identity;
+    std::shared_ptr<const std::string> brotli;
     std::string content_type;
 };
 
 using asset_cache = std::unordered_map<std::string, static_asset>;
 
-// Index the official fixture before starting event loops. Contents are read
-// asynchronously for each request, so file updates cannot produce stale data.
+auto load_asset_file(const std::filesystem::path& path)
+    -> std::shared_ptr<const std::string>
+{
+    std::ifstream input{path, std::ios::binary};
+    if (!input)
+        throw std::system_error{std::make_error_code(std::errc::io_error),
+            path.string()};
+    auto content = std::make_shared<std::string>(
+        std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{});
+    if (input.bad() || content->size() != std::filesystem::file_size(path))
+        throw std::system_error{std::make_error_code(std::errc::io_error),
+            path.string()};
+    return content;
+}
+
+// The official fixture is immutable for a benchmark process. Cache it before
+// starting the event loops, then stream bounded chunks from shared storage.
+// Reading and retaining a complete private copy for every concurrent request
+// amplified the 64 x 64 static profile into sustained file-I/O and heap growth.
 auto load_assets(const std::filesystem::path& root) -> asset_cache
 {
     asset_cache assets;
@@ -36,19 +53,40 @@ auto load_assets(const std::filesystem::path& root) -> asset_cache
             entry.path().extension() == ".gz")
             continue;
         static_asset asset;
-        asset.identity = entry.path();
+        asset.identity = load_asset_file(entry.path());
         asset.content_type = cnetmod::http::guess_mime_type(entry.path().extension().string());
         auto compressed = entry.path();
         compressed += ".br";
         if (std::filesystem::exists(compressed))
-            asset.brotli = compressed;
+            asset.brotli = load_asset_file(compressed);
         assets.emplace("/static/" + entry.path().filename().string(), std::move(asset));
     }
     return assets;
 }
 
+auto make_asset_body_source(std::shared_ptr<const std::string> content)
+    -> std::shared_ptr<cnetmod::http::response_body_source>
+{
+    constexpr std::size_t chunk_size = 16U * 1024U;
+    const auto content_length = static_cast<std::uint64_t>(content->size());
+    return std::make_shared<cnetmod::http::response_body_source>(
+        [content = std::move(content), offset = std::size_t{}, chunk_size](
+            cnetmod::cancel_token& token) mutable
+            -> cnetmod::task<std::optional<cnetmod::http::request_body_chunk>>
+        {
+            if (token.is_cancelled() || offset == content->size())
+                co_return std::nullopt;
+            const auto count = std::min(chunk_size, content->size() - offset);
+            const auto* begin = reinterpret_cast<const std::byte*>(content->data() + offset);
+            cnetmod::http::request_body_chunk chunk{begin, begin + count};
+            offset += count;
+            co_return chunk;
+        },
+        content_length);
+}
+
 auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& request,
-    cnetmod::http::v3::http3_response& response, cnetmod::cancel_token& token)
+    cnetmod::http::v3::http3_response& response, cnetmod::cancel_token&)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
     const auto found = assets.find(request.path.substr(0, request.path.find('?')));
@@ -70,19 +108,13 @@ auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& re
         co_return std::expected<void, std::error_code>{};
     }
     const auto& asset = found->second;
-    const auto use_brotli = brotli && !asset.brotli.empty();
-    auto content = co_await cnetmod::async_file_read_all(*cnetmod::io_context::current(),
-        use_brotli ? asset.brotli : asset.identity, token);
-    if (!content)
-    {
-        response.status = content.error() == std::errc::no_such_file_or_directory ? 404 : 500;
-        co_return std::expected<void, std::error_code>{};
-    }
+    const auto use_brotli = brotli && static_cast<bool>(asset.brotli);
+    const auto& content = use_brotli ? asset.brotli : asset.identity;
     response.headers.emplace("content-type", asset.content_type);
     response.headers.emplace("vary", "Accept-Encoding");
     if (use_brotli)
         response.headers.emplace("content-encoding", "br");
-    response.body = std::move(*content);
+    response.body_source = make_asset_body_source(content);
     co_return std::expected<void, std::error_code>{};
 }
 
@@ -186,6 +218,17 @@ auto main(int argc, char** argv) -> int
     auto server = argc == 6
         ? cnetmod::http::v3::make_http3_server(context, *tls, endpoint, std::move(handler))
         : cnetmod::http::v3::make_http3_server(context, *tls, endpoint, handle_request);
+    // HttpArena creates fresh h2load connections for every short run and the
+    // load generator leaves them silent instead of sending CONNECTION_CLOSE.
+    // Bound that known retention window so three official rounds cannot keep
+    // accumulating complete connection and retransmission state.
+    if (const auto configured = server->set_idle_timeout(std::chrono::seconds{5});
+        !configured)
+    {
+        logger::error{"HTTP/3 idle-timeout setup failed: {}",
+            configured.error().message()};
+        return 1;
+    }
     if (const auto result = server->start(); !result)
     {
         logger::error{"HTTP/3 start failed: {}", result.error().message()};

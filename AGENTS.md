@@ -8873,6 +8873,18 @@ auto server = h3::make_http3_server(io, tls,
     });
 ```
 
+可在 `start()` 前调整新连接的 QUIC 空闲回收时间：
+
+```cpp
+auto configured = server->set_idle_timeout(std::chrono::seconds{10});
+// 检查 configured 后再调用 server->start()。
+```
+
+`set_idle_timeout(std::chrono::milliseconds)` 会同步应用到多 worker listener；负值返回
+`invalid_argument`，`0ms` 禁用空闲到期。短任务型客户端若直接关闭 UDP socket 而不发送
+`CONNECTION_CLOSE`，服务端无法从静默中区分断线与合法空闲，应由应用按连接复用策略选择
+合适的有限超时。
+
 同步 handler 适合纯内存、快速响应；涉及数据库、缓存或 RPC 时使用协程 handler：
 
 ```cpp

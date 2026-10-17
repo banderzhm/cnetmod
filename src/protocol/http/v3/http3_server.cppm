@@ -118,6 +118,11 @@ public:
     /// default; a non-zero capacity requires a non-zero blocked-stream limit.
     auto set_qpack_settings(std::uint64_t max_table_capacity,
         std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>;
+    /// Configure the QUIC idle timeout advertised by newly accepted
+    /// connections. A zero duration disables idle expiry; negative durations
+    /// are rejected. Configure this before `start()`.
+    auto set_idle_timeout(std::chrono::milliseconds timeout)
+        -> std::expected<void, std::error_code>;
     /// Configure bounded per-connection and listener-wide UDP inbox memory
     /// before start(). Values are rounded up by the lock-free queue itself.
     auto set_inbox_limits(http3_inbox_limits limits)

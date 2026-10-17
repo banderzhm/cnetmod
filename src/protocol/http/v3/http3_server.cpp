@@ -913,6 +913,19 @@ public:
         return {};
     }
 
+    auto set_idle_timeout(std::chrono::milliseconds timeout)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (timeout < std::chrono::milliseconds::zero())
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        transport_config_.idle_timeout = timeout;
+        for (auto& shard : shards_)
+            shard->transport_config_.idle_timeout = timeout;
+        return {};
+    }
+
     auto set_push_cancellation_observer(
         server_push_cancellation_observer observer)
         -> std::expected<void, std::error_code>
@@ -1902,6 +1915,12 @@ auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,
     std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
 {
     return impl_->set_qpack_settings(max_table_capacity, max_blocked_streams);
+}
+
+auto http3_server::set_idle_timeout(std::chrono::milliseconds timeout)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_idle_timeout(timeout);
 }
 
 auto http3_server::set_inbox_limits(http3_inbox_limits limits)
