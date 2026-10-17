@@ -1,6 +1,9 @@
 # gRPC Release benchmark and profiling
 
-Measured results: [2026-10-17 same-host baseline/candidate comparison](results/grpc-arena-2026-10-17/README.md).
+Exploratory local results: [2026-10-17 baseline/candidate comparison](results/grpc-arena-2026-10-17/README.md).
+These custom-harness results do not satisfy the later official-suite acceptance
+requirement. Use [the official preparation plan](HTTPARENA_GRPC_OFFICIAL.md) for
+that next phase.
 
 Use `grpc_arena_server`, an independent server implementing
 `/benchmark.BenchmarkService/GetSum` with cnetmod's protobuf codec and normal

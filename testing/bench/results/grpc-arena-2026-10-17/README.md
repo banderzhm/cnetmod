@@ -1,5 +1,13 @@
 # gRPC / HTTP2 performance — 2026-10-17
 
+**Acceptance status updated:** this is an exploratory local comparison using
+the custom harness. It is not an official HttpArena run and does not satisfy
+the later requirement to use the official driver, statistics and competitors.
+The official-suite comparison and merge acceptance remain pending. See
+[official preparation](../../HTTPARENA_GRPC_OFFICIAL.md) for the locked suite,
+differences and prerequisites. The historical measurements below are retained
+as local profiling evidence, not as a leaderboard or official-suite claim.
+
 The same-host median throughput improved **35.6%–68.9%** across all four
 profiles. Median per-round p99 decreased in every profile. All 24 accepted
 measurement rounds had zero HTTP/request/network failures and passed their
@@ -24,7 +32,8 @@ regression checks no early credit and exactly 49,152 consumed bytes returned
 in one connection update. Existing interleaved-body, flow-control and
 single-dispatch checks remain green.
 
-Ready to merge into develop with the normal platform CI. Public callable APIs
+The earlier local-only merge recommendation is superseded by the official-suite
+acceptance requirement above. Public callable APIs
 are unchanged; consumers should rebuild their C++ module artifacts because
 the session's private layout changed. Runtime verification here is Linux/WSL;
 Windows and macOS runtime checks were not executed. The change adds no
