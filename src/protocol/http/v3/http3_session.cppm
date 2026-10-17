@@ -99,6 +99,10 @@ export struct http3_response
     int status{status::ok};
     http_version version{http_version::http_3};
     header_map headers;
+    /// Optional complete immutable QPACK response header block. Build it once
+    /// with qpack_static_response_headers::encode(). `status` must match and
+    /// `headers` must stay empty when this fast path is used.
+    std::shared_ptr<const qpack_static_response_headers> static_headers;
     std::string body;
     /// Optional immutable buffered body storage. Servers can share preloaded
     /// content across responses while the session builds the wire image.

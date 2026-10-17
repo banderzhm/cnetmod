@@ -134,6 +134,28 @@ response.headers.emplace("content-length", std::to_string(cached->size()));
 
 `body`、`shared_body` 与 `body_source` 三者只能设置一个。
 
+重复静态响应还可以预编码完整的 QPACK 响应头。编码结果只使用静态表和字面量，
+可以安全地跨连接共享，并避免每个请求重复创建 header 容器和查询 QPACK 表：
+
+```cpp
+const std::array fields{
+    h3::header_field{"content-type", "text/css"},
+    h3::header_field{"vary", "Accept-Encoding"}};
+auto encoded = h3::qpack_static_response_headers::encode(200, fields);
+if (!encoded)
+    co_return std::unexpected(encoded.error());
+auto cached_headers =
+    std::make_shared<h3::qpack_static_response_headers>(std::move(*encoded));
+
+// 请求热路径
+response.status = 200;
+response.static_headers = cached_headers;
+response.shared_body = cached_body;
+```
+
+使用 `static_headers` 时，`response.status` 必须与预编码状态一致，
+`response.headers` 必须为空，并且不能同时使用 `body_source`。
+
 ### 响应体流式发送
 
 服务端可设置 `response.body_source`。服务端先发送 HEADERS，再按 producer 发送

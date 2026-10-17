@@ -56,6 +56,32 @@ private:
     std::unique_ptr<impl> impl_;
 };
 
+/// Complete immutable response header block encoded without dynamic-table
+/// references. Cache one when status and fields repeat verbatim. A session can
+/// copy it directly without touching its connection-local QPACK encoder.
+export class qpack_static_response_headers
+{
+public:
+    qpack_static_response_headers(qpack_static_response_headers&&) noexcept = default;
+    auto operator=(qpack_static_response_headers&&) noexcept
+        -> qpack_static_response_headers& = default;
+    qpack_static_response_headers(const qpack_static_response_headers&) = delete;
+    auto operator=(const qpack_static_response_headers&)
+        -> qpack_static_response_headers& = delete;
+
+    [[nodiscard]] static auto encode(int status,
+        std::span<const header_field> fields)
+        -> std::expected<qpack_static_response_headers, std::error_code>;
+    [[nodiscard]] auto status() const noexcept -> int;
+    [[nodiscard]] auto encoded() const noexcept -> byte_view;
+
+private:
+    qpack_static_response_headers(int status, byte_buffer encoded) noexcept;
+
+    int status_;
+    byte_buffer encoded_;
+};
+
 export class qpack_decoder
 {
 public:

@@ -9,6 +9,7 @@ import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http;
 import cnetmod.protocol.http.semantics;
+import cnetmod.protocol.http.v3.qpack;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.v3.session;
 
@@ -18,7 +19,10 @@ struct static_asset
 {
     std::shared_ptr<const std::string> identity;
     std::shared_ptr<const std::string> brotli;
-    std::string content_type;
+    std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>
+        identity_headers;
+    std::shared_ptr<const cnetmod::http::v3::qpack_static_response_headers>
+        brotli_headers;
 };
 
 using asset_cache = std::unordered_map<std::string, static_asset>;
@@ -51,11 +55,35 @@ auto load_assets(const std::filesystem::path& root) -> asset_cache
             continue;
         static_asset asset;
         asset.identity = load_asset_file(entry.path());
-        asset.content_type = cnetmod::http::guess_mime_type(entry.path().extension().string());
+        const auto content_type = cnetmod::http::guess_mime_type(
+            entry.path().extension().string());
+        const std::array identity_fields{
+            cnetmod::http::v3::header_field{"content-type", std::string{content_type}},
+            cnetmod::http::v3::header_field{"vary", "Accept-Encoding"}};
+        auto identity_headers = cnetmod::http::v3::qpack_static_response_headers::encode(
+            cnetmod::http::status::ok, identity_fields);
+        if (!identity_headers)
+            throw std::system_error{identity_headers.error()};
+        asset.identity_headers =
+            std::make_shared<cnetmod::http::v3::qpack_static_response_headers>(
+                std::move(*identity_headers));
         auto compressed = entry.path();
         compressed += ".br";
         if (std::filesystem::exists(compressed))
+        {
             asset.brotli = load_asset_file(compressed);
+            const std::array brotli_fields{
+                cnetmod::http::v3::header_field{"content-type", std::string{content_type}},
+                cnetmod::http::v3::header_field{"vary", "Accept-Encoding"},
+                cnetmod::http::v3::header_field{"content-encoding", "br"}};
+            auto brotli_headers = cnetmod::http::v3::qpack_static_response_headers::encode(
+                cnetmod::http::status::ok, brotli_fields);
+            if (!brotli_headers)
+                throw std::system_error{brotli_headers.error()};
+            asset.brotli_headers =
+                std::make_shared<cnetmod::http::v3::qpack_static_response_headers>(
+                    std::move(*brotli_headers));
+        }
         assets.emplace("/static/" + entry.path().filename().string(), std::move(asset));
     }
     return assets;
@@ -85,11 +113,9 @@ auto serve_asset(const asset_cache& assets, cnetmod::http::v3::http3_request& re
     const auto& asset = found->second;
     const auto use_brotli = brotli && static_cast<bool>(asset.brotli);
     const auto& content = use_brotli ? asset.brotli : asset.identity;
-    response.headers.reserve(3U);
-    response.headers.emplace("content-type", asset.content_type);
-    response.headers.emplace("vary", "Accept-Encoding");
-    if (use_brotli)
-        response.headers.emplace("content-encoding", "br");
+    response.static_headers = use_brotli
+        ? asset.brotli_headers
+        : asset.identity_headers;
     response.shared_body = content;
     return {};
 }

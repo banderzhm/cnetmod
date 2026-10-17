@@ -7,6 +7,7 @@ namespace {
 using cnetmod::http::v3::header_field;
 using cnetmod::http::v3::qpack_decoder;
 using cnetmod::http::v3::qpack_encoder;
+using cnetmod::http::v3::qpack_static_response_headers;
 
 auto fields(std::initializer_list<header_field> values) -> std::vector<header_field>
 {
@@ -258,6 +259,29 @@ TEST(qpack_encoder_and_decoder_stream_instructions)
     const auto decoder_instructions = decoder.take_decoder_instructions();
     ASSERT_FALSE(decoder_instructions.empty());
     ASSERT_TRUE(encoder.process_decoder_instructions(decoder_instructions).has_value());
+}
+
+TEST(qpack_static_response_headers_round_trip)
+{
+    const std::array fields{
+        header_field{"content-type", "text/plain"},
+        header_field{"vary", "Accept-Encoding"},
+        header_field{"content-encoding", "br"}};
+    auto cached = qpack_static_response_headers::encode(200, fields);
+    ASSERT_TRUE(cached.has_value());
+    ASSERT_EQ(cached->status(), 200);
+
+    qpack_decoder decoder;
+    auto decoded = decoder.decode(cached->encoded());
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_EQ(decoded->size(), fields.size() + 1U);
+    ASSERT_EQ(decoded->front().name, ":status");
+    ASSERT_EQ(decoded->front().value, "200");
+    for (std::size_t index = 0; index < fields.size(); ++index)
+    {
+        ASSERT_EQ(decoded->at(index + 1U).name, fields[index].name);
+        ASSERT_EQ(decoded->at(index + 1U).value, fields[index].value);
+    }
 }
 
 TEST(qpack_rejects_header_block_that_requires_unreceived_dynamic_entries)

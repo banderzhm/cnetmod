@@ -564,23 +564,35 @@ namespace {
         bool suppress_body = false)
         -> std::expected<byte_buffer, std::error_code>
     {
-        std::vector<header_field> fields;
-        fields.reserve(response.headers.size() + 1U);
-        fields.push_back({":status", std::to_string(response.status)});
-        for (const auto& [name, value] : response.headers)
-            if (!name.starts_with(':') && !std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
-                                              {
-                                                  return static_cast<char>(std::tolower(character));
-                                              },
-                                              [](unsigned char character)
-                                              {
-                                                  return static_cast<char>(std::tolower(character));
-                                              }))
-                fields.push_back({name, value});
-        auto block = encoder.encode(fields, id);
-        if (!block)
-            return std::unexpected(block.error());
-        auto result = encode_http3_frame(headers_frame{*block});
+        byte_buffer block;
+        if (response.static_headers)
+        {
+            if (!response.headers.empty() ||
+                response.status != response.static_headers->status())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            block.append(response.static_headers->encoded());
+        }
+        else
+        {
+            std::vector<header_field> fields;
+            fields.reserve(response.headers.size() + 1U);
+            fields.push_back({":status", std::to_string(response.status)});
+            for (const auto& [name, value] : response.headers)
+                if (!name.starts_with(':') && !std::ranges::equal(name, "transfer-encoding", {}, [](unsigned char character)
+                                                  {
+                                                      return static_cast<char>(std::tolower(character));
+                                                  },
+                                                  [](unsigned char character)
+                                                  {
+                                                      return static_cast<char>(std::tolower(character));
+                                                  }))
+                    fields.push_back({name, value});
+            auto encoded = encoder.encode(fields, id);
+            if (!encoded)
+                return std::unexpected(encoded.error());
+            block = std::move(*encoded);
+        }
+        auto result = encode_http3_frame(headers_frame{block});
         const auto body = buffered_response_body(response);
         if (!body)
             return std::unexpected(body.error());
@@ -614,6 +626,13 @@ namespace {
     auto response_headers_frame(qpack_encoder& encoder, const http3_response& response,
         stream_id id) -> std::expected<byte_buffer, std::error_code>
     {
+        if (response.static_headers)
+        {
+            if (!response.headers.empty() || response.body_source ||
+                response.status != response.static_headers->status())
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return encode_http3_frame(headers_frame{response.static_headers->encoded()});
+        }
         std::vector<header_field> fields;
         fields.reserve(response.headers.size() + 2U);
         fields.push_back({":status", std::to_string(response.status)});
@@ -1790,6 +1809,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
                 response.status = status::internal_server_error;
             response.body.clear();
             response.shared_body.reset();
+            response.static_headers.reset();
         }
     }
     else if (async_handler_)
@@ -1813,6 +1833,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
             response.status = status::internal_server_error;
             response.body.clear();
             response.shared_body.reset();
+            response.static_headers.reset();
         }
     }
     else if (handler_(*request, response))
@@ -1820,6 +1841,7 @@ auto http3_server_session::service_peer_stream(stream_id id) -> task<void>
         response.status = status::internal_server_error;
         response.body.clear();
         response.shared_body.reset();
+        response.static_headers.reset();
     }
 
     // PUSH_PROMISE frames are part of the parent request stream and must

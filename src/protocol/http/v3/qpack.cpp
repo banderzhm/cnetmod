@@ -595,6 +595,35 @@ auto qpack_encoder::encode(std::span<const header_field> headers, std::uint64_t 
     return out;
 }
 
+qpack_static_response_headers::qpack_static_response_headers(
+    int status, byte_buffer encoded) noexcept
+    : status_(status), encoded_(std::move(encoded)) {}
+
+auto qpack_static_response_headers::encode(int status,
+    std::span<const header_field> fields)
+    -> std::expected<qpack_static_response_headers, std::error_code>
+{
+    std::vector<header_field> response_fields;
+    response_fields.reserve(fields.size() + 1U);
+    response_fields.push_back({":status", std::to_string(status)});
+    response_fields.insert(response_fields.end(), fields.begin(), fields.end());
+    qpack_encoder encoder;
+    auto section = encoder.encode(response_fields);
+    if (!section)
+        return std::unexpected(section.error());
+    return qpack_static_response_headers{status, std::move(*section)};
+}
+
+auto qpack_static_response_headers::status() const noexcept -> int
+{
+    return status_;
+}
+
+auto qpack_static_response_headers::encoded() const noexcept -> byte_view
+{
+    return encoded_.view();
+}
+
 auto qpack_encoder::take_encoder_instructions() -> byte_buffer
 {
     return std::exchange(impl_->pending_encoder_instructions, {});
