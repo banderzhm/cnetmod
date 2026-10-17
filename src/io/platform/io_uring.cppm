@@ -52,11 +52,11 @@ private:
     static constexpr unsigned max_cqe_batch_ = 64;
     static constexpr unsigned default_cqe_tick_limit_ = 256;
     static constexpr unsigned max_cqe_tick_limit_ = 4096;
-    static constexpr unsigned default_submit_batch_size_ = 1;
+    static constexpr unsigned default_submit_batch_size_ = 8;
     static constexpr unsigned max_submit_batch_size_ = 128;
 
     static auto submit_batch_size_from_env() noexcept -> unsigned;
-    static auto env_enabled(const char* name) noexcept -> bool;
+    static auto env_enabled(const char* name, bool default_value) noexcept -> bool;
     static auto cqe_tick_limit_from_env() noexcept -> unsigned;
     [[nodiscard]] auto submit_pending() -> std::expected<int, std::error_code>;
     auto run_one_impl(bool blocking) -> std::size_t;

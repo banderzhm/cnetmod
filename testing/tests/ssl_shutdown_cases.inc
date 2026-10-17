@@ -178,3 +178,87 @@ TEST(tls_memory_bio_supports_concurrent_read_and_serialized_write)
     peer_task.handle().promise().result();
     exercise_task.handle().promise().result();
 }
+
+#if defined(CNETMOD_PLATFORM_LINUX) && defined(CNETMOD_USING_BORINGSSL)
+TEST(tls_kernel_tx_offload_preserves_payload_and_close_notify)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    auto identity = cnetmod::ssl_context::server();
+    ASSERT_TRUE(identity.has_value());
+    identity->set_kernel_tls(true);
+    ASSERT_TRUE(identity->load_cert_file(CNETMOD_TLS_TEST_CERT).has_value());
+    ASSERT_TRUE(identity->load_key_file(CNETMOD_TLS_TEST_KEY).has_value());
+
+    auto listener = cnetmod::socket::create(cnetmod::address_family::ipv4,
+        cnetmod::socket_type::stream);
+    ASSERT_TRUE(listener.has_value());
+    ASSERT_TRUE(listener->bind(
+                            {cnetmod::ipv4_address::loopback(), 0})
+            .has_value());
+    ASSERT_TRUE(listener->listen().has_value());
+    const auto endpoint = listener->local_endpoint();
+    ASSERT_TRUE(endpoint.has_value());
+
+    bool offload_active = false;
+    unsigned finished{};
+    auto finish = [&]
+    {
+        if (++finished == 2)
+            io->stop();
+    };
+    auto peer = [&]() -> cnetmod::task<void>
+    {
+        auto socket = co_await cnetmod::async_accept(*io, *listener);
+        ASSERT_TRUE(socket.has_value());
+        cnetmod::ssl_stream stream{*identity, *io, *socket};
+        stream.set_accept_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        offload_active = stream.kernel_tls_active();
+        constexpr std::string_view payload = "ktls";
+        ASSERT_TRUE((co_await stream.async_write_all(
+                         cnetmod::const_buffer{payload.data(), payload.size()}))
+                .has_value());
+        ASSERT_TRUE((co_await stream.async_shutdown()).has_value());
+        finish();
+    };
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto socket = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(socket.has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(
+                         *io, *socket, *endpoint))
+                .has_value());
+        auto context = cnetmod::ssl_context::client();
+        ASSERT_TRUE(context.has_value());
+        context->set_verify_peer(false);
+        cnetmod::ssl_stream stream{*context, *io, *socket};
+        stream.set_connect_state();
+        ASSERT_TRUE((co_await stream.async_handshake()).has_value());
+        std::array<std::byte, 16U> bytes{};
+        auto received = co_await stream.async_read(cnetmod::buffer(bytes));
+        ASSERT_TRUE(received.has_value());
+        ASSERT_EQ(*received, std::size_t{4});
+        const auto text = std::string_view{
+            reinterpret_cast<const char*>(bytes.data()), *received};
+        ASSERT_EQ(text, std::string_view{"ktls"});
+        auto closed = co_await stream.async_read(cnetmod::buffer(bytes));
+        ASSERT_TRUE(closed.has_value());
+        if (closed)
+            ASSERT_EQ(*closed, std::size_t{0});
+        finish();
+    };
+
+    auto peer_task = peer();
+    auto exercise_task = exercise();
+    io->post(peer_task.handle());
+    io->post(exercise_task.handle());
+    io->run();
+    peer_task.handle().promise().result();
+    exercise_task.handle().promise().result();
+    // Kernels without TLS ULP exercise the documented user-space fallback.
+    // The local Linux performance gate additionally checks /proc/net/tls_stat.
+    (void)offload_active;
+}
+#endif

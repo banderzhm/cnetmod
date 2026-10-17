@@ -18,25 +18,43 @@ public:
 
     [[nodiscard]] auto decode(std::span<const std::byte> block)
         -> std::expected<std::vector<header_field>, std::error_code>;
+    [[nodiscard]] auto decode(std::span<const std::byte> block,
+        std::vector<header_field>& output)
+        -> std::expected<void, std::error_code>;
     [[nodiscard]] auto encode(std::span<const header_field> fields)
         -> std::expected<std::vector<std::byte>, std::error_code>;
+    [[nodiscard]] auto encode(std::span<const header_field> fields,
+        std::vector<std::byte>& output)
+        -> std::expected<void, std::error_code>;
 
     void set_dynamic_table_limit(std::size_t bytes);
     [[nodiscard]] auto dynamic_table_limit() const noexcept -> std::size_t;
 
 private:
+    template <typename Container>
+    [[nodiscard]] auto decode_into(std::span<const std::byte> block,
+        Container& output) -> std::expected<void, std::error_code>;
+
     struct entry
     {
         std::string name;
         std::string value;
     };
 
+    struct entry_view
+    {
+        std::string_view name;
+        std::string_view value;
+    };
+
     void evict();
     void insert(entry item);
-    [[nodiscard]] auto at(std::uint32_t index) const -> std::optional<entry>;
+    [[nodiscard]] auto at(std::uint32_t index) const
+        -> std::optional<entry_view>;
     [[nodiscard]] auto find(std::string_view name, std::string_view value,
         bool exact) const -> std::uint32_t;
     std::deque<entry> dynamic_table_;
+    std::vector<std::byte> huffman_scratch_;
     std::size_t dynamic_table_bytes_ = 0;
     std::size_t dynamic_table_limit_ = 4096;
 };

@@ -128,8 +128,10 @@ public:
     /// Set whether to verify peer certificate
     void set_verify_peer(bool verify) noexcept;
 
-    /// Request Linux kernel TLS when the runtime OpenSSL and kernel support it.
-    /// Unsupported cipher suites or kernels transparently retain user-space TLS.
+    /// Request Linux kernel TLS transmit offload. With bundled BoringSSL this
+    /// explicitly selects TLS 1.2 AES-GCM so record keys can be installed in
+    /// the kernel; unsupported platforms retain the normal TLS implementation.
+    /// Disabled by default so ordinary contexts continue to negotiate TLS 1.3.
     void set_kernel_tls(bool enabled) noexcept;
 
     [[nodiscard]] auto kernel_tls_enabled() const noexcept -> bool
@@ -309,6 +311,7 @@ private:
     // storage being submitted to the socket.
     async_mutex engine_mutex_;
     bool direct_socket_bio_ = false;
+    bool kernel_tls_requested_ = false;
     bool kernel_tls_active_ = false;
 };
 

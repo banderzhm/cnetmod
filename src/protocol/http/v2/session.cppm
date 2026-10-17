@@ -29,6 +29,7 @@ struct server_response
     std::vector<header_field> headers;
     std::vector<header_field> trailers;
     std::vector<std::byte> body;
+    std::string body_text;
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
 };
 
@@ -36,6 +37,13 @@ using server_handler =
     std::function<cnetmod::task<server_response>(server_request)>;
 using streaming_server_handler = std::function<cnetmod::task<server_response>(
     server_request, cnetmod::cancel_token&)>;
+/// Server integration variant that borrows request storage for the duration of
+/// the awaited call, allowing connection-local header capacity reuse.
+using borrowed_streaming_server_handler =
+    std::function<cnetmod::task<server_response>(
+        server_request&, cnetmod::cancel_token&)>;
+using sync_server_handler = std::function<std::optional<server_response>(
+    server_request&, cnetmod::cancel_token&)>;
 using transport_reader =
     std::function<cnetmod::task<std::expected<std::size_t, std::error_code>>(
         cnetmod::mutable_buffer)>;
@@ -55,6 +63,11 @@ public:
         streaming_server_handler handler,
         cnetmod::http::request_body_stream_options body_options = {},
         transport_reader reader = {}, transport_writer writer = {});
+    session(cnetmod::io_context& context, cnetmod::socket& socket,
+        borrowed_streaming_server_handler handler,
+        cnetmod::http::request_body_stream_options body_options = {},
+        transport_reader reader = {}, transport_writer writer = {},
+        sync_server_handler sync_handler = {});
 
     [[nodiscard]] auto run(std::span<const std::byte> initial = {})
         -> cnetmod::task<void>;
@@ -65,6 +78,13 @@ public:
     [[nodiscard]] auto local_settings() noexcept -> settings&;
 
 private:
+    struct ready_request
+    {
+        std::uint32_t stream_id{};
+        std::vector<header_field> headers;
+        bool detached = false;
+    };
+
     [[nodiscard]] auto process_frame(frame_header header,
         std::span<const std::byte> payload)
         -> std::expected<void, std::error_code>;
@@ -89,7 +109,9 @@ private:
         -> cnetmod::task<void>;
     void queue_connection_error(std::uint32_t code);
     void queue_frame(frame_header header, std::span<const std::byte> payload);
-    void compact_input();
+    [[nodiscard]] auto acquire_request_headers()
+        -> std::vector<header_field>;
+    void release_request_headers(std::vector<header_field> headers) noexcept;
 
     cnetmod::io_context* context_{};
     cnetmod::socket* socket_{};
@@ -99,18 +121,23 @@ private:
     settings peer_{};
     header_compression decoder_{};
     header_compression encoder_{};
-    std::unordered_map<std::uint32_t, stream> streams_;
-    std::vector<std::uint32_t> ready_streams_;
+    std::pmr::unsynchronized_pool_resource stream_pool_;
+    std::pmr::unordered_map<std::uint32_t, stream> streams_;
+    std::vector<ready_request> ready_requests_;
     server_handler handler_;
     streaming_server_handler streaming_handler_;
+    borrowed_streaming_server_handler borrowed_streaming_handler_;
+    sync_server_handler sync_handler_;
     cnetmod::http::request_body_stream_options body_options_{};
     std::unique_ptr<cnetmod::task_group> background_;
     cnetmod::async_mutex writer_mutex_;
     std::vector<std::byte> input_;
-    std::size_t input_offset_ = 0;
     std::vector<std::byte> outbound_;
     std::vector<std::byte> write_buffer_;
     std::vector<std::byte> header_block_;
+    std::vector<header_field> response_headers_;
+    std::vector<std::byte> encoded_headers_;
+    std::vector<std::vector<header_field>> request_header_pool_;
     std::uint32_t continuation_stream_id_ = 0;
     bool continuation_end_stream_ = false;
     std::uint32_t last_peer_stream_id_ = 0;

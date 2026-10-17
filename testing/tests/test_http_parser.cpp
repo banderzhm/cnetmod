@@ -77,9 +77,9 @@ TEST(request_parser_duplicate_headers_preserve_legacy_joining)
 
 TEST(request_parser_all_common_header_slots_are_addressable)
 {
-    constexpr std::array<std::string_view, 17> names{
+    constexpr std::array<std::string_view, 18> names{
         "Host", "Connection", "Content-Length", "Transfer-Encoding",
-        "Content-Type", "Authorization", "Accept-Encoding", "Range",
+        "Content-Type", "Authorization", "Accept-Encoding", "Accept", "Range",
         "Origin", "Forwarded", "X-Forwarded-For", "X-Real-IP",
         "Traceparent", "Tracestate", "User-Agent", "Cookie", "Upgrade"};
     std::string request = "GET / HTTP/1.1\r\n";

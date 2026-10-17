@@ -19,6 +19,9 @@ namespace {
     constexpr std::uint8_t flag_priority = 0x20;
     constexpr std::uint32_t error_protocol = 0x1;
     constexpr std::uint32_t error_frame_size = 0x6;
+    constexpr std::size_t response_batch_bytes = 64U * 1024U;
+    constexpr auto response_batch_max_age = std::chrono::microseconds{250};
+    constexpr std::size_t response_batch_time_check_interval = 32;
 
     auto read_u32(std::span<const std::byte> value) -> std::uint32_t
     {
@@ -28,13 +31,12 @@ namespace {
             std::to_integer<std::uint32_t>(value[3]);
     }
 
-    constexpr std::size_t input_compaction_threshold = 4096;
 } // namespace
 
 session::session(cnetmod::io_context& context, cnetmod::socket& socket,
     server_handler handler, transport_reader reader,
     transport_writer writer)
-    : context_(&context), socket_(&socket), reader_(std::move(reader)), writer_(std::move(writer)), handler_(std::move(handler))
+    : context_(&context), socket_(&socket), reader_(std::move(reader)), writer_(std::move(writer)), streams_(&stream_pool_), handler_(std::move(handler))
 {
     // Avoid both ends of the allocation trade-off: the common case should not
     // grow on its first multiplexed batch, while thousands of mostly-idle H2
@@ -42,11 +44,13 @@ session::session(cnetmod::io_context& context, cnetmod::socket& socket,
     const auto initial_stream_capacity = std::min<std::uint32_t>(
         local_.max_concurrent_streams, 32U);
     streams_.reserve(initial_stream_capacity);
-    ready_streams_.reserve(initial_stream_capacity);
+    ready_requests_.reserve(initial_stream_capacity);
     input_.reserve(16U * 1024U);
     outbound_.reserve(4U * 1024U);
     write_buffer_.reserve(4U * 1024U);
     header_block_.reserve(4U * 1024U);
+    response_headers_.reserve(8);
+    encoded_headers_.reserve(256);
     if (!reader_)
     {
         reader_ = [this](cnetmod::mutable_buffer buffer)
@@ -81,6 +85,53 @@ session::session(cnetmod::io_context& context, cnetmod::socket& socket,
     background_ = std::make_unique<cnetmod::task_group>(context);
 }
 
+session::session(cnetmod::io_context& context, cnetmod::socket& socket,
+    borrowed_streaming_server_handler handler,
+    cnetmod::http::request_body_stream_options body_options,
+    transport_reader reader, transport_writer writer,
+    sync_server_handler sync_handler)
+    : session(context, socket, server_handler{}, std::move(reader),
+          std::move(writer))
+{
+    if (!handler || body_options.max_bytes == 0 ||
+        body_options.chunk_capacity < 4)
+        throw std::invalid_argument(
+            "HTTP/2 streaming requires a handler, positive limit, and at least four body slots");
+    borrowed_streaming_handler_ = std::move(handler);
+    sync_handler_ = std::move(sync_handler);
+    body_options_ = body_options;
+    background_ = std::make_unique<cnetmod::task_group>(context);
+    request_header_pool_.reserve(std::min<std::uint32_t>(
+        local_.max_concurrent_streams, 32U));
+}
+
+auto session::acquire_request_headers() -> std::vector<header_field>
+{
+    if (request_header_pool_.empty())
+        return {};
+    auto headers = std::move(request_header_pool_.back());
+    request_header_pool_.pop_back();
+    return headers;
+}
+
+void session::release_request_headers(
+    std::vector<header_field> headers) noexcept
+{
+    // Reusing capacity must not turn the connection-local pool into a store of
+    // credentials.  HPACK's sensitive flag is advisory and clients do not
+    // consistently set it, so also recognize the standard credential fields.
+    for (auto& header : headers)
+    {
+        if (!header.sensitive && header.name != "authorization" &&
+            header.name != "proxy-authorization" &&
+            header.name != "cookie")
+            continue;
+        std::fill(header.value.begin(), header.value.end(), '\0');
+        header.value.clear();
+    }
+    request_header_pool_.push_back(std::move(headers));
+}
+
 auto session::peer_settings() const noexcept -> const settings&
 {
     return peer_;
@@ -103,31 +154,6 @@ void session::queue_frame(frame_header header,
     const auto encoded = encode_frame_header(header);
     outbound_.insert(outbound_.end(), encoded.begin(), encoded.end());
     outbound_.insert(outbound_.end(), payload.begin(), payload.end());
-}
-
-void session::compact_input()
-{
-    if (input_offset_ == 0)
-        return;
-
-    if (input_offset_ == input_.size())
-    {
-        input_.clear();
-        input_offset_ = 0;
-        return;
-    }
-
-    // Keep an unread tail in place until enough consumed prefix has accrued.
-    // Erasing from a vector for every small HTTP/2 frame turns a coalesced
-    // receive into repeated memmoves on the connection hot path.
-    if (input_offset_ < input_compaction_threshold && input_offset_ * 2 < input_.size())
-        return;
-
-    const auto unread = input_.size() - input_offset_;
-    std::move(input_.begin() + static_cast<std::ptrdiff_t>(input_offset_), input_.end(),
-        input_.begin());
-    input_.resize(unread);
-    input_offset_ = 0;
 }
 
 void session::queue_connection_error(std::uint32_t code)
@@ -184,9 +210,12 @@ auto session::validate_headers(std::span<const header_field> fields) const
 
 void session::queue_response(std::uint32_t stream_id, server_response response)
 {
-    std::vector<header_field> headers;
-    headers.reserve(response.headers.size() + 2);
-    headers.push_back({":status", std::to_string(response.status)});
+    const auto body = response.body_text.empty()
+        ? std::span<const std::byte>{response.body}
+        : std::as_bytes(std::span{response.body_text});
+    response_headers_.clear();
+    response_headers_.reserve(response.headers.size() + 2);
+    response_headers_.push_back({":status", std::to_string(response.status)});
     bool has_length = false;
     for (auto& header : response.headers)
     {
@@ -194,31 +223,32 @@ void session::queue_response(std::uint32_t stream_id, server_response response)
             header.name == "transfer-encoding" || header.name == "upgrade")
             continue;
         has_length |= header.name == "content-length";
-        headers.push_back(std::move(header));
+        response_headers_.push_back(std::move(header));
     }
-    if (!response.body.empty() && !has_length)
-        headers.push_back({"content-length", std::to_string(response.body.size())});
-    auto encoded = encoder_.encode(headers);
+    if (!body.empty() && !has_length)
+        response_headers_.push_back(
+            {"content-length", std::to_string(body.size())});
+    auto encoded = encoder_.encode(response_headers_, encoded_headers_);
     if (!encoded)
         return;
     const auto has_trailers = !response.trailers.empty();
-    const auto end_on_headers = response.body.empty() && !has_trailers;
+    const auto end_on_headers = body.empty() && !has_trailers;
     queue_frame({.type = frame_type::headers,
                     .flags = static_cast<std::uint8_t>(
                         flag_end_headers | (end_on_headers ? flag_end_stream : 0)),
                     .stream_id = stream_id},
-        *encoded);
+        encoded_headers_);
     std::size_t offset = 0;
-    while (offset < response.body.size())
+    while (offset < body.size())
     {
         const auto size = std::min<std::size_t>(
-            peer_.max_frame_size, response.body.size() - offset);
-        const auto final = offset + size == response.body.size();
+            peer_.max_frame_size, body.size() - offset);
+        const auto final = offset + size == body.size();
         queue_frame({.type = frame_type::data,
                         .flags = static_cast<std::uint8_t>(
                             final && !has_trailers ? flag_end_stream : 0),
                         .stream_id = stream_id},
-            {response.body.data() + offset, size});
+            body.subspan(offset, size));
         offset += size;
     }
     if (has_trailers)
@@ -262,7 +292,7 @@ auto session::write_response(std::uint32_t stream_id,
     co_await cnetmod::post_awaitable{*context_};
     if (response.body_source)
     {
-        if (!response.body.empty())
+        if (!response.body.empty() || !response.body_text.empty())
             co_return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
         std::vector<header_field> headers;
@@ -403,13 +433,20 @@ void session::start_streaming_request(std::uint32_t stream_id)
                 });
         });
     server_request request{.stream_id = stream_id,
-        .headers = found->second.headers(),
+        .headers = found->second.take_headers(),
         .body_stream = body};
     (void)background_->run(
         [this, stream_id, request = std::move(request)](cnetmod::cancel_token& token) mutable
             -> cnetmod::task<std::expected<void, std::error_code>>
         {
-            auto response = co_await streaming_handler_(std::move(request), token);
+            server_response response;
+            if (borrowed_streaming_handler_)
+            {
+                response = co_await borrowed_streaming_handler_(request, token);
+                release_request_headers(std::move(request.headers));
+            }
+            else
+                response = co_await streaming_handler_(std::move(request), token);
             co_return co_await write_response(
                 stream_id, std::move(response), token);
         });
@@ -437,18 +474,51 @@ auto session::shutdown_streaming() -> cnetmod::task<void>
 
 auto session::dispatch_ready() -> cnetmod::task<void>
 {
-    auto ready = std::exchange(ready_streams_, {});
-    for (const auto stream_id : ready)
+    std::vector<ready_request> ready;
+    ready.swap(ready_requests_);
+    auto batch_started = std::chrono::steady_clock::now();
+    std::size_t batched_responses{};
+    for (auto& pending : ready)
     {
-        const auto found = streams_.find(stream_id);
-        if (found == streams_.end())
+        const auto stream_id = pending.stream_id;
+        const auto found = pending.detached
+            ? streams_.end()
+            : streams_.find(stream_id);
+        if (!pending.detached && found == streams_.end())
             continue;
         server_response response;
-        if (handler_)
+        if (borrowed_streaming_handler_)
         {
             server_request request{
                 .stream_id = stream_id,
-                .headers = found->second.headers(),
+                .headers = pending.detached
+                    ? std::move(pending.headers)
+                    : found->second.take_headers()};
+            cancel_token cancellation;
+            auto immediate = sync_handler_
+                ? sync_handler_(request, cancellation)
+                : std::nullopt;
+            if (immediate)
+                response = std::move(*immediate);
+            else
+                response = co_await borrowed_streaming_handler_(
+                    request, cancellation);
+            release_request_headers(std::move(request.headers));
+        }
+        else if (streaming_handler_)
+        {
+            server_request request{
+                .stream_id = stream_id,
+                .headers = found->second.take_headers()};
+            cancel_token cancellation;
+            response = co_await streaming_handler_(
+                std::move(request), cancellation);
+        }
+        else if (handler_)
+        {
+            server_request request{
+                .stream_id = stream_id,
+                .headers = found->second.take_headers(),
                 .body = {found->second.body().begin(), found->second.body().end()}};
             response = co_await handler_(std::move(request));
         }
@@ -459,94 +529,74 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 stream_id, std::move(response), cancellation);
             if (!written)
                 co_return;
+            batch_started = std::chrono::steady_clock::now();
+            batched_responses = 0;
             continue;
         }
-        std::vector<header_field> headers;
-        headers.reserve(response.headers.size() + 2);
-        headers.push_back({":status", std::to_string(response.status)});
-        bool has_length = false;
-        for (auto& header : response.headers)
-        {
-            if (header.name.starts_with(':') || header.name == "connection" ||
-                header.name == "transfer-encoding" || header.name == "upgrade")
-                continue;
-            has_length |= header.name == "content-length";
-            headers.push_back(std::move(header));
-        }
-        if (!response.body.empty() && !has_length)
-            headers.push_back(
-                {"content-length", std::to_string(response.body.size())});
-        auto encoded = encoder_.encode(headers);
-        if (!encoded)
-            co_return;
-        const auto has_trailers = !response.trailers.empty();
-        const auto end_on_headers = response.body.empty() && !has_trailers;
-        queue_frame({.type = frame_type::headers,
-                        .flags = static_cast<std::uint8_t>(
-                            flag_end_headers | (end_on_headers ? flag_end_stream : 0)),
-                        .stream_id = stream_id},
-            *encoded);
-        std::size_t offset = 0;
-        while (offset < response.body.size())
-        {
-            const auto size = std::min<std::size_t>(peer_.max_frame_size,
-                response.body.size() - offset);
-            const auto final = offset + size == response.body.size();
-            queue_frame({.type = frame_type::data,
-                            .flags = static_cast<std::uint8_t>(
-                                final && !has_trailers ? flag_end_stream : 0),
-                            .stream_id = stream_id},
-                {response.body.data() + offset, size});
-            offset += size;
-        }
-        if (has_trailers)
-        {
-            auto encoded_trailers = encoder_.encode(response.trailers);
-            if (!encoded_trailers)
-                co_return;
-            queue_frame({.type = frame_type::headers,
-                            .flags = static_cast<std::uint8_t>(flag_end_headers |
-                                flag_end_stream),
-                            .stream_id = stream_id},
-                *encoded_trailers);
-        }
+        queue_response(stream_id, std::move(response));
         // This request has already supplied END_STREAM and its complete
         // response has been queued. Retaining it makes the per-connection
         // stream map grow without bound for ordinary sequential RPC traffic.
-        streams_.erase(stream_id);
+        if (!pending.detached)
+            streams_.erase(stream_id);
+        ++batched_responses;
+        const bool size_limit_reached =
+            outbound_.size() >= response_batch_bytes;
+        const bool time_limit_reached =
+            batched_responses % response_batch_time_check_interval == 0 &&
+            std::chrono::steady_clock::now() - batch_started >=
+                response_batch_max_age;
+        if (size_limit_reached || time_limit_reached)
+        {
+            if (!(co_await flush_outbound()))
+                co_return;
+            batch_started = std::chrono::steady_clock::now();
+            batched_responses = 0;
+        }
     }
+    ready.clear();
+    ready_requests_.swap(ready);
 }
 
 auto session::receive(std::span<const std::byte> bytes)
     -> std::expected<void, std::error_code>
 {
-    compact_input();
-    input_.insert(input_.end(), bytes.begin(), bytes.end());
+    // Parse complete transport reads in place. The owned buffer is only needed
+    // when a preface or frame crosses a read boundary.
+    const bool has_buffered_tail = !input_.empty();
+    if (has_buffered_tail)
+        input_.insert(input_.end(), bytes.begin(), bytes.end());
+    const auto source = has_buffered_tail
+        ? std::span<const std::byte>{input_}
+        : bytes;
+    std::size_t offset = 0;
+
     if (!received_preface_)
     {
-        if (input_.size() - input_offset_ < client_preface.size())
+        if (source.size() < client_preface.size())
+        {
+            if (!has_buffered_tail)
+                input_.assign(source.begin(), source.end());
             return {};
-        if (std::string_view(reinterpret_cast<const char*>(input_.data() + input_offset_),
+        }
+        if (std::string_view(reinterpret_cast<const char*>(source.data()),
                 client_preface.size()) != client_preface)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        input_offset_ += client_preface.size();
+        offset = client_preface.size();
         received_preface_ = true;
         queue_frame({.type = frame_type::settings, .stream_id = 0},
             encode_settings(local_));
     }
-    while (input_.size() - input_offset_ >= frame_header_size)
+    while (source.size() - offset >= frame_header_size)
     {
         auto header =
-            decode_frame_header(std::span{input_.data() + input_offset_, frame_header_size});
+            decode_frame_header(source.subspan(offset, frame_header_size));
         if (!header)
             return std::unexpected(header.error());
-        if (input_.size() - input_offset_ < frame_header_size + header->length)
-        {
-            compact_input();
-            return {};
-        }
-        auto payload = std::span{input_.data() + input_offset_ + frame_header_size,
-            static_cast<std::size_t>(header->length)};
+        if (source.size() - offset < frame_header_size + header->length)
+            break;
+        auto payload = source.subspan(
+            offset + frame_header_size, header->length);
         auto result = process_frame(*header, payload);
         if (!result)
         {
@@ -556,9 +606,17 @@ auto session::receive(std::span<const std::byte> bytes)
                     : error_protocol);
             return result;
         }
-        input_offset_ += frame_header_size + header->length;
+        offset += frame_header_size + header->length;
     }
-    compact_input();
+
+    if (offset == source.size())
+        input_.clear();
+    else if (has_buffered_tail)
+        input_.erase(input_.begin(),
+            input_.begin() + static_cast<std::ptrdiff_t>(offset));
+    else
+        input_.assign(source.begin() + static_cast<std::ptrdiff_t>(offset),
+            source.end());
     return {};
 }
 
@@ -599,54 +657,106 @@ auto session::process_frame(frame_header header,
         if (header.type == frame_type::headers && continuation_stream_id_ != 0)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
         std::size_t offset = 0;
+        std::size_t padding = 0;
         if (header.type == frame_type::headers && (header.flags & flag_padded))
         {
             if (payload.empty())
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            offset = 1 + std::to_integer<std::uint8_t>(payload[0]);
+            padding = std::to_integer<std::uint8_t>(payload[0]);
+            offset = 1;
         }
         if (header.type == frame_type::headers && (header.flags & flag_priority))
             offset += 5;
-        if (offset > payload.size())
+        if (offset > payload.size() || padding > payload.size() - offset)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        header_block_.insert(header_block_.end(),
-            payload.begin() + static_cast<std::ptrdiff_t>(offset),
-            payload.end());
+        const auto fragment = payload.subspan(
+            offset, payload.size() - offset - padding);
         if ((header.flags & flag_end_headers) == 0)
         {
+            header_block_.insert(
+                header_block_.end(), fragment.begin(), fragment.end());
             continuation_stream_id_ = header.stream_id;
             continuation_end_stream_ = (header.flags & flag_end_stream) != 0;
             return {};
         }
         continuation_stream_id_ = 0;
-        auto decoded = decoder_.decode(header_block_);
-        header_block_.clear();
-        if (!decoded)
-            return std::unexpected(decoded.error());
-        if (auto error = validate_headers(*decoded); error)
-            return std::unexpected(error);
         if ((header.stream_id & 1U) == 0 ||
             header.stream_id <= last_peer_stream_id_)
+        {
+            header_block_.clear();
+            continuation_end_stream_ = false;
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        last_peer_stream_id_ = header.stream_id;
-        auto [it, inserted] = streams_.try_emplace(
-            header.stream_id, header.stream_id,
-            static_cast<std::int32_t>(peer_.initial_window_size));
+        }
         const bool end_stream =
             continuation_end_stream_ || (header.flags & flag_end_stream) != 0;
         continuation_end_stream_ = false;
-        if (!inserted ||
-            !it->second.receive_headers(std::move(*decoded), end_stream))
+        auto reusable_headers = borrowed_streaming_handler_
+            ? acquire_request_headers()
+            : std::vector<header_field>{};
+        // A request completed by its HEADERS frame needs no persistent stream
+        // state. Decode it directly into the ready queue and avoid a hash-map
+        // node, lookup, and erase on the dominant GET/RPC path.
+        if (borrowed_streaming_handler_ && end_stream)
+        {
+            std::span<const std::byte> encoded_headers = fragment;
+            if (header.type == frame_type::continuation)
+            {
+                header_block_.insert(
+                    header_block_.end(), fragment.begin(), fragment.end());
+                encoded_headers = header_block_;
+            }
+            auto decode_result = decoder_.decode(
+                encoded_headers, reusable_headers);
+            header_block_.clear();
+            if (!decode_result)
+                return std::unexpected(decode_result.error());
+            if (auto error = validate_headers(reusable_headers); error)
+                return std::unexpected(error);
+            last_peer_stream_id_ = header.stream_id;
+            ready_requests_.push_back({header.stream_id,
+                std::move(reusable_headers), true});
+            return {};
+        }
+        auto [it, inserted] = streams_.try_emplace(
+            header.stream_id, header.stream_id,
+            static_cast<std::int32_t>(peer_.initial_window_size),
+            std::move(reusable_headers));
+        auto* decoded = inserted ? it->second.prepare_headers(end_stream) : nullptr;
+        if (!decoded)
+        {
+            header_block_.clear();
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        if (streaming_handler_)
+        }
+        // Most requests fit in one HEADERS frame. Decode that frame directly
+        // from the receive buffer; only CONTINUATION sequences need the owned
+        // assembly buffer.
+        std::span<const std::byte> encoded_headers = fragment;
+        if (header.type == frame_type::continuation)
+        {
+            header_block_.insert(
+                header_block_.end(), fragment.begin(), fragment.end());
+            encoded_headers = header_block_;
+        }
+        auto decode_result = decoder_.decode(encoded_headers, *decoded);
+        header_block_.clear();
+        if (!decode_result)
+        {
+            streams_.erase(it);
+            return std::unexpected(decode_result.error());
+        }
+        if (auto error = validate_headers(*decoded); error)
+        {
+            streams_.erase(it);
+            return std::unexpected(error);
+        }
+        last_peer_stream_id_ = header.stream_id;
+        if ((streaming_handler_ || borrowed_streaming_handler_) && !end_stream)
         {
             start_streaming_request(header.stream_id);
-            if (end_stream && it->second.body_stream())
-                it->second.body_stream()->close();
         }
         else if (end_stream)
         {
-            ready_streams_.push_back(header.stream_id);
+            ready_requests_.push_back({.stream_id = header.stream_id});
         }
         return {};
     }
@@ -672,9 +782,10 @@ auto session::process_frame(frame_header header,
                 static_cast<std::byte>(increment)};
             queue_frame({.type = frame_type::window_update}, update);
         }
-        if ((header.flags & flag_end_stream) != 0 && !streaming_handler_)
+        if ((header.flags & flag_end_stream) != 0 && !streaming_handler_ &&
+            !borrowed_streaming_handler_)
         {
-            ready_streams_.push_back(header.stream_id);
+            ready_requests_.push_back({.stream_id = header.stream_id});
         }
         return {};
     }

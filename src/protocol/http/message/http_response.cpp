@@ -29,7 +29,7 @@ namespace {
         }
         return true;
     }
-}
+} // namespace
 
 response::response() = default;
 
@@ -93,6 +93,7 @@ auto response::append_header(std::string_view key, std::string_view value)
         {
             header.value.assign(value);
             header.present = true;
+            active_common_headers_ |= static_cast<std::uint16_t>(1U << *slot);
         }
         if (*slot == 6)
             has_cached_date_header_ = false;
@@ -148,6 +149,8 @@ auto response::remove_header(std::string_view key) -> response&
     {
         common_headers_[*slot].present = false;
         common_headers_[*slot].value.clear();
+        active_common_headers_ &=
+            static_cast<std::uint16_t>(~(1U << *slot));
         if (*slot == 6)
             has_cached_date_header_ = false;
         invalidate_headers_snapshot();
@@ -209,11 +212,16 @@ void response::reset(int status_code, http_version version) noexcept
     status_msg_.clear();
     version_ = version;
     headers_.clear();
-    for (auto& header : common_headers_)
+    auto active = active_common_headers_;
+    while (active != 0)
     {
+        const auto slot = static_cast<std::size_t>(std::countr_zero(active));
+        auto& header = common_headers_[slot];
         header.value.clear();
         header.present = false;
+        active &= static_cast<std::uint16_t>(active - 1U);
     }
+    active_common_headers_ = 0;
     invalidate_headers_snapshot();
     trailers_.clear();
     body_.clear();
@@ -269,6 +277,24 @@ auto response::body() const noexcept -> std::string_view
     return body_;
 }
 
+auto response::take_headers() -> header_map
+{
+    materialize_headers();
+    headers_snapshot_valid_ = false;
+    return std::move(headers_snapshot_);
+}
+
+auto response::header_count() const noexcept -> std::size_t
+{
+    return headers_.size() + (has_cached_date_header_ ? 1U : 0U) +
+        static_cast<std::size_t>(std::popcount(active_common_headers_));
+}
+
+auto response::take_trailers() noexcept -> header_map
+{
+    return std::move(trailers_);
+}
+
 auto response::take_body() noexcept -> std::string
 {
     return std::move(body_);
@@ -317,6 +343,7 @@ void response::set_cached_date_header(std::array<char, 29U> value) noexcept
     has_cached_date_header_ = true;
     common_headers_[6].present = false;
     common_headers_[6].value.clear();
+    active_common_headers_ &= static_cast<std::uint16_t>(~(1U << 6U));
     invalidate_headers_snapshot();
 }
 
@@ -343,26 +370,52 @@ void response::append_serialized_to(std::string& output) const
                 return total + header.first.size() + header.second.size() + 4U;
             });
     std::size_t common_size{};
-    for (std::size_t slot{}; slot < common_headers_.size(); ++slot)
-        if (common_headers_[slot].present)
-            common_size += common_header_name(slot).size() +
-                common_headers_[slot].value.size() + 4U;
+    auto active = active_common_headers_;
+    while (active != 0)
+    {
+        const auto slot = static_cast<std::size_t>(std::countr_zero(active));
+        common_size += common_header_name(slot).size() +
+            common_headers_[slot].value.size() + 4U;
+        active &= static_cast<std::uint16_t>(active - 1U);
+    }
     output.reserve(output.size() + reserve_size + common_size);
     if (version_ == http_version::http_1_1 && status_msg_.empty())
     {
         switch (status_code_)
         {
-        case 200: output += "HTTP/1.1 200 OK\r\n"; break;
-        case 201: output += "HTTP/1.1 201 Created\r\n"; break;
-        case 204: output += "HTTP/1.1 204 No Content\r\n"; break;
-        case 400: output += "HTTP/1.1 400 Bad Request\r\n"; break;
-        case 401: output += "HTTP/1.1 401 Unauthorized\r\n"; break;
-        case 403: output += "HTTP/1.1 403 Forbidden\r\n"; break;
-        case 404: output += "HTTP/1.1 404 Not Found\r\n"; break;
-        case 405: output += "HTTP/1.1 405 Method Not Allowed\r\n"; break;
-        case 429: output += "HTTP/1.1 429 Too Many Requests\r\n"; break;
-        case 500: output += "HTTP/1.1 500 Internal Server Error\r\n"; break;
-        case 503: output += "HTTP/1.1 503 Service Unavailable\r\n"; break;
+        case 200:
+            output += "HTTP/1.1 200 OK\r\n";
+            break;
+        case 201:
+            output += "HTTP/1.1 201 Created\r\n";
+            break;
+        case 204:
+            output += "HTTP/1.1 204 No Content\r\n";
+            break;
+        case 400:
+            output += "HTTP/1.1 400 Bad Request\r\n";
+            break;
+        case 401:
+            output += "HTTP/1.1 401 Unauthorized\r\n";
+            break;
+        case 403:
+            output += "HTTP/1.1 403 Forbidden\r\n";
+            break;
+        case 404:
+            output += "HTTP/1.1 404 Not Found\r\n";
+            break;
+        case 405:
+            output += "HTTP/1.1 405 Method Not Allowed\r\n";
+            break;
+        case 429:
+            output += "HTTP/1.1 429 Too Many Requests\r\n";
+            break;
+        case 500:
+            output += "HTTP/1.1 500 Internal Server Error\r\n";
+            break;
+        case 503:
+            output += "HTTP/1.1 503 Service Unavailable\r\n";
+            break;
         default:
             output += "HTTP/1.1 ";
             output += std::to_string(status_code_);
@@ -388,15 +441,16 @@ void response::append_serialized_to(std::string& output) const
         output.append(cached_date_header_.data(), cached_date_header_.size());
         output += "\r\n";
     }
-    for (std::size_t slot{}; slot < common_headers_.size(); ++slot)
+    active = active_common_headers_;
+    while (active != 0)
     {
+        const auto slot = static_cast<std::size_t>(std::countr_zero(active));
         const auto& header = common_headers_[slot];
-        if (!header.present)
-            continue;
         output += common_header_name(slot);
         output += ": ";
         output += header.value;
         output += "\r\n";
+        active &= static_cast<std::uint16_t>(active - 1U);
     }
     for (const auto& [key, value] : headers_)
     {
@@ -412,12 +466,45 @@ void response::append_serialized_to(std::string& output) const
 auto response::common_header_slot(std::string_view key) noexcept
     -> std::optional<std::size_t>
 {
-    constexpr std::array<std::string_view, common_header_count> names{
-        "Content-Length", "Content-Type", "Connection", "Transfer-Encoding",
-        "Server", "X-Streamed", "Date", "Location", "Allow", "Retry-After"};
-    for (std::size_t slot{}; slot < names.size(); ++slot)
-        if (header_equal(key, names[slot]))
-            return slot;
+    switch (key.size())
+    {
+    case 4:
+        return header_equal(key, "Date") ? std::optional<std::size_t>{6}
+                                         : std::nullopt;
+    case 5:
+        return header_equal(key, "Allow") ? std::optional<std::size_t>{8}
+                                          : std::nullopt;
+    case 6:
+        return header_equal(key, "Server") ? std::optional<std::size_t>{4}
+                                           : std::nullopt;
+    case 8:
+        return header_equal(key, "Location") ? std::optional<std::size_t>{7}
+                                             : std::nullopt;
+    case 10:
+        if (header_equal(key, "Connection"))
+            return 2;
+        if (header_equal(key, "X-Streamed"))
+            return 5;
+        return std::nullopt;
+    case 11:
+        return header_equal(key, "Retry-After")
+            ? std::optional<std::size_t>{9}
+            : std::nullopt;
+    case 12:
+        return header_equal(key, "Content-Type")
+            ? std::optional<std::size_t>{1}
+            : std::nullopt;
+    case 14:
+        return header_equal(key, "Content-Length")
+            ? std::optional<std::size_t>{0}
+            : std::nullopt;
+    case 17:
+        return header_equal(key, "Transfer-Encoding")
+            ? std::optional<std::size_t>{3}
+            : std::nullopt;
+    default:
+        break;
+    }
     return std::nullopt;
 }
 
@@ -443,10 +530,14 @@ void response::materialize_headers() const
     if (has_cached_date_header_)
         headers_snapshot_["Date"] = std::string{
             cached_date_header_.data(), cached_date_header_.size()};
-    for (std::size_t slot{}; slot < common_headers_.size(); ++slot)
-        if (common_headers_[slot].present)
-            headers_snapshot_[std::string{common_header_name(slot)}] =
-                common_headers_[slot].value;
+    auto active = active_common_headers_;
+    while (active != 0)
+    {
+        const auto slot = static_cast<std::size_t>(std::countr_zero(active));
+        headers_snapshot_[std::string{common_header_name(slot)}] =
+            common_headers_[slot].value;
+        active &= static_cast<std::uint16_t>(active - 1U);
+    }
     headers_snapshot_valid_ = true;
 }
 
@@ -456,6 +547,7 @@ auto response::set_common_header(std::size_t slot, std::string_view value)
     auto& header = common_headers_[slot];
     header.value.assign(value);
     header.present = true;
+    active_common_headers_ |= static_cast<std::uint16_t>(1U << slot);
     if (slot == 6)
         has_cached_date_header_ = false;
     invalidate_headers_snapshot();
@@ -468,6 +560,7 @@ auto response::set_common_header_owned(std::size_t slot, std::string value)
     auto& header = common_headers_[slot];
     header.value = std::move(value);
     header.present = true;
+    active_common_headers_ |= static_cast<std::uint16_t>(1U << slot);
     if (slot == 6)
         has_cached_date_header_ = false;
     invalidate_headers_snapshot();

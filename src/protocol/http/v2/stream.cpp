@@ -6,6 +6,11 @@ namespace cnetmod::http::v2 {
 stream::stream(std::uint32_t id, std::int32_t initial_window) noexcept
     : id_(id), receive_window_(initial_window), send_window_(initial_window) {}
 
+stream::stream(std::uint32_t id, std::int32_t initial_window,
+    std::vector<header_field> reusable_headers) noexcept
+    : id_(id), receive_window_(initial_window), send_window_(initial_window), headers_(std::move(reusable_headers))
+{}
+
 auto stream::id() const noexcept -> std::uint32_t
 {
     return id_;
@@ -19,6 +24,11 @@ auto stream::state() const noexcept -> stream_state
 auto stream::headers() const noexcept -> const std::vector<header_field>&
 {
     return headers_;
+}
+
+auto stream::take_headers() noexcept -> std::vector<header_field>
+{
+    return std::move(headers_);
 }
 
 auto stream::body() const noexcept -> std::span<const std::byte>
@@ -56,6 +66,15 @@ auto stream::receive_headers(std::vector<header_field> fields, bool end_stream)
     headers_ = std::move(fields);
     state_ = end_stream ? stream_state::half_closed_remote : stream_state::open;
     return true;
+}
+
+auto stream::prepare_headers(bool end_stream) noexcept
+    -> std::vector<header_field>*
+{
+    if (state_ != stream_state::idle && state_ != stream_state::open)
+        return nullptr;
+    state_ = end_stream ? stream_state::half_closed_remote : stream_state::open;
+    return &headers_;
 }
 
 auto stream::receive_data(std::span<const std::byte> data, bool end_stream)

@@ -76,54 +76,60 @@ namespace {
         {"www-authenticate", ""},
     };
 
+    struct static_lookup
+    {
+        std::uint32_t index{};
+        bool known_name{};
+    };
+
     auto common_static_index(std::string_view name, std::string_view value,
-        bool exact) noexcept -> std::uint32_t
+        bool exact) noexcept -> static_lookup
     {
         if (name == ":method")
         {
             if (!exact || value == "GET")
-                return 2;
-            return value == "POST" ? 3 : 0;
+                return {2, true};
+            return {value == "POST" ? 3U : 0U, true};
         }
         if (name == ":path")
         {
             if (!exact || value == "/")
-                return 4;
-            return value == "/index.html" ? 5 : 0;
+                return {4, true};
+            return {value == "/index.html" ? 5U : 0U, true};
         }
         if (name == ":scheme")
         {
             if (!exact || value == "http")
-                return 6;
-            return value == "https" ? 7 : 0;
+                return {6, true};
+            return {value == "https" ? 7U : 0U, true};
         }
         if (name == ":status")
         {
             if (!exact || value == "200")
-                return 8;
+                return {8, true};
             if (value == "204")
-                return 9;
+                return {9, true};
             if (value == "206")
-                return 10;
+                return {10, true};
             if (value == "304")
-                return 11;
+                return {11, true};
             if (value == "400")
-                return 12;
+                return {12, true};
             if (value == "404")
-                return 13;
-            return value == "500" ? 14 : 0;
+                return {13, true};
+            return {value == "500" ? 14U : 0U, true};
         }
         if (name == ":authority")
-            return exact && !value.empty() ? 0 : 1;
+            return {exact && !value.empty() ? 0U : 1U, true};
         if (name == "content-length")
-            return exact && !value.empty() ? 0 : 28;
+            return {exact && !value.empty() ? 0U : 28U, true};
         if (name == "content-type")
-            return exact && !value.empty() ? 0 : 31;
+            return {exact && !value.empty() ? 0U : 31U, true};
         if (name == "host")
-            return exact && !value.empty() ? 0 : 38;
+            return {exact && !value.empty() ? 0U : 38U, true};
         if (name == "user-agent")
-            return exact && !value.empty() ? 0 : 58;
-        return 0;
+            return {exact && !value.empty() ? 0U : 58U, true};
+        return {};
     }
 
     void encode_integer(std::vector<std::byte>& out, std::uint32_t value,
@@ -165,13 +171,14 @@ namespace {
         return std::nullopt;
     }
 
-    void encode_string(std::vector<std::byte>& out, std::string_view value)
+    void encode_string(std::vector<std::byte>& out, std::string_view value,
+        std::vector<std::byte>& scratch)
     {
-        auto encoded = huffman_encode(value);
-        if (encoded.size() < value.size())
+        huffman_encode(value, scratch);
+        if (scratch.size() < value.size())
         {
-            encode_integer(out, static_cast<std::uint32_t>(encoded.size()), 7, 0x80);
-            out.insert(out.end(), encoded.begin(), encoded.end());
+            encode_integer(out, static_cast<std::uint32_t>(scratch.size()), 7, 0x80);
+            out.insert(out.end(), scratch.begin(), scratch.end());
             return;
         }
         encode_integer(out, static_cast<std::uint32_t>(value.size()), 7);
@@ -179,27 +186,24 @@ namespace {
             out.push_back(static_cast<std::byte>(ch));
     }
 
-    auto decode_string(std::span<const std::byte> input, std::size_t& offset)
-        -> std::optional<std::string>
+    auto decode_string(std::span<const std::byte> input, std::size_t& offset,
+        std::string& output) -> bool
     {
         if (offset == input.size())
-            return std::nullopt;
+            return false;
         const bool huffman =
             (std::to_integer<std::uint8_t>(input[offset]) & 0x80) != 0;
         auto size = decode_integer(input, offset, 7);
         if (!size || *size > input.size() - offset)
-            return std::nullopt;
+            return false;
         const auto value = input.subspan(offset, *size);
         offset += *size;
         if (huffman)
         {
-            auto decoded = huffman_decode(value);
-            if (!decoded)
-                return std::nullopt;
-            return std::move(*decoded);
+            return huffman_decode(value, output).has_value();
         }
-        return std::string(reinterpret_cast<const char*>(value.data()),
-            value.size());
+        output.assign(reinterpret_cast<const char*>(value.data()), value.size());
+        return true;
     }
 } // namespace
 
@@ -231,27 +235,30 @@ void header_compression::insert(entry item)
     evict();
 }
 
-auto header_compression::at(std::uint32_t index) const -> std::optional<entry>
+auto header_compression::at(std::uint32_t index) const
+    -> std::optional<entry_view>
 {
     if (index > 0 && index < std::size(static_table))
-        return entry{std::string(static_table[index].name),
-            std::string(static_table[index].value)};
+        return entry_view{static_table[index].name, static_table[index].value};
     const auto dynamic =
         static_cast<std::size_t>(index) - std::size(static_table);
     if (index >= std::size(static_table) && dynamic < dynamic_table_.size())
-        return dynamic_table_[dynamic];
+        return entry_view{
+            dynamic_table_[dynamic].name, dynamic_table_[dynamic].value};
     return std::nullopt;
 }
 
 auto header_compression::find(std::string_view name, std::string_view value,
     bool exact) const -> std::uint32_t
 {
-    if (const auto common = common_static_index(name, value, exact))
-        return common;
-    for (std::uint32_t i = 1; i < std::size(static_table); ++i)
-        if (static_table[i].name == name &&
-            (!exact || static_table[i].value == value))
-            return i;
+    const auto common = common_static_index(name, value, exact);
+    if (common.index != 0)
+        return common.index;
+    if (!common.known_name)
+        for (std::uint32_t i = 1; i < std::size(static_table); ++i)
+            if (static_table[i].name == name &&
+                (!exact || static_table[i].value == value))
+                return i;
     for (std::size_t i = 0; i < dynamic_table_.size(); ++i)
         if (dynamic_table_[i].name == name &&
             (!exact || dynamic_table_[i].value == value))
@@ -274,7 +281,29 @@ auto header_compression::decode(std::span<const std::byte> block)
     -> std::expected<std::vector<header_field>, std::error_code>
 {
     std::vector<header_field> result;
-    result.reserve(std::min<std::size_t>(block.size(), 16U));
+    if (auto decoded = decode(block, result); !decoded)
+        return std::unexpected(decoded.error());
+    return result;
+}
+
+template <typename Container>
+auto header_compression::decode_into(std::span<const std::byte> block,
+    Container& output)
+    -> std::expected<void, std::error_code>
+{
+    // Header blocks are measured in encoded bytes, not field count. Reserving
+    // one element per byte substantially over-allocates the ordinary 4-8 field
+    // request. Eight covers the common request while retaining capacity in the
+    // connection-local header pool for later streams.
+    if (output.capacity() < 8U)
+        output.reserve(8U);
+    std::size_t output_size{};
+    const auto next_field = [&]() -> header_field&
+    {
+        if (output_size == output.size())
+            output.emplace_back();
+        return output[output_size++];
+    };
     std::size_t offset = 0;
     bool can_resize = true;
     while (offset < block.size())
@@ -287,7 +316,10 @@ auto header_compression::decode(std::span<const std::byte> block)
             auto value = index ? at(*index) : std::nullopt;
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            result.push_back({std::move(value->name), std::move(value->value)});
+            auto& field = next_field();
+            field.name.assign(value->name);
+            field.value.assign(value->value);
+            field.sensitive = false;
             continue;
         }
         if ((first & 0xe0) == 0x20)
@@ -306,57 +338,72 @@ auto header_compression::decode(std::span<const std::byte> block)
         auto index = decode_integer(block, offset, incremental ? 6 : 4);
         if (!index)
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        std::string name;
+        auto& field = next_field();
         if (*index)
         {
             auto value = at(*index);
             if (!value)
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            name = std::move(value->name);
+            field.name.assign(value->name);
         }
         else
         {
-            auto value = decode_string(block, offset);
-            if (!value || value->empty())
+            if (!decode_string(block, offset, field.name) ||
+                field.name.empty())
                 return std::unexpected(std::make_error_code(std::errc::protocol_error));
-            name = std::move(*value);
         }
-        auto value = decode_string(block, offset);
-        if (!value)
+        if (!decode_string(block, offset, field.value))
             return std::unexpected(std::make_error_code(std::errc::protocol_error));
-        header_field field{std::move(name), std::move(*value), sensitive};
+        field.sensitive = sensitive;
         if (incremental)
             insert({field.name, field.value});
-        result.push_back(std::move(field));
     }
-    return result;
+    output.resize(output_size);
+    return {};
+}
+
+auto header_compression::decode(std::span<const std::byte> block,
+    std::vector<header_field>& output)
+    -> std::expected<void, std::error_code>
+{
+    return decode_into(block, output);
 }
 
 auto header_compression::encode(std::span<const header_field> fields)
     -> std::expected<std::vector<std::byte>, std::error_code>
 {
     std::vector<std::byte> result;
-    result.reserve(fields.size() * 16U);
+    if (auto encoded = encode(fields, result); !encoded)
+        return std::unexpected(encoded.error());
+    return result;
+}
+
+auto header_compression::encode(std::span<const header_field> fields,
+    std::vector<std::byte>& output)
+    -> std::expected<void, std::error_code>
+{
+    output.clear();
+    output.reserve(fields.size() * 16U);
     for (const auto& field : fields)
     {
         if (field.name.empty())
             return std::unexpected(std::make_error_code(std::errc::invalid_argument));
         if (const auto exact = find(field.name, field.value, true))
         {
-            encode_integer(result, exact, 7, 0x80);
+            encode_integer(output, exact, 7, 0x80);
             continue;
         }
         const auto indexed = !field.sensitive && field.name != "authorization" &&
             field.name != "cookie" && field.name != "set-cookie";
         const auto name = find(field.name, {}, false);
-        encode_integer(result, name, indexed ? 6 : 4,
+        encode_integer(output, name, indexed ? 6 : 4,
             indexed ? 0x40 : (field.sensitive ? 0x10 : 0));
         if (!name)
-            encode_string(result, field.name);
-        encode_string(result, field.value);
+            encode_string(output, field.name, huffman_scratch_);
+        encode_string(output, field.value, huffman_scratch_);
         if (indexed)
             insert({field.name, field.value});
     }
-    return result;
+    return {};
 }
 } // namespace cnetmod::http::v2

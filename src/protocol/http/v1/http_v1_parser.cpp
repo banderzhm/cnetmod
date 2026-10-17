@@ -45,45 +45,64 @@ namespace detail {
         switch (name.size())
         {
         case 4:
-            if (header_equal(name, "Host")) return 0;
+            if (header_equal(name, "Host"))
+                return 0;
             break;
         case 5:
-            if (header_equal(name, "Range")) return 7;
+            if (header_equal(name, "Range"))
+                return 7;
             break;
         case 6:
-            if (header_equal(name, "Origin")) return 8;
-            if (header_equal(name, "Cookie")) return 15;
+            if (header_equal(name, "Accept"))
+                return 17;
+            if (header_equal(name, "Origin"))
+                return 8;
+            if (header_equal(name, "Cookie"))
+                return 15;
             break;
         case 7:
-            if (header_equal(name, "Upgrade")) return 16;
+            if (header_equal(name, "Upgrade"))
+                return 16;
             break;
         case 9:
-            if (header_equal(name, "Forwarded")) return 9;
-            if (header_equal(name, "X-Real-IP")) return 11;
+            if (header_equal(name, "Forwarded"))
+                return 9;
+            if (header_equal(name, "X-Real-IP"))
+                return 11;
             break;
         case 10:
-            if (header_equal(name, "Connection")) return 1;
-            if (header_equal(name, "Tracestate")) return 13;
-            if (header_equal(name, "User-Agent")) return 14;
+            if (header_equal(name, "Connection"))
+                return 1;
+            if (header_equal(name, "Tracestate"))
+                return 13;
+            if (header_equal(name, "User-Agent"))
+                return 14;
             break;
         case 11:
-            if (header_equal(name, "Traceparent")) return 12;
+            if (header_equal(name, "Traceparent"))
+                return 12;
             break;
         case 12:
-            if (header_equal(name, "Content-Type")) return 4;
+            if (header_equal(name, "Content-Type"))
+                return 4;
             break;
         case 13:
-            if (header_equal(name, "Authorization")) return 5;
+            if (header_equal(name, "Authorization"))
+                return 5;
             break;
         case 14:
-            if (header_equal(name, "Content-Length")) return 2;
+            if (header_equal(name, "Content-Length"))
+                return 2;
             break;
         case 15:
-            if (header_equal(name, "Accept-Encoding")) return 6;
-            if (header_equal(name, "X-Forwarded-For")) return 10;
+            if (header_equal(name, "Accept-Encoding"))
+                return 6;
+            if (header_equal(name, "X-Forwarded-For"))
+                return 10;
             break;
         case 17:
-            if (header_equal(name, "Transfer-Encoding")) return 3;
+            if (header_equal(name, "Transfer-Encoding"))
+                return 3;
             break;
         default:
             break;
@@ -348,8 +367,7 @@ void request_parser::finalize_headers()
     std::size_t capacity = 8;
     while (capacity < header_fields_.size() * 2)
         capacity *= 2;
-    header_index_.assign(capacity, missing_header);
-    common_headers_.fill(missing_header);
+    header_index_.clear();
 
     for (std::size_t index{}; index < header_fields_.size(); ++index)
     {
@@ -364,6 +382,11 @@ void request_parser::finalize_headers()
             continue;
         }
 
+        // The headers emitted by browsers and common benchmark clients are
+        // covered by the fixed slots. Build the fallback hash table only when
+        // an extension header actually needs it.
+        if (header_index_.empty())
+            header_index_.assign(capacity, missing_header);
         auto bucket = static_cast<std::size_t>(detail::header_hash(name)) &
             (header_index_.size() - 1);
         while (header_index_[bucket] != missing_header)
