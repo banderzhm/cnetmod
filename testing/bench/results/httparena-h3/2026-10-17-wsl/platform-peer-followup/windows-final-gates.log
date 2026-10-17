@@ -1,0 +1,48 @@
+UpdateCTestConfiguration  from :C:/Users/25007/.codex/tmp/cnetmod-h3-windows/DartConfiguration.tcl
+Test project C:/Users/25007/.codex/tmp/cnetmod-h3-windows
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 63
+    Start 63: h3_interop_release_gate
+
+63: Test command: C:\Users\25007\.codex\tmp\cnetmod-h3-windows-python\Scripts\python.exe "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py" "--server" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe" "--client" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe" "--port" "4433" "--wtransport-probe" "C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe"
+63: Working Directory: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3
+63: Test timeout computed to be: 120
+63: [PASSED] aioquic-server_to_cnetmod-client: request and response validated
+63: [PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+63: [PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+63: [SKIPPED] cnetmod-server_to_curl-http3: curl lacks HTTP/3 support
+63: [SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+63: [SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied
+1/2 Test #63: h3_interop_release_gate ................   Passed    6.91 sec
+test 64
+    Start 64: h3_interop_multi_worker_release_gate
+
+64: Test command: C:\Users\25007\.codex\tmp\cnetmod-h3-windows-python\Scripts\python.exe "C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/h3_acceptance.py" "--server" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_server.exe" "--client" "C:/Users/25007/.codex/tmp/cnetmod-h3-windows/bin/Release/h3_interop_client.exe" "--server-workers" "2" "--port" "4434" "--wtransport-probe" "C:/Users/25007/.codex/tmp/cnetmod-h3-wtransport/target/release/webtransport_probe.exe"
+64: Working Directory: C:/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3
+64: Test timeout computed to be: 120
+64: [PASSED] aioquic-server_to_cnetmod-client: request and response validated
+64: [PASSED] aioquic-webtransport_to_cnetmod-server: request and response validated
+64: [PASSED] wtransport-webtransport_to_cnetmod-server: 3 independent connections validated
+64: [SKIPPED] cnetmod-server_to_curl-http3: curl lacks HTTP/3 support
+64: [SKIPPED] cnetmod-server_to_nghttp3-client: --nghttp3-client-command was not supplied
+64: [SKIPPED] nghttp3-server_to_cnetmod-client: --nghttp3-server-command was not supplied
+2/2 Test #64: h3_interop_multi_worker_release_gate ...   Passed    7.34 sec
+
+The following tests passed:
+	h3_interop_release_gate
+	h3_interop_multi_worker_release_gate
+
+100% tests passed, 0 tests failed out of 2
+
+Label Time Summary:
+http3           =  14.24 sec*proc (2 tests)
+interop         =  14.24 sec*proc (2 tests)
+multi_worker    =   7.34 sec*proc (1 test)
+release_gate    =  14.24 sec*proc (2 tests)
+
+Total Test time (real) =  14.26 sec

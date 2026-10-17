@@ -1,0 +1,87 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling libc v0.2.191
+   Compiling stable_deref_trait v1.2.1
+   Compiling cfg-if v1.0.5
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling cc v1.8.0
+   Compiling thiserror v2.0.21
+   Compiling autocfg v1.5.1
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+   Compiling num-traits v0.2.19
+   Compiling ring v0.17.14
+   Compiling num-conv v0.2.2
+   Compiling litemap v0.8.3
+   Compiling time-core v0.1.9
+   Compiling writeable v0.6.4
+   Compiling time-macros v0.2.32
+rustc-LLVM ERROR: IO failure on output stream: No space left on device
+error: could not compile `time-macros` (lib)
+
+Caused by:
+  No space left on device (os error 28)
+
+Caused by:
+  failed to parse process output: `rustc --crate-name time_macros --edition=2024 /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/time-macros-0.2.32/src/lib.rs --error-format=json --json=diagnostic-rendered-ansi,artifacts,future-incompat --crate-type proc-macro --emit=dep-info,link -C prefer-dynamic -C embed-bitcode=no -C debug-assertions=off --cfg 'feature="formatting"' --cfg 'feature="parsing"' --check-cfg 'cfg(docsrs,test)' --check-cfg 'cfg(feature, values("formatting", "large-dates", "parsing", "serde"))' -C metadata=a1b96b53504b3aaf -C extra-filename=-3d738976186a3417 --out-dir /tmp/cnetmod-h3-wtransport-target/release/deps -C strip=debuginfo -L dependency=/tmp/cnetmod-h3-wtransport-target/release/deps --extern num_conv=/tmp/cnetmod-h3-wtransport-target/release/deps/libnum_conv-986574c64debaec2.rlib --extern time_core=/tmp/cnetmod-h3-wtransport-target/release/deps/libtime_core-165ab58c2d8ff49e.rlib --extern proc_macro --cap-lints allow` (exit status: 101)
+warning: build failed, waiting for other jobs to finish...
+error: failed to write to `/tmp/cnetmod-h3-wtransport-target/release/deps/rmetavWlywz/full.rmeta`: No space left on device (os error 28)
+
+error: could not compile `syn` (lib) due to 1 previous error
+error: failed to write to `/tmp/cnetmod-h3-wtransport-target/release/deps/rmetaGuSokk/full.rmeta`: No space left on device (os error 28)
+
+error: could not compile `syn` (lib) due to 1 previous error
+warning: ring@0.17.14: /root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ring-0.17.14/crypto/curve25519/curve25519.c:1924:1: fatal error: error writing to /tmp/cc5xLADW.s: No space left on device
+warning: ring@0.17.14:  1924 | }
+warning: ring@0.17.14:       | ^
+warning: ring@0.17.14: compilation terminated.
+error: failed to run custom build command for `ring v0.17.14`
+
+Caused by:
+  process didn't exit successfully: `/tmp/cnetmod-h3-wtransport-target/release/build/ring-e5ac1e3fc42d2586/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-env-changed=CARGO_MANIFEST_DIR
+  cargo:rerun-if-env-changed=CARGO_PKG_NAME
+  cargo:rerun-if-env-changed=CARGO_PKG_VERSION_MAJOR
+  cargo:rerun-if-env-changed=CARGO_PKG_VERSION_MINOR
+  cargo:rerun-if-env-changed=CARGO_PKG_VERSION_PATCH
+  cargo:rerun-if-env-changed=CARGO_PKG_VERSION_PRE
+  cargo:rerun-if-env-changed=CARGO_MANIFEST_LINKS
+  cargo:rerun-if-env-changed=RING_PREGENERATE_ASM
+  cargo:rerun-if-env-changed=OUT_DIR
+  cargo:rerun-if-env-changed=CARGO_CFG_TARGET_ARCH
+  cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS
+  cargo:rerun-if-env-changed=CARGO_CFG_TARGET_ENV
+  cargo:rerun-if-env-changed=CARGO_CFG_TARGET_ENDIAN
+  cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+  CC_x86_64-unknown-linux-gnu = None
+  cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+  CC_x86_64_unknown_linux_gnu = None
+  cargo:rerun-if-env-changed=HOST_CC
+  HOST_CC = None
+  cargo:rerun-if-env-changed=CC
+  CC = None
+  cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+  cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+  CRATE_CC_NO_DEFAULTS = None
+  cargo:rerun-if-env-changed=CFLAGS
+  CFLAGS = None
+  cargo:rerun-if-env-changed=HOST_CFLAGS
+  HOST_CFLAGS = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+  CFLAGS_x86_64_unknown_linux_gnu = None
+  cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+  CFLAGS_x86_64-unknown-linux-gnu = None
+  cargo:warning=/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ring-0.17.14/crypto/curve25519/curve25519.c:1924:1: fatal error: error writing to /tmp/cc5xLADW.s: No space left on device
+  cargo:warning= 1924 | }
+  cargo:warning=      | ^
+  cargo:warning=compilation terminated.
+
+  --- stderr
+
+
+  error occurred in cc-rs: command did not execute successfully (status code exit status: 1): "cc" "-O3" "-ffunction-sections" "-fdata-sections" "-fPIC" "-m64" "-I" "/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ring-0.17.14/include" "-I" "/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ring-0.17.14/pregenerated" "-Wall" "-Wextra" "-fvisibility=hidden" "-std=c1x" "-Wall" "-Wbad-function-cast" "-Wcast-align" "-Wcast-qual" "-Wconversion" "-Wmissing-field-initializers" "-Wmissing-include-dirs" "-Wnested-externs" "-Wredundant-decls" "-Wshadow" "-Wsign-compare" "-Wsign-conversion" "-Wstrict-prototypes" "-Wundef" "-Wuninitialized" "-g3" "-DNDEBUG" "-o" "/tmp/cnetmod-h3-wtransport-target/release/build/ring-13477bef0469c4c5/out/25ac62e5b3c53843-curve25519.o" "-c" "/root/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/ring-0.17.14/crypto/curve25519/curve25519.c"
+
+

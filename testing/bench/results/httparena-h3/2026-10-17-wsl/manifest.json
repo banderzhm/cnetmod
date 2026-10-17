@@ -95,6 +95,25 @@
     "optimized-profile-load.txt": "c2fb382f4da0697f905d024b467a61fb62479dcab4c4152cd325cd9b6e9d259e",
     "optimized-server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "optimized-summary.log": "ac5801448c4323d228107fe8d18e617f4164423640d5450188f3d769ad417bba",
+    "platform-peer-followup/commands.txt": "3f374b36d14caaa610edbe0fa237873f55716eb6850e1afae63bc45bba80827c",
+    "platform-peer-followup/environment.json": "d19e4f2ae01d1e9b035b9c4186984453a18f207ce3a0ec4e8edd812a064adf8c",
+    "platform-peer-followup/linux-all-peers-1.json": "23822841acf81cae3fa65c574d03ff9f126d0bc718cf2b6882f643e06425b979",
+    "platform-peer-followup/linux-all-peers-1.log": "493795b59d05af95bf2e6078f7c498e2b4add671fa2ad5876e4246f371fe0f77",
+    "platform-peer-followup/linux-all-peers-command.json": "17b886c2bfa570ae3244493792855d6f218bfe2c4c52dcf8a5a25d4908c20a75",
+    "platform-peer-followup/linux-wtransport-build.log": "2260384c980d83d9fc477083df66928a9221c58a1ef38ba9941d212471aba971",
+    "platform-peer-followup/linux-wtransport-first-build-failure.log": "a49eeb82b73f39918b1575a9b222ff6b7c9ffb14a509a408db5247bbc25e41c8",
+    "platform-peer-followup/ngtcp2-build.log": "a4362c7ccfa2e3a1c35ebae263fa9afb5bc63ceda608e6322adda9586222441e",
+    "platform-peer-followup/ngtcp2-configure.log": "41aed33108d61c42623a1618fb91f584ae97b469b430f72b4aaff791ced47d84",
+    "platform-peer-followup/windows-configure-final.log": "25176f1ef997eff23b12cbc976eeb23385d964714b573af39231ada17d317961",
+    "platform-peer-followup/windows-configure.log": "26e0242f97a0cd52827bbfd137c838f4d5ee01520b8f7453011fee4db923978c",
+    "platform-peer-followup/windows-ctest-details.log": "a31b047140b7acdd9ce47bd17f882869b6887ec034281c34447e764c96203ef7",
+    "platform-peer-followup/windows-ctest.log": "38912747d54d6623453a5f0028e799891f516beb48368ea0076de700cc2a4b0c",
+    "platform-peer-followup/windows-final-gates.log": "4bda82e0e702602b6b19b23b172cd0376044508d3e5ce4a45a743e0504ca9718",
+    "platform-peer-followup/windows-multi-worker.json": "b4802826cc2842853c83b85b2c9a6115e1459581bb4631b4ffa6b19e05faf1a7",
+    "platform-peer-followup/windows-release-build.log": "2b76b2a26f53794932a03ec2497af7c549ac5cc4f4b1b70d58e9bc15de6505ab",
+    "platform-peer-followup/windows-wtransport-build.log": "34befd059fc15557d3d07dc1a580f3391a91c682c386d104cb4c6dff515be4ea",
+    "platform-peer-followup/wtransport-Cargo.lock": "80c22404a135391e617d8b44acbdd216d46451b51cd022fd29494d8345198a76",
+    "platform-peer-followup/wtransport-Cargo.toml": "f97a7e884807da7966b610aadb0fdf621df87603e9ce31ab82e15d3757d790c8",
     "webtransport-followup/baseline-corrected-probe.json": "398b38fe6cc5abff49173f3ae525d6bd1ad086a92d45bed03e2d628397ea8f3c",
     "webtransport-followup/baseline-corrected-probe.log": "7e38601865a34bd74cef17b0642b9f672fe7050669114a1852e8563b4325d98f",
     "webtransport-followup/client-before-fix.json": "3b8099c1d0551b75867047634d37a5178d0b1ea4dac5531f1e07ca52033b67c1",
@@ -124,5 +143,32 @@
       "nghttp3 server"
     ],
     "record_directory": "webtransport-followup"
+  },
+  "platform_peer_followup": {
+    "record_directory": "platform-peer-followup",
+    "production_code_changed": false,
+    "windows_configuration": "Release",
+    "windows_ctest_passed": 13,
+    "windows_ctest_failed": 0,
+    "windows_final_interop_gates_passed": 2,
+    "windows_workers": [
+      1,
+      2
+    ],
+    "windows_native_wtransport_connections_per_gate": 3,
+    "windows_peer_skips": [
+      "curl HTTP/3 unavailable",
+      "nghttp3 client and server not supplied natively"
+    ],
+    "windows_debug_tested": false,
+    "linux_acceptance_passed": 6,
+    "linux_acceptance_failed": 0,
+    "linux_acceptance_skipped": 0,
+    "previously_missing_peers_now_validated": [
+      "Rust wtransport (Windows and Linux)",
+      "nghttp3 client (Linux)",
+      "nghttp3 server (Linux)"
+    ],
+    "high_load_measurements_rerun": false
   }
 }

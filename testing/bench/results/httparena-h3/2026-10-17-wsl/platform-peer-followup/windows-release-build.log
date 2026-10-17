@@ -1,0 +1,1241 @@
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  bcm.cc
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  aes.cc
+  a_bitstr.cc
+  a_bool.cc
+  a_d2i_fp.cc
+  a_dup.cc
+  a_gentm.cc
+  a_i2d_fp.cc
+  a_int.cc
+  a_mbstr.cc
+  a_object.cc
+  a_octet.cc
+  a_strex.cc
+  a_strnid.cc
+  a_time.cc
+  a_type.cc
+  a_utctm.cc
+  asn1_lib.cc
+  asn1_par.cc
+  asn_pack.cc
+  f_int.cc
+  正在生成代码...
+  正在编译...
+  f_string.cc
+  posix_time.cc
+  tasn_dec.cc
+  tasn_enc.cc
+  tasn_fre.cc
+  tasn_new.cc
+  tasn_typ.cc
+  tasn_utl.cc
+  base64.cc
+  bio.cc
+  bio_mem.cc
+  connect.cc
+  errno.cc
+  fd.cc
+  file.cc
+  hexdump.cc
+  pair.cc
+  printf.cc
+  socket.cc
+  socket_helper.cc
+  正在生成代码...
+  正在编译...
+  blake2.cc
+  bn_asn1.cc
+  convert.cc
+  div.cc
+  exponentiation.cc
+  sqrt.cc
+  buf.cc
+  asn1_compat.cc
+  ber.cc
+  cbb.cc
+  cbs.cc
+  unicode.cc
+  chacha.cc
+  derive_key.cc
+  e_aesctrhmac.cc
+  e_aeseax.cc
+  e_aesgcmsiv.cc
+  e_chacha20poly1305.cc
+  e_des.cc
+  e_null.cc
+  正在生成代码...
+  正在编译...
+  e_rc2.cc
+  e_rc4.cc
+  e_tls.cc
+  get_cipher.cc
+  tls_cbc.cc
+  cms.cc
+  conf.cc
+  cpu_aarch64_apple.cc
+  cpu_aarch64_fuchsia.cc
+  cpu_aarch64_linux.cc
+  cpu_aarch64_openbsd.cc
+  cpu_aarch64_sysreg.cc
+  cpu_aarch64_win.cc
+  cpu_arm_freebsd.cc
+  cpu_arm_linux.cc
+  cpu_intel.cc
+  crypto.cc
+  curve25519.cc
+  curve25519_64_adx.cc
+  spake25519.cc
+  正在生成代码...
+  正在编译...
+  des.cc
+  dh_asn1.cc
+  params.cc
+  digest_extra.cc
+  dsa.cc
+  dsa_asn1.cc
+  ec_asn1.cc
+  ec_derive.cc
+  hash_to_curve.cc
+  ecdh.cc
+  ecdsa_asn1.cc
+  ecdsa_p1363.cc
+  engine.cc
+  err.cc
+  evp.cc
+  evp_asn1.cc
+  evp_ctx.cc
+  evp_kem.cc
+  p_dh.cc
+  p_dsa.cc
+  正在生成代码...
+  正在编译...
+  p_ec.cc
+  p_ed25519.cc
+  p_hkdf.cc
+  p_mldsa.cc
+  p_mlkem.cc
+  p_rsa.cc
+  p_x25519.cc
+  p_xwing.cc
+  pbkdf.cc
+  print.cc
+  scrypt.cc
+  sign.cc
+  ex_data.cc
+  fips_shared_support.cc
+  fuzzer_mode.cc
+  hpke.cc
+  hrss.cc
+  kyber.cc
+  lhash.cc
+  md4.cc
+  正在生成代码...
+  正在编译...
+  md5.cc
+  mem.cc
+  mldsa.cc
+  mlkem.cc
+  obj.cc
+  obj_xref.cc
+  pem_all.cc
+  pem_info.cc
+  pem_lib.cc
+  pem_oth.cc
+  pem_pk8.cc
+  pem_pkey.cc
+  pem_x509.cc
+  pem_xaux.cc
+  pkcs7.cc
+  pkcs7_x509.cc
+  p5_pbev2.cc
+  pkcs8.cc
+  pkcs8_x509.cc
+  poly1305.cc
+  正在生成代码...
+  正在编译...
+  poly1305_arm.cc
+  poly1305_vec.cc
+  pool.cc
+  deterministic.cc
+  fork_detect.cc
+  forkunsafe.cc
+  getentropy.cc
+  ios.cc
+  rand.cc
+  trusty.cc
+  urandom.cc
+  windows.cc
+  rc4.cc
+  refcount.cc
+  rsa_asn1.cc
+  rsa_crypt.cc
+  rsa_extra.cc
+  rsa_print.cc
+  sha1.cc
+  sha256.cc
+  正在生成代码...
+  正在编译...
+  sha512.cc
+  siphash.cc
+  slhdsa.cc
+  spake2plus.cc
+  stack.cc
+  thread.cc
+  thread_none.cc
+  thread_pthread.cc
+  thread_win.cc
+  pmbtoken.cc
+  trust_token.cc
+  voprf.cc
+  a_digest.cc
+  a_sign.cc
+  a_verify.cc
+  algorithm.cc
+  asn1_gen.cc
+  by_dir.cc
+  by_file.cc
+  i2d_pr.cc
+  正在生成代码...
+  正在编译...
+  name_print.cc
+  policy.cc
+  rsa_pss.cc
+  t_crl.cc
+  t_req.cc
+  t_x509.cc
+  t_x509a.cc
+  v3_akey.cc
+  v3_akeya.cc
+  v3_alt.cc
+  v3_bcons.cc
+  v3_bitst.cc
+  v3_conf.cc
+  v3_cpols.cc
+  v3_crld.cc
+  v3_enum.cc
+  v3_extku.cc
+  v3_genn.cc
+  v3_ia5.cc
+  v3_info.cc
+  正在生成代码...
+  正在编译...
+  v3_int.cc
+  v3_lib.cc
+  v3_ncons.cc
+  v3_ocsp.cc
+  v3_pcons.cc
+  v3_pmaps.cc
+  v3_prn.cc
+  v3_purp.cc
+  v3_skey.cc
+  v3_utl.cc
+  x509.cc
+  x509_att.cc
+  x509_cmp.cc
+  x509_d2.cc
+  x509_def.cc
+  x509_ext.cc
+  x509_lu.cc
+  x509_obj.cc
+  x509_req.cc
+  x509_set.cc
+  正在生成代码...
+  正在编译...
+  x509_trs.cc
+  x509_txt.cc
+  x509_v3.cc
+  x509_vfy.cc
+  x509_vpm.cc
+  x509cset.cc
+  x509name.cc
+  x509rset.cc
+  x509spki.cc
+  x_algor.cc
+  x_all.cc
+  x_attrib.cc
+  x_crl.cc
+  x_exten.cc
+  x_name.cc
+  x_pubkey.cc
+  x_req.cc
+  x_sig.cc
+  x_spki.cc
+  x_x509.cc
+  正在生成代码...
+  正在编译...
+  x_x509a.cc
+  xwing.cc
+  err_data.cc
+  正在生成代码...
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  bio_ssl.cc
+  d1_both.cc
+  d1_lib.cc
+  d1_pkt.cc
+  d1_srtp.cc
+  dtls_method.cc
+  dtls_record.cc
+  encrypted_client_hello.cc
+  extensions.cc
+  handoff.cc
+  handshake.cc
+  handshake_client.cc
+  handshake_server.cc
+  s3_both.cc
+  s3_lib.cc
+  s3_pkt.cc
+  ssl_aead_ctx.cc
+  ssl_asn1.cc
+  ssl_buffer.cc
+  ssl_cert.cc
+  正在生成代码...
+  正在编译...
+  ssl_cipher.cc
+  ssl_credential.cc
+  ssl_file.cc
+  ssl_key_share.cc
+  ssl_lib.cc
+  ssl_privkey.cc
+  ssl_session.cc
+  ssl_stat.cc
+  ssl_transcript.cc
+  ssl_versions.cc
+  ssl_x509.cc
+  t1_enc.cc
+  tls13_both.cc
+  tls13_client.cc
+  tls13_enc.cc
+  tls13_server.cc
+  tls_method.cc
+  tls_record.cc
+  正在生成代码...
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  process.cpp
+  semaphore_impl.cpp
+  socket_impl.cpp
+  log_impl.cpp
+  awaitable_impl.cpp
+  buffer_impl.cpp
+  file_impl.cpp
+  crash_dump_impl.cpp
+  net_init_impl.cpp
+  async_op.cpp
+  time.cpp
+  ssl_ktls.cpp
+  cancel_impl.cpp
+  timer_impl.cpp
+  circuit_breaker_impl.cpp
+  mutex_impl.cpp
+  address_impl.cpp
+  task_impl.cpp
+  scheduler.cpp
+  serial_port_impl.cpp
+  datetime.cpp
+  ssl_impl.cpp
+  dtls_impl.cpp
+  wait_group_impl.cpp
+  io_context_factory.cpp
+  iocp_async_op.cpp
+  error_impl.cpp
+  rate_limiter.cpp
+  shared_mutex_impl.cpp
+  io_context_impl.cpp
+  buffer_pool_impl.cpp
+  server_context_impl.cpp
+  iocp_impl.cpp
+  tcp_impl.cpp
+  charconv_impl.cpp
+  address.cppm
+  json.cpp
+  crash_dump.cppm
+  udp_impl.cpp
+  converter_impl.cpp
+  cnetmod_utils.cppm
+  hmac_sha256.cpp
+  buffer_pool.cppm
+  dtls.cppm
+  process.cppm
+  log.cppm
+  buffer.cppm
+  log_config.cppm
+  operation_scope.cpp
+  jwt.cpp
+  file.cppm
+  metric_aggregation.cpp
+  core.cppm
+  metric.cpp
+  net_init.cppm
+  error.cpp
+  serial_port.cppm
+  lazy.cppm
+  ssl.cppm
+  password.cpp
+  tracing.cpp
+  error.cppm
+  sha256.cpp
+  socket.cppm
+  time.cppm
+  coro.cppm
+  awaitable.cppm
+  rate_limiter.cppm
+  cancel.cppm
+  mutex.cppm
+  database.cppm
+  bridge.cppm
+  channel.cppm
+  sql_parameters.cppm
+  circuit_breaker.cppm
+  retry.cppm
+  pool.cppm
+  semaphore.cppm
+  sql_query_data.cppm
+  udp.cppm
+  datetime.cppm
+  shared_mutex.cppm
+  io_operation.cppm
+  tcp.cppm
+  timer.cppm
+  task_group.cppm
+  iocp.cppm
+  scheduler.cppm
+  executor.cppm
+  io.cppm
+  async_op.cppm
+  spawn.cppm
+  striped_mutex.cppm
+  task.cppm
+  io_context.cppm
+  wait_group.cppm
+  application_result.cppm
+  atomic_rw_latch.cppm
+  atomic_hash_map.cppm
+  charconv.cppm
+  bounded_mpmc_queue.cppm
+  striped_accumulator.cppm
+  dns_impl.cpp
+  concurrent_vector.cppm
+  error.cppm
+  metric.cppm
+  sha256.cppm
+  slot_latch_hash_map.cppm
+  converter.cppm
+  json.cppm
+  jwt.cppm
+  metric_aggregation.cppm
+  tracing.cppm
+  operation_scope.cppm
+  security.cppm
+  copy_on_write_value.cppm
+  concurrent_skip_list.cppm
+  password.cppm
+  striped_hash_map.cppm
+  flat_map.cppm
+  operation_result.cppm
+  hmac_sha256.cppm
+  json.cppm
+  helpers.cppm
+  std.ixx
+  正在编译...
+  json.cppm
+  converter.cppm
+  std.ixx
+  converter_impl.cpp
+  json.cppm
+  crash_dump.cppm
+  bounded_mpmc_queue.cppm
+  log_config.cppm
+  buffer.cppm
+  process.cppm
+  helpers.cppm
+  atomic_hash_map.cppm
+  hmac_sha256.cppm
+  address.cppm
+  copy_on_write_value.cppm
+  error.cppm
+  atomic_rw_latch.cppm
+  operation_result.cppm
+  metric.cppm
+  awaitable.cppm
+  time.cppm
+  charconv.cppm
+  striped_accumulator.cppm
+  net_init.cppm
+  sha256.cppm
+  application_result.cppm
+  flat_map.cppm
+  sql_query_data.cppm
+  lazy.cppm
+  log.cppm
+  crash_dump_impl.cpp
+  striped_hash_map.cppm
+  buffer_pool.cppm
+  hmac_sha256.cpp
+  slot_latch_hash_map.cppm
+  cancel.cppm
+  time.cpp
+  process.cpp
+  error.cppm
+  address_impl.cpp
+  concurrent_vector.cppm
+  charconv_impl.cpp
+  net_init_impl.cpp
+  socket.cppm
+  datetime.cppm
+  metric_aggregation.cppm
+  error_impl.cpp
+  metric.cpp
+  buffer_impl.cpp
+  concurrent_skip_list.cppm
+  awaitable_impl.cpp
+  sql_parameters.cppm
+  io_operation.cppm
+  file.cppm
+  json.cpp
+  tracing.cppm
+  io_context.cppm
+  sha256.cpp
+  rate_limiter.cppm
+  log_impl.cpp
+  tracing.cpp
+  metric_aggregation.cpp
+  cancel_impl.cpp
+  cnetmod_utils.cppm
+  error.cpp
+  buffer_pool_impl.cpp
+  socket_impl.cpp
+  datetime.cpp
+  operation_scope.cppm
+  operation_scope.cpp
+  tcp.cppm
+  mutex.cppm
+  channel.cppm
+  semaphore.cppm
+  iocp.cppm
+  serial_port.cppm
+  rate_limiter.cpp
+  task.cppm
+  io.cppm
+  shared_mutex.cppm
+  io_context_impl.cpp
+  scheduler.cppm
+  database.cppm
+  file_impl.cpp
+  udp.cppm
+  wait_group.cppm
+  wait_group_impl.cpp
+  iocp_impl.cpp
+  circuit_breaker.cppm
+  striped_mutex.cppm
+  mutex_impl.cpp
+  shared_mutex_impl.cpp
+  io_context_factory.cpp
+  spawn.cppm
+  scheduler.cpp
+  tcp_impl.cpp
+  ssl.cppm
+  serial_port_impl.cpp
+  task_impl.cpp
+  async_op.cppm
+  semaphore_impl.cpp
+  pool.cppm
+  password.cppm
+  server_context_impl.cpp
+  bridge.cppm
+  jwt.cppm
+  async_op.cpp
+  executor.cppm
+  ssl_impl.cpp
+  udp_impl.cpp
+  ssl_ktls.cpp
+  iocp_async_op.cpp
+  timer.cppm
+  dtls.cppm
+  circuit_breaker_impl.cpp
+  retry.cppm
+  task_group.cppm
+  dns_impl.cpp
+  timer_impl.cpp
+  coro.cppm
+  dtls_impl.cpp
+  security.cppm
+  jwt.cpp
+  core.cppm
+  password.cpp
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  quic.cppm
+  quic_frame.cpp
+  quic_flow_control.cpp
+  congestion_control.cpp
+  quic_connection.cpp
+  quic_packet.cppm
+  varint.cppm
+  loss_detection.cpp
+  quic_types.cpp
+  loss_detection.cppm
+  quic_crypto.cpp
+  quic_types.cppm
+  quic_packet.cpp
+  quic_flow_control.cppm
+  congestion_control.cppm
+  varint.cpp
+  quic_stream.cppm
+  quic_frame.cppm
+  quic_stream.cpp
+  quic_crypto.cppm
+  quic_connection.cppm
+  正在编译...
+  quic_types.cppm
+  varint.cppm
+  quic_flow_control.cppm
+  quic_crypto.cppm
+  quic_packet.cppm
+  quic_frame.cppm
+  congestion_control.cppm
+  quic_stream.cppm
+  loss_detection.cppm
+  quic_connection.cppm
+  quic.cppm
+  quic_frame.cpp
+  quic_packet.cpp
+  loss_detection.cpp
+  quic_flow_control.cpp
+  quic_types.cpp
+  quic_crypto.cpp
+  quic_stream.cpp
+  quic_connection.cpp
+  congestion_control.cpp
+  varint.cpp
+D:\runtime\vs\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\include\memory(4042,17): warning C4996: 'std::atomic_compare_exchange_weak_explicit': warning STL4029: std::atomic_*() overloads for shared_ptr are deprecated in C++20. The shared_ptr specialization of std::atomic provides superior functionality. You can define _SILENCE_CXX20_OLD_SHARED_PTR_ATOMIC_SUPPORT_DEPRECATION_WARNING or _SILENCE_ALL_CXX20_DEPRECATION_WARNINGS to suppress this warning. [C:\Users\25007\.codex\tmp\cnetmod-h3-windows\cnetmod_quic.vcxproj]
+  (编译源文件“../../worktrees/2c3c/cnetmod/src/protocol/quic/quic_crypto.cpp”)
+      D:\runtime\vs\Microsoft Visual Studio\18\BuildTools\VC\Tools\MSVC\14.51.36231\include\memory(4042,17):
+      模板实例化上下文(最早的实例化上下文)为
+          C:\Users\25007\.codex\worktrees\2c3c\cnetmod\src\protocol\quic\quic_crypto.cpp(1582,19):
+          查看对正在编译的函数 模板 实例化“bool std::atomic_compare_exchange_strong_explicit<cnetmod::quic::quic_aead_context>(std::shared_ptr<cnetmod::quic::quic_aead_context> *,std::shared_ptr<cnetmod::quic::quic_aead_context> *,std::shared_ptr<cnetmod::quic::quic_aead_context>,std::memory_order,std::memory_order)”的引用
+  
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cookie.cpp
+  multipart_url.cpp
+  multipart_disposition.cpp
+  http_client.cpp
+  multipart_form.cpp
+  http_response.cpp
+  multipart_builder.cpp
+  multipart_content_type.cpp
+  http_semantics.cpp
+  sse.cpp
+  client_pool.cpp
+  utils.cpp
+  sse_stream.cpp
+  ip_firewall.cpp
+  router.cpp
+  http_metrics.cpp
+  http_ip_filter.cpp
+  swagger.cpp
+  http_rate_limiter.cpp
+  authorization.cpp
+  http_request_id.cpp
+  http_cache.cpp
+  http_access_log.cpp
+  http_upload.cpp
+  http_graceful_shutdown.cpp
+  http_cors.cpp
+  tracing.cpp
+  http_compress.cpp
+  multipart_parser.cpp
+  swagger_ui.cpp
+  http_server.cpp
+  http_recover.cpp
+  http_v1_parser.cpp
+  huffman.cpp
+  header_compression.cpp
+  http3_client.cpp
+  http3_frame.cpp
+  session.cpp
+  flow_control.cpp
+  stream.cpp
+  multipart.cppm
+  multipart_content_type.cppm
+  qpack.cpp
+  http3_server.cpp
+  http_v2_frame.cpp
+  settings.cpp
+  multipart_form.cppm
+  swagger.cppm
+  request.cppm
+  multipart_parser.cppm
+  semantics.cppm
+  sse.cppm
+  cookie.cppm
+  swagger_ui.cppm
+  http3_session.cpp
+  application_result.cppm
+  http_client.cppm
+  http.cppm
+  multipart_builder.cppm
+  client_pool.cppm
+  multipart_disposition.cppm
+  multipart_url.cppm
+  utils.cppm
+  http_response.cppm
+  access_log.cppm
+  request_id.cppm
+  settings.cppm
+  metrics.cppm
+  http_server.cppm
+  router.cppm
+  rate_limiter.cppm
+  graceful_shutdown.cppm
+  flow_control.cppm
+  cache_store.cppm
+  http3_frame.cppm
+  timeout.cppm
+  authorization.cppm
+  header_compression.cppm
+  http_v1_parser.cppm
+  tracing.cppm
+  http3_client.cppm
+  stream.cppm
+  ip_filter.cppm
+  huffman.cppm
+  body_limit.cppm
+  upload.cppm
+  recover.cppm
+  cors.cppm
+  health_check.cppm
+  session.cppm
+  jwt_auth.cppm
+  http_v2_frame.cppm
+  middleware.cppm
+  http3_server.cppm
+  ip_firewall.cppm
+  compress.cppm
+  http_cache.cppm
+  qpack.cppm
+  http3_session.cppm
+  正在编译...
+  multipart_content_type.cppm
+  qpack.cppm
+  header_compression.cppm
+  flow_control.cppm
+  multipart_disposition.cppm
+  semantics.cppm
+  multipart_builder.cppm
+  settings.cppm
+  http3_frame.cppm
+  huffman.cppm
+  cookie.cppm
+  http_v2_frame.cppm
+  multipart_url.cppm
+  cache_store.cppm
+  header_compression.cpp
+  http3_frame.cpp
+  multipart_form.cppm
+  qpack.cpp
+  stream.cppm
+  http_v2_frame.cpp
+  http_semantics.cpp
+  huffman.cpp
+  http_response.cppm
+  http3_session.cppm
+  request.cppm
+  http_v1_parser.cppm
+  flow_control.cpp
+  settings.cpp
+  stream.cpp
+  http_client.cppm
+  sse.cppm
+  application_result.cppm
+  http3_server.cppm
+  session.cppm
+  http3_client.cppm
+  http3_session.cpp
+  multipart_parser.cppm
+  session.cpp
+  http3_client.cpp
+  http3_server.cpp
+  multipart.cppm
+  router.cppm
+  swagger.cppm
+  utils.cppm
+  swagger_ui.cppm
+  http_server.cppm
+  http.cppm
+  http_v1_parser.cpp
+  multipart_content_type.cpp
+  cookie.cpp
+  multipart_disposition.cpp
+  swagger_ui.cpp
+  cors.cppm
+  swagger.cpp
+  access_log.cppm
+  http_client.cpp
+  multipart_builder.cpp
+  http_server.cpp
+  recover.cppm
+  jwt_auth.cppm
+  compress.cppm
+  router.cpp
+  sse.cpp
+  ip_filter.cppm
+  metrics.cppm
+  http_response.cpp
+  client_pool.cppm
+  multipart_parser.cpp
+  http_cache.cppm
+  utils.cpp
+  rate_limiter.cppm
+  authorization.cppm
+  health_check.cppm
+  multipart_url.cpp
+  graceful_shutdown.cppm
+  multipart_form.cpp
+  ip_firewall.cppm
+  sse_stream.cpp
+  body_limit.cppm
+  request_id.cppm
+  timeout.cppm
+  tracing.cppm
+  upload.cppm
+  http_request_id.cpp
+  http_access_log.cpp
+  tracing.cpp
+  http_upload.cpp
+  http_compress.cpp
+  authorization.cpp
+  http_recover.cpp
+  http_cache.cpp
+  http_metrics.cpp
+  client_pool.cpp
+  ip_firewall.cpp
+  http_rate_limiter.cpp
+  middleware.cppm
+  http_cors.cpp
+  http_ip_filter.cpp
+  http_graceful_shutdown.cpp
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  auto_configuration.cpp
+  http_client.cpp
+  mongodb.cpp
+  configuration.cpp
+  mysql.cpp
+  components.cpp
+  export_response.cpp
+  application_host.cpp
+  builtin_auto_configuration.cpp
+  kafka.cpp
+  http_client.cpp
+  grpc.cpp
+  chat_model_pool.cpp
+  amqp091.cpp
+  openai.cpp
+  postgresql.cpp
+  redis.cpp
+  health_registry.cpp
+  amqp10.cpp
+  export_retry.cpp
+  json.cpp
+  grpc_server.cpp
+  kafka_consumer.cpp
+  grpc.cpp
+  managed_service.cpp
+  http_server.cpp
+  kafka_producer.cpp
+  application_runtime.cpp
+  messaging.cpp
+  mqtt.cpp
+  openai.cpp
+  chat_model_composition.cpp
+  options.cpp
+  telemetry.cpp
+  application.cppm
+  otlp_http_exporter.cpp
+  service_lifecycle.cpp
+  configuration.cppm
+  chat_model_template.cpp
+  mysql.cppm
+  rest_template.cpp
+  postgresql.cppm
+  http_client.cppm
+  service_registry.cpp
+  async_file_template.cpp
+  redis.cppm
+  application_host.cppm
+  application_runtime.cppm
+  components.cppm
+  managed_service.cppm
+  amqp10.cppm
+  amqp091.cppm
+  openai.cppm
+  health_registry.cppm
+  task_supervisor.cpp
+  recovery_policy.cpp
+  mongodb.cppm
+  json.cppm
+  application_module.cppm
+  auto_configuration.cppm
+  grpc.cppm
+  diagnostics.cppm
+  kafka.cppm
+  mqtt.cppm
+  messaging.cppm
+  grpc_server.cppm
+  grpc.cppm
+  chat_model_service.cppm
+  export_retry.cppm
+  otlp_http_exporter.cppm
+  kafka_consumer.cppm
+  observability.cppm
+  http_server.cppm
+  chat_model_pool.cppm
+  http_client.cppm
+  kafka_producer.cppm
+  openai.cppm
+  service_lifecycle.cppm
+  export_response.cppm
+  json_template.cppm
+  chat_model_template.cppm
+  chat_model_composition.cppm
+  rest_template.cppm
+  task_supervisor.cppm
+  service_registry.cppm
+  async_file_template.cppm
+  telemetry.cppm
+  options.cppm
+  recovery_policy.cppm
+  正在编译...
+  kafka.cppm
+  grpc.cppm
+  amqp091.cppm
+  grpc_server.cppm
+  mysql.cppm
+  redis.cppm
+  mqtt.cppm
+  chat_model_pool.cppm
+  kafka_producer.cppm
+  export_retry.cppm
+  chat_model_composition.cppm
+  postgresql.cppm
+  openai.cppm
+  otlp_http_exporter.cppm
+  openai.cppm
+  chat_model_service.cppm
+  http_client.cppm
+  http_server.cppm
+  chat_model_template.cppm
+  async_file_template.cppm
+  mongodb.cppm
+  json_template.cppm
+  amqp10.cppm
+  grpc.cppm
+  recovery_policy.cppm
+  messaging.cppm
+  export_response.cppm
+  kafka_consumer.cppm
+  amqp091.cpp
+  kafka.cpp
+  recovery_policy.cpp
+  chat_model_pool.cpp
+  mongodb.cpp
+  amqp10.cpp
+  http_client.cpp
+  grpc.cpp
+  redis.cpp
+  chat_model_template.cpp
+  messaging.cpp
+  mysql.cpp
+  postgresql.cpp
+  openai.cpp
+  export_response.cpp
+  otlp_http_exporter.cpp
+  openai.cpp
+  kafka_consumer.cpp
+  task_supervisor.cppm
+  async_file_template.cpp
+  http_server.cpp
+  kafka_producer.cpp
+  grpc_server.cpp
+  chat_model_composition.cpp
+  telemetry.cppm
+  export_retry.cpp
+  grpc.cpp
+  mqtt.cpp
+  task_supervisor.cpp
+  managed_service.cppm
+  observability.cppm
+  telemetry.cpp
+  rest_template.cppm
+  rest_template.cpp
+  service_registry.cppm
+  health_registry.cppm
+  managed_service.cpp
+  service_registry.cpp
+  health_registry.cpp
+  service_lifecycle.cppm
+  service_lifecycle.cpp
+  configuration.cppm
+  configuration.cpp
+  diagnostics.cppm
+  application_runtime.cppm
+  auto_configuration.cppm
+  components.cppm
+  options.cppm
+  components.cpp
+  auto_configuration.cpp
+  json.cppm
+  http_client.cppm
+  application_runtime.cpp
+  application_module.cppm
+  options.cpp
+  application_host.cppm
+  http_client.cpp
+  json.cpp
+  builtin_auto_configuration.cpp
+  application_host.cpp
+  application.cppm
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  component_facade.cpp
+  正在编译...
+  component_facade.cpp
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  alloc.c
+  alloc-aligned.c
+  alloc-posix.c
+  arena.c
+  bitmap.c
+  heap.c
+  init.c
+  libc.c
+  options.c
+  os.c
+  page.c
+  page-map.c
+  prim.c
+  prim-tls.c
+  random.c
+  sample-guarded.c
+  sample-profile.c
+  stats.c
+  subproc.c
+  theap.c
+  正在生成代码...
+  正在编译...
+  threadlocal.c
+  正在生成代码...
+    正在创建库 C:/Users/25007/.codex/tmp/cnetmod-h3-windows/3rdparty/mimalloc/Release/mimalloc.dll.lib 和对象 C:/Users/25007/.codex/tmp/cnetmod-h3-windows/3rdparty/mimalloc/Release/mimalloc.dll.exp
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  h3_interop_server.cpp
+  正在编译...
+  h3_interop_server.cpp
+  h3_interop_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\h3_interop_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  h3_interop_client.cpp
+  正在编译...
+  h3_interop_client.cpp
+  h3_interop_client.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\bin\Release\h3_interop_client.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  1>
+  正在扫描源以查找模块依赖项...
+  http_client_e2e_server.cpp
+  正在编译...
+  http_client_e2e_server.cpp
+  http3_e2e_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http3_e2e_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_application.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_application.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_core.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_core.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  1>
+  正在扫描源以查找模块依赖项...
+  http_client_e2e.cpp
+  正在编译...
+  http_client_e2e.cpp
+  http_client_http3_e2e.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\http3\Release\http_client_http3_e2e.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  arena_h3_server.cpp
+  正在编译...
+  arena_h3_server.cpp
+  arena_h3_server.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\bench\Release\arena_h3_server.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_packet.cpp
+  正在编译...
+  test_quic_packet.cpp
+  test_quic_packet.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_packet.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_stream.cpp
+  正在编译...
+  test_quic_stream.cpp
+  test_quic_stream.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_stream.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_frame.cpp
+  正在编译...
+  test_quic_frame.cpp
+  test_quic_frame.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_frame.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_loss_detection.cpp
+  正在编译...
+  test_quic_loss_detection.cpp
+  test_quic_loss_detection.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_loss_detection.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_quic_congestion.cpp
+  正在编译...
+  test_quic_congestion.cpp
+  test_quic_congestion.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_quic_congestion.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_http3_qpack.cpp
+  正在编译...
+  test_http3_qpack.cpp
+  test_http3_qpack.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_http3_qpack.exe
+适用于 .NET Framework MSBuild 版本 18.10.1-1.26427.6+3cd27c13e
+
+  fipsmodule.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\fipsmodule.dir\Release\fipsmodule.lib
+  crypto.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\crypto.lib
+  ssl.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\third_party\boringssl\build\Release\ssl.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_runtime.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_runtime.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_quic.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_quic.lib
+  正在扫描源以查找模块依赖项...
+  cnetmod_http.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\Release\cnetmod_http.lib
+  mimalloc.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\3rdparty\mimalloc\Release\mimalloc.dll
+  Copy mimalloc-redirect.dll to output directory
+  正在扫描源以查找模块依赖项...
+  test_http3_frame.cpp
+  正在编译...
+  test_http3_frame.cpp
+  test_http3_frame.vcxproj -> C:\Users\25007\.codex\tmp\cnetmod-h3-windows\testing\tests\Release\test_http3_frame.exe

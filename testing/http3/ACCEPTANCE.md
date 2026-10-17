@@ -57,10 +57,20 @@ body (ngtcp2 1.25.0 binary paths shown as examples):
 ```sh
 python3 testing/http3/h3_acceptance.py ... \
   --nghttp3-client-command \
-    'osslclient --timeout=1s --no-quic-dump --exit-on-first-stream-close 127.0.0.1 4433 {url}' \
+    'osslclient --timeout=1s --no-quic-dump --exit-on-first-stream-close 127.0.0.1 {port} {url}' \
   --nghttp3-server-command \
     'osslserver -q --htdocs {root} 127.0.0.1 {port} {key} {cert}'
 ```
+
+For the 2026-10-17 `fix/http3-arena-performance` follow-up, all six peer cases
+passed on Arch WSL, including both nghttp3 directions and three independent
+Rust wtransport connections. Windows MSVC 19.51 Release passed 13 selected
+CTest entries, including one-worker and two-worker IOCP gates with native
+aioquic and Rust peers. Windows curl HTTP/3 and native nghttp3 were unavailable
+and remain explicit skips there; this follow-up did not run Windows Debug.
+The cnetmod client health check requires both status 200 and the `ok` body.
+See the [platform verification records](../bench/results/httparena-h3/2026-10-17-wsl/platform-peer-followup)
+for commands, exact peer dependencies and detailed results.
 
 ### Rust `wtransport` WebTransport peer
 

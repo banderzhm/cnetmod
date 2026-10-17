@@ -184,9 +184,10 @@ all final comparisons; they remain in `/tmp/cnetmod-h3-arena-verified/`.
 - aioquic-server → cnetmod-client and cnetmod-server → curl HTTP/3 pass.
 - Initial acceptance reported an aioquic WebTransport HTTP Datagram timeout on
   both original develop and optimized builds. The follow-up below resolves the
-  test-peer bug; both original failure JSON records are retained. Optional Rust
-  wtransport/nghttp3 peers were not supplied and remain recorded as skipped.
-- Windows/MSVC and weak-network/long-duration tests were not run in this task.
+  test-peer bug; both original failure JSON records are retained. The platform
+  follow-up below supplies the previously skipped Rust wtransport/nghttp3 peers.
+- Windows/MSVC Release verification passes in the follow-up below.
+  Windows Debug and weak-network/long-duration tests were not run in this task.
 - `git diff --check`, generated AGENTS consistency and version checks pass.
 
 The production diff is confined to ordinary HTTP/3 receive-buffer sizing. It
@@ -213,6 +214,38 @@ Follow-up validation passed all 12 selected CTest entries (including the
 acceptance gate and both client E2E modes). The corrected probe also passed
 against the preserved original develop server and on three fresh optimized
 acceptance runs. Each acceptance run has three passed cases and three explicitly
-skipped optional peers; Windows and weak-network coverage remain outstanding.
+skipped optional peers. The subsequent platform follow-up supplies those peers;
+weak-network coverage remains outstanding.
 See [acceptance details](../http3/ACCEPTANCE.md) and the `webtransport-followup`
 records in the result directory for the corrected baseline and optimized runs.
+
+### Windows and optional-peer follow-up
+
+On `fix/http3-arena-performance`, Visual Studio 2026 / MSVC 19.51 built the
+optimized HTTP/3 server, clients, benchmark adapter and seven QUIC/QPACK test
+targets in Release using one MSBuild node. All 13 selected CTest entries pass,
+including ordinary and dynamic-QPACK client E2E, and both one-worker and
+two-worker IOCP interoperability gates. Each Windows gate passes aioquic
+HTTP/3, aioquic WebTransport and three independent native Rust wtransport
+connections. Windows curl lacks HTTP/3, and native nghttp3 peers were not
+provided; these cases remain explicitly skipped on Windows. Debug was not run.
+
+The Arch WSL gate supplies all six peers and passes all six with no skips:
+aioquic HTTP/3, aioquic WebTransport, Rust wtransport (three independent
+connections), curl HTTP/3, nghttp3 client and nghttp3 server. The latter two
+use the official ngtcp2 1.25.0 examples linked with nghttp3 1.18.0 and OpenSSL
+3.6.4. The same unmodified Rust probe source was built on each platform with
+wtransport 0.7.1; an isolated Cargo package avoids unrelated cross-language
+benchmark dependencies, and its exact manifest and lockfile are recorded.
+
+The acceptance harness now expands `{port}` for the nghttp3 client command
+so it reaches the randomly assigned fixture port. cnetmod client health
+checks also require the `ok` response body alongside status 200. Both Windows
+interop gates and the complete Linux peer gate pass with these stronger checks.
+No production code changed and no high-load measurements were repeated.
+
+Commands, tool and executable identities, build logs, detailed Windows CTest
+output and final peer JSON are preserved in
+[`platform-peer-followup`](results/httparena-h3/2026-10-17-wsl/platform-peer-followup).
+The root manifest hashes these records. This adds local Windows Release and
+optional-peer evidence without claiming Debug, weak-network or soak coverage.
