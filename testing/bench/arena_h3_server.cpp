@@ -201,9 +201,9 @@ auto main(int argc, char** argv) -> int
         : cnetmod::http::v3::make_http3_server(context, *tls, endpoint, handle_request);
     // HttpArena creates fresh h2load connections for every short run and the
     // load generator leaves them silent instead of sending CONNECTION_CLOSE.
-    // Bound that known retention window so three official rounds cannot keep
-    // accumulating complete connection and retransmission state.
-    if (const auto configured = server->set_idle_timeout(std::chrono::seconds{8});
+    // Reclaim those connections within the official two-second round cooldown
+    // so later rounds do not retain complete connection and recovery state.
+    if (const auto configured = server->set_idle_timeout(std::chrono::milliseconds{1500});
         !configured)
     {
         logger::error{"HTTP/3 idle-timeout setup failed: {}",
