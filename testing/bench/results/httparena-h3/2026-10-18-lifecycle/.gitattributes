@@ -1,0 +1,3 @@
+# Preserve recorded bytes so the evidence manifest is portable across checkouts.
+# Raw tool output includes CRLF and terminal whitespace; retain it verbatim.
+* -text -whitespace

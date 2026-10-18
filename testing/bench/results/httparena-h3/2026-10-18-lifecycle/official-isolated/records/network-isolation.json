@@ -1,0 +1,6 @@
+{
+  "anchor": "cnetmod-h3-lifecycle-netns",
+  "mode": "same isolated loopback for all servers and native h2load",
+  "peer_images_unchanged": true,
+  "profile_arguments_unchanged": true
+}

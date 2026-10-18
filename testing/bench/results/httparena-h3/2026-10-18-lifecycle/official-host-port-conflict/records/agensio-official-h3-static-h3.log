@@ -1,0 +1,30 @@
+[info] available CPUs: 32
+[info] framework: agensio-official-h3 (agensio-official-h3, C++)
+[info] subscribed tests: baseline-h3,static-h3
+[info] building image: httparena-agensio-official-h3
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== agensio-official-h3 / static-h3 / 64c (tool=h2load-h3) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[warn] agensio-official-h3 did not come up for static-h3; skipping
+
+─── agensio-official-h3 — status=exited exit=1 oom=false error=
+─── agensio-official-h3 — last 120 log lines ───
+  | fatal: cannot bind 0.0.0.0:8082: Address already in use
+  | agensio 0.1.0-alpha.23 starting with 32 worker(s), SO_REUSEPORT per worker
+  |   listening on http://0.0.0.0:8080 (h1)  sites: localhost
+  |   listening on https://0.0.0.0:8081 (h1)  sites: localhost
+  |   listening on http://0.0.0.0:8082 (h1)  sites: localhost
+  |   listening on https://:::8443 (h1)  sites: localhost
+─── agensio-official-h3 — end of logs ───
+httparena-bench-agensio-official-h3
+httparena-bench-agensio-official-h3
+[info] rebuilding site/data/*.json
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/frameworks.json
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/results/cnetmod-official-optimized.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/results/cnetmod-official-static.json - 1 new, 1 total
+[updated] /var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307365/arena/site/data/current.json
+[info] done
