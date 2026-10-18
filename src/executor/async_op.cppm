@@ -141,9 +141,20 @@ export auto async_sendto(io_context& ctx, socket& sock,
 /// Submit on the socket's IOCP while resuming the awaiting coroutine on its
 /// connection-affine executor. This is used by shared UDP listeners whose
 /// protocol state is sharded across worker contexts.
+/// Synchronous completion continues inline on the calling executor; an
+/// asynchronous completion posts the continuation to resume_context.
 export auto async_sendto_on(io_context& socket_context,
     io_context& resume_context, socket& sock, const_buffer buf,
     const endpoint& peer)
+    -> task<std::expected<std::size_t, std::error_code>>;
+
+/// Cancellation retires only after the original IOCP completion. A successful
+/// completion still reports the datagram's accepted byte count.
+/// Synchronous completion continues inline; asynchronous completion posts to
+/// resume_context, as in the overload without a cancellation token.
+export auto async_sendto_on(io_context& socket_context,
+    io_context& resume_context, socket& sock, const_buffer buf,
+    const endpoint& peer, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
 #endif
 
@@ -387,6 +398,19 @@ export auto async_sendto_batch(io_context& ctx, socket& sock,
 export auto async_sendto_batch(io_context& ctx, socket& sock,
     std::span<const udp_send_datagram> datagrams, cancel_token& token)
     -> task<std::expected<std::size_t, std::error_code>>;
+
+#ifdef CNETMOD_HAS_IO_URING
+/// Explicit Linux segmentation-offload attempt on original UDP datagrams.
+/// Returns accepted original-datagram count, not GSO message count. Native
+/// UDP_CORK/UDP_SEGMENT overrides retain ordinary batch behavior. Callers
+/// must serialize socket-option changes and retain buffers through completion.
+/// Unsupported offload/backpressure falls back to the ordinary cancellable
+/// batch; this never increases an individual datagram's payload or changes
+/// the default async_sendto_batch API.
+export auto async_sendto_segmented_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>;
+#endif
 
 /// Pre-initialize the platform UDP backend selected by `socket_options::registered_io`.
 /// On Windows this creates the RIO queues before a listener becomes visible to

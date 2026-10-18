@@ -344,6 +344,7 @@ namespace {
     {
         const auto condition = error.default_error_condition();
         return !is_nonfatal_udp_path_error(error) &&
+            error != make_error_code(errc::operation_would_block) &&
             condition != std::errc::operation_would_block &&
             condition != std::errc::resource_unavailable_try_again &&
             condition != std::errc::interrupted;
@@ -467,6 +468,7 @@ struct quic_connection::quic_connection_impl
     std::uint64_t retired_peer_streams_bidi{};
     std::uint64_t retired_peer_streams_uni{};
     bool peer_transport_parameters_applied{};
+    bool handshake_confirmed{};
     bool multipath_negotiated{};
     std::uint32_t peer_max_path_id{};
     std::uint64_t next_bidi_stream;
@@ -566,11 +568,38 @@ struct quic_connection::quic_connection_impl
     // One coroutine-owned state domain serializes packet numbers, stream
     // state, recovery, and every frame queue. Packet construction enters this
     // domain briefly; UDP sends happen only after it is released.
+    std::function<void(std::optional<std::chrono::steady_clock::time_point>)>
+        timer_deadline_observer;
     async_mutex receive_mutex;
+    // Publishes a snapshot while its state is still serialized, then releases
+    // the mutex before notifying a shared listener. Covers every early return
+    // without another task frame or an unlocked read of recovery state.
+    struct listener_state_guard
+    {
+        quic_connection& connection;
+        quic_connection_impl& state;
+        bool locked{true};
+        ~listener_state_guard() noexcept(false) { unlock_and_notify(); }
+        auto unlock_and_notify() -> void
+        {
+            if (!locked)
+                return;
+            const auto deadline = state.timer_deadline_observer
+                ? connection.next_timer_deadline() : std::nullopt;
+            locked = false;
+            state.receive_mutex.unlock();
+            // As for every async member operation, its caller retains the
+            // connection until this task completes. The observer is immutable.
+            if (deadline)
+                state.timer_deadline_observer(deadline);
+        }
+    };
+
     // Windows overlapped UDP sends on one socket must not be issued from
     // multiple coroutines concurrently; serialize the actual socket write
     // separately from packet construction.
     async_mutex socket_send_mutex;
+    cancel_token send_cancel_token;
     // DATAGRAM frames are deliberately kept out of retransmission metadata.
     std::deque<std::vector<std::byte>> unreliable_send_frames;
     channel<std::vector<std::byte>> received_application_datagrams{128};
@@ -581,6 +610,18 @@ struct quic_connection::quic_connection_impl
     // bit and must never be a plain bool.
     async_mutex flush_mutex;
     std::atomic<bool> send_flush_requested{};
+    auto can_start_requested_flush() -> bool
+    {
+        if (!send_flush_requested.load(std::memory_order_acquire) ||
+            !flush_mutex.try_lock())
+            return false;
+        // An existing writer consumes this edge before releasing ownership.
+        // Its socket completion must be allowed to run: an immediate receive
+        // deadline while it is suspended would spin without submitting I/O.
+        // Preserve the edge and use the actual PTO/idle deadline when busy.
+        flush_mutex.unlock();
+        return true;
+    }
     static constexpr std::size_t max_send_batch_datagrams{16U};
     // The packet owner is unique for a connection, including across the
     // asynchronous socket submission below. Keep its MTU-sized ciphertext
@@ -600,7 +641,8 @@ struct quic_connection::quic_connection_impl
     // that receive so it recalculates its PTO deadline instead of waiting for
     // the idle timeout. The token is owned by this connection and is reset
     // only after its completed receive operation has unwound.
-    cancel_token receive_wait_token;
+    // Shared listeners never allocate a private receive cancellation token.
+    std::shared_ptr<cancel_token> receive_wait_token;
     std::atomic<bool> receive_rearm_requested{};
     // 0-RTT bytes are deliberately isolated from normal application frames.
     // A rejected offer is never replayed by the transport: only the HTTP
@@ -1238,20 +1280,18 @@ auto quic_connection::send_datagram(std::span<const std::byte> datagram,
     auto& selected_context = path_socket ? path_socket->context() : impl_->socket_context;
     const bool switch_context =
         std::addressof(impl_->ctx) != std::addressof(selected_context);
-        #ifdef CNETMOD_HAS_IOCP
+#ifdef CNETMOD_HAS_IOCP
     if (switch_context)
-    {
         co_return co_await async_sendto_on(selected_context, impl_->ctx,
-            selected_socket.native_socket(),
-            const_buffer{datagram.data(), datagram.size()}, destination);
-    }
-        #endif
+            selected_socket.native_socket(), const_buffer{datagram.data(), datagram.size()},
+            destination, impl_->send_cancel_token);
+#endif
     if (switch_context)
         co_await post_awaitable{selected_context};
 
     auto sent = co_await async_sendto(selected_context,
         selected_socket.native_socket(),
-        const_buffer{datagram.data(), datagram.size()}, destination);
+        const_buffer{datagram.data(), datagram.size()}, destination, impl_->send_cancel_token);
 
     if (switch_context)
         co_await post_awaitable{impl_->ctx};
@@ -1272,18 +1312,66 @@ auto quic_connection::send_datagram_batch(
     co_await impl_->socket_send_mutex.lock();
     async_lock_guard send_guard{impl_->socket_send_mutex, std::adopt_lock};
 
+    const bool switch_context = std::addressof(impl_->ctx) != std::addressof(impl_->socket_context);
+#ifdef CNETMOD_HAS_IOCP
+    if (switch_context)
+    {
+        std::size_t submitted{};
+        for (const auto& datagram : datagrams)
+        {
+            const auto sent = co_await async_sendto_on(impl_->socket_context, impl_->ctx,
+                impl_->socket->native_socket(), datagram.bytes, datagram.peer, impl_->send_cancel_token);
+            if (!sent)
+                co_return std::unexpected(sent.error());
+            ++submitted;
+        }
+        co_return submitted;
+    }
+#endif
+    if (switch_context)
+        co_await post_awaitable{impl_->socket_context};
+    std::expected<std::size_t, std::error_code> result{std::size_t{}};
     std::size_t submitted{};
     while (submitted != datagrams.size())
     {
+#ifdef CNETMOD_HAS_IO_URING
+        auto accepted = impl_->config.enable_udp_segmentation_offload
+            ? co_await async_sendto_segmented_batch(impl_->socket_context,
+                  impl_->socket->native_socket(), datagrams.subspan(submitted),
+                  impl_->send_cancel_token)
+            : co_await async_sendto_batch(impl_->socket_context,
+                  impl_->socket->native_socket(), datagrams.subspan(submitted),
+                  impl_->send_cancel_token);
+#else
         auto accepted = co_await async_sendto_batch(impl_->socket_context,
-            impl_->socket->native_socket(), datagrams.subspan(submitted));
-        if (!accepted)
-            co_return std::unexpected(accepted.error());
-        if (*accepted == 0U)
-            co_return std::unexpected(std::make_error_code(std::errc::operation_would_block));
+            impl_->socket->native_socket(), datagrams.subspan(submitted), impl_->send_cancel_token);
+#endif
+        if (!accepted || *accepted == 0U)
+        {
+            result = std::unexpected(!accepted ? accepted.error()
+                : std::make_error_code(std::errc::operation_would_block));
+            break;
+        }
         submitted += *accepted;
     }
+    if (switch_context)
+        co_await post_awaitable{impl_->ctx};
+    if (!result)
+        co_return std::unexpected(result.error());
     co_return submitted;
+}
+
+auto quic_connection::async_stop_io() -> task<void>
+{
+    // Every platform adapter marshals cancellation to its own queue (or uses
+    // thread-safe CancelIoEx). Do not retain an application path's old raw
+    // context pointer after its last operation has completed.
+    impl_->send_cancel_token.request_cancel();
+    impl_->send_cancel_token.dispatch_cancel();
+    // Cancellation is a request. Borrowed packet storage remains alive until
+    // the original SENDMSG/IOCP completion releases the unique send owner.
+    co_await impl_->socket_send_mutex.lock();
+    impl_->socket_send_mutex.unlock();
 }
 
 auto quic_connection::set_resumption_ticket(const session_ticket& ticket)
@@ -1349,7 +1437,7 @@ auto quic_connection::process_datagram(std::span<const std::byte> datagram,
     const endpoint& sender) -> task<std::expected<void, std::error_code>>
 {
     co_await impl_->receive_mutex.lock();
-    async_lock_guard receive_guard{impl_->receive_mutex, std::adopt_lock};
+    quic_connection_impl::listener_state_guard receive_guard{*this, *impl_};
     if (impl_->connection_state == connection_state::draining)
     {
         if (impl_->draining_deadline && std::chrono::steady_clock::now() >= *impl_->draining_deadline)
@@ -1380,7 +1468,7 @@ auto quic_connection::process_datagram(std::span<const std::byte> datagram,
 auto quic_connection::async_poll_timers() -> task<void>
 {
     co_await impl_->receive_mutex.lock();
-    async_lock_guard receive_guard{impl_->receive_mutex, std::adopt_lock};
+    quic_connection_impl::listener_state_guard receive_guard{*this, *impl_};
     if (is_closed())
         co_return;
 
@@ -1416,12 +1504,24 @@ auto quic_connection::async_poll_timers() -> task<void>
     // Packet state above belongs to the receive serial domain.  UDP sending
     // may suspend on pacing or socket writability, so it must run after that
     // domain is released; otherwise the timer can stall all incoming packets.
-    receive_guard.release();
-    impl_->receive_mutex.unlock();
+    receive_guard.unlock_and_notify();
     if (pto_due)
-        co_await handle_pto();
+    {
+        const auto probed = co_await handle_pto();
+        if (!probed)
+        {
+            close_transport(probed.error());
+            co_return;
+        }
+    }
     if (flush_requested)
         co_await flush_send_queue();
+}
+
+auto quic_connection::set_timer_deadline_observer(std::function<void(
+    std::optional<std::chrono::steady_clock::time_point>)> observer) -> void
+{
+    impl_->timer_deadline_observer = std::move(observer);
 }
 
 auto quic_connection::next_timer_deadline() const
@@ -1455,7 +1555,7 @@ auto quic_connection::next_timer_deadline() const
     // congestion-blocked; scheduling them at `now` spins the listener timer
     // until an ACK arrives. Their recovery PTO is already considered above,
     // and processing that ACK publishes a new flush edge.
-    if (impl_->send_flush_requested.load(std::memory_order_acquire))
+    if (impl_->can_start_requested_flush())
         consider(now);
     return earliest;
 }
@@ -1488,7 +1588,9 @@ auto quic_connection::do_run() -> task<std::expected<void, std::error_code>>
             // BoringSSL installs the client early-write secret while creating
             // the Initial flight.  Send queued replay-safe application bytes
             // only after that secret exists, in their own 0-RTT long packet.
-            co_await pack_and_send_packets();
+            const auto early_sent = co_await pack_and_send_packets();
+            if (!early_sent)
+                co_return std::unexpected(early_sent.error());
         }
         schedule_idle_timeout();
     }
@@ -1502,6 +1604,8 @@ auto quic_connection::do_run() -> task<std::expected<void, std::error_code>>
                 break;
             if (datagram.error() == std::make_error_code(std::errc::operation_canceled))
             {
+                if (impl_->send_flush_requested.load(std::memory_order_acquire))
+                    co_await async_poll_timers();
                 continue;
             }
             if (datagram.error() == std::make_error_code(std::errc::timed_out))
@@ -1554,7 +1658,9 @@ auto quic_connection::recv_datagram()
 {
     auto& storage = impl_->receive_storage;
     endpoint sender;
-    auto& token = impl_->receive_wait_token;
+    if (!impl_->receive_wait_token)
+        impl_->receive_wait_token = std::make_shared<cancel_token>();
+    auto& token = *impl_->receive_wait_token;
     // `with_timeout` has fully joined its operation and timer before this
     // function resumes, so the previous IOCP/epoll cancellation registration
     // is no longer live here.
@@ -1577,6 +1683,8 @@ auto quic_connection::recv_datagram()
     if (const auto path_mtu_probe = impl_->earliest_path_mtu_probe_deadline();
         path_mtu_probe && (!deadline || *path_mtu_probe < *deadline))
         deadline = path_mtu_probe;
+    if (impl_->can_start_requested_flush())
+        deadline = std::chrono::steady_clock::now();
     if (deadline)
     {
         const auto now = std::chrono::steady_clock::now();
@@ -1888,6 +1996,14 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             bool ack_eliciting = false;
             for (std::size_t frame_offset = 0; frame_offset < plaintext->size();)
             {
+                // PADDING has no frame state and is legal at this encryption
+                // level. Consume the run without constructing a variant and
+                // two coroutine frames for every padding byte.
+                while (frame_offset < plaintext->size() &&
+                    (*plaintext)[frame_offset] == std::byte{})
+                    ++frame_offset;
+                if (frame_offset == plaintext->size())
+                    break;
                 auto frame = decode_frame(std::span<const std::byte>{*plaintext}.subspan(frame_offset));
                 if (!frame || frame->second == 0)
                     co_return std::unexpected(frame ? std::make_error_code(std::errc::bad_message) : frame.error());
@@ -1986,6 +2102,11 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
             bool ack_eliciting = false;
             for (std::size_t frame_offset = 0; frame_offset < plaintext->size();)
             {
+                while (frame_offset < plaintext->size() &&
+                    (*plaintext)[frame_offset] == std::byte{})
+                    ++frame_offset;
+                if (frame_offset == plaintext->size())
+                    break;
                 auto frame = decode_frame(std::span<const std::byte>{*plaintext}.subspan(frame_offset));
                 if (!frame || frame->second == 0)
                     co_return std::unexpected(frame ? std::make_error_code(std::errc::bad_message) : frame.error());
@@ -2220,6 +2341,11 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
     bool ack_eliciting = false;
     for (std::size_t frame_offset = 0; frame_offset < plaintext->size();)
     {
+        while (frame_offset < plaintext->size() &&
+            (*plaintext)[frame_offset] == std::byte{})
+            ++frame_offset;
+        if (frame_offset == plaintext->size())
+            break;
         auto frame = decode_frame(std::span<const std::byte>{*plaintext}.subspan(frame_offset));
         if (!frame || frame->second == 0)
             co_return std::unexpected(frame ? std::make_error_code(std::errc::bad_message)
@@ -2227,6 +2353,8 @@ auto quic_connection::process_packet(std::span<const std::byte> packet,
         ack_eliciting = ack_eliciting || is_ack_eliciting(frame->first);
         if (const auto* acknowledgment = std::get_if<ack_frame>(&frame->first))
             (void)process_ack_frame_state(*acknowledgment);
+        else if (const auto* stream = std::get_if<stream_frame>(&frame->first))
+            process_stream_frame_state(*stream);
         else
             co_await process_frames(frame->first);
 
@@ -2277,17 +2405,14 @@ auto quic_connection::handle_long_header_packet(long_header header)
 {
     if (header.type == packet_type::version_negotiation)
         co_return std::unexpected(make_error_code(quic_errc::protocol_violation));
-    if (impl_->tls->is_handshake_complete())
+    if (impl_->tls->is_handshake_complete() &&
+        (impl_->connection_state == connection_state::idle ||
+            impl_->connection_state == connection_state::handshaking ||
+            impl_->connection_state == connection_state::connected))
     {
         auto settled = impl_->settle_early_data_outcome();
         if (!settled)
             co_return std::unexpected(settled.error());
-        // RFC 9001 §4.9: once 1-RTT keys are available, Handshake protection
-        // is no longer permitted.  Keeping it would accept obsolete packets.
-        // Initial and Handshake packets may be coalesced. TLS can report
-        // completion after the Initial CRYPTO frames while the following
-        // Handshake packet still needs these keys. An authenticated 1-RTT
-        // packet is the safe discard point (handle_short_header_packet).
         auto parameters_valid = validate_peer_transport_parameters();
         if (!parameters_valid)
             co_return std::unexpected(parameters_valid.error());
@@ -2317,7 +2442,24 @@ auto quic_connection::handle_long_header_packet(long_header header)
             impl_->peer_transport_parameters_applied = true;
             auto issued = issue_parallel_local_connection_ids();
             if (!issued)
+            {
+                // Parameter application is a one-time transition. A failed
+                // CID setup must not let a later packet skip confirmation.
+                impl_->queue_protocol_close(quic_errc::internal_error, frame_type::crypto);
                 co_return std::unexpected(issued.error());
+            }
+            if (impl_->connection_role == quic_role::server)
+            {
+                // RFC 9001 section 4.1.2: TLS completion confirms the server's
+                // handshake. The client needs this reliable 1-RTT frame to
+                // confirm its handshake and enable application-data PTO.
+                impl_->encoded_send_frames.push_back(encode_frame(handshake_done_frame{}));
+                impl_->send_flush_requested.store(true, std::memory_order_release);
+                impl_->handshake_confirmed = true;
+                impl_->tls->discard_keys(encryption_level::handshake);
+                impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)].clear();
+                impl_->recovery.discard_packet_number_space(pn_space::handshake);
+            }
         }
         impl_->connection_state = connection_state::connected;
         impl_->arm_path_mtu_discovery(std::chrono::steady_clock::now());
@@ -2330,14 +2472,14 @@ auto quic_connection::handle_long_header_packet(long_header header)
 auto quic_connection::handle_short_header_packet(short_header)
     -> task<std::expected<void, std::error_code>>
 {
-    if (impl_->tls->is_handshake_complete())
+    if (impl_->tls->is_handshake_complete() &&
+        (impl_->connection_state == connection_state::idle ||
+            impl_->connection_state == connection_state::handshaking ||
+            impl_->connection_state == connection_state::connected))
     {
         auto settled = impl_->settle_early_data_outcome();
         if (!settled)
             co_return std::unexpected(settled.error());
-        impl_->tls->discard_keys(encryption_level::handshake);
-        impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)].clear();
-        impl_->recovery.discard_packet_number_space(pn_space::handshake);
         auto parameters_valid = validate_peer_transport_parameters();
         if (!parameters_valid)
             co_return std::unexpected(parameters_valid.error());
@@ -2357,7 +2499,24 @@ auto quic_connection::handle_short_header_packet(short_header)
             impl_->peer_transport_parameters_applied = true;
             auto issued = issue_parallel_local_connection_ids();
             if (!issued)
+            {
+                // Parameter application is a one-time transition. A failed
+                // CID setup must not let a later packet skip confirmation.
+                impl_->queue_protocol_close(quic_errc::internal_error, frame_type::crypto);
                 co_return std::unexpected(issued.error());
+            }
+            if (impl_->connection_role == quic_role::server)
+            {
+                // RFC 9001 section 4.1.2: TLS completion confirms the server's
+                // handshake. The client needs this reliable 1-RTT frame to
+                // confirm its handshake and enable application-data PTO.
+                impl_->encoded_send_frames.push_back(encode_frame(handshake_done_frame{}));
+                impl_->send_flush_requested.store(true, std::memory_order_release);
+                impl_->handshake_confirmed = true;
+                impl_->tls->discard_keys(encryption_level::handshake);
+                impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)].clear();
+                impl_->recovery.discard_packet_number_space(pn_space::handshake);
+            }
         }
         impl_->connection_state = connection_state::connected;
         impl_->arm_path_mtu_discovery(std::chrono::steady_clock::now());
@@ -2494,6 +2653,25 @@ auto quic_connection::process_frames(const quic_frame_variant& frame) -> task<vo
                 co_await process_connection_close_frame(value);
             else if constexpr (std::is_same_v<frame_t, ping_frame>)
                 co_await process_ping_frame(value);
+            else if constexpr (std::is_same_v<frame_t, handshake_done_frame>)
+            {
+                // TLS completion alone does not confirm a client's handshake.
+                // Duplicate HANDSHAKE_DONE frames are valid retransmissions.
+                if (impl_->connection_role != quic_role::client ||
+                    impl_->receiving_level != encryption_level::application ||
+                    !impl_->tls->is_handshake_complete())
+                {
+                    impl_->queue_protocol_close(quic_errc::protocol_violation,
+                        frame_type::handshake_done);
+                }
+                else if (!impl_->handshake_confirmed)
+                {
+                    impl_->handshake_confirmed = true;
+                    impl_->tls->discard_keys(encryption_level::handshake);
+                    impl_->retransmit_crypto_frames[level_index(encryption_level::handshake)].clear();
+                    impl_->recovery.discard_packet_number_space(pn_space::handshake);
+                }
+            }
             else if constexpr (std::is_same_v<frame_t, path_challenge_frame>)
                 co_await process_path_challenge_frame(value);
             else if constexpr (std::is_same_v<frame_t, path_response_frame>)
@@ -2789,8 +2967,11 @@ auto quic_connection::process_ack_frame_state(const ack_frame& frame)
             if (!application_path.path_mtu_probe_in_flight ||
                 *application_path.path_mtu_probe_in_flight != target)
                 continue;
-            application_path.discovered_max_datagram_payload = std::max(
-                application_path.discovered_max_datagram_payload, target);
+            if (target > application_path.discovered_max_datagram_payload)
+            {
+                application_path.discovered_max_datagram_payload = target;
+                application_path.recovery.on_max_datagram_size_validated(target);
+            }
             application_path.path_mtu_probe_in_flight.reset();
             if (application_path.discovered_max_datagram_payload <
                 impl_->path_mtu_probe_limit())
@@ -3085,23 +3266,29 @@ auto quic_connection::process_retire_connection_id_frame(const retire_connection
 
 auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<void>
 {
+    process_stream_frame_state(frame);
+    co_return;
+}
+
+auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> void
+{
     const bool locally_initiated = is_client_initiated(frame.stream_id) ==
         (impl_->connection_role == quic_role::client);
     if (locally_initiated && is_unidirectional(frame.stream_id))
     {
         impl_->queue_protocol_close(quic_errc::stream_state_error, frame_type::stream);
-        co_return;
+        return;
     }
     if (impl_->retired_streams.contains(frame.stream_id))
     {
         const auto sizes = impl_->retired_streams.find_final_sizes(frame.stream_id);
         if (!sizes)
-            co_return;
+            return;
         const auto final_size = sizes->received_final_size;
         if (frame.offset > final_size || frame.data.size() > final_size - frame.offset ||
             (frame.fin && frame.offset + frame.data.size() != final_size))
             impl_->queue_protocol_close(quic_errc::final_size_error, frame_type::stream);
-        co_return;
+        return;
     }
     auto [it, inserted] = impl_->streams.try_emplace(frame.stream_id);
     impl_->pending_priority_streams.erase(frame.stream_id);
@@ -3117,7 +3304,7 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
             impl_->streams.erase(it);
             impl_->queue_protocol_close(!peer_initiated ? quic_errc::stream_state_error
                 : quic_errc::stream_limit_error, frame_type::stream);
-            co_return;
+            return;
         }
         it->second.value = std::make_unique<quic_stream>(frame.stream_id,
             impl_->connection_role, is_bidirectional(frame.stream_id));
@@ -3135,14 +3322,14 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
         {
             impl_->streams.erase(it);
             impl_->queue_protocol_close(quic_errc::internal_error, frame_type::stream);
-            co_return;
+            return;
         }
     }
     const auto highest = it->second.value->bytes_received();
     if (frame.offset > std::numeric_limits<std::uint64_t>::max() - frame.data.size())
     {
         impl_->queue_protocol_close(quic_errc::final_size_error, frame_type::stream);
-        co_return;
+        return;
     }
     const auto end = frame.offset + frame.data.size();
     if (impl_->received_stream_data > impl_->local_advertised_max_data ||
@@ -3150,7 +3337,7 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
             impl_->local_advertised_max_data - impl_->received_stream_data))
     {
         impl_->queue_protocol_close(quic_errc::flow_control_error, frame_type::stream);
-        co_return;
+        return;
     }
     const auto received_before = it->second.value->bytes_received();
     auto delivered = it->second.value->push_received(frame.offset, frame.data, frame.fin);
@@ -3175,7 +3362,7 @@ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<vo
         }
         (void)readiness->try_send({});
     }
-    co_return;
+    return;
 }
 
 auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>
@@ -3310,7 +3497,8 @@ auto quic_connection::process_connection_close_frame(const connection_close_fram
     co_return;
 }
 
-auto quic_connection::handle_pto() -> task<void>
+auto quic_connection::handle_pto()
+    -> task<std::expected<void, std::error_code>>
 {
     struct pending_probe
     {
@@ -3324,7 +3512,7 @@ auto quic_connection::handle_pto() -> task<void>
     // them after releasing it. Awaiting UDP writability here previously let a
     // timer stall the server listener's receive path.
     co_await impl_->receive_mutex.lock();
-    async_lock_guard receive_guard{impl_->receive_mutex, std::adopt_lock};
+    quic_connection_impl::listener_state_guard receive_guard{*this, *impl_};
     const auto handshake_due = impl_->recovery.next_pto_deadline();
     const auto application_due = impl_->earliest_application_pto();
     const bool application_is_due = application_due && (!handshake_due || std::get<1>(*application_due) < handshake_due->first);
@@ -3333,7 +3521,7 @@ auto quic_connection::handle_pto() -> task<void>
               std::get<2>(*application_due)}}
         : handshake_due;
     if (!due || due->first > std::chrono::steady_clock::now())
-        co_return;
+        co_return std::expected<void, std::error_code>{};
 
     const auto level = encryption_level_for(due->second);
     const bool path_scoped = level == encryption_level::application;
@@ -3374,7 +3562,7 @@ auto quic_connection::handle_pto() -> task<void>
                 }
             }
         }
-        co_return;
+        co_return std::expected<void, std::error_code>{};
     }
     recovery.on_pto_expired(due->second);
 
@@ -3398,9 +3586,11 @@ auto quic_connection::handle_pto() -> task<void>
                 impl_->local_max_streams_bidi, true}));
             impl_->encoded_send_frames.push_front(encode_frame(ping_frame{}));
             auto packet = pack_one_rtt_packet(true);
-            if (!packet.empty())
+            if (!packet)
+                co_return std::unexpected(packet.error());
+            if (!packet->empty())
                 probes.push_back(
-                    {std::move(packet), application_path.peer, application_path.path_socket});
+                    {std::move(*packet), application_path.peer, application_path.path_socket});
         }
         else
         {
@@ -3417,25 +3607,25 @@ auto quic_connection::handle_pto() -> task<void>
                 probes.push_back({std::move(packet), impl_->peer, nullptr});
         }
     }
-    receive_guard.release();
-    impl_->receive_mutex.unlock();
+    receive_guard.unlock_and_notify();
     for (const auto& probe : probes)
     {
         const auto sent = co_await send_datagram(probe.packet, probe.peer, probe.path_socket);
         if (!sent && !probe.path_socket && is_terminal_udp_send_error(sent.error()))
         {
-            close_transport(sent.error());
-            break;
+            co_return std::unexpected(sent.error());
         }
     }
-    co_return;
+    co_return std::expected<void, std::error_code>{};
 }
 
-auto quic_connection::pack_and_send_packet() -> task<void>
+auto quic_connection::pack_and_send_packet()
+    -> task<std::expected<void, std::error_code>>
 {
     std::vector<std::byte> packet;
     endpoint peer;
     udp::udp_socket* path_socket{};
+    std::optional<time_point> timer_deadline;
     {
         co_await impl_->receive_mutex.lock();
         async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
@@ -3470,7 +3660,12 @@ auto quic_connection::pack_and_send_packet() -> task<void>
             impl_->sending_application_path_id = path_id;
             packet = pack_zero_rtt_packet();
             if (packet.empty())
-                packet = pack_one_rtt_packet();
+            {
+                auto built = pack_one_rtt_packet();
+                if (!built)
+                    co_return std::unexpected(built.error());
+                packet = std::move(*built);
+            }
             if (!packet.empty())
             {
                 peer = impl_->sending_application_path().peer;
@@ -3478,17 +3673,22 @@ auto quic_connection::pack_and_send_packet() -> task<void>
                 break;
             }
         }
+        if (!packet.empty() && impl_->timer_deadline_observer)
+            timer_deadline = next_timer_deadline();
     }
+    if (timer_deadline)
+        impl_->timer_deadline_observer(timer_deadline);
     if (packet.empty())
-        co_return;
+        co_return std::expected<void, std::error_code>{};
     co_await await_application_pacing(packet.size());
     const auto sent = co_await send_datagram(packet, peer, path_socket);
     if (!sent && !path_socket && is_terminal_udp_send_error(sent.error()))
-        close_transport(sent.error());
-    co_return;
+        co_return std::unexpected(sent.error());
+    co_return std::expected<void, std::error_code>{};
 }
 
-auto quic_connection::pack_and_send_packets() -> task<void>
+auto quic_connection::pack_and_send_packets()
+    -> task<std::expected<void, std::error_code>>
 {
     struct pending_datagram
     {
@@ -3499,6 +3699,7 @@ auto quic_connection::pack_and_send_packets() -> task<void>
     std::vector<pending_datagram> pending;
     pending.reserve(quic_connection_impl::max_send_batch_datagrams);
     bool primary_socket_only{};
+    std::optional<time_point> timer_deadline;
     {
         co_await impl_->receive_mutex.lock();
         async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
@@ -3521,9 +3722,17 @@ auto quic_connection::pack_and_send_packets() -> task<void>
             {
                 auto packet = pack_zero_rtt_packet();
                 if (packet.empty())
-                    packet = pack_one_rtt_packet(false,
+                {
+                    auto built = pack_one_rtt_packet(false,
                         std::move(impl_->application_packet_storage[index]),
                         std::addressof(impl_->application_payload_storage[index]));
+                    // No datagram in this batch has been submitted yet. Abort
+                    // the entire local prefix before pacing, observers, or UDP;
+                    // the caller closes recovery after this lock is released.
+                    if (!built)
+                        co_return std::unexpected(built.error());
+                    packet = std::move(*built);
+                }
                 if (packet.empty())
                 {
                     impl_->application_packet_storage[index] = std::move(packet);
@@ -3533,14 +3742,17 @@ auto quic_connection::pack_and_send_packets() -> task<void>
                     impl_->sending_application_path().peer});
             }
         }
+        if (!pending.empty() && impl_->timer_deadline_observer)
+            timer_deadline = next_timer_deadline();
     }
+    if (timer_deadline)
+        impl_->timer_deadline_observer(timer_deadline);
     if (!primary_socket_only)
     {
-        co_await pack_and_send_packet();
-        co_return;
+        co_return co_await pack_and_send_packet();
     }
     if (pending.empty())
-        co_return;
+        co_return std::expected<void, std::error_code>{};
 
     // The packer has already limited this burst to the path's available
     // congestion window. Reserve its aggregate pacing credit with one timer,
@@ -3566,14 +3778,14 @@ auto quic_connection::pack_and_send_packets() -> task<void>
     // the packer, exactly as on the pre-existing single-send path.
     const auto sent = co_await send_datagram_batch(datagrams);
     if (!sent && is_terminal_udp_send_error(sent.error()))
-        close_transport(sent.error());
+        co_return std::unexpected(sent.error());
     for (std::size_t index{}; index < pending.size(); ++index)
     {
         pending[index].packet.clear();
         impl_->application_packet_storage[index] =
             std::move(pending[index].packet);
     }
-    co_return;
+    co_return std::expected<void, std::error_code>{};
 }
 
 auto quic_connection::send_initial_packets()
@@ -3973,7 +4185,8 @@ auto quic_connection::pack_handshake_packet() -> std::vector<std::byte>
 
 auto quic_connection::pack_one_rtt_packet(bool pto_probe,
     std::vector<std::byte> packet_storage,
-    std::vector<std::byte>* payload_storage) -> std::vector<std::byte>
+    std::vector<std::byte>* payload_storage)
+    -> std::expected<std::vector<std::byte>, std::error_code>
 {
     if (!impl_->tls)
         return {};
@@ -4213,10 +4426,16 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
     for (int shift = 24; shift >= 0; shift -= 8)
         packet.push_back(static_cast<std::byte>((packet_number >> shift) & 0xffU));
     const auto pn_offset = packet.size() - pn_length;
-    if (!append_sealed_payload(*keys, payload, packet, packet_number, path.id))
-        return {};
-    if (!protect_header(*keys, packet, pn_offset, false))
-        return {};
+    // A crypto failure is terminal work, not an empty/congestion-blocked
+    // packet. Some crypto backends fail without pushing an error-queue entry.
+    if (const auto sealed = append_sealed_payload(*keys, payload, packet, packet_number, path.id);
+        !sealed)
+        return std::unexpected(sealed.error() ? sealed.error()
+            : std::make_error_code(std::errc::io_error));
+    if (const auto protected_header = protect_header(*keys, packet, pn_offset, false);
+        !protected_header)
+        return std::unexpected(protected_header.error() ? protected_header.error()
+            : std::make_error_code(std::errc::io_error));
     impl_->account_path_send(path, packet.size());
     // ACK state is cleared only once an authenticated packet containing the
     // frame has been constructed.  The UDP submission path awaits writability
@@ -4296,6 +4515,7 @@ auto quic_connection::flush_send_queue() -> task<void>
     if (!impl_->flush_mutex.try_lock())
         co_return;
     async_lock_guard flush_guard{impl_->flush_mutex, std::adopt_lock};
+    bool coalescing_checked{};
     // A single application write can be fragmented into multiple STREAM
     // frames.  Drain all packets that the congestion window currently admits;
     // every packet passes through await_application_pacing() and async_sendto
@@ -4312,6 +4532,42 @@ auto quic_connection::flush_send_queue() -> task<void>
         // stay outside it so receive processing remains responsive.
         co_await impl_->receive_mutex.lock();
         async_lock_guard state_guard{impl_->receive_mutex, std::adopt_lock};
+        if (!std::exchange(coalescing_checked, true) &&
+            impl_->connection_state == connection_state::connected &&
+            !impl_->queued_protocol_error &&
+            impl_->write_commands.approximate_size() != 0U)
+        {
+            // This is a bounded scheduling hint, independent of MAX_STREAMS
+            // or stream-ID gaps. Avoid a reactor turn for a single active
+            // stream; at most sixteen real entries are examined under the
+            // existing state lock, and control-only/many-uni connections may
+            // simply miss the optimization rather than pay an unbounded scan.
+            std::size_t inspected{};
+            std::size_t active_bidirectional{};
+            for (const auto& [id, stream] : impl_->streams)
+            {
+                if (is_bidirectional(id) && stream.value &&
+                    stream.value->state() != stream_state::closed &&
+                    ++active_bidirectional == 2U)
+                    break;
+                if (++inspected == 16U)
+                    break;
+            }
+            if (active_bidirectional == 2U)
+            {
+                // Only the writer owner posts. Already-ready stream services
+                // can publish while its token stays held, without a timer or
+                // dependence on another incoming datagram.
+                state_guard.release();
+                impl_->receive_mutex.unlock();
+                co_await post_awaitable{impl_->ctx};
+                // close_transport completes queued producers. A local CLOSE
+                // instead remains queued and is drained on the next pass.
+                if (is_closed() || impl_->connection_state == connection_state::draining)
+                    co_return;
+                continue;
+            }
+        }
         using completion_result = std::pair<quic_write_completion*,
             std::expected<void, std::error_code>>;
         std::optional<completion_result> first_completion;
@@ -4328,9 +4584,9 @@ auto quic_connection::flush_send_queue() -> task<void>
                     quic_write_command::operation::datagram
                 ? co_await apply_application_datagram(std::move(command->bytes))
                 : command->shared_bytes
-                ? co_await apply_stream_write(command->stream,
+                ? apply_stream_write(command->stream,
                       command->bytes, command->shared_bytes, command->fin)
-                : co_await apply_stream_write(command->stream,
+                : apply_stream_write(command->stream,
                       command->bytes, command->fin);
             if (!result && result.error() == make_error_code(quic_errc::flow_control_error) &&
                 command->completion)
@@ -4375,7 +4631,16 @@ auto quic_connection::flush_send_queue() -> task<void>
                 impl_->prioritized_stream_frame_count() +
                 impl_->unreliable_send_frames.size() +
                 impl_->early_data_send_frames.size();
-            co_await pack_and_send_packets();
+            const auto sent = co_await pack_and_send_packets();
+            if (!sent)
+            {
+                // The receive lock and packet/path references are gone. Keep
+                // the writer claim until queued producers have been failed;
+                // async_close joins it before reclaiming connection storage.
+                // Existing accepted completions retain their queue semantics.
+                close_transport(sent.error());
+                co_return;
+            }
             send_ack = false;
             if (impl_->encoded_send_frames.size() + impl_->prioritized_stream_frame_count() +
                     impl_->unreliable_send_frames.size() +
@@ -4411,15 +4676,15 @@ auto quic_connection::flush_send_queue() -> task<void>
 }
 
 auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
-    bool fin) -> task<std::expected<void, std::error_code>>
+    bool fin) -> std::expected<void, std::error_code>
 {
-    co_return co_await apply_stream_write(sid, data, {}, fin);
+    return apply_stream_write(sid, data, {}, fin);
 }
 
 auto quic_connection::apply_stream_write(stream_id sid,
     const std::vector<std::byte>& prefix,
     const std::shared_ptr<const std::string>& shared_data, bool fin)
-    -> task<std::expected<void, std::error_code>>
+    -> std::expected<void, std::error_code>
 {
     const std::span<const std::byte> prefix_payload{prefix.data(), prefix.size()};
     const auto shared_payload = shared_data
@@ -4428,16 +4693,16 @@ auto quic_connection::apply_stream_write(stream_id sid,
     const auto payload_size = prefix_payload.size() + shared_payload.size();
     if (is_closed() || impl_->connection_state == connection_state::closing ||
         impl_->connection_state == connection_state::draining)
-        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+        return std::unexpected(std::make_error_code(std::errc::not_connected));
     if (impl_->retired_streams.contains(sid))
-        co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     auto [it, inserted] = impl_->streams.try_emplace(sid);
     if (inserted)
     {
         if (is_client_initiated(sid) != (impl_->connection_role == quic_role::client))
         {
             impl_->streams.erase(it);
-            co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+            return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
         }
         it->second.value = std::make_unique<quic_stream>(sid, impl_->connection_role,
             is_bidirectional(sid));
@@ -4448,33 +4713,33 @@ auto quic_connection::apply_stream_write(stream_id sid,
     }
     if (payload_size > impl_->peer_max_data -
             std::min(impl_->peer_max_data, impl_->sent_stream_data))
-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
+        return std::unexpected(make_error_code(quic_errc::flow_control_error));
     // Reserve the whole logical write before mutating stream accounting. A
     // shared response is submitted as a small prefix followed by its cached
     // body; accepting the prefix and then rejecting the body would otherwise
     // leave a partial HTTP/3 frame on the stream.
     if (payload_size > it->second.value->remaining_send_window())
-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
+        return std::unexpected(make_error_code(quic_errc::flow_control_error));
     if (!prefix_payload.empty())
     {
-        auto sent = co_await it->second.value->send(prefix_payload);
+        auto sent = it->second.value->apply_send_state(prefix_payload);
         if (!sent)
-            co_return std::unexpected(sent.error());
+            return std::unexpected(sent.error());
     }
     if (!shared_payload.empty())
     {
-        auto sent = co_await it->second.value->send(shared_payload);
+        auto sent = it->second.value->apply_send_state(shared_payload);
         if (!sent)
-            co_return std::unexpected(sent.error());
+            return std::unexpected(sent.error());
     }
     if (payload_size == 0U)
     {
-        auto sent = co_await it->second.value->send({});
+        auto sent = it->second.value->apply_send_state({});
         if (!sent)
-            co_return std::unexpected(sent.error());
+            return std::unexpected(sent.error());
     }
     if (fin)
-        co_await it->second.value->close_local();
+        it->second.value->apply_close_local_state();
     impl_->sent_stream_data += payload_size;
 
     // `quic_stream::send` accounts bytes before this point.  The wire offset
@@ -4511,7 +4776,7 @@ auto quic_connection::apply_stream_write(stream_id sid,
             static_cast<std::size_t>(varint_size(sid)) +
             static_cast<std::size_t>(varint_size(stream_offset));
         if (send_packet_payload <= fixed_frame_size + 1U)
-            co_return std::unexpected(std::make_error_code(std::errc::message_size));
+            return std::unexpected(std::make_error_code(std::errc::message_size));
         auto chunk = std::min(payload_size - sent_offset,
             send_packet_payload - fixed_frame_size - 1U);
         while (fixed_frame_size + static_cast<std::size_t>(varint_size(chunk)) +
@@ -4591,11 +4856,11 @@ auto quic_connection::apply_stream_write(stream_id sid,
     // it immediately re-arms with the deadline for this newly queued STREAM
     // frame. This is edge-triggered and does not serialize or block writers.
     impl_->receive_rearm_requested.store(true, std::memory_order_release);
-    if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
+    if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
     {
-        impl_->receive_wait_token.cancel();
+        impl_->receive_wait_token->cancel();
     }
-    co_return {};
+    return {};
 }
 
 auto quic_connection::async_send(stream_id sid, std::span<const std::byte> data,
@@ -4682,8 +4947,8 @@ auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_d
 
         impl_->send_flush_requested.store(true, std::memory_order_release);
         impl_->receive_rearm_requested.store(true, std::memory_order_release);
-        if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
-            impl_->receive_wait_token.cancel();
+        if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+            impl_->receive_wait_token->cancel();
 
         // Submit the complete application write first. apply_stream_write()
         // fragments it into UDP-sized STREAM frames under one state lock and
@@ -4736,8 +5001,8 @@ auto quic_connection::async_send_shared(stream_id sid,
 
         impl_->send_flush_requested.store(true, std::memory_order_release);
         impl_->receive_rearm_requested.store(true, std::memory_order_release);
-        if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
-            impl_->receive_wait_token.cancel();
+        if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+            impl_->receive_wait_token->cancel();
         co_await flush_send_queue();
         const auto result = co_await completion->receive();
         prefix = std::exchange(completion->rejected_bytes, {});
@@ -4776,8 +5041,8 @@ auto quic_connection::set_stream_priority(stream_id sid, std::uint8_t urgency,
         return false;
     impl_->send_flush_requested.store(true, std::memory_order_release);
     impl_->receive_rearm_requested.store(true, std::memory_order_release);
-    if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
-        impl_->receive_wait_token.cancel();
+    if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+        impl_->receive_wait_token->cancel();
     return true;
 }
 
@@ -4813,8 +5078,8 @@ auto quic_connection::async_send_datagram(std::span<const std::byte> data)
     }
     impl_->send_flush_requested.store(true, std::memory_order_release);
     impl_->receive_rearm_requested.store(true, std::memory_order_release);
-    if (impl_->receive_wait_token.pending_.load(std::memory_order_acquire))
-        impl_->receive_wait_token.cancel();
+    if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+        impl_->receive_wait_token->cancel();
     co_await flush_send_queue();
     const auto result = co_await completion->receive();
     impl_->write_commands.release(*completion);
@@ -5021,6 +5286,7 @@ auto quic_connection::retire_stream(stream_id sid)
     if (stream->second.value->state() != stream_state::closed)
         return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
 
+    bool credit_updated{};
     if (is_client_initiated(sid) != (impl_->connection_role == quic_role::client))
     {
         const auto bidirectional = is_bidirectional(sid);
@@ -5046,6 +5312,7 @@ auto quic_connection::retire_stream(stream_id sid)
         if (available > limit && available - limit >= replenish_threshold)
         {
             limit = available;
+            credit_updated = true;
             impl_->encoded_send_frames.push_back(encode_frame(max_streams_frame{limit,
                 bidirectional}));
         }
@@ -5058,7 +5325,44 @@ auto quic_connection::retire_stream(stream_id sid)
     impl_->pending_priority_streams.erase(sid);
     auto readiness = stream->second.readiness;
     impl_->streams.erase(stream);
+    auto* const context = std::addressof(impl_->ctx);
+    std::unique_ptr<std::function<void()>> notification;
+    if (credit_updated)
+    {
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+        if (impl_->timer_deadline_observer)
+        {
+            // Retirement also runs inside packet parsing. Carry only the
+            // immutable weak observer across the deferred control-plane edge.
+            notification = std::make_unique<std::function<void()>>(
+                [observer = impl_->timer_deadline_observer,
+                    deadline = std::chrono::steady_clock::now()] { observer(deadline); });
+        }
+        else if (const auto token = impl_->receive_wait_token;
+            token && token->pending_.load(std::memory_order_acquire))
+        {
+            impl_->receive_rearm_requested.store(true, std::memory_order_release);
+            token->request_cancel();
+            notification = std::make_unique<std::function<void()>>(
+                [token] { token->dispatch_cancel(); });
+        }
+    }
     readiness->close();
+    // Completion can resume application code synchronously. No connection
+    // storage is accessed after notifying readiness.
+    if (notification)
+    {
+        context->post([](void* value)
+            {
+                // post's cleanup owns only callbacks discarded before dispatch.
+                // A dispatched callback must release its notification itself.
+                std::unique_ptr<std::function<void()>> owned{
+                    static_cast<std::function<void()>*>(value)};
+                (*owned)();
+            },
+            notification.get(), [](void* value) { delete static_cast<std::function<void()>*>(value); });
+        (void)notification.release();
+    }
     return {};
 }
 
@@ -5123,7 +5427,7 @@ auto quic_connection::async_probe_path_impl(std::uint32_t path_id, endpoint peer
     auto validation_deadline = std::chrono::steady_clock::now();
     {
         co_await impl_->receive_mutex.lock();
-        async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+        quic_connection_impl::listener_state_guard guard{*this, *impl_};
         if (!impl_->multipath_negotiated || path_id == 0U ||
             !impl_->config.multipath_initial_max_path_id ||
             path_id > *impl_->config.multipath_initial_max_path_id)
@@ -5194,7 +5498,7 @@ auto quic_connection::async_probe_path_impl(std::uint32_t path_id, endpoint peer
         if (now >= validation_deadline)
         {
             co_await impl_->receive_mutex.lock();
-            async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+            quic_connection_impl::listener_state_guard guard{*this, *impl_};
             if (const auto pending = impl_->pending_path_validations.find(key);
                 pending != impl_->pending_path_validations.end() &&
                 pending->second.path_id == path_id && pending->second.challenge == challenge)
@@ -5212,7 +5516,7 @@ auto quic_connection::async_probe_path_impl(std::uint32_t path_id, endpoint peer
         std::vector<std::byte> retry;
         {
             co_await impl_->receive_mutex.lock();
-            async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+            quic_connection_impl::listener_state_guard guard{*this, *impl_};
             if (impl_->connection_state == connection_state::closed)
                 co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
             const auto path = impl_->application_paths.find(path_id);
@@ -5254,6 +5558,10 @@ auto quic_connection::set_path_backup(std::uint32_t path_id, bool backup)
     impl_->encoded_send_frames.push_back(encode_frame(path_status_frame{
         path_id, path->second->next_local_path_status_sequence, backup}));
     impl_->send_flush_requested.store(true, std::memory_order_release);
+    if (impl_->timer_deadline_observer)
+        impl_->timer_deadline_observer(next_timer_deadline());
+    else if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+        impl_->receive_wait_token->cancel();
     return {};
 }
 
@@ -5261,7 +5569,7 @@ auto quic_connection::async_abandon_path(std::uint32_t path_id,
     std::uint64_t error_code) -> task<std::expected<void, std::error_code>>
 {
     co_await impl_->receive_mutex.lock();
-    async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+    quic_connection_impl::listener_state_guard guard{*this, *impl_};
     if (!impl_->multipath_negotiated || path_id == 0U)
         co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     const auto path = impl_->application_paths.find(path_id);
@@ -5282,6 +5590,10 @@ auto quic_connection::async_abandon_path(std::uint32_t path_id,
     impl_->encoded_send_frames.push_back(encode_frame(path_abandon_frame{
         path_id, error_code}));
     impl_->send_flush_requested.store(true, std::memory_order_release);
+    guard.unlock_and_notify();
+    if (!impl_->timer_deadline_observer && impl_->receive_wait_token &&
+        impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+        impl_->receive_wait_token->cancel();
     co_return {};
 }
 
@@ -5399,7 +5711,8 @@ auto quic_connection::close_transport(std::error_code error, connection_state st
     if (state == connection_state::draining)
         return;
     impl_->receive_rearm_requested.store(false, std::memory_order_release);
-    impl_->receive_wait_token.cancel();
+    if (impl_->receive_wait_token)
+        impl_->receive_wait_token->cancel();
     if (impl_->owned_socket)
         impl_->socket->close();
 }

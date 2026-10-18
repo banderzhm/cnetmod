@@ -183,6 +183,24 @@ auto main(int argc, char** argv) -> int
     };
     if (!parse(argv[3], port) || port > 65535 || !parse(argv[4], workers))
         return 2;
+    // Explicit diagnostic ceilings. Keep receive capacity fixed when comparing
+    // send discovery limits so one binary and buffer layout serve every round.
+    unsigned max_path_mtu{1472U}, max_udp_payload_size{1472U};
+    const auto parse_udp_limit = [&parse](const char* name, unsigned& value)
+    {
+        const auto* text = std::getenv(name);
+        if (!text)
+            return true;
+        if (!parse(text, value) || value < 1200U || value > 65507U)
+        {
+            logger::error{"{} must be a complete integer in [1200, 65507]", name};
+            return false;
+        }
+        return true;
+    };
+    if (!parse_udp_limit("CNETMOD_QUIC_MAX_PATH_MTU", max_path_mtu) ||
+        !parse_udp_limit("CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE", max_udp_payload_size))
+        return 2;
     auto tls = cnetmod::ssl_context::quic_server();
     if (!tls)
         return 1;
@@ -215,6 +233,18 @@ auto main(int argc, char** argv) -> int
     const cnetmod::endpoint endpoint{cnetmod::ipv4_address::any(), static_cast<std::uint16_t>(port)};
     auto server = cnetmod::http::v3::make_http3_server(
         context, *tls, endpoint, std::move(handler));
+    // Explicit same-binary diagnostic switch; ordinary/official runs keep
+    // the established path unless the environment opts in before start.
+    if (const auto* gso = std::getenv("CNETMOD_QUIC_GSO");
+        gso && std::string_view{gso} == "1")
+    {
+        if (const auto configured = server->set_udp_segmentation_offload(true);
+            !configured)
+        {
+            logger::error{"HTTP/3 UDP offload setup failed: {}", configured.error().message()};
+            return 1;
+        }
+    }
     // HttpArena creates fresh h2load connections for every short run and the
     // load generator leaves them silent instead of sending CONNECTION_CLOSE.
     // Reclaim those connections within the official two-second round cooldown
@@ -229,7 +259,7 @@ auto main(int argc, char** argv) -> int
     // The official workload is loopback-only and its peer advertises support
     // for larger datagrams. Probe the controlled local path before using its
     // larger payload ceiling so static responses need fewer encrypted packets.
-    if (const auto configured = server->set_path_mtu_discovery(1472,
+    if (const auto configured = server->set_path_mtu_discovery(max_path_mtu,
             std::chrono::milliseconds{1});
         !configured)
     {
@@ -237,7 +267,7 @@ auto main(int argc, char** argv) -> int
             configured.error().message()};
         return 1;
     }
-    if (const auto configured = server->set_max_udp_payload_size(1472);
+    if (const auto configured = server->set_max_udp_payload_size(max_udp_payload_size);
         !configured)
     {
         logger::error{"HTTP/3 UDP payload setup failed: {}",

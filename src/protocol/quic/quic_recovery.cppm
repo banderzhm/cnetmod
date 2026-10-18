@@ -138,6 +138,8 @@ public:
     [[nodiscard]] auto take_early_data_frames() -> std::vector<quic_send_frame>;
     auto discard_packet_number_space(pn_space space) noexcept -> void;
 
+    // Caller checks the matching probe ACK and per-path discovery increase.
+    auto on_max_datagram_size_validated(std::uint64_t bytes) noexcept -> void;
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;
     [[nodiscard]] auto congestion_window() const noexcept -> std::uint64_t;
     [[nodiscard]] auto pacing_rate() const noexcept -> std::optional<double>;
@@ -151,13 +153,32 @@ private:
         bool retransmission_alias{};
     };
 
+    using sent_packet_map = std::map<std::uint64_t, sent_packet>;
+
+    struct packet_node_cache
+    {
+        packet_node_cache() = default;
+        packet_node_cache(const packet_node_cache&) noexcept;
+        auto operator=(const packet_node_cache&) noexcept -> packet_node_cache&;
+        packet_node_cache(packet_node_cache&& other) noexcept;
+        auto operator=(packet_node_cache&& other) noexcept -> packet_node_cache&;
+        auto clear() noexcept -> void;
+
+        std::array<sent_packet_map::node_type, 64U> nodes;
+        std::size_t size{};
+    };
+
     static constexpr std::size_t packet_number_space_count{3U};
     [[nodiscard]] static auto space_index(pn_space space) noexcept -> std::size_t;
+    auto insert_sent_packet(pn_space space, std::uint64_t packet_number,
+        sent_packet packet) -> void;
+    auto recycle_sent_packet(pn_space space, sent_packet_map::iterator packet) noexcept
+        -> sent_packet_map::iterator;
 
     loss_detector detector_;
     congestion_controller congestion_;
-    std::array<std::map<std::uint64_t, sent_packet>, packet_number_space_count>
-        sent_packets_;
+    std::array<sent_packet_map, packet_number_space_count> sent_packets_;
+    std::array<packet_node_cache, packet_number_space_count> cached_nodes_;
     std::array<std::size_t, packet_number_space_count> alias_counts_{};
 };
 

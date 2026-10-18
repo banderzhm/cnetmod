@@ -22,6 +22,14 @@ export struct uring_overlapped
     void* completion_context = nullptr;
 };
 
+/// Caller-owned cancellation state; retain it until its completion callback.
+export struct uring_cancel_request
+{
+    uring_overlapped operation{};
+    uring_overlapped* target{};
+    uring_cancel_request* next{};
+};
+
 /// Linux io_uring event loop.  The interface keeps the state layout only;
 /// platform and syscall logic lives in io_uring_impl.cpp.
 export class io_uring_context : public io_context
@@ -40,10 +48,22 @@ public:
     void restart() override;
     [[nodiscard]] auto get_sqe() -> ::io_uring_sqe*;
     [[nodiscard]] auto prepare_sqe() -> ::io_uring_sqe*;
+    /// Prepared operations retain their buffers until CQE completion. Submission
+    /// failures are deferred (zero submitted); inspect submission_error().
     [[nodiscard]] auto flush() -> std::expected<int, std::error_code>;
     [[nodiscard]] auto flush_pending() -> std::expected<int, std::error_code>;
     [[nodiscard]] auto submit_batch_size() const noexcept -> unsigned;
+    /// Explicit synchronous submission reports errors without retiring SQEs.
+    /// The caller must retain every queued operation even when this fails.
     [[nodiscard]] auto submit() -> std::expected<int, std::error_code>;
+    /// Owner-thread diagnostic, cleared by successful submission. Fatal errors
+    /// stop the reactor without completing queued operations: stopped() does not
+    /// permit destroying their frames/buffers. Keep them alive through external
+    /// ring repair, restart and completion draining, or the context's teardown
+    /// contract. No general fatal-ring recovery is provided here.
+    [[nodiscard]] auto submission_error() const noexcept -> std::error_code;
+    /// Owner-thread only. SQ pressure never discards a cancellation request.
+    void enqueue_cancel(uring_cancel_request& request);
 
 protected:
     void wake() override;
@@ -61,6 +81,7 @@ private:
     [[nodiscard]] auto submit_pending() -> std::expected<int, std::error_code>;
     auto run_one_impl(bool blocking) -> std::size_t;
     void submit_wake_read();
+    void drain_cancellations();
 
     ::io_uring ring_{};
     std::atomic<bool> stopped_{false};
@@ -68,7 +89,11 @@ private:
     int pipe_fds_[2] = {-1, -1};
     char pipe_buf_ = 0;
     uring_overlapped wake_ov_{};
+    bool wake_read_pending_ = false;
     unsigned pending_sqes_ = 0;
+    std::error_code submission_error_{};
+    uring_cancel_request* cancel_head_{};
+    uring_cancel_request* cancel_tail_{};
     unsigned submit_batch_size_ = default_submit_batch_size_;
     unsigned cqe_tick_limit_ = default_cqe_tick_limit_;
     inline static std::atomic<std::uint64_t> next_instance_id_{0};

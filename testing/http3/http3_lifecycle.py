@@ -294,10 +294,42 @@ async def max_stream_credit_window(port):
 
 
 async def run(port):
+    await padding_packets(port)
     await check(port)
     await max_stream_credit_window(port)
     await reject_invalid_resets(port)
     await critical_stream_fin(port)
+
+
+async def padding_packets(port):
+    async with connect("127.0.0.1", port, configuration=configuration(),
+                       create_protocol=Probe) as peer:
+        assert await peer.get(port) == b"ok\n"
+        original = peer._quic._write_ping_frame
+        written = []
+        for padding_only in (True, False):
+            def write_padded(builder, uids=[], comment=""):
+                written.append(padding_only)
+                # This runs in aioquic's authenticated 1-RTT packet builder,
+                # rather than exercising only the unchanged public decoder.
+                builder.start_frame(0, capacity=257).push_bytes(b"\0" * 256)
+                if not padding_only:
+                    original(builder, uids, comment)
+                    builder.start_frame(0, capacity=257).push_bytes(b"\0" * 256)
+                    original(builder, [], comment)
+            peer._quic._write_ping_frame = write_padded
+            try:
+                if padding_only:
+                    peer._quic.send_ping(0xCAFE)
+                    peer.transmit()
+                    await asyncio.sleep(0.03)
+                else:
+                    await asyncio.wait_for(peer.ping(), 5)
+            finally:
+                peer._quic._write_ping_frame = original
+            assert await peer.get(port) == b"ok\n"
+        assert True in written and False in written, written
+        print("PASS encrypted all-PADDING and PADDING between PING frames")
 
 
 def main():

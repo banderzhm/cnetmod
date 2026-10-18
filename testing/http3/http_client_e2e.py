@@ -91,6 +91,22 @@ def wait_for_file(path: Path, timeout: float) -> bool:
     return path.exists()
 
 
+def read_json_snapshot(path: Path, timeout: float = 1.0) -> object:
+    """Read an atomically replaced fixture file within a fixed retry budget.
+
+    Windows can briefly deny opening a destination during Path.replace().
+    Persistent sharing/permission failures or invalid JSON remain test failures.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (PermissionError, json.JSONDecodeError):
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.01)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("server", type=Path)
@@ -218,7 +234,7 @@ def main() -> int:
                     print(completed.stderr, end="", file=sys.stderr)
                 if completed.returncode:
                     if args.early_data_loss:
-                        print(f"early-data fault evidence: {early_stats.read_text()}", file=sys.stderr)
+                        print(f"early-data fault evidence: {read_json_snapshot(early_stats)}", file=sys.stderr)
                         proxy_stdout, proxy_stderr = stop_process(proxy)
                         print(f"proxy stdout:\n{proxy_stdout}\nproxy stderr:\n{proxy_stderr}", file=sys.stderr)
                     if server.poll() is None:
@@ -239,7 +255,7 @@ def main() -> int:
                     print("PMTU blackhole proxy did not drop an oversized probe", file=sys.stderr)
                     return 1
                 if args.early_data_loss:
-                    observed = json.loads(early_stats.read_text(encoding="utf-8"))
+                    observed = read_json_snapshot(early_stats)
                     print(f"early-data fault evidence: {observed}")
                     assert observed["retries_delayed"] > 0, observed
                     assert observed["early_before_retry"] > 0, observed

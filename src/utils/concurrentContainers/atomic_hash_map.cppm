@@ -6,7 +6,8 @@ namespace cnetmod::concurrent_containers {
 
 /// Fixed-capacity, open-addressed map. Nodes are immutable and published with
 /// atomic shared_ptr CAS, so readers never lock and erased keys remain safe
-/// tombstones until the map is destroyed.
+/// tombstones until reused or the map is destroyed. A tombstone retains its
+/// key only; the erased value is released after prior reader snapshots retire.
 export template <class Key, class Value, class Hash = std::hash<Key>, class Equal = std::equal_to<Key>>
 class atomic_hash_map
 {
@@ -46,8 +47,7 @@ private:
     struct entry
     {
         Key key;
-        Value value;
-        bool erased{};
+        std::optional<Value> value;
     };
 
     struct alignas(64) slot

@@ -240,6 +240,11 @@ export struct quic_config
     // Kept opt-in until an application has chosen a suitable ceiling for its
     // network. RFC 9000's 1200-byte baseline remains the safe default.
     bool enable_path_mtu_discovery{false};
+    /// Explicit Linux io_uring UDP segmentation-offload attempt. Each already
+    /// sealed packet retains its PN, PMTU, AEAD, congestion and recovery state.
+    /// Default off; application path sockets and other backends retain their
+    /// ordinary datagram path. Native UDP option changes must be serialized.
+    bool enable_udp_segmentation_offload{false};
     /// Largest probe target used by the built-in PLPMTUD state machine. This
     /// is deliberately conservative for Internet paths; applications with a
     /// controlled jumbo-frame network can raise it, but it is always capped

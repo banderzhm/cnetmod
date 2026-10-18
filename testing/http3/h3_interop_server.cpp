@@ -8,9 +8,50 @@ import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
+import cnetmod.coro.spawn;
+import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.session;
+
+// This fixture samples from an internal timer: querying H3 periodically
+// would itself trigger ingress cleanup and conceal a missing timer deadline.
+auto sample_cold_cleanup(cnetmod::io_context& context,
+    cnetmod::http::v3::http3_server& server, std::string report)
+    -> cnetmod::task<void>
+{
+    std::string snapshots;
+    // A confirmed connection can drain for three initial PTOs (~3s).
+    // Sample reset retention after that legal silence window; the final
+    // snapshot remains 35s after arming, with no inbound probe traffic.
+    for (const auto delay : {std::chrono::seconds{4}, std::chrono::seconds{31}})
+    {
+        (void)co_await cnetmod::async_timer_wait(context, delay);
+        const auto stats = server.statistics();
+        snapshots += std::format("{} {} {} {} {} {}\n",
+            stats.active_connections, stats.retained_reset_routes,
+            stats.pending_initial_routes, stats.pending_connection_timers,
+            stats.active_connection_inboxes, stats.retired_dispatch_routes);
+        (void)co_await cnetmod::async_file_write_all(context, report, snapshots);
+    }
+}
+
+// Exercise stop/start while the first generation still has a sleeping timer.
+// The test waits on this file before sending its first datagram.
+auto restart_listener(cnetmod::io_context& context,
+    cnetmod::http::v3::http3_server& server, std::string report)
+    -> cnetmod::task<void>
+{
+    (void)co_await cnetmod::async_timer_wait(context, std::chrono::milliseconds{20});
+    co_await server.stop();
+    const auto started = server.start();
+    const auto stats = server.statistics();
+    (void)co_await cnetmod::async_file_write_all(context, report + ".stats",
+        std::format("{} {} {}\n", stats.active_connections,
+            stats.active_connection_inboxes, stats.inbox_queued_datagrams));
+    (void)co_await cnetmod::async_file_write_all(context, report,
+        started ? "restarted\n" : "restart failed\n");
+}
 
 auto main(int argc, char** argv) -> int
 {
@@ -18,6 +59,10 @@ auto main(int argc, char** argv) -> int
     unsigned workers = 1;
     bool webtransport_echo{};
     bool lifecycle_test{};
+    bool outbound_pto_test{};
+    std::string cold_cleanup_report;
+    std::string restart_report;
+    std::string active_restart_report;
     std::string certificate = "cert.pem";
     std::string private_key = "key.pem";
     for (int index = 1; index < argc; ++index)
@@ -41,6 +86,22 @@ auto main(int argc, char** argv) -> int
         else if (std::string_view{argv[index]} == "--lifecycle-test")
         {
             lifecycle_test = true;
+        }
+        else if (std::string_view{argv[index]} == "--outbound-pto-test")
+        {
+            outbound_pto_test = true;
+        }
+        else if (std::string_view{argv[index]} == "--cold-cleanup-report" && index + 1 < argc)
+        {
+            cold_cleanup_report = argv[++index];
+        }
+        else if (std::string_view{argv[index]} == "--restart-report" && index + 1 < argc)
+        {
+            restart_report = argv[++index];
+        }
+        else if (std::string_view{argv[index]} == "--active-restart-report" && index + 1 < argc)
+        {
+            active_restart_report = argv[++index];
         }
         else if (std::string_view{argv[index]} == "--webtransport")
         {
@@ -78,9 +139,20 @@ auto main(int argc, char** argv) -> int
     }
 
     auto server_observer = std::make_shared<cnetmod::http::v3::http3_server*>(nullptr);
-    auto handler = [server_observer](cnetmod::http::v3::http3_request& request,
+    auto sampling_context = std::make_shared<cnetmod::io_context*>(nullptr);
+    auto sampling_started = std::make_shared<std::atomic<bool>>();
+    auto handler = [server_observer, sampling_context, sampling_started, cold_cleanup_report](cnetmod::http::v3::http3_request& request,
                        cnetmod::http::v3::http3_response& response) -> std::error_code
     {
+        if (request.path == "/cold-cleanup-start" && !cold_cleanup_report.empty())
+        {
+            if (!sampling_started->exchange(true))
+                cnetmod::spawn(**sampling_context, sample_cold_cleanup(
+                    **sampling_context, **server_observer, cold_cleanup_report));
+            response.status = 200;
+            response.body = "ok\n";
+            return {};
+        }
         if (request.path == "/active-connections")
         {
             response.status = 200;
@@ -161,10 +233,34 @@ auto main(int argc, char** argv) -> int
         co_return co_await session.close(7U, "echo complete");
     };
     cnetmod::http::v3::async_server_request_handler async_handler =
-        [handler](cnetmod::http::v3::http3_request& request,
+        [handler, outbound_pto_test, server_observer, sampling_context, active_restart_report](
+            cnetmod::http::v3::http3_request& request,
             cnetmod::http::v3::http3_response& response,
-            cnetmod::cancel_token&) -> cnetmod::task<std::expected<void, std::error_code>>
+            cnetmod::cancel_token& request_token) -> cnetmod::task<std::expected<void, std::error_code>>
     {
+        if (outbound_pto_test && request.path == "/restart-inflight" && !active_restart_report.empty())
+        {
+            cnetmod::spawn(**sampling_context, restart_listener(
+                **sampling_context, **server_observer, active_restart_report));
+            const auto waited = co_await cnetmod::async_timer_wait(*cnetmod::io_context::current(),
+                std::chrono::seconds{10}, request_token);
+            co_return waited ? std::expected<void, std::error_code>{}
+                : std::unexpected(waited.error());
+        }
+        if (outbound_pto_test && (request.path == "/delayed-pto" ||
+            request.path == "/delayed-pto-full-frame"))
+        {
+            // Leave the listener with only its idle timer before the response
+            // creates fresh recovery state from an asynchronous producer.
+            (void)co_await cnetmod::async_timer_wait(*cnetmod::io_context::current(),
+                std::chrono::milliseconds{1200});
+            response.status = 200;
+            // An empty header map and this body produce one 1166-byte H3
+            // write: a 1170-byte STREAM frame in a 1199-byte QUIC datagram.
+            response.body = request.path == "/delayed-pto-full-frame"
+                ? std::string(1158U, 'x') : "delayed pto response\n";
+            co_return {};
+        }
         if (const auto error = handler(request, response); error)
             co_return std::unexpected(error);
         co_return {};
@@ -173,19 +269,22 @@ auto main(int argc, char** argv) -> int
     if (workers == 1U)
     {
         auto context = cnetmod::make_io_context();
-        auto server = webtransport_echo
+        auto server = webtransport_echo || outbound_pto_test
             ? cnetmod::http::v3::make_http3_server(*context, tls,
                   cnetmod::endpoint{*address, port},
                   cnetmod::http::v3::http3_server_handlers{async_handler, webtransport_handler})
             : cnetmod::http::v3::make_http3_server(*context, tls,
                   cnetmod::endpoint{*address, port}, handler);
         *server_observer = server.get();
+        *sampling_context = context.get();
         if (lifecycle_test)
         {
             (void)server->set_qpack_settings(65536U, 100U);
             (void)server->set_request_body_limits({.max_bytes = 1024U});
             (void)server->set_idle_timeout(std::chrono::milliseconds{500});
         }
+        if (outbound_pto_test)
+            (void)server->set_idle_timeout(std::chrono::milliseconds{3000});
         if (webtransport_echo)
             (void)server->set_max_datagram_frame_size(1200U);
         if (auto result = server->start(); !result)
@@ -194,17 +293,28 @@ auto main(int argc, char** argv) -> int
             return 1;
         }
         logger::info{"HTTP/3 interop listener started on UDP {} with 1 worker", port};
+        if (!restart_report.empty())
+            cnetmod::spawn(*context, restart_listener(*context, *server, restart_report));
         context->run();
         return 0;
     }
 
     cnetmod::server_context context{workers, workers};
-    auto server = webtransport_echo
+    auto server = webtransport_echo || outbound_pto_test
         ? cnetmod::http::v3::make_http3_server(context, tls,
               cnetmod::endpoint{*address, port}, cnetmod::http::v3::http3_server_handlers{std::move(async_handler), std::move(webtransport_handler)})
         : cnetmod::http::v3::make_http3_server(context, tls,
               cnetmod::endpoint{*address, port}, std::move(handler));
     *server_observer = server.get();
+    *sampling_context = std::addressof(context.accept_io());
+    if (lifecycle_test)
+    {
+        (void)server->set_qpack_settings(65536U, 100U);
+        (void)server->set_request_body_limits({.max_bytes = 1024U});
+        (void)server->set_idle_timeout(std::chrono::milliseconds{500});
+    }
+    if (outbound_pto_test)
+        (void)server->set_idle_timeout(std::chrono::milliseconds{3000});
     if (webtransport_echo)
         (void)server->set_max_datagram_frame_size(1200U);
     if (auto result = server->start(); !result)
@@ -214,6 +324,8 @@ auto main(int argc, char** argv) -> int
     }
     logger::info{"HTTP/3 interop listener started on UDP {} with {} workers", port,
         workers};
+    if (!restart_report.empty())
+        cnetmod::spawn(context.accept_io(), restart_listener(context.accept_io(), *server, restart_report));
     context.run();
     return 0;
 }

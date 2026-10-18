@@ -10,6 +10,7 @@ module;
     #include <exec/static_thread_pool.hpp>
     #include <fcntl.h>
     #include <liburing.h>
+    #include <linux/udp.h>
     #include <netinet/in.h>
     #include <poll.h>
     #include <sys/socket.h>
@@ -61,25 +62,74 @@ struct uring_suspend
 // io_uring Cancel Version Suspend Awaiter
 // =============================================================================
 
-/// cancel_fn_: Submit IORING_OP_ASYNC_CANCEL to cancel operation
-static void uring_cancel_fn(cancel_token& token) noexcept
-{
-    auto* uring = static_cast<io_uring_context*>(token.ctx_);
-    auto* sqe = uring->get_sqe();
-    if (sqe)
-    {
-        ::io_uring_prep_cancel(sqe, token.overlapped_, 0);
-        ::io_uring_sqe_set_data(sqe, nullptr); // Cancel itself needs no callback
-        (void)uring->submit();
-    }
-}
-
 /// io_uring suspend awaiter with cancel support
 struct uring_cancel_suspend
 {
     uring_overlapped& ov;
     cancel_token& token;
     io_uring_context* ctx;
+    post_node cancellation_post{};
+    uring_cancel_request cancellation{};
+    bool original_completed = false;
+    bool cancellation_retired = false;
+
+    static void notify_cancel(void* operation) noexcept
+    {
+        auto& waiter = *static_cast<uring_cancel_suspend*>(operation);
+        // This callback runs under the token latch: never resume or reenter the
+        // token here. enqueue_cancel only prepares/submits SQEs; their completion
+        // callbacks run on a later reactor tick. A foreign thread only posts.
+        if (waiter.ctx->running_in_this_thread())
+            waiter.ctx->enqueue_cancel(waiter.cancellation);
+        else
+            waiter.ctx->post_node_raw(&waiter.cancellation_post);
+    }
+
+    void resume_completed() noexcept
+    {
+        ov.completion = nullptr;
+        ov.completion_context = nullptr;
+        ov.coroutine.resume();
+    }
+
+    void resume_cancelled() noexcept
+    {
+        token.finish_callback(this);
+        resume_completed();
+    }
+
+    static void original_done(uring_overlapped& operation, int32_t result,
+        std::uint32_t) noexcept
+    {
+        auto& waiter = *static_cast<uring_cancel_suspend*>(operation.completion_context);
+        operation.result = result;
+        waiter.original_completed = true;
+        if (waiter.token.complete_callback(&waiter))
+            waiter.resume_completed();
+        else if (waiter.cancellation_retired)
+            waiter.resume_cancelled();
+    }
+
+    static void cancel_done(uring_overlapped& operation, int32_t,
+        std::uint32_t) noexcept
+    {
+        auto& waiter = *static_cast<uring_cancel_suspend*>(operation.completion_context);
+        waiter.cancellation_retired = true;
+        if (waiter.original_completed)
+            waiter.resume_cancelled();
+    }
+
+    static void dispatch_cancel(void* operation) noexcept
+    {
+        auto& waiter = *static_cast<uring_cancel_suspend*>(operation);
+        if (waiter.original_completed)
+        {
+            waiter.cancellation_retired = true;
+            waiter.resume_cancelled();
+            return;
+        }
+        waiter.ctx->enqueue_cancel(waiter.cancellation);
+    }
 
     auto await_ready() const noexcept -> bool
     {
@@ -89,12 +139,20 @@ struct uring_cancel_suspend
     void await_suspend(std::coroutine_handle<> h) noexcept
     {
         ov.coroutine = h;
-        token.ctx_ = ctx;
-        token.overlapped_ = &ov;
-        token.cancel_fn_ = &uring_cancel_fn;
-        token.pending_.store(true, std::memory_order_release);
-        if (token.is_cancelled())
-            uring_cancel_fn(token);
+        ov.completion = &original_done;
+        ov.completion_context = this;
+        cancellation_post.callback = &dispatch_cancel;
+        cancellation_post.callback_arg = this;
+        cancellation.target = &ov;
+        cancellation.operation.completion = &cancel_done;
+        cancellation.operation.completion_context = this;
+        if (!token.register_callback(this, &notify_cancel))
+        {
+            // The original SQE is already prepared. Even pre-registration
+            // cancellation must await its CQE before releasing borrowed buffers.
+            token.pending_.store(true, std::memory_order_release);
+            dispatch_cancel(this);
+        }
     }
 
     void await_resume() noexcept
@@ -1565,8 +1623,7 @@ auto async_sendto(io_context& ctx, socket& sock,
         if (ov.result >= 0)
             co_return static_cast<std::size_t>(ov.result);
         const auto error = make_error_code(from_native_error(-ov.result));
-        if (error != std::make_error_code(std::errc::operation_would_block) &&
-            error != std::make_error_code(std::errc::resource_unavailable_try_again))
+        if (error != make_error_code(errc::operation_would_block))
             co_return std::unexpected(error);
         // io_uring SENDMSG can complete EAGAIN on a non-blocking UDP socket.
         // Park on POLLOUT before re-submitting to avoid a CQE-driven busy loop.
@@ -1612,21 +1669,164 @@ auto async_sendto(io_context& ctx, socket& sock,
         if (auto r = uring.flush(); !r)
             co_return std::unexpected(r.error());
         co_await uring_cancel_suspend{ov, token, &uring};
-        if (token.is_cancelled())
-            co_return std::unexpected(make_error_code(errc::operation_aborted));
+        // Cancellation cannot undo an accepted datagram. Preserve success
+        // when its completion won the race with the cancellation request.
         if (ov.result >= 0)
             co_return static_cast<std::size_t>(ov.result);
+        if (token.is_cancelled())
+            co_return std::unexpected(make_error_code(errc::operation_aborted));
         const auto error = make_error_code(from_native_error(-ov.result));
-        if (error != std::make_error_code(std::errc::operation_would_block) &&
-            error != std::make_error_code(std::errc::resource_unavailable_try_again))
+        if (error != make_error_code(errc::operation_would_block))
             co_return std::unexpected(error);
-        auto writable = co_await async_wait_writable(ctx, sock);
+        auto writable = co_await async_wait_writable(ctx, sock, token);
         if (!writable)
             co_return std::unexpected(writable.error());
     }
 }
 
 namespace {
+
+// No coroutine suspension or kernel-owned pointers escape this helper. Keep
+// its bounded syscall scratch on the ordinary stack rather than in each
+// async_sendto_batch coroutine frame.
+[[nodiscard]] auto sendto_batch_now(socket& sock,
+    std::span<const udp_send_datagram> datagrams)
+    -> std::expected<std::size_t, std::error_code>
+{
+    constexpr std::size_t batch_capacity = 16U;
+    const auto datagram_count = std::min(datagrams.size(), batch_capacity);
+    std::array<::iovec, batch_capacity> iovecs{};
+    std::array<::sockaddr_storage, batch_capacity> peers{};
+    std::array<::mmsghdr, batch_capacity> messages{};
+    for (std::size_t index{}; index < datagram_count; ++index)
+    {
+        iovecs[index] = {const_cast<void*>(datagrams[index].bytes.data),
+            datagrams[index].bytes.size};
+        messages[index].msg_hdr.msg_name = &peers[index];
+        messages[index].msg_hdr.msg_namelen = fill_sockaddr(
+            datagrams[index].peer, peers[index]);
+        messages[index].msg_hdr.msg_iov = &iovecs[index];
+        messages[index].msg_hdr.msg_iovlen = 1;
+    }
+
+    const int sent = ::sendmmsg(static_cast<int>(sock.native_handle()),
+        messages.data(), static_cast<unsigned int>(datagram_count),
+        MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (sent < 0)
+        return std::unexpected(make_error_code(from_native_error(errno)));
+    return static_cast<std::size_t>(sent);
+}
+
+// Explicit offload path only. All scratch is synchronous syscall storage;
+// no cmsg/iovec pointer is retained by io_uring or a suspended coroutine.
+[[nodiscard]] auto sendto_segmented_batch_now(socket& sock,
+    std::span<const udp_send_datagram> datagrams)
+    -> std::expected<std::size_t, std::error_code>
+{
+#ifndef UDP_SEGMENT
+    return sendto_batch_now(sock, datagrams);
+#else
+    constexpr std::size_t capacity = 16U;
+    constexpr std::size_t maximum_group_bytes = 65507U;
+    const auto count = std::min(datagrams.size(), capacity);
+    if (count < 2U)
+        return sendto_batch_now(sock, datagrams);
+    struct alignas(::cmsghdr) control_buffer
+    {
+        std::array<std::byte, CMSG_SPACE(sizeof(std::uint16_t))> bytes{};
+    };
+    std::array<::iovec, capacity> iovecs{};
+    std::array<::sockaddr_storage, capacity> peers{};
+    std::array<::socklen_t, capacity> peer_lengths{};
+    std::array<::mmsghdr, capacity> messages{};
+    std::array<control_buffer, capacity> controls{};
+    std::array<std::size_t, capacity> original_prefix{};
+    for (std::size_t index{}; index < count; ++index)
+    {
+        iovecs[index] = {const_cast<void*>(datagrams[index].bytes.data),
+            datagrams[index].bytes.size};
+        peer_lengths[index] = fill_sockaddr(datagrams[index].peer, peers[index]);
+    }
+    std::size_t group_count{};
+    bool grouped{};
+    for (std::size_t start{}; start < count;)
+    {
+        const auto stride = datagrams[start].bytes.size;
+        auto end = start + 1U;
+        auto total = stride;
+        if (stride != 0U && stride <= maximum_group_bytes)
+        {
+            while (end < count)
+            {
+                const auto next = datagrams[end].bytes.size;
+                // A short last segment is valid; an interior short/empty
+                // segment cannot preserve the caller's datagram boundaries.
+                if (next == 0U || next > stride ||
+                    next > maximum_group_bytes - total ||
+                    peer_lengths[end] != peer_lengths[start] ||
+                    std::memcmp(&peers[end], &peers[start], peer_lengths[start]) != 0)
+                    break;
+                total += next;
+                ++end;
+                if (next != stride)
+                    break;
+            }
+        }
+        auto& message = messages[group_count].msg_hdr;
+        message.msg_name = &peers[start];
+        message.msg_namelen = peer_lengths[start];
+        message.msg_iov = &iovecs[start];
+        message.msg_iovlen = end - start;
+        if (end - start > 1U)
+        {
+            grouped = true;
+            message.msg_control = controls[group_count].bytes.data();
+            message.msg_controllen = controls[group_count].bytes.size();
+            auto* control = CMSG_FIRSTHDR(&message);
+            control->cmsg_level = IPPROTO_UDP;
+            control->cmsg_type = UDP_SEGMENT;
+            control->cmsg_len = CMSG_LEN(sizeof(std::uint16_t));
+            const auto segment_size = static_cast<std::uint16_t>(stride);
+            std::memcpy(CMSG_DATA(control), &segment_size, sizeof(segment_size));
+        }
+        original_prefix[group_count++] = end;
+        start = end;
+    }
+    if (!grouped)
+        return sendto_batch_now(sock, datagrams);
+
+    // Explicit opt-in still must not override an application's native socket
+    // contract. These read-only checks intentionally precede each grouped
+    // attempt; lifetime-safe option-state caching is not part of this candidate.
+    const auto fd = static_cast<int>(sock.native_handle());
+    int cork{}, native_segment{};
+    ::socklen_t option_size = sizeof(cork);
+    if (::getsockopt(fd, IPPROTO_UDP, UDP_CORK, &cork, &option_size) != 0 || cork != 0)
+        return sendto_batch_now(sock, datagrams);
+    option_size = sizeof(native_segment);
+    if (::getsockopt(fd, IPPROTO_UDP, UDP_SEGMENT, &native_segment, &option_size) != 0 ||
+        native_segment != 0)
+        return sendto_batch_now(sock, datagrams);
+
+    const int sent = ::sendmmsg(fd, messages.data(),
+        static_cast<unsigned int>(group_count), MSG_DONTWAIT | MSG_NOSIGNAL);
+    if (sent > 0)
+        return original_prefix[static_cast<std::size_t>(sent) - 1U];
+    if (sent == 0)
+        return std::size_t{};
+    const auto failure = errno;
+    // No new group was accepted on a negative UDP send. Make one ordinary
+    // attempt, preserving native checksum behavior and reporting its result.
+    // A positive prefix never enters this fallback and can never be resent.
+    // A grouped submission can exceed an offload/route size constraint even
+    // when each original UDP is valid. A real per-datagram PMTU error remains
+    // observable from this one ordinary attempt; never retry a positive prefix.
+    if (failure == ENOPROTOOPT || failure == EOPNOTSUPP || failure == EINVAL ||
+        failure == EIO || failure == EMSGSIZE)
+        return sendto_batch_now(sock, datagrams);
+    return std::unexpected(make_error_code(from_native_error(failure)));
+#endif
+}
 
 auto drain_recvfrom_batch_now(socket& sock,
     std::vector<udp_received_datagram>& result,
@@ -1715,56 +1915,23 @@ auto async_sendto_batch(io_context& ctx, socket& sock,
     // and enter io_uring only when the kernel reports actual backpressure;
     // waiting for a single probe send on every hot-path batch adds one event
     // loop turn even though sendmmsg could accept the whole burst immediately.
-    constexpr std::size_t stack_batch_capacity = 16U;
-    const auto initial_count = std::min(datagrams.size(), stack_batch_capacity);
-    std::array<::iovec, stack_batch_capacity> initial_iovecs{};
-    std::array<::sockaddr_storage, stack_batch_capacity> initial_peers{};
-    std::array<::mmsghdr, stack_batch_capacity> initial_messages{};
-    for (std::size_t i = 0; i < initial_count; ++i)
-    {
-        initial_iovecs[i] = {const_cast<void*>(datagrams[i].bytes.data),
-            datagrams[i].bytes.size};
-        initial_messages[i].msg_hdr.msg_name = &initial_peers[i];
-        initial_messages[i].msg_hdr.msg_namelen = fill_sockaddr(
-            datagrams[i].peer, initial_peers[i]);
-        initial_messages[i].msg_hdr.msg_iov = &initial_iovecs[i];
-        initial_messages[i].msg_hdr.msg_iovlen = 1;
-    }
-    const int initially_sent = ::sendmmsg(static_cast<int>(sock.native_handle()),
-        initial_messages.data(), static_cast<unsigned int>(initial_count),
-        MSG_DONTWAIT | MSG_NOSIGNAL);
-    if (initially_sent > 0)
-        co_return static_cast<std::size_t>(initially_sent);
-    if (initially_sent < 0 && errno != EAGAIN && errno != EWOULDBLOCK)
-        co_return std::unexpected(make_error_code(from_native_error(errno)));
+    const auto batch = datagrams.first(std::min(datagrams.size(), std::size_t{16}));
+    const auto initially_sent = sendto_batch_now(sock, batch);
+    if (initially_sent && *initially_sent > 0U)
+        co_return *initially_sent;
+    if (!initially_sent && initially_sent.error() != make_error_code(errc::operation_would_block))
+        co_return std::unexpected(initially_sent.error());
 
-    auto first = co_await async_sendto(ctx, sock, datagrams.front().bytes, datagrams.front().peer);
+    auto first = co_await async_sendto(ctx, sock, batch.front().bytes, batch.front().peer);
     if (!first)
         co_return std::unexpected(first.error());
-    if (datagrams.size() == 1U)
+    if (batch.size() == 1U)
         co_return std::size_t{1};
 
-    const auto remaining = datagrams.subspan(1);
-    std::vector<::iovec> iovecs(remaining.size());
-    std::vector<::sockaddr_storage> peers(remaining.size());
-    std::vector<::mmsghdr> messages(remaining.size());
-    for (std::size_t i = 0; i < remaining.size(); ++i)
-    {
-        iovecs[i] = {const_cast<void*>(remaining[i].bytes.data), remaining[i].bytes.size};
-        messages[i].msg_hdr.msg_name = &peers[i];
-        messages[i].msg_hdr.msg_namelen = fill_sockaddr(remaining[i].peer, peers[i]);
-        messages[i].msg_hdr.msg_iov = &iovecs[i];
-        messages[i].msg_hdr.msg_iovlen = 1;
-    }
-    const int count = ::sendmmsg(static_cast<int>(sock.native_handle()), messages.data(),
-        static_cast<unsigned int>(messages.size()), MSG_NOSIGNAL);
-    if (count < 0)
-    {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            co_return std::size_t{1};
-        co_return std::unexpected(make_error_code(from_native_error(errno)));
-    }
-    co_return 1U + static_cast<std::size_t>(count);
+    // A failure in the non-blocking suffix cannot erase the accepted first
+    // datagram. The caller observes that error when retrying the suffix.
+    const auto remaining = sendto_batch_now(sock, batch.subspan(1));
+    co_return remaining ? 1U + *remaining : std::size_t{1};
 }
 
 auto async_recvfrom_batch(io_context& ctx, socket& sock,
@@ -1804,34 +1971,50 @@ auto async_sendto_batch(io_context& ctx, socket& sock,
         co_return std::unexpected(make_error_code(errc::operation_aborted));
     if (datagrams.empty())
         co_return std::size_t{};
-    auto first = co_await async_sendto(ctx, sock, datagrams.front().bytes,
-        datagrams.front().peer, token);
+
+    // Cancellation-aware callers retain the same immediate sendmmsg path as
+    // ordinary batches. No kernel operation or borrowed buffer outlives this
+    // synchronous attempt; accepted packets remain a successful prefix even
+    // if cancellation was requested while the syscall ran.
+    const auto batch = datagrams.first(std::min(datagrams.size(), std::size_t{16}));
+    const auto initially_sent = sendto_batch_now(sock, batch);
+    if (initially_sent && *initially_sent > 0U)
+        co_return *initially_sent;
+    if (!initially_sent && initially_sent.error() != make_error_code(errc::operation_would_block))
+        co_return std::unexpected(initially_sent.error());
+
+    auto first = co_await async_sendto(ctx, sock, batch.front().bytes,
+        batch.front().peer, token);
     if (!first)
         co_return std::unexpected(first.error());
-    if (datagrams.size() == 1U || token.is_cancelled())
+    if (batch.size() == 1U || token.is_cancelled())
         co_return std::size_t{1};
 
-    const auto remaining = datagrams.subspan(1);
-    std::vector<::iovec> iovecs(remaining.size());
-    std::vector<::sockaddr_storage> peers(remaining.size());
-    std::vector<::mmsghdr> messages(remaining.size());
-    for (std::size_t i = 0; i < remaining.size(); ++i)
-    {
-        iovecs[i] = {const_cast<void*>(remaining[i].bytes.data), remaining[i].bytes.size};
-        messages[i].msg_hdr.msg_name = &peers[i];
-        messages[i].msg_hdr.msg_namelen = fill_sockaddr(remaining[i].peer, peers[i]);
-        messages[i].msg_hdr.msg_iov = &iovecs[i];
-        messages[i].msg_hdr.msg_iovlen = 1;
-    }
-    const int count = ::sendmmsg(static_cast<int>(sock.native_handle()), messages.data(),
-        static_cast<unsigned int>(messages.size()), MSG_NOSIGNAL);
-    if (count < 0)
-    {
-        if (errno == EAGAIN || errno == EWOULDBLOCK)
-            co_return std::size_t{1};
-        co_return std::unexpected(make_error_code(from_native_error(errno)));
-    }
-    co_return 1U + static_cast<std::size_t>(count);
+    // Do not replace progress with a suffix error: the caller retries only
+    // the unaccepted suffix and observes its error on that next submission.
+    const auto remaining = sendto_batch_now(sock, batch.subspan(1));
+    co_return remaining ? 1U + *remaining : std::size_t{1};
+}
+
+auto async_sendto_segmented_batch(io_context& ctx, socket& sock,
+    std::span<const udp_send_datagram> datagrams, cancel_token& token)
+    -> task<std::expected<std::size_t, std::error_code>>
+{
+    if (token.is_cancelled())
+        co_return std::unexpected(make_error_code(errc::operation_aborted));
+    if (datagrams.empty())
+        co_return std::size_t{};
+    const auto batch = datagrams.first(std::min(datagrams.size(), std::size_t{16}));
+    const auto sent = sendto_segmented_batch_now(sock, batch);
+    // An accepted original prefix remains progress even if cancel raced with
+    // the synchronous syscall. Only the unaccepted suffix is retried upstream.
+    if (sent && *sent != 0U)
+        co_return *sent;
+    if (!sent && sent.error() != make_error_code(errc::operation_would_block))
+        co_return std::unexpected(sent.error());
+    // Retain original datagrams across existing async completion/cancellation;
+    // never send their logical GSO concatenation as one ordinary UDP packet.
+    co_return co_await async_sendto_batch(ctx, sock, batch, token);
 }
 
 #endif // CNETMOD_HAS_IO_URING

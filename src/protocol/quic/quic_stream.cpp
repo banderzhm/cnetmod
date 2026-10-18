@@ -54,19 +54,25 @@ auto quic_stream::init() -> void
 auto quic_stream::send(std::span<const std::byte> data)
     -> task<std::expected<void, std::error_code>>
 {
+    co_return apply_send_state(data);
+}
+
+auto quic_stream::apply_send_state(std::span<const std::byte> data)
+    -> std::expected<void, std::error_code>
+{
     auto& impl = *impl_;
 
     // Check state
     if (impl.state_ == stream_state::closed ||
         impl.state_ == stream_state::half_closed_local)
     {
-        co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
     }
 
     // Check flow control limit
     if (data.size() > impl.max_send_data_ - impl.total_sent_)
     {
-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
+        return std::unexpected(make_error_code(quic_errc::flow_control_error));
     }
     else
     {
@@ -83,17 +89,23 @@ auto quic_stream::send(std::span<const std::byte> data)
         }
     }
 
-    co_return {};
+    return {};
 }
 
 auto quic_stream::close_local() -> task<void>
 {
+    apply_close_local_state();
+    co_return;
+}
+
+auto quic_stream::apply_close_local_state() -> void
+{
     if (impl_->state_ == stream_state::closed)
-        co_return;
+        return;
     impl_->state_ = impl_->state_ == stream_state::half_closed_remote
         ? stream_state::closed
         : stream_state::half_closed_local;
-    co_return;
+    return;
 }
 
 auto quic_stream::close_remote() -> void

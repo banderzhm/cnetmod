@@ -92,6 +92,10 @@ if(CNETMOD_ENABLE_SSL)
     list(APPEND TEST_SOURCES test_security_token.cpp)
 endif()
 
+if(WIN32)
+    list(APPEND TEST_SOURCES test_udp_sendto_on_cancel.cpp)
+endif()
+
 # Filter out QUIC/HTTP3 tests if QUIC not available
 if(NOT CNETMOD_HAS_QUIC)
     list(FILTER TEST_SOURCES EXCLUDE REGEX "^(test_quic|test_http3)")
@@ -664,6 +668,9 @@ endif()
 if(TARGET test_dns_cancellation)
     target_link_options(test_dns_cancellation PRIVATE "LINKER:--wrap=getaddrinfo")
     set_tests_properties(test_dns_cancellation PROPERTIES TIMEOUT 15)
+endif()
+if(TARGET test_udp_sendto_on_cancel)
+    set_tests_properties(test_udp_sendto_on_cancel PROPERTIES TIMEOUT 60)
 endif()
 
 # HTTP/3 targets and the only HTTP/3 interoperability CTest are owned by

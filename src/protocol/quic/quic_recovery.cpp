@@ -53,6 +53,73 @@ auto quic_recovery_controller::space_index(pn_space space) noexcept -> std::size
     return static_cast<std::size_t>(space);
 }
 
+quic_recovery_controller::packet_node_cache::packet_node_cache(const packet_node_cache&) noexcept
+{
+}
+
+auto quic_recovery_controller::packet_node_cache::operator=(const packet_node_cache& other) noexcept
+    -> packet_node_cache&
+{
+    if (this != std::addressof(other))
+        clear();
+    return *this;
+}
+
+quic_recovery_controller::packet_node_cache::packet_node_cache(packet_node_cache&& other) noexcept
+    : size(std::exchange(other.size, 0U))
+{
+    for (std::size_t index{}; index < size; ++index)
+        nodes[index] = std::move(other.nodes[index]);
+}
+
+auto quic_recovery_controller::packet_node_cache::operator=(packet_node_cache&& other) noexcept
+    -> packet_node_cache&
+{
+    if (this != std::addressof(other))
+    {
+        clear();
+        size = std::exchange(other.size, 0U);
+        for (std::size_t index{}; index < size; ++index)
+            nodes[index] = std::move(other.nodes[index]);
+    }
+    return *this;
+}
+
+auto quic_recovery_controller::packet_node_cache::clear() noexcept -> void
+{
+    while (size != 0U)
+        nodes[--size] = {};
+}
+
+auto quic_recovery_controller::insert_sent_packet(pn_space space,
+    std::uint64_t packet_number, sent_packet packet) -> void
+{
+    auto& sent = sent_packets_[space_index(space)];
+    auto& cache = cached_nodes_[space_index(space)];
+    if (cache.size == 0U)
+    {
+        sent.emplace(packet_number, std::move(packet));
+        return;
+    }
+    auto node = std::move(cache.nodes[--cache.size]);
+    node.key() = packet_number;
+    node.mapped() = std::move(packet);
+    sent.insert(std::move(node));
+}
+
+auto quic_recovery_controller::recycle_sent_packet(pn_space space,
+    sent_packet_map::iterator packet) noexcept -> sent_packet_map::iterator
+{
+    const auto next = std::next(packet);
+    auto node = sent_packets_[space_index(space)].extract(packet);
+    // A cached node must never retain a static response body or PTO alias.
+    node.mapped() = {};
+    auto& cache = cached_nodes_[space_index(space)];
+    if (cache.size < cache.nodes.size())
+        cache.nodes[cache.size++] = std::move(node);
+    return next;
+}
+
 void quic_recovery_controller::on_packet_sent(std::uint64_t packet_number,
     std::size_t bytes, time_point sent_at, bool recovery_tracked, pn_space space,
     retransmittable_frame_storage frames,
@@ -63,7 +130,7 @@ void quic_recovery_controller::on_packet_sent(std::uint64_t packet_number,
     if (!recovery_tracked)
         return;
     congestion_.on_packet_sent(bytes);
-    sent_packets_[space_index(space)].emplace(packet_number,
+    insert_sent_packet(space, packet_number,
         sent_packet{std::move(frames), bytes, path_mtu_probe_target,
             retransmission_alias});
     if (retransmission_alias)
@@ -108,7 +175,7 @@ auto quic_recovery_controller::on_ack_received(const ack_frame& frame,
         if (packet->second.retransmission_alias)
             --alias_count;
         congestion_.on_packet_acked(packet->second.bytes);
-        sent.erase(packet);
+        (void)recycle_sent_packet(space, packet);
     }
 
     if (!delivered_frames.empty())
@@ -129,15 +196,20 @@ auto quic_recovery_controller::on_ack_received(const ack_frame& frame,
 
     const auto lost = detector_.detect_lost_packets(received_at, space);
     std::uint64_t lost_bytes{};
+    std::uint64_t lost_probe_bytes{};
     for (const auto packet_number : lost)
     {
         const auto packet = sent.find(packet_number);
         if (packet == sent.end())
             continue;
         if (packet->second.path_mtu_probe_target)
+        {
             update.lost_path_mtu_probes.push_back(
                 *packet->second.path_mtu_probe_target);
-        lost_bytes += packet->second.bytes;
+            lost_probe_bytes += packet->second.bytes;
+        }
+        else
+            lost_bytes += packet->second.bytes;
         packet->second.frames.for_each_reverse(
             [&update](auto& frame)
             {
@@ -145,8 +217,12 @@ auto quic_recovery_controller::on_ack_received(const ack_frame& frame,
             });
         if (packet->second.retransmission_alias)
             --alias_count;
-        sent.erase(packet);
+        (void)recycle_sent_packet(space, packet);
     }
+    // RFC 9000 section 14.4: a lost PMTU probe consumes flight credit but
+    // is not a reliable congestion signal. Ordinary losses still reduce cwnd.
+    if (lost_probe_bytes != 0U)
+        congestion_.on_packets_discarded(lost_probe_bytes);
     if (lost_bytes != 0U)
         congestion_.on_congestion_event(lost_bytes);
     return update;
@@ -189,15 +265,25 @@ auto quic_recovery_controller::discard_non_retransmittable(pn_space space)
     auto& sent = sent_packets_[space_index(space)];
     std::vector<std::size_t> probes;
     std::uint64_t lost_bytes{};
+    std::uint64_t lost_probe_bytes{};
     for (const auto& [packet_number, packet] : sent)
     {
         if (packet.path_mtu_probe_target)
+        {
             probes.push_back(*packet.path_mtu_probe_target);
+            lost_probe_bytes += packet.bytes;
+        }
+        else
+            lost_bytes += packet.bytes;
         detector_.discard_inflight_packet(packet_number, space);
-        lost_bytes += packet.bytes;
     }
     sent.clear();
+    cached_nodes_[space_index(space)].clear();
     alias_counts_[space_index(space)] = 0U;
+    // RFC 9000 section 14.4: a lost PMTU probe consumes flight credit but
+    // is not a reliable congestion signal. Ordinary losses still reduce cwnd.
+    if (lost_probe_bytes != 0U)
+        congestion_.on_packets_discarded(lost_probe_bytes);
     if (lost_bytes != 0U)
         congestion_.on_congestion_event(lost_bytes);
     return probes;
@@ -220,6 +306,7 @@ auto quic_recovery_controller::take_outstanding_frames(pn_space space)
 void quic_recovery_controller::discard_packet_number_space(pn_space space) noexcept
 {
     sent_packets_[space_index(space)].clear();
+    cached_nodes_[space_index(space)].clear();
     alias_counts_[space_index(space)] = 0U;
     congestion_.on_packets_discarded(detector_.discard_packet_number_space(space));
 }
@@ -247,13 +334,18 @@ auto quic_recovery_controller::take_early_data_frames() -> std::vector<quic_send
             discarded += packet->second.bytes;
             if (packet->second.retransmission_alias)
                 --alias_counts_[space_index(pn_space::application)];
-            packet = sent.erase(packet);
+            packet = recycle_sent_packet(pn_space::application, packet);
         }
         else
             ++packet;
     }
     congestion_.on_packets_discarded(discarded);
     return result;
+}
+
+auto quic_recovery_controller::on_max_datagram_size_validated(std::uint64_t bytes) noexcept -> void
+{
+    congestion_.on_max_datagram_size_validated(bytes);
 }
 
 auto quic_recovery_controller::can_send_datagram(std::uint64_t bytes) const noexcept -> bool

@@ -23,6 +23,20 @@ if(CNETMOD_HAS_QUIC)
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
     endif()
 
+    add_executable(quic_pmtu_cc_server quic_pmtu_cc_server.cpp)
+    target_link_libraries(quic_pmtu_cc_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_pmtu_cc_server)
+    set_property(TARGET quic_pmtu_cc_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_pmtu_cc_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
+    add_executable(quic_retire_stream_server quic_retire_stream_server.cpp)
+    target_link_libraries(quic_retire_stream_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_retire_stream_server)
+    set_property(TARGET quic_retire_stream_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_retire_stream_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
     # Public http::client -> http3_server regression fixture.  This is kept
     # separate from the low-level v3 interop client so the test exercises the
     # same unified API that applications use.
@@ -50,11 +64,49 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
+    # Explicit process-local cryptography AEAD adapter; this is not stock aioquic interop.
+    add_test(NAME quic_pmtu_cc_large_response_after_loss
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_cc.py"
+            "$<TARGET_FILE:quic_pmtu_cc_server>" --large-aead-peer)
+    set_tests_properties(quic_pmtu_cc_large_response_after_loss PROPERTIES
+        LABELS "http3;quic;pmtu;recovery;test_peer_adapter" TIMEOUT 90 SKIP_RETURN_CODE 77)
     add_test(NAME http3_lifecycle
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_lifecycle.py"
             "$<TARGET_FILE:h3_interop_server>")
     set_tests_properties(http3_lifecycle PROPERTIES
         LABELS "http3;interop;lifecycle" TIMEOUT 60 SKIP_RETURN_CODE 77)
+    add_test(NAME http3_cold_listener_cleanup
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_cold_cleanup.py"
+            "$<TARGET_FILE:h3_interop_server>")
+    set_tests_properties(http3_cold_listener_cleanup PROPERTIES
+        LABELS "http3;interop;lifecycle" TIMEOUT 50 SKIP_RETURN_CODE 77)
+    foreach(outbound_workers IN ITEMS 1 2)
+        add_test(NAME http3_outbound_pto_close_restart_${outbound_workers}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_outbound_pto.py"
+                "$<TARGET_FILE:h3_interop_server>" --workers ${outbound_workers} --restart)
+        set_tests_properties(http3_outbound_pto_close_restart_${outbound_workers} PROPERTIES
+            LABELS "http3;interop;lifecycle;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    endforeach()
+    add_test(NAME quic_retire_stream_credit_wakeup
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_retire_stream.py"
+            "$<TARGET_FILE:quic_retire_stream_server>" --mode all)
+    set_tests_properties(quic_retire_stream_credit_wakeup PROPERTIES
+        LABELS "http3;quic;lifecycle;flow_control" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME quic_retire_stream_notification_lifetime
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_retire_stream.py"
+            "$<TARGET_FILE:quic_retire_stream_server>" --scenario notification-lifetime)
+    set_tests_properties(quic_retire_stream_notification_lifetime PROPERTIES
+        LABELS "http3;quic;lifecycle;memory" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME quic_private_outbound_pto
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_retire_stream.py"
+            "$<TARGET_FILE:quic_retire_stream_server>" --scenario private-pto)
+    set_tests_properties(quic_private_outbound_pto PROPERTIES
+        LABELS "http3;quic;lifecycle;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    add_test(NAME quic_handshake_confirmation
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_handshake_confirmation.py"
+            "$<TARGET_FILE:quic_retire_stream_server>")
+    set_tests_properties(quic_handshake_confirmation PROPERTIES
+        LABELS "http3;quic;lifecycle;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
     add_test(NAME h3_webtransport_aioquic_probe_unit
         COMMAND "${Python3_EXECUTABLE}" -m unittest discover
             -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_webtransport_aioquic_probe.py)
@@ -242,6 +294,8 @@ endif()
 if(CNETMOD_HAS_QUIC)
     foreach(http3_test_target IN ITEMS
             h3_interop_server
+            quic_retire_stream_server
+            quic_pmtu_cc_server
             h3_interop_client
             http3_e2e_server
             http_client_http3_e2e

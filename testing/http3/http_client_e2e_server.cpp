@@ -277,6 +277,13 @@ auto main(int argc, char** argv) -> int
             response.body = "get-ok";
             co_return {};
         }
+        if (request.path == "/buffered-shared-small")
+        {
+            response.status = 200;
+            response.headers["content-type"] = "application/octet-stream";
+            response.shared_body = std::make_shared<const std::string>(512U, 'x');
+            co_return {};
+        }
         if (request.path == "/buffered-small" || request.path == "/buffered-large")
         {
             response.status = 200;

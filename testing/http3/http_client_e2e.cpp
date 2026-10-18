@@ -121,17 +121,17 @@ auto run_small_window_semantics(cnetmod::io_context& context,
     }
     // Serial correctness checks, not a load test. Reuse the connection so
     // subsequent replies also cross connection-level credit boundaries.
-    for (unsigned index{}; index < 8U; ++index)
+    for (unsigned index{}; index < 16U; ++index)
     {
         cnetmod::http::v3::http3_request request;
         request.host = "127.0.0.1";
         request.port = port;
-        request.path = "/buffered-small";
+        request.path = index < 8U ? "/buffered-small" : "/buffered-shared-small";
         const auto response = co_await client.send_request(request);
         if (!response || response->status != 200 ||
             response->body != std::string(512U, 'x'))
         {
-            state.fail("small-window response " + std::to_string(index) +
+            state.fail("small-window response " + request.path + " " + std::to_string(index) +
                 (response ? " corrupted" : ": " + response.error().message()));
             break;
         }

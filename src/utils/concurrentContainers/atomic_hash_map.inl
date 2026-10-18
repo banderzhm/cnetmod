@@ -51,7 +51,7 @@ auto atomic_hash_map<K, V, H, E>::try_emplace_bounded(K key, V value,
         return false;
     }
 
-    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::move(value), false});
+    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::optional<V>{std::in_place, std::move(value)}});
     for (;;)
     {
         std::optional<std::size_t> first_tombstone;
@@ -64,7 +64,7 @@ auto atomic_hash_map<K, V, H, E>::try_emplace_bounded(K key, V value,
             {
                 const auto target = first_tombstone.value_or(index);
                 auto expected = load_slot(slots_[target]);
-                if (expected && !expected->erased)
+                if (expected && expected->value.has_value())
                 {
                     retry = true;
                     break;
@@ -74,12 +74,12 @@ auto atomic_hash_map<K, V, H, E>::try_emplace_bounded(K key, V value,
                 retry = true;
                 break;
             }
-            if (equal_(observed->key, candidate->key) && !observed->erased)
+            if (equal_(observed->key, candidate->key) && observed->value.has_value())
             {
                 size_.fetch_sub(1U, std::memory_order_release);
                 return false;
             }
-            if (observed->erased && !first_tombstone)
+            if (!observed->value.has_value() && !first_tombstone)
                 first_tombstone = index;
         }
 
@@ -88,7 +88,7 @@ auto atomic_hash_map<K, V, H, E>::try_emplace_bounded(K key, V value,
         if (first_tombstone)
         {
             auto expected = load_slot(slots_[*first_tombstone]);
-            if (expected && expected->erased &&
+            if (expected && !expected->value.has_value() &&
                 compare_exchange_slot(slots_[*first_tombstone], expected, candidate))
                 return true;
             continue;
@@ -101,7 +101,7 @@ auto atomic_hash_map<K, V, H, E>::try_emplace_bounded(K key, V value,
 template <class K, class V, class H, class E>
 auto atomic_hash_map<K, V, H, E>::try_insert_or_assign(K key, V value) -> bool
 {
-    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::move(value), false});
+    const auto candidate = std::make_shared<const entry>(entry{std::move(key), std::optional<V>{std::in_place, std::move(value)}});
     for (;;)
     {
         std::optional<std::size_t> first_tombstone;
@@ -120,7 +120,7 @@ auto atomic_hash_map<K, V, H, E>::try_insert_or_assign(K key, V value) -> bool
                 target = index;
                 break;
             }
-            if (observed->erased && !first_tombstone)
+            if (!observed->value.has_value() && !first_tombstone)
                 first_tombstone = index;
         }
 
@@ -130,9 +130,9 @@ auto atomic_hash_map<K, V, H, E>::try_insert_or_assign(K key, V value) -> bool
             return false;
 
         auto observed = load_slot(slots_[*target]);
-        if (observed && !observed->erased && !equal_(observed->key, candidate->key))
+        if (observed && observed->value.has_value() && !equal_(observed->key, candidate->key))
             continue;
-        const bool grows = !observed || observed->erased;
+        const bool grows = !observed || !observed->value.has_value();
         if (compare_exchange_slot(slots_[*target], observed, candidate))
         {
             if (grows)
@@ -158,8 +158,8 @@ auto atomic_hash_map<K, V, H, E>::find(const K& key) const -> std::optional<V>
         const auto item = load_slot(slots_[(slot_index(key) + step) & mask_]);
         if (!item)
             return std::nullopt;
-        if (equal_(item->key, key) && !item->erased)
-            return item->value;
+        if (equal_(item->key, key) && item->value.has_value())
+            return *item->value;
     }
     return std::nullopt;
 }
@@ -181,9 +181,9 @@ auto atomic_hash_map<K, V, H, E>::erase(const K& key) -> bool
             return false;
         if (!equal_(item->key, key))
             continue;
-        if (item->erased)
+        if (!item->value.has_value())
             return false;
-        auto tomb = std::make_shared<const entry>(entry{item->key, item->value, true});
+        auto tomb = std::make_shared<const entry>(entry{item->key, std::nullopt});
         if (compare_exchange_slot(slot, item, tomb))
         {
             size_.fetch_sub(1U, std::memory_order_relaxed);
@@ -204,11 +204,11 @@ auto atomic_hash_map<K, V, H, E>::erase_if(Predicate&& predicate) -> std::size_t
     {
         auto& slot = slots_[index];
         auto observed = load_slot(slot);
-        while (observed && !observed->erased &&
-            std::invoke(predicate, observed->key, observed->value))
+        while (observed && observed->value.has_value() &&
+            std::invoke(predicate, observed->key, *observed->value))
         {
             auto tombstone = std::make_shared<const entry>(
-                entry{observed->key, observed->value, true});
+                entry{observed->key, std::nullopt});
             if (compare_exchange_slot(slot, observed, tombstone))
             {
                 size_.fetch_sub(1U, std::memory_order_relaxed);
@@ -232,9 +232,9 @@ auto atomic_hash_map<K, V, H, E>::erase_min_by(Compare&& less) -> bool
         for (std::size_t index{}; index < capacity_; ++index)
         {
             auto observed = load_slot(slots_[index]);
-            if (!observed || observed->erased)
+            if (!observed || !observed->value.has_value())
                 continue;
-            if (!candidate || std::invoke(less, observed->key, observed->value, candidate->key, candidate->value))
+            if (!candidate || std::invoke(less, observed->key, *observed->value, candidate->key, *candidate->value))
             {
                 candidate_index = index;
                 candidate = std::move(observed);
@@ -244,7 +244,7 @@ auto atomic_hash_map<K, V, H, E>::erase_min_by(Compare&& less) -> bool
             return false;
 
         auto tombstone = std::make_shared<const entry>(
-            entry{candidate->key, candidate->value, true});
+            entry{candidate->key, std::nullopt});
         if (compare_exchange_slot(slots_[candidate_index], candidate, tombstone))
         {
             size_.fetch_sub(1U, std::memory_order_relaxed);

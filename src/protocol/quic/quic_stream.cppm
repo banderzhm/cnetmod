@@ -30,6 +30,8 @@ export enum class stream_state
 // QUIC Stream Interface
 // =============================================================================
 
+export class quic_connection;
+
 export class quic_stream
 {
 public:
@@ -128,6 +130,13 @@ public:
     [[nodiscard]] auto is_bidirectional() const noexcept -> bool;
 
 private:
+    friend class quic_connection;
+
+    /// Internal owner-only bookkeeping; public task operations remain lazy.
+    auto apply_send_state(std::span<const std::byte> data)
+        -> std::expected<void, std::error_code>;
+    auto apply_close_local_state() -> void;
+
     struct impl
     {
         stream_id id_;

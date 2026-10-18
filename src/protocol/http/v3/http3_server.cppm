@@ -44,8 +44,17 @@ export struct http3_server_statistics
     std::uint64_t rio_send_datagrams{};
     std::uint64_t rio_receive_queue_dropped_datagrams{};
     std::uint64_t rio_fallbacks{};
-    /// Live connections retained by CID routing, independent of CID count.
+    /// Connections outside draining/closed state, independent of CID count.
+    /// Draining connections retain silent CID routes until their deadline.
     std::size_t active_connections{};
+    /// Cold-state ownership snapshots; reading these takes the listener's
+    /// structural latch, without counters on the per-request path.
+    std::size_t retained_reset_routes{};
+    /// Initial-route expiration records (promoted aliases may remain here
+    /// until their original ten-second expiration).
+    std::size_t pending_initial_routes{};
+    std::size_t pending_connection_timers{};
+    std::size_t retired_dispatch_routes{};
 };
 
 /// Bounded listener-side buffering. These limits apply before a UDP datagram
@@ -113,6 +122,10 @@ public:
     auto set_path_mtu_discovery(std::uint64_t maximum_payload = 1452,
         std::chrono::milliseconds probe_interval = std::chrono::seconds{1},
         std::chrono::milliseconds initial_probe_delay = {})
+        -> std::expected<void, std::error_code>;
+    /// Explicit Linux io_uring offload attempt before start(). Defaults off;
+    /// independently sealed datagrams and their PMTU limit remain unchanged.
+    auto set_udp_segmentation_offload(bool enabled)
         -> std::expected<void, std::error_code>;
     /// Set the largest UDP payload this listener advertises and accepts.
     /// Configure this before start; the RFC 9000 minimum is 1200 bytes.

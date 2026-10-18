@@ -134,6 +134,16 @@ public:
     [[nodiscard]] auto next_timer_deadline() const
         -> std::optional<std::chrono::steady_clock::time_point>;
 
+    /// Abort pending socket sends during listener shutdown and join their
+    /// kernel completions. The caller keeps this connection alive until return.
+    /// This is terminal for sending; normal async_close does not use it.
+    [[nodiscard]] auto async_stop_io() -> task<void>;
+
+    /// Install before driving the connection. Shared listeners receive an
+    /// outbound recovery deadline snapshot without retaining their owner.
+    auto set_timer_deadline_observer(std::function<void(
+        std::optional<std::chrono::steady_clock::time_point>)> observer) -> void;
+
     // =========================================================================
     // Public API - Stream Operations
     // =========================================================================
@@ -426,6 +436,7 @@ private:
     [[nodiscard]] auto process_ack_frame(const ack_frame& frame) -> task<void>;
     auto process_ack_frame_state(const ack_frame& frame) -> encryption_level;
     [[nodiscard]] auto process_stream_frame(const stream_frame& frame) -> task<void>;
+    auto process_stream_frame_state(const stream_frame& frame) -> void;
     [[nodiscard]] auto process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>;
     [[nodiscard]] auto process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>;
     [[nodiscard]] auto process_crypto_frame(const crypto_frame& frame) -> task<void>;
@@ -457,10 +468,10 @@ private:
         connection_state state = connection_state::closed) noexcept -> void;
 
     /// Pack and send packets
-    [[nodiscard]] auto pack_and_send_packet() -> task<void>;
+    [[nodiscard]] auto pack_and_send_packet() -> task<std::expected<void, std::error_code>>;
     /// Packet-owner fast path for the common single-path case. It batches only
     /// datagrams already admitted by the congestion controller and pacer.
-    [[nodiscard]] auto pack_and_send_packets() -> task<void>;
+    [[nodiscard]] auto pack_and_send_packets() -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto send_initial_packets()
         -> task<std::expected<std::size_t, std::error_code>>;
     [[nodiscard]] auto send_handshake_packets()
@@ -471,14 +482,14 @@ private:
     [[nodiscard]] auto pack_one_rtt_packet(bool pto_probe = false,
         std::vector<std::byte> packet_storage = {},
         std::vector<std::byte>* payload_storage = nullptr)
-        -> std::vector<std::byte>;
+        -> std::expected<std::vector<std::byte>, std::error_code>;
     [[nodiscard]] auto pack_path_validation_packet(std::span<const std::byte> frame)
         -> std::vector<std::byte>;
 
     /// Timer management
     void schedule_idle_timeout();
     void handle_idle_timeout();
-    [[nodiscard]] auto handle_pto() -> task<void>;
+    [[nodiscard]] auto handle_pto() -> task<std::expected<void, std::error_code>>;
 
     [[nodiscard]] auto send_datagram(std::span<const std::byte> datagram,
         const endpoint& destination, udp::udp_socket* path_socket = nullptr)
@@ -497,11 +508,11 @@ private:
     /// has been dequeued.  It is deliberately separate from async_send(), so
     /// callers never mutate stream or flow-control state directly.
     [[nodiscard]] auto apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
-        bool fin) -> task<std::expected<void, std::error_code>>;
+        bool fin) -> std::expected<void, std::error_code>;
     [[nodiscard]] auto apply_stream_write(stream_id sid,
         const std::vector<std::byte>& prefix,
         const std::shared_ptr<const std::string>& shared_data, bool fin)
-        -> task<std::expected<void, std::error_code>>;
+        -> std::expected<void, std::error_code>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto async_send_fragments(stream_id sid,
