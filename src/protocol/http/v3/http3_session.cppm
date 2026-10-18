@@ -307,6 +307,12 @@ public:
     /// close handling.
     [[nodiscard]] auto process_peer_unidirectional_stream(stream_id id,
         byte_view bytes) -> task<std::expected<void, std::error_code>>;
+    /// Take the validated prefix length; the caller consumes exactly these bytes.
+    [[nodiscard]] auto take_peer_unidirectional_consumed_bytes(stream_id id) noexcept
+        -> std::size_t;
+    /// Critical stream FIN/RESET is an HTTP/3 application connection error.
+    auto finish_peer_unidirectional_stream(stream_id id) -> task<void>;
+
     /// Internal peer-stream classifier used by the HTTP/3 transport loop.
     /// Returns true after the preface was routed to a WebTransport session.
     [[nodiscard]] auto route_webtransport_stream(stream_id id, byte_view bytes,
@@ -323,6 +329,7 @@ public:
 
 private:
     auto service_peer_stream(stream_id id) -> task<void>;
+    auto cancel_request(stream_id id) -> task<void>;
     quic_connection& conn_;
     server_request_handler handler_;
     async_server_request_handler async_handler_;
@@ -435,6 +442,12 @@ public:
         -> task<std::expected<webtransport_session, std::error_code>>;
     [[nodiscard]] auto process_peer_unidirectional_stream(stream_id id,
         byte_view bytes) -> task<std::expected<void, std::error_code>>;
+    /// Take the validated prefix length; the caller consumes exactly these bytes.
+    [[nodiscard]] auto take_peer_unidirectional_consumed_bytes(stream_id id) noexcept
+        -> std::size_t;
+    /// Critical stream FIN/RESET is an HTTP/3 application connection error.
+    auto finish_peer_unidirectional_stream(stream_id id) -> task<void>;
+
     /// Reports that the mandatory peer control SETTINGS frame has been
     /// consumed and its QPACK limits applied to this connection.
     [[nodiscard]] auto peer_settings_received() const noexcept -> bool;

@@ -342,4 +342,77 @@ TEST(qpack_enforces_blocked_stream_limit_and_cancellation)
     ASSERT_TRUE(encoder.process_decoder_instructions(cancellation).has_value());
 }
 
+TEST(qpack_blocked_cancellation_is_idempotent_and_releases_slot)
+{
+    qpack_encoder encoder{1024};
+    encoder.set_max_blocked_streams(2);
+    qpack_decoder decoder{1024};
+    decoder.set_max_blocked_streams(1);
+    const auto first = encoder.encode(fields({{"x-lifecycle", "first"}}), 48);
+    ASSERT_TRUE(first.has_value());
+    ASSERT_EQ(decoder.decode(*first, 48).error(),
+        std::make_error_code(std::errc::resource_unavailable_try_again));
+    ASSERT_TRUE(decoder.cancel_blocked_stream(48));
+    ASSERT_FALSE(decoder.cancel_blocked_stream(48));
+    ASSERT_FALSE(decoder.take_decoder_instructions().empty());
+    ASSERT_TRUE(decoder.take_decoder_instructions().empty());
+    const auto second = encoder.encode(fields({{"x-lifecycle", "second"}}), 52);
+    ASSERT_TRUE(second.has_value());
+    ASSERT_EQ(decoder.decode(*second, 52).error(),
+        std::make_error_code(std::errc::resource_unavailable_try_again));
+}
+
+TEST(qpack_fragmented_unfinished_literal_has_a_table_derived_bound)
+{
+    qpack_decoder decoder{64};
+    // Insert literal name, raw name length 4096, with no completed name/value.
+    const std::array prefix{std::byte{0x5f}, std::byte{0xe1}, std::byte{0x1f}};
+    ASSERT_TRUE(decoder.process_encoder_instructions(std::span<const std::byte>{prefix}).has_value());
+    std::array<std::byte, 32> fragment;
+    fragment.fill(std::byte{'x'});
+    bool rejected = false;
+    for (std::size_t index{}; index < 16U; ++index)
+    {
+        if (!decoder.process_encoder_instructions(std::span<const std::byte>{fragment}))
+        {
+            rejected = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(rejected);
+    // Terminal malformed input is released rather than retained for a retry.
+    const std::array capacity{std::byte{0x20}};
+    ASSERT_TRUE(decoder.process_encoder_instructions(std::span<const std::byte>{capacity}).has_value());
+}
+
+TEST(qpack_complete_instruction_batch_is_not_limited_by_total_bytes)
+{
+    qpack_decoder decoder{64};
+    const std::array instruction{
+        std::byte{0x41}, std::byte{'x'}, std::byte{0x01}, std::byte{'y'}};
+    std::vector<std::byte> batch;
+    for (std::size_t index{}; index < 1000U; ++index)
+        batch.insert(batch.end(), instruction.begin(), instruction.end());
+    ASSERT_TRUE(decoder.process_encoder_instructions(as_span(batch)).has_value());
+    ASSERT_EQ(decoder.get_dynamic_table_size(), 1U);
+}
+
+TEST(qpack_decoder_stream_rejects_an_unbounded_integer_prefix)
+{
+    qpack_encoder encoder;
+    const std::array prefix{std::byte{0xff}};
+    ASSERT_TRUE(encoder.process_decoder_instructions(std::span<const std::byte>{prefix}).has_value());
+    const std::array continuation{std::byte{0x80}};
+    bool rejected = false;
+    for (std::size_t index{}; index < 10U; ++index)
+    {
+        if (!encoder.process_decoder_instructions(std::span<const std::byte>{continuation}))
+        {
+            rejected = true;
+            break;
+        }
+    }
+    ASSERT_TRUE(rejected);
+}
+
 RUN_TESTS();

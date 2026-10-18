@@ -121,6 +121,19 @@ h3::streaming_server_request_handler handler =
 
 handler 提前返回会关闭 body pump；消费者慢时，传输层不会无限制缓存上传数据。
 
+服务端默认限制请求 DATA 为 32 MiB。`start()` 前可通过
+`server->set_request_body_limits({.max_bytes = 64U * 1024U * 1024U,
+.chunk_capacity = 16U})` 调整；所有 worker 和普通/流式 handler 使用同一配置。
+普通 handler 仍在完整请求体到达后启动，同时限制 FIN 前的聚合 wire 缓冲为
+`max_bytes` 加允许的 header 字节（未设置 header 上限时额外 64 KiB）；大量帧开销也计入
+此聚合上限。超限只取消当前 stream，连接可继续复用。流式 handler 的 DATA 累计限制
+独立于逐帧缓冲和 channel 容量，大上传应显式提高限制。
+
+RESET 会按 final size 结算流和连接接收信用；取消后的接收方向只保留 offset，直到
+peer FIN/RESET 给出最终大小后退休。QPACK 阻塞等待绑定到流取消和连接关闭，取消会发送
+Stream Cancellation 指令，避免保留阻塞 header section。
+
+
 ### 共享缓冲响应体
 
 服务端可将预加载的不可变内容放入 `response.shared_body`。多个响应共享原始存储，

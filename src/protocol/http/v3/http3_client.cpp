@@ -112,6 +112,7 @@ namespace detail {
         const bool unidirectional = (stream & 0x02U) != 0U;
         bool stream_classified = false;
         bool server_push_stream = false;
+        std::optional<std::uint64_t> peer_stream_type;
         for (;;)
         {
             auto received = co_await connection->async_recv(stream,
@@ -119,7 +120,11 @@ namespace detail {
             if (!received)
             {
                 if (received.error() != std::make_error_code(std::errc::operation_would_block))
+                {
+                    if (unidirectional && !server_push_stream)
+                        co_await session->finish_peer_unidirectional_stream(stream);
                     co_return;
+                }
                 auto ready = co_await connection->async_wait_readable(stream);
                 if (!ready)
                     co_return;
@@ -137,6 +142,8 @@ namespace detail {
                             "invalid HTTP/3 server push stream");
                     }
                 }
+                if (unidirectional && !server_push_stream)
+                    co_await session->finish_peer_unidirectional_stream(stream);
                 co_return;
             }
             wire.commit(*received);
@@ -165,7 +172,7 @@ namespace detail {
             }
             if (!unidirectional)
                 co_return;
-            if (!server_push_stream)
+            if (!peer_stream_type)
             {
                 const auto type = quic::decode_varint(wire.readable_view());
                 if (!type)
@@ -176,6 +183,7 @@ namespace detail {
                         "invalid HTTP/3 unidirectional stream type");
                     co_return;
                 }
+                peer_stream_type = type->first;
                 if (type->first == 0x01U)
                 {
                     server_push_stream = true;
@@ -184,21 +192,22 @@ namespace detail {
             }
             if (server_push_stream)
                 continue;
-            // A peer commonly sends the one-byte QPACK stream type first and
-            // its initial capacity instruction in a later QUIC frame. The
-            // empty encoder/decoder stream is legal, but completing consumption
-            // at the type byte would drop that later data.
             const auto bytes = wire.readable_view();
-            if (bytes.size() == 1U &&
-                (bytes.front() == std::byte{0x02} || bytes.front() == std::byte{0x03}))
-                continue;
             auto processed = co_await session->process_peer_unidirectional_stream(stream, bytes);
             if (!processed)
             {
-                if (processed.error() == std::make_error_code(std::errc::message_size))
+                if (processed.error() == std::make_error_code(std::errc::message_size) &&
+                    wire.readable_bytes() <= 65536U)
                     continue;
                 co_await connection->async_close(processed.error(),
                     "invalid peer HTTP/3 unidirectional stream");
+                co_return;
+            }
+            wire.consume(session->take_peer_unidirectional_consumed_bytes(stream));
+            if (wire.readable_bytes() > 65536U)
+            {
+                co_await connection->async_close(std::make_error_code(std::errc::message_size),
+                    "HTTP/3 incomplete control frame exceeds buffer limit");
                 co_return;
             }
             // Critical unidirectional streams remain open for the connection

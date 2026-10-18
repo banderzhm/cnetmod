@@ -50,6 +50,11 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
+    add_test(NAME http3_lifecycle
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_lifecycle.py"
+            "$<TARGET_FILE:h3_interop_server>")
+    set_tests_properties(http3_lifecycle PROPERTIES
+        LABELS "http3;interop;lifecycle" TIMEOUT 60 SKIP_RETURN_CODE 77)
     add_test(NAME h3_webtransport_aioquic_probe_unit
         COMMAND "${Python3_EXECUTABLE}" -m unittest discover
             -s "${CMAKE_CURRENT_SOURCE_DIR}" -p test_webtransport_aioquic_probe.py)
@@ -93,6 +98,18 @@ if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
     endif()
 
     if(TARGET http3_e2e_server AND TARGET http_client_http3_e2e)
+        add_test(NAME http3_early_data_recovery
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/http_client_e2e.py" "--early-data-loss"
+                "$<TARGET_FILE:http3_e2e_server>" "$<TARGET_FILE:http_client_http3_e2e>")
+        set_tests_properties(http3_early_data_recovery PROPERTIES
+            TIMEOUT 90 LABELS "http3;quic;recovery" SKIP_RETURN_CODE 77)
+        add_test(NAME http3_streaming_cancellation
+            COMMAND "${Python3_EXECUTABLE}"
+                "${CMAKE_CURRENT_SOURCE_DIR}/http3_streaming_cancellation.py"
+                "$<TARGET_FILE:http3_e2e_server>")
+        set_tests_properties(http3_streaming_cancellation PROPERTIES
+            TIMEOUT 20 LABELS "http3;quic;lifecycle" SKIP_RETURN_CODE 77)
         add_test(NAME http3_idle_connection_cleanup
             COMMAND "${Python3_EXECUTABLE}"
                 "${CMAKE_CURRENT_SOURCE_DIR}/http3_idle_cleanup.py"

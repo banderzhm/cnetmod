@@ -134,6 +134,8 @@ public:
         -> std::vector<std::size_t>;
     [[nodiscard]] auto take_outstanding_frames(pn_space space)
         -> std::vector<quic_send_frame>;
+    // Retry resends only unacknowledged early work; rejection discards it.
+    [[nodiscard]] auto take_early_data_frames() -> std::vector<quic_send_frame>;
     auto discard_packet_number_space(pn_space space) noexcept -> void;
 
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;

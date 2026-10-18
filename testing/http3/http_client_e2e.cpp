@@ -23,6 +23,7 @@ struct test_state
 {
     bool ok = true;
     std::string failure;
+    std::vector<std::jthread> cancellation_threads;
 
     void fail(std::string message)
     {
@@ -306,6 +307,81 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
                 streaming_result->trailers["x-stream-complete"] != "1")
                 state.fail("HTTP/3 response streaming API returned invalid data");
 
+            // HEADERS arrive immediately; DATA waits for 30 seconds. The
+            // handler's real cancellable timer overlaps the receive pump's
+            // readable wait. Sharing their callback slot leaves the handler
+            // asleep after cancellation and exceeds the test's time budget.
+            streaming_request.path = "/stream-delayed";
+            for (int mode = 0; mode != 4; ++mode)
+            {
+                auto parent_token = std::make_shared<cnetmod::cancel_token>();
+                auto entered = std::make_shared<std::atomic<bool>>();
+                if (mode == 0)
+                    state.cancellation_threads.emplace_back([parent_token, entered]
+                        {
+                            const auto deadline = std::chrono::steady_clock::now() +
+                                std::chrono::seconds{2};
+                            while (!entered->load() &&
+                                std::chrono::steady_clock::now() < deadline)
+                                std::this_thread::sleep_for(std::chrono::milliseconds{1});
+                            std::this_thread::sleep_for(std::chrono::milliseconds{30});
+                            parent_token->cancel();
+                        });
+                const auto began = std::chrono::steady_clock::now();
+                auto concurrent = co_await streaming_client->send_request_streaming(
+                    streaming_request,
+                    [&context, entered, mode](cnetmod::http::v3::http3_response&,
+                        cnetmod::http::request_body_stream&, cnetmod::cancel_token& child)
+                        -> cnetmod::task<std::expected<void, std::error_code>>
+                    {
+                        entered->store(true);
+                        auto waited = co_await cnetmod::async_timer_wait(context,
+                            mode == 0 ? std::chrono::milliseconds{30000}
+                                      : std::chrono::milliseconds{20}, child);
+                        if (!waited)
+                            co_return std::unexpected(waited.error());
+                        if (mode == 2)
+                            child.cancel();
+                        if (mode == 3)
+                            co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+                        co_return {};
+                    }, *parent_token);
+                if (std::chrono::steady_clock::now() - began > std::chrono::seconds{2})
+                    state.fail("concurrent streaming cancellation did not complete promptly");
+                if (mode == 1 ? !concurrent : bool(concurrent))
+                    state.fail("concurrent streaming handler returned wrong cancellation outcome");
+                if ((mode != 0 && parent_token->is_cancelled()) ||
+                    (mode == 3 && (!concurrent && concurrent.error() !=
+                        std::make_error_code(std::errc::invalid_argument))))
+                    state.fail("internal streaming shutdown changed caller cancellation/error");
+                cnetmod::http::v3::http3_request reuse;
+                reuse.host = "127.0.0.1";
+                reuse.port = port;
+                reuse.path = "/get";
+                auto reused = co_await streaming_client->send_request(reuse);
+                if (!reused || reused->body != "get-ok")
+                    state.fail("connection could not be reused after concurrent streaming cancellation");
+            }
+
+            streaming_request.path = "/test-only-malformed-stream-length";
+            bool malformed_handler_entered{};
+            auto malformed_stream = co_await streaming_client->send_request_streaming(
+                streaming_request,
+                [&context, &malformed_handler_entered](cnetmod::http::v3::http3_response&,
+                    cnetmod::http::request_body_stream&, cnetmod::cancel_token& child)
+                    -> cnetmod::task<std::expected<void, std::error_code>>
+                {
+                    malformed_handler_entered = true;
+                    auto waited = co_await cnetmod::async_timer_wait(context,
+                        std::chrono::seconds{30}, child);
+                    if (!waited)
+                        co_return std::unexpected(waited.error());
+                    co_return {};
+                });
+            if (!malformed_handler_entered || malformed_stream || malformed_stream.error() !=
+                std::make_error_code(std::errc::message_size))
+                state.fail("streaming cleanup changed malformed response error");
+
             cnetmod::http::v3::http3_request trailer_request;
             trailer_request.method = cnetmod::http::http_method::POST;
             trailer_request.host = "127.0.0.1";
@@ -517,6 +593,21 @@ auto run_http_semantics(cnetmod::io_context& context, std::uint16_t port,
     auto cancelled = co_await client.send(slow_request, cancellation);
     if (cancelled || !cancellation.is_cancelled())
         state.fail("cancelled HTTP/3 request unexpectedly completed");
+
+    // Keep worker ownership in the main test state; joining happens after
+    // context.run(), never inside a coroutine. The token is shared with it.
+    auto threaded_token = std::make_shared<cnetmod::cancel_token>();
+    state.cancellation_threads.emplace_back([threaded_token]
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds{100});
+            threaded_token->cancel();
+        });
+    auto threaded_cancelled = co_await client.send(slow_request, *threaded_token);
+    if (threaded_cancelled || !threaded_token->is_cancelled())
+        state.fail("cross-thread HTTP/3 cancellation unexpectedly completed");
+    auto reused = co_await client.get(url("/get"));
+    require_response(state, reused, 200, "get-ok", "reuse after cross-thread cancellation");
+
 
     co_await client.close_async();
     co_return;
@@ -1183,6 +1274,7 @@ auto main(int argc, char** argv) -> int
         : std::uint16_t{};
     cnetmod::spawn(*context, run_suite(*context, static_cast<std::uint16_t>(std::stoul(argv[1])), state, mode == "--multipath" || mode == "--multipath-pmtu" || mode == "--multipath-pmtu-blackhole", mode == "--multipath-pmtu" || mode == "--multipath-pmtu-blackhole", mode == "--multipath-timeout", mode == "--multipath-pmtu-blackhole", mode == "--multipath-close", mode == "--connect-close", pmtu_blackhole_arm_marker, secondary_peer_port));
     context->run();
+    state.cancellation_threads.clear();
     if (!state.ok)
     {
         logger::error{"HTTP/3 client end-to-end regression failed: {}", state.failure};

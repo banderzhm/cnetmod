@@ -115,6 +115,8 @@ public:
     /// Applies this endpoint's SETTINGS_QPACK_BLOCKED_STREAMS limit.
     void set_max_blocked_streams(std::uint64_t maximum) noexcept;
     void cancel_stream(std::uint64_t stream_id);
+    /// Cancel a retained blocked section once; repeated cleanup is harmless.
+    auto cancel_blocked_stream(std::uint64_t stream_id) -> bool;
 
 private:
     struct impl;

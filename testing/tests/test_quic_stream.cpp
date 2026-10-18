@@ -4,6 +4,30 @@ import std;
 import cnetmod.coro.task;
 import cnetmod.protocol.quic;
 
+TEST(quic_stream_fin_cannot_shrink_received_extent)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_receive_limit(1024);
+    const std::array data{std::byte{'x'}};
+    ASSERT_TRUE(stream.push_received(100, data, false).has_value());
+    ASSERT_FALSE(stream.push_received(10, {}, true).has_value());
+}
+
+TEST(quic_stream_reset_cannot_exceed_receive_credit)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_receive_limit(16);
+    ASSERT_FALSE(stream.reset_remote(1024).has_value());
+}
+
+TEST(quic_stream_reset_final_size_is_accounted)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_receive_limit(1024);
+    ASSERT_TRUE(stream.reset_remote(100).has_value());
+    ASSERT_EQ(stream.bytes_received(), 100U);
+}
+
 TEST(quic_stream_out_of_order_gap_is_not_readable)
 {
     cnetmod::quic::quic_stream stream{
@@ -112,6 +136,70 @@ TEST(quic_retired_stream_history_preserves_gaps_and_merges_out_of_order)
     history.insert(4U, {99U, 99U});
     ASSERT_EQ(history.find_final_sizes(4U)->received_final_size, 1U);
     ASSERT_EQ(history.final_size_count(), 4U);
+}
+
+TEST(quic_stream_reset_duplicates_preserve_credit_and_final_size)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_receive_limit(100);
+    ASSERT_TRUE(stream.reset_remote(100).has_value());
+    ASSERT_TRUE(stream.reset_remote(100).has_value());
+    ASSERT_EQ(stream.bytes_received(), 100U);
+    ASSERT_EQ(stream.bytes_consumed(), 100U);
+    ASSERT_EQ(stream.remaining_receive_window(), 0U);
+    ASSERT_FALSE(stream.reset_remote(99).has_value());
+}
+
+TEST(quic_stream_abandoned_receive_accepts_final_size_without_buffering)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.set_initial_receive_limit(100);
+    const std::array data{std::byte{'x'}};
+    ASSERT_TRUE(stream.push_received(10, data, false).has_value());
+    stream.stop_local();
+    stream.abandon_receive();
+    ASSERT_TRUE(stream.push_received(50, data, true).has_value());
+    ASSERT_EQ(stream.bytes_received(), 51U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::closed);
+    ASSERT_TRUE(stream.reset_remote(51).has_value());
+    ASSERT_EQ(stream.bytes_consumed(), 51U);
+    ASSERT_TRUE(stream.reset_remote(51).has_value());
+    ASSERT_FALSE(stream.push_received(52, data, false).has_value());
+}
+
+TEST(quic_stream_unidirectional_has_only_one_open_direction)
+{
+    cnetmod::quic::quic_stream incoming{2, cnetmod::quic::quic_role::server, false};
+    incoming.init();
+    ASSERT_TRUE(incoming.state() == cnetmod::quic::stream_state::half_closed_local);
+    ASSERT_TRUE(incoming.push_received(0, {}, true).has_value());
+    ASSERT_TRUE(incoming.state() == cnetmod::quic::stream_state::closed);
+    cnetmod::quic::quic_stream outgoing{3, cnetmod::quic::quic_role::server, false};
+    outgoing.init();
+    ASSERT_TRUE(outgoing.state() == cnetmod::quic::stream_state::half_closed_remote);
+    cnetmod::sync_wait(outgoing.close_local());
+    ASSERT_TRUE(outgoing.state() == cnetmod::quic::stream_state::closed);
+}
+
+TEST(quic_stream_abandon_after_fin_closes_unconsumed_receive_direction)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.init();
+    const std::array payload{std::byte{'x'}, std::byte{'y'}};
+    ASSERT_TRUE(stream.push_received(0, payload, true).has_value());
+    ASSERT_EQ(stream.bytes_consumed(), 0U);
+    stream.stop_local();
+    stream.abandon_receive();
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::closed);
+    ASSERT_TRUE(stream.reset_remote(2).has_value());
+    ASSERT_EQ(stream.bytes_consumed(), 2U);
+    ASSERT_TRUE(stream.push_received(0, payload, true).has_value());
+    ASSERT_TRUE(stream.reset_remote(2).has_value());
+    ASSERT_EQ(stream.bytes_consumed(), 2U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::closed);
+    stream.abandon_receive();
+    cnetmod::sync_wait(stream.close_local());
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::closed);
 }
 
 RUN_TESTS();

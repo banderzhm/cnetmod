@@ -11,6 +11,7 @@ import cnetmod.core.address;
 import cnetmod.io.io_context;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.v3.session;
+import std;
 
 using namespace cnetmod::quic;
 
@@ -230,6 +231,57 @@ TEST(multipath_transport_parameter_roundtrip_is_capability_only)
     ASSERT_TRUE((*receiver)->decode_transport_params(*encoded).has_value());
     ASSERT_TRUE((*receiver)->received_transport_params().initial_max_path_id.has_value());
     ASSERT_EQ(*(*receiver)->received_transport_params().initial_max_path_id, 7U);
+}
+
+TEST(early_data_recovery_extracts_only_unacknowledged_work)
+{
+    quic_config config;
+    quic_recovery_controller recovery{config};
+    const auto now = std::chrono::steady_clock::now();
+    auto first = quic_send_frame::owned({std::byte{1}}, 0U);
+    auto second = quic_send_frame::owned({std::byte{2}}, 4U);
+    first.mark_early_data();
+    second.mark_early_data();
+    auto ordinary = quic_send_frame::owned({std::byte{3}}, 8U);
+    recovery.on_packet_sent(0, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{first});
+    recovery.on_packet_sent(1, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{second});
+    recovery.on_packet_sent(2, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{ordinary});
+    ack_frame ack{};
+    ack.largest_acked = 0;
+    ASSERT_TRUE(recovery.on_ack_received(ack, now + std::chrono::milliseconds{1},
+        pn_space::application).has_value());
+    auto retry = recovery.take_early_data_frames();
+    ASSERT_EQ(retry.size(), 1U);
+    ASSERT_TRUE(retry.front() == second);
+    auto remaining = recovery.newest_probe_frames(pn_space::application);
+    ASSERT_TRUE(remaining.has_value());
+    ASSERT_TRUE((*remaining)[0] == ordinary);
+    ASSERT_TRUE(recovery.take_early_data_frames().empty());
+}
+
+TEST(early_data_retry_deduplicates_pto_and_preserves_ordinary_queue)
+{
+    quic_config config;
+    quic_recovery_controller recovery{config};
+    const auto now = std::chrono::steady_clock::now();
+    auto early = quic_send_frame::owned({std::byte{1}}, 0U);
+    early.mark_early_data();
+    recovery.on_packet_sent(10, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{early});
+    recovery.on_packet_sent(11, 100, now, true, pn_space::application,
+        retransmittable_frame_storage{early}, std::nullopt, true);
+    ASSERT_EQ(recovery.take_early_data_frames().size(), 1U);
+    ASSERT_FALSE(recovery.next_pto_deadline().has_value());
+    quic_stream_scheduler scheduler;
+    scheduler.set_priority(0, 0, false);
+    scheduler.enqueue(0, early);
+    scheduler.enqueue(4, quic_send_frame::owned({std::byte{2}}, 4U));
+    ASSERT_EQ(scheduler.take_early_data().size(), 1U);
+    ASSERT_EQ(scheduler.size(), 1U);
+    ASSERT_EQ(scheduler.take()->stream, 4U);
 }
 
 int main()

@@ -83,6 +83,8 @@ public:
         bool fin) -> std::expected<void, std::error_code>;
     auto reset_remote(std::uint64_t final_size) -> std::expected<void, std::error_code>;
     void stop_local() noexcept;
+    void abandon_receive() noexcept;
+    [[nodiscard]] auto receive_abandoned() const noexcept -> bool;
 
     /// Set peer-advertised send credit.  This is independent from the local
     /// receive window used by push_received().
@@ -140,6 +142,7 @@ private:
         std::uint64_t next_expected_offset_ = 0;
         std::uint64_t highest_received_offset_ = 0;
         std::optional<std::uint64_t> final_size_;
+        bool receive_abandoned_{};
 
         // Send queue
         std::deque<std::pair<std::uint64_t, std::vector<std::byte>>> send_queue_;

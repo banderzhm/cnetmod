@@ -22,6 +22,7 @@ import cnetmod.coro.cancel;
 import cnetmod.protocol.udp;
 import cnetmod.executor.async_op;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.utils.concurrent_containers.atomic_hash_map;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
@@ -930,6 +931,19 @@ public:
         return {};
     }
 
+    auto set_request_body_limits(request_body_stream_options options)
+        -> std::expected<void, std::error_code>
+    {
+        if (running_)
+            return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
+        if (options.max_bytes == 0U || options.chunk_capacity == 0U)
+            return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+        request_body_options_ = options;
+        for (auto& shard : shards_)
+            shard->request_body_options_ = options;
+        return {};
+    }
+
     auto set_idle_timeout(std::chrono::milliseconds timeout)
         -> std::expected<void, std::error_code>
     {
@@ -1277,6 +1291,7 @@ private:
                 : async_handler_        ? make_http3_server_session(*connection, async_handler_)
                                         : make_http3_server_session(*connection, handler_)};
         session->configure_local_settings(h3_settings_);
+        session->configure_request_body_stream(request_body_options_);
         session->configure_push_cancellation_observer(
             push_cancellation_observer_);
         {
@@ -1838,6 +1853,7 @@ private:
     std::chrono::steady_clock::time_point next_reset_cleanup_{};
     quic::quic_config transport_config_{};
     http3_settings h3_settings_{};
+    request_body_stream_options request_body_options_{};
     http3_inbox_limits inbox_limits_{};
     std::shared_ptr<detail::retry_token_manager> retry_tokens_;
     std::shared_ptr<dispatch_state> dispatcher_;
@@ -1951,6 +1967,12 @@ auto http3_server::set_qpack_settings(std::uint64_t max_table_capacity,
     std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>
 {
     return impl_->set_qpack_settings(max_table_capacity, max_blocked_streams);
+}
+
+auto http3_server::set_request_body_limits(request_body_stream_options options)
+    -> std::expected<void, std::error_code>
+{
+    return impl_->set_request_body_limits(options);
 }
 
 auto http3_server::set_idle_timeout(std::chrono::milliseconds timeout)

@@ -807,6 +807,19 @@ auto qpack_decoder::process_encoder_instructions(byte_view data) -> std::expecte
         impl_->pending_encoder_stream_input.begin(),
         impl_->pending_encoder_stream_input.begin() +
             static_cast<std::ptrdiff_t>(consumed));
+    // One unfinished insertion can retain only a table-sized field. Huffman
+    // codes use at most 30 bits per decoded byte; 4x the allowed table size
+    // plus integer/string prefixes is a conservative encoded upper bound.
+    // Apply it after consuming complete instructions, so a large batch of
+    // individually valid insertions does not trip a cumulative traffic cap.
+    constexpr auto storage_max = std::numeric_limits<std::size_t>::max();
+    const auto unfinished_limit = impl_->max_table_capacity > (storage_max - 64U) / 4U
+        ? storage_max : static_cast<std::size_t>(impl_->max_table_capacity * 4U + 64U);
+    if (impl_->pending_encoder_stream_input.size() > unfinished_limit)
+    {
+        impl_->pending_encoder_stream_input.clear();
+        return std::unexpected(detail::error());
+    }
     // Encoder instructions are ordered.  Once their inserts are committed,
     // every retained block is retried in stream-id order; a still-unavailable
     // block remains retained without producing a duplicate acknowledgement.
@@ -1026,6 +1039,14 @@ void qpack_decoder::cancel_stream(std::uint64_t stream_id)
 {
     impl_->blocked_header_blocks.erase(stream_id);
     detail::append_int(impl_->pending_decoder_instructions, 0x40U, 6, stream_id);
+}
+
+auto qpack_decoder::cancel_blocked_stream(std::uint64_t stream_id) -> bool
+{
+    if (!impl_->blocked_header_blocks.contains(stream_id))
+        return false;
+    cancel_stream(stream_id);
+    return true;
 }
 
 auto is_sensitive_header(std::string_view n) noexcept -> bool

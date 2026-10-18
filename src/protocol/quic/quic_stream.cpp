@@ -34,6 +34,15 @@ auto quic_stream::init() -> void
         return;
     }
 
+    if (!impl_->bidirectional_)
+    {
+        const bool local = is_client_initiated(impl_->id_) ==
+            (impl_->owner_ == quic_role::client);
+        impl_->state_ = local ? stream_state::half_closed_remote
+                             : stream_state::half_closed_local;
+        return;
+    }
+
     // For client-initiated streams, immediately mark as open locally
     if ((impl_->owner_ == quic_role::client && is_client_initiated(impl_->id_)) ||
         (impl_->owner_ == quic_role::server && is_server_initiated(impl_->id_)))
@@ -79,6 +88,8 @@ auto quic_stream::send(std::span<const std::byte> data)
 
 auto quic_stream::close_local() -> task<void>
 {
+    if (impl_->state_ == stream_state::closed)
+        co_return;
     impl_->state_ = impl_->state_ == stream_state::half_closed_remote
         ? stream_state::closed
         : stream_state::half_closed_local;
@@ -87,6 +98,8 @@ auto quic_stream::close_local() -> task<void>
 
 auto quic_stream::close_remote() -> void
 {
+    if (impl_->state_ == stream_state::closed)
+        return;
     impl_->state_ = impl_->state_ == stream_state::half_closed_local
         ? stream_state::closed
         : stream_state::half_closed_remote;
@@ -114,6 +127,9 @@ auto quic_stream::receive(mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
     auto& impl = *impl_;
+
+    if (impl.receive_abandoned_)
+        co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
 
     if (impl.state_ == stream_state::closed)
     {
@@ -291,6 +307,8 @@ auto quic_stream::push_received(std::uint64_t offset,
     if (offset > std::numeric_limits<std::uint64_t>::max() - data.size())
         return std::unexpected(make_error_code(quic_errc::final_size_error));
     const auto end = offset + data.size();
+    if (fin && end < state.highest_received_offset_)
+        return std::unexpected(make_error_code(quic_errc::final_size_error));
     if (state.final_size_ &&
         (end > *state.final_size_ || (fin && end != *state.final_size_)))
         return std::unexpected(make_error_code(quic_errc::final_size_error));
@@ -311,6 +329,13 @@ auto quic_stream::push_received(std::uint64_t offset,
         if (state.final_size_ && *state.final_size_ != end)
             return std::unexpected(make_error_code(quic_errc::final_size_error));
         state.final_size_ = end;
+    }
+    if (state.receive_abandoned_)
+    {
+        state.highest_received_offset_ = std::max(state.highest_received_offset_, end);
+        if (fin)
+            close_remote();
+        return {};
     }
 
     // Already-consumed bytes and exact duplicates do not alter the receive
@@ -389,9 +414,14 @@ auto quic_stream::reset_remote(std::uint64_t final_size)
         return std::unexpected(make_error_code(quic_errc::final_size_error));
     if (state.highest_received_offset_ > final_size)
         return std::unexpected(make_error_code(quic_errc::final_size_error));
+    if (final_size > state.max_data_)
+        return std::unexpected(make_error_code(quic_errc::flow_control_error));
     state.final_size_ = final_size;
+    state.highest_received_offset_ = final_size;
+    state.next_expected_offset_ = final_size;
     state.receive_buffer_.clear();
-    state.state_ = state.state_ == stream_state::half_closed_local
+    state.state_ = state.state_ == stream_state::closed ||
+            state.state_ == stream_state::half_closed_local
         ? stream_state::closed
         : stream_state::half_closed_remote;
     return {};
@@ -405,6 +435,19 @@ void quic_stream::stop_local() noexcept
         impl_->state_ = stream_state::half_closed_local;
 }
 
+void quic_stream::abandon_receive() noexcept
+{
+    impl_->receive_abandoned_ = true;
+    impl_->receive_buffer_.clear();
+    if (impl_->final_size_)
+        close_remote();
+}
+
+auto quic_stream::receive_abandoned() const noexcept -> bool
+{
+    return impl_->receive_abandoned_;
+}
+
 auto quic_stream::state() const noexcept -> stream_state
 {
     return impl_->state_;
@@ -412,6 +455,8 @@ auto quic_stream::state() const noexcept -> stream_state
 
 auto quic_stream::is_readable() const noexcept -> bool
 {
+    if (impl_->receive_abandoned_)
+        return true;
     if (impl_->state_ == stream_state::closed ||
         impl_->state_ == stream_state::half_closed_remote)
         return true;

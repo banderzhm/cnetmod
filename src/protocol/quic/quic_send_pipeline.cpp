@@ -90,6 +90,25 @@ auto quic_send_frame::stream() const noexcept -> std::optional<std::uint64_t>
     return stream_;
 }
 
+void quic_send_frame::set_priority(std::uint8_t urgency, bool incremental) noexcept
+{
+    urgency_ = std::min<std::uint8_t>(urgency, 7U);
+    incremental_ = incremental;
+}
+
+auto quic_send_frame::urgency() const noexcept -> std::uint8_t
+{
+    return urgency_;
+}
+
+auto quic_send_frame::incremental() const noexcept -> bool
+{
+    return incremental_;
+}
+
+void quic_send_frame::mark_early_data() noexcept { early_data_ = true; }
+auto quic_send_frame::is_early_data() const noexcept -> bool { return early_data_; }
+
 auto quic_send_frame::is_connection_close() const noexcept -> bool
 {
     return !owned_bytes_.empty() &&
@@ -129,6 +148,7 @@ void quic_send_frame::clear() noexcept
     shared_offset_ = 0U;
     shared_size_ = 0U;
     stream_.reset();
+    early_data_ = false;
 }
 
 auto operator==(const quic_send_frame& lhs,
@@ -198,6 +218,7 @@ void quic_stream_scheduler::enqueue(std::uint64_t stream, quic_send_frame frame)
         return;
     }
     auto& frames = impl_->frames[priority->second.urgency][stream];
+    frame.set_priority(priority->second.urgency, priority->second.incremental);
     if (frames.empty())
         impl_->ready[priority->second.urgency].push_back(stream);
     frames.push_back(std::move(frame));
@@ -231,12 +252,9 @@ auto quic_stream_scheduler::take() -> std::optional<scheduled_quic_frame>
                 continue;
             auto frame = std::move(found->second.front());
             found->second.pop_front();
-            const auto priority = impl_->priorities.contains(stream)
-                ? impl_->priorities[stream]
-                : implementation::priority{};
             if (!found->second.empty())
             {
-                if (priority.incremental)
+                if (frame.incremental())
                     streams.push_back(stream);
                 else
                     streams.push_front(stream);
@@ -271,10 +289,11 @@ auto quic_stream_scheduler::requeue_retransmission(quic_send_frame& frame) -> bo
     if (!stream)
         return false;
     const auto priority = impl_->priorities.find(*stream);
-    requeue(priority == impl_->priorities.end()
-            ? scheduled_quic_frame{*stream, 3U, true, std::move(frame)}
-            : scheduled_quic_frame{*stream, priority->second.urgency, false,
-                  std::move(frame)});
+    if (priority != impl_->priorities.end())
+        frame.set_priority(priority->second.urgency, priority->second.incremental);
+    const auto urgency = frame.urgency();
+    const bool default_fifo = urgency == 3U && !frame.incremental();
+    requeue(scheduled_quic_frame{*stream, urgency, default_fifo, std::move(frame)});
     return true;
 }
 
@@ -298,13 +317,22 @@ void quic_stream_scheduler::set_priority(std::uint64_t stream,
         impl_->frames[old.urgency].erase(pending);
         std::erase(impl_->ready[old.urgency], stream);
         for (auto& frame : frames)
+        {
+            frame.set_priority(3U, false);
             impl_->defaults.push_back({stream, 3U, true, std::move(frame)});
+        }
         return;
     }
     impl_->priorities.insert_or_assign(stream,
         implementation::priority{urgency, incremental});
     if (previous != impl_->priorities.end() && old.urgency == urgency)
+    {
+        if (const auto pending = impl_->frames[urgency].find(stream);
+            pending != impl_->frames[urgency].end())
+            for (auto& frame : pending->second)
+                frame.set_priority(urgency, incremental);
         return;
+    }
     std::deque<quic_send_frame> moved;
     if (previous != impl_->priorities.end())
     {
@@ -331,11 +359,62 @@ void quic_stream_scheduler::set_priority(std::uint64_t stream,
             return;
     }
     auto& destination = impl_->frames[urgency][stream];
+    for (auto& frame : moved)
+        frame.set_priority(urgency, incremental);
     const bool was_empty = destination.empty();
     destination.insert(destination.end(), std::make_move_iterator(moved.begin()),
         std::make_move_iterator(moved.end()));
     if (was_empty && !destination.empty())
         impl_->ready[urgency].push_back(stream);
+}
+
+void quic_stream_scheduler::retire_stream(std::uint64_t stream) noexcept
+{
+    impl_->priorities.erase(stream);
+}
+
+void quic_stream_scheduler::discard_early_data() noexcept
+{
+    std::erase_if(impl_->defaults, [](const auto& frame) { return frame.frame.is_early_data(); });
+    for (std::size_t urgency{}; urgency < impl_->frames.size(); ++urgency)
+    {
+        auto& streams = impl_->frames[urgency];
+        for (auto frame = streams.begin(); frame != streams.end();)
+        {
+            std::erase_if(frame->second, [](const auto& value) { return value.is_early_data(); });
+            if (frame->second.empty())
+            {
+                std::erase(impl_->ready[urgency], frame->first);
+                frame = streams.erase(frame);
+            }
+            else
+                ++frame;
+        }
+    }
+}
+
+auto quic_stream_scheduler::take_early_data() -> std::vector<quic_send_frame>
+{
+    std::vector<quic_send_frame> result;
+    const auto take = [&result](auto& frame)
+    {
+        if (!frame.is_early_data())
+            return false;
+        result.push_back(std::move(frame));
+        return true;
+    };
+    std::erase_if(impl_->defaults, [&](auto& value) { return take(value.frame); });
+    for (auto& streams : impl_->frames)
+        for (auto& [_, frames] : streams)
+            std::erase_if(frames, take);
+    // Empty buckets/ready entries are removed by the shared discard pass.
+    discard_early_data();
+    return result;
+}
+
+auto quic_stream_scheduler::priority_count() const noexcept -> std::size_t
+{
+    return impl_->priorities.size();
 }
 
 } // namespace cnetmod::quic

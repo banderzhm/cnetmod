@@ -732,4 +732,31 @@ TEST(multipath_frames_reject_path_ids_above_the_nonce_limit)
     ASSERT_FALSE(cnetmod::quic::decode_frame(encoded).has_value());
 }
 
+TEST(quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission)
+{
+    using namespace cnetmod::quic;
+    quic_stream_scheduler scheduler;
+    scheduler.set_priority(0U, 1U, true);
+    scheduler.enqueue(0U, quic_send_frame::owned({std::byte{1}}, 0U));
+    auto frame = scheduler.take();
+    ASSERT_TRUE(frame.has_value());
+    scheduler.set_priority(0U, 6U, false);
+    ASSERT_TRUE(scheduler.requeue_retransmission(frame->frame));
+    frame = scheduler.take();
+    ASSERT_EQ(frame->urgency, 6U);
+    const auto alias = frame->frame;
+    scheduler.retire_stream(0U);
+    ASSERT_EQ(scheduler.priority_count(), 0U);
+    ASSERT_TRUE(scheduler.requeue_retransmission(frame->frame));
+    frame = scheduler.take();
+    ASSERT_EQ(frame->urgency, 6U);
+    ASSERT_TRUE(frame->frame == alias);
+    for (std::uint64_t id = 4U; id < 400004U; id += 4U)
+    {
+        scheduler.set_priority(id, 0U, false);
+        scheduler.retire_stream(id);
+    }
+    ASSERT_EQ(scheduler.priority_count(), 0U);
+}
+
 RUN_TESTS();

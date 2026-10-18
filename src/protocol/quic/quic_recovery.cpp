@@ -224,6 +224,38 @@ void quic_recovery_controller::discard_packet_number_space(pn_space space) noexc
     congestion_.on_packets_discarded(detector_.discard_packet_number_space(space));
 }
 
+auto quic_recovery_controller::take_early_data_frames() -> std::vector<quic_send_frame>
+{
+    auto& sent = sent_packets_[space_index(pn_space::application)];
+    std::vector<quic_send_frame> result;
+    std::uint64_t discarded{};
+    for (auto packet = sent.begin(); packet != sent.end();)
+    {
+        const bool contained_early = packet->second.frames.any_of(
+            [](const auto& frame) { return frame.is_early_data(); });
+        packet->second.frames.erase_if([&result](auto& frame)
+            {
+                if (!frame.is_early_data())
+                    return false;
+                if (std::ranges::find(result, frame) == result.end())
+                    result.push_back(std::move(frame));
+                return true;
+            });
+        if (contained_early && packet->second.frames.empty() && !packet->second.path_mtu_probe_target)
+        {
+            detector_.discard_inflight_packet(packet->first, pn_space::application);
+            discarded += packet->second.bytes;
+            if (packet->second.retransmission_alias)
+                --alias_counts_[space_index(pn_space::application)];
+            packet = sent.erase(packet);
+        }
+        else
+            ++packet;
+    }
+    congestion_.on_packets_discarded(discarded);
+    return result;
+}
+
 auto quic_recovery_controller::can_send_datagram(std::uint64_t bytes) const noexcept -> bool
 {
     return congestion_.can_send_datagram(bytes);

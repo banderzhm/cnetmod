@@ -9,6 +9,7 @@ import cnetmod.executor.pool;
 import cnetmod.coro.cancel;
 import cnetmod.coro.task;
 import cnetmod.protocol.http.v3.server;
+import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.http.v3.session;
 
 auto main(int argc, char** argv) -> int
@@ -16,6 +17,7 @@ auto main(int argc, char** argv) -> int
     std::uint16_t port = 4433;
     unsigned workers = 1;
     bool webtransport_echo{};
+    bool lifecycle_test{};
     std::string certificate = "cert.pem";
     std::string private_key = "key.pem";
     for (int index = 1; index < argc; ++index)
@@ -35,6 +37,10 @@ auto main(int argc, char** argv) -> int
         else if (std::string_view{argv[index]} == "--key" && index + 1 < argc)
         {
             private_key = argv[++index];
+        }
+        else if (std::string_view{argv[index]} == "--lifecycle-test")
+        {
+            lifecycle_test = true;
         }
         else if (std::string_view{argv[index]} == "--webtransport")
         {
@@ -71,9 +77,16 @@ auto main(int argc, char** argv) -> int
         return 1;
     }
 
-    auto handler = [](cnetmod::http::v3::http3_request& request,
+    auto server_observer = std::make_shared<cnetmod::http::v3::http3_server*>(nullptr);
+    auto handler = [server_observer](cnetmod::http::v3::http3_request& request,
                        cnetmod::http::v3::http3_response& response) -> std::error_code
     {
+        if (request.path == "/active-connections")
+        {
+            response.status = 200;
+            response.body = std::to_string((*server_observer)->statistics().active_connections);
+            return {};
+        }
         if (request.path == "/health")
         {
             response.status = 200;
@@ -166,6 +179,13 @@ auto main(int argc, char** argv) -> int
                   cnetmod::http::v3::http3_server_handlers{async_handler, webtransport_handler})
             : cnetmod::http::v3::make_http3_server(*context, tls,
                   cnetmod::endpoint{*address, port}, handler);
+        *server_observer = server.get();
+        if (lifecycle_test)
+        {
+            (void)server->set_qpack_settings(65536U, 100U);
+            (void)server->set_request_body_limits({.max_bytes = 1024U});
+            (void)server->set_idle_timeout(std::chrono::milliseconds{500});
+        }
         if (webtransport_echo)
             (void)server->set_max_datagram_frame_size(1200U);
         if (auto result = server->start(); !result)
@@ -184,6 +204,7 @@ auto main(int argc, char** argv) -> int
               cnetmod::endpoint{*address, port}, cnetmod::http::v3::http3_server_handlers{std::move(async_handler), std::move(webtransport_handler)})
         : cnetmod::http::v3::make_http3_server(context, tls,
               cnetmod::endpoint{*address, port}, std::move(handler));
+    *server_observer = server.get();
     if (webtransport_echo)
         (void)server->set_max_datagram_frame_size(1200U);
     if (auto result = server->start(); !result)

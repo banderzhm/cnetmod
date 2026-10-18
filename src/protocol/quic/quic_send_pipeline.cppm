@@ -45,6 +45,11 @@ public:
     [[nodiscard]] auto release_owned_bytes() noexcept -> std::vector<std::byte>;
     auto append_to(std::vector<std::byte>& output) const -> void;
     auto clear() noexcept -> void;
+    auto set_priority(std::uint8_t urgency, bool incremental) noexcept -> void;
+    [[nodiscard]] auto urgency() const noexcept -> std::uint8_t;
+    [[nodiscard]] auto incremental() const noexcept -> bool;
+    auto mark_early_data() noexcept -> void;
+    [[nodiscard]] auto is_early_data() const noexcept -> bool;
 
     friend auto operator==(const quic_send_frame& lhs,
         const quic_send_frame& rhs) noexcept -> bool;
@@ -57,6 +62,9 @@ private:
     std::size_t shared_offset_{};
     std::size_t shared_size_{};
     std::optional<std::uint64_t> stream_;
+    std::uint8_t urgency_{3U};
+    bool incremental_{};
+    bool early_data_{};
 };
 
 export struct scheduled_quic_frame
@@ -86,6 +94,11 @@ public:
     [[nodiscard]] auto requeue_retransmission(quic_send_frame& frame) -> bool;
     auto set_priority(std::uint64_t stream, std::uint8_t urgency,
         bool incremental) noexcept -> void;
+    /// Forget application metadata; queued/recovery frames own their priority.
+    auto retire_stream(std::uint64_t stream) noexcept -> void;
+    auto discard_early_data() noexcept -> void;
+    [[nodiscard]] auto take_early_data() -> std::vector<quic_send_frame>;
+    [[nodiscard]] auto priority_count() const noexcept -> std::size_t;
 
 private:
     class implementation;

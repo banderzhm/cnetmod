@@ -12,6 +12,7 @@ import cnetmod.protocol.http.semantics;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.server;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.v3.qpack;
 
 namespace {
 
@@ -120,10 +121,11 @@ auto main(int argc, char** argv) -> int
     auto priority = std::make_shared<priority_fixture>();
     auto batch = std::make_shared<batch_fixture>();
     auto cancelled_push_frames = std::make_shared<std::atomic<std::size_t>>();
+    auto cancelled_stream_waits = std::make_shared<std::atomic<std::size_t>>();
     auto server_observer = std::make_shared<cnetmod::http::v3::http3_server*>(nullptr);
     cnetmod::http::v3::streaming_server_request_handler handler =
         [context_ptr, early_data_cache, priority, batch,
-            cancelled_push_frames, server_observer](cnetmod::http::v3::http3_request& request,
+            cancelled_push_frames, cancelled_stream_waits, server_observer](cnetmod::http::v3::http3_request& request,
             cnetmod::http::v3::http3_response& response,
             cnetmod::http::request_body_stream& body_stream,
             cnetmod::cancel_token& token) -> cnetmod::task<std::expected<void, std::error_code>>
@@ -132,6 +134,40 @@ auto main(int argc, char** argv) -> int
         {
             response.status = 200;
             response.body = std::to_string((*server_observer)->statistics().active_connections);
+            co_return {};
+        }
+        if (request.path == "/stream-wait-count")
+        {
+            response.status = 200;
+            response.body = std::to_string(cancelled_stream_waits->load());
+            co_return {};
+        }
+        if (request.path == "/stream-wait" || request.path == "/stream-early")
+        {
+            // The request body remains open while real downstream IO waits.
+            const auto waited = co_await cnetmod::async_timer_wait(*context_ptr,
+                request.path == "/stream-wait" ? std::chrono::milliseconds{30000}
+                                               : std::chrono::milliseconds{20}, token);
+            if (!waited)
+            {
+                cancelled_stream_waits->fetch_add(1U);
+                co_return std::unexpected(waited.error());
+            }
+            response.status = 200;
+            response.body = "early-ok";
+            co_return {};
+        }
+        if (request.path == "/stream-delayed")
+        {
+            response.status = 200;
+            response.body_source = std::make_shared<cnetmod::http::response_body_source>(
+                [context_ptr](cnetmod::cancel_token& response_token)
+                    -> cnetmod::task<std::optional<cnetmod::http::request_body_chunk>>
+                {
+                    (void)co_await cnetmod::async_timer_wait(*context_ptr,
+                        std::chrono::seconds{30}, response_token);
+                    co_return std::nullopt;
+                });
             co_return {};
         }
         if (request.path.starts_with("/priority/"))
@@ -415,6 +451,21 @@ auto main(int argc, char** argv) -> int
         {
             response.status = 200;
             response.headers["content-length"] = "99";
+            response.body = "short";
+            co_return {};
+        }
+        if (request.path == "/test-only-malformed-stream-length")
+        {
+            // Deliberately emit malformed wire for the client parser test.
+            // Pre-encoded fields bypass the ordinary response length check.
+            const std::array<cnetmod::http::v3::header_field, 1> fields{{
+                {"content-length", "99"}}};
+            auto encoded = cnetmod::http::v3::qpack_static_response_headers::encode(200, fields);
+            if (!encoded)
+                co_return std::unexpected(encoded.error());
+            response.status = 200;
+            response.static_headers = std::make_shared<
+                cnetmod::http::v3::qpack_static_response_headers>(std::move(*encoded));
             response.body = "short";
             co_return {};
         }

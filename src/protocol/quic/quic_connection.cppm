@@ -213,6 +213,7 @@ public:
      * registration. Register only for the dynamic lifetime of a request
      * handler.
      */
+    [[nodiscard]] auto is_stream_cancelled(stream_id sid) const noexcept -> bool;
     void register_stream_cancellation(stream_id sid, cancel_token& token) noexcept;
     void unregister_stream_cancellation(stream_id sid) noexcept;
 
@@ -257,9 +258,11 @@ public:
     [[nodiscard]] auto initiate_key_update() -> std::expected<void, std::error_code>;
 
     /// Close connection with error
+    /// application_error selects CONNECTION_CLOSE_APP; false preserves the
+    /// transport-error close used by existing callers. Draining never sends.
     [[nodiscard]] auto async_close(
         std::error_code ec,
-        std::string_view reason = {})
+        std::string_view reason = {}, bool application_error = false)
         -> task<void>;
 
     /// Check if connection is closed
@@ -450,6 +453,8 @@ private:
     /// Wake every pending stream-read waiter when the connection can no
     /// longer receive application data.
     auto close_stream_readiness() noexcept -> void;
+    auto close_transport(std::error_code error,
+        connection_state state = connection_state::closed) noexcept -> void;
 
     /// Pack and send packets
     [[nodiscard]] auto pack_and_send_packet() -> task<void>;

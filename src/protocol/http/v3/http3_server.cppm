@@ -12,6 +12,7 @@ import cnetmod.executor.pool;
 import cnetmod.coro.task;
 import cnetmod.protocol.quic;
 import cnetmod.protocol.http.v3.session;
+import cnetmod.protocol.http.semantics;
 
 namespace cnetmod::http::v3 {
 
@@ -122,6 +123,10 @@ public:
     /// default; a non-zero capacity requires a non-zero blocked-stream limit.
     auto set_qpack_settings(std::uint64_t max_table_capacity,
         std::uint64_t max_blocked_streams) -> std::expected<void, std::error_code>;
+    /// Configure cumulative DATA/body bounds before start(). Buffered requests
+    /// also cap wire storage at max_bytes plus the allowed header bytes.
+    auto set_request_body_limits(request_body_stream_options options)
+        -> std::expected<void, std::error_code>;
     /// Configure the QUIC idle timeout advertised by newly accepted
     /// connections. A zero duration disables idle expiry; negative durations
     /// are rejected. Configure this before `start()`.
