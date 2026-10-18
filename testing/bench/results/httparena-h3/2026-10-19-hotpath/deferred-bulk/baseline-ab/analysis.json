@@ -1,0 +1,214 @@
+{
+  "valid": true,
+  "scope": "6 baseline-h3 rounds at 4096/8192; three matched AB/BA/AB blocks. Nonofficial paired experiment. Header rate differs from completed rate.",
+  "configurations": [
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "variants": {
+        "baseline": {
+          "completed_rps": 2888372.7915194347,
+          "valid_2xx_rps": 2888372.7915194347,
+          "cpu_us_per_complete": 6.674782801309648,
+          "p99_ms": 5.39,
+          "rss_after_mib": 68.8046875
+        },
+        "candidate": {
+          "completed_rps": 2781981.6578483246,
+          "valid_2xx_rps": 2781981.6578483246,
+          "cpu_us_per_complete": 6.822690434970923,
+          "p99_ms": 6.21,
+          "rss_after_mib": 71.84375
+        }
+      },
+      "paired_changes": [
+        {
+          "profile": "baseline-h3",
+          "path_mtu": 4096,
+          "receive_ceiling": 8192,
+          "block": 1,
+          "completion_gain_percent": -8.090418193627302,
+          "cpu_per_complete_change_percent": 4.303855465215589,
+          "p99_change_percent": 10.727969348659006
+        },
+        {
+          "profile": "baseline-h3",
+          "path_mtu": 4096,
+          "receive_ceiling": 8192,
+          "block": 2,
+          "completion_gain_percent": -3.683428052759863,
+          "cpu_per_complete_change_percent": 1.4633307942211404,
+          "p99_change_percent": 4.194630872483218
+        },
+        {
+          "profile": "baseline-h3",
+          "path_mtu": 4096,
+          "receive_ceiling": 8192,
+          "block": 3,
+          "completion_gain_percent": 2.491080247983235,
+          "cpu_per_complete_change_percent": -0.03276226590277487,
+          "p99_change_percent": 15.213358070500927
+        }
+      ]
+    }
+  ],
+  "rounds": [
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "block": 1,
+      "variant": "baseline",
+      "done": 16874480,
+      "status_2xx": 16874480,
+      "header_completion_delta": 0,
+      "elapsed_seconds": 5.66,
+      "completed_rps": 2981356.890459364,
+      "valid_2xx_rps": 2981356.890459364,
+      "printed_rps": 3374896.0,
+      "cpu_us_per_complete": 6.578573087881819,
+      "p99_ms": 5.22,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "rss_after_mib": 72.21484375,
+      "host_busy_cpu": 27.855585351567555,
+      "host_idle_cpu": 2.148440690068287,
+      "positive_cpu_tids": 29
+    },
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "block": 1,
+      "variant": "candidate",
+      "done": 15509264,
+      "status_2xx": 15509264,
+      "header_completion_delta": 0,
+      "elapsed_seconds": 5.66,
+      "completed_rps": 2740152.6501766783,
+      "valid_2xx_rps": 2740152.6501766783,
+      "printed_rps": 3101852.8,
+      "cpu_us_per_complete": 6.861705365257823,
+      "p99_ms": 5.78,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "rss_after_mib": 64.73828125,
+      "host_busy_cpu": 26.836109034231942,
+      "host_idle_cpu": 2.9560963780875387,
+      "positive_cpu_tids": 25
+    },
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "block": 2,
+      "variant": "candidate",
+      "done": 15773836,
+      "status_2xx": 15773836,
+      "header_completion_delta": 0,
+      "elapsed_seconds": 5.67,
+      "completed_rps": 2781981.6578483246,
+      "valid_2xx_rps": 2781981.6578483246,
+      "printed_rps": 3154767.2,
+      "cpu_us_per_complete": 6.822690434970923,
+      "p99_ms": 6.21,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "rss_after_mib": 71.84375,
+      "host_busy_cpu": 26.760313259301814,
+      "host_idle_cpu": 2.6959953420708325,
+      "positive_cpu_tids": 30
+    },
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "block": 2,
+      "variant": "baseline",
+      "done": 16348190,
+      "status_2xx": 16348190,
+      "header_completion_delta": 0,
+      "elapsed_seconds": 5.66,
+      "completed_rps": 2888372.7915194347,
+      "valid_2xx_rps": 2888372.7915194347,
+      "printed_rps": 3269638.0,
+      "cpu_us_per_complete": 6.724291802334081,
+      "p99_ms": 5.96,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "rss_after_mib": 68.8046875,
+      "host_busy_cpu": 27.418976478686016,
+      "host_idle_cpu": 2.6464327231521536,
+      "positive_cpu_tids": 29
+    },
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "block": 3,
+      "variant": "baseline",
+      "done": 16216258,
+      "status_2xx": 16216258,
+      "header_completion_delta": 0,
+      "elapsed_seconds": 5.66,
+      "completed_rps": 2865063.250883392,
+      "valid_2xx_rps": 2865063.250883392,
+      "printed_rps": 3243251.6,
+      "cpu_us_per_complete": 6.674782801309648,
+      "p99_ms": 5.39,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "rss_after_mib": 68.76171875,
+      "host_busy_cpu": 27.394935058740028,
+      "host_idle_cpu": 2.277004068940399,
+      "positive_cpu_tids": 27
+    },
+    {
+      "path_mtu": 4096,
+      "receive_ceiling": 8192,
+      "block": 3,
+      "variant": "candidate",
+      "done": 16620218,
+      "status_2xx": 16620218,
+      "header_completion_delta": 0,
+      "elapsed_seconds": 5.66,
+      "completed_rps": 2936434.2756183743,
+      "valid_2xx_rps": 2936434.2756183743,
+      "printed_rps": 3324043.6,
+      "cpu_us_per_complete": 6.6725959912198505,
+      "p99_ms": 6.21,
+      "failed": 0,
+      "errored": 0,
+      "timeout": 0,
+      "rss_after_mib": 72.015625,
+      "host_busy_cpu": 27.645164623992738,
+      "host_idle_cpu": 2.419081313371478,
+      "positive_cpu_tids": 32
+    }
+  ],
+  "source_difference": [
+    "src/protocol/quic/quic_connection.cpp",
+    "testing/http3/deadline_frame_parser.py"
+  ],
+  "proof": {
+    "baseline": {
+      "binary": "/var/tmp/cnetmod-pmtu-deadline-5afc506d/baseline-guard/arena_h3_server",
+      "binary_sha256": "2fa51db8652cf8a0d166d79ab4d36241c9a5c789aa8ed4c0cb5e57eb56bb7d28",
+      "allocator_proof_sha256": "df6ccf8851c820a86bef0358f076cd0ea14a97bdce3be1f7f360d989d2631280",
+      "source_manifest_sha256": "bb2a751524921b82751ac8e404e2df6532a0d1755a487f76122d0f0e56e1cb2f",
+      "source_count": 1274
+    },
+    "candidate": {
+      "binary": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/proof-build-root/testing/bench/arena_h3_server",
+      "binary_sha256": "729c62a8a3e54cbd619ccfd3d369dd9bbf5d752e14fc23d6de9256ec64332dd9",
+      "allocator_proof_sha256": "2ee1ebe26911db9454207efcdfb1be421c0827575ef2b8debe0cea992ee66d9e",
+      "source_manifest_sha256": "b89671ad2eb5b3d2abdf99c07fb1734322b70535174e15f1ee518f63bf6cad4a",
+      "source_count": 1274
+    }
+  },
+  "limits": [
+    "Ceilings do not prove every packet reaches that size.",
+    "Host busy includes load generator; thread skew does not prove available spare capacity.",
+    "No packet rejection counter was added, so performance change cannot identify rejected versus successful copy counts."
+  ]
+}

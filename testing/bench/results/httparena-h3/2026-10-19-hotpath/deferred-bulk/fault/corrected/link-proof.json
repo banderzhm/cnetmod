@@ -1,0 +1,12 @@
+{
+  "external_quic_archive": "/var/tmp/cnetmod-h3-deferred-bulk-fault-29750984cd8945798f9f0832ef63cc9c-link-fix/libcnetmod_quic.a",
+  "archive_sha256": "194759d93177cad28f0fdc63ba12443078444e4a1c17568cab75b19c4979efa7",
+  "member_sha256": "8a6193c39a6f61ff248b349ef1cf439c5e9a0955d50dce828e9624949641f4f4",
+  "link_map_sha256": "f9d2574c679d75a9ee8557f666e9db790df52bb41d9e8406d4f1fc89e2919be1",
+  "trace_sha256": "65def42a4ed4b7d34a94c0beeacca9ff9e0e5c41012a928607c06828a1729374",
+  "archive_seen_in_trace": true,
+  "member_trace": [
+    "trace: /var/tmp/cnetmod-h3-deferred-bulk-fault-29750984cd8945798f9f0832ef63cc9c-link-fix/libcnetmod_quic.a(quic_connection.cpp.o)"
+  ],
+  "map_role": "ThinLTO output layout; not archive-selection evidence"
+}

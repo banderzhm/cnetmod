@@ -1,0 +1,87 @@
+{
+  "source_report_sha256": "10af879ee6884c7171ceca1c974a1536ce7e704474be2804450a44c948e107cc",
+  "measurements": [
+    {
+      "ceiling": 16384,
+      "received_candidates": 119,
+      "acknowledged_candidates": 119,
+      "first": {
+        "packet_number": 0,
+        "bytes": 1328,
+        "received_time_ms": 1.0,
+        "received_event": 25,
+        "client_ack_time_ms": 1.0,
+        "client_ack_event": 33
+      },
+      "last": {
+        "packet_number": 350,
+        "bytes": 16384,
+        "received_time_ms": 54.0,
+        "received_event": 1067,
+        "client_ack_time_ms": 54.0,
+        "client_ack_event": 1069
+      },
+      "zero_received_deltas": 72,
+      "size_deltas": [
+        80,
+        128
+      ],
+      "time_unit": "milliseconds, qlog0.3 relative time from trace reference; event order breaks equal timestamps"
+    },
+    {
+      "ceiling": 32768,
+      "received_candidates": 247,
+      "acknowledged_candidates": 247,
+      "first": {
+        "packet_number": 0,
+        "bytes": 1328,
+        "received_time_ms": 1.0,
+        "received_event": 25,
+        "client_ack_time_ms": 1.0,
+        "client_ack_event": 33
+      },
+      "last": {
+        "packet_number": 437,
+        "bytes": 32768,
+        "received_time_ms": 48.0,
+        "received_event": 1415,
+        "client_ack_time_ms": 48.0,
+        "client_ack_event": 1417
+      },
+      "zero_received_deltas": 206,
+      "size_deltas": [
+        80,
+        128
+      ],
+      "time_unit": "milliseconds, qlog0.3 relative time from trace reference; event order breaks equal timestamps"
+    },
+    {
+      "ceiling": 65507,
+      "received_candidates": 503,
+      "acknowledged_candidates": 503,
+      "first": {
+        "packet_number": 0,
+        "bytes": 1328,
+        "received_time_ms": 1.0,
+        "received_event": 25,
+        "client_ack_time_ms": 1.0,
+        "client_ack_event": 29
+      },
+      "last": {
+        "packet_number": 785,
+        "bytes": 65507,
+        "received_time_ms": 86.0,
+        "received_event": 2775,
+        "client_ack_time_ms": 86.0,
+        "client_ack_event": 2777
+      },
+      "zero_received_deltas": 423,
+      "size_deltas": [
+        51,
+        128
+      ],
+      "time_unit": "milliseconds, qlog0.3 relative time from trace reference; event order breaks equal timestamps"
+    }
+  ],
+  "scope": "Offline extraction of all target candidates and client ACK observations, not internal validated path state. Current arm_path_mtu_discovery overwrites next-probe interval; timing is not a final acceptance result."
+}

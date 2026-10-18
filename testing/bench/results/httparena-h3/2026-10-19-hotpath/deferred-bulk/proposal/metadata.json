@@ -1,0 +1,11 @@
+{
+  "head": "5afc506dfefe021ca17caadaa1870572255dea1f",
+  "base_source_sha256": "50cd8c3ba2cc226c45e83a483ba4c04665e229b76aae69ebf4523170abb7f1c2",
+  "candidate_source_sha256": "d2a8a62e278ea04b2ea2350c459dce595b409a17a8483ee94114b4e1e0fa731a",
+  "patch_sha256": "3f0aefad9df3d885dd092dc123876e8379d4e17d1cf941ab57c5439285477746",
+  "scope": "src/protocol/quic/quic_connection.cpp",
+  "applied": false,
+  "built": false,
+  "runtime_tested": false,
+  "limits": "ACK/PING prefix and cold reserves unchanged; only bulk materialization deferred. No in-place seal."
+}

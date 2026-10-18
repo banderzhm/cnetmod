@@ -1,0 +1,38 @@
+{
+  "packer-append-call": [
+    "objdump",
+    "-d",
+    "-C",
+    "--start-address=0x30bfaf",
+    "--stop-address=0x30c020",
+    "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/arena_h3_server"
+  ],
+  "packer-zero-fill-call": [
+    "objdump",
+    "-d",
+    "-C",
+    "--start-address=0x30c710",
+    "--stop-address=0x30c7a0",
+    "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/arena_h3_server"
+  ],
+  "apply-boundary-copy": [
+    "objdump",
+    "-d",
+    "-C",
+    "--start-address=0x312460",
+    "--stop-address=0x312540",
+    "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/arena_h3_server"
+  ],
+  "caller_source": [
+    "addr2line",
+    "-f",
+    "-C",
+    "-i",
+    "-e",
+    "/var/tmp/cnetmod-h3-large-mtu-perf-c6333e93d31b45c689c0146783514018/arena_h3_server",
+    "0x30bff7",
+    "0x30c75e",
+    "0x3124c2",
+    "0x346740"
+  ]
+}

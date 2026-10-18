@@ -1,0 +1,13 @@
+ROUND START baseline-h3-mtu4096-recv8192-block1-baseline
+ROUND VALID {"profile": "baseline-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 1, "variant": "baseline", "done": 16874480, "completed_rps": 2981356.890459364, "cpu_us_per_complete": 6.578573087881819, "p99_ms": 5.22, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START baseline-h3-mtu4096-recv8192-block1-candidate
+ROUND VALID {"profile": "baseline-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 1, "variant": "candidate", "done": 15509264, "completed_rps": 2740152.6501766783, "cpu_us_per_complete": 6.861705365257823, "p99_ms": 5.78, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START baseline-h3-mtu4096-recv8192-block2-candidate
+ROUND VALID {"profile": "baseline-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 2, "variant": "candidate", "done": 15773836, "completed_rps": 2781981.6578483246, "cpu_us_per_complete": 6.822690434970923, "p99_ms": 6.21, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START baseline-h3-mtu4096-recv8192-block2-baseline
+ROUND VALID {"profile": "baseline-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 2, "variant": "baseline", "done": 16348190, "completed_rps": 2888372.7915194347, "cpu_us_per_complete": 6.724291802334081, "p99_ms": 5.96, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START baseline-h3-mtu4096-recv8192-block3-baseline
+ROUND VALID {"profile": "baseline-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 3, "variant": "baseline", "done": 16216258, "completed_rps": 2865063.250883392, "cpu_us_per_complete": 6.674782801309648, "p99_ms": 5.39, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START baseline-h3-mtu4096-recv8192-block3-candidate
+ROUND VALID {"profile": "baseline-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 3, "variant": "candidate", "done": 16620218, "completed_rps": 2936434.2756183743, "cpu_us_per_complete": 6.6725959912198505, "p99_ms": 6.21, "failed": 0, "errored": 0, "timeout": 0}
+RESULTS /var/tmp/cnetmod-h3-deferred-bulk-baseline-ab-5a0881b316864beba05c0f298d1d99d2 valid True

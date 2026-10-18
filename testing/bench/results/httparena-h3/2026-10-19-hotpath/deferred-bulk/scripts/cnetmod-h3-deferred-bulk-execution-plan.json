@@ -1,0 +1,7 @@
+{
+  "candidate_root": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c",
+  "source_snapshot": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-deferred-bulk-source-ac465be6",
+  "arena": "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena",
+  "fault_output": "/var/tmp/cnetmod-h3-deferred-bulk-fault-29750984cd8945798f9f0832ef63cc9c",
+  "fault_results": "/var/tmp/cnetmod-h3-deferred-bulk-fault-results-29750984cd8945798f9f0832ef63cc9c"
+}

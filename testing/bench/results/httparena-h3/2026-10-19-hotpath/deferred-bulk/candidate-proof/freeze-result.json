@@ -1,0 +1,22 @@
+{
+  "valid": true,
+  "source_difference": [
+    "src/protocol/quic/quic_connection.cpp",
+    "testing/http3/deadline_frame_parser.py"
+  ],
+  "source_count": 1274,
+  "candidate": {
+    "binary": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/proof-build-root/testing/bench/arena_h3_server",
+    "binary_sha256": "729c62a8a3e54cbd619ccfd3d369dd9bbf5d752e14fc23d6de9256ec64332dd9",
+    "source_snapshot": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/source-snapshot",
+    "allocator_proof": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/system-allocator/allocator-proof.json",
+    "proof_build_root": "/var/tmp/cnetmod-h3-deferred-bulk-candidate-29750984cd8945798f9f0832ef63cc9c/proof-build-root"
+  },
+  "source_unchanged_during_freeze": true,
+  "baseline_backing_unchanged": true,
+  "scripts": {
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-deferred-bulk-freeze.py": "1b753e9b37fe49de114c550e4a1731c721f1e15d18543bed6a696502c1d3f629",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-deferred-bulk-ab.py": "b672008ce62a52b61a2410d581fd86182c4b4010d358347cbc4d5deee0ca91c3",
+    "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-deferred-plaintext-review-5afc/deferred-plaintext.patch": "3f0aefad9df3d885dd092dc123876e8379d4e17d1cf941ab57c5439285477746"
+  }
+}

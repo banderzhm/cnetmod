@@ -1,0 +1,82 @@
+[
+  {
+    "frames": [
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection18apply_stream_writeEmRKNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEERKNS5_10shared_ptrIKNS5_12basic_stringIcNS5_11char_traitsIcEENS8_IcEEEEEEb",
+        "offset": "0xec7",
+        "elf_pc": "0x3124c7"
+      },
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection16flush_send_queueEv.resume",
+        "offset": "0x8a9",
+        "elf_pc": "0x330339"
+      },
+      {
+        "mangled": "_ZN7cnetmodW7cnetmodW2ioW8platformW8io_uring16io_uring_context12run_one_implEb",
+        "offset": "0x7ce",
+        "elf_pc": "0x3712de"
+      }
+    ],
+    "samples": 472
+  },
+  {
+    "frames": [
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic12encode_frameERKNS0_S3_12stream_frameE",
+        "offset": "0xa5",
+        "elf_pc": "0x346745"
+      },
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection18apply_stream_writeEmRKNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEERKNS5_10shared_ptrIKNS5_12basic_stringIcNS5_11char_traitsIcEENS8_IcEEEEEEb",
+        "offset": "0xf28",
+        "elf_pc": "0x312528"
+      },
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection16flush_send_queueEv.resume",
+        "offset": "0x8a9",
+        "elf_pc": "0x330339"
+      }
+    ],
+    "samples": 460
+  },
+  {
+    "frames": [
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection18apply_stream_writeEmRKNSt3__16vectorISt4byteNS5_9allocatorIS7_EEEERKNS5_10shared_ptrIKNS5_12basic_stringIcNS5_11char_traitsIcEENS8_IcEEEEEEb",
+        "offset": "0xe93",
+        "elf_pc": "0x312493"
+      },
+      {
+        "mangled": "_ZN7cnetmod4quicW7cnetmodW8protocolW4quic15quic_connection16flush_send_queueEv.resume",
+        "offset": "0x8a9",
+        "elf_pc": "0x330339"
+      },
+      {
+        "mangled": "_ZN7cnetmodW7cnetmodW2ioW8platformW8io_uring16io_uring_context12run_one_implEb",
+        "offset": "0x7ce",
+        "elf_pc": "0x3712de"
+      }
+    ],
+    "samples": 6
+  },
+  {
+    "frames": [
+      {
+        "mangled": "_ZN7cnetmod4http2v312_GLOBAL__N_112encode_frameEmNS_W7cnetmodW4coreW6buffer9byte_viewE.llvm.3102471200550365145",
+        "offset": "0x77",
+        "elf_pc": "0x2bc2d7"
+      },
+      {
+        "mangled": "_ZN7cnetmod4http2v312_GLOBAL__N_122response_headers_frameERNS1_W7cnetmodW8protocolW4httpW2v3W5qpack13qpack_encoderERKNS1_S6_W7session14http3_responseEm",
+        "offset": "0x62",
+        "elf_pc": "0x2d7ba2"
+      },
+      {
+        "mangled": "_ZN7cnetmod4http2v3W7cnetmodW8protocolW4httpW2v3W7session20http3_server_session19service_peer_streamEm.resume",
+        "offset": "0x3747",
+        "elf_pc": "0x2ee6a7"
+      }
+    ],
+    "samples": 4
+  }
+]

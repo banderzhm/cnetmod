@@ -1,0 +1,25 @@
+ROUND START static-h3-mtu4096-recv8192-block1-baseline
+ROUND VALID {"profile": "static-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 1, "variant": "baseline", "done": 3464958, "completed_rps": 612183.3922261484, "cpu_us_per_complete": 28.470763570582957, "p99_ms": 16.09, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu4096-recv8192-block1-candidate
+ROUND VALID {"profile": "static-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 1, "variant": "candidate", "done": 3487777, "completed_rps": 615128.2186948854, "cpu_us_per_complete": 28.04365072652294, "p99_ms": 15.82, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu4096-recv8192-block2-candidate
+ROUND VALID {"profile": "static-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 2, "variant": "candidate", "done": 3387023, "completed_rps": 598413.9575971732, "cpu_us_per_complete": 28.647576352448745, "p99_ms": 17.27, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu4096-recv8192-block2-baseline
+ROUND VALID {"profile": "static-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 2, "variant": "baseline", "done": 3493870, "completed_rps": 616202.8218694886, "cpu_us_per_complete": 28.292409276819114, "p99_ms": 16.44, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu4096-recv8192-block3-baseline
+ROUND VALID {"profile": "static-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 3, "variant": "baseline", "done": 3420562, "completed_rps": 604339.5759717315, "cpu_us_per_complete": 28.41930653500799, "p99_ms": 18.07, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu4096-recv8192-block3-candidate
+ROUND VALID {"profile": "static-h3", "path_mtu": 4096, "receive_ceiling": 8192, "block": 3, "variant": "candidate", "done": 3416222, "completed_rps": 602508.2892416226, "cpu_us_per_complete": 28.90912827093789, "p99_ms": 17.68, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu65507-recv65507-block1-baseline
+ROUND VALID {"profile": "static-h3", "path_mtu": 65507, "receive_ceiling": 65507, "block": 1, "variant": "baseline", "done": 2039897, "completed_rps": 359136.7957746479, "cpu_us_per_complete": 53.16444898933622, "p99_ms": 36.83, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu65507-recv65507-block1-candidate
+ROUND VALID {"profile": "static-h3", "path_mtu": 65507, "receive_ceiling": 65507, "block": 1, "variant": "candidate", "done": 2241140, "completed_rps": 394566.90140845074, "cpu_us_per_complete": 47.359825802939575, "p99_ms": 31.79, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu65507-recv65507-block2-candidate
+ROUND VALID {"profile": "static-h3", "path_mtu": 65507, "receive_ceiling": 65507, "block": 2, "variant": "candidate", "done": 2264287, "completed_rps": 398642.07746478874, "cpu_us_per_complete": 45.95265529502223, "p99_ms": 40.19, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu65507-recv65507-block2-baseline
+ROUND VALID {"profile": "static-h3", "path_mtu": 65507, "receive_ceiling": 65507, "block": 2, "variant": "baseline", "done": 2033617, "completed_rps": 358662.6102292769, "cpu_us_per_complete": 54.20883086638242, "p99_ms": 37.02, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu65507-recv65507-block3-baseline
+ROUND VALID {"profile": "static-h3", "path_mtu": 65507, "receive_ceiling": 65507, "block": 3, "variant": "baseline", "done": 1962991, "completed_rps": 345597.00704225356, "cpu_us_per_complete": 55.11996743744622, "p99_ms": 38.47, "failed": 0, "errored": 0, "timeout": 0}
+ROUND START static-h3-mtu65507-recv65507-block3-candidate
+ROUND VALID {"profile": "static-h3", "path_mtu": 65507, "receive_ceiling": 65507, "block": 3, "variant": "candidate", "done": 2152564, "completed_rps": 379640.9171075838, "cpu_us_per_complete": 48.34699456090504, "p99_ms": 42.1, "failed": 0, "errored": 0, "timeout": 0}
+RESULTS /var/tmp/cnetmod-h3-deferred-bulk-ab-e93876177ef648aab86e50e6478b89f4 valid True

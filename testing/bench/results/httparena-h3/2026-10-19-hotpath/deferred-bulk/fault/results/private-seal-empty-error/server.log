@@ -1,0 +1,3 @@
+[2026-10-18 16:27:20.551] [info] [125710616299456] [quic_packet_failure_server.cpp:28] actual packet protection result failed=true category=openssl value=503316583 candidates=2 committed=1
+[2026-10-18 16:27:20.551] [info] [125710616299456] [quic_packet_failure_server.cpp:196] packet-failure regression error generic 5 0 true 5 2 1 1
+

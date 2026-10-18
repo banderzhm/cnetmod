@@ -1,0 +1,2 @@
+# Preserve exact bytes and native formatting of archived diagnostic evidence.
+* -text -whitespace
