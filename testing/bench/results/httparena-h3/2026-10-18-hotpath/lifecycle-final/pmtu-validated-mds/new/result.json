@@ -1,0 +1,938 @@
+{
+  "status": "passed",
+  "expect": "pass",
+  "records": "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new",
+  "diagnostics_required": true,
+  "confirmation_requests_per_epoch": 4,
+  "confirmation_interval_seconds": 0.025,
+  "quiet_interval_seconds": 0.075,
+  "server_sha256": "55737929dbec28fce266f4d1a64fb58a7cdf89dde0cc15c5065f1575abdfb54f",
+  "peer_aead": {
+    "kind": "cryptography-large-packet-test-peer",
+    "stock_aioquic_interoperability": false,
+    "aioquic_version": "1.3.0",
+    "cryptography_version": "50.0.1",
+    "original_backend": "/usr/lib/python3.14/site-packages/aioquic/_crypto.abi3.so",
+    "original_backend_sha256": "64c07c18ad6a3189a770d53a847b950a6a72495157d7d8a55fe187955d9dd369",
+    "adapter_sha256": "8edf9cfb2b5720c74db24eb182af4d8c7333d7f7d861b11e0042e89a21e1c104",
+    "header_protection": "unchanged aioquic backend",
+    "scope": "client and independent proxy CryptoContext AEAD factory"
+  },
+  "command": [
+    "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_cc_server",
+    "--port",
+    "60916",
+    "--cert",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/cert.pem",
+    "--key",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/key.pem",
+    "--listening-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/listening.txt",
+    "--ready-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/ready.txt",
+    "--result-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/failure.txt"
+  ],
+  "trace_command": [
+    "/usr/sbin/strace",
+    "-ff",
+    "-o",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/udp-syscalls",
+    "-e",
+    "trace=sendmmsg,sendmsg,setsockopt,getsockopt",
+    "/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_cc_server",
+    "--port",
+    "60916",
+    "--cert",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/cert.pem",
+    "--key",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/key.pem",
+    "--listening-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/listening.txt",
+    "--ready-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/ready.txt",
+    "--result-report",
+    "/mnt/c/Users/25007/.codex/tmp/pmtu-cc-review/window-ack-isolated/new/failure.txt"
+  ],
+  "peer_receive_limit": "omitted transport parameter; RFC default65527",
+  "peer_outgoing_target": 1200,
+  "server_ceiling": 4096,
+  "discovery_trace": [
+    {
+      "path": 0,
+      "mds": 1328,
+      "cwnd": 16111,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 13
+    },
+    {
+      "path": 0,
+      "mds": 1456,
+      "cwnd": 17567,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 17
+    },
+    {
+      "path": 0,
+      "mds": 1584,
+      "cwnd": 19151,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 21
+    },
+    {
+      "path": 0,
+      "mds": 1712,
+      "cwnd": 20863,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 25
+    },
+    {
+      "path": 0,
+      "mds": 1840,
+      "cwnd": 22703,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 29
+    },
+    {
+      "path": 0,
+      "mds": 1968,
+      "cwnd": 24671,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 33
+    },
+    {
+      "path": 0,
+      "mds": 2096,
+      "cwnd": 26767,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 37
+    },
+    {
+      "path": 0,
+      "mds": 2224,
+      "cwnd": 28991,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 41
+    },
+    {
+      "path": 0,
+      "mds": 2352,
+      "cwnd": 31343,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 45
+    },
+    {
+      "path": 0,
+      "mds": 2480,
+      "cwnd": 33823,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 49
+    },
+    {
+      "path": 0,
+      "mds": 2608,
+      "cwnd": 36431,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 53
+    },
+    {
+      "path": 0,
+      "mds": 2736,
+      "cwnd": 39167,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 57
+    },
+    {
+      "path": 0,
+      "mds": 2864,
+      "cwnd": 42031,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 61
+    },
+    {
+      "path": 0,
+      "mds": 2992,
+      "cwnd": 45023,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 65
+    },
+    {
+      "path": 0,
+      "mds": 3120,
+      "cwnd": 48143,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 69
+    },
+    {
+      "path": 0,
+      "mds": 3248,
+      "cwnd": 51391,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 73
+    },
+    {
+      "path": 0,
+      "mds": 3376,
+      "cwnd": 54767,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 77
+    },
+    {
+      "path": 0,
+      "mds": 3504,
+      "cwnd": 58271,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 81
+    },
+    {
+      "path": 0,
+      "mds": 3632,
+      "cwnd": 61903,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 85
+    },
+    {
+      "path": 0,
+      "mds": 3760,
+      "cwnd": 65663,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 89
+    },
+    {
+      "path": 0,
+      "mds": 3888,
+      "cwnd": 69551,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 93
+    },
+    {
+      "path": 0,
+      "mds": 4016,
+      "cwnd": 73567,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 97
+    },
+    {
+      "path": 0,
+      "mds": 4096,
+      "cwnd": 77663,
+      "pto": false,
+      "kind": "VALIDATE",
+      "line": 101
+    }
+  ],
+  "epochs": [
+    {
+      "epoch": 0,
+      "stream": 0,
+      "drop": {
+        "at": 478.428629579,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 0,
+        "packet_number": 25,
+        "target_stream": 0,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 289,
+          "probe_lost": 0,
+          "cwnd": 38979,
+          "flight": 328,
+          "pto": true,
+          "kind": "ACK",
+          "line": 116
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 38991,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 138
+      }
+    },
+    {
+      "epoch": 1,
+      "stream": 20,
+      "drop": {
+        "at": 478.786199076,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 1,
+        "packet_number": 38,
+        "target_stream": 20,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 289,
+          "probe_lost": 0,
+          "cwnd": 19510,
+          "flight": 328,
+          "pto": true,
+          "kind": "ACK",
+          "line": 153
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 19534,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 173
+      }
+    },
+    {
+      "epoch": 2,
+      "stream": 40,
+      "drop": {
+        "at": 479.185411226,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 2,
+        "packet_number": 50,
+        "target_stream": 40,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 289,
+          "probe_lost": 0,
+          "cwnd": 9797,
+          "flight": 328,
+          "pto": true,
+          "kind": "ACK",
+          "line": 188
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 9849,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 210
+      }
+    },
+    {
+      "epoch": 3,
+      "stream": 60,
+      "drop": {
+        "at": 479.571780421,
+        "direction": "server",
+        "bytes": 289,
+        "action": "drop",
+        "epoch": 3,
+        "packet_number": 63,
+        "target_stream": 60,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 289,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 329,
+          "pto": true,
+          "kind": "ACK",
+          "line": 225
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 245
+      }
+    },
+    {
+      "epoch": 4,
+      "stream": 80,
+      "drop": {
+        "at": 479.897448529,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 4,
+        "packet_number": 75,
+        "target_stream": 80,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 260
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 282
+      }
+    },
+    {
+      "epoch": 5,
+      "stream": 100,
+      "drop": {
+        "at": 480.214810718,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 5,
+        "packet_number": 88,
+        "target_stream": 100,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 297
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 319
+      }
+    },
+    {
+      "epoch": 6,
+      "stream": 120,
+      "drop": {
+        "at": 480.499654939,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 6,
+        "packet_number": 101,
+        "target_stream": 120,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 334
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 356
+      }
+    },
+    {
+      "epoch": 7,
+      "stream": 140,
+      "drop": {
+        "at": 480.876404343,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 7,
+        "packet_number": 114,
+        "target_stream": 140,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 371
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 391
+      }
+    },
+    {
+      "epoch": 8,
+      "stream": 160,
+      "drop": {
+        "at": 481.203933626,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 8,
+        "packet_number": 126,
+        "target_stream": 160,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 406
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 428
+      }
+    },
+    {
+      "epoch": 9,
+      "stream": 180,
+      "drop": {
+        "at": 481.505033955,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 9,
+        "packet_number": 139,
+        "target_stream": 180,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 443
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 463
+      }
+    },
+    {
+      "epoch": 10,
+      "stream": 200,
+      "drop": {
+        "at": 481.797991369,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 10,
+        "packet_number": 151,
+        "target_stream": 200,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 478
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 500
+      }
+    },
+    {
+      "epoch": 11,
+      "stream": 220,
+      "drop": {
+        "at": 482.088595307,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 11,
+        "packet_number": 164,
+        "target_stream": 220,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 515
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 535
+      }
+    },
+    {
+      "epoch": 12,
+      "stream": 240,
+      "drop": {
+        "at": 482.346548312,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 12,
+        "packet_number": 176,
+        "target_stream": 240,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 550
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 572
+      }
+    },
+    {
+      "epoch": 13,
+      "stream": 260,
+      "drop": {
+        "at": 482.63429044,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 13,
+        "packet_number": 189,
+        "target_stream": 260,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 587
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 609
+      }
+    },
+    {
+      "epoch": 14,
+      "stream": 280,
+      "drop": {
+        "at": 482.920469806,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 14,
+        "packet_number": 202,
+        "target_stream": 280,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 624
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 646
+      }
+    },
+    {
+      "epoch": 15,
+      "stream": 300,
+      "drop": {
+        "at": 483.224204437,
+        "direction": "server",
+        "bytes": 290,
+        "action": "drop",
+        "epoch": 15,
+        "packet_number": 215,
+        "target_stream": 300,
+        "frames": [
+          {
+            "offset": 0,
+            "length": 256,
+            "fin": true
+          }
+        ]
+      },
+      "losses": [
+        {
+          "space": 2,
+          "ordinary_lost": 290,
+          "probe_lost": 0,
+          "cwnd": 8192,
+          "flight": 330,
+          "pto": true,
+          "kind": "ACK",
+          "line": 661
+        }
+      ],
+      "quiet": {
+        "space": 2,
+        "ordinary_lost": 0,
+        "probe_lost": 0,
+        "cwnd": 8257,
+        "flight": 0,
+        "pto": false,
+        "kind": "ACK",
+        "line": 681
+      }
+    }
+  ],
+  "before_final": {
+    "space": 2,
+    "ordinary_lost": 0,
+    "probe_lost": 0,
+    "cwnd": 8257,
+    "flight": 0,
+    "pto": false,
+    "kind": "ACK",
+    "line": 681
+  },
+  "final_body_bytes": 16384,
+  "final_body_sha256": "47d30d4078849f62042ce5a0e873cd00cfdaecce1b8404708580bafb42edf7e5",
+  "final_fin": true,
+  "final_elapsed_ms": 45.09096800001089,
+  "final_timed_out": false,
+  "packet_diagnostic_count": 233,
+  "proxy_errors": [],
+  "server_exit_code": -15
+}

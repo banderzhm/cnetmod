@@ -1,0 +1,2 @@
+  ASSERT FAILED: result && *result at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_udp_batch.cpp:1303
+  ASSERT FAILED: result && *result at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_udp_batch.cpp:1303

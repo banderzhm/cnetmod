@@ -1,0 +1,420 @@
+{
+  "abandoned_pages_enumerated": false,
+  "bins": {
+    "1024": {
+      "committed_block_capacity_bytes": 294912,
+      "definitely_empty_pages": 7,
+      "empty_reserved_block_capacity_bytes": 451584,
+      "pages": 32,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 2064384,
+      "used_blocks_upper": 25,
+      "used_bytes_upper": 25600
+    },
+    "10240": {
+      "committed_block_capacity_bytes": 471040,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 9,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 552960,
+      "used_blocks_upper": 46,
+      "used_bytes_upper": 471040
+    },
+    "112": {
+      "committed_block_capacity_bytes": 253456,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1893584,
+      "pages": 31,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 2024176,
+      "used_blocks_upper": 87,
+      "used_bytes_upper": 9744
+    },
+    "12288": {
+      "committed_block_capacity_bytes": 774144,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 14966784,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 15482880,
+      "used_blocks_upper": 9,
+      "used_bytes_upper": 110592
+    },
+    "128": {
+      "committed_block_capacity_bytes": 483328,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1896832,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1962240,
+      "used_blocks_upper": 34,
+      "used_bytes_upper": 4352
+    },
+    "1536": {
+      "committed_block_capacity_bytes": 1924608,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1870848,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1935360,
+      "used_blocks_upper": 33,
+      "used_bytes_upper": 50688
+    },
+    "16": {
+      "committed_block_capacity_bytes": 245760,
+      "definitely_empty_pages": 4,
+      "empty_reserved_block_capacity_bytes": 261440,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1960800,
+      "used_blocks_upper": 103,
+      "used_bytes_upper": 1648
+    },
+    "160": {
+      "committed_block_capacity_bytes": 244800,
+      "definitely_empty_pages": 28,
+      "empty_reserved_block_capacity_bytes": 1827840,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1958400,
+      "used_blocks_upper": 14,
+      "used_bytes_upper": 2240
+    },
+    "16384": {
+      "committed_block_capacity_bytes": 163840,
+      "definitely_empty_pages": 2,
+      "empty_reserved_block_capacity_bytes": 1048576,
+      "pages": 8,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 4194304,
+      "used_blocks_upper": 6,
+      "used_bytes_upper": 98304
+    },
+    "1792": {
+      "committed_block_capacity_bytes": 222208,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1870848,
+      "pages": 29,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1870848,
+      "used_blocks_upper": 0,
+      "used_bytes_upper": 0
+    },
+    "192": {
+      "committed_block_capacity_bytes": 241920,
+      "definitely_empty_pages": 28,
+      "empty_reserved_block_capacity_bytes": 1827840,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1958400,
+      "used_blocks_upper": 34,
+      "used_bytes_upper": 6528
+    },
+    "196608": {
+      "committed_block_capacity_bytes": 393216,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 1,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 4128768,
+      "used_blocks_upper": 1,
+      "used_bytes_upper": 196608
+    },
+    "2048": {
+      "committed_block_capacity_bytes": 245760,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1841152,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1904640,
+      "used_blocks_upper": 1,
+      "used_bytes_upper": 2048
+    },
+    "224": {
+      "committed_block_capacity_bytes": 5385408,
+      "definitely_empty_pages": 85,
+      "empty_reserved_block_capacity_bytes": 5540640,
+      "pages": 86,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 5605824,
+      "used_blocks_upper": 2,
+      "used_bytes_upper": 448
+    },
+    "24576": {
+      "committed_block_capacity_bytes": 147456,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 1,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 516096,
+      "used_blocks_upper": 6,
+      "used_bytes_upper": 147456
+    },
+    "256": {
+      "committed_block_capacity_bytes": 729088,
+      "definitely_empty_pages": 28,
+      "empty_reserved_block_capacity_bytes": 1827840,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1958400,
+      "used_blocks_upper": 4,
+      "used_bytes_upper": 1024
+    },
+    "2560": {
+      "committed_block_capacity_bytes": 698880,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 32,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 2048000,
+      "used_blocks_upper": 96,
+      "used_bytes_upper": 245760
+    },
+    "3072": {
+      "committed_block_capacity_bytes": 301056,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1870848,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1935360,
+      "used_blocks_upper": 3,
+      "used_bytes_upper": 9216
+    },
+    "32": {
+      "committed_block_capacity_bytes": 245760,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1959360,
+      "used_blocks_upper": 189,
+      "used_bytes_upper": 6048
+    },
+    "320": {
+      "committed_block_capacity_bytes": 1448000,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1948800,
+      "used_blocks_upper": 120,
+      "used_bytes_upper": 38400
+    },
+    "3584": {
+      "committed_block_capacity_bytes": 243712,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1870848,
+      "pages": 29,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1870848,
+      "used_blocks_upper": 0,
+      "used_bytes_upper": 0
+    },
+    "384": {
+      "committed_block_capacity_bytes": 282240,
+      "definitely_empty_pages": 7,
+      "empty_reserved_block_capacity_bytes": 454272,
+      "pages": 33,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 2141568,
+      "used_blocks_upper": 80,
+      "used_bytes_upper": 30720
+    },
+    "393216": {
+      "committed_block_capacity_bytes": 1179648,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 1,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 3932160,
+      "used_blocks_upper": 3,
+      "used_bytes_upper": 1179648
+    },
+    "4096": {
+      "committed_block_capacity_bytes": 1798144,
+      "definitely_empty_pages": 15,
+      "empty_reserved_block_capacity_bytes": 921600,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1843200,
+      "used_blocks_upper": 16,
+      "used_bytes_upper": 65536
+    },
+    "40960": {
+      "committed_block_capacity_bytes": 2211840,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 14254080,
+      "pages": 29,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 14254080,
+      "used_blocks_upper": 0,
+      "used_bytes_upper": 0
+    },
+    "448": {
+      "committed_block_capacity_bytes": 241920,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1948800,
+      "used_blocks_upper": 46,
+      "used_bytes_upper": 20608
+    },
+    "48": {
+      "committed_block_capacity_bytes": 897600,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 1,
+      "reserved_block_capacity_bytes": 1961280,
+      "used_blocks_upper": 8287,
+      "used_bytes_upper": 397776
+    },
+    "49152": {
+      "committed_block_capacity_bytes": 2899968,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 14254080,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 14745600,
+      "used_blocks_upper": 5,
+      "used_bytes_upper": 245760
+    },
+    "512": {
+      "committed_block_capacity_bytes": 286720,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1885696,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1950720,
+      "used_blocks_upper": 83,
+      "used_bytes_upper": 42496
+    },
+    "6144": {
+      "committed_block_capacity_bytes": 24576,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 1,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 61440,
+      "used_blocks_upper": 3,
+      "used_bytes_upper": 18432
+    },
+    "64": {
+      "committed_block_capacity_bytes": 3917056,
+      "definitely_empty_pages": 70,
+      "empty_reserved_block_capacity_bytes": 4578560,
+      "pages": 73,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 4774784,
+      "used_blocks_upper": 1076,
+      "used_bytes_upper": 68864
+    },
+    "640": {
+      "committed_block_capacity_bytes": 384000,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 32,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 2068480,
+      "used_blocks_upper": 33,
+      "used_bytes_upper": 21120
+    },
+    "768": {
+      "committed_block_capacity_bytes": 230400,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1870848,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1935360,
+      "used_blocks_upper": 2,
+      "used_bytes_upper": 1536
+    },
+    "8": {
+      "committed_block_capacity_bytes": 245760,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 1895904,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 1,
+      "reserved_block_capacity_bytes": 1961280,
+      "used_blocks_upper": 180,
+      "used_bytes_upper": 1440
+    },
+    "80": {
+      "committed_block_capacity_bytes": 2662560,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 56,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 3660160,
+      "used_blocks_upper": 3969,
+      "used_bytes_upper": 317520
+    },
+    "8192": {
+      "committed_block_capacity_bytes": 1048576,
+      "definitely_empty_pages": 19,
+      "empty_reserved_block_capacity_bytes": 1089536,
+      "pages": 29,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1662976,
+      "used_blocks_upper": 10,
+      "used_bytes_upper": 81920
+    },
+    "81920": {
+      "committed_block_capacity_bytes": 4423680,
+      "definitely_empty_pages": 29,
+      "empty_reserved_block_capacity_bytes": 14254080,
+      "pages": 29,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 14254080,
+      "used_blocks_upper": 0,
+      "used_bytes_upper": 0
+    },
+    "896": {
+      "committed_block_capacity_bytes": 330624,
+      "definitely_empty_pages": 22,
+      "empty_reserved_block_capacity_bytes": 1419264,
+      "pages": 30,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1935360,
+      "used_blocks_upper": 8,
+      "used_bytes_upper": 7168
+    },
+    "96": {
+      "committed_block_capacity_bytes": 236640,
+      "definitely_empty_pages": 19,
+      "empty_reserved_block_capacity_bytes": 1240320,
+      "pages": 29,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 1893120,
+      "used_blocks_upper": 14,
+      "used_bytes_upper": 1344
+    },
+    "98304": {
+      "committed_block_capacity_bytes": 491520,
+      "definitely_empty_pages": 0,
+      "empty_reserved_block_capacity_bytes": 0,
+      "pages": 1,
+      "pages_with_deferred_thread_free": 0,
+      "reserved_block_capacity_bytes": 4128768,
+      "used_blocks_upper": 4,
+      "used_bytes_upper": 393216
+    }
+  },
+  "complete_within_declared_scope": true,
+  "heaps_visited": 1,
+  "limits": {
+    "debugger_wall_seconds": 5,
+    "heaps": 256,
+    "pages": 32768,
+    "theaps": 2048
+  },
+  "live_bytes_exact": false,
+  "owned_empty_reserved_capacity_bytes": 98985744,
+  "owned_used_bytes_upper": 4322848,
+  "pages_visited": 1141,
+  "scope": "owned theap page queues plus detached metadata theap",
+  "theaps_visited": 34,
+  "used_includes_deferred_thread_free": true
+}

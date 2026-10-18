@@ -1,0 +1,9 @@
+{
+  "head": "d0d920791a1d226711176df47148b5e98a2f8713",
+  "branch": "fix/http3-arena-performance",
+  "dirty": true,
+  "external_run": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-quic-ack-validation-1792329600",
+  "allocator": "CNETMOD_USE_MIMALLOC=OFF (existing system-allocator build)",
+  "build": "/var/tmp/cnetmod-h3-arena-build privately bound at recorded /tmp/cnetmod-h3-arena-build",
+  "arena_not_relinked_in_this_stage": "2cb22a32818646fbf63575370adf6a0c48b3ba5df4bbbc3d3002ab2838003e0a"
+}

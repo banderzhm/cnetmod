@@ -1,0 +1,13 @@
+129: auto quic_send_frame::append_to(std::vector<std::byte>& output) const -> void
+130: {
+131:     if (!owned_bytes_.empty())
+132:     {
+133:         output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
+134:         return;
+135:     }
+136:     output.insert(output.end(), stream_header_.begin(),
+137:         stream_header_.begin() + stream_header_size_);
+138:     const auto body = std::as_bytes(std::span{
+139:         shared_bytes_->data() + shared_offset_, shared_size_});
+140:     output.insert(output.end(), body.begin(), body.end());
+141: }

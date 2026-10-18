@@ -1,0 +1,340 @@
+--- a/src/protocol/quic/quic_connection.cpp
++++ b/src/protocol/quic/quic_connection.cpp
+@@ -2333,8 +2333,10 @@
+                                             : frame.error());
+         ack_eliciting = ack_eliciting || is_ack_eliciting(frame->first);
+         if (const auto* acknowledgment = std::get_if<ack_frame>(&frame->first))
+             (void)process_ack_frame_state(*acknowledgment);
++        else if (const auto* stream = std::get_if<stream_frame>(&frame->first))
++            process_stream_frame_state(*stream);
+         else
+             co_await process_frames(frame->first);
+ 
+         frame_offset += frame->second;
+@@ -3241,25 +3243,31 @@
+ }
+ 
+ auto quic_connection::process_stream_frame(const stream_frame& frame) -> task<void>
+ {
++    process_stream_frame_state(frame);
++    co_return;
++}
++
++auto quic_connection::process_stream_frame_state(const stream_frame& frame) -> void
++{
+     const bool locally_initiated = is_client_initiated(frame.stream_id) ==
+         (impl_->connection_role == quic_role::client);
+     if (locally_initiated && is_unidirectional(frame.stream_id))
+     {
+         impl_->queue_protocol_close(quic_errc::stream_state_error, frame_type::stream);
+-        co_return;
++        return;
+     }
+     if (impl_->retired_streams.contains(frame.stream_id))
+     {
+         const auto sizes = impl_->retired_streams.find_final_sizes(frame.stream_id);
+         if (!sizes)
+-            co_return;
++            return;
+         const auto final_size = sizes->received_final_size;
+         if (frame.offset > final_size || frame.data.size() > final_size - frame.offset ||
+             (frame.fin && frame.offset + frame.data.size() != final_size))
+             impl_->queue_protocol_close(quic_errc::final_size_error, frame_type::stream);
+-        co_return;
++        return;
+     }
+     auto [it, inserted] = impl_->streams.try_emplace(frame.stream_id);
+     impl_->pending_priority_streams.erase(frame.stream_id);
+     if (inserted)
+@@ -3273,9 +3281,9 @@
+         {
+             impl_->streams.erase(it);
+             impl_->queue_protocol_close(!peer_initiated ? quic_errc::stream_state_error
+                 : quic_errc::stream_limit_error, frame_type::stream);
+-            co_return;
++            return;
+         }
+         it->second.value = std::make_unique<quic_stream>(frame.stream_id,
+             impl_->connection_role, is_bidirectional(frame.stream_id));
+         // A peer-opened bidirectional stream uses the peer's bidi_local
+@@ -3291,24 +3299,24 @@
+         if (!impl_->accepted_streams.try_send(frame.stream_id))
+         {
+             impl_->streams.erase(it);
+             impl_->queue_protocol_close(quic_errc::internal_error, frame_type::stream);
+-            co_return;
++            return;
+         }
+     }
+     const auto highest = it->second.value->bytes_received();
+     if (frame.offset > std::numeric_limits<std::uint64_t>::max() - frame.data.size())
+     {
+         impl_->queue_protocol_close(quic_errc::final_size_error, frame_type::stream);
+-        co_return;
++        return;
+     }
+     const auto end = frame.offset + frame.data.size();
+     if (impl_->received_stream_data > impl_->local_advertised_max_data ||
+         (end > highest && end - highest >
+             impl_->local_advertised_max_data - impl_->received_stream_data))
+     {
+         impl_->queue_protocol_close(quic_errc::flow_control_error, frame_type::stream);
+-        co_return;
++        return;
+     }
+     const auto received_before = it->second.value->bytes_received();
+     auto delivered = it->second.value->push_received(frame.offset, frame.data, frame.fin);
+     if (!delivered)
+@@ -3331,9 +3339,9 @@
+             (void)retire_stream(frame.stream_id);
+         }
+         (void)readiness->try_send({});
+     }
+-    co_return;
++    return;
+ }
+ 
+ auto quic_connection::process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>
+ {
+@@ -4530,11 +4538,11 @@
+             auto result = command->type ==
+                     quic_write_command::operation::datagram
+                 ? co_await apply_application_datagram(std::move(command->bytes))
+                 : command->shared_bytes
+-                ? co_await apply_stream_write(command->stream,
++                ? apply_stream_write(command->stream,
+                       command->bytes, command->shared_bytes, command->fin)
+-                : co_await apply_stream_write(command->stream,
++                : apply_stream_write(command->stream,
+                       command->bytes, command->fin);
+             if (!result && result.error() == make_error_code(quic_errc::flow_control_error) &&
+                 command->completion)
+             {
+@@ -4613,35 +4621,35 @@
+     }
+ }
+ 
+ auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
+-    bool fin) -> task<std::expected<void, std::error_code>>
+-{
+-    co_return co_await apply_stream_write(sid, data, {}, fin);
++    bool fin) -> std::expected<void, std::error_code>
++{
++    return apply_stream_write(sid, data, {}, fin);
+ }
+ 
+ auto quic_connection::apply_stream_write(stream_id sid,
+     const std::vector<std::byte>& prefix,
+     const std::shared_ptr<const std::string>& shared_data, bool fin)
+-    -> task<std::expected<void, std::error_code>>
++    -> std::expected<void, std::error_code>
+ {
+     const std::span<const std::byte> prefix_payload{prefix.data(), prefix.size()};
+     const auto shared_payload = shared_data
+         ? std::as_bytes(std::span{shared_data->data(), shared_data->size()})
+         : std::span<const std::byte>{};
+     const auto payload_size = prefix_payload.size() + shared_payload.size();
+     if (is_closed() || impl_->connection_state == connection_state::closing ||
+         impl_->connection_state == connection_state::draining)
+-        co_return std::unexpected(std::make_error_code(std::errc::not_connected));
++        return std::unexpected(std::make_error_code(std::errc::not_connected));
+     if (impl_->retired_streams.contains(sid))
+-        co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
++        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+     auto [it, inserted] = impl_->streams.try_emplace(sid);
+     if (inserted)
+     {
+         if (is_client_initiated(sid) != (impl_->connection_role == quic_role::client))
+         {
+             impl_->streams.erase(it);
+-            co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
++            return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+         }
+         it->second.value = std::make_unique<quic_stream>(sid, impl_->connection_role,
+             is_bidirectional(sid));
+         it->second.value->update_send_limit(impl_->config.max_stream_data);
+@@ -4650,35 +4658,35 @@
+         it->second.readiness = std::make_shared<channel<std::monostate>>(1);
+     }
+     if (payload_size > impl_->peer_max_data -
+             std::min(impl_->peer_max_data, impl_->sent_stream_data))
+-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
++        return std::unexpected(make_error_code(quic_errc::flow_control_error));
+     // Reserve the whole logical write before mutating stream accounting. A
+     // shared response is submitted as a small prefix followed by its cached
+     // body; accepting the prefix and then rejecting the body would otherwise
+     // leave a partial HTTP/3 frame on the stream.
+     if (payload_size > it->second.value->remaining_send_window())
+-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
++        return std::unexpected(make_error_code(quic_errc::flow_control_error));
+     if (!prefix_payload.empty())
+     {
+-        auto sent = co_await it->second.value->send(prefix_payload);
++        auto sent = it->second.value->apply_send_state(prefix_payload);
+         if (!sent)
+-            co_return std::unexpected(sent.error());
++            return std::unexpected(sent.error());
+     }
+     if (!shared_payload.empty())
+     {
+-        auto sent = co_await it->second.value->send(shared_payload);
++        auto sent = it->second.value->apply_send_state(shared_payload);
+         if (!sent)
+-            co_return std::unexpected(sent.error());
++            return std::unexpected(sent.error());
+     }
+     if (payload_size == 0U)
+     {
+-        auto sent = co_await it->second.value->send({});
++        auto sent = it->second.value->apply_send_state({});
+         if (!sent)
+-            co_return std::unexpected(sent.error());
++            return std::unexpected(sent.error());
+     }
+     if (fin)
+-        co_await it->second.value->close_local();
++        it->second.value->apply_close_local_state();
+     impl_->sent_stream_data += payload_size;
+ 
+     // `quic_stream::send` accounts bytes before this point.  The wire offset
+     // must therefore be the beginning of this write, not zero for every
+@@ -4713,9 +4721,9 @@
+         const auto fixed_frame_size = 1U +
+             static_cast<std::size_t>(varint_size(sid)) +
+             static_cast<std::size_t>(varint_size(stream_offset));
+         if (send_packet_payload <= fixed_frame_size + 1U)
+-            co_return std::unexpected(std::make_error_code(std::errc::message_size));
++            return std::unexpected(std::make_error_code(std::errc::message_size));
+         auto chunk = std::min(payload_size - sent_offset,
+             send_packet_payload - fixed_frame_size - 1U);
+         while (fixed_frame_size + static_cast<std::size_t>(varint_size(chunk)) +
+                 chunk >
+@@ -4797,9 +4805,9 @@
+     if (impl_->receive_wait_token && impl_->receive_wait_token->pending_.load(std::memory_order_acquire))
+     {
+         impl_->receive_wait_token->cancel();
+     }
+-    co_return {};
++    return {};
+ }
+ 
+ auto quic_connection::async_send(stream_id sid, std::span<const std::byte> data,
+     bool fin) -> task<std::expected<void, std::error_code>>
+--- a/src/protocol/quic/quic_connection.cppm
++++ b/src/protocol/quic/quic_connection.cppm
+@@ -435,8 +435,9 @@
+     /// Frame handlers
+     [[nodiscard]] auto process_ack_frame(const ack_frame& frame) -> task<void>;
+     auto process_ack_frame_state(const ack_frame& frame) -> encryption_level;
+     [[nodiscard]] auto process_stream_frame(const stream_frame& frame) -> task<void>;
++    auto process_stream_frame_state(const stream_frame& frame) -> void;
+     [[nodiscard]] auto process_reset_stream_frame(const reset_stream_frame& frame) -> task<void>;
+     [[nodiscard]] auto process_stop_sending_frame(const stop_sending_frame& frame) -> task<void>;
+     [[nodiscard]] auto process_crypto_frame(const crypto_frame& frame) -> task<void>;
+     [[nodiscard]] auto process_connection_close_frame(
+@@ -506,13 +507,13 @@
+     /// Executed only by the connection packet-owner after a producer command
+     /// has been dequeued.  It is deliberately separate from async_send(), so
+     /// callers never mutate stream or flow-control state directly.
+     [[nodiscard]] auto apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
+-        bool fin) -> task<std::expected<void, std::error_code>>;
++        bool fin) -> std::expected<void, std::error_code>;
+     [[nodiscard]] auto apply_stream_write(stream_id sid,
+         const std::vector<std::byte>& prefix,
+         const std::shared_ptr<const std::string>& shared_data, bool fin)
+-        -> task<std::expected<void, std::error_code>>;
++        -> std::expected<void, std::error_code>;
+     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
+         -> task<std::expected<void, std::error_code>>;
+     [[nodiscard]] auto async_send_fragments(stream_id sid,
+         std::vector<std::byte> data, bool fin)
+--- a/src/protocol/quic/quic_stream.cpp
++++ b/src/protocol/quic/quic_stream.cpp
+@@ -53,21 +53,27 @@
+ 
+ auto quic_stream::send(std::span<const std::byte> data)
+     -> task<std::expected<void, std::error_code>>
+ {
++    co_return apply_send_state(data);
++}
++
++auto quic_stream::apply_send_state(std::span<const std::byte> data)
++    -> std::expected<void, std::error_code>
++{
+     auto& impl = *impl_;
+ 
+     // Check state
+     if (impl.state_ == stream_state::closed ||
+         impl.state_ == stream_state::half_closed_local)
+     {
+-        co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
++        return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+     }
+ 
+     // Check flow control limit
+     if (data.size() > impl.max_send_data_ - impl.total_sent_)
+     {
+-        co_return std::unexpected(make_error_code(quic_errc::flow_control_error));
++        return std::unexpected(make_error_code(quic_errc::flow_control_error));
+     }
+     else
+     {
+         impl.total_sent_ += data.size();
+@@ -82,19 +88,25 @@
+                 : stream_state::half_closed_local;
+         }
+     }
+ 
+-    co_return {};
++    return {};
+ }
+ 
+ auto quic_stream::close_local() -> task<void>
+ {
++    apply_close_local_state();
++    co_return;
++}
++
++auto quic_stream::apply_close_local_state() -> void
++{
+     if (impl_->state_ == stream_state::closed)
+-        co_return;
++        return;
+     impl_->state_ = impl_->state_ == stream_state::half_closed_remote
+         ? stream_state::closed
+         : stream_state::half_closed_local;
+-    co_return;
++    return;
+ }
+ 
+ auto quic_stream::close_remote() -> void
+ {
+--- a/src/protocol/quic/quic_stream.cppm
++++ b/src/protocol/quic/quic_stream.cppm
+@@ -28,8 +28,10 @@
+ 
+ // =============================================================================
+ // QUIC Stream Interface
+ // =============================================================================
++
++export class quic_connection;
+ 
+ export class quic_stream
+ {
+ public:
+@@ -127,8 +129,15 @@
+     /// Is bidirectional?
+     [[nodiscard]] auto is_bidirectional() const noexcept -> bool;
+ 
+ private:
++    friend class quic_connection;
++
++    /// Internal owner-only bookkeeping; public task operations remain lazy.
++    auto apply_send_state(std::span<const std::byte> data)
++        -> std::expected<void, std::error_code>;
++    auto apply_close_local_state() -> void;
++
+     struct impl
+     {
+         stream_id id_;
+         quic_role owner_;

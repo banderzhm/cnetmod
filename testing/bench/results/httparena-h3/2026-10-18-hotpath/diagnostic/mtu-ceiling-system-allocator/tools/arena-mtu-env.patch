@@ -1,0 +1,45 @@
+--- a/testing/bench/arena_h3_server.cpp
++++ b/testing/bench/arena_h3_server.cpp
+@@ -183,6 +183,24 @@
+     };
+     if (!parse(argv[3], port) || port > 65535 || !parse(argv[4], workers))
+         return 2;
++    // Explicit diagnostic ceilings. Keep receive capacity fixed when comparing
++    // send discovery limits so one binary and buffer layout serve every round.
++    unsigned max_path_mtu{1472U}, max_udp_payload_size{1472U};
++    const auto parse_udp_limit = [&parse](const char* name, unsigned& value)
++    {
++        const auto* text = std::getenv(name);
++        if (!text)
++            return true;
++        if (!parse(text, value) || value < 1200U || value > 65507U)
++        {
++            logger::error{"{} must be a complete integer in [1200, 65507]", name};
++            return false;
++        }
++        return true;
++    };
++    if (!parse_udp_limit("CNETMOD_QUIC_MAX_PATH_MTU", max_path_mtu) ||
++        !parse_udp_limit("CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE", max_udp_payload_size))
++        return 2;
+     auto tls = cnetmod::ssl_context::quic_server();
+     if (!tls)
+         return 1;
+@@ -241,7 +259,7 @@
+     // The official workload is loopback-only and its peer advertises support
+     // for larger datagrams. Probe the controlled local path before using its
+     // larger payload ceiling so static responses need fewer encrypted packets.
+-    if (const auto configured = server->set_path_mtu_discovery(1472,
++    if (const auto configured = server->set_path_mtu_discovery(max_path_mtu,
+             std::chrono::milliseconds{1});
+         !configured)
+     {
+@@ -249,7 +267,7 @@
+             configured.error().message()};
+         return 1;
+     }
+-    if (const auto configured = server->set_max_udp_payload_size(1472);
++    if (const auto configured = server->set_max_udp_payload_size(max_udp_payload_size);
+         !configured)
+     {
+         logger::error{"HTTP/3 UDP payload setup failed: {}",

@@ -1,0 +1,8 @@
+/var/tmp/cnetmod-h3-cid-failure-controls-final/without-cid-close/quic_retire_stream_server.cpp:395:54: warning: missing field 'connection' initializer [-Wmissing-field-initializers]
+  395 |     fixture state{*context, tls, std::move(arguments)};
+      |                                                      ^
+1 warning generated.
+/var/tmp/cnetmod-h3-cid-failure-controls-final/with-cid-close/quic_retire_stream_server.cpp:395:54: warning: missing field 'connection' initializer [-Wmissing-field-initializers]
+  395 |     fixture state{*context, tls, std::move(arguments)};
+      |                                                      ^
+1 warning generated.

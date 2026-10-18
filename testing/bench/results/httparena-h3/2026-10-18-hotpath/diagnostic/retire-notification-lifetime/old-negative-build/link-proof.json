@@ -1,0 +1,8 @@
+{
+  "version": "old",
+  "archive_input": "/var/tmp/cnetmod-h3-quic-node-balance-05fe/libcnetmod_quic.a",
+  "archive_sha256": "253380fdad2f789dc7c20549edf3d1aaf9b2f1fa39639f00de3b3c36eae5b622",
+  "connection_member_sha256": "e219d613e851cacb206e0656ebdea4350cca0213ae9f1d54cfa54bc35478c2f8",
+  "binary_sha256": "3224dac156013e41c52f93a860909f0de304f4bbbe4ee8231e71c2e45f0a809a",
+  "external_member_seen_in_trace": true
+}

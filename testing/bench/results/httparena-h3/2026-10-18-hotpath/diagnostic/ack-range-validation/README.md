@@ -1,0 +1,15 @@
+# Malformed ACK validation: old fails, correction passes
+
+This correctness change is on the dirty `fix/http3-arena-performance` worktree. It does not implement the proposed ACK visitor optimization and is not a performance result. No commit was made. The Linux build uses the existing system allocator configuration (`CNETMOD_USE_MIMALLOC=OFF`); both stages preserve the cache in their evidence directory.
+
+The original `on_ack_received` updates largest-ACK and RTT before validating the first range, then retires the first range before validating later gaps and lengths. A later rejection can leave the detector map and recovery map inconsistent. Public `ack_range::gap` values of UINT64_MAX or UINT64_MAX-1 also wrap the original `gap + 2` check. Wire QUIC varints are narrower; the full-width cases cover the public C++ structure.
+
+The correction prevalidates every actual range before any state change, checks subtraction operands without overflow, and preserves existing error precedence and public signatures. The non-template validation implementation is in `loss_detection.cpp`; no callback/visitor or metadata-owner refactor is included. It does not add a count/vector consistency restriction to the public API.
+
+Tests-only against the original implementation builds successfully and fails two of 27 unit cases (25 pass): the detector atomicity test has 31 failed assertions, and the recovery/shared-owner test has nine. Evidence includes changed RTT/PTO, flight shrinking from nine packets to seven despite rejection, max-gap values being accepted, and a later valid ACK failing to release ownership/flight. The valid zero-boundary, duplicate, stale ACK case passes on both versions.
+
+After applying the correction, the three selected CTest targets pass with zero skips: loss detection 27, congestion 20, stream 17, totaling 64 unit cases. Five malformed-range variants cover invalid first range, later gap, later length, and both full-width gaps. Rejection must leave RTT/flight/PTO unchanged; a subsequent valid ACK must match an untouched detector and release the shared body. Existing PTO-alias, PMTU probe loss, discard/reuse and shared-body coverage also passes.
+
+`prepared/fix.patch` and `prepared/tests.patch` are the exact applied increments relative to the recorded dirty source baseline. Before/after sources, actual byte hashes, original build/CTest/JUnit logs, cache, commands and executable hashes are retained. CRLF applied source hashes differ from LF-only prepared source hashes; normalized contents were verified equal. `source-manifest.json` identifies the unchanged connection, recovery and congestion inputs, preserving earlier GSO and PMTU fixes.
+
+Only these unit targets were rebuilt. The arena executable `2cb22a...` was not relinked and does not include this fix; final all-target Linux/Windows validation is delegated to the coordinator. There was no service load, throughput run or new allocator comparison in this stage. No ELF, PCM or static archive is copied here. The protected repository interoperability JSON remains unchanged.

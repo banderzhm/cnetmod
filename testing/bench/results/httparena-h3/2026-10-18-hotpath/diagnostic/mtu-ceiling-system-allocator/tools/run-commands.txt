@@ -1,0 +1,13 @@
+Prepared commands only; not executed. Use only after coordinator releases window.
+
+Preflight (actual frozen Linux candidate; low concurrency, fixed4096 requests):
+
+unshare --mount bash /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh python /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-mtu-preflight.py --binary /var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server --binary-sha 5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470 --source-snapshot /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/source-snapshot --allocator-proof /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/system-allocator/allocator-proof.json
+
+The tool prints the unique external results directory. Only if its preflight-report.json is valid may the18-round runner consume it. Replace REPORT_PATH with that actual absolute file path:
+
+unshare --mount bash /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-isolated.sh python /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-mtu-ceiling-ab.py --binary /var/tmp/cnetmod-h3-arena-build/testing/bench/arena_h3_server --binary-sha 5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470 --source-snapshot /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/source-snapshot --allocator-proof /mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/system-allocator/allocator-proof.json --preflight-report REPORT_PATH
+
+If4096 requests do not establish the larger application packet, retain that valid:false run. The existing --requests option accepts512..8192; any explicit later change is a separate diagnostic run with its own report. Never change production probe pacing/step to satisfy this gate. Further preparation of an independently supported low-rate h2load option can be considered if needed; this runner does not assume an unverified CLI option.
+
+Raw qlogs and the copied candidate ELF stay in /var/tmp external records. A subsequent repository archive should contain aggregate reports, script/hash manifests and necessary bounded raw extracts, not large qlogs/payloads, ELF or keys. SSLKEYLOGFILE is removed from both client and server environments.

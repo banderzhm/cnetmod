@@ -1,0 +1,16 @@
+{
+  "pid": 63360,
+  "command": [
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_server.exe",
+    "--port",
+    "56460",
+    "--workers",
+    "2",
+    "--cert",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-7916d85438b4411f9f8a68e4a5ccc72b\\cnetmod-server_to_nghttp3-client\\cert.pem",
+    "--key",
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-7916d85438b4411f9f8a68e4a5ccc72b\\cnetmod-server_to_nghttp3-client\\key.pem"
+  ],
+  "cwd": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-7916d85438b4411f9f8a68e4a5ccc72b\\cnetmod-server_to_nghttp3-client",
+  "target_platform": "Windows"
+}

@@ -1,0 +1,11 @@
+{
+  "pid": 33148,
+  "command": [
+    "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-windows\\bin\\Release\\h3_interop_client.exe",
+    "127.0.0.1",
+    "51933",
+    "/health"
+  ],
+  "cwd": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-pmtu-final-system-windows-20261018-ffa91ab479f4422791aaeacc51dbe847\\run-7916d85438b4411f9f8a68e4a5ccc72b\\nghttp3-server_to_cnetmod-client",
+  "target_platform": "Windows"
+}

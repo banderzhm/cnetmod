@@ -1,0 +1,6 @@
+[
+  "llvm-ar",
+  "rcs",
+  "/var/tmp/cnetmod-h3-crypto-old-real-fault/libcnetmod_quic.a",
+  "/var/tmp/cnetmod-h3-crypto-old-real-fault/quic_connection.cpp.o"
+]

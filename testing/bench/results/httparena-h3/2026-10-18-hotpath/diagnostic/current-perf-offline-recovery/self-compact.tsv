@@ -1,0 +1,633 @@
+percent	samples	symbol	dso
+5.4	456	[k] _raw_spin_unlock_irqrestore	[kernel.kallsyms]
+3.75	317	[.] aes_gcm_enc_update_vaes_avx2	arena_h3_server
+2.47	209	[k] handle_softirqs	[kernel.kallsyms]
+2.32	196	[k] _raw_spin_unlock_irq	[kernel.kallsyms]
+2.19	185	[.] std::__1::__wrap_iter<std::byte*> std::__1::vector<std::byte, std::__1::allocator<std::byte> >::__insert_with_size[abi:nqe220108]<std::__1::_ClassicAlgPolicy, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*> >(std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, long)	arena_h3_server
+2.07	175	[k] __alloc_skb	[kernel.kallsyms]
+2.07	175	[.] operator new[](unsigned long)	arena_h3_server
+1.85	156	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)	arena_h3_server
+1.4	118	[k] __ip_select_ident	[kernel.kallsyms]
+1.27	107	[k] _copy_from_iter	[kernel.kallsyms]
+1.23	104	[k] __udp_enqueue_schedule_skb	[kernel.kallsyms]
+1.21	102	[.] void std::__1::__tree_remove[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)	arena_h3_server
+1.16	98	[.] cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::take()	arena_h3_server
+1.14	96	[k] skb_defer_free_flush	[kernel.kallsyms]
+1.02	86	[k] udp_sendmsg	[kernel.kallsyms]
+0.98	83	[k] __rcu_read_lock	[kernel.kallsyms]
+0.97	82	[.] __vdso_clock_gettime	[vdso]
+0.92	78	[k] _copy_from_user	[kernel.kallsyms]
+0.9	76	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_and_send_packets() [clone .resume]	arena_h3_server
+0.83	70	[k] __ip_append_data	[kernel.kallsyms]
+0.83	70	[k] ip_finish_output2	[kernel.kallsyms]
+0.78	66	[.] aes_hw_encrypt	arena_h3_server
+0.78	66	[k] fib_table_lookup	[kernel.kallsyms]
+0.77	65	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::apply_stream_write(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> > const&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const> const&, bool)	arena_h3_server
+0.73	62	[k] __rcu_read_unlock	[kernel.kallsyms]
+0.71	60	[.] pthread_mutex_lock	libc.so.6
+0.67	57	[k] __pi_memset	[kernel.kallsyms]
+0.67	57	[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::insert_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet)	arena_h3_server
+0.65	55	[.] _mi_malloc_generic(mi_theap_s*, unsigned long, unsigned long, mi_page_s**)	arena_h3_server
+0.63	53	[k] ____sys_sendmsg	[kernel.kallsyms]
+0.63	53	[.] cnetmod::http::v2::huffman_decode@cnetmod.protocol.http.v2.huffman(std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >&)	arena_h3_server
+0.63	53	[.] cnetmod::quic::retransmittable_frame_storage@cnetmod.protocol.quic::push_back(cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline)	arena_h3_server
+0.62	52	[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::recycle_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, void*>*, long> >)	arena_h3_server
+0.6	51	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::retire_stream(unsigned long)	arena_h3_server
+0.6	51	[k] do_softirq.part.0	[kernel.kallsyms]
+0.59	50	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::flush_send_queue() [clone .resume]	arena_h3_server
+0.58	49	[k] skb_release_data	[kernel.kallsyms]
+0.57	48	[k] net_rx_action	[kernel.kallsyms]
+0.57	48	[k] sock_wfree	[kernel.kallsyms]
+0.56	47	[k] __netif_receive_skb_core.constprop.0	[kernel.kallsyms]
+0.54	46	[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::on_ack_received(cnetmod::quic::ack_frame@cnetmod.protocol.quic const&, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> > >, cnetmod::quic::pn_space@cnetmod.protocol.quic)	arena_h3_server
+0.54	46	[.] gcm_gmult_vpclmulqdq_avx2	arena_h3_server
+0.53	45	[k] ip_route_output_key_hash_rcu	[kernel.kallsyms]
+0.52	44	[.] operator delete[](void*)	arena_h3_server
+0.51	43	[k] copy_iovec_from_user	[kernel.kallsyms]
+0.51	43	[k] kmem_cache_alloc_node_noprof	[kernel.kallsyms]
+0.51	43	[k] selinux_parse_skb.constprop.0	[kernel.kallsyms]
+0.5	42	[k] _find_next_bit	[kernel.kallsyms]
+0.5	42	[.] aes_hw_set_encrypt_key_alt	arena_h3_server
+0.5	42	[.] cnetmod::quic::append_sealed_payload@cnetmod.protocol.quic(cnetmod::quic::quic_level_keys@cnetmod.protocol.quic const&, std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::vector<std::byte, std::__1::allocator<std::byte> >&, unsigned long, unsigned int)	arena_h3_server
+0.5	42	[k] udp_send_skb	[kernel.kallsyms]
+0.5	42	[.] void std::__1::__tree_balance_after_insert[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)	arena_h3_server
+0.49	41	[k] __udp4_lib_rcv	[kernel.kallsyms]
+0.49	41	[k] clear_page_erms	[kernel.kallsyms]
+0.47	40	[k] __ip_make_skb	[kernel.kallsyms]
+0.47	40	[k] __kmalloc_node_track_caller_noprof	[kernel.kallsyms]
+0.45	38	[.] cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long) [clone .resume]	arena_h3_server
+0.44	37	[.] cbrtf32x	libm.so.6
+0.44	37	[k] inet_sendmsg	[kernel.kallsyms]
+0.44	37	[.] std::__1::__atomic_notify_one_global_table(void const*)	libc++.so.1.0
+0.43	36	[k] __dev_queue_xmit	[kernel.kallsyms]
+0.43	36	[k] ip_rcv_core	[kernel.kallsyms]
+0.41	35	[k] ___sys_sendmsg	[kernel.kallsyms]
+0.41	35	[.] aligned_alloc	arena_h3_server
+0.41	35	[.] cnetmod::quic::loss_detector@cnetmod.protocol.quic::insert_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet)	arena_h3_server
+0.41	35	[k] ip_finish_output	[kernel.kallsyms]
+0.4	34	[k] kfree	[kernel.kallsyms]
+0.39	33	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_send_shared(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> >&&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const>, bool) [clone .resume]	arena_h3_server
+0.38	32	[k] ___slab_alloc	[kernel.kallsyms]
+0.38	32	[k] avc_lookup	[kernel.kallsyms]
+0.35	30	[k] do_syscall_64	[kernel.kallsyms]
+0.35	30	[k] udp4_lib_lookup2	[kernel.kallsyms]
+0.34	29	[k] __raw_callee_save___pv_queued_spin_unlock	[kernel.kallsyms]
+0.34	29	[k] __udp4_lib_lookup	[kernel.kallsyms]
+0.34	29	[k] finish_task_switch.isra.0	[kernel.kallsyms]
+0.33	28	[k] udp_queue_rcv_one_skb	[kernel.kallsyms]
+0.32	27	[.] EVP_AEAD_CTX_sealv	arena_h3_server
+0.32	27	[k] __put_user_4	[kernel.kallsyms]
+0.32	27	[.] cnetmod::quic::loss_detector@cnetmod.protocol.quic::on_ack_received(cnetmod::quic::ack_frame@cnetmod.protocol.quic const&, unsigned long, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> > >, cnetmod::quic::pn_space@cnetmod.protocol.quic)	arena_h3_server
+0.32	27	[.] cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::enqueue(unsigned long, cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline)	arena_h3_server
+0.32	27	[k] slab_update_freelist.isra.0	[kernel.kallsyms]
+0.31	26	[.] cnetmod::quic::encode_varint_to@cnetmod.protocol.quic(unsigned long, std::__1::span<std::byte, 18446744073709551615ul>)	arena_h3_server
+0.31	26	[k] ip_send_skb	[kernel.kallsyms]
+0.31	26	[.] std::__1::__function::__func<main::$_0, std::__1::error_code (cnetmod::http::v3::http3_request@cnetmod.protocol.http.v3.session&, cnetmod::http::v3::http3_response@cnetmod.protocol.http.v3.session&)>::operator()(cnetmod::http::v3::http3_request@cnetmod.protocol.http.v3.session&, cnetmod::http::v3::http3_response@cnetmod.protocol.http.v3.session&)	arena_h3_server
+0.31	26	[.] std::__1::__wrap_iter<std::byte*> std::__1::vector<std::byte, std::__1::allocator<std::byte> >::__insert_with_size[abi:nqe220108]<std::__1::_ClassicAlgPolicy, std::byte const*, std::byte const*>(std::__1::__wrap_iter<std::byte const*>, std::byte const*, std::byte const*, long)	arena_h3_server
+0.3	25	[k] __ip_finish_output	[kernel.kallsyms]
+0.28	24	[k] ip_output	[kernel.kallsyms]
+0.28	24	[k] ipv4_mtu	[kernel.kallsyms]
+0.28	24	[.] 0x00000000000a0952	libc.so.6
+0.27	23	[k] __check_object_size	[kernel.kallsyms]
+0.27	23	[.] aead_aes_gcm_sealv_impl((anonymous namespace)::aead_aes_gcm_ctx const*, bssl::Span<crypto_iovec_st const, 18446744073709551615ul>, bssl::Span<unsigned char, 18446744073709551615ul>, unsigned long*, bssl::Span<unsigned char const, 18446744073709551615ul>, bssl::Span<crypto_ivec_st const, 18446744073709551615ul>, unsigned long)	arena_h3_server
+0.27	23	[.] cnetmod::quic::cubic_congestion_controller@cnetmod.protocol.quic::on_packet_acked(unsigned long)	arena_h3_server
+0.27	23	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::process_packet(std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::endpoint@cnetmod.core.address const&) [clone .resume]	arena_h3_server
+0.27	23	[k] dst_release	[kernel.kallsyms]
+0.26	22	[k] __netif_receive_skb	[kernel.kallsyms]
+0.26	22	[.] cnetmod::quic::(anonymous namespace)::aead_context_for(cnetmod::quic::quic_level_keys@cnetmod.protocol.quic const&)	arena_h3_server
+0.26	22	[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::on_packet_sent(unsigned long, unsigned long, std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> > >, bool, cnetmod::quic::pn_space@cnetmod.protocol.quic, cnetmod::quic::retransmittable_frame_storage@cnetmod.protocol.quic, std::__1::optional<unsigned long>, bool)	arena_h3_server
+0.26	22	[k] selinux_ip_output	[kernel.kallsyms]
+0.26	22	[k] selinux_socket_sock_rcv_skb	[kernel.kallsyms]
+0.25	21	[k] build_detached_freelist	[kernel.kallsyms]
+0.25	21	[.] cnetmod::(anonymous namespace)::sendto_batch_now(cnetmod::socket@cnetmod.core.socket&, std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>)	arena_h3_server
+0.25	21	[k] ip_rcv	[kernel.kallsyms]
+0.25	21	[k] ip_rcv_finish_core	[kernel.kallsyms]
+0.25	21	[.] mi_theap_malloc_zero_aligned_at_overalloc(mi_theap_s*, unsigned long, unsigned long, unsigned long, bool, mi_page_s**)	arena_h3_server
+0.25	21	[k] siphash_3u32	[kernel.kallsyms]
+0.24	20	[.] std::__1::__function::__func<cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::process_incoming(cnetmod::udp_received_datagram@cnetmod.executor.async_op)::{lambda(std::__1::optional<std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> > > >)#1}, void (std::__1::optional<std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> > > >)>::operator()(std::__1::optional<std::__1::chrono::time_point<std::__1::chrono::steady_clock, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> > > >&&)	arena_h3_server
+0.22	19	[k] __build_skb_around	[kernel.kallsyms]
+0.22	19	[k] __netif_receive_skb_one_core	[kernel.kallsyms]
+0.21	18	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_recv(unsigned long, cnetmod::mutable_buffer@cnetmod.core.buffer) [clone .resume]	arena_h3_server
+0.21	18	[.] cnetmod::quic::retransmittable_frame_storage@cnetmod.protocol.quic::~retransmittable_frame_storage()	arena_h3_server
+0.21	18	[k] loopback_xmit	[kernel.kallsyms]
+0.21	18	[k] raw_local_deliver	[kernel.kallsyms]
+0.2	17	[k] __local_bh_enable_ip	[kernel.kallsyms]
+0.2	17	[k] _raw_spin_lock	[kernel.kallsyms]
+0.2	17	[k] eth_type_trans	[kernel.kallsyms]
+0.2	17	[k] ip_route_output_flow	[kernel.kallsyms]
+0.2	17	[k] sock_def_readable	[kernel.kallsyms]
+0.2	17	[.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::~basic_string()	libc++.so.1.0
+0.19	16	[k] __virt_addr_valid	[kernel.kallsyms]
+0.19	16	[k] avc_has_perm_noaudit	[kernel.kallsyms]
+0.19	16	[.] bssl::CRYPTO_gcm128_encrypt(bssl::gcm128_key_st const*, bssl::GCM128_CONTEXT*, unsigned char const*, unsigned char*, unsigned long)	arena_h3_server
+0.19	16	[k] skb_clone_tx_timestamp	[kernel.kallsyms]
+0.19	16	[k] skb_set_owner_w	[kernel.kallsyms]
+0.18	15	[k] __sys_sendmmsg	[kernel.kallsyms]
+0.18	15	[k] _raw_spin_lock_irqsave	[kernel.kallsyms]
+0.18	15	[.] cnetmod::async_recvfrom_batch@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, unsigned long, unsigned long, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]	arena_h3_server
+0.18	15	[.] cnetmod::http::v3::(anonymous namespace)::request_from_frames(cnetmod::http::v3::qpack_decoder@cnetmod.protocol.http.v3.qpack&, cnetmod::byte_view@cnetmod.core.buffer, unsigned long, std::__1::deque<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> > > >&)	arena_h3_server
+0.18	15	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::run_timer_loop(std::__1::shared_ptr<cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::connection_timer_state>) [clone .resume]	arena_h3_server
+0.18	15	[k] ip_send_check	[kernel.kallsyms]
+0.18	15	[k] ip_setup_cork.constprop.0	[kernel.kallsyms]
+0.18	15	[k] selinux_ip_postroute	[kernel.kallsyms]
+0.17	14	[k] __xfrm_policy_check2.constprop.0	[kernel.kallsyms]
+0.17	14	[k] _find_first_bit	[kernel.kallsyms]
+0.17	14	[k] avc_has_perm	[kernel.kallsyms]
+0.17	14	[.] cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::run() [clone .resume]	arena_h3_server
+0.17	14	[.] cnetmod::spawn@cnetmod.coro.spawn(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>)::{lambda(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>)#1}::operator()(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>) const [clone .resume]	arena_h3_server
+0.17	14	[k] netlbl_enabled	[kernel.kallsyms]
+0.17	14	[k] nf_hook_slow	[kernel.kallsyms]
+0.17	14	[k] process_backlog	[kernel.kallsyms]
+0.17	14	[k] selinux_sk_getsecid	[kernel.kallsyms]
+0.15	13	[k] __napi_poll	[kernel.kallsyms]
+0.15	13	[k] __slab_free	[kernel.kallsyms]
+0.15	13	[k] alloc_skb_with_frags	[kernel.kallsyms]
+0.15	13	[.] cnetmod::http::v3::http3_response@cnetmod.protocol.http.v3.session::~http3_response()	arena_h3_server
+0.15	13	[k] kmalloc_size_roundup	[kernel.kallsyms]
+0.15	13	[k] skb_pull_rcsum	[kernel.kallsyms]
+0.15	13	[.] std::__1::__sp_mut::lock()	libc++.so.1.0
+0.14	12	[.] __sendmmsg	libc.so.6
+0.14	12	[k] check_stack_object	[kernel.kallsyms]
+0.14	12	[.] cnetmod::http::v3::qpack_decoder@cnetmod.protocol.http.v3.qpack::decode(cnetmod::byte_view@cnetmod.core.buffer, unsigned long)	arena_h3_server
+0.14	12	[k] enqueue_to_backlog	[kernel.kallsyms]
+0.14	12	[k] fdget_pos	[kernel.kallsyms]
+0.14	12	[k] ip_protocol_deliver_rcu	[kernel.kallsyms]
+0.14	12	[.] mi_free_small	arena_h3_server
+0.14	12	[k] selinux_ip_postroute_compat	[kernel.kallsyms]
+0.14	12	[.] std::__1::__atomic_notify_all_global_table(void const*)	libc++.so.1.0
+0.14	12	[k] x64_sys_call	[kernel.kallsyms]
+0.13	11	[k] __import_iovec	[kernel.kallsyms]
+0.13	11	[.] cnetmod::async_sendto_batch@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]	arena_h3_server
+0.13	11	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::run_loop(std::__1::shared_ptr<cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::connection_timer_state>) [clone .resume]	arena_h3_server
+0.13	11	[.] cnetmod::quic::detail::compute_hp_mask@cnetmod.protocol.quic(cnetmod::quic::quic_level_keys@cnetmod.protocol.quic const&, std::__1::span<std::byte const, 18446744073709551615ul>)	arena_h3_server
+0.13	11	[k] fib_lookup_good_nhc	[kernel.kallsyms]
+0.13	11	[k] io_submit_sqes	[kernel.kallsyms]
+0.13	11	[.] mi_page_queue_find_free_ex(mi_theap_s*, mi_page_queue_s*, bool)	arena_h3_server
+0.13	11	[k] move_addr_to_kernel	[kernel.kallsyms]
+0.13	11	[k] netif_skb_features	[kernel.kallsyms]
+0.13	11	[k] sk_filter_trim_cap	[kernel.kallsyms]
+0.13	11	[k] skb_csum_hwoffload_help	[kernel.kallsyms]
+0.13	11	[.] std::__1::__hash_memory(void const*, unsigned long)	libc++.so.1.0
+0.13	11	[.] std::__1::__wrap_iter<std::__1::pair<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > >*> cnetmod::flat_map@cnetmod.utils.flat_map<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, cnetmod::http::case_insensitive_less@cnetmod.protocol.http.semantics, std::__1::allocator<std::__1::pair<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > > > >::find_impl<char [16]>(char const (&) [16])	arena_h3_server
+0.13	11	[.] std::__1::chrono::steady_clock::now()	libc++.so.1.0
+0.13	11	[k] validate_xmit_skb	[kernel.kallsyms]
+0.13	11	[.] 0x0000000000176ed3	libc.so.6
+0.13	11	[.] 0x0000000000002734	liburing.so.2.15
+0.12	10	[.] __cxa_decrement_exception_refcount	libc++abi.so.1.0
+0.12	10	[k] __io_prep_rw	[kernel.kallsyms]
+0.12	10	[k] __ip_local_out	[kernel.kallsyms]
+0.12	10	[.] cnetmod::io_uring_context@cnetmod.io.platform.io_uring::run_one_impl(bool)	arena_h3_server
+0.12	10	[.] cnetmod::quic::(anonymous namespace)::take_ack_frame(std::__1::set<unsigned long, std::__1::less<unsigned long>, std::__1::allocator<unsigned long> >&)	arena_h3_server
+0.12	10	[.] cnetmod::quic::loss_detector@cnetmod.protocol.quic::next_pto_deadline() const	arena_h3_server
+0.12	10	[k] io_issue_sqe	[kernel.kallsyms]
+0.12	10	[k] ip_make_skb	[kernel.kallsyms]
+0.12	10	[k] kmalloc_reserve	[kernel.kallsyms]
+0.12	10	[.] mi_theap_malloc_zero_aligned_at_generic(mi_theap_s*, unsigned long, unsigned long, unsigned long, bool, mi_page_s**)	arena_h3_server
+0.12	10	[k] mod_memcg_state	[kernel.kallsyms]
+0.12	10	[.] operator delete[](void*, unsigned long)	arena_h3_server
+0.12	10	[.] operator new(unsigned long, std::align_val_t)	libc++abi.so.1.0
+0.12	10	[k] selinux_file_permission	[kernel.kallsyms]
+0.12	10	[.] std::__1::__get_sp_mut(void const*)	libc++.so.1.0
+0.12	10	[k] udp_unicast_rcv_skb	[kernel.kallsyms]
+0.12	10	[.] 0x0000000000176e84	libc.so.6
+0.11	9	[.] EVP_AEAD_CTX_seal	arena_h3_server
+0.11	9	[k] __io_read	[kernel.kallsyms]
+0.11	9	[.] cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::service_peer_stream(unsigned long)::{lambda()#1}::operator()() const	arena_h3_server
+0.11	9	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::process_stream_frame_state(cnetmod::quic::stream_frame@cnetmod.protocol.quic const&)	arena_h3_server
+0.11	9	[.] cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::requeue(cnetmod::quic::scheduled_quic_frame@cnetmod.protocol.quic.send_pipeline)	arena_h3_server
+0.09	8	[k] __check_heap_object	[kernel.kallsyms]
+0.09	8	[k] _copy_to_iter	[kernel.kallsyms]
+0.09	8	[.] bssl::BCM_aes_set_encrypt_key(unsigned char const*, unsigned int, aes_key_st*)	arena_h3_server
+0.09	8	[.] cnetmod::async_lock_guard@cnetmod.coro.mutex::~async_lock_guard()	arena_h3_server
+0.09	8	[.] cnetmod::quic::loss_detector@cnetmod.protocol.quic::recycle_inflight_packet(cnetmod::quic::loss_detector@cnetmod.protocol.quic::pn_space_state&, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::loss_detector@cnetmod.protocol.quic::inflight_packet>, void*>*, long> >)	arena_h3_server
+0.09	8	[k] copy_msghdr_from_user	[kernel.kallsyms]
+0.09	8	[k] ip_local_deliver_finish	[kernel.kallsyms]
+0.09	8	[k] irqentry_exit_to_user_mode	[kernel.kallsyms]
+0.09	8	[k] selinux_netlbl_sock_rcv_skb	[kernel.kallsyms]
+0.09	8	[.] std::__1::__hash_iterator<std::__1::__hash_node<std::__1::__hash_value_type<cnetmod::quic::connection_id@cnetmod.protocol.quic, std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> >, void*>*> std::__1::__hash_table<std::__1::__hash_value_type<cnetmod::quic::connection_id@cnetmod.protocol.quic, std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> >, std::__1::__unordered_map_hasher<cnetmod::quic::connection_id@cnetmod.protocol.quic, std::__1::pair<cnetmod::quic::connection_id@cnetmod.protocol.quic const, std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> >, std::__1::hash<cnetmod::quic::connection_id@cnetmod.protocol.quic>, std::__1::equal_to<cnetmod::quic::connection_id@cnetmod.protocol.quic> >, std::__1::__unordered_map_equal<cnetmod::quic::connection_id@cnetmod.protocol.quic, std::__1::pair<cnetmod::quic::connection_id@cnetmod.protocol.quic const, std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> >, std::__1::equal_to<cnetmod::quic::connection_id@cnetmod.protocol.quic>, std::__1::hash<cnetmod::quic::connection_id@cnetmod.protocol.quic> >, std::__1::allocator<std::__1::pair<cnetmod::quic::connection_id@cnetmod.protocol.quic const, std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> > > >::find<cnetmod::quic::connection_id@cnetmod.protocol.quic>(cnetmod::quic::connection_id@cnetmod.protocol.quic const&)	arena_h3_server
+0.09	8	[.] std::__1::__hash_iterator<std::__1::__hash_node<std::__1::__hash_value_type<cnetmod::quic::connection_id@cnetmod.protocol.quic, unsigned int>, void*>*> std::__1::__hash_table<std::__1::__hash_value_type<cnetmod::quic::connection_id@cnetmod.protocol.quic, unsigned int>, std::__1::__unordered_map_hasher<cnetmod::quic::connection_id@cnetmod.protocol.quic, std::__1::pair<cnetmod::quic::connection_id@cnetmod.protocol.quic const, unsigned int>, std::__1::hash<cnetmod::quic::connection_id@cnetmod.protocol.quic>, std::__1::equal_to<cnetmod::quic::connection_id@cnetmod.protocol.quic> >, std::__1::__unordered_map_equal<cnetmod::quic::connection_id@cnetmod.protocol.quic, std::__1::pair<cnetmod::quic::connection_id@cnetmod.protocol.quic const, unsigned int>, std::__1::equal_to<cnetmod::quic::connection_id@cnetmod.protocol.quic>, std::__1::hash<cnetmod::quic::connection_id@cnetmod.protocol.quic> >, std::__1::allocator<std::__1::pair<cnetmod::quic::connection_id@cnetmod.protocol.quic const, unsigned int> > >::find<cnetmod::quic::connection_id@cnetmod.protocol.quic>(cnetmod::quic::connection_id@cnetmod.protocol.quic const&)	arena_h3_server
+0.09	8	[.] std::__1::__shared_weak_count::lock()	libc++.so.1.0
+0.09	8	[k] xfrm_lookup_with_ifid	[kernel.kallsyms]
+0.08	7	[k] __copy_msghdr	[kernel.kallsyms]
+0.08	7	[k] __io_submit_flush_completions	[kernel.kallsyms]
+0.08	7	[k] _raw_spin_unlock	[kernel.kallsyms]
+0.08	7	[.] bssl::CRYPTO_once(int*, void (*)())	arena_h3_server
+0.08	7	[.] bssl::OPENSSL_get_ia32cap(int)	arena_h3_server
+0.08	7	[.] clock_gettime	libc.so.6
+0.08	7	[.] cnetmod::channel@cnetmod.coro.channel<unsigned long>::try_send(unsigned long)	arena_h3_server
+0.08	7	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::next_timer_deadline() const	arena_h3_server
+0.08	7	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::send_datagram_batch(std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>) [clone .resume]	arena_h3_server
+0.08	7	[.] cnetmod::quic::quic_stream@cnetmod.protocol.quic::receive(cnetmod::mutable_buffer@cnetmod.core.buffer) [clone .resume]	arena_h3_server
+0.08	7	[k] dev_hard_start_xmit	[kernel.kallsyms]
+0.08	7	[k] exit_to_user_mode_loop	[kernel.kallsyms]
+0.08	7	[k] fdget	[kernel.kallsyms]
+0.08	7	[k] fget	[kernel.kallsyms]
+0.08	7	[.] io_uring_peek_batch_cqe	liburing.so.2.15
+0.08	7	[.] operator delete(void*, unsigned long, std::align_val_t)	libc++abi.so.1.0
+0.08	7	[.] pthread_once	libc.so.6
+0.08	7	[k] security_sock_rcv_skb	[kernel.kallsyms]
+0.08	7	[k] udp_queue_rcv_skb	[kernel.kallsyms]
+0.08	7	[k] validate_xmit_xfrm	[kernel.kallsyms]
+0.08	7	[.] 0x000000000009d3bc	libc.so.6
+0.07	6	[.] SSL_process_quic_post_handshake	arena_h3_server
+0.07	6	[k] __sk_mem_raise_allocated	[kernel.kallsyms]
+0.07	6	[.] cnetmod::http::v3::detail::read_string@cnetmod.protocol.http.v3.qpack(cnetmod::byte_view@cnetmod.core.buffer&)	arena_h3_server
+0.07	6	[.] cnetmod::quic::protect_header@cnetmod.protocol.quic(cnetmod::quic::quic_level_keys@cnetmod.protocol.quic const&, std::__1::span<std::byte, 18446744073709551615ul>, unsigned long, bool)	arena_h3_server
+0.07	6	[.] cnetmod::task@cnetmod.coro.task<std::__1::expected<unsigned long, std::__1::error_code> >::promise_type::result()	arena_h3_server
+0.07	6	[k] import_ubuf	[kernel.kallsyms]
+0.07	6	[k] kmem_cache_free_bulk	[kernel.kallsyms]
+0.07	6	[k] mutex_lock	[kernel.kallsyms]
+0.07	6	[k] mutex_unlock	[kernel.kallsyms]
+0.07	6	[k] napi_skb_cache_put	[kernel.kallsyms]
+0.07	6	[k] skb_network_protocol	[kernel.kallsyms]
+0.07	6	[k] sock_alloc_send_pskb	[kernel.kallsyms]
+0.07	6	[.] 0x0000000000176e47	libc.so.6
+0.06	5	[k] __list_del_entry_valid_or_report	[kernel.kallsyms]
+0.06	5	[k] __pv_queued_spin_lock_slowpath	[kernel.kallsyms]
+0.06	5	[k] __seccomp_filter	[kernel.kallsyms]
+0.06	5	[k] __wake_up_sync_key	[kernel.kallsyms]
+0.06	5	[.] aead_aes_gcm_openv_detached_impl((anonymous namespace)::aead_aes_gcm_ctx const*, bssl::Span<crypto_iovec_st const, 18446744073709551615ul>, bssl::Span<unsigned char const, 18446744073709551615ul>, bssl::Span<unsigned char const, 18446744073709551615ul>, bssl::Span<crypto_ivec_st const, 18446744073709551615ul>, unsigned long)	arena_h3_server
+0.06	5	[k] allocate_slab	[kernel.kallsyms]
+0.06	5	[.] bssl::CRYPTO_gcm128_decrypt(bssl::gcm128_key_st const*, bssl::GCM128_CONTEXT*, unsigned char const*, unsigned char*, unsigned long)	arena_h3_server
+0.06	5	[.] cnetmod::async_mutex@cnetmod.coro.mutex::unlock()	arena_h3_server
+0.06	5	[.] cnetmod::http::v3::(anonymous namespace)::append_varint(unsigned long, cnetmod::byte_buffer@cnetmod.core.buffer&)	arena_h3_server
+0.06	5	[.] cnetmod::http::v3::http3_request@cnetmod.protocol.http.v3.session::operator=(cnetmod::http::v3::http3_request@cnetmod.protocol.http.v3.session&&)	arena_h3_server
+0.06	5	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::refresh_connection_routes(std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> const&)	arena_h3_server
+0.06	5	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_accept_stream() [clone .resume]	arena_h3_server
+0.06	5	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_poll_timers() [clone .resume]	arena_h3_server
+0.06	5	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_zero_rtt_packet()	arena_h3_server
+0.06	5	[.] cnetmod::spawn@cnetmod.coro.spawn(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>)::{lambda(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>)#1}::operator()(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::task@cnetmod.coro.task<void>) const	arena_h3_server
+0.06	5	[.] cnetmod::udp_datagram_buffer@cnetmod.executor.async_op::udp_datagram_buffer(unsigned long)	arena_h3_server
+0.06	5	[.] cnetmod::uring_cancel_suspend@cnetmod.executor.async_op::await_suspend(std::__1::coroutine_handle<void>)	arena_h3_server
+0.06	5	[k] io_handle_tw_list	[kernel.kallsyms]
+0.06	5	[k] io_poll_add_hash	[kernel.kallsyms]
+0.06	5	[k] ip_generic_getfrag	[kernel.kallsyms]
+0.06	5	[.] mi_page_queue_remove(mi_page_queue_s*, mi_page_s*)	arena_h3_server
+0.06	5	[k] netif_rx_internal	[kernel.kallsyms]
+0.06	5	[.] scalbnf32x	libm.so.6
+0.06	5	[k] selinux_xfrm_postroute_last	[kernel.kallsyms]
+0.06	5	[.] std::__1::__hash_const_iterator<std::__1::__hash_node<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session> >, void*>*> std::__1::__hash_table<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session> >, std::__1::__unordered_map_hasher<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session> >, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::__unordered_map_equal<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session> >, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::allocator<std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, std::__1::shared_ptr<cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session> > > >::find<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>(cnetmod::quic::quic_connection@cnetmod.protocol.quic* const&) const	arena_h3_server
+0.06	5	[.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::__grow_by(unsigned long, unsigned long, unsigned long, unsigned long, unsigned long, unsigned long)	libc++.so.1.0
+0.06	5	[.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::__init(char const*, unsigned long)	libc++.so.1.0
+0.06	5	[.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::compare(unsigned long, unsigned long, char const*, unsigned long) const	libc++.so.1.0
+0.06	5	[.] std::exception_ptr::~exception_ptr()	libc++.so.1.0
+0.06	5	[k] udp4_hwcsum	[kernel.kallsyms]
+0.06	5	[k] udp_rcv	[kernel.kallsyms]
+0.06	5	[k] udp_recvmsg	[kernel.kallsyms]
+0.06	5	[k] xfrm_lookup_route	[kernel.kallsyms]
+0.06	5	[.] 0x0000000000176e00	libc.so.6
+0.06	5	[.] 0x0000000000176e89	libc.so.6
+0.05	4	[.] AES_set_encrypt_key	arena_h3_server
+0.05	4	[.] ERR_clear_error	arena_h3_server
+0.05	4	[.] _ZNSt3__118__visit_format_argB9nqe220108IZNS_8__format26__handle_replacement_fieldB9nqe220108ITkNS_19contiguous_iteratorEPKcNS_26basic_format_parse_contextIcEENS_20basic_format_contextINS_20back_insert_iteratorINS1_15__output_bufferIcEEEEcEEEET_SD_SD_RT0_RT1_EUlSD_E_SC_EEDcOSD_NS_16basic_format_argISE_EE	arena_h3_server
+0.05	4	[k] __cond_resched	[kernel.kallsyms]
+0.05	4	[k] __do_sys_io_uring_enter	[kernel.kallsyms]
+0.05	4	[k] __io_issue_sqe	[kernel.kallsyms]
+0.05	4	[k] __memcg_slab_free_hook	[kernel.kallsyms]
+0.05	4	[k] __usecs_to_jiffies	[kernel.kallsyms]
+0.05	4	[k] _raw_spin_lock_bh	[kernel.kallsyms]
+0.05	4	[.] aes_gcm_dec_update_vaes_avx2	arena_h3_server
+0.05	4	[k] anon_pipe_read	[kernel.kallsyms]
+0.05	4	[.] cnetmod::async_wait_group@cnetmod.coro.wait_group::done()	arena_h3_server
+0.05	4	[.] cnetmod::channel@cnetmod.coro.channel<unsigned long>::recv_awaitable::await_ready()	arena_h3_server
+0.05	4	[.] cnetmod::quic::(anonymous namespace)::append_varint(std::__1::vector<std::byte, std::__1::allocator<std::byte> >&, unsigned long) [clone .llvm.14048665872124894752]	arena_h3_server
+0.05	4	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_recv(unsigned long, cnetmod::mutable_buffer@cnetmod.core.buffer) [clone .destroy]	arena_h3_server
+0.05	4	[.] cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::size() const	arena_h3_server
+0.05	4	[.] cnetmod::quic::quic_tls_session@cnetmod.protocol.quic::process_post_handshake()	arena_h3_server
+0.05	4	[.] cnetmod::quic::quic_write_completion@cnetmod.protocol.quic::receiver::await_suspend(std::__1::coroutine_handle<void>)	arena_h3_server
+0.05	4	[.] cnetmod::task@cnetmod.coro.task<std::__1::expected<void, std::__1::error_code> >::promise_type::result()	arena_h3_server
+0.05	4	[.] cnetmod::uring_cancel_suspend@cnetmod.executor.async_op::original_done(cnetmod::uring_overlapped@cnetmod.io.platform.io_uring&, int, unsigned int)	arena_h3_server
+0.05	4	[k] fput	[kernel.kallsyms]
+0.05	4	[k] inet_lookup_reuseport	[kernel.kallsyms]
+0.05	4	[.] inet_ntop	libc.so.6
+0.05	4	[k] inet_send_prepare	[kernel.kallsyms]
+0.05	4	[k] inode_has_perm	[kernel.kallsyms]
+0.05	4	[k] io_arm_poll_handler	[kernel.kallsyms]
+0.05	4	[.] memset$plt	arena_h3_server
+0.05	4	[k] mod_node_page_state	[kernel.kallsyms]
+0.05	4	[k] napi_consume_skb	[kernel.kallsyms]
+0.05	4	[k] netdev_core_pick_tx	[kernel.kallsyms]
+0.05	4	[.] operator delete(void*, std::align_val_t)	libc++abi.so.1.0
+0.05	4	[k] skb_free_head	[kernel.kallsyms]
+0.05	4	[.] std::__1::__hash_iterator<std::__1::__hash_node<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, void*>*> std::__1::__hash_table<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, std::__1::__unordered_map_hasher<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::__unordered_map_equal<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::allocator<std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule> > >::find<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>(cnetmod::quic::quic_connection@cnetmod.protocol.quic* const&)	arena_h3_server
+0.05	4	[.] std::__1::__shared_weak_count::__release_weak()	libc++.so.1.0
+0.05	4	[.] std::__1::vector<std::byte, std::__1::allocator<std::byte> >::resize(unsigned long)	arena_h3_server
+0.05	4	[k] syscall_trace_enter	[kernel.kallsyms]
+0.05	4	[k] try_charge_memcg	[kernel.kallsyms]
+0.05	4	[.] 0x0000000000055870	libc++.so.1.0
+0.05	4	[.] 0x0000000000176e80	libc.so.6
+0.04	3	[.] _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE6__initEPKcm$plt	arena_h3_server
+0.04	3	[.] _ZNSt3__116__variant_detail12__visitation6__base12__dispatcherIJLm2EEE10__dispatchB9nqe220108IOZNS0_6__dtorINS0_8__traitsIJN7cnetmod4quicW7cnetmodW8protocolW4quic13padding_frameENS9_SC_10ping_frameENS9_SC_9ack_frameENS9_SC_18reset_stream_frameENS9_SC_18stop_sending_frameENS9_SC_12crypto_frameENS9_SC_15new_token_frameENS9_SC_12stream_frameENS9_SC_14max_data_frameENS9_SC_21max_stream_data_frameENS9_SC_17max_streams_frameENS9_SC_18data_blocked_frameENS9_SC_25stream_data_blocked_frameENS9_SC_21streams_blocked_frameENS9_SC_23new_connection_id_frameENS9_SC_26retire_connection_id_frameENS9_SC_20path_challenge_frameENS9_SC_19path_response_frameENS9_SC_22connection_close_frameENS9_SC_20handshake_done_frameENS9_SC_14datagram_frameENS9_SC_14path_ack_frameENS9_SC_18path_abandon_frameENS9_SC_17path_status_frameENS9_SC_28path_new_connection_id_frameENS9_SC_31path_retire_connection_id_frameENS9_SC_17max_path_id_frameENS9_SC_19paths_blocked_frameENS9_SC_23path_cids_blocked_frameEEEELNS0_6_TraitE1EE9__destroyB9nqe220108EvEUlRT_E_JRNS0_6__baseILS17_1EJSD_SE_SF_SG_SH_SI_SJ_SK_SL_SM_SN_SO_SP_SQ_SR_SS_ST_SU_SV_SW_SX_SY_SZ_S10_S11_S12_S13_S14_S15_EEEEEEDcS19_DpT0_	arena_h3_server
+0.04	3	[k] __free_frozen_pages	[kernel.kallsyms]
+0.04	3	[k] __put_user_nocheck_4	[kernel.kallsyms]
+0.04	3	[k] __schedule	[kernel.kallsyms]
+0.04	3	[k] _raw_spin_lock_irq	[kernel.kallsyms]
+0.04	3	[k] add_wait_queue	[kernel.kallsyms]
+0.04	3	[.] aead_aes_gcm_sealv(evp_aead_ctx_st const*, bssl::Span<crypto_iovec_st const, 18446744073709551615ul>, bssl::Span<unsigned char, 18446744073709551615ul>, unsigned long*, bssl::Span<unsigned char const, 18446744073709551615ul>, bssl::Span<crypto_ivec_st const, 18446744073709551615ul>)	arena_h3_server
+0.04	3	[k] anon_pipe_write	[kernel.kallsyms]
+0.04	3	[.] bn_sqrx8x_internal	arena_h3_server
+0.04	3	[.] bssl::BCM_aes_encrypt(unsigned char const*, unsigned char*, aes_key_st const*)	arena_h3_server
+0.04	3	[.] cnetmod::async_timer_wait@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> >, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]	arena_h3_server
+0.04	3	[.] cnetmod::channel@cnetmod.coro.channel<std::__1::monostate>::close()	arena_h3_server
+0.04	3	[.] cnetmod::detail::resume_detached_post@cnetmod.coro.spawn(void*)	arena_h3_server
+0.04	3	[.] cnetmod::http::v3::decode_http3_frame@cnetmod.protocol.http.v3.frame(cnetmod::byte_view@cnetmod.core.buffer)	arena_h3_server
+0.04	3	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::process_incoming(cnetmod::udp_received_datagram@cnetmod.executor.async_op) [clone .destroy]	arena_h3_server
+0.04	3	[.] cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::send_pushes(unsigned long, std::__1::vector<cnetmod::http::v3::http3_push@cnetmod.protocol.http.v3.session, std::__1::allocator<cnetmod::http::v3::http3_push@cnetmod.protocol.http.v3.session> > const&) [clone .resume]	arena_h3_server
+0.04	3	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::settle_early_data_outcome()	arena_h3_server
+0.04	3	[.] cnetmod::quic::quic_write_completion@cnetmod.protocol.quic::receiver::await_ready()	arena_h3_server
+0.04	3	[.] cnetmod::quic::quic_write_completion@cnetmod.protocol.quic::receiver::await_resume()	arena_h3_server
+0.04	3	[.] decltype(auto) std::__1::__variant_detail::__visitation::__base::__dispatcher<1ul>::__dispatch[abi:nqe220108]<std::__1::__variant_detail::__dtor<std::__1::__variant_detail::__traits<cnetmod::http::v3::data_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::headers_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::settings_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::push_promise_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::goaway_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::max_push_id_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::cancel_push_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::priority_update_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::unknown_frame@cnetmod.protocol.http.v3.frame>, (std::__1::__variant_detail::_Trait)1>::__destroy[abi:nqe220108]()::{lambda(auto:1&)#1}&&, std::__1::__variant_detail::__base<(std::__1::__variant_detail::_Trait)1, cnetmod::http::v3::data_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::headers_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::settings_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::push_promise_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::goaway_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::max_push_id_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::cancel_push_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::priority_update_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::unknown_frame@cnetmod.protocol.http.v3.frame>&>(std::__1::__variant_detail::__dtor<std::__1::__variant_detail::__traits<cnetmod::http::v3::data_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::headers_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::settings_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::push_promise_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::goaway_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::max_push_id_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::cancel_push_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::priority_update_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::unknown_frame@cnetmod.protocol.http.v3.frame>, (std::__1::__variant_detail::_Trait)1>::__destroy[abi:nqe220108]()::{lambda(auto:1&)#1}&&, std::__1::__variant_detail::__base<(std::__1::__variant_detail::_Trait)1, cnetmod::http::v3::data_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::headers_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::settings_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::push_promise_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::goaway_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::max_push_id_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::cancel_push_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::priority_update_frame@cnetmod.protocol.http.v3.frame, cnetmod::http::v3::unknown_frame@cnetmod.protocol.http.v3.frame>&)	arena_h3_server
+0.04	3	[k] get_page_from_freelist	[kernel.kallsyms]
+0.04	3	[k] get_partial_node	[kernel.kallsyms]
+0.04	3	[k] get_random_u32	[kernel.kallsyms]
+0.04	3	[k] io_arm_apoll	[kernel.kallsyms]
+0.04	3	[k] io_prep_read	[kernel.kallsyms]
+0.04	3	[k] io_timeout	[kernel.kallsyms]
+0.04	3	[k] ip_local_deliver	[kernel.kallsyms]
+0.04	3	[k] is_vmalloc_addr	[kernel.kallsyms]
+0.04	3	[k] llist_reverse_order	[kernel.kallsyms]
+0.04	3	[k] page_counter_try_charge	[kernel.kallsyms]
+0.04	3	[k] pipe_poll	[kernel.kallsyms]
+0.04	3	[k] selinux_sock_rcv_skb_compat	[kernel.kallsyms]
+0.04	3	[k] selinux_xfrm_sock_rcv_skb	[kernel.kallsyms]
+0.04	3	[k] skb_release_head_state	[kernel.kallsyms]
+0.04	3	[.] std::__1::__hash_table<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, std::__1::__unordered_map_hasher<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::__unordered_map_equal<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::allocator<std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule> > >::remove(std::__1::__hash_const_iterator<std::__1::__hash_node<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::timer_schedule>, void*>*>)	arena_h3_server
+0.04	3	[.] std::__1::__hash_table<std::__1::__hash_value_type<unsigned long, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, std::__1::__unordered_map_hasher<unsigned long, std::__1::pair<unsigned long const, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, std::__1::hash<unsigned long>, std::__1::equal_to<unsigned long> >, std::__1::__unordered_map_equal<unsigned long, std::__1::pair<unsigned long const, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, std::__1::equal_to<unsigned long>, std::__1::hash<unsigned long> >, std::__1::allocator<std::__1::pair<unsigned long const, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry> > >::__emplace_unique[abi:nqe220108]<std::__1::piecewise_construct_t const&, std::__1::tuple<unsigned long const&>, std::__1::tuple<> >(std::__1::piecewise_construct_t const&, std::__1::tuple<unsigned long const&>&&, std::__1::tuple<>&&)::{lambda(unsigned long const&, std::__1::piecewise_construct_t const&, std::__1::tuple<unsigned long const&>&&, std::__1::tuple<>&&)#1}::operator()(unsigned long const&, std::__1::piecewise_construct_t const&, std::__1::tuple<unsigned long const&>&&, std::__1::tuple<>&&) const	arena_h3_server
+0.04	3	[.] std::__1::__hash_table<std::__1::__hash_value_type<unsigned long, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, std::__1::__unordered_map_hasher<unsigned long, std::__1::pair<unsigned long const, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, std::__1::hash<unsigned long>, std::__1::equal_to<unsigned long> >, std::__1::__unordered_map_equal<unsigned long, std::__1::pair<unsigned long const, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, std::__1::equal_to<unsigned long>, std::__1::hash<unsigned long> >, std::__1::allocator<std::__1::pair<unsigned long const, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry> > >::erase(std::__1::__hash_const_iterator<std::__1::__hash_node<std::__1::__hash_value_type<unsigned long, cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::stream_entry>, void*>*>)	arena_h3_server
+0.04	3	[.] std::__1::__sp_mut::unlock()	libc++.so.1.0
+0.04	3	[.] std::__1::__split_buffer<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >*, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >*>, std::__1::__split_buffer_pointer_layout>::shrink_to_fit()	arena_h3_server
+0.04	3	[.] std::__1::__wrap_iter<std::__1::pair<unsigned long, std::__1::deque<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> > > > >*> std::__1::vector<std::__1::pair<unsigned long, std::__1::deque<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> > > > >, std::__1::allocator<std::__1::pair<unsigned long, std::__1::deque<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> > > > > > >::emplace<std::__1::piecewise_construct_t const&, std::__1::tuple<unsigned long const&>, std::__1::tuple<> >(std::__1::__wrap_iter<std::__1::pair<unsigned long, std::__1::deque<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> > > > > const*>, std::__1::piecewise_construct_t const&, std::__1::tuple<unsigned long const&>&&, std::__1::tuple<>&&)	arena_h3_server
+0.04	3	[.] std::__1::basic_format_context<std::__1::back_insert_iterator<std::__1::__format::__output_buffer<char> >, char>::iterator std::__1::__format::__vformat_to[abi:nqe220108]<std::__1::basic_format_parse_context<char>, std::__1::basic_format_context<std::__1::back_insert_iterator<std::__1::__format::__output_buffer<char> >, char> >(std::__1::basic_format_parse_context<char>&&, std::__1::basic_format_context<std::__1::back_insert_iterator<std::__1::__format::__output_buffer<char> >, char>&&)	arena_h3_server
+0.04	3	[.] std::__1::vector<unsigned long, std::__1::allocator<unsigned long> >::emplace_back<unsigned long const&>(unsigned long const&)::{lambda()#2}::operator()() const	arena_h3_server
+0.04	3	[.] 0x0000000000055854	libc++.so.1.0
+0.04	3	[.] 0x0000000000176400	libc.so.6
+0.04	3	[.] 0x0000000000176485	libc.so.6
+0.04	3	[.] 0x0000000000176e5e	libc.so.6
+0.04	3	[.] 0x0000000000176e93	libc.so.6
+0.04	3	[.] 0x00000000000935c1	libm.so.6
+0.04	3	[.] 0x0000000000093615	libm.so.6
+0.04	3	[.] 0x000000000009368e	libm.so.6
+0.04	3	[.] 0x00000000000936b5	libm.so.6
+0.02	2	[.] CRYPTO_memcmp	arena_h3_server
+0.02	2	[.] _ZNSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEED1Ev$pltgot	arena_h3_server
+0.02	2	[.] _ZNSt3__18__format26__handle_replacement_fieldB9nqe220108ITkNS_19contiguous_iteratorEPKcNS_26basic_format_parse_contextIcEENS_20basic_format_contextINS_20back_insert_iteratorINS0_15__output_bufferIcEEEEcEEEET_SC_SC_RT0_RT1_	arena_h3_server
+0.02	2	[.] _ZNSt3__18expectedIN7cnetmod4http2v3W7cnetmodW8protocolW4httpW2v3W7session13http3_requestENS_10error_codeEEaSB9nqe220108EOSB_Qaaaaaaaa23is_move_constructible_vIT_E20is_move_assignable_vISD_E23is_move_constructible_vIT0_E20is_move_assignable_vISE_Eoo31is_nothrow_move_constructible_vISD_E31is_nothrow_move_constructible_vISE_E	arena_h3_server
+0.02	2	[.] _ZZNSt3__18__format26__handle_replacement_fieldB9nqe220108ITkNS_19contiguous_iteratorEPKcNS_26basic_format_parse_contextIcEENS_20basic_format_contextINS_20back_insert_iteratorINS0_15__output_bufferIcEEEEcEEEET_SC_SC_RT0_RT1_ENKUlSC_E_clIjEEDaSC_	arena_h3_server
+0.02	2	[k] __io_timeout_prep	[kernel.kallsyms]
+0.02	2	[k] __kmalloc_noprof	[kernel.kallsyms]
+0.02	2	[k] __pi_memcpy	[kernel.kallsyms]
+0.02	2	[k] __sk_mem_schedule	[kernel.kallsyms]
+0.02	2	[k] __skb_recv_udp	[kernel.kallsyms]
+0.02	2	[k] __slab_alloc.isra.0	[kernel.kallsyms]
+0.02	2	[k] __x64_sys_sendmmsg	[kernel.kallsyms]
+0.02	2	[k] _copy_to_user	[kernel.kallsyms]
+0.02	2	[.] _mi_page_retire(mi_page_s*)	arena_h3_server
+0.02	2	[k] _raw_spin_trylock	[kernel.kallsyms]
+0.02	2	[.] aead_aes_gcm_openv_detached(evp_aead_ctx_st const*, bssl::Span<crypto_iovec_st const, 18446744073709551615ul>, bssl::Span<unsigned char const, 18446744073709551615ul>, bssl::Span<unsigned char const, 18446744073709551615ul>, bssl::Span<crypto_ivec_st const, 18446744073709551615ul>)	arena_h3_server
+0.02	2	[.] cnetmod::channel@cnetmod.coro.channel<std::__1::monostate>::try_send(std::__1::monostate)	arena_h3_server
+0.02	2	[.] cnetmod::channel@cnetmod.coro.channel<std::__1::vector<std::byte, std::__1::allocator<std::byte> > >::close()	arena_h3_server
+0.02	2	[.] cnetmod::channel@cnetmod.coro.channel<unsigned long>::recv_awaitable::await_suspend(std::__1::coroutine_handle<void>)	arena_h3_server
+0.02	2	[.] cnetmod::http::v3::(anonymous namespace)::buffered_response_body(cnetmod::http::v3::http3_response@cnetmod.protocol.http.v3.session const&)	arena_h3_server
+0.02	2	[.] cnetmod::http::v3::(anonymous namespace)::response_declared_length(cnetmod::http::v3::http3_response@cnetmod.protocol.http.v3.session const&)	arena_h3_server
+0.02	2	[.] cnetmod::http::v3::http3_request@cnetmod.protocol.http.v3.session::~http3_request()	arena_h3_server
+0.02	2	[.] cnetmod::http::v3::http3_server_session@cnetmod.protocol.http.v3.session::send_pushes(unsigned long, std::__1::vector<cnetmod::http::v3::http3_push@cnetmod.protocol.http.v3.session, std::__1::allocator<cnetmod::http::v3::http3_push@cnetmod.protocol.http.v3.session> > const&) [clone .cleanup]	arena_h3_server
+0.02	2	[.] cnetmod::io_uring_context@cnetmod.io.platform.io_uring::wake()	arena_h3_server
+0.02	2	[.] cnetmod::quic::(anonymous namespace)::decode_stream_frame(std::__1::span<std::byte const, 18446744073709551615ul>, unsigned long)	arena_h3_server
+0.02	2	[.] cnetmod::quic::decode_frame@cnetmod.protocol.quic(std::__1::span<std::byte const, 18446744073709551615ul>)	arena_h3_server
+0.02	2	[.] cnetmod::quic::decode_short_header@cnetmod.protocol.quic(std::__1::span<std::byte const, 18446744073709551615ul>, unsigned long)	arena_h3_server
+0.02	2	[.] cnetmod::quic::encode_frame@cnetmod.protocol.quic(cnetmod::quic::stream_frame@cnetmod.protocol.quic const&)	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::await_application_pacing(unsigned long) [clone .resume]	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::flush_send_queue() [clone .cleanup]	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::process_datagram(std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::endpoint@cnetmod.core.address const&) [clone .resume]	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::process_packet(std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::endpoint@cnetmod.core.address const&) [clone .cleanup]	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::quic_connection_impl::requeue_prioritized_stream_frame(cnetmod::quic::scheduled_quic_frame@cnetmod.protocol.quic.send_pipeline)	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::can_send_datagram(unsigned long) const	arena_h3_server
+0.02	2	[.] cnetmod::quic::quic_write_completion@cnetmod.protocol.quic::complete(std::__1::expected<void, std::__1::error_code>)	arena_h3_server
+0.02	2	[k] css_rstat_updated	[kernel.kallsyms]
+0.02	2	[k] do_recvmmsg	[kernel.kallsyms]
+0.02	2	[k] file_has_perm	[kernel.kallsyms]
+0.02	2	[k] find_exception	[kernel.kallsyms]
+0.02	2	[.] frexpf32x	libm.so.6
+0.02	2	[k] import_iovec	[kernel.kallsyms]
+0.02	2	[k] io_async_queue_proc	[kernel.kallsyms]
+0.02	2	[k] io_cqring_wait	[kernel.kallsyms]
+0.02	2	[k] io_msg_alloc_async	[kernel.kallsyms]
+0.02	2	[k] io_read	[kernel.kallsyms]
+0.02	2	[k] io_recvmsg_prep	[kernel.kallsyms]
+0.02	2	[k] io_timeout_prep	[kernel.kallsyms]
+0.02	2	[k] ipv4_pktinfo_prepare	[kernel.kallsyms]
+0.02	2	[k] memcmp	[kernel.kallsyms]
+0.02	2	[.] mi_page_queue_push_at_end(mi_theap_s*, mi_page_queue_s*, mi_page_s*)	arena_h3_server
+0.02	2	[k] move_addr_to_user	[kernel.kallsyms]
+0.02	2	[.] pow	libm.so.6
+0.02	2	[k] sched_balance_update_blocked_averages	[kernel.kallsyms]
+0.02	2	[k] security_file_permission	[kernel.kallsyms]
+0.02	2	[k] selinux_socket_recvmsg	[kernel.kallsyms]
+0.02	2	[k] selinux_socket_sendmsg	[kernel.kallsyms]
+0.02	2	[k] sk_leave_memory_pressure	[kernel.kallsyms]
+0.02	2	[k] skb_attempt_defer_free	[kernel.kallsyms]
+0.02	2	[k] skb_condense	[kernel.kallsyms]
+0.02	2	[.] std::__1::__itoa::__base_10_u32[abi:nqe220108](char*, unsigned int)	arena_h3_server
+0.02	2	[.] std::__1::deque<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >, std::__1::allocator<std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> > > >::clear()	arena_h3_server
+0.02	2	[.] std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic>::operator=[abi:nqe220108](std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> const&)	arena_h3_server
+0.02	2	[k] task_work_run	[kernel.kallsyms]
+0.02	2	[k] udp_poll	[kernel.kallsyms]
+0.02	2	[k] vfs_read	[kernel.kallsyms]
+0.02	2	[.] write	libc.so.6
+0.02	2	[.] 0x0000000000055690	libc++.so.1.0
+0.02	2	[.] 0x00000000000556b7	libc++.so.1.0
+0.02	2	[.] 0x0000000000175ca0	libc.so.6
+0.02	2	[.] 0x0000000000175f99	libc.so.6
+0.02	2	[.] 0x0000000000176459	libc.so.6
+0.02	2	[.] 0x0000000000176466	libc.so.6
+0.02	2	[.] 0x0000000000176470	libc.so.6
+0.02	2	[.] 0x0000000000176e68	libc.so.6
+0.02	2	[.] 0x0000000000176e8e	libc.so.6
+0.02	2	[.] 0x00000000000934ef	libm.so.6
+0.02	2	[.] 0x0000000000093536	libm.so.6
+0.02	2	[.] 0x000000000009356a	libm.so.6
+0.02	2	[.] 0x00000000000935c5	libm.so.6
+0.02	2	[.] 0x0000000000093636	libm.so.6
+0.02	2	[.] 0x00000000000936cc	libm.so.6
+0.02	2	[.] 0x00000000000936d1	libm.so.6
+0.02	2	[.] 0x00000000000936ec	libm.so.6
+0.02	2	[.] 0x00000000000028e5	liburing.so.2.15
+0.01	1	[.] AES_encrypt	arena_h3_server
+0.01	1	[.] EVP_AEAD_CTX_open	arena_h3_server
+0.01	1	[.] HMAC	arena_h3_server
+0.01	1	[.] SSL_is_init_finished	arena_h3_server
+0.01	1	[.] _ZNKSt3__112basic_stringIcNS_11char_traitsIcEENS_9allocatorIcEEE7compareEmmPKcm$plt	arena_h3_server
+0.01	1	[.] _ZNSt13exception_ptrD1Ev$plt	arena_h3_server
+0.01	1	[.] _ZNSt3__111__formatter16__format_integerB9nqe220108ITkNS_17unsigned_integralEjcNS_20basic_format_contextINS_20back_insert_iteratorINS_8__format15__output_bufferIcEEEEcEEEENT1_8iteratorET_RS9_NS_13__format_spec23__parsed_specificationsIT0_EEb	arena_h3_server
+0.01	1	[.] _ZNSt3__111__formatter27__write_string_no_precisionB9nqe220108IcTkNS_15output_iteratorIRKT_EENS_20back_insert_iteratorINS_8__format15__output_bufferIcEEEEEEDtfp0_ENS_17basic_string_viewIS3_NS_11char_traitsIS3_EEEET0_NS_13__format_spec23__parsed_specificationsIS3_EE	arena_h3_server
+0.01	1	[.] _ZNSt3__116__variant_detail12__visitation6__base12__dispatcherIJLm5EEE10__dispatchB9nqe220108IOZNS0_6__ctorINS0_8__traitsIJN7cnetmod4quicW7cnetmodW8protocolW4quic13padding_frameENS9_SC_10ping_frameENS9_SC_9ack_frameENS9_SC_18reset_stream_frameENS9_SC_18stop_sending_frameENS9_SC_12crypto_frameENS9_SC_15new_token_frameENS9_SC_12stream_frameENS9_SC_14max_data_frameENS9_SC_21max_stream_data_frameENS9_SC_17max_streams_frameENS9_SC_18data_blocked_frameENS9_SC_25stream_data_blocked_frameENS9_SC_21streams_blocked_frameENS9_SC_23new_connection_id_frameENS9_SC_26retire_connection_id_frameENS9_SC_20path_challenge_frameENS9_SC_19path_response_frameENS9_SC_22connection_close_frameENS9_SC_20handshake_done_frameENS9_SC_14datagram_frameENS9_SC_14path_ack_frameENS9_SC_18path_abandon_frameENS9_SC_17path_status_frameENS9_SC_28path_new_connection_id_frameENS9_SC_31path_retire_connection_id_frameENS9_SC_17max_path_id_frameENS9_SC_19paths_blocked_frameENS9_SC_23path_cids_blocked_frameEEEEE19__generic_constructB9nqe220108INS0_18__move_constructorIS16_LNS0_6_TraitE1EEEEEvRS17_OT_EUlS1E_E_JONS0_6__baseILS1A_1EJSD_SE_SF_SG_SH_SI_SJ_SK_SL_SM_SN_SO_SP_SQ_SR_SS_ST_SU_SV_SW_SX_SY_SZ_S10_S11_S12_S13_S14_S15_EEEEEEDcS1D_DpT0_	arena_h3_server
+0.01	1	[.] _ZNSt3__116__variant_detail12__visitation6__base12__dispatcherIJLm7EEE10__dispatchB9nqe220108IOZNS0_6__ctorINS0_8__traitsIJN7cnetmod4quicW7cnetmodW8protocolW4quic13padding_frameENS9_SC_10ping_frameENS9_SC_9ack_frameENS9_SC_18reset_stream_frameENS9_SC_18stop_sending_frameENS9_SC_12crypto_frameENS9_SC_15new_token_frameENS9_SC_12stream_frameENS9_SC_14max_data_frameENS9_SC_21max_stream_data_frameENS9_SC_17max_streams_frameENS9_SC_18data_blocked_frameENS9_SC_25stream_data_blocked_frameENS9_SC_21streams_blocked_frameENS9_SC_23new_connection_id_frameENS9_SC_26retire_connection_id_frameENS9_SC_20path_challenge_frameENS9_SC_19path_response_frameENS9_SC_22connection_close_frameENS9_SC_20handshake_done_frameENS9_SC_14datagram_frameENS9_SC_14path_ack_frameENS9_SC_18path_abandon_frameENS9_SC_17path_status_frameENS9_SC_28path_new_connection_id_frameENS9_SC_31path_retire_connection_id_frameENS9_SC_17max_path_id_frameENS9_SC_19paths_blocked_frameENS9_SC_23path_cids_blocked_frameEEEEE19__generic_constructB9nqe220108INS0_18__move_constructorIS16_LNS0_6_TraitE1EEEEEvRS17_OT_EUlS1E_E_JONS0_6__baseILS1A_1EJSD_SE_SF_SG_SH_SI_SJ_SK_SL_SM_SN_SO_SP_SQ_SR_SS_ST_SU_SV_SW_SX_SY_SZ_S10_S11_S12_S13_S14_S15_EEEEEEDcS1D_DpT0_	arena_h3_server
+0.01	1	[.] _ZNSt3__116__variant_detail12__visitation6__base12__dispatcherIJLm7EEE10__dispatchB9nqe220108IOZNS0_6__dtorINS0_8__traitsIJN7cnetmod4quicW7cnetmodW8protocolW4quic13padding_frameENS9_SC_10ping_frameENS9_SC_9ack_frameENS9_SC_18reset_stream_frameENS9_SC_18stop_sending_frameENS9_SC_12crypto_frameENS9_SC_15new_token_frameENS9_SC_12stream_frameENS9_SC_14max_data_frameENS9_SC_21max_stream_data_frameENS9_SC_17max_streams_frameENS9_SC_18data_blocked_frameENS9_SC_25stream_data_blocked_frameENS9_SC_21streams_blocked_frameENS9_SC_23new_connection_id_frameENS9_SC_26retire_connection_id_frameENS9_SC_20path_challenge_frameENS9_SC_19path_response_frameENS9_SC_22connection_close_frameENS9_SC_20handshake_done_frameENS9_SC_14datagram_frameENS9_SC_14path_ack_frameENS9_SC_18path_abandon_frameENS9_SC_17path_status_frameENS9_SC_28path_new_connection_id_frameENS9_SC_31path_retire_connection_id_frameENS9_SC_17max_path_id_frameENS9_SC_19paths_blocked_frameENS9_SC_23path_cids_blocked_frameEEEELNS0_6_TraitE1EE9__destroyB9nqe220108EvEUlRT_E_JRNS0_6__baseILS17_1EJSD_SE_SF_SG_SH_SI_SJ_SK_SL_SM_SN_SO_SP_SQ_SR_SS_ST_SU_SV_SW_SX_SY_SZ_S10_S11_S12_S13_S14_S15_EEEEEEDcS19_DpT0_	arena_h3_server
+0.01	1	[.] _ZNSt3__119__shared_weak_count4lockEv$plt	arena_h3_server
+0.01	1	[.] _ZNSt3__119__to_chars_integralB9nqe220108IjTnNS_9enable_ifIXntsr9is_signedIT_EE5valueEiE4typeELi0EEENS_17__to_chars_resultEPcS6_S2_i	arena_h3_server
+0.01	1	[.] _ZNSt3__132__atomic_notify_one_global_tableEPKv$plt	arena_h3_server
+0.01	1	[.] _ZNSt3__14pairINS_7variantIJN7cnetmod4http2v3W7cnetmodW8protocolW4httpW2v3W5frame10data_frameENS4_S9_13headers_frameENS4_S9_14settings_frameENS4_S9_18push_promise_frameENS4_S9_12goaway_frameENS4_S9_17max_push_id_frameENS4_S9_17cancel_push_frameENS4_S9_21priority_update_frameENS4_S9_13unknown_frameEEEEmEC2B9nqe220108ISJ_RKmTnNS_9enable_ifIXclsr25__check_pair_constructionISJ_mEE23__is_pair_constructibleIT_T0_EEEiE4typeELi0EEEOSP_OSQ_	arena_h3_server
+0.01	1	[.] _ZNSt3__18__sp_mut4lockEv$plt	arena_h3_server
+0.01	1	[.] _ZNSt3__18expectedINS_4pairINS_7variantIJN7cnetmod4quicW7cnetmodW8protocolW4quic13padding_frameENS4_S7_10ping_frameENS4_S7_9ack_frameENS4_S7_18reset_stream_frameENS4_S7_18stop_sending_frameENS4_S7_12crypto_frameENS4_S7_15new_token_frameENS4_S7_12stream_frameENS4_S7_14max_data_frameENS4_S7_21max_stream_data_frameENS4_S7_17max_streams_frameENS4_S7_18data_blocked_frameENS4_S7_25stream_data_blocked_frameENS4_S7_21streams_blocked_frameENS4_S7_23new_connection_id_frameENS4_S7_26retire_connection_id_frameENS4_S7_20path_challenge_frameENS4_S7_19path_response_frameENS4_S7_22connection_close_frameENS4_S7_20handshake_done_frameENS4_S7_14datagram_frameENS4_S7_14path_ack_frameENS4_S7_18path_abandon_frameENS4_S7_17path_status_frameENS4_S7_28path_new_connection_id_frameENS4_S7_31path_retire_connection_id_frameENS4_S7_17max_path_id_frameENS4_S7_19paths_blocked_frameENS4_S7_23path_cids_blocked_frameEEEEmEENS_10error_codeEEC2B9nqe220108IS12_Qaaaaaaaaaant9is_same_vIu14__remove_cvrefITL0__ENS_10in_place_tEEnt9is_same_vINS0_IT_T0_EES17_Ent9is_same_vIS17_NS_10unexpect_tEE18is_constructible_vIS19_S16_Entsr19__is_std_unexpectedIS17_EE5valueoont9is_same_vIu11__remove_cvIS19_EbEntsr17__is_std_expectedIS17_EE5valueEEOS19_	arena_h3_server
+0.01	1	[.] _ZNSt3__18optionalIN7cnetmod4http2v3W7cnetmodW8protocolW4httpW2v3W7session13http3_requestEEaSB9nqe220108IS9_TnNS_9enable_ifIXsr4_AndINS_17integral_constantIbXntu9__is_sameu14__remove_cvrefIT_ESA_EEEENS_7_OrImplIXaantcvbsr10_IsNotSameISF_S9_EE5valuenesZT1_Li0EEE7_ResultINSD_IbXntu9__is_sameSF_S9_EEEENS_4_NotINS_9is_scalarIS9_EEEEEENS_16is_constructibleIS9_JSE_EEENS_13is_assignableIRS9_SE_EENS_9is_objectIS9_EEEE5valueEiE4typeELi0EEERSA_OSE_	arena_h3_server
+0.01	1	[.] _ZdlPvmSt11align_val_t$plt	arena_h3_server
+0.01	1	[.] __errno_location	libc.so.6
+0.01	1	[k] __hrtimer_setup	[kernel.kallsyms]
+0.01	1	[k] __io_arm_poll_handler	[kernel.kallsyms]
+0.01	1	[k] __io_import_rw_buffer	[kernel.kallsyms]
+0.01	1	[k] __list_add_valid_or_report	[kernel.kallsyms]
+0.01	1	[k] __x64_sys_futex	[kernel.kallsyms]
+0.01	1	[k] __x64_sys_io_uring_enter	[kernel.kallsyms]
+0.01	1	[.] _mi_arenas_page_unabandon(mi_page_s*, mi_theap_s*)	arena_h3_server
+0.01	1	[.] _mi_theap_collect_retired(mi_theap_s*, bool)	arena_h3_server
+0.01	1	[k] alloc_frozen_pages_noprof	[kernel.kallsyms]
+0.01	1	[k] anon_pipe_buf_release	[kernel.kallsyms]
+0.01	1	[k] arch_do_signal_or_restart	[kernel.kallsyms]
+0.01	1	[.] bool std::__1::operator==[abi:nqe220108]<char, std::__1::char_traits<char>, std::__1::allocator<char> >(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&)	arena_h3_server
+0.01	1	[.] bssl::CRYPTO_get_thread_local(bssl::thread_local_data_t)	arena_h3_server
+0.01	1	[.] cnetmod::async_recvfrom@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, cnetmod::mutable_buffer@cnetmod.core.buffer, cnetmod::endpoint@cnetmod.core.address&, cnetmod::cancel_token@cnetmod.coro.cancel&) [clone .resume]	arena_h3_server
+0.01	1	[.] cnetmod::async_sendto_batch@cnetmod.executor.async_op(cnetmod::io_context@cnetmod.io.io_context&, cnetmod::socket@cnetmod.core.socket&, std::__1::span<cnetmod::udp_send_datagram@cnetmod.executor.async_op const, 18446744073709551615ul>, cnetmod::cancel_token@cnetmod.coro.cancel&)	arena_h3_server
+0.01	1	[.] cnetmod::cancel_token@cnetmod.coro.cancel::complete_callback(void*)	arena_h3_server
+0.01	1	[.] cnetmod::endpoint@cnetmod.core.address::to_string() const	arena_h3_server
+0.01	1	[.] cnetmod::http::v3::(anonymous namespace)::flush_qpack_decoder_instructions(cnetmod::quic::quic_connection@cnetmod.protocol.quic&, cnetmod::http::v3::qpack_decoder@cnetmod.protocol.http.v3.qpack&, std::__1::optional<unsigned long> const&) [clone .resume]	arena_h3_server
+0.01	1	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::discard_expired_reset_routes()	arena_h3_server
+0.01	1	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::ensure_http3_session(std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> const&)	arena_h3_server
+0.01	1	[.] cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::process_incoming(cnetmod::udp_received_datagram@cnetmod.executor.async_op) [clone .resume]	arena_h3_server
+0.01	1	[.] cnetmod::quic::(anonymous namespace)::decode_ack_frame(std::__1::span<std::byte const, 18446744073709551615ul>, bool)	arena_h3_server
+0.01	1	[.] cnetmod::quic::open_payload@cnetmod.protocol.quic(cnetmod::quic::quic_level_keys@cnetmod.protocol.quic const&, std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::span<std::byte const, 18446744073709551615ul>, unsigned long, unsigned int)	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_accept_stream() [clone .destroy]	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_poll_timers() [clone .destroy]	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_recv(unsigned long, cnetmod::mutable_buffer@cnetmod.core.buffer)	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::async_send_shared(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> >&&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const>, bool) [clone .destroy]	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_and_send_packets() [clone .destroy]	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::process_ack_frame_state(cnetmod::quic::ack_frame@cnetmod.protocol.quic const&)	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::process_datagram(std::__1::span<std::byte const, 18446744073709551615ul>, cnetmod::endpoint@cnetmod.core.address const&) [clone .destroy]	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_stream@cnetmod.protocol.quic::impl::~impl()	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_stream@cnetmod.protocol.quic::receive(cnetmod::mutable_buffer@cnetmod.core.buffer)	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_tls_session@cnetmod.protocol.quic::confirm_application_read_key(cnetmod::quic::application_read_key_kind@cnetmod.protocol.quic)	arena_h3_server
+0.01	1	[.] cnetmod::quic::quic_tls_session@cnetmod.protocol.quic::early_data_status() const	arena_h3_server
+0.01	1	[.] cnetmod::task_awaiter@cnetmod.coro.task<void, cnetmod::task@cnetmod.coro.task<void>::promise_type>::await_resume()	arena_h3_server
+0.01	1	[k] copy_page_to_iter	[kernel.kallsyms]
+0.01	1	[.] decltype(auto) std::__1::__variant_detail::__visitation::__variant::__visit_value[abi:nqe220108]<cnetmod::quic::congestion_controller@cnetmod.protocol.quic::on_packet_acked(unsigned long)::{lambda(auto:1&)#1}, std::__1::variant<cnetmod::quic::new_reno_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::cubic_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::bbr_congestion_controller@cnetmod.protocol.quic>&>(cnetmod::quic::congestion_controller@cnetmod.protocol.quic::on_packet_acked(unsigned long)::{lambda(auto:1&)#1}&&, std::__1::variant<cnetmod::quic::new_reno_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::cubic_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::bbr_congestion_controller@cnetmod.protocol.quic>&)	arena_h3_server
+0.01	1	[.] decltype(auto) std::__1::__variant_detail::__visitation::__variant::__visit_value[abi:nqe220108]<cnetmod::quic::congestion_controller@cnetmod.protocol.quic::update_rtt(std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> >)::{lambda(auto:1&)#1}, std::__1::variant<cnetmod::quic::new_reno_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::cubic_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::bbr_congestion_controller@cnetmod.protocol.quic>&>(cnetmod::quic::congestion_controller@cnetmod.protocol.quic::update_rtt(std::__1::chrono::duration<long long, std::__1::ratio<1l, 1000000000l> >)::{lambda(auto:1&)#1}&&, std::__1::variant<cnetmod::quic::new_reno_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::cubic_congestion_controller@cnetmod.protocol.quic, cnetmod::quic::bbr_congestion_controller@cnetmod.protocol.quic>&)	arena_h3_server
+0.01	1	[k] free_frozen_page_commit	[kernel.kallsyms]
+0.01	1	[k] futex_hash	[kernel.kallsyms]
+0.01	1	[k] get_signal	[kernel.kallsyms]
+0.01	1	[k] hv_qlock_wait	[kernel.kallsyms]
+0.01	1	[k] io_async_cancel	[kernel.kallsyms]
+0.01	1	[k] io_async_cancel_prep	[kernel.kallsyms]
+0.01	1	[k] io_file_get_flags	[kernel.kallsyms]
+0.01	1	[k] io_net_import_vec	[kernel.kallsyms]
+0.01	1	[k] io_poll_find.isra.0	[kernel.kallsyms]
+0.01	1	[k] io_prep_rw	[kernel.kallsyms]
+0.01	1	[k] io_queue_async	[kernel.kallsyms]
+0.01	1	[k] io_recvmsg	[kernel.kallsyms]
+0.01	1	[k] io_req_io_end	[kernel.kallsyms]
+0.01	1	[k] io_rw_init_file	[kernel.kallsyms]
+0.01	1	[k] io_rw_recycle	[kernel.kallsyms]
+0.01	1	[k] io_timeout_complete	[kernel.kallsyms]
+0.01	1	[k] io_try_cancel	[kernel.kallsyms]
+0.01	1	[.] io_uring_peek_batch_cqe$plt	arena_h3_server
+0.01	1	[k] kmem_cache_size	[kernel.kallsyms]
+0.01	1	[.] memcpy$plt	arena_h3_server
+0.01	1	[.] mi_stats_add(mi_stats_s*, mi_stats_s const*)	arena_h3_server
+0.01	1	[.] mi_theap_collect_ex(mi_theap_s*, mi_collect_e)	arena_h3_server
+0.01	1	[.] operator delete(void*, std::align_val_t)@plt	libc++abi.so.1.0
+0.01	1	[k] populate_seccomp_data	[kernel.kallsyms]
+0.01	1	[k] prep_compound_page	[kernel.kallsyms]
+0.01	1	[.] pthread_getspecific	libc.so.6
+0.01	1	[.] pthread_once$plt	arena_h3_server
+0.01	1	[k] put_cpu_partial	[kernel.kallsyms]
+0.01	1	[.] read	libc.so.6
+0.01	1	[.] recvmmsg	libc.so.6
+0.01	1	[k] refill_stock	[kernel.kallsyms]
+0.01	1	[k] rw_verify_area	[kernel.kallsyms]
+0.01	1	[k] skb_consume_udp	[kernel.kallsyms]
+0.01	1	[k] sock_recvmsg	[kernel.kallsyms]
+0.01	1	[.] std::__1::__format_spec::__parsed_specifications<char> std::__1::__format_spec::__parser<char>::__get_parsed_std_specifications[abi:nqe220108]<std::__1::basic_format_context<std::__1::back_insert_iterator<std::__1::__format::__output_buffer<char> >, char> >(std::__1::basic_format_context<std::__1::back_insert_iterator<std::__1::__format::__output_buffer<char> >, char>&) const	arena_h3_server
+0.01	1	[.] std::__1::__function::__func<cnetmod::quic::quic_connection@cnetmod.protocol.quic::retire_stream(unsigned long)::{lambda()#1}, void ()>::operator()()	arena_h3_server
+0.01	1	[.] std::__1::__hash_iterator<std::__1::__hash_node<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::published_connection_route>, void*>*> std::__1::__hash_table<std::__1::__hash_value_type<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::published_connection_route>, std::__1::__unordered_map_hasher<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::published_connection_route>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::__unordered_map_equal<cnetmod::quic::quic_connection@cnetmod.protocol.quic*, std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::published_connection_route>, std::__1::equal_to<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>, std::__1::hash<cnetmod::quic::quic_connection@cnetmod.protocol.quic*> >, std::__1::allocator<std::__1::pair<cnetmod::quic::quic_connection@cnetmod.protocol.quic* const, cnetmod::http::v3::http3_server@cnetmod.protocol.http.v3.server::impl::published_connection_route> > >::find<cnetmod::quic::quic_connection@cnetmod.protocol.quic*>(cnetmod::quic::quic_connection@cnetmod.protocol.quic* const&)	arena_h3_server
+0.01	1	[.] std::__1::__wrap_iter<std::__1::pair<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > > const*> cnetmod::flat_map@cnetmod.utils.flat_map<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, cnetmod::http::case_insensitive_less@cnetmod.protocol.http.semantics, std::__1::allocator<std::__1::pair<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > > > >::find_impl<char [15]>(char const (&) [15]) const	arena_h3_server
+0.01	1	[.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::basic_string(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const&, unsigned long, unsigned long, std::__1::allocator<char> const&)	libc++.so.1.0
+0.01	1	[.] std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >::find(char, unsigned long) const	libc++.so.1.0
+0.01	1	[.] std::__1::deque<cnetmod::quic::scheduled_quic_frame@cnetmod.protocol.quic.send_pipeline, std::__1::allocator<cnetmod::quic::scheduled_quic_frame@cnetmod.protocol.quic.send_pipeline> >::__add_back_capacity()	arena_h3_server
+0.01	1	[.] std::__1::shared_ptr<cnetmod::channel@cnetmod.coro.channel<std::__1::monostate> >::~shared_ptr[abi:nqe220108]()	arena_h3_server
+0.01	1	[.] std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const>::operator=[abi:nqe220108](std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const> const&)	arena_h3_server
+0.01	1	[.] std::__1::system_category()	libc++.so.1.0
+0.01	1	[.] std::__1::variant<cnetmod::quic::padding_frame@cnetmod.protocol.quic, cnetmod::quic::ping_frame@cnetmod.protocol.quic, cnetmod::quic::ack_frame@cnetmod.protocol.quic, cnetmod::quic::reset_stream_frame@cnetmod.protocol.quic, cnetmod::quic::stop_sending_frame@cnetmod.protocol.quic, cnetmod::quic::crypto_frame@cnetmod.protocol.quic, cnetmod::quic::new_token_frame@cnetmod.protocol.quic, cnetmod::quic::stream_frame@cnetmod.protocol.quic, cnetmod::quic::max_data_frame@cnetmod.protocol.quic, cnetmod::quic::max_stream_data_frame@cnetmod.protocol.quic, cnetmod::quic::max_streams_frame@cnetmod.protocol.quic, cnetmod::quic::data_blocked_frame@cnetmod.protocol.quic, cnetmod::quic::stream_data_blocked_frame@cnetmod.protocol.quic, cnetmod::quic::streams_blocked_frame@cnetmod.protocol.quic, cnetmod::quic::new_connection_id_frame@cnetmod.protocol.quic, cnetmod::quic::retire_connection_id_frame@cnetmod.protocol.quic, cnetmod::quic::path_challenge_frame@cnetmod.protocol.quic, cnetmod::quic::path_response_frame@cnetmod.protocol.quic, cnetmod::quic::connection_close_frame@cnetmod.protocol.quic, cnetmod::quic::handshake_done_frame@cnetmod.protocol.quic, cnetmod::quic::datagram_frame@cnetmod.protocol.quic, cnetmod::quic::path_ack_frame@cnetmod.protocol.quic, cnetmod::quic::path_abandon_frame@cnetmod.protocol.quic, cnetmod::quic::path_status_frame@cnetmod.protocol.quic, cnetmod::quic::path_new_connection_id_frame@cnetmod.protocol.quic, cnetmod::quic::path_retire_connection_id_frame@cnetmod.protocol.quic, cnetmod::quic::max_path_id_frame@cnetmod.protocol.quic, cnetmod::quic::paths_blocked_frame@cnetmod.protocol.quic, cnetmod::quic::path_cids_blocked_frame@cnetmod.protocol.quic>::~variant[abi:nqe220108]()	arena_h3_server
+0.01	1	[.] std::__1::vector<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack, std::__1::allocator<cnetmod::http::v3::header_field@cnetmod.protocol.http.v3.qpack> >::reserve(unsigned long)	arena_h3_server
+0.01	1	[.] std::__1::vector<cnetmod::quic::(anonymous namespace)::take_ack_frame(std::__1::set<unsigned long, std::__1::less<unsigned long>, std::__1::allocator<unsigned long> >&)::interval, std::__1::allocator<cnetmod::quic::(anonymous namespace)::take_ack_frame(std::__1::set<unsigned long, std::__1::less<unsigned long>, std::__1::allocator<unsigned long> >&)::interval> >::emplace_back<cnetmod::quic::(anonymous namespace)::take_ack_frame(std::__1::set<unsigned long, std::__1::less<unsigned long>, std::__1::allocator<unsigned long> >&)::interval const&>(cnetmod::quic::(anonymous namespace)::take_ack_frame(std::__1::set<unsigned long, std::__1::less<unsigned long>, std::__1::allocator<unsigned long> >&)::interval const&)::{lambda()#2}::operator()() const	arena_h3_server
+0.01	1	[.] std::__1::vector<cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline, std::__1::allocator<cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline> >::__swap_out_circular_buffer(std::__1::__split_buffer<cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline, std::__1::allocator<cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline>, std::__1::__split_buffer_pointer_layout>&)	arena_h3_server
+0.01	1	[.] std::__1::vector<std::__1::pair<cnetmod::quic::quic_write_completion@cnetmod.protocol.quic*, std::__1::expected<void, std::__1::error_code> >, std::__1::allocator<std::__1::pair<cnetmod::quic::quic_write_completion@cnetmod.protocol.quic*, std::__1::expected<void, std::__1::error_code> > > >::emplace_back<cnetmod::quic::quic_write_completion@cnetmod.protocol.quic*&, std::__1::expected<void, std::__1::error_code> >(cnetmod::quic::quic_write_completion@cnetmod.protocol.quic*&, std::__1::expected<void, std::__1::error_code>&&)::{lambda()#2}::operator()() const	arena_h3_server
+0.01	1	[.] std::__1::vector<std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic>, std::__1::allocator<std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> > >::emplace_back<std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic> >(std::__1::shared_ptr<cnetmod::quic::quic_connection@cnetmod.protocol.quic>&&)::{lambda()#2}::operator()() const	arena_h3_server
+0.01	1	[.] strlen$plt	arena_h3_server
+0.01	1	[k] tctx_task_work_run	[kernel.kallsyms]
+0.01	1	[.] unsigned long std::__1::__tree<std::__1::__value_type<unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> > >, std::__1::__map_value_compare<unsigned long, std::__1::pair<unsigned long const, std::__1::vector<std::byte, std::__1::allocator<std::byte> > >, std::__1::less<unsigned long> >, std::__1::allocator<std::__1::pair<unsigned long const, std::__1::vector<std::byte, std::__1::allocator<std::byte> > > > >::__erase_unique<unsigned long>(unsigned long const&)	arena_h3_server
+0.01	1	[k] vfs_write	[kernel.kallsyms]
+0.01	1	[.] 0x0000000000055695	libc++.so.1.0
+0.01	1	[.] 0x000000000005569c	libc++.so.1.0
+0.01	1	[.] 0x000000000005569e	libc++.so.1.0
+0.01	1	[.] 0x0000000000055840	libc++.so.1.0
+0.01	1	[.] 0x0000000000055846	libc++.so.1.0
+0.01	1	[.] 0x0000000000055850	libc++.so.1.0
+0.01	1	[.] 0x000000000005585b	libc++.so.1.0
+0.01	1	[.] 0x000000000005585e	libc++.so.1.0
+0.01	1	[.] 0x0000000000055862	libc++.so.1.0
+0.01	1	[.] 0x0000000000055ac8	libc++.so.1.0
+0.01	1	[.] 0x0000000000055acc	libc++.so.1.0
+0.01	1	[.] 0x0000000000055ad2	libc++.so.1.0
+0.01	1	[.] 0x000000000009d37b	libc.so.6
+0.01	1	[.] 0x000000000009d380	libc.so.6
+0.01	1	[.] 0x000000000009d381	libc.so.6
+0.01	1	[.] 0x000000000009d3ad	libc.so.6
+0.01	1	[.] 0x000000000009d3d4	libc.so.6
+0.01	1	[.] 0x00000000000a0929	libc.so.6
+0.01	1	[.] 0x0000000000175a09	libc.so.6
+0.01	1	[.] 0x0000000000175a12	libc.so.6
+0.01	1	[.] 0x0000000000175d88	libc.so.6
+0.01	1	[.] 0x0000000000175f8e	libc.so.6
+0.01	1	[.] 0x0000000000175f95	libc.so.6
+0.01	1	[.] 0x0000000000175fa1	libc.so.6
+0.01	1	[.] 0x0000000000175fa3	libc.so.6
+0.01	1	[.] 0x0000000000175fae	libc.so.6
+0.01	1	[.] 0x0000000000175fc0	libc.so.6
+0.01	1	[.] 0x0000000000176411	libc.so.6
+0.01	1	[.] 0x0000000000176433	libc.so.6
+0.01	1	[.] 0x0000000000176435	libc.so.6
+0.01	1	[.] 0x0000000000176446	libc.so.6
+0.01	1	[.] 0x000000000017645b	libc.so.6
+0.01	1	[.] 0x0000000000176480	libc.so.6
+0.01	1	[.] 0x00000000001764c0	libc.so.6
+0.01	1	[.] 0x000000000017653e	libc.so.6
+0.01	1	[.] 0x0000000000176e08	libc.so.6
+0.01	1	[.] 0x0000000000176e52	libc.so.6
+0.01	1	[.] 0x0000000000176e97	libc.so.6
+0.01	1	[.] 0x0000000000176eae	libc.so.6
+0.01	1	[.] 0x0000000000176eb3	libc.so.6
+0.01	1	[.] 0x0000000000176ed5	libc.so.6
+0.01	1	[.] 0x0000000000179180	libc.so.6
+0.01	1	[.] 0x00000000001791ad	libc.so.6
+0.01	1	[.] 0x000000000004b21c	libm.so.6
+0.01	1	[.] 0x000000000004b228	libm.so.6
+0.01	1	[.] 0x000000000004b232	libm.so.6
+0.01	1	[.] 0x00000000000934d0	libm.so.6
+0.01	1	[.] 0x0000000000093549	libm.so.6
+0.01	1	[.] 0x000000000009356e	libm.so.6
+0.01	1	[.] 0x000000000009358a	libm.so.6
+0.01	1	[.] 0x0000000000093590	libm.so.6
+0.01	1	[.] 0x00000000000935af	libm.so.6
+0.01	1	[.] 0x00000000000935cd	libm.so.6
+0.01	1	[.] 0x00000000000935d6	libm.so.6
+0.01	1	[.] 0x00000000000935db	libm.so.6
+0.01	1	[.] 0x00000000000935ff	libm.so.6
+0.01	1	[.] 0x000000000009360d	libm.so.6
+0.01	1	[.] 0x000000000009361a	libm.so.6
+0.01	1	[.] 0x0000000000093685	libm.so.6
+0.01	1	[.] 0x00000000000936a4	libm.so.6
+0.01	1	[.] 0x00000000000936bf	libm.so.6
+0.01	1	[.] 0x00000000000936da	libm.so.6
+0.01	1	[.] 0x0000000000093713	libm.so.6
+0.01	1	[.] 0x0000000000093769	libm.so.6
+0.01	1	[.] 0x0000000000093787	libm.so.6
+0.01	1	[.] 0x00000000000026f0	liburing.so.2.15
+0.01	1	[.] 0x0000000000002935	liburing.so.2.15

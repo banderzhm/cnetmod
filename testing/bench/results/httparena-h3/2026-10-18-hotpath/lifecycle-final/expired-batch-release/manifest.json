@@ -1,0 +1,15 @@
+{
+  "stage": "same-layout external expired-batch ownership proof",
+  "binaries": [
+    {
+      "variant": "expired-held",
+      "path": "/var/tmp/cnetmod-h3-expired-weak-proof-final2/expired-held/h3_interop_server-4s",
+      "sha256": "c79d58d2db4de8a49acf6940e407b0db4d6d01b2745d70aaf16e699d313f37e4"
+    },
+    {
+      "variant": "expired-released",
+      "path": "/var/tmp/cnetmod-h3-expired-weak-proof-final2/expired-released/h3_interop_server-4s",
+      "sha256": "120f93fbdd33e7918d14f91b92862da408c06e305344697cf541fdf4b2e7102b"
+    }
+  ]
+}

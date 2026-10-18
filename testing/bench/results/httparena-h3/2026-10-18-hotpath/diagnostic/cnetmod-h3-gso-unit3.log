@@ -1,0 +1,21 @@
+[==========] Running 7 test(s).
+[ RUN      ] udp_batch_preserves_boundaries_and_backend_lifetime
+[       OK ] udp_batch_preserves_boundaries_and_backend_lifetime
+[ RUN      ] udp_batch_wait_honors_deadline_cancellation
+[       OK ] udp_batch_wait_honors_deadline_cancellation
+[ RUN      ] udp_batch_short_burst_does_not_wait_for_full_batch
+[       OK ] udp_batch_short_burst_does_not_wait_for_full_batch
+[ RUN      ] udp_batch_segment_runs_preserve_ipv4_and_ipv6_boundaries
+[2026-10-18 08:21:01.066] [error] [125629055895488] [test_udp_batch.cpp:299] UDP batch send error: family=127.0.0.1 datagrams=3 mixed_peers=false no_checksum=false submitted=0 category=cnetmod value=26 message=unknown error current_errno=90
+  ASSERT FAILED: result->error().value() == 0 (got: 26 vs 0) at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_udp_batch.cpp:650
+  ASSERT FAILED: result && *result at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_udp_batch.cpp:651
+[  FAILED  ] udp_batch_segment_runs_preserve_ipv4_and_ipv6_boundaries (2 failure(s))
+[ RUN      ] udp_batch_partial_gso_prefix_and_fallback_error_are_preserved
+[       OK ] udp_batch_partial_gso_prefix_and_fallback_error_are_preserved
+[ RUN      ] udp_batch_would_block_enters_async_send_path
+[       OK ] udp_batch_would_block_enters_async_send_path
+[ RUN      ] epoll_directional_waiters_preserve_read_write_cancel_and_hup
+[       OK ] epoll_directional_waiters_preserve_read_write_cancel_and_hup
+[==========] 7 test(s) ran.
+[  PASSED  ] 6 test(s).
+[  FAILED  ] 1 test(s).

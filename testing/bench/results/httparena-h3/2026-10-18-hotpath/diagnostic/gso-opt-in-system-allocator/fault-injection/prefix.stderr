@@ -1,0 +1,2 @@
+CNETMOD_GSO_FAULT fired mode=prefix kernel_messages=2 gso_messages=2 first_stride=1472 first_iovs=3 first_bytes=4416
+CNETMOD_GSO_REAL result=1 errno=0 mode=prefix first_gso=1

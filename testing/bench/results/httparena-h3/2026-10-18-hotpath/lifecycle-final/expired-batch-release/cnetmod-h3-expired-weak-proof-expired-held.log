@@ -1,0 +1,16 @@
+[2026-10-18 10:52:39.991] [info] [136856103158208] [h3_interop_server.cpp:322] HTTP/3 interop listener started on UDP 53817 with 2 workers
+[2026-10-18 10:52:43.178] [warn] [136856072865472] [http3_server.cpp:43] weak_release cid=25e05462dce1eed4 checkpoint_ms=100 expired=false strong_count=1
+[2026-10-18 10:52:43.578] [warn] [136856072865472] [http3_server.cpp:46] weak_release cid=25e05462dce1eed4 checkpoint_ms=500 expired=false strong_count=1
+[2026-10-18 10:53:13.078] [warn] [136856072865472] [quic_connection.cpp:1274] weak_connection_destroy cid=25e05462dce1eed4
+
+Traceback (most recent call last):
+  File "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-expired-weak-probe-run.py", line 49, in <module>
+    if __name__=='__main__':main()
+                            ~~~~^^
+  File "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-expired-weak-probe-run.py", line 32, in main
+    try:cold.main()
+        ~~~~~~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/http3_cold_cleanup.py", line 73, in main
+    assert before[1] > 0, ("fixture did not retain reset routes", before)
+           ^^^^^^^^^^^^^
+AssertionError: ('fixture did not retain reset routes', [0, 0, 0, 1, 0, 0])

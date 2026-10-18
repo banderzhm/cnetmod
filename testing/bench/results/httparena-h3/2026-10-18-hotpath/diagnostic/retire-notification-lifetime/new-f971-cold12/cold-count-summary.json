@@ -1,0 +1,252 @@
+[
+  {
+    "name": "initial",
+    "duration_seconds": 0.685203257000012,
+    "bin48_used_blocks_upper": 289,
+    "bin80_used_blocks_upper": 1,
+    "owned_used_bytes_upper": 3207632,
+    "owned_empty_reserved_capacity_bytes": 0,
+    "abandoned_maintained_page_count": 0,
+    "bins_with_deferred_thread_free": {
+      "48": 1,
+      "8": 1
+    },
+    "active_connections": 0,
+    "connections": 0,
+    "sessions": 0,
+    "timer_generations": 0,
+    "timer_heap_size": 0,
+    "timer_heap_reserved_bytes": 0,
+    "published_route_generations": 0,
+    "reset_routes": 0,
+    "pending_route_expirations": 0,
+    "mimalloc_reserved": 1076166656,
+    "mimalloc_committed": 43974656,
+    "small_pool": {
+      "address": "0x2bb80fd0100",
+      "block_size": 2048,
+      "cached_blocks_approx": 0,
+      "cached_payload_bytes": 0,
+      "capacity": 32768,
+      "constructed": true,
+      "dequeue_position": 0,
+      "enqueue_position": 0,
+      "max_blocks": 32768,
+      "queue_cell_bytes": 64,
+      "queue_storage_bytes": 2097152,
+      "sampled_raw_allocation_addresses": [],
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool"
+    },
+    "large_pool": {
+      "address": "0x0",
+      "constructed": false,
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool"
+    },
+    "proc_status": "Name:\tarena_h3_server\nUmask:\t0022\nState:\tt (tracing stop)\nTgid:\t881\nNgid:\t0\nPid:\t881\nPPid:\t796\nTracerPid:\t955\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t256\nGroups:\t0 0 \nNStgid:\t881\nNSpid:\t881\nNSpgid:\t881\nNSsid:\t881\nKthread:\t0\nVmPeak:\t 1594256 kB\nVmSize:\t 1594256 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t   47260 kB\nVmRSS:\t   47260 kB\nRssAnon:\t   40100 kB\nRssFile:\t    7160 kB\nRssShmem:\t       0 kB\nVmData:\t 1583948 kB\nVmStk:\t     136 kB\nVmExe:\t    2780 kB\nVmLib:\t    3280 kB\nVmPTE:\t     404 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t66\nSigQ:\t1/63276\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000000000\nSigCgt:\t0000000100000000\nCapInh:\t0000000000000000\nCapPrm:\t000001ffffffffff\nCapEff:\t000001ffffffffff\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t51\nnonvoluntary_ctxt_switches:\t1\n",
+    "proc_smaps_rollup": "2bb80000000-7ffe3e8ca000 ---p 00000000 00:00 0                           [rollup]\nRss:               47260 kB\nPss:               45019 kB\nPss_Dirty:         40364 kB\nPss_Anon:          40100 kB\nPss_File:           4919 kB\nPss_Shmem:             0 kB\nShared_Clean:       2484 kB\nShared_Dirty:          0 kB\nPrivate_Clean:      4412 kB\nPrivate_Dirty:     40364 kB\nReferenced:        47260 kB\nAnonymous:         40100 kB\nKSM:                   0 kB\nLazyFree:              0 kB\nAnonHugePages:     38912 kB\nShmemPmdMapped:        0 kB\nFilePmdMapped:         0 kB\nShared_Hugetlb:        0 kB\nPrivate_Hugetlb:       0 kB\nSwap:                  0 kB\nSwapPss:               0 kB\nLocked:                0 kB\n"
+  },
+  {
+    "name": "round-01-idle2s",
+    "duration_seconds": 0.6691964330000246,
+    "bin48_used_blocks_upper": 351,
+    "bin80_used_blocks_upper": 1,
+    "owned_used_bytes_upper": 3601072,
+    "owned_empty_reserved_capacity_bytes": 100880256,
+    "abandoned_maintained_page_count": 0,
+    "bins_with_deferred_thread_free": {
+      "48": 1,
+      "8": 1
+    },
+    "active_connections": 0,
+    "connections": 0,
+    "sessions": 0,
+    "timer_generations": 0,
+    "timer_heap_size": 0,
+    "timer_heap_reserved_bytes": 212992,
+    "published_route_generations": 0,
+    "reset_routes": 128,
+    "pending_route_expirations": 0,
+    "mimalloc_reserved": 1076166656,
+    "mimalloc_committed": 177078272,
+    "small_pool": {
+      "address": "0x2bb80fd0100",
+      "block_size": 2048,
+      "cached_blocks_approx": 56,
+      "cached_payload_bytes": 114688,
+      "capacity": 32768,
+      "constructed": true,
+      "dequeue_position": 133664,
+      "enqueue_position": 133720,
+      "max_blocks": 32768,
+      "queue_cell_bytes": 64,
+      "queue_storage_bytes": 2097152,
+      "sampled_raw_allocation_addresses": [
+        "0x2bb81ff0080",
+        "0x2bb84060080",
+        "0x2bb845c0080",
+        "0x2bb84124680"
+      ],
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool"
+    },
+    "large_pool": {
+      "address": "0x0",
+      "constructed": false,
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool"
+    },
+    "proc_status": "Name:\tarena_h3_server\nUmask:\t0022\nState:\tt (tracing stop)\nTgid:\t881\nNgid:\t0\nPid:\t881\nPPid:\t796\nTracerPid:\t1048\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t256\nGroups:\t0 0 \nNStgid:\t881\nNSpid:\t881\nNSpgid:\t881\nNSsid:\t881\nKthread:\t0\nVmPeak:\t 1594256 kB\nVmSize:\t 1594256 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t  173536 kB\nVmRSS:\t  173536 kB\nRssAnon:\t  165428 kB\nRssFile:\t    8108 kB\nRssShmem:\t       0 kB\nVmData:\t 1583948 kB\nVmStk:\t     136 kB\nVmExe:\t    2780 kB\nVmLib:\t    3280 kB\nVmPTE:\t     648 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t66\nSigQ:\t1/63276\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000000000\nSigCgt:\t0000000100000000\nCapInh:\t0000000000000000\nCapPrm:\t000001ffffffffff\nCapEff:\t000001ffffffffff\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t53\nnonvoluntary_ctxt_switches:\t1\n",
+    "proc_smaps_rollup": "2bb80000000-7ffe3e8ca000 ---p 00000000 00:00 0                           [rollup]\nRss:              173536 kB\nPss:              171180 kB\nPss_Dirty:        166028 kB\nPss_Anon:         165428 kB\nPss_File:           5752 kB\nPss_Shmem:             0 kB\nShared_Clean:       2640 kB\nShared_Dirty:          0 kB\nPrivate_Clean:      4868 kB\nPrivate_Dirty:    166028 kB\nReferenced:       173536 kB\nAnonymous:        165428 kB\nKSM:                   0 kB\nLazyFree:              0 kB\nAnonHugePages:    163840 kB\nShmemPmdMapped:        0 kB\nFilePmdMapped:         0 kB\nShared_Hugetlb:        0 kB\nPrivate_Hugetlb:       0 kB\nSwap:                  0 kB\nSwapPss:               0 kB\nLocked:                0 kB\n"
+  },
+  {
+    "name": "round-06-idle2s",
+    "duration_seconds": 0.6922642350000388,
+    "bin48_used_blocks_upper": 394,
+    "bin80_used_blocks_upper": 1,
+    "owned_used_bytes_upper": 3838576,
+    "owned_empty_reserved_capacity_bytes": 113528288,
+    "abandoned_maintained_page_count": 0,
+    "bins_with_deferred_thread_free": {
+      "48": 1,
+      "8": 1
+    },
+    "active_connections": 0,
+    "connections": 0,
+    "sessions": 0,
+    "timer_generations": 0,
+    "timer_heap_size": 0,
+    "timer_heap_reserved_bytes": 376832,
+    "published_route_generations": 0,
+    "reset_routes": 768,
+    "pending_route_expirations": 0,
+    "mimalloc_reserved": 1076166656,
+    "mimalloc_committed": 206438400,
+    "small_pool": {
+      "address": "0x2bb80fd0100",
+      "block_size": 2048,
+      "cached_blocks_approx": 64,
+      "cached_payload_bytes": 131072,
+      "capacity": 32768,
+      "constructed": true,
+      "dequeue_position": 795032,
+      "enqueue_position": 795096,
+      "max_blocks": 32768,
+      "queue_cell_bytes": 64,
+      "queue_storage_bytes": 2097152,
+      "sampled_raw_allocation_addresses": [
+        "0x2bb84163c80",
+        "0x2bb843b1e80",
+        "0x2bb84341e80",
+        "0x2bb84124680"
+      ],
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool"
+    },
+    "large_pool": {
+      "address": "0x0",
+      "constructed": false,
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool"
+    },
+    "proc_status": "Name:\tarena_h3_server\nUmask:\t0022\nState:\tt (tracing stop)\nTgid:\t881\nNgid:\t0\nPid:\t881\nPPid:\t796\nTracerPid:\t1400\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t256\nGroups:\t0 0 \nNStgid:\t881\nNSpid:\t881\nNSpgid:\t881\nNSsid:\t881\nKthread:\t0\nVmPeak:\t 1594256 kB\nVmSize:\t 1594256 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t  203172 kB\nVmRSS:\t  198056 kB\nRssAnon:\t  189948 kB\nRssFile:\t    8108 kB\nRssShmem:\t       0 kB\nVmData:\t 1583948 kB\nVmStk:\t     136 kB\nVmExe:\t    2780 kB\nVmLib:\t    3280 kB\nVmPTE:\t     704 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t66\nSigQ:\t1/63276\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000000000\nSigCgt:\t0000000100000000\nCapInh:\t0000000000000000\nCapPrm:\t000001ffffffffff\nCapEff:\t000001ffffffffff\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t55\nnonvoluntary_ctxt_switches:\t1\n",
+    "proc_smaps_rollup": "2bb80000000-7ffe3e8ca000 ---p 00000000 00:00 0                           [rollup]\nRss:              198056 kB\nPss:              195700 kB\nPss_Dirty:        190596 kB\nPss_Anon:         189948 kB\nPss_File:           5752 kB\nPss_Shmem:             0 kB\nShared_Clean:       2640 kB\nShared_Dirty:          0 kB\nPrivate_Clean:      4820 kB\nPrivate_Dirty:    190596 kB\nReferenced:       198056 kB\nAnonymous:        189948 kB\nKSM:                   0 kB\nLazyFree:              0 kB\nAnonHugePages:    165888 kB\nShmemPmdMapped:        0 kB\nFilePmdMapped:         0 kB\nShared_Hugetlb:        0 kB\nPrivate_Hugetlb:       0 kB\nSwap:                  0 kB\nSwapPss:               0 kB\nLocked:                0 kB\n"
+  },
+  {
+    "name": "round-12-idle2s",
+    "duration_seconds": 0.7858870129999787,
+    "bin48_used_blocks_upper": 411,
+    "bin80_used_blocks_upper": 1,
+    "owned_used_bytes_upper": 3931712,
+    "owned_empty_reserved_capacity_bytes": 114589120,
+    "abandoned_maintained_page_count": 0,
+    "bins_with_deferred_thread_free": {
+      "48": 1,
+      "8": 1
+    },
+    "active_connections": 0,
+    "connections": 0,
+    "sessions": 0,
+    "timer_generations": 0,
+    "timer_heap_size": 0,
+    "timer_heap_reserved_bytes": 434176,
+    "published_route_generations": 0,
+    "reset_routes": 1152,
+    "pending_route_expirations": 0,
+    "mimalloc_reserved": 1076166656,
+    "mimalloc_committed": 213778432,
+    "small_pool": {
+      "address": "0x2bb80fd0100",
+      "block_size": 2048,
+      "cached_blocks_approx": 64,
+      "cached_payload_bytes": 131072,
+      "capacity": 32768,
+      "constructed": true,
+      "dequeue_position": 1845696,
+      "enqueue_position": 1845760,
+      "max_blocks": 32768,
+      "queue_cell_bytes": 64,
+      "queue_storage_bytes": 2097152,
+      "sampled_raw_allocation_addresses": [
+        "0x2bb841b3280",
+        "0x2bb84055080",
+        "0x2bb845f0080",
+        "0x2bb845c0080"
+      ],
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool"
+    },
+    "large_pool": {
+      "address": "0x0",
+      "constructed": false,
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool"
+    },
+    "proc_status": "Name:\tarena_h3_server\nUmask:\t0022\nState:\tt (tracing stop)\nTgid:\t881\nNgid:\t0\nPid:\t881\nPPid:\t796\nTracerPid:\t1881\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t256\nGroups:\t0 0 \nNStgid:\t881\nNSpid:\t881\nNSpgid:\t881\nNSsid:\t881\nKthread:\t0\nVmPeak:\t 1594256 kB\nVmSize:\t 1594256 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t  206788 kB\nVmRSS:\t  206788 kB\nRssAnon:\t  198680 kB\nRssFile:\t    8108 kB\nRssShmem:\t       0 kB\nVmData:\t 1583948 kB\nVmStk:\t     136 kB\nVmExe:\t    2780 kB\nVmLib:\t    3280 kB\nVmPTE:\t     720 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t66\nSigQ:\t1/63276\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000000000\nSigCgt:\t0000000100000000\nCapInh:\t0000000000000000\nCapPrm:\t000001ffffffffff\nCapEff:\t000001ffffffffff\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t57\nnonvoluntary_ctxt_switches:\t1\n",
+    "proc_smaps_rollup": "2bb80000000-7ffe3e8ca000 ---p 00000000 00:00 0                           [rollup]\nRss:              206788 kB\nPss:              204432 kB\nPss_Dirty:        199328 kB\nPss_Anon:         198680 kB\nPss_File:           5752 kB\nPss_Shmem:             0 kB\nShared_Clean:       2640 kB\nShared_Dirty:          0 kB\nPrivate_Clean:      4820 kB\nPrivate_Dirty:    199328 kB\nReferenced:       206788 kB\nAnonymous:        198680 kB\nKSM:                   0 kB\nLazyFree:              0 kB\nAnonHugePages:    169984 kB\nShmemPmdMapped:        0 kB\nFilePmdMapped:         0 kB\nShared_Hugetlb:        0 kB\nPrivate_Hugetlb:       0 kB\nSwap:                  0 kB\nSwapPss:               0 kB\nLocked:                0 kB\n"
+  },
+  {
+    "name": "round-12-idle37s",
+    "duration_seconds": 0.7191065580000213,
+    "bin48_used_blocks_upper": 411,
+    "bin80_used_blocks_upper": 1,
+    "owned_used_bytes_upper": 3858112,
+    "owned_empty_reserved_capacity_bytes": 120148800,
+    "abandoned_maintained_page_count": 0,
+    "bins_with_deferred_thread_free": {
+      "48": 1,
+      "8": 1
+    },
+    "active_connections": 0,
+    "connections": 0,
+    "sessions": 0,
+    "timer_generations": 0,
+    "timer_heap_size": 0,
+    "timer_heap_reserved_bytes": 434176,
+    "published_route_generations": 0,
+    "reset_routes": 0,
+    "pending_route_expirations": 0,
+    "mimalloc_reserved": 1076166656,
+    "mimalloc_committed": 213778432,
+    "small_pool": {
+      "address": "0x2bb80fd0100",
+      "block_size": 2048,
+      "cached_blocks_approx": 64,
+      "cached_payload_bytes": 131072,
+      "capacity": 32768,
+      "constructed": true,
+      "dequeue_position": 1845696,
+      "enqueue_position": 1845760,
+      "max_blocks": 32768,
+      "queue_cell_bytes": 64,
+      "queue_storage_bytes": 2097152,
+      "sampled_raw_allocation_addresses": [
+        "0x2bb841b3280",
+        "0x2bb84055080",
+        "0x2bb845f0080",
+        "0x2bb845c0080"
+      ],
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23small_udp_datagram_poolEvE4pool"
+    },
+    "large_pool": {
+      "address": "0x0",
+      "constructed": false,
+      "symbol": "_ZZN7cnetmod6detailW7cnetmodW8executorW8async_op23large_udp_datagram_poolEvE4pool"
+    },
+    "proc_status": "Name:\tarena_h3_server\nUmask:\t0022\nState:\tt (tracing stop)\nTgid:\t881\nNgid:\t0\nPid:\t881\nPPid:\t796\nTracerPid:\t1933\nUid:\t0\t0\t0\t0\nGid:\t0\t0\t0\t0\nFDSize:\t256\nGroups:\t0 0 \nNStgid:\t881\nNSpid:\t881\nNSpgid:\t881\nNSsid:\t881\nKthread:\t0\nVmPeak:\t 1594256 kB\nVmSize:\t 1594256 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t  206788 kB\nVmRSS:\t  206788 kB\nRssAnon:\t  198680 kB\nRssFile:\t    8108 kB\nRssShmem:\t       0 kB\nVmData:\t 1583948 kB\nVmStk:\t     136 kB\nVmExe:\t    2780 kB\nVmLib:\t    3280 kB\nVmPTE:\t     720 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t66\nSigQ:\t1/63276\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000000000000\nSigCgt:\t0000000100000000\nCapInh:\t0000000000000000\nCapPrm:\t000001ffffffffff\nCapEff:\t000001ffffffffff\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t2\nSeccomp_filters:\t1\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffffffff\nCpus_allowed_list:\t0-31\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t59\nnonvoluntary_ctxt_switches:\t1\n",
+    "proc_smaps_rollup": "2bb80000000-7ffe3e8ca000 ---p 00000000 00:00 0                           [rollup]\nRss:              206788 kB\nPss:              204432 kB\nPss_Dirty:        199328 kB\nPss_Anon:         198680 kB\nPss_File:           5752 kB\nPss_Shmem:             0 kB\nShared_Clean:       2640 kB\nShared_Dirty:          0 kB\nPrivate_Clean:      4820 kB\nPrivate_Dirty:    199328 kB\nReferenced:       206788 kB\nAnonymous:        198680 kB\nKSM:                   0 kB\nLazyFree:              0 kB\nAnonHugePages:    169984 kB\nShmemPmdMapped:        0 kB\nFilePmdMapped:         0 kB\nShared_Hugetlb:        0 kB\nPrivate_Hugetlb:       0 kB\nSwap:                  0 kB\nSwapPss:               0 kB\nLocked:                0 kB\n"
+  }
+]

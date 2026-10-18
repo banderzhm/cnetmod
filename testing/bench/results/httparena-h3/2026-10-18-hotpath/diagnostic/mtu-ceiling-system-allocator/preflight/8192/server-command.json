@@ -1,0 +1,19 @@
+{
+  "command": [
+    "nsenter",
+    "-t",
+    "779",
+    "-n",
+    "/var/tmp/cnetmod-h3-mtu-preflight-d1d75d2b98744840896b101f141765ac/arena_h3_server",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs/server.crt",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/certs/server.key",
+    "8443",
+    "32",
+    "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/data/static"
+  ],
+  "environment": {
+    "CNETMOD_QUIC_GSO": "1",
+    "CNETMOD_QUIC_MAX_PATH_MTU": "8192",
+    "CNETMOD_QUIC_MAX_UDP_PAYLOAD_SIZE": "8192"
+  }
+}

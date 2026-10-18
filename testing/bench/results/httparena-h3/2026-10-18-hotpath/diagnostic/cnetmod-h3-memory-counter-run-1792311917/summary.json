@@ -1,0 +1,93 @@
+{
+  "scope": "diagnostic allocation aliases plus C++/DSO forwarding; direct mimalloc internal mi_* metadata excluded; no throughput ranking",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792311920.453546,
+      "rss": 51027968,
+      "private": 48627712,
+      "diag_live_bytes": 20048960,
+      "diag_live_blocks": 2196,
+      "diag_peak_bytes": 20099912,
+      "diag_allocation_calls": 4698,
+      "diag_foreign_calls": 0
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792311924.1304162,
+      "rss": 166060032,
+      "private": 163622912,
+      "diag_live_bytes": 28700336,
+      "diag_live_blocks": 29679,
+      "diag_peak_bytes": 57062504,
+      "diag_allocation_calls": 14987939,
+      "diag_foreign_calls": 0
+    },
+    {
+      "name": "round-2-idle-2s",
+      "time": 1792311927.939512,
+      "rss": 202432512,
+      "private": 199995392,
+      "diag_live_bytes": 31017472,
+      "diag_live_blocks": 36667,
+      "diag_peak_bytes": 57558344,
+      "diag_allocation_calls": 30375043,
+      "diag_foreign_calls": 0
+    },
+    {
+      "name": "round-3-idle-2s",
+      "time": 1792311931.5223072,
+      "rss": 206483456,
+      "private": 204046336,
+      "diag_live_bytes": 31830960,
+      "diag_live_blocks": 39075,
+      "diag_peak_bytes": 57558344,
+      "diag_allocation_calls": 45821724,
+      "diag_foreign_calls": 0
+    },
+    {
+      "name": "round-4-idle-2s",
+      "time": 1792311935.237595,
+      "rss": 207634432,
+      "private": 205197312,
+      "diag_live_bytes": 31865680,
+      "diag_live_blocks": 39203,
+      "diag_peak_bytes": 59649920,
+      "diag_allocation_calls": 60726375,
+      "diag_foreign_calls": 0
+    },
+    {
+      "name": "round-5-idle-2s",
+      "time": 1792311938.9459062,
+      "rss": 210997248,
+      "private": 208560128,
+      "diag_live_bytes": 31983168,
+      "diag_live_blocks": 39331,
+      "diag_peak_bytes": 59649920,
+      "diag_allocation_calls": 76104948,
+      "diag_foreign_calls": 0
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    },
+    {
+      "index": 2,
+      "requests": 200000
+    },
+    {
+      "index": 3,
+      "requests": 200000
+    },
+    {
+      "index": 4,
+      "requests": 200000
+    },
+    {
+      "index": 5,
+      "requests": 200000
+    }
+  ]
+}

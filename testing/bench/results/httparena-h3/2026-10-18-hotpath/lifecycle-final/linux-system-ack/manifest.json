@@ -1,0 +1,11 @@
+{
+  "build.log": "1ce0a58c25d4b60b149575ef7251f7874a968c85a41ff9897ce658713eee877d",
+  "cnetmod-h3-reviewed-final-build.sh": "22f591e20042bac932816770fcf0ac879cb5deb364ac999a2f2bd65a8bc340f1",
+  "cnetmod-h3-reviewed-final-tests.sh": "82033316b064557bcaf743f1169bb40e0e7c3df8dbce84e0548a9774606b40ba",
+  "metadata.json": "532b57f19df2fa5181d28d180cea675731fb29c6e99474bb56911f3b9aaa951d",
+  "README.md": "2980693f42ee47ee11461d3f67f93b72fb0abccc231f525d6fed0cb93c17a322",
+  "six-peers.json": "545cf40b93aa699f5e78fe707da93685236432e027e829a308d5325ae24ea18b",
+  "six-peers.log": "493795b59d05af95bf2e6078f7c498e2b4add671fa2ad5876e4246f371fe0f77",
+  "source.diff": "eede73b51a29f8d44196790c5d17defa0245899c990861f905e0c3e242ed47ca",
+  "tests.log": "0cb8a9a506093cad457d43c8d5ffae584217d3ddd86e23d531aec381b646a3a9"
+}

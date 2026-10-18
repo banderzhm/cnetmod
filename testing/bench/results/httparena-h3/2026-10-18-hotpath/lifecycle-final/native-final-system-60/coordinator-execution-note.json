@@ -1,0 +1,24 @@
+{
+  "provenance": "Coordinator /root direct message; no standalone raw console file exists",
+  "reported_tool_session": 45922,
+  "reported_final_tool": "write_stdin",
+  "reported_exit_code": 0,
+  "reported_final_stdout": {
+    "name": "final-idle-37s",
+    "time": 1792332886.3463662,
+    "rss": 138039296,
+    "private": 135520256,
+    "results_directory": "/var/tmp/cnetmod-h3-system-retention-6d27bba41cc64c7e8983ad48f9e6968f"
+  },
+  "runner_argument_values": {
+    "expected_sha": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+    "path_mtu": 4096,
+    "gso": "1",
+    "source_snapshot": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/source-snapshot",
+    "allocator_proof": "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-final-system-validation/system-allocator/allocator-proof.json"
+  },
+  "cleanup_inference": "Runner executes server.terminate/server.wait and docker rm check=True before printing RESULTS. Reported final exit0 therefore establishes that this cleanup path completed successfully.",
+  "limitations": "This is a coordinator execution note, not fabricated raw tool stdout. Summary.valid is set before finally; it alone does not record cleanup. No additional current-process snapshot was supplied.",
+  "archived_runner_sha256": "23274019ae89e52a9a5dd2be5205c9c133022dc81845a94c7e7be3e6de475b37",
+  "runner_hash_scope": "archive-time copy; runner did not record its own runtime hash"
+}

@@ -1,0 +1,12 @@
+{
+  "script_sha256": "43b74b1d5fdb871cb3de9ece10179c3a0cc4e2d5cc9e83c6167c885ab092d114",
+  "modes": [
+    "observer",
+    "private"
+  ],
+  "result": "both passed",
+  "invalid_role_error": 10,
+  "invalid_role_frame_type": 30,
+  "confirmation_timeout_seconds": 3,
+  "duplicate_done": "Both PTO probes containing DONE were forwarded; subsequent request plus FIN ACK succeeded."
+}

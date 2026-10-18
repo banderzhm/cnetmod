@@ -1,0 +1,11 @@
+[
+  "ctest",
+  "--output-on-failure",
+  "-j1",
+  "--timeout",
+  "75",
+  "-R",
+  "^(test_udp_batch|test_quic_.*|quic_retire_stream_credit_wakeup|quic_retire_stream_notification_lifetime|quic_private_outbound_pto|quic_handshake_confirmation)$",
+  "--output-junit",
+  "/mnt/c/Users/25007/.codex/tmp/cnetmod-h3-gso-validation-1fdab0ae660649bf83f09840e8459d4f/system-allocator/directed-tests.xml"
+]

@@ -1,0 +1,250 @@
+--- a/src/protocol/quic/quic_recovery.cpp
++++ b/src/protocol/quic/quic_recovery.cpp
+@@ -196,15 +196,20 @@
+ 
+     const auto lost = detector_.detect_lost_packets(received_at, space);
+     std::uint64_t lost_bytes{};
++    std::uint64_t lost_probe_bytes{};
+     for (const auto packet_number : lost)
+     {
+         const auto packet = sent.find(packet_number);
+         if (packet == sent.end())
+             continue;
+         if (packet->second.path_mtu_probe_target)
++        {
+             update.lost_path_mtu_probes.push_back(
+                 *packet->second.path_mtu_probe_target);
+-        lost_bytes += packet->second.bytes;
++            lost_probe_bytes += packet->second.bytes;
++        }
++        else
++            lost_bytes += packet->second.bytes;
+         packet->second.frames.for_each_reverse(
+             [&update](auto& frame)
+             {
+@@ -214,6 +219,10 @@
+             --alias_count;
+         (void)recycle_sent_packet(space, packet);
+     }
++    // RFC 9000 section 14.4: a lost PMTU probe consumes flight credit but
++    // is not a reliable congestion signal. Ordinary losses still reduce cwnd.
++    if (lost_probe_bytes != 0U)
++        congestion_.on_packets_discarded(lost_probe_bytes);
+     if (lost_bytes != 0U)
+         congestion_.on_congestion_event(lost_bytes);
+     return update;
+@@ -256,16 +265,25 @@
+     auto& sent = sent_packets_[space_index(space)];
+     std::vector<std::size_t> probes;
+     std::uint64_t lost_bytes{};
++    std::uint64_t lost_probe_bytes{};
+     for (const auto& [packet_number, packet] : sent)
+     {
+         if (packet.path_mtu_probe_target)
++        {
+             probes.push_back(*packet.path_mtu_probe_target);
++            lost_probe_bytes += packet.bytes;
++        }
++        else
++            lost_bytes += packet.bytes;
+         detector_.discard_inflight_packet(packet_number, space);
+-        lost_bytes += packet.bytes;
+     }
+     sent.clear();
+     cached_nodes_[space_index(space)].clear();
+     alias_counts_[space_index(space)] = 0U;
++    // RFC 9000 section 14.4: a lost PMTU probe consumes flight credit but
++    // is not a reliable congestion signal. Ordinary losses still reduce cwnd.
++    if (lost_probe_bytes != 0U)
++        congestion_.on_packets_discarded(lost_probe_bytes);
+     if (lost_bytes != 0U)
+         congestion_.on_congestion_event(lost_bytes);
+     return probes;
+--- a/src/protocol/quic/congestion_control.cpp
++++ b/src/protocol/quic/congestion_control.cpp
+@@ -53,9 +53,9 @@
+ 
+ void new_reno_congestion_controller::on_congestion_event(std::uint64_t lost_bytes)
+ {
++    bytes_in_flight_ -= std::min(lost_bytes, bytes_in_flight_);
+     if (current_state_ == state_type::recovery)
+         return;
+-    bytes_in_flight_ -= std::min(lost_bytes, bytes_in_flight_);
+     ssthresh_ = std::max(cwnd_ / 2U, min_congestion_window);
+     cwnd_ = ssthresh_;
+     current_state_ = state_type::recovery;
+--- a/testing/tests/test_quic_loss_detection.cpp
++++ b/testing/tests/test_quic_loss_detection.cpp
+@@ -564,4 +564,141 @@
+     ASSERT_TRUE(original.on_ack_received(ack, now + 20ms, space).has_value());
+ }
+ 
++
++TEST(quic_recovery_lost_pmtu_probe_preserves_window_and_releases_flight)
++{
++    for (const auto algorithm : {cnetmod::quic::quic_congestion_algorithm::new_reno,
++             cnetmod::quic::quic_congestion_algorithm::cubic,
++             cnetmod::quic::quic_congestion_algorithm::bbr})
++    {
++        auto config = make_test_config();
++        config.congestion_algorithm = algorithm;
++        cnetmod::quic::quic_recovery_controller recovery(config);
++        const auto now = std::chrono::steady_clock::now();
++        cnetmod::quic::quic_recovery_controller control(config);
++        control.on_packet_sent(4U, 100U, now, true,
++            cnetmod::quic::pn_space::application);
++        recovery.on_packet_sent(1U, 1328U, now, true,
++            cnetmod::quic::pn_space::application, {}, 1328U);
++        recovery.on_packet_sent(4U, 100U, now, true,
++            cnetmod::quic::pn_space::application);
++        cnetmod::quic::ack_frame ack;
++        ack.largest_acked = 4U;
++        const auto update = recovery.on_ack_received(
++            ack, now + 20ms, cnetmod::quic::pn_space::application);
++        ASSERT_TRUE(update.has_value());
++        ASSERT_EQ(update->lost_path_mtu_probes.size(), 1U);
++        ASSERT_EQ(update->lost_path_mtu_probes.front(), 1328U);
++        ASSERT_TRUE(update->acknowledged_path_mtu_probes.empty());
++        ASSERT_TRUE(update->lost_frames.empty());
++        const auto control_update = control.on_ack_received(
++            ack, now + 20ms, cnetmod::quic::pn_space::application);
++        ASSERT_TRUE(control_update.has_value());
++        ASSERT_EQ(recovery.congestion_window(), control.congestion_window());
++        ASSERT_TRUE(recovery.can_send_datagram(recovery.congestion_window()));
++        ASSERT_FALSE(recovery.next_pto_deadline().has_value());
++    }
++}
++
++TEST(quic_recovery_mixed_pmtu_and_ordinary_loss_still_reduces_window)
++{
++    auto config = make_test_config();
++    config.congestion_algorithm = cnetmod::quic::quic_congestion_algorithm::new_reno;
++    cnetmod::quic::quic_recovery_controller recovery(config);
++    const auto now = std::chrono::steady_clock::now();
++    const auto before = recovery.congestion_window();
++    recovery.on_packet_sent(1U, 1328U, now, true,
++        cnetmod::quic::pn_space::application, {}, 1328U);
++    const std::vector frame{std::byte{0x01}};
++    recovery.on_packet_sent(2U, 1200U, now, true,
++        cnetmod::quic::pn_space::application,
++        cnetmod::quic::retransmittable_frame_storage{
++            cnetmod::quic::quic_send_frame{frame}});
++    recovery.on_packet_sent(5U, 100U, now, true,
++        cnetmod::quic::pn_space::application);
++    cnetmod::quic::ack_frame ack;
++    ack.largest_acked = 5U;
++    const auto update = recovery.on_ack_received(
++        ack, now + 20ms, cnetmod::quic::pn_space::application);
++    ASSERT_TRUE(update.has_value());
++    ASSERT_EQ(update->lost_path_mtu_probes.size(), 1U);
++    ASSERT_EQ(update->lost_frames.size(), 1U);
++    ASSERT_TRUE(update->lost_frames.front().owned_bytes() == frame);
++    ASSERT_EQ(recovery.congestion_window(), (before + 100U) / 2U);
++    ASSERT_TRUE(recovery.can_send_datagram(recovery.congestion_window()));
++}
++
++TEST(quic_recovery_pmtu_probe_pto_cleanup_preserves_window)
++{
++    for (const auto algorithm : {cnetmod::quic::quic_congestion_algorithm::new_reno,
++             cnetmod::quic::quic_congestion_algorithm::cubic,
++             cnetmod::quic::quic_congestion_algorithm::bbr})
++    {
++        auto config = make_test_config();
++        config.congestion_algorithm = algorithm;
++        cnetmod::quic::quic_recovery_controller recovery(config);
++        const auto before = recovery.congestion_window();
++        recovery.on_packet_sent(1U, 1328U, std::chrono::steady_clock::now(), true,
++            cnetmod::quic::pn_space::application, {}, 1328U);
++        ASSERT_FALSE(recovery.newest_probe_frames(
++            cnetmod::quic::pn_space::application).has_value());
++        const auto probes = recovery.discard_non_retransmittable(
++            cnetmod::quic::pn_space::application);
++        ASSERT_EQ(probes.size(), 1U);
++        ASSERT_EQ(probes.front(), 1328U);
++        ASSERT_EQ(recovery.congestion_window(), before);
++        ASSERT_TRUE(recovery.can_send_datagram(before));
++        ASSERT_FALSE(recovery.next_pto_deadline().has_value());
++        ASSERT_TRUE(recovery.discard_non_retransmittable(
++            cnetmod::quic::pn_space::application).empty());
++        ASSERT_EQ(recovery.congestion_window(), before);
++    }
++}
++
++TEST(quic_recovery_pmtu_pto_cleanup_keeps_ordinary_datagram_loss_response)
++{
++    auto config = make_test_config();
++    config.congestion_algorithm = cnetmod::quic::quic_congestion_algorithm::new_reno;
++    cnetmod::quic::quic_recovery_controller recovery(config);
++    const auto before = recovery.congestion_window();
++    const auto now = std::chrono::steady_clock::now();
++    recovery.on_packet_sent(1U, 1328U, now, true,
++        cnetmod::quic::pn_space::application, {}, 1328U);
++    recovery.on_packet_sent(2U, 1200U, now, true,
++        cnetmod::quic::pn_space::application);
++    const auto probes = recovery.discard_non_retransmittable(
++        cnetmod::quic::pn_space::application);
++    ASSERT_EQ(probes.size(), 1U);
++    ASSERT_EQ(recovery.congestion_window(), before / 2U);
++    ASSERT_TRUE(recovery.can_send_datagram(recovery.congestion_window()));
++}
++
++
++TEST(quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission)
++{
++    auto config = make_test_config();
++    config.congestion_algorithm = cnetmod::quic::quic_congestion_algorithm::new_reno;
++    cnetmod::quic::quic_recovery_controller recovery(config);
++    const auto before = recovery.congestion_window();
++    const auto now = std::chrono::steady_clock::now();
++    const std::vector frame{std::byte{0x0a}, std::byte{0x00}, std::byte{0x01}, std::byte{0x42}};
++    recovery.on_packet_sent(1U, 1328U, now, true,
++        cnetmod::quic::pn_space::application,
++        cnetmod::quic::retransmittable_frame_storage{
++            cnetmod::quic::quic_send_frame{frame}}, 1328U);
++    recovery.on_packet_sent(4U, 100U, now, true,
++        cnetmod::quic::pn_space::application);
++    cnetmod::quic::ack_frame ack;
++    ack.largest_acked = 4U;
++    const auto update = recovery.on_ack_received(
++        ack, now + 20ms, cnetmod::quic::pn_space::application);
++    ASSERT_TRUE(update.has_value());
++    ASSERT_EQ(update->lost_path_mtu_probes.size(), 1U);
++    ASSERT_EQ(update->lost_frames.size(), 1U);
++    ASSERT_TRUE(update->lost_frames.front().owned_bytes() == frame);
++    ASSERT_EQ(recovery.congestion_window(), before + 100U);
++    ASSERT_TRUE(recovery.can_send_datagram(recovery.congestion_window()));
++    ASSERT_FALSE(recovery.next_pto_deadline().has_value());
++}
++
+ RUN_TESTS();
+--- a/testing/tests/test_quic_congestion.cpp
++++ b/testing/tests/test_quic_congestion.cpp
+@@ -302,4 +302,28 @@
+     ASSERT_TRUE(fast_rate > slow_rate);
+ }
+ 
++
++TEST(congestion_consecutive_losses_release_flight_during_recovery)
++{
++    for (const auto algorithm : {cnetmod::quic::quic_congestion_algorithm::new_reno,
++             cnetmod::quic::quic_congestion_algorithm::cubic,
++             cnetmod::quic::quic_congestion_algorithm::bbr})
++    {
++        auto config = make_cc_config();
++        config.congestion_algorithm = algorithm;
++        auto cc = cnetmod::quic::create_congestion_controller(config);
++        cc.on_packet_sent(2000U);
++        cc.on_congestion_event(1000U);
++        ASSERT_EQ(cc.bytes_in_flight(), 1000U);
++        const auto after_first_loss = cc.congestion_window();
++        cc.on_congestion_event(1000U);
++        ASSERT_EQ(cc.bytes_in_flight(), 0U);
++        ASSERT_TRUE(cc.can_send_datagram(cc.congestion_window()));
++        if (algorithm != cnetmod::quic::quic_congestion_algorithm::bbr)
++            ASSERT_EQ(cc.congestion_window(), after_first_loss);
++        else
++            ASSERT_TRUE(cc.congestion_window() <= after_first_loss);
++    }
++}
++
+ RUN_TESTS();

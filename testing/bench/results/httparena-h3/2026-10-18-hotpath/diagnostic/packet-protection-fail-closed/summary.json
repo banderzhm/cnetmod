@@ -1,0 +1,39 @@
+{
+  "old_negative": {
+    "cases_executed": 1,
+    "case": "observer/seal",
+    "exit_code": 1,
+    "expected_failure": true,
+    "actual_crypto_error": "openssl:503316583",
+    "report": "accepted system 0 0 false 1 4 3 1"
+  },
+  "new_positive": {
+    "cases_executed": 6,
+    "exit_code": 0,
+    "modes": [
+      "observer",
+      "private"
+    ],
+    "faults": [
+      "seal",
+      "hp",
+      "seal-empty-error"
+    ],
+    "each": {
+      "elapsed_ms": 0,
+      "closed": true,
+      "candidates": 2,
+      "committed": 1,
+      "actual_failures": 1,
+      "client_response_body_bytes": 0,
+      "subsequent_write_matches_terminal_error": true
+    }
+  },
+  "binaries": {
+    "old": "75e3f2d8b198b86bfc27023236762f8184dcef69e46bc461513e960e72ab6ca3",
+    "new": "d60d4136a6ef5c05b671516fa8006bd8941def29c1d7e9c0b8bb8484edee1b6b"
+  },
+  "both_build_inputs_unchanged": true,
+  "both_external_member_hash_and_linker_input_trace_verified": true,
+  "after_tests_proc_exact_binary_path_matches": []
+}

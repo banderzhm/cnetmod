@@ -1,0 +1,19 @@
+[
+  "/var/tmp/cnetmod-ninja-1.11/bin/ninja",
+  "-j2",
+  "arena_h3_server",
+  "test_udp_batch",
+  "test_quic_stream",
+  "test_quic_loss_detection",
+  "test_quic_congestion",
+  "test_quic_early_data",
+  "test_quic_frame",
+  "test_quic_packet",
+  "test_quic_varint",
+  "h3_interop_server",
+  "h3_interop_client",
+  "http3_e2e_server",
+  "http_client_http3_e2e",
+  "http3_migration_e2e",
+  "quic_retire_stream_server"
+]

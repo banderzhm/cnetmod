@@ -1,0 +1,203 @@
+{
+  "binary_sha256": "3bbf8402eb9d0cc0afa17455ddbdf0e6a7ae69ea5038a83011f4f4c495eefa9a",
+  "cores": 32,
+  "workers": 32,
+  "client_cpus": "16-31",
+  "mode": "diagnostic, native identical binary in same isolated loopback; not official ranking",
+  "measurements": [
+    {
+      "name": "baseline-reference",
+      "command": [
+        "nsenter",
+        "-t",
+        "662",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 7107989,
+      "elapsed": 5.66,
+      "valid_rps": 1255828.445229682,
+      "server_cpu_seconds": 112.42999999999999,
+      "before": {
+        "rss": 42323968,
+        "pss": 40104960,
+        "private": 39956480
+      },
+      "after_load": {
+        "rss": 151711744,
+        "pss": 149499904,
+        "private": 149344256
+      },
+      "after_idle_2s": {
+        "rss": 151711744,
+        "pss": 149499904,
+        "private": 149344256
+      },
+      "after_idle_10s": {
+        "rss": 151711744,
+        "pss": 149492736,
+        "private": 149344256
+      }
+    },
+    {
+      "name": "baseline-perf",
+      "command": [
+        "nsenter",
+        "-t",
+        "662",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 6609341,
+      "elapsed": 5.65,
+      "valid_rps": 1169794.8672566372,
+      "server_cpu_seconds": 107.72999999999999,
+      "before": {
+        "rss": 151711744,
+        "pss": 149492736,
+        "private": 149344256
+      },
+      "after_load": {
+        "rss": 170532864,
+        "pss": 168305664,
+        "private": 168165376
+      },
+      "after_idle_2s": {
+        "rss": 170532864,
+        "pss": 168321024,
+        "private": 168165376
+      },
+      "after_idle_10s": {
+        "rss": 170532864,
+        "pss": 168321024,
+        "private": 168165376
+      }
+    },
+    {
+      "name": "static-reference",
+      "command": [
+        "nsenter",
+        "-t",
+        "662",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "-i",
+        "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/requests/static-h2-uris.txt",
+        "-H",
+        "Accept-Encoding: br;q=1, gzip;q=0.8",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 1604983,
+      "elapsed": 5.67,
+      "valid_rps": 283065.7848324515,
+      "server_cpu_seconds": 102.48,
+      "before": {
+        "rss": 50774016,
+        "pss": 48506880,
+        "private": 48353280
+      },
+      "after_load": {
+        "rss": 191918080,
+        "pss": 189615104,
+        "private": 189431808
+      },
+      "after_idle_2s": {
+        "rss": 191918080,
+        "pss": 189615104,
+        "private": 189431808
+      },
+      "after_idle_10s": {
+        "rss": 191918080,
+        "pss": 189615104,
+        "private": 189431808
+      }
+    },
+    {
+      "name": "static-perf",
+      "command": [
+        "nsenter",
+        "-t",
+        "662",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "-i",
+        "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/requests/static-h2-uris.txt",
+        "-H",
+        "Accept-Encoding: br;q=1, gzip;q=0.8",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 1173727,
+      "elapsed": 5.7,
+      "valid_rps": 205917.01754385963,
+      "server_cpu_seconds": 94.13999999999999,
+      "before": {
+        "rss": 191918080,
+        "pss": 189615104,
+        "private": 189431808
+      },
+      "after_load": {
+        "rss": 203476992,
+        "pss": 201151488,
+        "private": 200990720
+      },
+      "after_idle_2s": {
+        "rss": 203476992,
+        "pss": 201162752,
+        "private": 200990720
+      },
+      "after_idle_10s": {
+        "rss": 203476992,
+        "pss": 201174016,
+        "private": 200990720
+      }
+    }
+  ]
+}

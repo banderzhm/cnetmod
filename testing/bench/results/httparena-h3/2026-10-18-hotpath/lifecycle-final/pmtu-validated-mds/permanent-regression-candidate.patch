@@ -1,0 +1,903 @@
+--- a/testing/http3/CMakeLists.txt
++++ b/testing/http3/CMakeLists.txt
+@@ -23,6 +23,14 @@
+             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+     endif()
+ 
++    add_executable(quic_pmtu_cc_server quic_pmtu_cc_server.cpp)
++    target_link_libraries(quic_pmtu_cc_server PRIVATE cnetmod_core)
++    cnetmod_enable_release_codegen(quic_pmtu_cc_server)
++    cnetmod_deploy_mimalloc_runtime(quic_pmtu_cc_server)
++    set_property(TARGET quic_pmtu_cc_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
++    set_target_properties(quic_pmtu_cc_server PROPERTIES
++        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
++
+     add_executable(quic_retire_stream_server quic_retire_stream_server.cpp)
+     target_link_libraries(quic_retire_stream_server PRIVATE cnetmod_core)
+     cnetmod_deploy_mimalloc_runtime(quic_retire_stream_server)
+@@ -57,6 +65,12 @@
+ find_package(Python3 COMPONENTS Interpreter QUIET)
+ 
+ if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
++    # Explicit process-local cryptography AEAD adapter; this is not stock aioquic interop.
++    add_test(NAME quic_pmtu_cc_large_response_after_loss
++        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_cc.py"
++            "$<TARGET_FILE:quic_pmtu_cc_server>" --large-aead-peer)
++    set_tests_properties(quic_pmtu_cc_large_response_after_loss PROPERTIES
++        LABELS "http3;quic;pmtu;recovery;test_peer_adapter" TIMEOUT 90 SKIP_RETURN_CODE 77)
+     add_test(NAME http3_lifecycle
+         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/http3_lifecycle.py"
+             "$<TARGET_FILE:h3_interop_server>")
+@@ -282,6 +296,7 @@
+     foreach(http3_test_target IN ITEMS
+             h3_interop_server
+             quic_retire_stream_server
++            quic_pmtu_cc_server
+             h3_interop_client
+             http3_e2e_server
+             http_client_http3_e2e
+--- /dev/null
++++ b/testing/http3/quic_pmtu_cc_server.cpp
+@@ -0,0 +1,345 @@
++// Single-path raw QUIC fixture for real PMTU discovery and ordinary-loss epochs.
++// The Python harness terminates this dedicated process after collecting proof.
++import std;
++import cnetmod.core;
++import cnetmod.core.log;
++import cnetmod.core.ssl;
++import cnetmod.coro.awaitable;
++import cnetmod.coro.task;
++import cnetmod.executor.async_op;
++import cnetmod.io.io_context;
++import cnetmod.protocol.quic;
++import cnetmod.protocol.udp;
++
++namespace {
++namespace cn = cnetmod;
++namespace quic = cn::quic;
++using clock_type = std::chrono::steady_clock;
++
++struct options
++{
++    std::uint16_t port{4433};
++    std::uint64_t ceiling{4096U};
++    std::string certificate;
++    std::string key;
++    std::string listening;
++    std::string ready;
++    std::string report;
++};
++
++struct fixture
++{
++    cn::io_context& context;
++    cn::ssl_context& tls;
++    options arguments;
++    cn::udp::udp_socket socket{context};
++    std::unique_ptr<quic::quic_connection> connection;
++    std::vector<cn::task<void>> tasks;
++    std::optional<clock_type::time_point> scheduled;
++    std::uint64_t timer_generation{};
++    std::uint64_t observer_calls{};
++    std::uint64_t ingress{};
++    bool failed{};
++
++    void launch(cn::task<void> operation)
++    {
++        tasks.push_back(std::move(operation));
++        tasks.back().handle().resume();
++    }
++};
++
++auto fail(fixture& state, std::string message) -> cn::task<void>
++{
++    state.failed = true;
++    logger::error{"PMTU fixture: {}", message};
++    (void)co_await cn::async_file_write_all(state.context, state.arguments.report,
++        "failed: " + message + "\n");
++}
++
++auto timer_at(fixture& state, std::uint64_t generation,
++    clock_type::time_point deadline) -> cn::task<void>;
++
++void schedule(fixture& state, std::optional<clock_type::time_point> deadline)
++{
++    if (state.scheduled == deadline)
++        return;
++    state.scheduled = deadline;
++    const auto generation = ++state.timer_generation;
++    if (deadline)
++        state.launch(timer_at(state, generation, *deadline));
++}
++
++auto timer_at(fixture& state, std::uint64_t generation,
++    clock_type::time_point deadline) -> cn::task<void>
++{
++    // Even an immediate observer edge runs after packet parsing releases its
++    // serial domain. Never poll QUIC from inside the observer callback.
++    co_await cn::post_awaitable{state.context};
++    if (deadline > clock_type::now())
++        (void)co_await cn::async_timer_wait(state.context, deadline - clock_type::now());
++    if (generation != state.timer_generation || state.failed)
++        co_return;
++    state.scheduled.reset();
++    co_await state.connection->async_poll_timers();
++    schedule(state, state.connection->next_timer_deadline());
++}
++
++auto observer_receive(fixture& state) -> cn::task<void>
++{
++    std::array<std::byte, 65536> storage{};
++    while (!state.connection->is_closed())
++    {
++        cn::endpoint peer;
++        const auto received = co_await cn::async_recvfrom(state.context,
++            state.socket.native_socket(), cn::mutable_buffer{storage.data(), storage.size()}, peer);
++        if (!received)
++        {
++            co_await fail(state, "receive: " + received.error().message());
++            co_return;
++        }
++        ++state.ingress;
++        const auto processed = co_await state.connection->process_datagram(
++            std::span<const std::byte>{storage.data(), *received}, peer);
++        if (!processed)
++        {
++            co_await fail(state, "process: " + processed.error().message());
++            co_return;
++        }
++        // This is a normal listener refresh after actual ingress, never a
++        // periodic flush. Loss recovery must use actual ACKs and timer edges.
++        schedule(state, state.connection->next_timer_deadline());
++    }
++}
++
++auto respond(fixture& state) -> cn::task<void>
++{
++    for (;;)
++    {
++        const auto stream = co_await state.connection->async_accept_stream();
++        if (!stream)
++        {
++            co_await fail(state, "accept stream: " + stream.error().message());
++            co_return;
++        }
++        std::array<char, 128> bytes{};
++        std::string request;
++        for (;;)
++        {
++            const auto read = co_await state.connection->async_recv(*stream,
++                cn::mutable_buffer{bytes.data(), bytes.size()});
++            if (!read)
++            {
++                if (read.error() != std::make_error_code(std::errc::operation_would_block))
++                {
++                    co_await fail(state, "read: " + read.error().message());
++                    co_return;
++                }
++                const auto ready = co_await state.connection->async_wait_readable(*stream);
++                if (!ready)
++                {
++                    co_await fail(state, "read readiness: " + ready.error().message());
++                    co_return;
++                }
++                continue;
++            }
++            if (*read == 0U)
++                break;
++            request.append(bytes.data(), *read);
++            if (request.size() > 128U)
++            {
++                co_await fail(state, "oversized fixture request");
++                co_return;
++            }
++        }
++        const bool final = request == "final\n";
++        const bool epoch = request.starts_with("epoch/");
++        const bool confirmation = request.starts_with("confirm/");
++        if (!final && !epoch && !confirmation)
++        {
++            co_await fail(state, "unknown fixture request");
++            co_return;
++        }
++        const auto mds = state.connection->discovered_path_mtu(0U).value_or(0U);
++        const std::string body(final ? 16384U : epoch ? 256U : 1U,
++            final ? 'F' : epoch ? 'e' : 'c');
++        logger::info{"PMTU_FIXTURE_ENQUEUE stream={} command={} mds={} bytes={}",
++            *stream, request.substr(0U, request.size() - 1U), mds, body.size()};
++        const auto sent = co_await state.connection->async_send(*stream,
++            std::span<const std::byte>{reinterpret_cast<const std::byte*>(body.data()), body.size()}, true);
++        if (!sent)
++        {
++            co_await fail(state, "send: " + sent.error().message());
++            co_return;
++        }
++        // Do not manually flush/poll timers: production outbound notifications
++        // and the listener's real timer driver must make this response progress.
++    }
++}
++
++auto monitor_discovery(fixture& state) -> cn::task<void>
++{
++    const auto limit = clock_type::now() + std::chrono::seconds{8};
++    for (;;)
++    {
++        const auto mds = state.connection->discovered_path_mtu(0U).value_or(0U);
++        if (mds == state.arguments.ceiling)
++        {
++            (void)co_await cn::async_file_write_all(state.context, state.arguments.ready,
++                std::format("mds {}\n", mds));
++            co_return;
++        }
++        if (state.failed || clock_type::now() >= limit)
++        {
++            co_await fail(state, "ACK-validated discovery did not reach configured ceiling");
++            co_return;
++        }
++        (void)co_await cn::async_timer_wait(state.context, std::chrono::milliseconds{5});
++    }
++}
++
++auto retry_packet(const quic::long_header& initial, const quic::connection_id& retry_cid)
++    -> std::expected<std::vector<std::byte>, std::error_code>
++{
++    std::vector<std::byte> packet{std::byte{0xf0}};
++    for (int shift = 24; shift >= 0; shift -= 8)
++        packet.push_back(static_cast<std::byte>((initial.version >> shift) & 0xffU));
++    packet.push_back(static_cast<std::byte>(initial.scid.size()));
++    packet.insert(packet.end(), initial.scid.data(), initial.scid.data() + initial.scid.size());
++    packet.push_back(static_cast<std::byte>(retry_cid.size()));
++    packet.insert(packet.end(), retry_cid.data(), retry_cid.data() + retry_cid.size());
++    packet.push_back(std::byte{0x71});
++    auto tag = quic::make_retry_integrity_tag(quic::quic_version::v1, initial.dcid, packet);
++    if (!tag)
++        return std::unexpected(tag.error());
++    packet.insert(packet.end(), tag->begin(), tag->end());
++    return packet;
++}
++
++auto serve(fixture& state) -> cn::task<void>
++{
++    std::array<std::byte, 65536> storage{};
++    cn::endpoint peer;
++    quic::connection_id original;
++    std::array<std::byte, 8> cid_bytes{};
++    std::random_device random;
++    for (auto& byte : cid_bytes)
++        byte = static_cast<std::byte>(random() & 0xffU);
++    const quic::connection_id retry_cid{cid_bytes.data(), static_cast<std::uint8_t>(cid_bytes.size())};
++    bool retried{};
++    for (;;)
++    {
++        auto received = co_await cn::async_recvfrom(state.context, state.socket.native_socket(),
++            cn::mutable_buffer{storage.data(), storage.size()}, peer);
++        if (!received)
++        {
++            co_await fail(state, "Initial receive: " + received.error().message());
++            co_return;
++        }
++        auto header = quic::decode_long_header(std::span<const std::byte>{storage.data(), *received});
++        if (!header || header->type != quic::packet_type::initial || header->version != 1U)
++            continue;
++        if (header->token.empty())
++        {
++            if (!retried)
++                original = header->dcid;
++            auto retry = retry_packet(*header, retry_cid);
++            if (!retry)
++            {
++                co_await fail(state, "Retry encoding");
++                co_return;
++            }
++            (void)co_await cn::async_sendto(state.context, state.socket.native_socket(),
++                cn::const_buffer{retry->data(), retry->size()}, peer);
++            retried = true;
++            continue;
++        }
++        if (!retried || header->dcid != retry_cid || header->token.size() != 1U ||
++            header->token.front() != std::byte{0x71})
++            continue;
++        quic::quic_config config;
++        config.idle_timeout = std::chrono::seconds{30};
++        config.enable_path_mtu_discovery = true;
++        config.max_path_mtu = state.arguments.ceiling;
++        config.max_udp_payload_size = 65527U;
++        config.path_mtu_probe_interval = std::chrono::milliseconds{1};
++        config.path_mtu_initial_probe_delay = std::chrono::milliseconds{50};
++        config.congestion_algorithm = quic::quic_congestion_algorithm::new_reno;
++        config.max_data = 1048576U;
++        config.max_stream_data = 1048576U;
++        config.max_streams_bidi = 128U;
++        config.max_streams_uni = 0U;
++        config.active_connection_id_limit = 2U;
++        state.connection = std::make_unique<quic::quic_connection>(state.context,
++            state.socket, peer, quic::quic_role::server, state.tls, config);
++        if (!state.connection->register_cid(retry_cid) ||
++            !state.connection->set_original_destination_connection_id(original))
++        {
++            co_await fail(state, "Retry transport parameters");
++            co_return;
++        }
++        state.connection->set_timer_deadline_observer([&state](auto deadline)
++        {
++            ++state.observer_calls;
++            schedule(state, deadline);
++        });
++        const auto processed = co_await state.connection->process_datagram(
++            std::span<const std::byte>{storage.data(), *received}, peer);
++        if (!processed)
++        {
++            co_await fail(state, "validated Initial: " + processed.error().message());
++            co_return;
++        }
++        schedule(state, state.connection->next_timer_deadline());
++        state.launch(observer_receive(state));
++        state.launch(respond(state));
++        state.launch(monitor_discovery(state));
++        co_return;
++    }
++}
++} // namespace
++
++auto main(int argc, char** argv) -> int
++{
++    cn::net_init network;
++    logger::init("quic-pmtu-cc", logger::level::info);
++    options arguments;
++    if ((argc - 1) % 2 != 0)
++        return 2;
++    for (int index = 1; index + 1 < argc; index += 2)
++    {
++        const std::string_view name{argv[index]};
++        const std::string value{argv[index + 1]};
++        if (name == "--port") arguments.port = static_cast<std::uint16_t>(std::stoul(value));
++        else if (name == "--ceiling") arguments.ceiling = std::stoull(value);
++        else if (name == "--cert") arguments.certificate = value;
++        else if (name == "--key") arguments.key = value;
++        else if (name == "--listening-report") arguments.listening = value;
++        else if (name == "--ready-report") arguments.ready = value;
++        else if (name == "--result-report") arguments.report = value;
++        else return 2;
++    }
++    if (arguments.ceiling < 1200U || arguments.ceiling > 65507U ||
++        arguments.listening.empty() || arguments.ready.empty() || arguments.report.empty())
++        return 2;
++    auto tls_result = cn::ssl_context::quic_server();
++    if (!tls_result)
++        return 1;
++    auto tls = std::move(*tls_result);
++    tls.configure_alpn_server({"quic-pmtu-cc-test"});
++    if (!tls.load_cert_file(arguments.certificate) || !tls.load_key_file(arguments.key))
++        return 1;
++    auto context = cn::make_io_context();
++    fixture state{*context, tls, std::move(arguments)};
++    const auto address = cn::ip_address::from_string("127.0.0.1");
++    if (!address || !state.socket.open(cn::endpoint{*address, state.arguments.port}))
++        return 1;
++    auto start = [&state]() -> cn::task<void>
++    {
++        (void)co_await cn::async_file_write_all(state.context, state.arguments.listening, "listening\n");
++        co_await serve(state);
++    };
++    auto running = start();
++    running.handle().resume();
++    context->run();
++    return state.failed ? 1 : 0;
++}
+--- /dev/null
++++ b/testing/http3/quic_pmtu_cc.py
+@@ -0,0 +1,445 @@
++"""Real single-path PMTU ACK / ordinary-loss / large pending-frame regression.
++
++No CC setters or fake ACK callbacks are used. --require-diagnostics consumes
++only a separately instrumented validation binary; normal positive regression
++runs remain usable after temporary production logging is removed.
++"""
++from __future__ import annotations
++
++import argparse
++import asyncio
++import hashlib
++import json
++import os
++from pathlib import Path
++import re
++import signal
++import ssl
++import subprocess
++import sys
++import tempfile
++import time
++
++
++def arguments():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument("server", type=Path)
++    parser.add_argument("--helper-dir", type=Path, default=Path(__file__).parent)
++    parser.add_argument("--records", type=Path)
++    parser.add_argument("--expect", choices=("pass", "stall"), default="pass")
++    parser.add_argument("--require-diagnostics", action="store_true")
++    parser.add_argument("--large-aead-peer", action="store_true",
++                        help="Explicit cryptography AEAD test-peer adapter; not stock aioquic interop")
++    parser.add_argument("--trace-server", action="store_true",
++                        help="Linux validation only: strace real UDP socket options/submissions")
++    parser.add_argument("--epochs", type=int, default=16)
++    parser.add_argument("--final-timeout", type=float, default=2.0)
++    args = parser.parse_args()
++    if args.epochs < 12 or args.epochs > 24:
++        parser.error("epochs must be in [12,24] to exercise the reduction precondition")
++    if args.expect == "stall" and not args.require_diagnostics:
++        parser.error("an expected stall requires actual cwnd/flight/pending-frame diagnostics")
++    if not args.server.is_file():
++        parser.error("server binary is missing")
++    if args.records is None:
++        args.records = Path(tempfile.mkdtemp(prefix="quic-pmtu-cc-"))
++    if args.records.exists() and any(args.records.iterdir()):
++        parser.error("records directory must be empty; never overwrite earlier evidence")
++    return args
++
++
++class Trace:
++    def __init__(self, path):
++        self.path = path
++
++    def read(self):
++        try:
++            lines = self.path.read_text(encoding="utf-8", errors="replace").splitlines()
++        except FileNotFoundError:
++            return []
++        result = []
++        for index, line in enumerate(lines):
++            marker = re.search(r"PMTU_CC_(ACK|VALIDATE|BLOCK|SENT)\s+(.*)", line)
++            if marker:
++                fields = {key: (True if value == "true" else False if value == "false"
++                                else int(value) if value.isdigit() else value)
++                          for key, value in re.findall(r"(\w+)=(\w+)", marker[2])}
++                fields.update(kind=marker[1], line=index)
++                result.append(fields)
++        return result
++
++    def ack(self):
++        return next((row for row in reversed(self.read()) if row["kind"] == "ACK" and row.get("space") == 2), None)
++
++    def quiet(self):
++        rows = self.read()
++        ack = next((row for row in reversed(rows) if row["kind"] == "ACK" and row.get("space") == 2), None)
++        if ack is None or ack.get("flight") != 0 or ack.get("pto"):
++            return None
++        # Do not accept a stale empty-flight snapshot if a later packet was
++        # recovery tracked. Pure ACK-only SENT records do not create flight.
++        if any(row["kind"] == "SENT" and row["line"] > ack["line"] and
++               row.get("tracked", True) for row in rows):
++            return None
++        return ack
++
++
++async def wait_until(predicate, timeout, reason):
++    limit = time.monotonic() + timeout
++    while True:
++        value = predicate()
++        if value:
++            return value
++        if time.monotonic() >= limit:
++            raise AssertionError(reason)
++        await asyncio.sleep(0.005)
++
++
++async def exercise(args, process, port, trace, result, imports):
++    QuicConnectionProtocol, connect, QuicConfiguration, StreamDataReceived, \
++        ConnectionTerminated, StreamReset, CryptoContext, Epoch, Buffer, \
++        pull_quic_header, response_stream_frames = imports
++
++    class RawPeer(QuicConnectionProtocol):
++        def __init__(self, *values, **kwargs):
++            super().__init__(*values, **kwargs)
++            self.responses = {}
++
++        def quic_event_received(self, event):
++            if isinstance(event, StreamDataReceived):
++                response = self.responses.get(event.stream_id)
++                assert response is not None, repr(event)
++                response["body"].extend(event.data)
++                if event.end_stream and not response["done"].done():
++                    response["fin"] = True
++                    response["done"].set_result(bytes(response["body"]))
++            elif isinstance(event, (ConnectionTerminated, StreamReset)):
++                for stream, response in self.responses.items():
++                    if (isinstance(event, ConnectionTerminated) or stream == event.stream_id) \
++                            and not response["done"].done():
++                        response["done"].set_exception(AssertionError(repr(event)))
++
++        def request(self, command, arm=None):
++            stream = self._quic.get_next_available_stream_id()
++            response = {"body": bytearray(), "fin": False,
++                        "done": asyncio.get_running_loop().create_future()}
++            self.responses[stream] = response
++            if arm:
++                arm(stream)
++            self._quic.send_stream_data(stream, command.encode() + b"\n", end_stream=True)
++            response["sender"] = self._quic._streams[stream].sender
++            self.transmit()
++            return stream, response
++
++    class Backend(asyncio.DatagramProtocol):
++        def __init__(self, owner):
++            self.owner = owner
++
++        def datagram_received(self, data, address):
++            self.owner.from_server(data)
++
++        def error_received(self, error):
++            self.owner.errors.append(repr(error))
++
++    class LossProxy(asyncio.DatagramProtocol):
++        def __init__(self):
++            self.front = self.back = None
++            self.client = None
++            self.crypto = None
++            self.target = None
++            self.epoch = None
++            self.dropped = False
++            self.highest = 0
++            self.events = []
++            self.errors = []
++
++        async def open(self):
++            loop = asyncio.get_running_loop()
++            self.back, _ = await loop.create_datagram_endpoint(
++                lambda: Backend(self), remote_addr=("127.0.0.1", port))
++            self.front, _ = await loop.create_datagram_endpoint(
++                lambda: self, local_addr=("127.0.0.1", 0))
++            return self.front.get_extra_info("sockname")[1]
++
++        def datagram_received(self, data, address):
++            if self.client is None:
++                self.client = address
++            assert self.client == address, "fixture allows one stable tuple"
++            self.events.append({"at": time.monotonic(), "direction": "client",
++                                "bytes": len(data), "action": "forward"})
++            self.back.sendto(data)
++
++        def error_received(self, error):
++            self.errors.append(repr(error))
++
++        def attach(self, peer):
++            source = peer._quic._cryptos[Epoch.ONE_RTT].recv
++            assert source.is_valid()
++            self.crypto = CryptoContext(key_phase=source.key_phase)
++            self.crypto.setup(cipher_suite=source.cipher_suite,
++                              secret=source.secret, version=source.version)
++            self.cid_length = peer._quic.configuration.connection_id_length
++
++        def arm(self, epoch, stream):
++            assert not self.target or self.dropped, "earlier armed drop never happened"
++            self.target = stream
++            self.epoch = epoch
++            self.dropped = False
++            self.events.append({"at": time.monotonic(), "action": "arm",
++                                "epoch": epoch, "stream": stream})
++
++        def disarm(self):
++            self.events.append({"at": time.monotonic(), "action": "disarm"})
++            self.target = None
++            self.epoch = None
++
++        def from_server(self, data):
++            event = {"at": time.monotonic(), "direction": "server",
++                     "bytes": len(data), "action": "forward", "epoch": self.epoch}
++            if self.crypto is not None and data and not data[0] & 0x80:
++                try:
++                    header = Buffer(data=data)
++                    pull_quic_header(header, host_cid_length=self.cid_length)
++                    _, payload, number, _ = self.crypto.decrypt_packet(
++                        data, header.tell(), self.highest)
++                    self.highest = max(self.highest, number + 1)
++                    frames = response_stream_frames(payload, self.target
++                                                    if self.target is not None else -1)
++                    event.update(packet_number=number, target_stream=self.target, frames=frames)
++                    # Drop actual reliable bytes for the named response. ACK,
++                    # PING, PMTU padding and unrelated control traffic pass.
++                    if self.target is not None and not self.dropped and \
++                            any(frame["length"] for frame in frames):
++                        self.dropped = True
++                        event["action"] = "drop"
++                        self.events.append(event)
++                        return
++                except Exception as error:
++                    self.errors.append("decode: " + repr(error))
++                    event["decode_error"] = repr(error)
++            self.events.append(event)
++            self.front.sendto(data, self.client)
++
++        def close(self):
++            if self.front:
++                self.front.close()
++            if self.back:
++                self.back.close()
++
++    def check_process():
++        if process.poll() is not None:
++            raise AssertionError(f"server exited early: {process.returncode}")
++        failure = args.records / "failure.txt"
++        if failure.exists():
++            raise AssertionError(failure.read_text(encoding="utf-8", errors="replace"))
++        return True
++
++    def discovery_ready():
++        check_process()
++        ready = args.records / "ready.txt"
++        return ready.exists() and ready.read_text(encoding="utf-8").strip() == "mds 4096"
++
++    async def quiescent():
++        # Identical stimulus/timing with or without diagnostics. Diagnostics
++        # observe this fixed quiet point; they never trigger extra requests.
++        await asyncio.sleep(0.075)
++        check_process()
++        if args.require_diagnostics:
++            quiet = trace.quiet()
++            assert quiet is not None, "actual flight/PTO did not become quiescent"
++            return quiet
++        return None
++
++    proxy = LossProxy()
++    proxy_port = await proxy.open()
++    config = QuicConfiguration(is_client=True, alpn_protocols=["quic-pmtu-cc-test"])
++    config.verify_mode = ssl.CERT_NONE
++    config.idle_timeout = 30.0
++    config.max_data = 1048576
++    config.max_stream_data = 1048576
++    config.max_datagram_size = 1200  # Outgoing target; not an advertised receive cap.
++    result["peer_receive_limit"] = "omitted transport parameter; RFC default65527"
++    result["peer_outgoing_target"] = 1200
++    result["server_ceiling"] = 4096
++    try:
++        async with connect("127.0.0.1", proxy_port, configuration=config,
++                           create_protocol=RawPeer) as peer:
++            proxy.attach(peer)
++            await wait_until(discovery_ready, 8, "no actual probe-ACK discovery to4096")
++            if args.require_diagnostics:
++                validates = [row for row in trace.read() if row["kind"] == "VALIDATE"]
++                assert validates and validates[-1].get("mds") == 4096, validates
++                result["discovery_trace"] = validates
++            await quiescent()
++            epochs = []
++            for epoch in range(args.epochs):
++                check_process()
++                line_before = len(trace.read())
++                stream, response = peer.request(f"epoch/{epoch}",
++                    lambda sid: proxy.arm(epoch, sid))
++                body = await asyncio.wait_for(asyncio.shield(response["done"]), 3)
++                assert body == b"e" * 256 and response["fin"], (epoch, len(body))
++                assert proxy.dropped, f"epoch{epoch} had no actual STREAM drop"
++                await wait_until(lambda: response["sender"].is_finished, 1,
++                                 "request FIN not acknowledged")
++                losses = []
++                for confirmation in range(4):
++                    # A fresh ordinary higher-PN response and its real ACK
++                    # force the detector to revisit the earlier dropped PN.
++                    _, confirm = peer.request(f"confirm/{epoch}/{confirmation}")
++                    data = await asyncio.wait_for(asyncio.shield(confirm["done"]), 1)
++                    assert data == b"c" and confirm["fin"]
++                    await asyncio.sleep(0.025)
++                quiet = await quiescent()
++                if args.require_diagnostics:
++                    losses = [
++                        row for row in trace.read()[line_before:]
++                        if row["kind"] == "ACK" and row.get("ordinary_lost", 0) > 0]
++                    assert losses, f"epoch{epoch}: PTO copy happened but no actual ordinary loss"
++                    if args.expect == "pass":
++                        assert all(row["cwnd"] >= 8192 for row in losses), losses
++                dropped = [event for event in proxy.events if event.get("action") == "drop"
++                           and event.get("epoch") == epoch]
++                assert len(dropped) == 1, dropped
++                later = [event for event in proxy.events if event.get("direction") == "server"
++                         and event.get("action") == "forward" and
++                         event.get("packet_number", -1) > dropped[0]["packet_number"] and
++                         event.get("epoch") == epoch]
++                assert later, "no actual higher-PN server packet was delivered"
++                epochs.append({"epoch": epoch, "stream": stream,
++                               "drop": dropped[0], "losses": losses, "quiet": quiet})
++            result["epochs"] = epochs
++            proxy.disarm()
++            snapshot = await quiescent()
++            if args.require_diagnostics:
++                assert snapshot["flight"] == 0 and not snapshot["pto"], snapshot
++                result["before_final"] = snapshot
++                if args.expect == "stall":
++                    assert snapshot["cwnd"] < 4096, snapshot
++                    assert any(loss["cwnd"] == 2944 for item in epochs
++                               for loss in item["losses"]), "old floor was never reached"
++            final_line = len(trace.read())
++            _, response = peer.request("final")
++            started = time.monotonic()
++            timed_out = False
++            try:
++                body = await asyncio.wait_for(asyncio.shield(response["done"]),
++                                              args.final_timeout)
++                result["final_body_bytes"] = len(body)
++                result["final_body_sha256"] = hashlib.sha256(body).hexdigest()
++                result["final_fin"] = response["fin"]
++                assert body == b"F" * 16384 and response["fin"]
++            except asyncio.TimeoutError:
++                timed_out = True
++            result["final_elapsed_ms"] = (time.monotonic() - started) * 1000
++            result["final_timed_out"] = timed_out
++            if args.expect == "stall":
++                assert timed_out, "old comparison unexpectedly completed; no negative proof"
++                blocks = [row for row in trace.read()[final_line:]
++                          if row["kind"] == "BLOCK" and row.get("mds") == 4096
++                          and row.get("noflight") and not row.get("pto")
++                          and row.get("first_frame", 0) > row.get("cwnd", 0)]
++                assert blocks, "timeout lacks actual empty-flight/noPTO/large-frame cwnd refusal"
++                result["blocked_pending_frame"] = blocks[-1]
++                response["done"].cancel()
++                result["status"] = "expected_stall_proven"
++            else:
++                assert not timed_out, "16KiB response stalled after real loss epochs"
++                await quiescent()
++                result["status"] = "passed"
++            if args.require_diagnostics:
++                sends = [row for row in trace.read() if row["kind"] == "SENT"]
++                assert all(row["bytes"] <= row["mds"] for row in sends
++                           if not row.get("probe")), "ordinary packet exceeded discoveredMDS"
++                assert any(row.get("probe") for row in sends), "no real probe transmission"
++                result["packet_diagnostic_count"] = len(sends)
++            assert not proxy.errors, proxy.errors
++    finally:
++        result["proxy_errors"] = proxy.errors
++        (args.records / "proxy-ledger.json").write_text(
++            json.dumps(proxy.events, indent=2), encoding="utf-8")
++        proxy.close()
++
++
++def main():
++    args = arguments()
++    args.records.mkdir(parents=True, exist_ok=True)
++    sys.path.insert(0, str(args.helper_dir))
++    try:
++        from aioquic.asyncio import QuicConnectionProtocol, connect
++        from aioquic.buffer import Buffer
++        from aioquic.quic.configuration import QuicConfiguration
++        from aioquic.quic.crypto import CryptoContext
++        from aioquic.quic.events import StreamDataReceived, ConnectionTerminated, StreamReset
++        from aioquic.quic.packet import pull_quic_header
++        from aioquic.tls import Epoch
++        from http_client_e2e import make_certificate, reserve_port
++        from http3_outbound_pto import response_stream_frames
++    except ImportError as error:
++        print(f"fixture dependency unavailable: {error}", file=sys.stderr)
++        return 77
++    imports = (QuicConnectionProtocol, connect, QuicConfiguration, StreamDataReceived,
++               ConnectionTerminated, StreamReset, CryptoContext, Epoch, Buffer,
++               pull_quic_header, response_stream_frames)
++    result = {"status": "failed", "expect": args.expect, "records": str(args.records.resolve()),
++              "diagnostics_required": args.require_diagnostics,
++              "confirmation_requests_per_epoch": 4,
++              "confirmation_interval_seconds": 0.025,
++              "quiet_interval_seconds": 0.075,
++              "server_sha256": hashlib.sha256(args.server.read_bytes()).hexdigest()}
++    process = None
++    try:
++        if args.large_aead_peer:
++            from large_aead_peer import install
++            result["peer_aead"] = install()
++        else:
++            result["peer_aead"] = {"kind": "unmodified-installed-aioquic",
++                                    "stock_aioquic_interoperability": None}
++        cert, key = make_certificate(args.records)
++        port = reserve_port()
++        command = [str(args.server.resolve()), "--port", str(port),
++                   "--cert", str(cert.resolve()), "--key", str(key.resolve()),
++                   "--listening-report", str((args.records / "listening.txt").resolve()),
++                   "--ready-report", str((args.records / "ready.txt").resolve()),
++                   "--result-report", str((args.records / "failure.txt").resolve())]
++        result["command"] = command
++        if args.trace_server:
++            command = ["/usr/sbin/strace", "-ff", "-o", str(args.records / "udp-syscalls"),
++                       "-e", "trace=sendmmsg,sendmsg,setsockopt,getsockopt", *command]
++            result["trace_command"] = command
++        log = args.records / "server.log"
++        with log.open("w", encoding="utf-8") as output:
++            process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
++                                       start_new_session=args.trace_server)
++            async def run():
++                await wait_until(lambda: (args.records / "listening.txt").exists(), 3,
++                                 "fixture did not start listening")
++                await exercise(args, process, port, Trace(log), result, imports)
++            asyncio.run(run())
++    except Exception as error:
++        result["status"] = "failed"
++        result["error"] = repr(error)
++    finally:
++        if process:
++            if process.poll() is None:
++                if args.trace_server:
++                    os.killpg(process.pid, signal.SIGTERM)
++                else:
++                    process.terminate()
++            try:
++                process.wait(timeout=5)
++            except subprocess.TimeoutExpired:
++                if args.trace_server:
++                    os.killpg(process.pid, signal.SIGKILL)
++                else:
++                    process.kill()
++                process.wait(timeout=5)
++            result["server_exit_code"] = process.returncode
++        (args.records / "result.json").write_text(json.dumps(result, indent=2), encoding="utf-8")
++        print(json.dumps(result, sort_keys=True), flush=True)
++    accepted = "expected_stall_proven" if args.expect == "stall" else "passed"
++    return 0 if result["status"] == accepted else 1
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+--- /dev/null
++++ b/testing/http3/large_aead_peer.py
+@@ -0,0 +1,66 @@
++"""Explicit test-peer AEAD adapter; this is not stock aioquic interop.
++
++aioquic 1.3.0's native AEAD has a 1500-byte ciphertext receive limit. This
++process-local factory uses cryptography's authenticated primitives with QUIC's
++same nonce, AAD and appended 16-byte tag. Header protection is unchanged.
++Never modifies installed packages. Enable only for this directed test peer.
++"""
++from __future__ import annotations
++
++import hashlib
++import importlib.metadata
++from pathlib import Path
++
++from aioquic._crypto import CryptoError
++from cryptography.exceptions import InvalidTag
++from cryptography.hazmat.primitives.ciphers.aead import AESGCM, ChaCha20Poly1305
++
++
++class LargePacketAEAD:
++    def __init__(self, cipher_name: bytes, key: bytes, iv: bytes):
++        choices = {b"aes-128-gcm": (AESGCM, 16),
++                   b"aes-256-gcm": (AESGCM, 32),
++                   b"chacha20-poly1305": (ChaCha20Poly1305, 32)}
++        if cipher_name not in choices:
++            raise CryptoError("Invalid cipher name")
++        factory, length = choices[cipher_name]
++        if len(key) != length or len(iv) != 12:
++            raise CryptoError("Invalid key or IV length")
++        self._cipher = factory(bytes(key))
++        self._iv = bytes(iv)
++
++    def _nonce(self, packet_number: int) -> bytes:
++        # The native API receives an unsigned 64-bit integer. QUIC packet
++        # numbers use 62 bits; retain the underlying API's 64-bit domain.
++        if not isinstance(packet_number, int) or not 0 <= packet_number < 1 << 64:
++            raise OverflowError("packet number is outside unsigned 64-bit range")
++        return (int.from_bytes(self._iv, "big") ^ packet_number).to_bytes(12, "big")
++
++    def encrypt(self, data: bytes, associated_data: bytes, packet_number: int) -> bytes:
++        return self._cipher.encrypt(self._nonce(packet_number), bytes(data),
++                                    bytes(associated_data))
++
++    def decrypt(self, data: bytes, associated_data: bytes, packet_number: int) -> bytes:
++        try:
++            return self._cipher.decrypt(self._nonce(packet_number), bytes(data),
++                                        bytes(associated_data))
++        except InvalidTag as error:
++            raise CryptoError("Payload decryption failed") from error
++
++
++def install() -> dict:
++    """Replace only CryptoContext's process-local AEAD factory, explicitly."""
++    import aioquic._crypto as native
++    import aioquic.quic.crypto as crypto
++    native_path = Path(native.__file__).resolve()
++    adapter_path = Path(__file__).resolve()
++    crypto.AEAD = LargePacketAEAD
++    return {"kind": "cryptography-large-packet-test-peer",
++            "stock_aioquic_interoperability": False,
++            "aioquic_version": importlib.metadata.version("aioquic"),
++            "cryptography_version": importlib.metadata.version("cryptography"),
++            "original_backend": str(native_path),
++            "original_backend_sha256": hashlib.sha256(native_path.read_bytes()).hexdigest(),
++            "adapter_sha256": hashlib.sha256(adapter_path.read_bytes()).hexdigest(),
++            "header_protection": "unchanged aioquic backend",
++            "scope": "client and independent proxy CryptoContext AEAD factory"}

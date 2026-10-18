@@ -1,0 +1,90 @@
+--- a/src/protocol/quic/quic_recovery.cpp
++++ b/src/protocol/quic/quic_recovery.cpp
+@@ -5,6 +5,7 @@
+ module cnetmod.protocol.quic;
+ 
+ import std;
++import cnetmod.core.log;
+ import :recovery;
+ 
+ namespace cnetmod::quic {
+@@ -225,6 +226,10 @@
+         congestion_.on_packets_discarded(lost_probe_bytes);
+     if (lost_bytes != 0U)
+         congestion_.on_congestion_event(lost_bytes);
++    logger::info{"PMTU_CC_ACK space={} ordinary_lost={} probe_lost={} cwnd={} flight={} pto={}",
++        static_cast<unsigned>(space), lost_bytes, lost_probe_bytes,
++        congestion_.congestion_window(), congestion_.bytes_in_flight(),
++        next_pto_deadline().has_value()};
+     return update;
+ }
+ 
+--- a/src/protocol/quic/quic_connection.cpp
++++ b/src/protocol/quic/quic_connection.cpp
+@@ -7,6 +7,7 @@
+ module cnetmod.protocol.quic;
+ 
+ import std;
++import cnetmod.core.log;
+ 
+ #ifdef CNETMOD_HAS_SSL
+     #ifdef CNETMOD_ENABLE_QUIC
+@@ -1293,6 +1294,9 @@
+         selected_socket.native_socket(),
+         const_buffer{datagram.data(), datagram.size()}, destination, impl_->send_cancel_token);
+ 
++    logger::info{"PMTU_CC_UDP_SINGLE bytes={} sent={} error={}",
++        datagram.size(), sent ? *sent : std::size_t{0U},
++        sent ? 0 : sent.error().value()};
+     if (switch_context)
+         co_await post_awaitable{impl_->ctx};
+     co_return sent;
+@@ -1346,6 +1350,10 @@
+         auto accepted = co_await async_sendto_batch(impl_->socket_context,
+             impl_->socket->native_socket(), datagrams.subspan(submitted), impl_->send_cancel_token);
+ #endif
++        logger::info{"PMTU_CC_UDP_BATCH count={} first={} accepted={} error={}",
++            datagrams.size() - submitted, datagrams[submitted].bytes.size,
++            accepted ? *accepted : std::size_t{0U},
++            accepted ? 0 : accepted.error().value()};
+         if (!accepted || *accepted == 0U)
+         {
+             result = std::unexpected(!accepted ? accepted.error()
+@@ -2970,6 +2978,10 @@
+             application_path.discovered_max_datagram_payload = std::max(
+                 application_path.discovered_max_datagram_payload, target);
+             application_path.path_mtu_probe_in_flight.reset();
++            logger::info{"PMTU_CC_VALIDATE path={} mds={} cwnd={} pto={}",
++                application_path.id, application_path.discovered_max_datagram_payload,
++                application_path.recovery.congestion_window(),
++                application_path.recovery.next_pto_deadline().has_value()};
+             if (application_path.discovered_max_datagram_payload <
+                 impl_->path_mtu_probe_limit())
+             {
+@@ -4392,6 +4404,16 @@
+         !contains_connection_close &&
+         !path.recovery.can_send_datagram(estimated_packet_size))
+     {
++        // Temporary diagnostic bound prevents an old blocked driver from
++        // flooding the validation log. This state never ships in production.
++        static std::atomic<unsigned> diagnostic_block_events{};
++        if (diagnostic_block_events.fetch_add(1U, std::memory_order_relaxed) < 16U)
++            logger::info{"PMTU_CC_BLOCK path={} mds={} cwnd={} packet={} first_frame={} noflight={} pto={}",
++                path.id, path.discovered_max_datagram_payload, path.recovery.congestion_window(),
++                estimated_packet_size,
++                retransmittable_frames.empty() ? std::size_t{0U} : retransmittable_frames[0U].size(),
++                path.recovery.can_send_datagram(path.recovery.congestion_window()),
++                path.recovery.next_pto_deadline().has_value()};
+ 
+         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
+         {
+@@ -4452,6 +4474,9 @@
+         std::chrono::steady_clock::now(), recovery_tracked,
+         pn_space::application, std::move(retransmittable_frames),
+         path_mtu_probe_target, pto_probe);
++    logger::info{"PMTU_CC_SENT path={} pn={} mds={} bytes={} probe={} pto={} tracked={}",
++        path.id, packet_number, path.discovered_max_datagram_payload,
++        packet.size(), path_mtu_probe_target.has_value(), pto_probe, recovery_tracked};
+     return packet;
+ }
+ 

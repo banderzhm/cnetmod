@@ -1,0 +1,35 @@
+{
+  "test_quic_congestion": {
+    "exit_code": 1,
+    "failed_lines": [
+      "  ASSERT FAILED: cc.bytes_in_flight() == 0U (got: 1000 vs 0) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_congestion.cpp:320",
+      "  ASSERT FAILED: cc.can_send_datagram(cc.congestion_window()) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_congestion.cpp:321",
+      "[  FAILED  ] congestion_consecutive_losses_release_flight_during_recovery (2 failure(s))",
+      "[  PASSED  ] 19 test(s).",
+      "[  FAILED  ] 1 test(s)."
+    ]
+  },
+  "test_quic_loss_detection": {
+    "exit_code": 1,
+    "failed_lines": [
+      "  ASSERT FAILED: recovery.congestion_window() == control.congestion_window() (got: 7410 vs 14820) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:597",
+      "  ASSERT FAILED: recovery.congestion_window() == control.congestion_window() (got: 10374 vs 14820) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:597",
+      "  ASSERT FAILED: recovery.congestion_window() == control.congestion_window() (got: 12967 vs 14820) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:597",
+      "[  FAILED  ] quic_recovery_lost_pmtu_probe_preserves_window_and_releases_flight (3 failure(s))",
+      "  ASSERT FAILED: recovery.congestion_window() == before (got: 7360 vs 14720) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:649",
+      "  ASSERT FAILED: recovery.can_send_datagram(before) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:650",
+      "  ASSERT FAILED: recovery.congestion_window() == before (got: 7360 vs 14720) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:654",
+      "  ASSERT FAILED: recovery.congestion_window() == before (got: 10304 vs 14720) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:649",
+      "  ASSERT FAILED: recovery.can_send_datagram(before) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:650",
+      "  ASSERT FAILED: recovery.congestion_window() == before (got: 10304 vs 14720) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:654",
+      "  ASSERT FAILED: recovery.congestion_window() == before (got: 12880 vs 14720) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:649",
+      "  ASSERT FAILED: recovery.can_send_datagram(before) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:650",
+      "  ASSERT FAILED: recovery.congestion_window() == before (got: 12880 vs 14720) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:654",
+      "[  FAILED  ] quic_recovery_pmtu_probe_pto_cleanup_preserves_window (9 failure(s))",
+      "  ASSERT FAILED: recovery.congestion_window() == before + 100U (got: 7410 vs 14820) at C:\\Users\\25007\\.codex\\worktrees\\2c3c\\cnetmod\\testing\\tests\\test_quic_loss_detection.cpp:699",
+      "[  FAILED  ] quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission (1 failure(s))",
+      "[  PASSED  ] 21 test(s).",
+      "[  FAILED  ] 3 test(s)."
+    ]
+  }
+}

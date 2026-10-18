@@ -1,0 +1,28 @@
+{
+  "pid": 33840,
+  "command": [
+    "C:/Windows/System32/wsl.exe",
+    "--distribution",
+    "archlinux",
+    "--user",
+    "root",
+    "--exec",
+    "/usr/sbin/python3",
+    "-c",
+    "\nimport json, os, sys\npidfile, nonce, executable, *arguments = sys.argv[1:]\nif os.getpgrp() == os.getpid() and os.getsid(0) != os.getpid():\n    child = os.fork()\n    if child:\n        _, status = os.waitpid(child, 0)\n        os._exit(os.waitstatus_to_exitcode(status))\nif os.getsid(0) != os.getpid():\n    os.setsid()\nrecord = dict(pid=os.getpid(), pgid=os.getpgrp(), sid=os.getsid(0), nonce=nonce,\n              executable=os.path.realpath(executable),\n              launch_executable=os.readlink('/proc/self/exe'))\nwith open(pidfile + '.new', 'x', encoding='utf-8') as output:\n    json.dump(record, output)\nos.replace(pidfile + '.new', pidfile)\nos.environ['CNETMOD_H3_PEER_RUN'] = nonce\nos.execv(executable, [executable, *arguments])\n",
+    "/mnt/c/Users/25007/.codex/tmp/h3-hotpath-windows-final-20261018-193412-0aba7d1e/run-e282732eda5a4fb688896e41f2f4037b/cnetmod-server_to_nghttp3-client/linux-ngtcp2-client.linux-pid.json",
+    "84ab13073fa94dd987a1b85809482ab0",
+    "/var/tmp/cnetmod-h3-ngtcp2-peer-build/examples/osslclient",
+    "--timeout=1s",
+    "--no-quic-dump",
+    "--no-http-dump",
+    "--download",
+    "/mnt/c/Users/25007/.codex/tmp/h3-hotpath-windows-final-20261018-193412-0aba7d1e/run-e282732eda5a4fb688896e41f2f4037b/cnetmod-server_to_nghttp3-client/download",
+    "--exit-on-first-stream-close",
+    "127.0.0.1",
+    "64788",
+    "https://127.0.0.1:64788/health"
+  ],
+  "cwd": "C:\\Users\\25007\\.codex\\tmp\\h3-hotpath-windows-final-20261018-193412-0aba7d1e\\run-e282732eda5a4fb688896e41f2f4037b\\cnetmod-server_to_nghttp3-client",
+  "target_platform": "WSL/Linux"
+}

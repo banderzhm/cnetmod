@@ -1,0 +1,7 @@
+{
+  "archive": "/var/tmp/cnetmod-h3-crypto-new-real-fault/libcnetmod_quic.a",
+  "member": "quic_connection.cpp.o",
+  "original_sha256": "e219d613e851cacb206e0656ebdea4350cca0213ae9f1d54cfa54bc35478c2f8",
+  "replacement_sha256": "4e039fca6d235ab92108343241de9ed85be7ea774a7a92aaec02a85a2391da70",
+  "object_sha256": "4e039fca6d235ab92108343241de9ed85be7ea774a7a92aaec02a85a2391da70"
+}

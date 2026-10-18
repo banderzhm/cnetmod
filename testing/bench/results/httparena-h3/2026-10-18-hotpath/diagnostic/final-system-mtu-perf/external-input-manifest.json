@@ -1,0 +1,36 @@
+[
+  {
+    "ceiling": 1472,
+    "external_directory": "/var/tmp/cnetmod-h3-system-perf-91b5cc8bd99c410585a9f598f920b767",
+    "binary_sha256": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+    "perf_data_sha256": "b215678a4401cffc037db58c601d2895b394149a7b1b67d38116d49b640f7b85",
+    "perf_data_bytes": 1818915,
+    "summary_sha256": "82f8e17adcbf8588b0f4d9446fde72dbb1e6ef9fabe8f856a6489f487d97a405",
+    "source_metadata_sha256": "2d43c86f04044e01a1ec43130e86dc13b6a3b269507e5272e4f1e5b5e5fce143",
+    "source_diff_sha256": "100fd1aebf87c080d2afba346e3799d74ae40f23d936aed4f0afe62fd8936d68",
+    "allocator_proof_sha256": "64e67f09d49418b52d34407157c70d34dc9750c28cd09440c19e8324909642c4",
+    "perf_record_exit_code": -2,
+    "namespace_cleanup": {
+      "returncode": 0,
+      "stdout": "cnetmod-current-perf-3d3a28aa43f9481ea47fa66c4808ae7f\n",
+      "stderr": ""
+    }
+  },
+  {
+    "ceiling": 4096,
+    "external_directory": "/var/tmp/cnetmod-h3-system-perf-7b4e3e7fa14c452091b92573e61e9855",
+    "binary_sha256": "5bf46aeeee227934742969972dfa3e4705d5fb87e66289c9109f41d89f353470",
+    "perf_data_sha256": "f1da7f8fbe3494d94a278799b7850a5a975374954742edf479ba6af681d66f37",
+    "perf_data_bytes": 1865187,
+    "summary_sha256": "ccff5fab4da5abf4d56bb8b2615d486ba3b4b0a16be1c2d32163074daa263e3a",
+    "source_metadata_sha256": "2d43c86f04044e01a1ec43130e86dc13b6a3b269507e5272e4f1e5b5e5fce143",
+    "source_diff_sha256": "100fd1aebf87c080d2afba346e3799d74ae40f23d936aed4f0afe62fd8936d68",
+    "allocator_proof_sha256": "64e67f09d49418b52d34407157c70d34dc9750c28cd09440c19e8324909642c4",
+    "perf_record_exit_code": -2,
+    "namespace_cleanup": {
+      "returncode": 0,
+      "stdout": "cnetmod-current-perf-9c0621160e624786b3f134e132de6da4\n",
+      "stderr": ""
+    }
+  }
+]

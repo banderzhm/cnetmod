@@ -1,0 +1,2 @@
+mold: fatal: --dependency-file: cannot open testing/tests/CMakeFiles/test_udp_batch.dir/link.d: Read-only file system
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)

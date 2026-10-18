@@ -1,0 +1,53 @@
+{
+  "old": {
+    "ctest": {
+      "stage": "old",
+      "returncode": 8,
+      "executed": 1,
+      "bad": [
+        "test_quic_loss_detection"
+      ]
+    },
+    "unit_targets": [
+      {
+        "target": "test_quic_loss_detection",
+        "unit_case_count": 27,
+        "failed_cases": [
+          {
+            "name": "loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery",
+            "assertion_failures": 31
+          },
+          {
+            "name": "quic_recovery_malformed_ack_keeps_owner_and_followup_ack_releases_it",
+            "assertion_failures": 9
+          }
+        ]
+      }
+    ]
+  },
+  "new": {
+    "ctest": {
+      "stage": "new",
+      "returncode": 0,
+      "executed": 3,
+      "bad": []
+    },
+    "unit_targets": [
+      {
+        "target": "test_quic_stream",
+        "unit_case_count": 17,
+        "failed_cases": []
+      },
+      {
+        "target": "test_quic_loss_detection",
+        "unit_case_count": 27,
+        "failed_cases": []
+      },
+      {
+        "target": "test_quic_congestion",
+        "unit_case_count": 20,
+        "failed_cases": []
+      }
+    ]
+  }
+}

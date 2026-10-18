@@ -1,0 +1,22 @@
+{
+  "server": "/var/tmp/cnetmod-h3-expired-weak-proof-final2/expired-released/h3_interop_server-4s",
+  "expected_expired": "true",
+  "weak_probes": [
+    {
+      "cid": "38a0f30c7ff9f080",
+      "checkpoint_ms": 100,
+      "expired": true,
+      "strong_count": 0
+    },
+    {
+      "cid": "38a0f30c7ff9f080",
+      "checkpoint_ms": 500,
+      "expired": true,
+      "strong_count": 0
+    }
+  ],
+  "destructor_cids": [
+    "38a0f30c7ff9f080"
+  ],
+  "scope": "same-layout external diagnostics; cold routing counters plus actual weak_ptr expiration, no forced collection"
+}

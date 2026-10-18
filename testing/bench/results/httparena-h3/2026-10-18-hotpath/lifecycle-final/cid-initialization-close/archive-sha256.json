@@ -1,0 +1,19 @@
+{
+  "cnetmod-h3-cid-failure-build.py": "2b530bff78fbaf4d840cbe3caad1dee415debad7af7944001546b39de63c471b",
+  "cnetmod-h3-cid-failure-controls-final-build.log": "6eb294c495e87209ddbaa75cd909a4f8bfb541f8b21dd10d26b767380b2ac639",
+  "cnetmod-h3-cid-failure-run.py": "5efeb16838193a1acbaf3690e06b0c7bf041ec790630d163052f77a2e8d930cd",
+  "cnetmod-h3-cid-failure-verified-negative.json": "2141cfd9ff8d3a75fa9ca83ba57bc49a8d0b10e0f073981eb3ad24474ee651aa",
+  "cnetmod-h3-cid-failure-verified-negative.log": "e80462eb646bbe0152ce81f7a070632667caafde7d5998c8c3e8c75617738ee2",
+  "cnetmod-h3-cid-failure-verified-positive.json": "74295da5243c4c0146d8628f511b2b1bea3e232d44e45c8772af00339ee48108",
+  "cnetmod-h3-cid-failure-verified-positive.log": "f403a7d3eb8f607be998124ecc9a7eabe78aed1372931d32321da3acaa220cba",
+  "cnetmod-h3-cid-failure-verified-run.sh": "1034d1f49695dab5d66a3d2f43e67831a4863d82ccac843c4e66524611d8f8bb",
+  "cnetmod-h3-cid-link-proof.py": "9514185464e0c2ddc2f5ed908eab9baaac3d5cd944b4cae7f8b4eda3dd010865",
+  "corrected-link-manifest.json": "de7fd97e0d723a2635cf62ebacc5ff09b6c1392a86e589981593889c84ef58b2",
+  "integrity.json": "edc3fbbc77c5dcf8fcabdd54cf0ec79b77afaa703d28afcf5faf8b8e6fe5fd1d",
+  "link-member-proof.json": "f1c589c3320c7dfb309d0af87db9755803af8b57063b504496d8b2a2991259b8",
+  "README.md": "08d795cf739726b3519951e0701a14319a5711b1877af5c27df2891640bafc4e",
+  "with-cid-close\\verified-link-command.json": "504394fb2d4187243781942ecb588f83dc2a43fe324d6e15ed7367e6f4f9b06a",
+  "with-cid-close\\verified-link-trace.log": "46fb4ab1a1b9eb8a9b8f181f67f3036ca67ce4d5ec68bbaab5bb0bdcdf59ad69",
+  "without-cid-close\\verified-link-command.json": "30ef4d2588de54ef4c96282c44f40e43b6fca2e6cafb02c5e4d402524f2ae00e",
+  "without-cid-close\\verified-link-trace.log": "77a67b0595c1f1dcde74c4a0aa64fe1718cbf4d4bfe8784fd5143f80bce11aef"
+}

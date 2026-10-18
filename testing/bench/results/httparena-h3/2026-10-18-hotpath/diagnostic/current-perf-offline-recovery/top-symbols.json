@@ -1,0 +1,705 @@
+{
+  "top": [
+    {
+      "percent": 5.4,
+      "symbol": "[k] _raw_spin_unlock_irqrestore",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 3.75,
+      "symbol": "[.] aes_gcm_enc_update_vaes_avx2",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 2.47,
+      "symbol": "[k] handle_softirqs",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 2.32,
+      "symbol": "[k] _raw_spin_unlock_irq",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 2.19,
+      "symbol": "[.] std::__1::__wrap_iter<std::byte*> std::__1::vector<std::byte, std::__1::allocator<std::byte> >::__insert_with_size[abi:nqe220108]<std::__1::_ClassicAlgPolicy, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*> >(std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, std::__1::__wrap_iter<std::byte const*>, long)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 2.07,
+      "symbol": "[k] __alloc_skb",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 2.07,
+      "symbol": "[.] operator new[](unsigned long)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 1.85,
+      "symbol": "[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 1.4,
+      "symbol": "[k] __ip_select_ident",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 1.27,
+      "symbol": "[k] _copy_from_iter",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 1.23,
+      "symbol": "[k] __udp_enqueue_schedule_skb",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 1.21,
+      "symbol": "[.] void std::__1::__tree_remove[abi:nqe220108]<std::__1::__tree_node_base<void*>*>(std::__1::__tree_node_base<void*>*, std::__1::__tree_node_base<void*>*)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 1.16,
+      "symbol": "[.] cnetmod::quic::quic_stream_scheduler@cnetmod.protocol.quic.send_pipeline::take()",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 1.14,
+      "symbol": "[k] skb_defer_free_flush",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 1.02,
+      "symbol": "[k] udp_sendmsg",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.98,
+      "symbol": "[k] __rcu_read_lock",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.97,
+      "symbol": "[.] __vdso_clock_gettime",
+      "dso": "[vdso]"
+    },
+    {
+      "percent": 0.92,
+      "symbol": "[k] _copy_from_user",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.9,
+      "symbol": "[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_and_send_packets() [clone .resume]",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.83,
+      "symbol": "[k] __ip_append_data",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.83,
+      "symbol": "[k] ip_finish_output2",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.78,
+      "symbol": "[.] aes_hw_encrypt",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.78,
+      "symbol": "[k] fib_table_lookup",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.77,
+      "symbol": "[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::apply_stream_write(unsigned long, std::__1::vector<std::byte, std::__1::allocator<std::byte> > const&, std::__1::shared_ptr<std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> > const> const&, bool)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.73,
+      "symbol": "[k] __rcu_read_unlock",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.71,
+      "symbol": "[.] pthread_mutex_lock",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.67,
+      "symbol": "[k] __pi_memset",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.67,
+      "symbol": "[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::insert_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.65,
+      "symbol": "[.] _mi_malloc_generic(mi_theap_s*, unsigned long, unsigned long, mi_page_s**)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.63,
+      "symbol": "[k] ____sys_sendmsg",
+      "dso": "[kernel.kallsyms]"
+    },
+    {
+      "percent": 0.63,
+      "symbol": "[.] cnetmod::http::v2::huffman_decode@cnetmod.protocol.http.v2.huffman(std::__1::span<std::byte const, 18446744073709551615ul>, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char> >&)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.63,
+      "symbol": "[.] cnetmod::quic::retransmittable_frame_storage@cnetmod.protocol.quic::push_back(cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.62,
+      "symbol": "[.] cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::recycle_sent_packet(cnetmod::quic::pn_space@cnetmod.protocol.quic, std::__1::__map_iterator<std::__1::__tree_iterator<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, std::__1::__tree_node<std::__1::__value_type<unsigned long, cnetmod::quic::quic_recovery_controller@cnetmod.protocol.quic::sent_packet>, void*>*, long> >)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.6,
+      "symbol": "[.] cnetmod::quic::quic_connection@cnetmod.protocol.quic::retire_stream(unsigned long)",
+      "dso": "arena_h3_server"
+    },
+    {
+      "percent": 0.6,
+      "symbol": "[k] do_softirq.part.0",
+      "dso": "[kernel.kallsyms]"
+    }
+  ],
+  "unknown": [
+    {
+      "percent": 0.28,
+      "symbol": "[.] 0x00000000000a0952",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.13,
+      "symbol": "[.] 0x0000000000176ed3",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.13,
+      "symbol": "[.] 0x0000000000002734",
+      "dso": "liburing.so.2.15"
+    },
+    {
+      "percent": 0.12,
+      "symbol": "[.] 0x0000000000176e84",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.08,
+      "symbol": "[.] 0x000000000009d3bc",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.07,
+      "symbol": "[.] 0x0000000000176e47",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.06,
+      "symbol": "[.] 0x0000000000176e00",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.06,
+      "symbol": "[.] 0x0000000000176e89",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.05,
+      "symbol": "[.] 0x0000000000055870",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.05,
+      "symbol": "[.] 0x0000000000176e80",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x0000000000055854",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x0000000000176400",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x0000000000176485",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x0000000000176e5e",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x0000000000176e93",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x00000000000935c1",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x0000000000093615",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x000000000009368e",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.04,
+      "symbol": "[.] 0x00000000000936b5",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000055690",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000556b7",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000175ca0",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000175f99",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000176459",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000176466",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000176470",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000176e68",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000176e8e",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000934ef",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000093536",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x000000000009356a",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000935c5",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x0000000000093636",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000936cc",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000936d1",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000936ec",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.02,
+      "symbol": "[.] 0x00000000000028e5",
+      "dso": "liburing.so.2.15"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055695",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000005569c",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000005569e",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055840",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055846",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055850",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000005585b",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000005585e",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055862",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055ac8",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055acc",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000055ad2",
+      "dso": "libc++.so.1.0"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009d37b",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009d380",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009d381",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009d3ad",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009d3d4",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000a0929",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175a09",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175a12",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175d88",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175f8e",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175f95",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175fa1",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175fa3",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175fae",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000175fc0",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176411",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176433",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176435",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176446",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000017645b",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176480",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000001764c0",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000017653e",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176e08",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176e52",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176e97",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176eae",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176eb3",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000176ed5",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000179180",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000001791ad",
+      "dso": "libc.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000004b21c",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000004b228",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000004b232",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000934d0",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000093549",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009356e",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009358a",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000093590",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000935af",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000935cd",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000935d6",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000935db",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000935ff",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009360d",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x000000000009361a",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000093685",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000936a4",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000936bf",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000936da",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000093713",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000093769",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000093787",
+      "dso": "libm.so.6"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x00000000000026f0",
+      "dso": "liburing.so.2.15"
+    },
+    {
+      "percent": 0.01,
+      "symbol": "[.] 0x0000000000002935",
+      "dso": "liburing.so.2.15"
+    }
+  ],
+  "unknown_percent_rounded_sum": 2.42,
+  "kernel_percent_rounded_sum": 55.98,
+  "all_row_count": 632,
+  "all_row_rounded_sum": 99.65
+}

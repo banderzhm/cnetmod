@@ -1,0 +1,36 @@
+{
+  "scope": "observer-enabled build1 plus node cache, before final locked snapshots and shutdown changes; uninstrumented diagnostic only",
+  "binary_sha256": "3178b52b161e686ff5fe39a1ad2f0b66e97ea26690b25f44c7532525b122b503",
+  "samples": [
+    {
+      "name": "initial",
+      "time": 1792314193.0653377,
+      "rss": 53227520,
+      "private": 50843648
+    },
+    {
+      "name": "round-1-idle-2s",
+      "time": 1792314196.0477912,
+      "rss": 190230528,
+      "private": 187764736
+    },
+    {
+      "name": "failure-immediate",
+      "time": 1792314198.1374693,
+      "rss": 207044608,
+      "private": 204578816
+    },
+    {
+      "name": "failure-idle-35s",
+      "time": 1792314233.138116,
+      "rss": 207044608,
+      "private": 204578816
+    }
+  ],
+  "rounds": [
+    {
+      "index": 1,
+      "requests": 200000
+    }
+  ]
+}

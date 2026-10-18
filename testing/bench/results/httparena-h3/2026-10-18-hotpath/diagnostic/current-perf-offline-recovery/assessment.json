@@ -1,0 +1,92 @@
+{
+  "scope": "Offline-only recovery: never starts a server, client or perf record.",
+  "original_runner_valid": false,
+  "original_summary_sha256": "b6b2d8291c6141092ab316dcccfc2a72f0c5c7428bd76783a984e585beb0f80b",
+  "original_error": "AssertionError('perf record failed; inspect perf-record.log')",
+  "original_perf_record_exitcode": null,
+  "exitcode_limitation": "Original runner asserted profiler.wait()==0 without persisting its nonzero value; the actual code cannot be recovered.",
+  "source_snapshot_head": "d0d920791a1d226711176df47148b5e98a2f8713",
+  "source_diff_sha256": "c5606ae3c0a0d0d07c7106c371a3385dc41de2a3c7ce6e3d4edeef48d0845e41",
+  "source_input_count": 1684,
+  "current_source_mismatches": [],
+  "production_source_mismatches": [],
+  "binary_sha256": "05fe27108dd833f86493aa2d00eefe7efef9df47805be198ef3eacd09042c479",
+  "binary_matches_expected": true,
+  "data_sha256": "e33feb3d3bc5041f110346967c7dd51015e7831a9fad453c810e3f27b689b155",
+  "data_bytes": 1990571,
+  "captured_samples": 8452,
+  "perf_report": {
+    "header": {
+      "command": [
+        "/usr/sbin/perf",
+        "report",
+        "--stdio",
+        "--percent-limit",
+        ".5",
+        "--sort",
+        "symbol,dso",
+        "-i",
+        "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c/static-perf.data",
+        "--header-only"
+      ],
+      "returncode": 0
+    },
+    "self": {
+      "command": [
+        "/usr/sbin/perf",
+        "report",
+        "--stdio",
+        "--percent-limit",
+        ".5",
+        "--sort",
+        "symbol,dso",
+        "-i",
+        "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c/static-perf.data",
+        "--no-children",
+        "-g",
+        "none"
+      ],
+      "returncode": 0
+    },
+    "stacks": {
+      "command": [
+        "/usr/sbin/perf",
+        "report",
+        "--stdio",
+        "--percent-limit",
+        ".5",
+        "--sort",
+        "symbol,dso",
+        "-i",
+        "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c/static-perf.data",
+        "-g",
+        "graph,0.5,caller"
+      ],
+      "returncode": 0
+    }
+  },
+  "workload": {
+    "counts_valid": true,
+    "total": 1686795,
+    "started": 1690891,
+    "done": 1686795,
+    "succeeded": 1686795,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0,
+    "status_2xx": 1686856,
+    "header_completion_delta": 61,
+    "printed_rps": 337359.0,
+    "elapsed_seconds": 5.67,
+    "completed_per_elapsed_second": 297494.708994709,
+    "server_cpu_seconds": 88.86,
+    "cpu_microseconds_per_completed": 52.67978622179933
+  },
+  "limitations": [
+    "Original valid=false remains unchanged; this is separately assessed offline evidence.",
+    "No original profiler exit code is invented.",
+    "Single perturbed diagnostic run, not a performance acceptance or ranking.",
+    "Frame-pointer call graphs can truncate optimized frames; self percentages are not exact allocation attribution."
+  ],
+  "usable_for_qualified_cpu_diagnosis": true
+}

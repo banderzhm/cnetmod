@@ -1,0 +1,4 @@
+[2026-10-18 10:56:00.915] [info] [134695200940480] [h3_interop_server.cpp:325] HTTP/3 interop listener started on UDP 52334 with 2 workers
+[2026-10-18 10:56:04.103] [warn] [134695161149120] [http3_server.cpp:43] weak_release cid=8c2e17b024cb399a checkpoint_ms=100 expired=false strong_count=1
+[2026-10-18 10:56:04.503] [warn] [134695161149120] [http3_server.cpp:46] weak_release cid=8c2e17b024cb399a checkpoint_ms=500 expired=false strong_count=1
+[2026-10-18 10:56:34.003] [warn] [134695161149120] [quic_connection.cpp:1274] weak_connection_destroy cid=8c2e17b024cb399a

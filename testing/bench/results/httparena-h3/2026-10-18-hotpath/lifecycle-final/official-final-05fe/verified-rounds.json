@@ -1,0 +1,182 @@
+[
+  {
+    "log": "agensio-official-h3-baseline-h3.log",
+    "round": 1,
+    "done": 34049728,
+    "succeeded": 34049728,
+    "status_2xx": 34049728,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "agensio-official-h3-baseline-h3.log",
+    "round": 2,
+    "done": 34282560,
+    "succeeded": 34282560,
+    "status_2xx": 34282560,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "agensio-official-h3-baseline-h3.log",
+    "round": 3,
+    "done": 33695488,
+    "succeeded": 33695488,
+    "status_2xx": 33695488,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "agensio-official-h3-static-h3.log",
+    "round": 1,
+    "done": 5019248,
+    "succeeded": 5019248,
+    "status_2xx": 5020392,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "agensio-official-h3-static-h3.log",
+    "round": 2,
+    "done": 4863016,
+    "succeeded": 4863016,
+    "status_2xx": 4864142,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "agensio-official-h3-static-h3.log",
+    "round": 3,
+    "done": 4526645,
+    "succeeded": 4526645,
+    "status_2xx": 4527817,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "cnetmod-official-optimized-baseline-h3.log",
+    "round": 1,
+    "done": 16341446,
+    "succeeded": 16341446,
+    "status_2xx": 16341446,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "cnetmod-official-optimized-baseline-h3.log",
+    "round": 2,
+    "done": 16119124,
+    "succeeded": 16119124,
+    "status_2xx": 16119124,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "cnetmod-official-optimized-baseline-h3.log",
+    "round": 3,
+    "done": 14780392,
+    "succeeded": 14780392,
+    "status_2xx": 14780392,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "cnetmod-official-static-static-h3.log",
+    "round": 1,
+    "done": 1576303,
+    "succeeded": 1576303,
+    "status_2xx": 1576362,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "cnetmod-official-static-static-h3.log",
+    "round": 2,
+    "done": 1619066,
+    "succeeded": 1619066,
+    "status_2xx": 1619121,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "cnetmod-official-static-static-h3.log",
+    "round": 3,
+    "done": 1550814,
+    "succeeded": 1550814,
+    "status_2xx": 1550877,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "genhttp-ioxide-official-h3-baseline-h3.log",
+    "round": 1,
+    "done": 6065892,
+    "succeeded": 6065892,
+    "status_2xx": 6065995,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "genhttp-ioxide-official-h3-baseline-h3.log",
+    "round": 2,
+    "done": 7468337,
+    "succeeded": 7468337,
+    "status_2xx": 7468531,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "genhttp-ioxide-official-h3-baseline-h3.log",
+    "round": 3,
+    "done": 7592691,
+    "succeeded": 7592691,
+    "status_2xx": 7592799,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "genhttp-ioxide-official-h3-static-h3.log",
+    "round": 1,
+    "done": 950525,
+    "succeeded": 950525,
+    "status_2xx": 953324,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "genhttp-ioxide-official-h3-static-h3.log",
+    "round": 2,
+    "done": 1117587,
+    "succeeded": 1117587,
+    "status_2xx": 1120803,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  },
+  {
+    "log": "genhttp-ioxide-official-h3-static-h3.log",
+    "round": 3,
+    "done": 1122197,
+    "succeeded": 1122197,
+    "status_2xx": 1124916,
+    "failed": 0,
+    "errored": 0,
+    "timeout": 0
+  }
+]

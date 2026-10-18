@@ -1,0 +1,12 @@
+{
+  "scope": "external only; not applied/built/tested",
+  "proposal_base": "C:\\Users\\25007\\.codex\\tmp\\cnetmod-h3-sync-state-proposal.patch",
+  "proposal_base_sha256": "bf880d17efde0561e798310debe4fc8d9ddd88cadd15a9ee11103ca825227a50",
+  "output_patch_sha256": "56bb8c089d1431c4189e13624ec978c61374d36fbdbb24ddd4ed7ce28395d5f3",
+  "inputs": {
+    "src/protocol/quic/quic_connection.cpp": "fe3e3c5299668744963587ed049058dd95d839535aef2c079bfb5fae4042bffc",
+    "src/protocol/quic/quic_connection.cppm": "0c9f1973b4d260661bac53e2ead5040dd5a49606808e423fa9c354ef711f0962",
+    "src/protocol/quic/quic_stream.cpp": "4c7dcae83eeb427e6e3dcfec9a9d8ab20e39acb0747cc300ab1eacdedf2b0923",
+    "src/protocol/quic/quic_stream.cppm": "f58cf432cec88669481a768c8a04d80728675fd2c19915015620512262a37234"
+  }
+}

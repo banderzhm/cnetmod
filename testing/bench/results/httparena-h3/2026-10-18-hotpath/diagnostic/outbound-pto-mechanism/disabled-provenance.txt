@@ -1,0 +1,2 @@
+Same current module layout and libraries. Only setter discards observer instead of installing it. New 1200ms fixture object.
+ef0c15b74911f68efa315e87e5f6de55a3df757fe13391ed63d0e494e634e1bd

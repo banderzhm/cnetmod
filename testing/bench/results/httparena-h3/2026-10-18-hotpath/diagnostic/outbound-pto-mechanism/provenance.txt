@@ -1,0 +1,7 @@
+Mechanism test, not an old-commit comparison.
+The disabled binary uses the same module layout and libraries, but its observer setter discards the callback. It retains the old inbound scheduling calls.
+The enabled binary SHA256 is 5cbf92b699235103229d7ce2e33118fff1cd21c2325705d2444b6671c2c63a65.
+The disabled binary SHA256 is ef0c15b74911f68efa315e87e5f6de55a3df757fe13391ed63d0e494e634e1bd.
+The delayed response waits 1200ms; idle timeout is 3000ms; response budget is 2000ms. Disabled times out; enabled 1/2-worker restart cases recover with no client ingress while gated.
+The earlier old.json uses a 200ms response and different old binary: its PTO passes because a residual handshake timer wakes the listener, while its CLOSE regression fails with active=2. Do not treat that run as the final PTO negative control.
+These results precede the final shutdown and lock-consistent timer publication changes.

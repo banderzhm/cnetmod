@@ -1,0 +1,170 @@
+[
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 22,
+    "actual_line": 22,
+    "old_lines": 6,
+    "new_lines": 10
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 48,
+    "actual_line": 48,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 66,
+    "actual_line": 66,
+    "old_lines": 6,
+    "new_lines": 10
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 86,
+    "actual_line": 86,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 108,
+    "actual_line": 108,
+    "old_lines": 6,
+    "new_lines": 10
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 131,
+    "actual_line": 131,
+    "old_lines": 14,
+    "new_lines": 13
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cppm",
+    "expected_line": 164,
+    "actual_line": 164,
+    "old_lines": 6,
+    "new_lines": 10
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 9,
+    "actual_line": 9,
+    "old_lines": 8,
+    "new_lines": 6
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 39,
+    "actual_line": 39,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 54,
+    "actual_line": 54,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 65,
+    "actual_line": 65,
+    "old_lines": 6,
+    "new_lines": 18
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 148,
+    "actual_line": 148,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 172,
+    "actual_line": 172,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 183,
+    "actual_line": 183,
+    "old_lines": 6,
+    "new_lines": 18
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 260,
+    "actual_line": 260,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 271,
+    "actual_line": 271,
+    "old_lines": 6,
+    "new_lines": 18
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 341,
+    "actual_line": 341,
+    "old_lines": 7,
+    "new_lines": 7
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 357,
+    "actual_line": 357,
+    "old_lines": 10,
+    "new_lines": 10
+  },
+  {
+    "file": "src/protocol/quic/congestion_control.cpp",
+    "expected_line": 430,
+    "actual_line": 430,
+    "old_lines": 6,
+    "new_lines": 15
+  },
+  {
+    "file": "src/protocol/quic/quic_recovery.cppm",
+    "expected_line": 138,
+    "actual_line": 138,
+    "old_lines": 6,
+    "new_lines": 8
+  },
+  {
+    "file": "src/protocol/quic/quic_recovery.cpp",
+    "expected_line": 343,
+    "actual_line": 343,
+    "old_lines": 6,
+    "new_lines": 11
+  },
+  {
+    "file": "src/protocol/quic/quic_connection.cpp",
+    "expected_line": 2957,
+    "actual_line": 2967,
+    "old_lines": 8,
+    "new_lines": 11
+  },
+  {
+    "file": "testing/tests/test_quic_congestion.cpp",
+    "expected_line": 1,
+    "actual_line": 1,
+    "old_lines": 6,
+    "new_lines": 6
+  },
+  {
+    "file": "testing/tests/test_quic_congestion.cpp",
+    "expected_line": 326,
+    "actual_line": 326,
+    "old_lines": 4,
+    "new_lines": 172
+  }
+]

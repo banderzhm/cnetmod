@@ -1,0 +1,85 @@
+{
+  "scope": "qlog diagnostic; instrumentation perturbs timing; no RPS ranking",
+  "candidate": "/var/tmp/cnetmod-h3-close-diagnostic-latest-native-r9c/arena_h3_server",
+  "sha256": "8ac72cfa883816cd97a6d4b68688461ee8f158fc9f4fbab3412ac9f5debdd99a",
+  "limits": {
+    "total_bytes": 8589934592,
+    "each_client_file_bytes": 67108864,
+    "rounds": 12,
+    "timeout_seconds": 70
+  },
+  "rounds": [
+    {
+      "index": 1,
+      "exit_code": 0,
+      "diagnostic_complete": true,
+      "http_complete": true,
+      "transport_complete": true,
+      "request_streams": 200000,
+      "completed_streams": 200000,
+      "stop_reason": null,
+      "passed": true
+    },
+    {
+      "index": 2,
+      "exit_code": 0,
+      "diagnostic_complete": true,
+      "http_complete": true,
+      "transport_complete": true,
+      "request_streams": 200000,
+      "completed_streams": 200000,
+      "stop_reason": null,
+      "passed": true
+    },
+    {
+      "index": 3,
+      "exit_code": 0,
+      "diagnostic_complete": true,
+      "http_complete": true,
+      "transport_complete": true,
+      "request_streams": 200000,
+      "completed_streams": 200000,
+      "stop_reason": null,
+      "passed": true
+    },
+    {
+      "index": 4,
+      "exit_code": 0,
+      "diagnostic_complete": true,
+      "http_complete": true,
+      "transport_complete": true,
+      "request_streams": 200000,
+      "completed_streams": 200000,
+      "stop_reason": null,
+      "passed": true
+    },
+    {
+      "index": 5,
+      "exit_code": 0,
+      "diagnostic_complete": true,
+      "http_complete": true,
+      "transport_complete": true,
+      "request_streams": 200000,
+      "completed_streams": 200000,
+      "stop_reason": null,
+      "passed": true
+    },
+    {
+      "index": 6,
+      "exit_code": 0,
+      "diagnostic_complete": true,
+      "http_complete": false,
+      "transport_complete": false,
+      "request_streams": 197013,
+      "completed_streams": 197013,
+      "stop_reason": null,
+      "passed": false
+    }
+  ],
+  "valid": false,
+  "loadgen_sha256": "9a35cefa52e809a32f1898d65575a2cbbf54555031604830b852e2f6b5a4484f",
+  "netns_anchor": "cnetmod-h3-qlog-0578225f3b154de899376961c761b54a",
+  "owned_server_pid": 666,
+  "failure": "RuntimeError('round6 failed; preserve raw diagnostics')",
+  "retained_bytes": 2073089984
+}

@@ -1,0 +1,4 @@
+{"case": "handshake_confirmation", "client_application_pto_count": 0, "client_packets_blocked_before_confirmation": 0, "confirmed_after_tls_complete": false, "decode_errors": [], "done_packets": [], "dropped_done": false, "dropped_request": false, "error": "AssertionError('TLS completed but HANDSHAKE_DONE never confirmed handshake')", "mode": "observer", "request_packets": [], "server_stderr": "[2026-10-18 10:48:26.195] [error] [127906264662464] [quic_retire_stream_server.cpp:57] retire-stream fixture: expected stream zero\n", "server_stdout": "", "socket_errors": [], "status": "failed", "tls_completed": true}
+Future exception was never retrieved
+future: <Future finished exception=AssertionError("ConnectionTerminated(error_code=<QuicErrorCode.NO_ERROR: 0>, frame_type=None, reason_phrase='')")>
+AssertionError: ConnectionTerminated(error_code=<QuicErrorCode.NO_ERROR: 0>, frame_type=None, reason_phrase='')

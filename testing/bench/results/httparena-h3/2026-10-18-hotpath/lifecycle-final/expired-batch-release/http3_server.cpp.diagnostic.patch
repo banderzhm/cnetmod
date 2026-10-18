@@ -1,0 +1,33 @@
+--- src/protocol/http/v3/http3_server.cpp
++++ diagnostic/http3_server.cpp
+@@ -34,6 +34,19 @@
+ namespace cnetmod::http::v3 {
+ 
+ namespace detail {
++
++    // Diagnostic-only: owns a weak reference and an identifier, never the peer.
++    auto weak_release_probe(io_context& context,
++        std::weak_ptr<quic::quic_connection> connection, std::string cid) -> task<void>
++    {
++        (void)co_await async_timer_wait(context, std::chrono::milliseconds{100});
++        logger::warn{"weak_release cid={} checkpoint_ms=100 expired={} strong_count={}",
++            cid, connection.expired(), connection.use_count()};
++        (void)co_await async_timer_wait(context, std::chrono::milliseconds{400});
++        logger::warn{"weak_release cid={} checkpoint_ms=500 expired={} strong_count={}",
++            cid, connection.expired(), connection.use_count()};
++    }
++
+ 
+     class retry_token_manager
+     {
+@@ -2065,6 +2078,10 @@
+                 // further peer datagram. Reconcile ownership here as well as
+                 // on receive, otherwise CID routes retain timed-out peers.
+                 refresh_connection_routes(connection);
++                if (connection->is_closed())
++                    spawn(context_, detail::weak_release_probe(context_,
++                        std::weak_ptr<quic::quic_connection>{connection},
++                        connection->local_cid() ? connection->local_cid()->to_string() : std::string{}));
+             }
+ 
+             // Release the last expired batch before sleeping. The routes

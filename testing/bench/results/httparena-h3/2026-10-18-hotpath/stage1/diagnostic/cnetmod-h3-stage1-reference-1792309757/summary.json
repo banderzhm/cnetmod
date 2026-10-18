@@ -1,0 +1,106 @@
+{
+  "binary_sha256": "285cf43c4e85286cab002a881c6ab95b73c86234a4f9450a22c2fb07960076bf",
+  "cores": 32,
+  "workers": 32,
+  "client_cpus": "16-31",
+  "mode": "diagnostic, native identical binary in same isolated loopback; not official ranking",
+  "measurements": [
+    {
+      "name": "baseline-reference",
+      "command": [
+        "nsenter",
+        "-t",
+        "1160",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "https://localhost:8443/baseline2?a=1&b=1",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 9554078,
+      "elapsed": 5.67,
+      "valid_rps": 1685022.5749559083,
+      "server_cpu_seconds": 106.37,
+      "before": {
+        "rss": 42618880,
+        "pss": 40348672,
+        "private": 40210432
+      },
+      "after_load": {
+        "rss": 162521088,
+        "pss": 160253952,
+        "private": 160112640
+      },
+      "after_idle_2s": {
+        "rss": 162521088,
+        "pss": 160253952,
+        "private": 160112640
+      },
+      "after_idle_10s": {
+        "rss": 162521088,
+        "pss": 160260096,
+        "private": 160112640
+      }
+    },
+    {
+      "name": "static-reference",
+      "command": [
+        "nsenter",
+        "-t",
+        "1160",
+        "-n",
+        "taskset",
+        "-c",
+        "16-31",
+        "/var/tmp/cnetmod-h3-loadgen169/h2load",
+        "--alpn-list=h3",
+        "-i",
+        "/var/tmp/cnetmod-h3-lifecycle-e1c6da60-1792307675/arena/requests/static-h2-uris.txt",
+        "-H",
+        "Accept-Encoding: br;q=1, gzip;q=0.8",
+        "-c",
+        "64",
+        "-m",
+        "64",
+        "-t",
+        "64",
+        "-D",
+        "5s"
+      ],
+      "requests_2xx": 1970184,
+      "elapsed": 5.67,
+      "valid_rps": 347475.1322751323,
+      "server_cpu_seconds": 97.13,
+      "before": {
+        "rss": 50778112,
+        "pss": 48637952,
+        "private": 48508928
+      },
+      "after_load": {
+        "rss": 183570432,
+        "pss": 181370880,
+        "private": 181231616
+      },
+      "after_idle_2s": {
+        "rss": 183570432,
+        "pss": 181370880,
+        "private": 181231616
+      },
+      "after_idle_10s": {
+        "rss": 183570432,
+        "pss": 181367808,
+        "private": 181231616
+      }
+    }
+  ]
+}

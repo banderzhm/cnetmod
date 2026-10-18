@@ -1,0 +1,17 @@
+{
+  "scope": "Small offline evidence; original runner valid=false remains unchanged. No binary/PCM/perf.data copied.",
+  "external_run": "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c",
+  "binary": {
+    "path": "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c/arena_h3_server",
+    "sha256": "05fe27108dd833f86493aa2d00eefe7efef9df47805be198ef3eacd09042c479"
+  },
+  "perf_data": {
+    "path": "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c/static-perf.data",
+    "sha256": "e33feb3d3bc5041f110346967c7dd51015e7831a9fad453c810e3f27b689b155",
+    "bytes": 1990571
+  },
+  "stacks_uncompressed": {
+    "path": "/var/tmp/cnetmod-h3-current-perf-be6beaa74a4e423c8c78ff0b8f4fe39c/offline-recovery/static-perf-stacks.txt",
+    "sha256": "132edf274f5025f8b36ccb370f65b5d45f853416dc50ac736ca6dd148a5cfaa9"
+  }
+}
