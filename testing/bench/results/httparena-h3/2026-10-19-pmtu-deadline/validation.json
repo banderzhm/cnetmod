@@ -1,0 +1,15 @@
+{
+  "branch": "fix/http3-arena-performance",
+  "linux_tests": 41,
+  "windows_tests": 42,
+  "skipped": 0,
+  "old_controls_expected_failures": 2,
+  "new_controls_passed": 10,
+  "windows_allocator_off_executables": 26,
+  "source_hashes_unchanged": true,
+  "scope": "Preserve existing PMTU deadlines only; performance target not accepted by these regressions.",
+  "final_parser_format_only_rechecks": {
+    "linux": 2,
+    "windows": 2
+  }
+}

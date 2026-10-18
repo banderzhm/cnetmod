@@ -941,7 +941,8 @@ struct quic_connection::quic_connection_impl
         {
             if (path->validated && !path->locally_abandoned && !path->peer_abandoned &&
                 path->discovered_max_datagram_payload < path_mtu_probe_limit() &&
-                !path->path_mtu_probe_target && !path->path_mtu_probe_in_flight)
+                !path->path_mtu_probe_target && !path->path_mtu_probe_in_flight &&
+                !path->next_path_mtu_probe_at)
             {
                 path->next_path_mtu_probe_at = now +
                     config.path_mtu_initial_probe_delay;

@@ -1,0 +1,46 @@
+[0/2] Re-checking globbed directories...
+[1/75] Generating CXX dyndep file testing/tests/CMakeFiles/test_concurrent_containers.dir/CXX.dd
+[2/73] Generating CXX dyndep file testing/tests/CMakeFiles/test_deadline.dir/CXX.dd
+[3/71] Generating CXX dyndep file testing/tests/CMakeFiles/test_task_group.dir/CXX.dd
+[4/69] Generating CXX dyndep file testing/tests/CMakeFiles/test_task.dir/CXX.dd
+[5/67] Generating CXX dyndep file 'CMakeFiles/cnetmod_runtime@synth_0.dir/CXX.dd'
+[6/67] Generating CXX dyndep file testing/tests/CMakeFiles/test_wait_group.dir/CXX.dd
+[7/65] Generating CXX dyndep file testing/tests/CMakeFiles/test_udp_batch.dir/CXX.dd
+[8/63] Generating CXX dyndep file 'CMakeFiles/cnetmod_quic@synth_0.dir/CXX.dd'
+[9/63] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_varint.dir/CXX.dd
+[10/62] Generating CXX dyndep file 'CMakeFiles/cnetmod_http@synth_0.dir/CXX.dd'
+[11/62] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_frame.dir/CXX.dd
+[12/61] Linking CXX executable testing/tests/test_quic_varint
+[13/61] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_packet.dir/CXX.dd
+[14/60] Linking CXX executable testing/tests/test_quic_frame
+[15/60] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_stream.dir/CXX.dd
+[16/59] Linking CXX executable testing/tests/test_quic_packet
+[17/59] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_loss_detection.dir/CXX.dd
+[18/58] Linking CXX executable testing/tests/test_quic_loss_detection
+[19/58] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_congestion.dir/CXX.dd
+[20/57] Linking CXX executable testing/tests/test_quic_congestion
+[21/57] Generating CXX dyndep file testing/tests/CMakeFiles/test_quic_early_data.dir/CXX.dd
+[22/56] Linking CXX executable testing/tests/test_quic_early_data
+[23/56] Generating CXX dyndep file testing/tests/CMakeFiles/test_http3_qpack.dir/CXX.dd
+[24/55] Linking CXX executable testing/tests/test_quic_stream
+[25/55] Generating CXX dyndep file testing/tests/CMakeFiles/test_http3_frame.dir/CXX.dd
+[26/54] Linking CXX executable testing/tests/test_http3_qpack
+[27/54] Generating CXX dyndep file testing/bench/CMakeFiles/arena_h3_server.dir/CXX.dd
+[28/53] Linking CXX executable testing/tests/test_http3_frame
+[29/53] Generating CXX dyndep file testing/http3/CMakeFiles/h3_interop_server.dir/CXX.dd
+[30/52] Linking CXX executable testing/bench/arena_h3_server
+[31/52] Generating CXX dyndep file testing/http3/CMakeFiles/h3_interop_client.dir/CXX.dd
+[32/51] Linking CXX executable bin/h3_interop_server
+[33/51] Generating CXX dyndep file testing/http3/CMakeFiles/quic_datagram_cc_server.dir/CXX.dd
+[34/50] Linking CXX executable bin/h3_interop_client
+[35/50] Generating CXX dyndep file testing/http3/CMakeFiles/quic_pmtu_cc_server.dir/CXX.dd
+[36/49] Linking CXX executable bin/quic_datagram_cc_server
+[37/49] Generating CXX dyndep file testing/http3/CMakeFiles/quic_retire_stream_server.dir/CXX.dd
+[38/48] Linking CXX executable bin/quic_pmtu_cc_server
+[39/48] Generating CXX dyndep file testing/http3/CMakeFiles/http3_e2e_server.dir/CXX.dd
+[40/47] Linking CXX executable bin/quic_retire_stream_server
+[41/47] Generating CXX dyndep file testing/http3/CMakeFiles/http_client_http3_e2e.dir/CXX.dd
+[42/46] Linking CXX executable testing/http3/http3_e2e_server
+[43/46] Generating CXX dyndep file testing/http3/CMakeFiles/http3_migration_e2e.dir/CXX.dd
+[44/45] Linking CXX executable testing/http3/http_client_http3_e2e
+[45/45] Linking CXX executable testing/http3/http3_migration_e2e
