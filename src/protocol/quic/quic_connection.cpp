@@ -4391,10 +4391,14 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
         }
         return packet_storage;
     }
-    if (!pto_probe && (!retransmittable_frames.empty() || contains_path_mtu_probe) &&
+    if (!pto_probe &&
+        (!retransmittable_frames.empty() || contains_unreliable_datagram ||
+            contains_path_mtu_probe) &&
         !contains_connection_close &&
         !path.recovery.can_send_datagram(estimated_packet_size))
     {
+        // DATAGRAM frames were consumed above. Drop them under congestion
+        // instead of transmitting beyond cwnd (RFC 9221 section 5.4).
 
         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
         {

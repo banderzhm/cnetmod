@@ -1,0 +1,29 @@
+{
+  "status": "failed",
+  "expect": "pass",
+  "scenario": "admission",
+  "server_sha256": "801c2a485d1966f59b63851c8b2ab79368d7e10c05464b6077e213ed2ff6556c",
+  "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097",
+  "aioquic_version": "1.7.0",
+  "peer_aead": "unmodified installed aioquic",
+  "command": [
+    "/var/tmp/cnetmod-datagram-cc-51d443d2/quic_datagram_cc_server.fixed-final",
+    "--port",
+    "56125",
+    "--cert",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/post-new-admission-09/cert.pem",
+    "--key",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/post-new-admission-09/key.pem",
+    "--listening-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/post-new-admission-09/listening.txt",
+    "--ready-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/post-new-admission-09/ready.txt",
+    "--burst-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/post-new-admission-09/burst.json",
+    "--result-report",
+    "/mnt/c/Users/25007/.codex/tmp/datagram-cc-review-51d443d2/post-new-admission-09/failure.txt"
+  ],
+  "proxy_errors": [],
+  "error": "AssertionError('failed: invalid setup: elapsed_us=62 first_deadline_us=1024003 sampled_us=6 first_is_due=false\\n')",
+  "server_exit_code": -15
+}

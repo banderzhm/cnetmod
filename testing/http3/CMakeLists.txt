@@ -23,6 +23,13 @@ if(CNETMOD_HAS_QUIC)
             RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
     endif()
 
+    add_executable(quic_datagram_cc_server quic_datagram_cc_server.cpp)
+    target_link_libraries(quic_datagram_cc_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_datagram_cc_server)
+    set_property(TARGET quic_datagram_cc_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_datagram_cc_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
     add_executable(quic_pmtu_cc_server quic_pmtu_cc_server.cpp)
     target_link_libraries(quic_pmtu_cc_server PRIVATE cnetmod_core)
     cnetmod_deploy_mimalloc_runtime(quic_pmtu_cc_server)
@@ -64,6 +71,13 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
+    foreach(datagram_cc_scenario IN ITEMS admission pto)
+        add_test(NAME quic_datagram_cc_${datagram_cc_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_datagram_cc.py"
+                "$<TARGET_FILE:quic_datagram_cc_server>" --scenario ${datagram_cc_scenario})
+        set_tests_properties(quic_datagram_cc_${datagram_cc_scenario} PROPERTIES
+            LABELS "http3;quic;datagram;recovery" TIMEOUT 45 SKIP_RETURN_CODE 77)
+    endforeach()
     # Explicit process-local cryptography AEAD adapter; this is not stock aioquic interop.
     add_test(NAME quic_pmtu_cc_large_response_after_loss
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_cc.py"
@@ -296,6 +310,7 @@ if(CNETMOD_HAS_QUIC)
             h3_interop_server
             quic_retire_stream_server
             quic_pmtu_cc_server
+            quic_datagram_cc_server
             h3_interop_client
             http3_e2e_server
             http_client_http3_e2e
