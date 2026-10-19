@@ -138,25 +138,31 @@ auto quic_stream::close_both() -> task<void>
 auto quic_stream::receive(mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
+    co_return apply_receive_state(buf);
+}
+
+auto quic_stream::apply_receive_state(mutable_buffer buf)
+    -> std::expected<std::size_t, std::error_code>
+{
     auto& impl = *impl_;
 
     if (impl.receive_abandoned_)
-        co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+        return std::unexpected(std::make_error_code(std::errc::operation_canceled));
 
     if (impl.state_ == stream_state::closed)
     {
-        co_return std::size_t{0};
+        return std::size_t{0};
     }
 
     if (impl.receive_buffer_.empty())
     {
         if (impl.state_ == stream_state::half_closed_remote)
         {
-            co_return std::size_t{0};
+            return std::size_t{0};
         }
 
         // Need to wait for more data
-        co_return std::unexpected(std::make_error_code(std::errc::operation_would_block));
+        return std::unexpected(std::make_error_code(std::errc::operation_would_block));
     }
 
     std::size_t total_copied = 0;
@@ -211,10 +217,10 @@ auto quic_stream::receive(mutable_buffer buf)
     // operation_would_block to await the missing contiguous range.
     if (total_copied == 0 && impl.state_ != stream_state::closed &&
         impl.state_ != stream_state::half_closed_remote)
-        co_return std::unexpected(
+        return std::unexpected(
             std::make_error_code(std::errc::operation_would_block));
 
-    co_return total_copied;
+    return total_copied;
 }
 
 void quic_stream::update_send_limit(std::uint64_t maximum) noexcept

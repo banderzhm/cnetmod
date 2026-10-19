@@ -449,3 +449,82 @@ TEST(posted_resource_cleanup_separates_dispatch_from_discard)
 }
 
 RUN_TESTS();
+
+TEST(quic_stream_receive_remains_lazy_and_consumes_partial_fin)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.init();
+    const std::array payload{std::byte{'a'}, std::byte{'b'}, std::byte{'c'}};
+    ASSERT_TRUE(stream.push_received(0, payload, true).has_value());
+    std::array<std::byte, 2> output{};
+    {
+        auto dropped = stream.receive(cnetmod::buffer(output));
+        (void)dropped;
+        ASSERT_EQ(stream.bytes_consumed(), 0U);
+    }
+    ASSERT_EQ(stream.bytes_consumed(), 0U);
+    auto pending = stream.receive(cnetmod::buffer(output));
+    ASSERT_EQ(stream.bytes_consumed(), 0U);
+    const auto first = cnetmod::sync_wait(std::move(pending));
+    ASSERT_TRUE(first.has_value());
+    if (first) ASSERT_EQ(*first, 2U);
+    ASSERT_TRUE(output[0] == std::byte{'a'} && output[1] == std::byte{'b'});
+    ASSERT_EQ(stream.bytes_consumed(), 2U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::open);
+    const auto last = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(last.has_value());
+    if (last) ASSERT_EQ(*last, 1U);
+    ASSERT_TRUE(output[0] == std::byte{'c'});
+    ASSERT_EQ(stream.bytes_consumed(), 3U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::half_closed_remote);
+    const auto eof = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(eof.has_value());
+    if (eof) ASSERT_EQ(*eof, 0U);
+}
+
+TEST(quic_stream_pending_receive_observes_later_abandonment)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.init();
+    const std::array payload{std::byte{'a'}};
+    ASSERT_TRUE(stream.push_received(0, payload, false).has_value());
+    std::array<std::byte, 1> output{};
+    auto pending = stream.receive(cnetmod::buffer(output));
+    stream.abandon_receive();
+    const auto received = cnetmod::sync_wait(std::move(pending));
+    ASSERT_FALSE(received.has_value());
+    if (!received)
+        ASSERT_EQ(received.error(), std::make_error_code(std::errc::operation_canceled));
+    ASSERT_EQ(stream.bytes_consumed(), 0U);
+    ASSERT_TRUE(output[0] == std::byte{});
+}
+
+TEST(quic_stream_receive_gap_would_block_until_contiguous_data_arrives)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.init();
+    const std::array later{std::byte{'c'}, std::byte{'d'}};
+    ASSERT_TRUE(stream.push_received(2, later, true).has_value());
+    std::array<std::byte, 4> output{};
+    const auto blocked = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_FALSE(blocked.has_value());
+    if (!blocked)
+        ASSERT_EQ(blocked.error(), std::make_error_code(std::errc::operation_would_block));
+    ASSERT_EQ(stream.bytes_consumed(), 0U);
+    ASSERT_TRUE(std::ranges::all_of(output, [](std::byte value) { return value == std::byte{}; }));
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::open);
+
+    const std::array first{std::byte{'a'}, std::byte{'b'}};
+    ASSERT_TRUE(stream.push_received(0, first, false).has_value());
+    const auto received = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(received.has_value());
+    if (received) ASSERT_EQ(*received, 4U);
+    const std::array expected{std::byte{'a'}, std::byte{'b'}, std::byte{'c'}, std::byte{'d'}};
+    ASSERT_TRUE(output == expected);
+    ASSERT_EQ(stream.bytes_consumed(), 4U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::half_closed_remote);
+    const auto eof = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(eof.has_value());
+    if (eof) ASSERT_EQ(*eof, 0U);
+    ASSERT_EQ(stream.bytes_consumed(), 4U);
+}

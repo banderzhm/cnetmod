@@ -136,6 +136,8 @@ private:
     auto apply_send_state(std::span<const std::byte> data)
         -> std::expected<void, std::error_code>;
     auto apply_close_local_state() -> void;
+    auto apply_receive_state(mutable_buffer buf)
+        -> std::expected<std::size_t, std::error_code>;
 
     struct impl
     {

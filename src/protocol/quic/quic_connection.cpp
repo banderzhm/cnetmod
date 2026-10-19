@@ -5531,7 +5531,7 @@ auto quic_connection::async_recv(stream_id sid, mutable_buffer buffer)
     const auto it = impl_->streams.find(sid);
     if (it == impl_->streams.end())
         co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
-    auto received = co_await it->second.value->receive(buffer);
+    auto received = it->second.value->apply_receive_state(buffer);
     if (!received || *received == 0)
         co_return received;
 
