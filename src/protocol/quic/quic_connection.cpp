@@ -459,6 +459,12 @@ struct quic_connection::quic_connection_impl
         // unbounded wake notifications while an application is processing a
         // previous read.
         std::shared_ptr<channel<std::monostate>> readiness;
+        std::uint64_t deferred_reset_error{};
+        bool local_send_accepted : 1 {};
+        bool deferred_reset_stop_peer : 1 {};
+        bool has_deferred_reset : 1 {};
+        bool deferred_reset_queued : 1 {};
+        bool deferred_stop_queued : 1 {};
     };
 
     std::unordered_map<stream_id, stream_entry> streams;
@@ -487,7 +493,94 @@ struct quic_connection::quic_connection_impl
     std::uint64_t local_max_streams_uni;
     std::uint64_t retired_peer_streams_bidi{};
     std::uint64_t retired_peer_streams_uni{};
+    // Authenticated MAX frames only; never provisional local configuration.
+    std::uint64_t peer_max_data_from_frames{};
+    std::uint64_t peer_max_streams_bidi_from_frames{};
+    std::uint64_t peer_max_streams_uni_from_frames{};
+    bool has_deferred_stream_cancellations{};
     bool peer_transport_parameters_applied{};
+
+    // Pending 0-RTT retains its existing provisional initialization.
+    // Ordinary 1-RTT starts at zero until authenticated peer limits apply.
+    [[nodiscard]] auto initial_local_stream_send_limit(stream_id id) const
+        -> std::optional<std::uint64_t>
+    {
+        if (!peer_transport_parameters_applied)
+        {
+            if (connection_role == quic_role::client &&
+                tls->early_data_status() == early_data_state::pending)
+                return std::nullopt;
+            return 0U;
+        }
+        const auto& params = tls->received_transport_params();
+        return is_unidirectional(id) ? params.initial_max_stream_data_uni
+                                    : params.initial_max_stream_data_bidi_remote;
+    }
+
+    [[nodiscard]] auto can_defer_local_zero_send(stream_id id, const stream_entry& stream) const -> bool
+    {
+        const auto limit = is_bidirectional(id) ? peer_max_streams_bidi : peer_max_streams_uni;
+        return (!peer_transport_parameters_applied || id / 4U + 1U > limit) &&
+            is_client_initiated(id) == (connection_role == quic_role::client) &&
+            !stream.local_send_accepted && !early_data_streams.contains(id) &&
+            !early_data_rejected_observed &&
+            (connection_role == quic_role::server || tls->early_data_status() == early_data_state::disabled) &&
+            stream.value->bytes_sent() == 0U;
+    }
+
+    auto ensure_local_stream(stream_id id) -> stream_entry&
+    {
+        auto it = streams.find(id);
+        if (it == streams.end())
+        {
+            // Publish only complete entries. Construction or map allocation
+            // failure must leave both the map and next SID unchanged.
+            stream_entry entry;
+            entry.value = std::make_unique<quic_stream>(id, connection_role,
+                is_bidirectional(id));
+            if (const auto limit = initial_local_stream_send_limit(id))
+                entry.value->set_initial_send_limit(*limit);
+            else
+                entry.value->update_send_limit(config.max_stream_data);
+            entry.value->set_initial_receive_limit(config.max_stream_data);
+            entry.value->init();
+            entry.readiness = std::make_shared<channel<std::monostate>>(1);
+            it = streams.try_emplace(id, std::move(entry)).first;
+        }
+        auto& next = is_bidirectional(id) ? next_bidi_stream : next_uni_stream;
+        next = std::max(next, id + 4U);
+        return it->second;
+    }
+
+    auto apply_initial_local_stream_send_limits() -> void
+    {
+        const auto& params = tls->received_transport_params();
+        for (auto& [id, stream] : streams)
+        {
+            if (is_client_initiated(id) != (connection_role == quic_role::client))
+                continue;
+            const auto limit = is_unidirectional(id)
+                ? params.initial_max_stream_data_uni
+                : params.initial_max_stream_data_bidi_remote;
+            // Streams begin at zero outside 0-RTT. Keep any genuine MAX_STREAM_DATA
+            // already processed before this one-time transport-parameter step.
+            stream.value->update_send_limit(limit);
+        }
+    }
+
+    auto apply_initial_peer_send_limits() -> void
+    {
+        const auto& params = tls->received_transport_params();
+        peer_max_data = std::max(params.initial_max_data, peer_max_data_from_frames);
+        peer_max_streams_bidi = std::max(params.initial_max_streams_bidi,
+            peer_max_streams_bidi_from_frames);
+        peer_max_streams_uni = std::max(params.initial_max_streams_uni,
+            peer_max_streams_uni_from_frames);
+        apply_initial_local_stream_send_limits();
+        if (has_deferred_stream_cancellations)
+            send_flush_requested.store(true, std::memory_order_release);
+    }
+
     bool handshake_confirmed{};
     bool multipath_negotiated{};
     std::uint32_t peer_max_path_id{};
@@ -2440,25 +2533,13 @@ auto quic_connection::handle_long_header_packet(long_header header)
         if (!impl_->peer_transport_parameters_applied)
         {
             const auto& params = impl_->tls->received_transport_params();
-            impl_->peer_max_data = params.initial_max_data;
-            impl_->peer_max_streams_bidi = params.initial_max_streams_bidi;
-            impl_->peer_max_streams_uni = params.initial_max_streams_uni;
+            impl_->apply_initial_peer_send_limits();
             if (impl_->config.multipath_initial_max_path_id && params.initial_max_path_id)
             {
                 impl_->multipath_negotiated = true;
                 impl_->peer_max_path_id = *params.initial_max_path_id;
                 impl_->application_paths.at(0U)->peer_connection_id =
                     impl_->peer_connection_id;
-            }
-            for (auto& [id, stream] : impl_->streams)
-            {
-                if (is_client_initiated(id) !=
-                    (impl_->connection_role == quic_role::client))
-                    continue;
-                const auto limit = is_unidirectional(id)
-                    ? params.initial_max_stream_data_uni
-                    : params.initial_max_stream_data_bidi_remote;
-                stream.value->update_send_limit(limit);
             }
             impl_->peer_transport_parameters_applied = true;
             auto issued = issue_parallel_local_connection_ids();
@@ -2507,9 +2588,7 @@ auto quic_connection::handle_short_header_packet(short_header)
         if (!impl_->peer_transport_parameters_applied)
         {
             const auto& params = impl_->tls->received_transport_params();
-            impl_->peer_max_data = params.initial_max_data;
-            impl_->peer_max_streams_bidi = params.initial_max_streams_bidi;
-            impl_->peer_max_streams_uni = params.initial_max_streams_uni;
+            impl_->apply_initial_peer_send_limits();
             if (impl_->config.multipath_initial_max_path_id && params.initial_max_path_id)
             {
                 impl_->multipath_negotiated = true;
@@ -2931,7 +3010,11 @@ auto quic_connection::process_frames(const quic_frame_variant& frame) -> task<vo
                 }
             }
             else if constexpr (std::is_same_v<frame_t, max_data_frame>)
+            {
+                impl_->peer_max_data_from_frames = std::max(
+                    impl_->peer_max_data_from_frames, value.maximum);
                 impl_->peer_max_data = std::max(impl_->peer_max_data, value.maximum);
+            }
             else if constexpr (std::is_same_v<frame_t, max_stream_data_frame>)
             {
                 const auto stream = impl_->streams.find(value.stream_id);
@@ -2942,7 +3025,13 @@ auto quic_connection::process_frames(const quic_frame_variant& frame) -> task<vo
             {
                 auto& limit = value.bidirectional ? impl_->peer_max_streams_bidi
                                                   : impl_->peer_max_streams_uni;
+                auto& from_frames = value.bidirectional
+                    ? impl_->peer_max_streams_bidi_from_frames
+                    : impl_->peer_max_streams_uni_from_frames;
+                from_frames = std::max(from_frames, value.maximum);
                 limit = std::max(limit, value.maximum);
+                if (impl_->has_deferred_stream_cancellations)
+                    impl_->send_flush_requested.store(true, std::memory_order_release);
             }
             else if constexpr (std::is_same_v<frame_t, streams_blocked_frame>)
             {
@@ -3498,6 +3587,21 @@ auto quic_connection::process_stop_sending_frame(const stop_sending_frame& frame
         }
         else
             impl_->queue_protocol_close(quic_errc::stream_state_error, frame_type::stop_sending);
+        co_return;
+    }
+    if (it->second.has_deferred_reset)
+        co_return; // The count-gated writer already owns this cancellation intent.
+    if (impl_->can_defer_local_zero_send(frame.stream_id, it->second))
+    {
+        // STOP_SENDING cancels only our send direction. Keep the receive side
+        // open and defer RESET0 until this local SID is actually authorized.
+        it->second.value->stop_local();
+        it->second.deferred_reset_error = frame.application_error_code;
+        it->second.has_deferred_reset = true;
+        it->second.deferred_reset_stop_peer = false;
+        impl_->has_deferred_stream_cancellations = true;
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+        (void)it->second.readiness->try_send({});
         co_return;
     }
     // The peer no longer accepts this send direction.  Stop queuing new
@@ -4643,6 +4747,87 @@ auto quic_connection::pack_path_validation_packet(std::span<const std::byte> fra
     return packet;
 }
 
+void quic_connection::publish_deferred_stream_cancellations()
+{
+    if (impl_->connection_state == connection_state::closing ||
+        impl_->connection_state == connection_state::draining || is_closed() ||
+        !impl_->tls->write_keys(encryption_level::application))
+        return;
+    // Keep the retry edge true until the entire scan succeeds. Each queued
+    // intent is independently recoverable if a later stream or retirement throws.
+    std::vector<stream_id> pending;
+    for (const auto& [sid, entry] : impl_->streams)
+        if (entry.has_deferred_reset)
+            pending.push_back(sid);
+    bool remaining{};
+    for (const auto sid : pending)
+    {
+        const auto current = impl_->streams.find(sid);
+        if (current == impl_->streams.end() || !current->second.has_deferred_reset)
+            continue;
+        auto& entry = current->second;
+        const auto limit = impl_->peer_transport_parameters_applied
+            ? (is_bidirectional(sid) ? impl_->peer_max_streams_bidi : impl_->peer_max_streams_uni)
+            : (is_bidirectional(sid) ? impl_->peer_max_streams_bidi_from_frames
+                                    : impl_->peer_max_streams_uni_from_frames);
+        if (!entry.deferred_reset_queued)
+        {
+            if (sid / 4U + 1U > limit)
+            {
+                remaining = true;
+                continue;
+            }
+            const auto error = entry.deferred_reset_error;
+            auto reset = encode_frame(reset_stream_frame{sid, error, 0U});
+            auto stop = entry.deferred_reset_stop_peer
+                ? std::optional{encode_frame(stop_sending_frame{sid, error})} : std::nullopt;
+            const auto before = impl_->encoded_send_frames.size();
+            try
+            {
+                impl_->encoded_send_frames.push_back(std::move(reset));
+                if (stop)
+                    impl_->encoded_send_frames.push_back(std::move(*stop));
+            }
+            catch (...)
+            {
+                while (impl_->encoded_send_frames.size() > before)
+                    impl_->encoded_send_frames.pop_back();
+                throw;
+            }
+            // Queue ownership is durable even if retirement or a later stream
+            // throws. A retry must retire this entry without queueing it twice.
+            entry.local_send_accepted = true;
+            entry.deferred_reset_queued = true;
+            entry.deferred_stop_queued = entry.deferred_reset_stop_peer;
+        }
+        // Full cancellation may upgrade a STOP-only intent after RESET already
+        // reached the reliable queue but an exception postponed retirement.
+        if (entry.deferred_reset_stop_peer && !entry.deferred_stop_queued)
+        {
+            impl_->encoded_send_frames.push_back(encode_frame(stop_sending_frame{
+                sid, entry.deferred_reset_error}));
+            entry.deferred_stop_queued = true;
+        }
+        if (entry.value->state() == stream_state::closed)
+        {
+            // Snapshot IDs, not iterators: retirement may notify application code.
+            // A failed/throwing retirement leaves its queued intent retryable.
+            if (const auto retired = retire_stream(sid); !retired)
+                remaining = true;
+        }
+        else
+        {
+            // Both STOP-only and full cancellation retain an unfinished receive
+            // half. Only a real peer FIN/RESET supplies its final size.
+            entry.has_deferred_reset = false;
+            entry.deferred_reset_queued = false;
+            entry.deferred_reset_stop_peer = false;
+            entry.deferred_stop_queued = false;
+        }
+    }
+    impl_->has_deferred_stream_cancellations = remaining;
+}
+
 auto quic_connection::flush_send_queue() -> task<void>
 {
     // Producers may request a flush from packet receive, a HTTP/3 response
@@ -4677,6 +4862,8 @@ auto quic_connection::flush_send_queue() -> task<void>
         // stay outside it so receive processing remains responsive.
         co_await impl_->receive_mutex.lock();
         async_lock_guard state_guard{impl_->receive_mutex, std::adopt_lock};
+        if (impl_->has_deferred_stream_cancellations)
+            publish_deferred_stream_cancellations();
         if (!std::exchange(coalescing_checked, true) &&
             impl_->connection_state == connection_state::connected &&
             !impl_->queued_protocol_error &&
@@ -4843,20 +5030,28 @@ auto quic_connection::apply_stream_write(stream_id sid,
         return std::unexpected(std::make_error_code(std::errc::not_connected));
     if (impl_->retired_streams.contains(sid))
         return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
-    auto [it, inserted] = impl_->streams.try_emplace(sid);
-    if (inserted)
+    if (sid > ((std::uint64_t{1} << 62U) - 1U))
+        return std::unexpected(make_error_code(quic_errc::stream_limit_error));
+    const bool local_stream = is_client_initiated(sid) ==
+        (impl_->connection_role == quic_role::client);
+    if (local_stream)
     {
-        if (is_client_initiated(sid) != (impl_->connection_role == quic_role::client))
-        {
-            impl_->streams.erase(it);
+        const bool provisional_early = impl_->connection_role == quic_role::client &&
+            impl_->tls->early_data_status() == early_data_state::pending;
+        const auto count_limit = impl_->peer_transport_parameters_applied || provisional_early
+            ? (is_bidirectional(sid) ? impl_->peer_max_streams_bidi : impl_->peer_max_streams_uni)
+            : (is_bidirectional(sid) ? impl_->peer_max_streams_bidi_from_frames
+                                    : impl_->peer_max_streams_uni_from_frames);
+        if (sid / 4U + 1U > count_limit)
+            return std::unexpected(make_error_code(quic_errc::stream_limit_error));
+    }
+    auto it = impl_->streams.find(sid);
+    if (it == impl_->streams.end())
+    {
+        if (!local_stream)
             return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
-        }
-        it->second.value = std::make_unique<quic_stream>(sid, impl_->connection_role,
-            is_bidirectional(sid));
-        it->second.value->update_send_limit(impl_->config.max_stream_data);
-        it->second.value->set_initial_receive_limit(impl_->config.max_stream_data);
-        it->second.value->init();
-        it->second.readiness = std::make_shared<channel<std::monostate>>(1);
+        (void)impl_->ensure_local_stream(sid);
+        it = impl_->streams.find(sid);
     }
     if (payload_size > impl_->peer_max_data -
             std::min(impl_->peer_max_data, impl_->sent_stream_data))
@@ -4885,6 +5080,8 @@ auto quic_connection::apply_stream_write(stream_id sid,
         if (!sent)
             return std::unexpected(sent.error());
     }
+    if (local_stream)
+        it->second.local_send_accepted = true;
     if (fin)
         it->second.value->apply_close_local_state();
     impl_->sent_stream_data += payload_size;
@@ -5044,6 +5241,43 @@ auto quic_connection::async_send(stream_id sid, std::span<const std::byte> data,
     co_return co_await async_send(sid, std::move(owned_data), fin);
 }
 
+auto quic_connection::await_local_stream_send_authority(stream_id sid)
+    -> task<std::expected<void, std::error_code>>
+{
+    if (sid > ((std::uint64_t{1} << 62U) - 1U))
+        co_return std::unexpected(make_error_code(quic_errc::stream_limit_error));
+    for (;;)
+    {
+        {
+            co_await impl_->receive_mutex.lock();
+            async_lock_guard guard{impl_->receive_mutex, std::adopt_lock};
+            if (impl_->terminal_send_error)
+                co_return std::unexpected(impl_->terminal_send_error);
+            if (is_closed() || impl_->connection_state == connection_state::closing ||
+                impl_->connection_state == connection_state::draining)
+                co_return std::unexpected(std::make_error_code(std::errc::not_connected));
+            if (impl_->retired_streams.contains(sid))
+                co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+            if (const auto stream = impl_->streams.find(sid); stream != impl_->streams.end() &&
+                (stream->second.value->state() == stream_state::closed ||
+                    stream->second.value->state() == stream_state::half_closed_local))
+                co_return std::unexpected(std::make_error_code(std::errc::operation_not_permitted));
+            const bool pending_early = impl_->connection_role == quic_role::client &&
+                impl_->tls->early_data_status() == early_data_state::pending;
+            const auto frame_count = is_bidirectional(sid)
+                ? impl_->peer_max_streams_bidi_from_frames : impl_->peer_max_streams_uni_from_frames;
+            if (impl_->peer_transport_parameters_applied || pending_early ||
+                sid / 4U + 1U <= frame_count)
+                co_return {};
+            // The old producer path created this zero-authority stream before
+            // returning a flow-control rejection. Keep that cancellation target.
+            (void)impl_->ensure_local_stream(sid);
+        }
+        // No queue slot or state lock is retained while negotiation is pending.
+        co_await async_sleep(impl_->ctx, std::chrono::milliseconds{1});
+    }
+}
+
 auto quic_connection::async_send_fragments(stream_id sid,
     std::vector<std::byte> owned_data, bool fin)
     -> task<std::expected<void, std::error_code>>
@@ -5102,6 +5336,14 @@ auto quic_connection::async_send_fragments(stream_id sid,
 auto quic_connection::async_send(stream_id sid, std::vector<std::byte>&& owned_data,
     bool fin) -> task<std::expected<void, std::error_code>>
 {
+    // Stream initiator and connection role are immutable; peer responses bypass
+    // this coroutine and its state lock entirely.
+    if (is_client_initiated(sid) == (impl_->connection_role == quic_role::client))
+    {
+        const auto authority = co_await await_local_stream_send_authority(sid);
+        if (!authority)
+            co_return std::unexpected(authority.error());
+    }
     for (;;)
     {
         auto* const completion = impl_->write_commands.try_acquire();
@@ -5154,6 +5396,14 @@ auto quic_connection::async_send_shared(stream_id sid,
 {
     if (!shared_data)
         co_return co_await async_send(sid, std::move(prefix), fin);
+    // Stream initiator and connection role are immutable; peer responses bypass
+    // this coroutine and its state lock entirely.
+    if (is_client_initiated(sid) == (impl_->connection_role == quic_role::client))
+    {
+        const auto authority = co_await await_local_stream_send_authority(sid);
+        if (!authority)
+            co_return std::unexpected(authority.error());
+    }
     for (;;)
     {
         auto* const completion = impl_->write_commands.try_acquire();
@@ -5360,6 +5610,37 @@ auto quic_connection::async_cancel_stream(stream_id sid,
     if (stream == impl_->streams.end())
         co_return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
 
+    if (stream->second.has_deferred_reset || impl_->can_defer_local_zero_send(sid, stream->second))
+    {
+        // Keep only the stream's zero-final-size cancellation intent. Waiting
+        // producers retain their own payload and observe the closed state.
+        const bool already_abandoned = stream->second.value->receive_abandoned();
+        stream->second.value->stop_local();
+        stream->second.value->abandon_receive();
+        // Cancellation abandons delivery; it cannot invent a remote final size.
+        // Abandonment closes receive only when FIN/RESET already established it.
+        // Otherwise the normal receive path accounts and retires on peer final.
+        if (!already_abandoned && stream->second.value->state() == stream_state::closed)
+        {
+            const auto received = stream->second.value->bytes_received();
+            const auto discarded = received - stream->second.value->bytes_consumed();
+            (void)stream->second.value->reset_remote(received);
+            impl_->return_receive_credit(discarded);
+        }
+        if (!stream->second.has_deferred_reset)
+            stream->second.deferred_reset_error = application_error_code;
+        stream->second.has_deferred_reset = true;
+        stream->second.deferred_reset_stop_peer = is_bidirectional(sid);
+        impl_->has_deferred_stream_cancellations = true;
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+        auto readiness = stream->second.readiness;
+        (void)readiness->try_send({});
+        guard.release();
+        impl_->receive_mutex.unlock();
+        co_await flush_send_queue();
+        co_return {};
+    }
+
     const auto final_size = stream->second.value->bytes_sent();
     stream->second.value->stop_local();
     stream->second.value->abandon_receive();
@@ -5426,16 +5707,13 @@ auto quic_connection::async_open_stream(bool bidirectional)
         co_return std::unexpected(std::make_error_code(std::errc::not_connected));
     auto& next = bidirectional ? impl_->next_bidi_stream : impl_->next_uni_stream;
     const auto id = next;
+    if (id > ((std::uint64_t{1} << 62U) - 1U))
+        co_return std::unexpected(make_error_code(quic_errc::stream_limit_error));
     const auto opened_count = id / 4 + 1;
     const auto limit = bidirectional ? impl_->peer_max_streams_bidi : impl_->peer_max_streams_uni;
     if (opened_count > limit)
         co_return std::unexpected(make_error_code(quic_errc::stream_limit_error));
-    next += 4;
-    auto stream = std::make_unique<quic_stream>(id, impl_->connection_role, bidirectional);
-    stream->update_send_limit(impl_->config.max_stream_data);
-    stream->set_initial_receive_limit(impl_->config.max_stream_data);
-    stream->init();
-    impl_->streams.emplace(id, quic_connection_impl::stream_entry{std::move(stream), std::make_shared<channel<std::monostate>>(1)});
+    (void)impl_->ensure_local_stream(id);
     impl_->pending_priority_streams.erase(id);
     co_return id;
 }
@@ -5457,7 +5735,10 @@ auto quic_connection::retire_stream(stream_id sid)
     const auto stream = impl_->streams.find(sid);
     if (stream == impl_->streams.end())
         return std::unexpected(std::make_error_code(std::errc::no_such_file_or_directory));
-    if (stream->second.value->state() != stream_state::closed)
+    if ((stream->second.has_deferred_reset &&
+            (!stream->second.deferred_reset_queued ||
+                (stream->second.deferred_reset_stop_peer && !stream->second.deferred_stop_queued))) ||
+        stream->second.value->state() != stream_state::closed)
         return std::unexpected(std::make_error_code(std::errc::operation_in_progress));
 
     bool credit_updated{};
@@ -5881,6 +6162,7 @@ auto quic_connection::close_transport(std::error_code error, connection_state st
     impl_->accepted_streams.close();
     close_stream_readiness();
     impl_->streams.clear();
+    impl_->has_deferred_stream_cancellations = false;
     impl_->remotely_cancelled_streams.clear();
     if (state == connection_state::draining)
         return;

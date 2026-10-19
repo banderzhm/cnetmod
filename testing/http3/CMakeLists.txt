@@ -51,6 +51,13 @@ if(CNETMOD_HAS_QUIC)
     set_target_properties(quic_pmtu_cc_server PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
 
+    add_executable(quic_initial_credit_server quic_initial_credit_server.cpp)
+    target_link_libraries(quic_initial_credit_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_initial_credit_server)
+    set_property(TARGET quic_initial_credit_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_initial_credit_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
     add_executable(quic_retire_stream_server quic_retire_stream_server.cpp)
     target_link_libraries(quic_retire_stream_server PRIVATE cnetmod_core)
     cnetmod_deploy_mimalloc_runtime(quic_retire_stream_server)
@@ -85,6 +92,13 @@ endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
+    foreach(initial_credit_scenario IN ITEMS credit cancel-final close-count-zero)
+        add_test(NAME quic_initial_credit_${initial_credit_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_initial_credit.py"
+                "$<TARGET_FILE:quic_initial_credit_server>" --scenario ${initial_credit_scenario})
+        set_tests_properties(quic_initial_credit_${initial_credit_scenario} PROPERTIES
+            LABELS "http3;quic;flow_control;stream_lifetime" TIMEOUT 45 SKIP_RETURN_CODE 77)
+    endforeach()
     foreach(pmtu_deadline_scenario IN ITEMS interval initial)
         add_test(NAME quic_pmtu_deadline_${pmtu_deadline_scenario}
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_deadline.py"
@@ -339,6 +353,7 @@ if(CNETMOD_HAS_QUIC)
     foreach(http3_test_target IN ITEMS
             h3_interop_server
             quic_retire_stream_server
+            quic_initial_credit_server
             quic_pmtu_cc_server
             quic_pmtu_deadline_server
             quic_pmtu_pending_server

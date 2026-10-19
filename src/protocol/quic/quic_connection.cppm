@@ -516,10 +516,13 @@ private:
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)
         -> task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto await_local_stream_send_authority(stream_id sid)
+        -> task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto async_send_fragments(stream_id sid,
         std::vector<std::byte> data, bool fin)
         -> task<std::expected<void, std::error_code>>;
     /// Send queued frames
+    auto publish_deferred_stream_cancellations() -> void;
     auto flush_send_queue() -> task<void>;
     /// Serialize application packets according to the controller's current
     /// pacing rate.  Control/path-validation packets are not delayed here.
