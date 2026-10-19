@@ -196,6 +196,8 @@ public:
     /// Send one unreliable RFC 9221 QUIC DATAGRAM. Both endpoints must have
     /// advertised a non-zero `max_datagram_frame_size`; congestion control
     /// still applies, but loss is intentionally never retransmitted.
+    /// Success accepts the send without guaranteeing delivery; a full pending
+    /// queue can drop it locally, just as congestion can prevent transmission.
     [[nodiscard]] auto async_send_datagram(std::span<const std::byte> data)
         -> task<std::expected<void, std::error_code>>;
 

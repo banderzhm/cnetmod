@@ -8,6 +8,46 @@ import std;
 
 namespace cnetmod::quic {
 
+bounded_datagram_queue::bounded_datagram_queue() = default;
+bounded_datagram_queue::~bounded_datagram_queue() = default;
+
+auto bounded_datagram_queue::try_push(std::vector<std::byte>&& frame) -> bool
+{
+    if (frames_.size() >= max_frames ||
+        frame.capacity() > max_capacity_bytes - retained_capacity_bytes_)
+    {
+        return false;
+    }
+    // deque insertion can allocate. Commit accounting only after ownership
+    // transfer succeeds; a failed push leaves the queue and counters intact.
+    frames_.push_back(std::move(frame));
+    retained_capacity_bytes_ += frames_.back().capacity();
+    return true;
+}
+
+auto bounded_datagram_queue::empty() const noexcept -> bool { return frames_.empty(); }
+auto bounded_datagram_queue::size() const noexcept -> std::size_t { return frames_.size(); }
+auto bounded_datagram_queue::front() const noexcept -> const std::vector<std::byte>&
+{
+    return frames_.front();
+}
+auto bounded_datagram_queue::retained_capacity_bytes() const noexcept -> std::size_t
+{
+    return retained_capacity_bytes_;
+}
+
+void bounded_datagram_queue::pop_front() noexcept
+{
+    retained_capacity_bytes_ -= frames_.front().capacity();
+    frames_.pop_front();
+}
+
+void bounded_datagram_queue::clear() noexcept
+{
+    frames_.clear();
+    retained_capacity_bytes_ = 0U;
+}
+
 quic_send_frame::quic_send_frame(std::vector<std::byte> bytes)
     : owned_bytes_(std::move(bytes))
 {

@@ -23,6 +23,32 @@ private:
     std::array<std::uint8_t, 8> credits_{quantum};
 };
 
+/// Packet-owner-only FIFO for encoded, intentionally unreliable DATAGRAMs.
+/// Capacity rejection drops the new frame without changing queued ownership.
+export class bounded_datagram_queue
+{
+public:
+    static constexpr std::size_t max_frames{128U};
+    static constexpr std::size_t max_capacity_bytes{256U * 1024U};
+
+    bounded_datagram_queue();
+    ~bounded_datagram_queue();
+    bounded_datagram_queue(const bounded_datagram_queue&) = delete;
+    auto operator=(const bounded_datagram_queue&) -> bounded_datagram_queue& = delete;
+
+    [[nodiscard]] auto try_push(std::vector<std::byte>&& frame) -> bool;
+    [[nodiscard]] auto empty() const noexcept -> bool;
+    [[nodiscard]] auto size() const noexcept -> std::size_t;
+    [[nodiscard]] auto front() const noexcept -> const std::vector<std::byte>&;
+    [[nodiscard]] auto retained_capacity_bytes() const noexcept -> std::size_t;
+    auto pop_front() noexcept -> void;
+    auto clear() noexcept -> void;
+
+private:
+    std::deque<std::vector<std::byte>> frames_;
+    std::size_t retained_capacity_bytes_{};
+};
+
 /// A retransmittable application frame. Static response data uses a shared
 /// slice strategy, so packet recovery retains offsets rather than body copies.
 export class quic_send_frame

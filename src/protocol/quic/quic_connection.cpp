@@ -714,7 +714,7 @@ struct quic_connection::quic_connection_impl
     async_mutex socket_send_mutex;
     cancel_token send_cancel_token;
     // DATAGRAM frames are deliberately kept out of retransmission metadata.
-    std::deque<std::vector<std::byte>> unreliable_send_frames;
+    bounded_datagram_queue unreliable_send_frames;
     channel<std::vector<std::byte>> received_application_datagrams{128};
     // Packet parsing and socket writes are separate phases. A connection may
     // have many concurrent stream producers, but packet number, congestion
@@ -5478,12 +5478,14 @@ auto quic_connection::apply_application_datagram(std::vector<std::byte> data)
     const auto peer_limit = impl_->tls->received_transport_params().max_datagram_frame_size;
     if (impl_->config.max_datagram_frame_size == 0U || peer_limit == 0U)
         co_return std::unexpected(std::make_error_code(std::errc::not_supported));
-    const auto frame = encode_frame(datagram_frame{
+    auto frame = encode_frame(datagram_frame{
         std::span<const std::byte>{data.data(), data.size()}, true});
     if (frame.size() > impl_->config.max_datagram_frame_size || frame.size() > peer_limit ||
         frame.size() > max_udp_payload - 64)
         co_return std::unexpected(std::make_error_code(std::errc::message_size));
-    impl_->unreliable_send_frames.push_back(frame);
+    // A valid unreliable send may be accepted but dropped locally when its
+    // bounded pending queue is full. Keep validation errors above unchanged.
+    (void)impl_->unreliable_send_frames.try_push(std::move(frame));
     co_return {};
 }
 
@@ -5493,7 +5495,17 @@ auto quic_connection::async_send_datagram(std::span<const std::byte> data)
     auto* const completion = impl_->write_commands.try_acquire();
     if (!completion)
         co_return std::unexpected(std::make_error_code(std::errc::resource_unavailable_try_again));
-    std::vector<std::byte> owned_data{data.begin(), data.end()};
+    std::vector<std::byte> owned_data;
+    try
+    {
+        owned_data.assign(data.begin(), data.end());
+    }
+    catch (...)
+    {
+        // No command owns this slot until try_enqueue succeeds.
+        impl_->write_commands.release(*completion);
+        throw;
+    }
     if (!impl_->write_commands.try_enqueue({quic_write_command::operation::datagram,
             {}, std::move(owned_data), false, 0U, false, completion, {}}))
     {

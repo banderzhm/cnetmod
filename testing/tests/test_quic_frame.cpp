@@ -1193,3 +1193,107 @@ TEST(quic_pending_range_moved_prefix_survives_producer_reuse_and_rollback)
     ASSERT_FALSE(scheduler.has_pending_writes());
     ASSERT_TRUE(owner.expired());
 }
+
+TEST(quic_datagram_queue_empty_frames_count_limit_fifo_and_move)
+{
+    using queue_type = cnetmod::quic::bounded_datagram_queue;
+    queue_type queue;
+    for (std::size_t index{}; index < queue_type::max_frames; ++index)
+    {
+        auto frame = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+        ASSERT_FALSE(frame.empty());
+        const auto* original_storage = frame.data();
+        ASSERT_TRUE(queue.try_push(std::move(frame)));
+        if (index == 0U) ASSERT_TRUE(queue.front().data() == original_storage);
+    }
+    const auto retained = queue.retained_capacity_bytes();
+    auto refused = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+    const auto* refused_storage = refused.data();
+    ASSERT_FALSE(queue.try_push(std::move(refused)));
+    ASSERT_TRUE(refused.data() == refused_storage);
+    ASSERT_EQ(queue.size(), queue_type::max_frames);
+    ASSERT_EQ(queue.retained_capacity_bytes(), retained);
+    const auto released = queue.front().capacity();
+    queue.pop_front();
+    ASSERT_EQ(queue.retained_capacity_bytes(), retained - released);
+    ASSERT_TRUE(queue.try_push(std::move(refused)));
+    ASSERT_EQ(queue.size(), queue_type::max_frames);
+    queue.clear();
+    ASSERT_TRUE(queue.empty());
+    ASSERT_EQ(queue.retained_capacity_bytes(), 0U);
+    auto next = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+    ASSERT_TRUE(queue.try_push(std::move(next)));
+}
+
+TEST(quic_datagram_queue_charges_capacity_and_reopens_after_pop)
+{
+    using queue_type = cnetmod::quic::bounded_datagram_queue;
+    queue_type queue;
+    std::size_t accepted{};
+    for (;;)
+    {
+        auto frame = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+        frame.reserve(queue_type::max_capacity_bytes / 4U);
+        ASSERT_LE(frame.capacity(), queue_type::max_capacity_bytes);
+        const auto charge = frame.capacity();
+        const auto before = queue.retained_capacity_bytes();
+        if (!queue.try_push(std::move(frame)))
+        {
+            ASSERT_GT(charge, queue_type::max_capacity_bytes - before);
+            ASSERT_EQ(queue.retained_capacity_bytes(), before);
+            break;
+        }
+        ++accepted;
+        ASSERT_EQ(queue.retained_capacity_bytes(), before + charge);
+        ASSERT_LE(queue.retained_capacity_bytes(), queue_type::max_capacity_bytes);
+    }
+    ASSERT_GT(accepted, 0U);
+    ASSERT_LT(accepted, queue_type::max_frames);
+    const auto before_pop = queue.retained_capacity_bytes();
+    const auto released = queue.front().capacity();
+    queue.pop_front();
+    ASSERT_EQ(queue.retained_capacity_bytes(), before_pop - released);
+    auto retry = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+    retry.reserve(queue_type::max_capacity_bytes / 4U);
+    ASSERT_TRUE(queue.try_push(std::move(retry)));
+    auto remaining = queue.retained_capacity_bytes();
+    while (!queue.empty())
+    {
+        remaining -= queue.front().capacity();
+        queue.pop_front();
+        ASSERT_EQ(queue.retained_capacity_bytes(), remaining);
+    }
+    ASSERT_EQ(remaining, 0U);
+    queue.clear();
+    ASSERT_EQ(queue.retained_capacity_bytes(), 0U);
+}
+
+TEST(quic_datagram_queue_rejects_oversized_storage_without_mutation)
+{
+    using queue_type = cnetmod::quic::bounded_datagram_queue;
+    queue_type queue;
+    auto frame = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+    frame.reserve(queue_type::max_capacity_bytes + 1U);
+    ASSERT_FALSE(queue.try_push(std::move(frame)));
+    ASSERT_TRUE(queue.empty());
+    ASSERT_EQ(queue.retained_capacity_bytes(), 0U);
+}
+
+TEST(quic_datagram_queue_keeps_maximum_current_frame_and_fifo_order)
+{
+    cnetmod::quic::bounded_datagram_queue queue;
+    const auto maximum = cnetmod::quic::max_udp_payload - 64U;
+    std::vector<std::byte> payload(maximum - 3U, std::byte{0x5a});
+    auto largest = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{payload, true});
+    ASSERT_EQ(largest.size(), maximum);
+    ASSERT_TRUE(queue.try_push(std::move(largest)));
+    auto empty = cnetmod::quic::encode_frame(cnetmod::quic::datagram_frame{{}, true});
+    const auto empty_size = empty.size();
+    ASSERT_TRUE(queue.try_push(std::move(empty)));
+    ASSERT_EQ(queue.front().size(), maximum);
+    queue.pop_front();
+    ASSERT_EQ(queue.front().size(), empty_size);
+    queue.pop_front();
+    ASSERT_TRUE(queue.empty());
+    ASSERT_EQ(queue.retained_capacity_bytes(), 0U);
+}
