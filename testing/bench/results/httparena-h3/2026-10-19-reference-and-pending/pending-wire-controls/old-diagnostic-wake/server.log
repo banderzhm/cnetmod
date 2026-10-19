@@ -1,0 +1,4 @@
+[2026-10-19 00:18:44.921] [info] [139792253315008] [old-diagnostic.cpp:4293] PMTU_PENDING_PACK path=0 target=1328 selected=1 cwnd=14783 credit=1 empty=1 pto_probe=0 at_us=318100165
+[2026-10-19 00:18:45.023] [info] [139792253315008] [old-diagnostic.cpp:2996] PMTU_PENDING_SCHEDULE path=0 ack_target=1328 next_us=318212509 at_us=318202509
+[2026-10-19 00:18:45.034] [info] [139792253315008] [old-diagnostic.cpp:4293] PMTU_PENDING_PACK path=0 target=1452 selected=1 cwnd=16111 credit=0 empty=0 pto_probe=0 at_us=318212690
+[2026-10-19 00:18:45.129] [info] [139792253315008] [old-diagnostic.cpp:2968] PMTU_PENDING_ACK path=0 pending=1452 cwnd=31959 empty=1 pto=0 reliable_queue=0 datagram_queue=0 at_us=318307653

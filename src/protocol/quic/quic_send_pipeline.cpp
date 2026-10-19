@@ -74,6 +74,28 @@ auto quic_send_frame::shared_stream(std::span<const std::byte> header,
     return result;
 }
 
+auto quic_send_frame::shared_stream_with_prefix(
+    std::span<const std::byte> header, std::span<const std::byte> prefix,
+    std::shared_ptr<const std::string> body, std::size_t body_offset,
+    std::size_t body_size, std::uint64_t stream) -> quic_send_frame
+{
+    if (!body || header.empty() ||
+        header.size() > quic_send_frame{}.stream_header_.size() ||
+        body_offset > body->size() || body_size > body->size() - body_offset ||
+        prefix.size() > std::numeric_limits<std::size_t>::max() - header.size() ||
+        body_size > std::numeric_limits<std::size_t>::max() - header.size() - prefix.size())
+        std::terminate();
+    quic_send_frame result;
+    result.owned_bytes_.reserve(header.size() + prefix.size());
+    result.owned_bytes_.insert(result.owned_bytes_.end(), header.begin(), header.end());
+    result.owned_bytes_.insert(result.owned_bytes_.end(), prefix.begin(), prefix.end());
+    result.shared_bytes_ = std::move(body);
+    result.shared_offset_ = body_offset;
+    result.shared_size_ = body_size;
+    result.stream_ = stream;
+    return result;
+}
+
 auto quic_send_frame::empty() const noexcept -> bool
 {
     return owned_bytes_.empty() && stream_header_size_ == 0U;
@@ -81,8 +103,8 @@ auto quic_send_frame::empty() const noexcept -> bool
 
 auto quic_send_frame::size() const noexcept -> std::size_t
 {
-    return owned_bytes_.empty() ? stream_header_size_ + shared_size_
-                                : owned_bytes_.size();
+    const auto owned_size = owned_bytes_.size();
+    return shared_bytes_ ? owned_size + stream_header_size_ + shared_size_ : owned_size;
 }
 
 auto quic_send_frame::stream() const noexcept -> std::optional<std::uint64_t>
@@ -113,26 +135,35 @@ auto quic_send_frame::is_connection_close() const noexcept -> bool
 {
     return !owned_bytes_.empty() &&
         (owned_bytes_.front() == std::byte{0x1c} ||
-            owned_bytes_.front() == std::byte{0x1d});
+            owned_bytes_.front() == std::byte{0x1d}) &&
+        !shared_bytes_;
 }
 
 auto quic_send_frame::owned_bytes() const noexcept -> const std::vector<std::byte>&
 {
-    return owned_bytes_;
+    if (!shared_bytes_)
+        return owned_bytes_;
+    // A shared frame has no complete owned encoding, including mixed prefixes.
+    static const std::vector<std::byte> empty;
+    return empty;
 }
 
 auto quic_send_frame::release_owned_bytes() noexcept -> std::vector<std::byte>
 {
+    if (shared_bytes_)
+        return {};
     return std::move(owned_bytes_);
 }
 
 auto quic_send_frame::append_to(std::vector<std::byte>& output) const -> void
 {
-    if (!owned_bytes_.empty())
+    if (!shared_bytes_)
     {
         output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
         return;
     }
+    if (!owned_bytes_.empty())
+        output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
     output.insert(output.end(), stream_header_.begin(),
         stream_header_.begin() + stream_header_size_);
     const auto body = std::as_bytes(std::span{
@@ -155,7 +186,8 @@ auto operator==(const quic_send_frame& lhs,
     const quic_send_frame& rhs) noexcept -> bool
 {
     if (lhs.shared_bytes_ || rhs.shared_bytes_)
-        return lhs.shared_bytes_ == rhs.shared_bytes_ &&
+        return lhs.owned_bytes_ == rhs.owned_bytes_ &&
+            lhs.shared_bytes_ == rhs.shared_bytes_ &&
             lhs.shared_offset_ == rhs.shared_offset_ &&
             lhs.shared_size_ == rhs.shared_size_ &&
             lhs.stream_ == rhs.stream_ &&

@@ -1,0 +1,33 @@
+--- a/src/protocol/quic/quic_send_pipeline.cpp
++++ b/src/protocol/quic/quic_send_pipeline.cpp
+@@ -133,9 +133,10 @@
+ 
+ auto quic_send_frame::is_connection_close() const noexcept -> bool
+ {
+-    return !shared_bytes_ && !owned_bytes_.empty() &&
++    return !owned_bytes_.empty() &&
+         (owned_bytes_.front() == std::byte{0x1c} ||
+-            owned_bytes_.front() == std::byte{0x1d});
++            owned_bytes_.front() == std::byte{0x1d}) &&
++        !shared_bytes_;
+ }
+ 
+ auto quic_send_frame::owned_bytes() const noexcept -> const std::vector<std::byte>&
+@@ -156,12 +157,13 @@
+ 
+ auto quic_send_frame::append_to(std::vector<std::byte>& output) const -> void
+ {
++    if (!shared_bytes_)
++    {
++        output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
++        return;
++    }
+     if (!owned_bytes_.empty())
+-    {
+         output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
+-    }
+-    if (!shared_bytes_)
+-        return;
+     output.insert(output.end(), stream_header_.begin(),
+         stream_header_.begin() + stream_header_size_);
+     const auto body = std::as_bytes(std::span{

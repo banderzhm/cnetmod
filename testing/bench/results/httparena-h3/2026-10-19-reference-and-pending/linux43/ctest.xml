@@ -1,0 +1,598 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="43"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="109"
+	timestamp="2026-10-19T08:51:31"
+	>
+	<testcase name="test_concurrent_containers" classname="test_concurrent_containers" time="0.0252778" status="run">
+		<properties/>
+		<system-out>[==========] Running 11 test(s).
+[ RUN      ] concurrent_queue_transfers_all_values
+[       OK ] concurrent_queue_transfers_all_values
+[ RUN      ] atomic_hash_map_and_copy_on_write_publish_consistent_values
+[       OK ] atomic_hash_map_and_copy_on_write_publish_consistent_values
+[ RUN      ] atomic_hash_map_bounded_insert_and_cas_eviction
+[       OK ] atomic_hash_map_bounded_insert_and_cas_eviction
+[ RUN      ] concurrent_vector_skip_list_and_accumulator
+[       OK ] concurrent_vector_skip_list_and_accumulator
+[ RUN      ] slot_latch_and_striped_maps_preserve_key_value_semantics
+[       OK ] slot_latch_and_striped_maps_preserve_key_value_semantics
+[ RUN      ] atomic_latch_containers_survive_parallel_read_write_pressure
+[       OK ] atomic_latch_containers_survive_parallel_read_write_pressure
+[ RUN      ] buffer_pool_cross_worker_leases_are_aba_safe
+[       OK ] buffer_pool_cross_worker_leases_are_aba_safe
+[ RUN      ] udp_datagram_buffer_transfers_pooled_or_fallback_storage
+[       OK ] udp_datagram_buffer_...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_deadline" classname="test_deadline" time="0.0267932" status="run">
+		<properties/>
+		<system-out>[==========] Running 10 test(s).
+[ RUN      ] deadline_constrains_child_budget
+[       OK ] deadline_constrains_child_budget
+[ RUN      ] maximum_relative_deadline_is_unlimited
+[       OK ] maximum_relative_deadline_is_unlimited
+[ RUN      ] cancel_token_retains_first_cancellation_cause
+[       OK ] cancel_token_retains_first_cancellation_cause
+[ RUN      ] with_deadline_expired_budget_normalizes_to_timeout
+[       OK ] with_deadline_expired_budget_normalizes_to_timeout
+[ RUN      ] with_timeout_uses_deadline_cancellation_cause
+[       OK ] with_timeout_uses_deadline_cancellation_cause
+[ RUN      ] with_deadline_factory_owns_a_fresh_cancel_token
+[       OK ] with_deadline_factory_owns_a_fresh_cancel_token
+[ RUN      ] with_deadline_owns_temporary_factory_until_task_destruction
+[       OK ] with_deadline_owns_temporary_factory_until_task_destruction
+[ RUN      ] with_deadline_cancels_underlying_wait
+[       OK ] with_deadline_cancels_underlying_wait
+[ RUN      ] overlapping_timers_keep_independent_completion_o...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_task_group" classname="test_task_group" time="0.00511154" status="run">
+		<properties/>
+		<system-out>[==========] Running 2 test(s).
+[ RUN      ] task_group_first_error_cancels_and_joins_children
+[       OK ] task_group_first_error_cancels_and_joins_children
+[ RUN      ] task_group_deadline_cancels_and_joins_children
+[       OK ] task_group_deadline_cancels_and_joins_children
+[==========] 2 test(s) ran.
+[  PASSED  ] 2 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_task" classname="test_task" time="0.0497699" status="run">
+		<properties/>
+		<system-out>[==========] Running 34 test(s).
+[ RUN      ] task_int_basic
+[       OK ] task_int_basic
+[ RUN      ] task_coroutine_frames_are_cache_line_aligned
+[       OK ] task_coroutine_frames_are_cache_line_aligned
+[ RUN      ] task_string_basic
+[       OK ] task_string_basic
+[ RUN      ] task_void_basic
+[       OK ] task_void_basic
+[ RUN      ] task_chained_await
+[       OK ] task_chained_await
+[ RUN      ] task_exception_propagation
+[       OK ] task_exception_propagation
+[ RUN      ] task_void_exception_propagation
+[       OK ] task_void_exception_propagation
+[ RUN      ] task_move_semantics
+[       OK ] task_move_semantics
+[ RUN      ] task_empty_await_is_deterministic
+[       OK ] task_empty_await_is_deterministic
+[ RUN      ] sync_wait_waits_for_asynchronous_completion
+[       OK ] sync_wait_waits_for_asynchronous_completion
+[ RUN      ] starts_on_starts_task_on_target_io_context
+[       OK ] starts_on_starts_task_on_target_io_context
+[ RUN      ] io_context_current_tracks_the_dispatching_loop
+[       OK ] io_con...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_wait_group" classname="test_wait_group" time="0.00277026" status="run">
+		<properties/>
+		<system-out>[==========] Running 8 test(s).
+[ RUN      ] wg_initial_count_zero
+[       OK ] wg_initial_count_zero
+[ RUN      ] wg_add_increases_count
+[       OK ] wg_add_increases_count
+[ RUN      ] wg_done_decreases_count
+[       OK ] wg_done_decreases_count
+[ RUN      ] wg_wait_already_zero
+[       OK ] wg_wait_already_zero
+[ RUN      ] wg_add_done_then_wait
+[       OK ] wg_add_done_then_wait
+[ RUN      ] wg_concurrent_done_and_wait
+[       OK ] wg_concurrent_done_and_wait
+[ RUN      ] wg_add_incremental
+[       OK ] wg_add_incremental
+[ RUN      ] wg_multiple_add_values
+[       OK ] wg_multiple_add_values
+[==========] 8 test(s) ran.
+[  PASSED  ] 8 test(s).
+</system-out>
+	</testcase>
+	<testcase name="test_udp_batch" classname="test_udp_batch" time="0.514323" status="run">
+		<properties/>
+		<system-out>[==========] Running 16 test(s).
+[ RUN      ] udp_batch_preserves_boundaries_and_backend_lifetime
+[       OK ] udp_batch_preserves_boundaries_and_backend_lifetime
+[ RUN      ] udp_batch_wait_honors_deadline_cancellation
+[       OK ] udp_batch_wait_honors_deadline_cancellation
+[ RUN      ] udp_batch_short_burst_does_not_wait_for_full_batch
+[       OK ] udp_batch_short_burst_does_not_wait_for_full_batch
+[ RUN      ] udp_batch_layout_preserves_ipv4_and_ipv6_boundaries
+[       OK ] udp_batch_layout_preserves_ipv4_and_ipv6_boundaries
+[ RUN      ] udp_batch_partial_prefix_and_suffix_error_are_preserved
+[       OK ] udp_batch_partial_prefix_and_suffix_error_are_preserved
+[ RUN      ] udp_batch_cancel_token_preserves_partial_prefix_and_stops_new_submission
+[       OK ] udp_batch_cancel_token_preserves_partial_prefix_and_stops_new_submission
+[ RUN      ] udp_send_prepared_operation_survives_deferred_submission_error
+[       OK ] udp_send_prepared_operation_survives_deferred_submission_error
+[ RUN      ] udp_batch_woul...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_varint" classname="test_quic_varint" time="0.00165511" status="run">
+		<properties/>
+		<system-out>[==========] Running 16 test(s).
+[ RUN      ] quic_varint_encode_zero
+[       OK ] quic_varint_encode_zero
+[ RUN      ] quic_varint_encode_1byte_range
+[       OK ] quic_varint_encode_1byte_range
+[ RUN      ] quic_varint_encode_2byte_range
+[       OK ] quic_varint_encode_2byte_range
+[ RUN      ] quic_varint_encode_4byte_range
+[       OK ] quic_varint_encode_4byte_range
+[ RUN      ] quic_varint_encode_max_valid
+[       OK ] quic_varint_encode_max_valid
+[ RUN      ] quic_varint_encode_exceeds_62bit
+[       OK ] quic_varint_encode_exceeds_62bit
+[ RUN      ] quic_varint_decode_partial_input
+[       OK ] quic_varint_decode_partial_input
+[ RUN      ] quic_varint_roundtrip_random
+Random round-trip tests: 100 passed, 0 failed
+[       OK ] quic_varint_roundtrip_random
+[ RUN      ] quic_varint_all_boundary_values
+[       OK ] quic_varint_all_boundary_values
+[ RUN      ] quic_varint_decode_truncated_2byte_prefix
+[       OK ] quic_varint_decode_truncated_2byte_prefix
+[ RUN      ] quic_varint_decode_truncated_4byte_prefix
+...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_frame" classname="test_quic_frame" time="0.00315813" status="run">
+		<properties/>
+		<system-out>[==========] Running 38 test(s).
+[ RUN      ] quic_ping_frame_roundtrip
+[       OK ] quic_ping_frame_roundtrip
+[ RUN      ] quic_ack_frame_with_ranges
+[       OK ] quic_ack_frame_with_ranges
+[ RUN      ] quic_stream_frame_encoding
+[       OK ] quic_stream_frame_encoding
+[ RUN      ] quic_crypto_frame_roundtrip
+[       OK ] quic_crypto_frame_roundtrip
+[ RUN      ] quic_connection_close_frame_decode
+[       OK ] quic_connection_close_frame_decode
+[ RUN      ] quic_path_challenge_roundtrip
+[       OK ] quic_path_challenge_roundtrip
+[ RUN      ] quic_unknown_frame_type_handling
+[       OK ] quic_unknown_frame_type_handling
+[ RUN      ] quic_priority_service_budget_bounds_background_starvation
+[       OK ] quic_priority_service_budget_bounds_background_starvation
+[ RUN      ] quic_shared_send_frame_renders_without_owning_body_copy
+[       OK ] quic_shared_send_frame_renders_without_owning_body_copy
+[ RUN      ] quic_stream_scheduler_preserves_default_fifo_across_payload_strategies
+[       OK ] quic_stream_schedule...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_packet" classname="test_quic_packet" time="0.000947113" status="run">
+		<properties/>
+		<system-out>[==========] Running 34 test(s).
+[ RUN      ] long_header_initial_type_detection
+[       OK ] long_header_initial_type_detection
+[ RUN      ] long_header_handshake_type_detection
+[       OK ] long_header_handshake_type_detection
+[ RUN      ] short_header_1rtt_type_detection
+[       OK ] short_header_1rtt_type_detection
+[ RUN      ] zero_rtt_type_detection
+[       OK ] zero_rtt_type_detection
+[ RUN      ] retry_type_detection
+[       OK ] retry_type_detection
+[ RUN      ] version_negotiation_detection
+[       OK ] version_negotiation_detection
+[ RUN      ] long_header_initial_full_parse
+[       OK ] long_header_initial_full_parse
+[ RUN      ] long_header_handshake_full_parse
+[       OK ] long_header_handshake_full_parse
+[ RUN      ] long_header_initial_with_token
+[       OK ] long_header_initial_with_token
+[ RUN      ] long_header_decode_too_short
+[       OK ] long_header_decode_too_short
+[ RUN      ] long_header_short_header_rejected
+[       OK ] long_header_short_header_rejected
+[ RUN      ] short_header_1rt...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_stream" classname="test_quic_stream" time="0.0758317" status="run">
+		<properties/>
+		<system-out>[==========] Running 17 test(s).
+[ RUN      ] quic_stream_fin_cannot_shrink_received_extent
+[       OK ] quic_stream_fin_cannot_shrink_received_extent
+[ RUN      ] quic_stream_reset_cannot_exceed_receive_credit
+[       OK ] quic_stream_reset_cannot_exceed_receive_credit
+[ RUN      ] quic_stream_reset_final_size_is_accounted
+[       OK ] quic_stream_reset_final_size_is_accounted
+[ RUN      ] quic_stream_out_of_order_gap_is_not_readable
+[       OK ] quic_stream_out_of_order_gap_is_not_readable
+[ RUN      ] quic_stream_duplicate_fin_is_idempotent
+[       OK ] quic_stream_duplicate_fin_is_idempotent
+[ RUN      ] quic_stream_initial_peer_send_credit_can_be_zero
+[       OK ] quic_stream_initial_peer_send_credit_can_be_zero
+[ RUN      ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[       OK ] quic_stream_initial_peer_send_credit_can_exceed_fallback
+[ RUN      ] quic_stream_public_send_and_close_remain_lazy
+[       OK ] quic_stream_public_send_and_close_remain_lazy
+[ RUN      ] quic_stream_empty_send_pre...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_loss_detection" classname="test_quic_loss_detection" time="0.00375848" status="run">
+		<properties/>
+		<system-out>[==========] Running 30 test(s).
+[ RUN      ] loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery
+[       OK ] loss_detector_malformed_ack_ranges_preserve_flight_rtt_pto_and_recovery
+[ RUN      ] loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack
+[       OK ] loss_detector_ack_range_zero_boundary_duplicate_and_stale_ack
+[ RUN      ] loss_detector_rtt_initialization
+[       OK ] loss_detector_rtt_initialization
+[ RUN      ] loss_detector_rtt_multiple_samples
+[       OK ] loss_detector_rtt_multiple_samples
+[ RUN      ] loss_detector_pto_duration_basic
+[       OK ] loss_detector_pto_duration_basic
+[ RUN      ] loss_detector_pto_increases_with_rtt_var
+[       OK ] loss_detector_pto_increases_with_rtt_var
+[ RUN      ] loss_detector_packet_sent_tracking
+[       OK ] loss_detector_packet_sent_tracking
+[ RUN      ] loss_detector_ack_received_processing
+[       OK ] loss_detector_ack_received_processing
+[ RUN      ] loss_detector_ack_range_may_include_ack_only_packet
+[       OK ] loss_de...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_congestion" classname="test_quic_congestion" time="0.00172677" status="run">
+		<properties/>
+		<system-out>[==========] Running 28 test(s).
+[ RUN      ] congestion_controller_initial_cwnd
+[       OK ] congestion_controller_initial_cwnd
+[ RUN      ] congestion_controller_initial_ssthresh
+[       OK ] congestion_controller_initial_ssthresh
+[ RUN      ] congestion_controller_initial_pacing_rate
+[       OK ] congestion_controller_initial_pacing_rate
+[ RUN      ] congestion_controller_can_send_below_cwnd
+[       OK ] congestion_controller_can_send_below_cwnd
+[ RUN      ] congestion_controller_can_send_at_cwnd
+[       OK ] congestion_controller_can_send_at_cwnd
+[ RUN      ] congestion_controller_on_packet_sent
+[       OK ] congestion_controller_on_packet_sent
+[ RUN      ] congestion_controller_on_packet_acked
+[       OK ] congestion_controller_on_packet_acked
+[ RUN      ] congestion_controller_discarded_packets_only_release_flight_accounting
+[       OK ] congestion_controller_discarded_packets_only_release_flight_accounting
+[ RUN      ] congestion_controller_congestion_event_no_crash
+[       OK ] congestion_controller_c...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_quic_early_data" classname="test_quic_early_data" time="0.00421296" status="run">
+		<properties/>
+		<system-out>[==========] Running 12 test(s).
+[ RUN      ] early_data_replay_cache_consumes_ticket_once
+[       OK ] early_data_replay_cache_consumes_ticket_once
+[ RUN      ] early_data_replay_cache_rejects_expired_and_evicts
+[       OK ] early_data_replay_cache_rejects_expired_and_evicts
+[ RUN      ] early_data_replay_cache_consumes_concurrently_once
+[       OK ] early_data_replay_cache_consumes_concurrently_once
+[ RUN      ] server_ticket_callbacks_require_shared_replay_cache
+[       OK ] server_ticket_callbacks_require_shared_replay_cache
+[ RUN      ] http3_server_requires_explicit_early_data_context
+[       OK ] http3_server_requires_explicit_early_data_context
+[ RUN      ] http3_server_inbox_limits_require_bounded_nonzero_values
+[       OK ] http3_server_inbox_limits_require_bounded_nonzero_values
+[ RUN      ] http3_server_idle_timeout_rejects_only_negative_durations
+[       OK ] http3_server_idle_timeout_rejects_only_negative_durations
+[ RUN      ] http3_server_udp_payload_size_enforces_quic_datagram_bounds
+[       ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_http3_qpack" classname="test_http3_qpack" time="0.00141201" status="run">
+		<properties/>
+		<system-out>[==========] Running 19 test(s).
+[ RUN      ] qpack_static_table_is_rfc9204_appendix_a
+[       OK ] qpack_static_table_is_rfc9204_appendix_a
+[ RUN      ] qpack_static_and_literal_header_block_round_trip
+[       OK ] qpack_static_and_literal_header_block_round_trip
+[ RUN      ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[       OK ] qpack_dynamic_indexed_header_block_ric_base_and_ack
+[ RUN      ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[       OK ] qpack_dynamic_header_blocks_remain_decodable_after_acknowledgement
+[ RUN      ] qpack_decoder_applies_local_maximum_table_capacity
+[       OK ] qpack_decoder_applies_local_maximum_table_capacity
+[ RUN      ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+[       OK ] qpack_acknowledged_entries_stay_pinned_until_each_section_ack
+[ RUN      ] qpack_static_section_has_zero_required_insert_count_after_dynamic_use
+[       OK ] qpack_static_section_has_zero_required_insert_count_after_dynamic_use
+[ RUN      ] qpack_small_...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="test_http3_frame" classname="test_http3_frame" time="0.00095413" status="run">
+		<properties/>
+		<system-out>[==========] Running 29 test(s).
+[ RUN      ] http3_data_frame_roundtrip
+[       OK ] http3_data_frame_roundtrip
+[ RUN      ] http3_async_server_handler_contract
+[       OK ] http3_async_server_handler_contract
+[ RUN      ] http3_async_server_handler_can_share_buffered_response_body
+[       OK ] http3_async_server_handler_can_share_buffered_response_body
+[ RUN      ] webtransport_async_server_handler_contract
+[       OK ] webtransport_async_server_handler_contract
+[ RUN      ] http3_headers_frame_with_qpack
+[       OK ] http3_headers_frame_with_qpack
+[ RUN      ] http3_settings_frame_multi_entries
+[       OK ] http3_settings_frame_multi_entries
+[ RUN      ] http3_goaway_frame_decode
+[       OK ] http3_goaway_frame_decode
+[ RUN      ] http3_max_push_id_encode
+[       OK ] http3_max_push_id_encode
+[ RUN      ] http3_frame_varint_length_decoding
+[       OK ] http3_frame_varint_length_decoding
+[ RUN      ] http3_cancel_push_frame
+[       OK ] http3_cancel_push_frame
+[ RUN      ] http3_push_promise_frame
+[       O...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_pmtu_deadline_interval" classname="quic_pmtu_deadline_interval" time="1.46317" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;pmtu;quic;timer"/>
+		</properties>
+		<system-out>{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server", "--port", "45239", "--cert", "/tmp/quic-pmtu-deadline-p6i3_gdw/cert.pem", "--key", "/tmp/quic-pmtu-deadline-p6i3_gdw/key.pem", "--listening-report", "/tmp/quic-pmtu-deadline-p6i3_gdw/listening.txt", "--result-report", "/tmp/quic-pmtu-deadline-p6i3_gdw/failure.txt", "--initial-delay-ms", "0", "--interval-ms", "200"], "connected_at": 236.090167792, "driver_sha256": "0a28d27d12edc2a3d0ea94662b8cb3fb5d980494397d50fc65d59852b3a74e9b", "fixture_source_sha256": "3d46358d5c7808cc672bf143bd17387b9a9a14657690cc5e32801ff23dceabc4", "measurement": {"ack_to_second_ms": 200.08019499999818, "actual_pings": 33, "first_after_connected_ms": 0.14845500001570144, "first_after_traffic_start_ms": 0.14777900000240152, "first_after_traffic_stop_ms": -660.9438319999867, "first_probe": {"action": "forward", "at": 236.090316247, "bytes": 1328, "decoded": true, "direction": "server", "frames": {"acks": [[5, 5]], "datagrams": [], "kinds"...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_pmtu_deadline_initial" classname="quic_pmtu_deadline_initial" time="1.0773" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;pmtu;quic;timer"/>
+		</properties>
+		<system-out>{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_deadline_server", "--port", "37519", "--cert", "/tmp/quic-pmtu-deadline-fs1o5zb7/cert.pem", "--key", "/tmp/quic-pmtu-deadline-fs1o5zb7/key.pem", "--listening-report", "/tmp/quic-pmtu-deadline-fs1o5zb7/listening.txt", "--result-report", "/tmp/quic-pmtu-deadline-fs1o5zb7/failure.txt", "--initial-delay-ms", "200", "--interval-ms", "200"], "connected_at": 237.167908856, "driver_sha256": "0a28d27d12edc2a3d0ea94662b8cb3fb5d980494397d50fc65d59852b3a74e9b", "fixture_source_sha256": "3d46358d5c7808cc672bf143bd17387b9a9a14657690cc5e32801ff23dceabc4", "measurement": {"ack_to_second_ms": 200.2626809999981, "actual_pings": 33, "first_after_connected_ms": 200.4912190000141, "first_after_traffic_start_ms": 200.49051600000212, "first_after_traffic_stop_ms": -459.8008939999829, "first_probe": {"action": "forward", "at": 237.368400075, "bytes": 1328, "decoded": true, "direction": "server", "frames": {"acks": [], "datagrams": [], "kinds": [1, 0,...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_pmtu_pending_ack_only" classname="quic_pmtu_pending_ack_only" time="2.09728" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;pmtu;quic;recovery"/>
+		</properties>
+		<system-out>{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_pending_server", "--port", "48662", "--cert", "/tmp/quic-pmtu-pending-hc1ip0j6/cert.pem", "--key", "/tmp/quic-pmtu-pending-hc1ip0j6/key.pem", "--listening-report", "/tmp/quic-pmtu-pending-hc1ip0j6/listening.txt", "--result-report", "/tmp/quic-pmtu-pending-hc1ip0j6/failure.txt", "--burst-report", "/tmp/quic-pmtu-pending-hc1ip0j6/burst.json", "--attempt-report", "/tmp/quic-pmtu-pending-hc1ip0j6/attempt.json", "--state-report", "/tmp/quic-pmtu-pending-hc1ip0j6/state.json", "--initial-delay-ms", "200", "--interval-ms", "10"], "driver_sha256": "2670281ec727353c081c20fcf2e40513c0d14ba7002ac10edb6f72ed45ada81f", "forward_delay_proof": [{"direction": "client", "forwarded_at": 238.711171075, "received_at": 238.660950509, "released_at": null, "scheduled_forward_at": 238.710954364}, {"direction": "server", "forwarded_at": 238.761829919, "received_at": 238.711520005, "released_at": null, "scheduled_forward_at": 238.761535798}, {"direction...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_pmtu_pending_wake" classname="quic_pmtu_pending_wake" time="1.83508" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;pmtu;quic;recovery"/>
+		</properties>
+		<system-out>{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_pending_server", "--port", "58859", "--cert", "/tmp/quic-pmtu-pending-dfwnwqax/cert.pem", "--key", "/tmp/quic-pmtu-pending-dfwnwqax/key.pem", "--listening-report", "/tmp/quic-pmtu-pending-dfwnwqax/listening.txt", "--result-report", "/tmp/quic-pmtu-pending-dfwnwqax/failure.txt", "--burst-report", "/tmp/quic-pmtu-pending-dfwnwqax/burst.json", "--attempt-report", "/tmp/quic-pmtu-pending-dfwnwqax/attempt.json", "--state-report", "/tmp/quic-pmtu-pending-dfwnwqax/state.json", "--initial-delay-ms", "200", "--interval-ms", "10"], "driver_sha256": "2670281ec727353c081c20fcf2e40513c0d14ba7002ac10edb6f72ed45ada81f", "forward_delay_proof": [{"direction": "client", "forwarded_at": 240.368804343, "received_at": 240.318510495, "released_at": null, "scheduled_forward_at": 240.368514994}, {"direction": "server", "forwarded_at": 240.419679205, "received_at": 240.369346953, "released_at": null, "scheduled_forward_at": 240.419361237}, {"direction...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_datagram_cc_admission" classname="quic_datagram_cc_admission" time="0.639871" status="run">
+		<properties>
+			<property name="cmake_labels" value="datagram;http3;quic;recovery"/>
+		</properties>
+		<system-out>{"admission": {"ack_recovery_marker": true, "burst_report": {"accepted": 64, "elapsed_us": 90, "first_recovery_deadline_us": 29398, "payload_bytes": 1100}, "cwnd_conservative_upper_bound": 17447, "held_packets": 3, "overflow": false, "prior_server_udp_bytes": 2727, "wire_datagram_packets": 13, "wire_ids": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12], "wire_udp_bytes": 14716}, "aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server", "--port", "42930", "--cert", "/tmp/quic-datagram-cc-f7qucdne/cert.pem", "--key", "/tmp/quic-datagram-cc-f7qucdne/key.pem", "--listening-report", "/tmp/quic-datagram-cc-f7qucdne/listening.txt", "--ready-report", "/tmp/quic-datagram-cc-f7qucdne/ready.txt", "--burst-report", "/tmp/quic-datagram-cc-f7qucdne/burst.json", "--result-report", "/tmp/quic-datagram-cc-f7qucdne/failure.txt"], "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097", "expect": "pass", "peer_aead": "unmodified installed aioquic", "proxy_errors": ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_datagram_cc_pto" classname="quic_datagram_cc_pto" time="0.459239" status="run">
+		<properties>
+			<property name="cmake_labels" value="datagram;http3;quic;recovery"/>
+		</properties>
+		<system-out>{"aioquic_version": "1.7.0", "command": ["/tmp/cnetmod-h3-arena-build/bin/quic_datagram_cc_server", "--port", "35473", "--cert", "/tmp/quic-datagram-cc-oj1ryzpx/cert.pem", "--key", "/tmp/quic-datagram-cc-oj1ryzpx/key.pem", "--listening-report", "/tmp/quic-datagram-cc-oj1ryzpx/listening.txt", "--ready-report", "/tmp/quic-datagram-cc-oj1ryzpx/ready.txt", "--burst-report", "/tmp/quic-datagram-cc-oj1ryzpx/burst.json", "--result-report", "/tmp/quic-datagram-cc-oj1ryzpx/failure.txt"], "driver_sha256": "f718e565948194f363b3050b993f5030bbc7aa351427cc010c209fce20701097", "expect": "pass", "peer_aead": "unmodified installed aioquic", "proxy_errors": [], "pto": {"complete_body_bytes": 262144, "complete_body_sha256": "b3bc55b2b3c1738327c7c1ed4b8897cb8489b1d7cd19b3127c25b283cc3c441b", "fin": true, "held_packets": 3, "received_before_ack_release": 14848, "repeat": {"frame": {"fin": false, "length": 512, "offset": 13312, "sha256": "9ea2ca99172f8143d19673eb288cb607ce2e87f09914569ac1285981dcb8803c", "stream": 8}, "original": ...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_pmtu_cc_large_response_after_loss" classname="quic_pmtu_cc_large_response_after_loss" time="4.17952" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;pmtu;quic;recovery;test_peer_adapter"/>
+		</properties>
+		<system-out>{"command": ["/tmp/cnetmod-h3-arena-build/bin/quic_pmtu_cc_server", "--port", "53415", "--cert", "/tmp/quic-pmtu-cc-u5punept/cert.pem", "--key", "/tmp/quic-pmtu-cc-u5punept/key.pem", "--listening-report", "/tmp/quic-pmtu-cc-u5punept/listening.txt", "--ready-report", "/tmp/quic-pmtu-cc-u5punept/ready.txt", "--result-report", "/tmp/quic-pmtu-cc-u5punept/failure.txt"], "confirmation_interval_seconds": 0.025, "confirmation_requests_per_epoch": 4, "diagnostics_required": false, "epochs": [{"drop": {"action": "drop", "at": 243.4508902, "bytes": 289, "direction": "server", "epoch": 0, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 25, "target_stream": 0}, "epoch": 0, "losses": [], "quiet": null, "stream": 0}, {"drop": {"action": "drop", "at": 243.668567628, "bytes": 289, "direction": "server", "epoch": 1, "frames": [{"fin": true, "length": 256, "offset": 0}], "packet_number": 38, "target_stream": 20}, "epoch": 1, "losses": [], "quiet": null, "stream": 20}, {"drop": {"action": "drop", "at": 2...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="http3_lifecycle" classname="http3_lifecycle" time="2.36291" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;interop;lifecycle"/>
+		</properties>
+		<system-out>PASS encrypted all-PADDING and PADDING between PING frames
+PASS RESET-before-HEADERS churn and connection reuse
+PASS RESET final-size credit: initial=1048576, reset_bytes=1310720, advertised=2097589
+PASS bounded buffered requests with and without FIN
+PASS RESET cancels QPACK waits and preserves connection reuse
+PASS STOP_SENDING cancels QPACK waits and preserves connection reuse
+PASS incremental control stream above incomplete-frame bound
+PASS connection close releases QPACK-blocked session
+PASS MAX_STREAMS high-ID retirement: initial=100, after_high=100, after_cleanup=200
+PASS explicit transport CLOSE invalid-direction ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE unopened-local-bidi ConnectionTerminated(error_code=5, frame_type=4, reason_phrase='stream state error')
+PASS explicit transport CLOSE over-MAX_STREAMS ConnectionTerminated(error_code=4, frame_type=4, reason_phrase='stream limit error')
+PASS explicit transport CLOSE over-stream-cr...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="http3_cold_listener_cleanup" classname="http3_cold_listener_cleanup" time="35.337" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;interop;lifecycle"/>
+		</properties>
+		<system-out>PASS zero-ingress 35s cleanup: [0, 4, 0, 0, 0, 0] -&gt; [0, 0, 0, 0, 0, 0]
+</system-out>
+	</testcase>
+	<testcase name="http3_outbound_pto_close_restart_1" classname="http3_outbound_pto_close_restart_1" time="4.2763" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;interop;lifecycle;recovery"/>
+		</properties>
+		<system-out>{"case": "pto", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 1200.6603599999721, "dropped_datagram_bytes": 60, "dropped_packet_number": 8, "dropped_stream_frames": [{"fin": true, "length": 28, "offset": 0}], "gate_at_ms": 100.8364639999968, "listener_healthy": true, "request_fin_acked": true, "response_at_ms": 1230.6814789999976, "response_body": "delayed pto response\n", "response_datagrams_dropped": 1, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [{"fin": true, "length": 28, "offset": 0}, {"fin": true, "length": 28, "offset": 0}], "server_forwarded_while_gated": 2, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 1}
+{"case": "pto-full", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_f...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="http3_outbound_pto_close_restart_2" classname="http3_outbound_pto_close_restart_2" time="4.67499" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;interop;lifecycle;recovery"/>
+		</properties>
+		<system-out>{"case": "pto", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 1201.257748000046, "dropped_datagram_bytes": 60, "dropped_packet_number": 8, "dropped_stream_frames": [{"fin": true, "length": 28, "offset": 0}], "gate_at_ms": 101.1225530000388, "listener_healthy": true, "request_fin_acked": true, "response_at_ms": 1230.9178560000191, "response_body": "delayed pto response\n", "response_datagrams_dropped": 1, "restart": true, "restart_budget": [0, 0, 0], "restart_report": "restarted", "retransmitted_stream_frames": [{"fin": true, "length": 28, "offset": 0}, {"fin": true, "length": 28, "offset": 0}], "server_forwarded_while_gated": 2, "socket_error_events": [], "socket_errors": [], "status": "passed", "workers": 2}
+{"case": "pto-full", "client_blocked": 0, "client_forwarded": 9, "client_forwarded_at_gate": 8, "client_forwarded_at_response": 8, "client_fo...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="quic_retire_stream_credit_wakeup" classname="quic_retire_stream_credit_wakeup" time="0.940597" status="run">
+		<properties>
+			<property name="cmake_labels" value="flow_control;http3;lifecycle;quic"/>
+		</properties>
+		<system-out>{"case": "credit", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 6.320850000008704, "final_max_streams": 2, "fixture_ingress_count": 5, "initial_max_streams": 1, "mode": "observer", "observer_notifications_after_retire": 7, "pre_retire_deadline_ms": 5889, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+{"case": "credit", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 5.964101000017763, "final_max_streams": 2, "fixture_ingress_count": 0, "initial_max_streams": 1, "mode": "private", "observer_notifications_after_retire": 0, "pre_retire_deadline_ms": 5889, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+</system-out>
+	</testcase>
+	<testcase name="quic_retire_stream_notification_lifetime" classname="quic_retire_stream_notification_lifetime" time="0.814182" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;memory;quic"/>
+		</properties>
+		<system-out>{"case": "notification-lifetime", "client_blocked": 3, "client_forwarded_after_gate": 0, "credit_at_ms": 10.702111999989938, "final_max_streams": 2, "fixture_ingress_count": 5, "initial_max_streams": 1, "mode": "observer", "notification_capture_expired_after_unobserve": true, "notification_capture_owners_after_dispatch": 1, "notification_capture_owners_before": 1, "observer_notifications_after_retire": 7, "pre_retire_deadline_ms": 5888, "proxy_errors": [], "request_fin_acked": true, "server_datagrams_after_gate": 5, "server_stderr": "", "server_stdout": "", "status": "passed"}
+</system-out>
+	</testcase>
+	<testcase name="quic_private_outbound_pto" classname="quic_private_outbound_pto" time="0.589698" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;quic;recovery"/>
+		</properties>
+		<system-out>{"case": "private-pto", "client_blocked": 0, "client_forwarded": 8, "client_forwarded_at_gate": 7, "client_forwarded_while_gated": 0, "control_only_after_drop": 0, "decode_errors": [], "drop_at_ms": 55.59081899997409, "dropped_datagram_bytes": 57, "dropped_packet_number": 3, "dropped_stream_frames": [{"fin": true, "length": 25, "offset": 0}], "gate_at_ms": 0.10048999996570274, "mode": "private", "observer_notifications": 0, "pre_send_deadline_ms": 5888, "response_at_ms": 85.818493999966, "response_datagrams_dropped": 1, "retransmitted_stream_frames": [{"fin": true, "length": 25, "offset": 0}, {"fin": true, "length": 25, "offset": 0}], "server_forwarded_while_gated": 2, "server_stderr": "", "server_stdout": "", "socket_error_events": [], "socket_errors": [], "status": "passed"}
+</system-out>
+	</testcase>
+	<testcase name="quic_handshake_confirmation" classname="quic_handshake_confirmation" time="1.49275" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;quic;recovery"/>
+		</properties>
+		<system-out>{"case": "handshake_confirmation", "client_application_pto_count": 1, "client_packets_blocked_before_confirmation": 0, "confirmed_after_tls_complete": false, "decode_errors": [], "done_packets": [{"at_ms": 15.663152999991325, "bytes": 63, "frames": [2, 24, 30], "pn": 0}, {"at_ms": 1039.9871490000123, "bytes": 63, "frames": [1, 18, 19, 24, 30], "pn": 1}, {"at_ms": 1040.0969400000122, "bytes": 63, "frames": [1, 18, 19, 24, 30], "pn": 2}], "dropped_done": true, "dropped_request": true, "handshake_confirmed": true, "illegal_client_done_error_code": 10, "illegal_client_done_frame_type": 30, "illegal_client_done_packet_numbers": [10], "mode": "observer", "request_fin_acked": true, "request_packets": [{"at_ms": 0.7396889999995437, "bytes": 46, "pn": 8}, {"at_ms": 28.851781000014398, "bytes": 47, "pn": 9}], "server_stderr": "[2026-10-19 00:52:33.962] [error] [125519550568384] [quic_retire_stream_server.cpp:59] retire-stream fixture: process: Transport endpoint is not connected\n", "server_stdout": "", "socket_errors"...
+[This part of the test output was removed since it exceeds the threshold of 1024 bytes.]
+</system-out>
+	</testcase>
+	<testcase name="h3_webtransport_aioquic_probe_unit" classname="h3_webtransport_aioquic_probe_unit" time="0.512091" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;interop;unit;webtransport"/>
+		</properties>
+		<system-out>.....Executing &lt;Task finished name='Task-26' coro=&lt;WebTransportProbeTests.asyncSetUp() done, defined at /mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/http3/test_webtransport_aioquic_probe.py:12&gt; result=None created at /usr/lib/python3.14/asyncio/runners.py:110&gt; took 0.115 seconds
+.
+----------------------------------------------------------------------
+Ran 6 tests in 0.302s
+
+OK
+</system-out>
+	</testcase>
+	<testcase name="http3_early_data_recovery" classname="http3_early_data_recovery" time="2.00309" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;quic;recovery"/>
+		</properties>
+		<system-out>[2026-10-19 00:52:36.036] [info] [125385351309248] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=46
+[2026-10-19 00:52:36.573] [info] [125385351309248] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+early-data fault evidence: {'retries_delayed': 20, 'early_before_retry': 10, 'early_dropped_after_retry': 2, 'initial_pn_regressions': 0, 'source_address_reuse': 0, 'initial_pn_regression_events': []}
+</system-out>
+	</testcase>
+	<testcase name="http3_streaming_cancellation" classname="http3_streaming_cancellation" time="0.516162" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;quic"/>
+		</properties>
+		<system-out>PASS streaming downstream IO + peer RESET x3 + normal early response + reuse
+</system-out>
+	</testcase>
+	<testcase name="http3_idle_connection_cleanup" classname="http3_idle_connection_cleanup" time="31.5444" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;lifecycle;quic"/>
+		</properties>
+		<system-out>idle peers reclaimed: 4 -&gt; 1; samples=[(0.0, 4), (1.0, 4), (2.01, 4), (3.01, 4), (4.02, 4), (5.02, 4), (6.02, 4), (7.02, 4), (8.03, 4), (9.03, 4), (10.03, 4), (11.04, 4), (12.04, 4), (13.04, 4), (14.05, 4), (15.05, 4), (16.05, 4), (17.05, 4), (18.05, 4), (19.06, 4), (20.06, 4), (21.06, 4), (22.06, 4), (23.07, 4), (24.07, 4), (25.07, 4), (26.07, 4), (27.07, 4), (28.08, 4), (29.08, 4), (30.08, 1)]
+</system-out>
+	</testcase>
+	<testcase name="http_client_http3_end_to_end" classname="http_client_http3_end_to_end" time="0.792851" status="run">
+		<properties>
+			<property name="cmake_labels" value="client;end_to_end;http3"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:09.285] [info] [132726496528320] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-19 00:53:09.428] [info] [132726496528320] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http_client_http3_dynamic_qpack_end_to_end" classname="http_client_http3_dynamic_qpack_end_to_end" time="0.759604" status="run">
+		<properties>
+			<property name="cmake_labels" value="client;end_to_end;http3;qpack"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:10.040] [info] [128496475875264] [http_client_e2e.cpp:750] HTTP/3 priority E2E passed: first foreground=1, first background=49
+[2026-10-19 00:53:10.188] [info] [128496475875264] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_multipath_end_to_end" classname="http3_multipath_end_to_end" time="0.446193" status="run">
+		<properties>
+			<property name="cmake_labels" value="end_to_end;http3;multipath;quic"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:10.634] [info] [129877737252800] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_multipath_path_mtu_end_to_end" classname="http3_multipath_path_mtu_end_to_end" time="0.487443" status="run">
+		<properties>
+			<property name="cmake_labels" value="end_to_end;http3;multipath;pmtu;quic"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:11.121] [info] [124187991619520] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_multipath_path_mtu_blackhole_end_to_end" classname="http3_multipath_path_mtu_blackhole_end_to_end" time="2.73604" status="run">
+		<properties>
+			<property name="cmake_labels" value="blackhole;end_to_end;http3;multipath;pmtu;quic"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:13.857] [info] [138418876753856] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_multipath_local_path_close_end_to_end" classname="http3_multipath_local_path_close_end_to_end" time="0.647429" status="run">
+		<properties>
+			<property name="cmake_labels" value="close;end_to_end;http3;multipath;quic"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:14.506] [info] [127345568769984] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_connect_close_end_to_end" classname="http3_connect_close_end_to_end" time="0.198829" status="run">
+		<properties>
+			<property name="cmake_labels" value="client;close;connect;end_to_end;http3;quic"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:14.704] [info] [139091812243392] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_multipath_path_validation_timeout_end_to_end" classname="http3_multipath_path_validation_timeout_end_to_end" time="3.2962" status="run">
+		<properties>
+			<property name="cmake_labels" value="end_to_end;http3;multipath;quic;timeout"/>
+		</properties>
+		<system-out>[2026-10-19 00:53:17.999] [info] [138142694967232] [http_client_e2e.cpp:1283] HTTP/3 client end-to-end regression passed
+</system-out>
+	</testcase>
+	<testcase name="http3_connection_migration" classname="http3_connection_migration" time="2.29981" status="run">
+		<properties>
+			<property name="cmake_labels" value="http3;migration;quic"/>
+		</properties>
+		<system-out>HTTP/3 connection migration: path validation and second request passed
+</system-out>
+	</testcase>
+</testsuite>

@@ -37,6 +37,13 @@ public:
         std::shared_ptr<const std::string> body, std::size_t body_offset,
         std::size_t body_size, std::uint64_t stream) -> quic_send_frame;
 
+    /// STREAM header plus a small owned application prefix and a shared body.
+    /// Shared strategies expose no bytes through the owned-only projection.
+    [[nodiscard]] static auto shared_stream_with_prefix(
+        std::span<const std::byte> header, std::span<const std::byte> prefix,
+        std::shared_ptr<const std::string> body, std::size_t body_offset,
+        std::size_t body_size, std::uint64_t stream) -> quic_send_frame;
+
     [[nodiscard]] auto empty() const noexcept -> bool;
     [[nodiscard]] auto size() const noexcept -> std::size_t;
     [[nodiscard]] auto stream() const noexcept -> std::optional<std::uint64_t>;

@@ -1,0 +1,2 @@
+[ perf record: Woken up 387 times to write data ]
+[ perf record: Captured and wrote 103.246 MB /var/tmp/agensio-reference-observation-dd7463c36c79453ca4d8fd9099ae2cf9/perf/perf.data (6455 samples) ]

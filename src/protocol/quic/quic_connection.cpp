@@ -2992,6 +2992,10 @@ auto quic_connection::process_ack_frame_state(const ack_frame& frame)
         }
     }
 
+    // One ACK permits one retry; pending target alone is not a now timer.
+    if (path_scoped && application_path.path_mtu_probe_target)
+        impl_->send_flush_requested.store(true, std::memory_order_release);
+
     for (auto& frame_to_retry : update->lost_frames)
     {
         if (path_scoped)
@@ -4265,7 +4269,12 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
             ? nullptr
             : std::addressof(found->second);
     };
-    const auto path_mtu_probe_target = path.path_mtu_probe_target;
+    // Preserve the existing PTO exception; defer optional PMTU enlargement
+    // when an ordinary packet lacks credit, leaving validated-size work free.
+    std::optional<std::size_t> path_mtu_probe_target;
+    if (path.path_mtu_probe_target &&
+        (pto_probe || path.recovery.can_send_datagram(*path.path_mtu_probe_target)))
+        path_mtu_probe_target = path.path_mtu_probe_target;
     const bool contains_path_mtu_probe = path_mtu_probe_target.has_value();
     if (contains_path_mtu_probe)
     {
@@ -4789,7 +4798,8 @@ auto quic_connection::apply_stream_write(stream_id sid,
             send_packet_payload)
             --chunk;
         const auto frame_fin = fin && sent_offset + chunk == payload_size;
-        if (!use_early_data && sent_offset >= prefix_payload.size() && shared_data)
+        if (!use_early_data && shared_data &&
+            sent_offset + chunk > prefix_payload.size())
         {
             std::array<std::byte, 32> header{};
             std::size_t header_size{};
@@ -4811,10 +4821,22 @@ auto quic_connection::apply_stream_write(stream_id sid,
             if (stream_offset != 0U)
                 append_varint(stream_offset);
             append_varint(chunk);
-            impl_->enqueue_stream_frame(sid,
-                quic_send_frame::shared_stream(
-                    std::span{header}.first(header_size), shared_data,
-                    sent_offset - prefix_payload.size(), chunk, sid));
+            if (sent_offset >= prefix_payload.size())
+            {
+                impl_->enqueue_stream_frame(sid,
+                    quic_send_frame::shared_stream(
+                        std::span{header}.first(header_size), shared_data,
+                        sent_offset - prefix_payload.size(), chunk, sid));
+            }
+            else
+            {
+                const auto prefix_count = prefix_payload.size() - sent_offset;
+                impl_->enqueue_stream_frame(sid,
+                    quic_send_frame::shared_stream_with_prefix(
+                        std::span{header}.first(header_size),
+                        prefix_payload.subspan(sent_offset, prefix_count), shared_data,
+                        0U, chunk - prefix_count, sid));
+            }
             sent_offset += chunk;
             continue;
         }

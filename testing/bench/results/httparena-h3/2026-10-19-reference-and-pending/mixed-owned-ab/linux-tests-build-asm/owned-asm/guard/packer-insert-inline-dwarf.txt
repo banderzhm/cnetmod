@@ -1,0 +1,36 @@
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPKS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISB_E9referenceEEE5valueEiE4typeELi0EEENS6_IPS1_EES9_SB_SB_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4227
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPKS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISB_E9referenceEEE5valueEiE4typeELi0EEENS6_IPS1_EES9_SB_SB_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4276
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISA_E9referenceEEE5valueEiE4typeELi0EEES8_NS6_IPKS1_EESA_SA_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4285
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISA_E9referenceEEE5valueEiE4typeELi0EEES8_NS6_IPKS1_EESA_SA_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4297
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108IPKS1_TnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsIS9_E9referenceEEE5valueEiE4typeELi0EEENS_11__wrap_iterIPS1_EENSF_IS7_EES9_S9_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline::append_to(std::__1::vector<std::byte, std::__1::allocator<std::byte> >&) const
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_send_pipeline.cpp:136
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4341
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108INS_11__wrap_iterIPKS1_EETnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsISB_E9referenceEEE5valueEiE4typeELi0EEENS6_IPS1_EES9_SB_SB_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_send_frame@cnetmod.protocol.quic.send_pipeline::append_to(std::__1::vector<std::byte, std::__1::allocator<std::byte> >&) const
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_send_pipeline.cpp:?
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4341
+_ZNSt3__16vectorISt4byteNS_9allocatorIS1_EEE6insertB9nqe220108IPKS1_TnNS_9enable_ifIXaasr31__has_forward_iterator_categoryIT_EE5valuesr16is_constructibleIS1_NS_15iterator_traitsIS9_E9referenceEEE5valueEiE4typeELi0EEENS_11__wrap_iterIPS1_EENSF_IS7_EES9_S9_
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/protocol/quic/quic_connection.cpp:4429
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/usr/include/c++/v1/__vector/vector.h:536
+cnetmod::quic::quic_connection@cnetmod.protocol.quic::pack_one_rtt_packet(bool, std::__1::vector<std::byte, std::__1::allocator<std::byte> >, std::__1::vector<std::byte, std::__1::allocator<std::byte> >*)
+/usr/include/c++/v1/__vector/vector.h:536

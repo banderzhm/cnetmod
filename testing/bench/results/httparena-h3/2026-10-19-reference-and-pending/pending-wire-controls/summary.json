@@ -1,0 +1,86 @@
+[
+  {
+    "name": "old-diagnostic-ack_only",
+    "exit": 1,
+    "expected_exit": 1,
+    "status": "failed",
+    "error": "AssertionError('pending MTU blocked ordinary ACK-only packet before original recovery deadline')"
+  },
+  {
+    "name": "old-diagnostic-wake",
+    "exit": 1,
+    "expected_exit": 1,
+    "status": "failed",
+    "error": "AssertionError('pure ACK release left only deferred PMTU probe without a writer wake before original deadline')"
+  },
+  {
+    "name": "deferral-diagnostic-ack_only",
+    "exit": 0,
+    "expected_exit": 0,
+    "status": "passed",
+    "error": null
+  },
+  {
+    "name": "deferral-diagnostic-wake",
+    "exit": 1,
+    "expected_exit": 1,
+    "status": "failed",
+    "error": "AssertionError('pure ACK release left only deferred PMTU probe without a writer wake before original deadline')"
+  },
+  {
+    "name": "full-diagnostic-ack_only",
+    "exit": 0,
+    "expected_exit": 0,
+    "status": "passed",
+    "error": null
+  },
+  {
+    "name": "full-diagnostic-wake",
+    "exit": 0,
+    "expected_exit": 0,
+    "status": "passed",
+    "error": null
+  },
+  {
+    "name": "old-normal-ack_only",
+    "exit": 1,
+    "expected_exit": 1,
+    "status": "failed",
+    "error": "AssertionError('pending MTU blocked ordinary ACK-only packet before original recovery deadline')"
+  },
+  {
+    "name": "old-normal-wake",
+    "exit": 1,
+    "expected_exit": 1,
+    "status": "failed",
+    "error": "AssertionError('pure ACK release left only deferred PMTU probe without a writer wake before original deadline')"
+  },
+  {
+    "name": "deferral-normal-ack_only",
+    "exit": 0,
+    "expected_exit": 0,
+    "status": "passed",
+    "error": null
+  },
+  {
+    "name": "deferral-normal-wake",
+    "exit": 1,
+    "expected_exit": 1,
+    "status": "failed",
+    "error": "AssertionError('pure ACK release left only deferred PMTU probe without a writer wake before original deadline')"
+  },
+  {
+    "name": "full-normal-ack_only",
+    "exit": 0,
+    "expected_exit": 0,
+    "status": "passed",
+    "error": null
+  },
+  {
+    "name": "full-normal-wake",
+    "exit": 0,
+    "expected_exit": 0,
+    "status": "passed",
+    "error": null
+  }
+]

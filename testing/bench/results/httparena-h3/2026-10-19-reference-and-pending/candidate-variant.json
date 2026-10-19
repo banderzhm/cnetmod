@@ -1,0 +1,7 @@
+{
+  "binary": "/var/tmp/cnetmod-pending-accepted-baseline-20261019/proof-build-root/testing/bench/arena_h3_server",
+  "binary_sha256": "880eb2a9886dd956deb325138b493162cb7354db90e64e7f19b2c5cf441ca4b4",
+  "source_snapshot": "/var/tmp/cnetmod-pending-accepted-baseline-20261019/source-snapshot",
+  "allocator_proof": "/var/tmp/cnetmod-pending-accepted-baseline-20261019/system-allocator/allocator-proof.json",
+  "proof_build_root": "/var/tmp/cnetmod-pending-accepted-baseline-20261019/proof-build-root"
+}

@@ -1,0 +1,19 @@
+{
+  "scope": "single separate DWARF diagnostic; sample shares are not direct call counts or proof of throughput cause",
+  "samples_with_leaf": 6455,
+  "leaf_dso_counts": {
+    "[kernel.kallsyms]": 2064,
+    "/usr/lib/x86_64-linux-gnu/libcrypto.so.3": 1757,
+    "/usr/local/bin/agensio": 1799,
+    "/usr/lib/x86_64-linux-gnu/libc.so.6": 814,
+    "[vdso]": 7,
+    "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33": 14
+  },
+  "copy_leaf_file_offset": "0x162b87",
+  "copy_instruction": "rep movsb",
+  "copy_leaf_samples": 519,
+  "copy_callers": {
+    "agensio::quic::QuicConnection<agensio::h3::Http3Connection>::build_packet(agensio::quic::Space, unsigned char*, unsigned long, std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::duration<long, std::ratio<1l, 1000000000l> > >, unsigned long)+0x3247 (/usr/local/bin/agensio)": 519
+  },
+  "libc_sha256": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92"
+}

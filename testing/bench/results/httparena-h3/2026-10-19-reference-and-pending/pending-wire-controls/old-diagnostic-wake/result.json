@@ -1,0 +1,279 @@
+{
+  "status": "failed",
+  "scenario": "wake",
+  "source_sha256": "98fbc918c1f8602e4a9b364c542eebf631a17621c5cc6298dce462c009395e0b",
+  "server_sha256": "b5e4ab45e9f3391bec5f25de480252d29480b5b9aeeca4959761b320b963f8c4",
+  "driver_sha256": "c01b8262be7df5c41b4aacb7f1aa72a74e3e83d4f36270333e7342ffc0765143",
+  "server_cpp_sha256": "79b6f315cd257814c5a0b901f0294988c26c7dd462eacb4e053524367eedf0d5",
+  "parser_sha256": "7341a99b0ee4cd459b996d4d300a60907e729f198a028a2180017e8a4e1c99f8",
+  "aioquic_version": "1.7.0",
+  "peer": "unmodified installed aioquic",
+  "command": [
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/build-recovered/old-diagnostic/quic_pmtu_pending_server",
+    "--port",
+    "34767",
+    "--cert",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/cert.pem",
+    "--key",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/key.pem",
+    "--listening-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/listening.txt",
+    "--result-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/failure.txt",
+    "--burst-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/burst.json",
+    "--attempt-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/attempt.json",
+    "--state-report",
+    "/var/tmp/cnetmod-pmtu-pending-mixed-20261019/wire-runtime-v2/old-diagnostic-wake/state.json",
+    "--initial-delay-ms",
+    "200",
+    "--interval-ms",
+    "10"
+  ],
+  "measurement": {
+    "burst": {
+      "accepted": 64,
+      "elapsed_us": 144,
+      "finished_us": 318202704,
+      "observed_deadline_us": 318212509,
+      "mds_observed_us": 318202553,
+      "configured_interval_us": 10000
+    },
+    "attempt": {
+      "at_us": 318212706,
+      "next_deadline_us": 318509511,
+      "mds": 1328,
+      "ingress": 5
+    },
+    "report_lag_ms": 1.197115999957532,
+    "wire_datagram_packets": 14,
+    "wire_datagram_udp_bytes": 15848,
+    "original_public_deadline": 318.509511,
+    "delay_seconds": 0.05,
+    "released_original_acks": 1,
+    "last_original_ack_forwarded_at": 318.307565445,
+    "larger_probe": null,
+    "last_public_state": {
+      "at_us": 318307689,
+      "next_deadline_us": 348307681,
+      "mds": 1328,
+      "ingress": 6
+    }
+  },
+  "proxy_errors": [],
+  "forward_delay_proof": [
+    {
+      "direction": "client",
+      "received_at": 317.641933901,
+      "scheduled_forward_at": 317.691937662,
+      "forwarded_at": 317.692142424,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 317.692301079,
+      "scheduled_forward_at": 317.742304895,
+      "forwarded_at": 317.742466519,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 317.743804163,
+      "scheduled_forward_at": 317.79380991700003,
+      "forwarded_at": 317.794006232,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 317.794902215,
+      "scheduled_forward_at": 317.844904901,
+      "forwarded_at": 317.845201787,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 317.794930633,
+      "scheduled_forward_at": 317.844931329,
+      "forwarded_at": 317.845290556,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 317.794938493,
+      "scheduled_forward_at": 317.844940255,
+      "forwarded_at": 317.845305316,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 317.84779385,
+      "scheduled_forward_at": 317.897801925,
+      "forwarded_at": 317.897822592,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 317.849305394,
+      "scheduled_forward_at": 317.899310985,
+      "forwarded_at": 317.899988408,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 317.849351774,
+      "scheduled_forward_at": 317.899354913,
+      "forwarded_at": 317.900026314,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 317.900119986,
+      "scheduled_forward_at": 317.950122282,
+      "forwarded_at": 317.950907986,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 317.900156068,
+      "scheduled_forward_at": 317.95021602500003,
+      "forwarded_at": 317.950939086,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 317.95239275,
+      "scheduled_forward_at": 318.002412574,
+      "forwarded_at": 318.002472012,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.100285082,
+      "scheduled_forward_at": 318.150438152,
+      "forwarded_at": 318.150589221,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 318.152191996,
+      "scheduled_forward_at": 318.202228466,
+      "forwarded_at": 318.202403434,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202624877,
+      "scheduled_forward_at": 318.25268913400004,
+      "forwarded_at": 318.253190994,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202700086,
+      "scheduled_forward_at": 318.25271484900003,
+      "forwarded_at": 318.253224882,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202720843,
+      "scheduled_forward_at": 318.252730109,
+      "forwarded_at": 318.253229011,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202740357,
+      "scheduled_forward_at": 318.252748768,
+      "forwarded_at": 318.253231038,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202753708,
+      "scheduled_forward_at": 318.252760519,
+      "forwarded_at": 318.253233023,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202764654,
+      "scheduled_forward_at": 318.252773134,
+      "forwarded_at": 318.253234649,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202778075,
+      "scheduled_forward_at": 318.25278370800004,
+      "forwarded_at": 318.253236856,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202787509,
+      "scheduled_forward_at": 318.25279531,
+      "forwarded_at": 318.253238873,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.20279846,
+      "scheduled_forward_at": 318.252803706,
+      "forwarded_at": 318.253241385,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202812139,
+      "scheduled_forward_at": 318.252817435,
+      "forwarded_at": 318.253243806,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.2028228,
+      "scheduled_forward_at": 318.252829804,
+      "forwarded_at": 318.253246016,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202834582,
+      "scheduled_forward_at": 318.252840314,
+      "forwarded_at": 318.253248109,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202843525,
+      "scheduled_forward_at": 318.252848619,
+      "forwarded_at": 318.253249827,
+      "released_at": null
+    },
+    {
+      "direction": "server",
+      "received_at": 318.202853282,
+      "scheduled_forward_at": 318.25285946400004,
+      "forwarded_at": 318.253251388,
+      "released_at": null
+    },
+    {
+      "direction": "client",
+      "received_at": 318.254924663,
+      "scheduled_forward_at": 318.307125675,
+      "forwarded_at": 318.307565445,
+      "released_at": 318.25712496
+    },
+    {
+      "direction": "client",
+      "received_at": 318.501149034,
+      "scheduled_forward_at": 318.55117280900004,
+      "forwarded_at": 318.551351097,
+      "released_at": null
+    }
+  ],
+  "error": "AssertionError('pure ACK release left only deferred PMTU probe without a writer wake before original deadline')",
+  "server_exit": -15
+}

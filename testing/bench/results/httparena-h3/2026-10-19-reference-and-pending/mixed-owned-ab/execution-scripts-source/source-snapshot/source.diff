@@ -1,0 +1,425 @@
+diff --git a/src/protocol/quic/quic_connection.cpp b/src/protocol/quic/quic_connection.cpp
+index b17b62c3..e8662e76 100644
+--- a/src/protocol/quic/quic_connection.cpp
++++ b/src/protocol/quic/quic_connection.cpp
+@@ -4789,7 +4789,8 @@ auto quic_connection::apply_stream_write(stream_id sid,
+             send_packet_payload)
+             --chunk;
+         const auto frame_fin = fin && sent_offset + chunk == payload_size;
+-        if (!use_early_data && sent_offset >= prefix_payload.size() && shared_data)
++        if (!use_early_data && shared_data &&
++            sent_offset + chunk > prefix_payload.size())
+         {
+             std::array<std::byte, 32> header{};
+             std::size_t header_size{};
+@@ -4811,10 +4812,22 @@ auto quic_connection::apply_stream_write(stream_id sid,
+             if (stream_offset != 0U)
+                 append_varint(stream_offset);
+             append_varint(chunk);
+-            impl_->enqueue_stream_frame(sid,
+-                quic_send_frame::shared_stream(
+-                    std::span{header}.first(header_size), shared_data,
+-                    sent_offset - prefix_payload.size(), chunk, sid));
++            if (sent_offset >= prefix_payload.size())
++            {
++                impl_->enqueue_stream_frame(sid,
++                    quic_send_frame::shared_stream(
++                        std::span{header}.first(header_size), shared_data,
++                        sent_offset - prefix_payload.size(), chunk, sid));
++            }
++            else
++            {
++                const auto prefix_count = prefix_payload.size() - sent_offset;
++                impl_->enqueue_stream_frame(sid,
++                    quic_send_frame::shared_stream_with_prefix(
++                        std::span{header}.first(header_size),
++                        prefix_payload.subspan(sent_offset, prefix_count), shared_data,
++                        0U, chunk - prefix_count, sid));
++            }
+             sent_offset += chunk;
+             continue;
+         }
+diff --git a/src/protocol/quic/quic_send_pipeline.cpp b/src/protocol/quic/quic_send_pipeline.cpp
+index fcdfa41b..3b19804a 100644
+--- a/src/protocol/quic/quic_send_pipeline.cpp
++++ b/src/protocol/quic/quic_send_pipeline.cpp
+@@ -74,6 +74,28 @@ auto quic_send_frame::shared_stream(std::span<const std::byte> header,
+     return result;
+ }
+ 
++auto quic_send_frame::shared_stream_with_prefix(
++    std::span<const std::byte> header, std::span<const std::byte> prefix,
++    std::shared_ptr<const std::string> body, std::size_t body_offset,
++    std::size_t body_size, std::uint64_t stream) -> quic_send_frame
++{
++    if (!body || header.empty() ||
++        header.size() > quic_send_frame{}.stream_header_.size() ||
++        body_offset > body->size() || body_size > body->size() - body_offset ||
++        prefix.size() > std::numeric_limits<std::size_t>::max() - header.size() ||
++        body_size > std::numeric_limits<std::size_t>::max() - header.size() - prefix.size())
++        std::terminate();
++    quic_send_frame result;
++    result.owned_bytes_.reserve(header.size() + prefix.size());
++    result.owned_bytes_.insert(result.owned_bytes_.end(), header.begin(), header.end());
++    result.owned_bytes_.insert(result.owned_bytes_.end(), prefix.begin(), prefix.end());
++    result.shared_bytes_ = std::move(body);
++    result.shared_offset_ = body_offset;
++    result.shared_size_ = body_size;
++    result.stream_ = stream;
++    return result;
++}
++
+ auto quic_send_frame::empty() const noexcept -> bool
+ {
+     return owned_bytes_.empty() && stream_header_size_ == 0U;
+@@ -81,8 +103,8 @@ auto quic_send_frame::empty() const noexcept -> bool
+ 
+ auto quic_send_frame::size() const noexcept -> std::size_t
+ {
+-    return owned_bytes_.empty() ? stream_header_size_ + shared_size_
+-                                : owned_bytes_.size();
++    const auto owned_size = owned_bytes_.size();
++    return shared_bytes_ ? owned_size + stream_header_size_ + shared_size_ : owned_size;
+ }
+ 
+ auto quic_send_frame::stream() const noexcept -> std::optional<std::uint64_t>
+@@ -113,26 +135,35 @@ auto quic_send_frame::is_connection_close() const noexcept -> bool
+ {
+     return !owned_bytes_.empty() &&
+         (owned_bytes_.front() == std::byte{0x1c} ||
+-            owned_bytes_.front() == std::byte{0x1d});
++            owned_bytes_.front() == std::byte{0x1d}) &&
++        !shared_bytes_;
+ }
+ 
+ auto quic_send_frame::owned_bytes() const noexcept -> const std::vector<std::byte>&
+ {
+-    return owned_bytes_;
++    if (!shared_bytes_)
++        return owned_bytes_;
++    // A shared frame has no complete owned encoding, including mixed prefixes.
++    static const std::vector<std::byte> empty;
++    return empty;
+ }
+ 
+ auto quic_send_frame::release_owned_bytes() noexcept -> std::vector<std::byte>
+ {
++    if (shared_bytes_)
++        return {};
+     return std::move(owned_bytes_);
+ }
+ 
+ auto quic_send_frame::append_to(std::vector<std::byte>& output) const -> void
+ {
+-    if (!owned_bytes_.empty())
++    if (!shared_bytes_)
+     {
+         output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
+         return;
+     }
++    if (!owned_bytes_.empty())
++        output.insert(output.end(), owned_bytes_.begin(), owned_bytes_.end());
+     output.insert(output.end(), stream_header_.begin(),
+         stream_header_.begin() + stream_header_size_);
+     const auto body = std::as_bytes(std::span{
+@@ -155,7 +186,8 @@ auto operator==(const quic_send_frame& lhs,
+     const quic_send_frame& rhs) noexcept -> bool
+ {
+     if (lhs.shared_bytes_ || rhs.shared_bytes_)
+-        return lhs.shared_bytes_ == rhs.shared_bytes_ &&
++        return lhs.owned_bytes_ == rhs.owned_bytes_ &&
++            lhs.shared_bytes_ == rhs.shared_bytes_ &&
+             lhs.shared_offset_ == rhs.shared_offset_ &&
+             lhs.shared_size_ == rhs.shared_size_ &&
+             lhs.stream_ == rhs.stream_ &&
+diff --git a/src/protocol/quic/quic_send_pipeline.cppm b/src/protocol/quic/quic_send_pipeline.cppm
+index a0c24fdc..09cf554d 100644
+--- a/src/protocol/quic/quic_send_pipeline.cppm
++++ b/src/protocol/quic/quic_send_pipeline.cppm
+@@ -37,6 +37,13 @@ public:
+         std::shared_ptr<const std::string> body, std::size_t body_offset,
+         std::size_t body_size, std::uint64_t stream) -> quic_send_frame;
+ 
++    /// STREAM header plus a small owned application prefix and a shared body.
++    /// Shared strategies expose no bytes through the owned-only projection.
++    [[nodiscard]] static auto shared_stream_with_prefix(
++        std::span<const std::byte> header, std::span<const std::byte> prefix,
++        std::shared_ptr<const std::string> body, std::size_t body_offset,
++        std::size_t body_size, std::uint64_t stream) -> quic_send_frame;
++
+     [[nodiscard]] auto empty() const noexcept -> bool;
+     [[nodiscard]] auto size() const noexcept -> std::size_t;
+     [[nodiscard]] auto stream() const noexcept -> std::optional<std::uint64_t>;
+diff --git a/testing/tests/test_quic_frame.cpp b/testing/tests/test_quic_frame.cpp
+index f2336b8c..738bc6ea 100644
+--- a/testing/tests/test_quic_frame.cpp
++++ b/testing/tests/test_quic_frame.cpp
+@@ -759,4 +759,141 @@ TEST(quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission)
+     ASSERT_EQ(scheduler.priority_count(), 0U);
+ }
+ 
++TEST(quic_mixed_send_frame_matches_public_stream_encoding)
++{
++    using namespace cnetmod::quic;
++    const std::array prefix{std::byte{0x00}, std::byte{0xff}};
++    for (const auto body_size : std::array<std::size_t, 7>{1U, 61U, 62U, 63U, 64U, 4096U, 65500U})
++    {
++        const auto body = std::make_shared<const std::string>(body_size + 6U, 'b');
++        const auto body_bytes = std::as_bytes(std::span{body->data(), body->size()});
++        std::vector<std::byte> payload(prefix.begin(), prefix.end());
++        payload.insert(payload.end(), body_bytes.begin() + 3U,
++            body_bytes.begin() + 3U + body_size);
++        for (const auto offset : {0U, 16384U})
++        {
++            for (const auto fin : {false, true})
++            {
++                // The public encoder supplies an independent canonical header.
++                const auto expected = encode_frame(stream_frame{64U, offset, payload, fin});
++                const auto header_size = expected.size() - payload.size();
++                auto frame = quic_send_frame::shared_stream_with_prefix(
++                    std::span{expected}.first(header_size), prefix,
++                    body, 3U, body_size, 64U);
++                ASSERT_EQ(frame.size(), expected.size());
++                ASSERT_FALSE(frame.empty());
++                ASSERT_FALSE(frame.is_connection_close());
++                ASSERT_TRUE(frame.owned_bytes().empty());
++                ASSERT_TRUE(frame.release_owned_bytes().empty());
++                std::vector<std::byte> wire;
++                frame.append_to(wire);
++                ASSERT_TRUE(wire == expected);
++                const auto decoded = decode_frame(wire);
++                ASSERT_TRUE(decoded.has_value());
++                if (!decoded || !std::holds_alternative<stream_frame>(decoded->first))
++                {
++                    ASSERT_TRUE(false);
++                    return;
++                }
++                const auto& stream = std::get<stream_frame>(decoded->first);
++                ASSERT_EQ(stream.stream_id, 64U);
++                ASSERT_EQ(stream.offset, offset);
++                ASSERT_EQ(stream.fin, fin);
++                ASSERT_TRUE(std::ranges::equal(stream.data, payload));
++            }
++        }
++    }
++}
++
++TEST(quic_mixed_send_frame_prefix_participates_in_alias_equality)
++{
++    using namespace cnetmod::quic;
++    const auto body = std::make_shared<const std::string>("body");
++    const std::array header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
++    const std::array first_prefix{std::byte{'a'}, std::byte{'b'}};
++    const std::array second_prefix{std::byte{'a'}, std::byte{'c'}};
++    const auto first = quic_send_frame::shared_stream_with_prefix(
++        header, first_prefix, body, 0U, body->size(), 0U);
++    const auto alias = first;
++    const auto different = quic_send_frame::shared_stream_with_prefix(
++        header, second_prefix, body, 0U, body->size(), 0U);
++    ASSERT_TRUE(first == alias);
++    ASSERT_FALSE(first == different);
++}
++
++TEST(quic_mixed_send_frame_copy_move_clear_retains_only_live_owners)
++{
++    using namespace cnetmod::quic;
++    auto body = std::make_shared<const std::string>("body");
++    const std::weak_ptr<const std::string> weak = body;
++    const std::array header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
++    const std::array prefix{std::byte{'a'}, std::byte{'b'}};
++    auto frame = quic_send_frame::shared_stream_with_prefix(
++        header, prefix, body, 0U, body->size(), 0U);
++    auto alias = frame;
++    auto moved = std::move(alias);
++    body.reset();
++    frame.clear();
++    ASSERT_FALSE(weak.expired());
++    std::vector<std::byte> wire;
++    moved.append_to(wire);
++    const auto decoded = decode_frame(wire);
++    ASSERT_TRUE(decoded.has_value());
++    moved.clear();
++    ASSERT_TRUE(weak.expired());
++    ASSERT_TRUE(moved.empty());
++    ASSERT_EQ(moved.size(), 0U);
++}
++
++TEST(quic_shared_strategy_never_exports_partial_owned_prefix_or_close)
++{
++    using namespace cnetmod::quic;
++    const auto body = std::make_shared<const std::string>("body");
++    // The raw-header factory accepts bytes; shared ownership must exclude CLOSE
++    // independently of any accidentally CLOSE-looking first byte.
++    const std::array header{std::byte{0x1c}};
++    const std::array prefix{std::byte{'a'}};
++    auto mixed = quic_send_frame::shared_stream_with_prefix(
++        header, prefix, body, 0U, body->size(), 0U);
++    ASSERT_FALSE(mixed.is_connection_close());
++    ASSERT_TRUE(mixed.owned_bytes().empty());
++    ASSERT_TRUE(mixed.release_owned_bytes().empty());
++    std::vector<std::byte> wire;
++    mixed.append_to(wire);
++    ASSERT_EQ(wire.size(), header.size() + prefix.size() + body->size());
++    const std::vector original{std::byte{0x1c}, std::byte{0x00}};
++    auto owned = quic_send_frame::owned(original);
++    ASSERT_TRUE(owned.is_connection_close());
++    owned.mark_early_data();
++    ASSERT_TRUE(owned.is_early_data());
++    ASSERT_TRUE(owned.owned_bytes() == original);
++    ASSERT_TRUE(owned.release_owned_bytes() == original);
++}
++
++TEST(quic_mixed_send_frame_owns_temporary_header_and_prefix)
++{
++    using namespace cnetmod::quic;
++    auto body = std::make_shared<const std::string>("body");
++    const std::weak_ptr<const std::string> owner = body;
++    quic_send_frame frame;
++    {
++        std::vector header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
++        std::vector prefix{std::byte{'D'}, std::byte{'A'}};
++        frame = quic_send_frame::shared_stream_with_prefix(
++            header, prefix, body, 0U, body->size(), 0U);
++        std::ranges::fill(header, std::byte{0x00});
++        std::ranges::fill(prefix, std::byte{0x00});
++    }
++    body.reset();
++    ASSERT_FALSE(owner.expired());
++    std::vector<std::byte> wire;
++    frame.append_to(wire);
++    const std::vector expected{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06},
++        std::byte{'D'}, std::byte{'A'}, std::byte{'b'}, std::byte{'o'},
++        std::byte{'d'}, std::byte{'y'}};
++    ASSERT_TRUE(wire == expected);
++    frame.clear();
++    ASSERT_TRUE(owner.expired());
++}
++
+ RUN_TESTS();
+diff --git a/testing/tests/test_quic_loss_detection.cpp b/testing/tests/test_quic_loss_detection.cpp
+index fd51d665..f6bdbe94 100644
+--- a/testing/tests/test_quic_loss_detection.cpp
++++ b/testing/tests/test_quic_loss_detection.cpp
+@@ -856,4 +856,122 @@ TEST(quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission)
+     ASSERT_FALSE(recovery.next_pto_deadline().has_value());
+ }
+ 
++namespace {
++
++auto mixed_test_frames(const std::shared_ptr<const std::string>& body)
++    -> cnetmod::quic::retransmittable_frame_storage
++{
++    const std::array header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
++    const std::array prefix{std::byte{'D'}, std::byte{'A'}};
++    return cnetmod::quic::retransmittable_frame_storage{
++        cnetmod::quic::quic_send_frame::shared_stream_with_prefix(
++            header, prefix, body, 0U, body->size(), 0U)};
++}
++
++} // namespace
++
++TEST(quic_recovery_mixed_pto_alias_releases_owner_after_original_ack)
++{
++    cnetmod::quic::quic_recovery_controller recovery(make_test_config());
++    const auto now = std::chrono::steady_clock::now();
++    const auto space = cnetmod::quic::pn_space::application;
++    auto body = std::make_shared<const std::string>("body");
++    const std::weak_ptr<const std::string> owner = body;
++    recovery.on_packet_sent(1U, 1200U, now, true, space, mixed_test_frames(body));
++    body.reset();
++    recovery.on_pto_expired(space);
++    auto probe = recovery.newest_probe_frames(space);
++    ASSERT_TRUE(probe.has_value());
++    if (!probe)
++        return;
++    recovery.on_packet_sent(2U, 1200U, now + 1ms, true, space,
++        std::move(*probe), std::nullopt, true);
++    probe.reset();
++    ASSERT_FALSE(owner.expired());
++    cnetmod::quic::ack_frame ack;
++    ack.largest_acked = 1U;
++    auto update = recovery.on_ack_received(ack, now + 20ms, space);
++    ASSERT_TRUE(update.has_value());
++    if (!update)
++        return;
++    ASSERT_TRUE(update->lost_frames.empty());
++    ASSERT_FALSE(recovery.newest_probe_frames(space).has_value());
++    ASSERT_TRUE(owner.expired());
++    ack.largest_acked = 2U;
++    update = recovery.on_ack_received(ack, now + 21ms, space);
++    ASSERT_TRUE(update.has_value());
++    ASSERT_FALSE(recovery.next_pto_deadline().has_value());
++}
++
++TEST(quic_recovery_mixed_loss_event_owns_complete_wire_until_released)
++{
++    using namespace cnetmod::quic;
++    quic_recovery_controller recovery(make_test_config());
++    const auto now = std::chrono::steady_clock::now();
++    const auto space = pn_space::application;
++    auto body = std::make_shared<const std::string>("body");
++    const std::weak_ptr<const std::string> owner = body;
++    recovery.on_packet_sent(1U, 1200U, now, true, space, mixed_test_frames(body));
++    body.reset();
++    recovery.on_packet_sent(4U, 1200U, now, true, space);
++    ack_frame ack;
++    ack.largest_acked = 4U;
++    auto update = recovery.on_ack_received(ack, now + 20ms, space);
++    ASSERT_TRUE(update.has_value());
++    if (!update)
++        return;
++    ASSERT_EQ(update->lost_frames.size(), 1U);
++    if (update->lost_frames.size() != 1U)
++        return;
++    ASSERT_FALSE(owner.expired());
++    std::vector<std::byte> wire;
++    update->lost_frames.front().append_to(wire);
++    const auto decoded = decode_frame(wire);
++    ASSERT_TRUE(decoded.has_value());
++    if (!decoded || !std::holds_alternative<stream_frame>(decoded->first))
++    {
++        ASSERT_TRUE(false);
++        return;
++    }
++    const std::array expected{std::byte{'D'}, std::byte{'A'}, std::byte{'b'},
++        std::byte{'o'}, std::byte{'d'}, std::byte{'y'}};
++    const auto& stream = std::get<stream_frame>(decoded->first);
++    ASSERT_TRUE(std::ranges::equal(stream.data, expected));
++    ASSERT_TRUE(stream.fin);
++    ASSERT_EQ(stream.offset, 0U);
++    update->lost_frames.clear();
++    ASSERT_TRUE(owner.expired());
++}
++
++TEST(quic_recovery_mixed_discard_and_destruction_release_all_owners)
++{
++    const auto now = std::chrono::steady_clock::now();
++    const auto space = cnetmod::quic::pn_space::application;
++    std::weak_ptr<const std::string> on_destruction;
++    {
++        cnetmod::quic::quic_recovery_controller recovery(make_test_config());
++        auto body = std::make_shared<const std::string>("body");
++        const std::weak_ptr<const std::string> owner = body;
++        for (std::uint64_t packet = 1U; packet <= 96U; ++packet)
++            recovery.on_packet_sent(packet, 1200U, now, true, space, mixed_test_frames(body));
++        body.reset();
++        cnetmod::quic::ack_frame ack;
++        ack.largest_acked = 64U;
++        ack.first_ack_range = 63U;
++        const auto update = recovery.on_ack_received(ack, now + 20ms, space);
++        ASSERT_TRUE(update.has_value());
++        ASSERT_FALSE(owner.expired());
++        recovery.discard_packet_number_space(space);
++        ASSERT_TRUE(owner.expired());
++        ASSERT_FALSE(recovery.next_pto_deadline().has_value());
++        auto final_body = std::make_shared<const std::string>("body");
++        on_destruction = final_body;
++        recovery.on_packet_sent(1U, 1200U, now + 21ms, true, space,
++            mixed_test_frames(final_body));
++        final_body.reset();
++        ASSERT_FALSE(on_destruction.expired());
++    }
++    ASSERT_TRUE(on_destruction.expired());
++}
++
+ RUN_TESTS();

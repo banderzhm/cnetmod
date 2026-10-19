@@ -1,0 +1,52 @@
+[
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+    "sha256": "c8438e4fde1934e61c88311633f00949ff645d5c04cdb8671fa3d78164d2f307",
+    "bytes": 225672
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libc.so.6",
+    "sha256": "9792e3cbb541c8f44c7acf5f14f4022ea62998ecc787d326bed4d8b6547dfd92",
+    "bytes": 1995216
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libcrypto.so.3",
+    "sha256": "8ae56f0a9481280a68c19f59809cd242a07a91ad7142944d21a878221992244b",
+    "bytes": 6521408
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+    "sha256": "30c61ab012a4241bed033725a09b61f5fdd3bb7df95ee852d0b096520524c7af",
+    "bytes": 182856
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libm.so.6",
+    "sha256": "6d567d53e895273ca14a1f9dc164fc6c8d39aed2f60aa46a733c2784228915f3",
+    "bytes": 977112
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libssl.so.3",
+    "sha256": "9592038e92d1f41affcbb625334d0b6e788714c889104fa6d5b107cf9fd657f2",
+    "bytes": 1109952
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33",
+    "sha256": "972bb2a18b71140dab0240f8a1f68ab3fb1d56bcd4c4f824a91b70888faf5a00",
+    "bytes": 2497768
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libz.so.1.3.1",
+    "sha256": "85590dd58edf5445e18bc7193e5ebc01ac5841f1ae187e97705a662e90c6421e",
+    "bytes": 125376
+  },
+  {
+    "path": "/usr/lib/x86_64-linux-gnu/libzstd.so.1.5.7",
+    "sha256": "27f07c9a49c2c956bcfb64cd4712976586a66facbf15fc7f09bc37413b5f2b21",
+    "bytes": 825336
+  },
+  {
+    "path": "/usr/local/bin/agensio",
+    "sha256": "8c0da17c36f77b67357f3769be3af19e36d39ed04aec5286f64c329e6db3e986",
+    "bytes": 4527496
+  }
+]

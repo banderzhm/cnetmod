@@ -30,6 +30,13 @@ if(CNETMOD_HAS_QUIC)
     set_target_properties(quic_pmtu_deadline_server PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
 
+    add_executable(quic_pmtu_pending_server quic_pmtu_pending_server.cpp)
+    target_link_libraries(quic_pmtu_pending_server PRIVATE cnetmod_core)
+    cnetmod_deploy_mimalloc_runtime(quic_pmtu_pending_server)
+    set_property(TARGET quic_pmtu_pending_server PROPERTY CXX_MODULE_GENERATION_MODE SEPARATE)
+    set_target_properties(quic_pmtu_pending_server PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/)
+
     add_executable(quic_datagram_cc_server quic_datagram_cc_server.cpp)
     target_link_libraries(quic_datagram_cc_server PRIVATE cnetmod_core)
     cnetmod_deploy_mimalloc_runtime(quic_datagram_cc_server)
@@ -85,6 +92,14 @@ if(Python3_Interpreter_FOUND AND CNETMOD_HAS_QUIC)
                 --helper-dir "${CMAKE_CURRENT_SOURCE_DIR}")
         set_tests_properties(quic_pmtu_deadline_${pmtu_deadline_scenario} PROPERTIES
             LABELS "http3;quic;pmtu;timer" TIMEOUT 30 SKIP_RETURN_CODE 77)
+    endforeach()
+    foreach(pmtu_pending_scenario IN ITEMS ack_only wake)
+        add_test(NAME quic_pmtu_pending_${pmtu_pending_scenario}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/quic_pmtu_pending.py"
+                "$<TARGET_FILE:quic_pmtu_pending_server>" --scenario ${pmtu_pending_scenario}
+                --helper-dir "${CMAKE_CURRENT_SOURCE_DIR}")
+        set_tests_properties(quic_pmtu_pending_${pmtu_pending_scenario} PROPERTIES
+            LABELS "http3;quic;pmtu;recovery" TIMEOUT 30 SKIP_RETURN_CODE 77)
     endforeach()
     foreach(datagram_cc_scenario IN ITEMS admission pto)
         add_test(NAME quic_datagram_cc_${datagram_cc_scenario}
@@ -326,6 +341,7 @@ if(CNETMOD_HAS_QUIC)
             quic_retire_stream_server
             quic_pmtu_cc_server
             quic_pmtu_deadline_server
+            quic_pmtu_pending_server
             quic_datagram_cc_server
             h3_interop_client
             http3_e2e_server

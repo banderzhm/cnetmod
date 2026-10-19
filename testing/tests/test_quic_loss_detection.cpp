@@ -856,4 +856,122 @@ TEST(quic_recovery_lost_pmtu_probe_preserves_reliable_frame_retransmission)
     ASSERT_FALSE(recovery.next_pto_deadline().has_value());
 }
 
+namespace {
+
+auto mixed_test_frames(const std::shared_ptr<const std::string>& body)
+    -> cnetmod::quic::retransmittable_frame_storage
+{
+    const std::array header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
+    const std::array prefix{std::byte{'D'}, std::byte{'A'}};
+    return cnetmod::quic::retransmittable_frame_storage{
+        cnetmod::quic::quic_send_frame::shared_stream_with_prefix(
+            header, prefix, body, 0U, body->size(), 0U)};
+}
+
+} // namespace
+
+TEST(quic_recovery_mixed_pto_alias_releases_owner_after_original_ack)
+{
+    cnetmod::quic::quic_recovery_controller recovery(make_test_config());
+    const auto now = std::chrono::steady_clock::now();
+    const auto space = cnetmod::quic::pn_space::application;
+    auto body = std::make_shared<const std::string>("body");
+    const std::weak_ptr<const std::string> owner = body;
+    recovery.on_packet_sent(1U, 1200U, now, true, space, mixed_test_frames(body));
+    body.reset();
+    recovery.on_pto_expired(space);
+    auto probe = recovery.newest_probe_frames(space);
+    ASSERT_TRUE(probe.has_value());
+    if (!probe)
+        return;
+    recovery.on_packet_sent(2U, 1200U, now + 1ms, true, space,
+        std::move(*probe), std::nullopt, true);
+    probe.reset();
+    ASSERT_FALSE(owner.expired());
+    cnetmod::quic::ack_frame ack;
+    ack.largest_acked = 1U;
+    auto update = recovery.on_ack_received(ack, now + 20ms, space);
+    ASSERT_TRUE(update.has_value());
+    if (!update)
+        return;
+    ASSERT_TRUE(update->lost_frames.empty());
+    ASSERT_FALSE(recovery.newest_probe_frames(space).has_value());
+    ASSERT_TRUE(owner.expired());
+    ack.largest_acked = 2U;
+    update = recovery.on_ack_received(ack, now + 21ms, space);
+    ASSERT_TRUE(update.has_value());
+    ASSERT_FALSE(recovery.next_pto_deadline().has_value());
+}
+
+TEST(quic_recovery_mixed_loss_event_owns_complete_wire_until_released)
+{
+    using namespace cnetmod::quic;
+    quic_recovery_controller recovery(make_test_config());
+    const auto now = std::chrono::steady_clock::now();
+    const auto space = pn_space::application;
+    auto body = std::make_shared<const std::string>("body");
+    const std::weak_ptr<const std::string> owner = body;
+    recovery.on_packet_sent(1U, 1200U, now, true, space, mixed_test_frames(body));
+    body.reset();
+    recovery.on_packet_sent(4U, 1200U, now, true, space);
+    ack_frame ack;
+    ack.largest_acked = 4U;
+    auto update = recovery.on_ack_received(ack, now + 20ms, space);
+    ASSERT_TRUE(update.has_value());
+    if (!update)
+        return;
+    ASSERT_EQ(update->lost_frames.size(), 1U);
+    if (update->lost_frames.size() != 1U)
+        return;
+    ASSERT_FALSE(owner.expired());
+    std::vector<std::byte> wire;
+    update->lost_frames.front().append_to(wire);
+    const auto decoded = decode_frame(wire);
+    ASSERT_TRUE(decoded.has_value());
+    if (!decoded || !std::holds_alternative<stream_frame>(decoded->first))
+    {
+        ASSERT_TRUE(false);
+        return;
+    }
+    const std::array expected{std::byte{'D'}, std::byte{'A'}, std::byte{'b'},
+        std::byte{'o'}, std::byte{'d'}, std::byte{'y'}};
+    const auto& stream = std::get<stream_frame>(decoded->first);
+    ASSERT_TRUE(std::ranges::equal(stream.data, expected));
+    ASSERT_TRUE(stream.fin);
+    ASSERT_EQ(stream.offset, 0U);
+    update->lost_frames.clear();
+    ASSERT_TRUE(owner.expired());
+}
+
+TEST(quic_recovery_mixed_discard_and_destruction_release_all_owners)
+{
+    const auto now = std::chrono::steady_clock::now();
+    const auto space = cnetmod::quic::pn_space::application;
+    std::weak_ptr<const std::string> on_destruction;
+    {
+        cnetmod::quic::quic_recovery_controller recovery(make_test_config());
+        auto body = std::make_shared<const std::string>("body");
+        const std::weak_ptr<const std::string> owner = body;
+        for (std::uint64_t packet = 1U; packet <= 96U; ++packet)
+            recovery.on_packet_sent(packet, 1200U, now, true, space, mixed_test_frames(body));
+        body.reset();
+        cnetmod::quic::ack_frame ack;
+        ack.largest_acked = 64U;
+        ack.first_ack_range = 63U;
+        const auto update = recovery.on_ack_received(ack, now + 20ms, space);
+        ASSERT_TRUE(update.has_value());
+        ASSERT_FALSE(owner.expired());
+        recovery.discard_packet_number_space(space);
+        ASSERT_TRUE(owner.expired());
+        ASSERT_FALSE(recovery.next_pto_deadline().has_value());
+        auto final_body = std::make_shared<const std::string>("body");
+        on_destruction = final_body;
+        recovery.on_packet_sent(1U, 1200U, now + 21ms, true, space,
+            mixed_test_frames(final_body));
+        final_body.reset();
+        ASSERT_FALSE(on_destruction.expired());
+    }
+    ASSERT_TRUE(on_destruction.expired());
+}
+
 RUN_TESTS();

@@ -1,0 +1,226 @@
+[0/2] Re-checking globbed directories...
+[1/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_server.cppm.o
+[2/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_client.cppm.o
+[3/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_server.cpp.o
+[4/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/messaging.cppm.o
+[5/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/messaging.cpp.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/src/application/monitoring/integration/messaging.cpp:44:10: warning: unused function 'parse' [-Wunused-function]
+   44 |     auto parse(std::string_view traceparent, std::string_view tracestate)
+      |          ^~~~~
+1 warning generated.
+[6/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/otlp/otlp_http_exporter.cppm.o
+[7/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/integration/http_client.cpp.o
+[8/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/telemetry.cppm.o
+[9/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/telemetry.cpp.o
+[10/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/otlp/otlp_http_exporter.cpp.o
+[11/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/monitoring/observability.cppm.o
+[12/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/json_template.cppm.o
+[13/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/managed_service.cppm.o
+[14/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/rest_template.cppm.o
+[15/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/managed_service.cpp.o
+[16/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/health_registry.cppm.o
+[17/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/template/rest_template.cpp.o
+[18/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_registry.cppm.o
+[19/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/health_registry.cpp.o
+[20/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_lifecycle.cppm.o
+[21/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_registry.cpp.o
+[22/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/configuration.cppm.o
+[23/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/service_lifecycle.cpp.o
+[24/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_runtime.cppm.o
+[25/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_runtime.cpp.o
+[26/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/configuration.cpp.o
+[27/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/auto_configuration.cppm.o
+[28/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/auto_configuration.cpp.o
+[29/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/http_client.cppm.o
+[30/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/diagnostics.cppm.o
+[31/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/builtin_auto_configuration.cpp.o
+[32/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/components.cppm.o
+[33/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/integration/http_client.cpp.o
+[34/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/json.cppm.o
+[35/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/json.cpp.o
+[36/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/options.cppm.o
+[37/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/components.cpp.o
+[38/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_module.cppm.o
+[39/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_host.cppm.o
+[40/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/options.cpp.o
+[41/234] Building CXX object CMakeFiles/cnetmod_application.dir/src/application.cppm.o
+[42/234] Generating CXX dyndep file CMakeFiles/cnetmod_app.dir/CXX.dd
+[43/233] Generating CXX dyndep file testing/tests/CMakeFiles/test_instrumentation.dir/CXX.dd
+[44/232] Linking CXX executable testing/tests/test_instrumentation
+[45/232] Generating CXX dyndep file testing/tests/CMakeFiles/test_metric_aggregation.dir/CXX.dd
+[46/231] Linking CXX executable testing/tests/test_metric_aggregation
+[47/231] Generating CXX dyndep file testing/tests/CMakeFiles/test_flat_map.dir/CXX.dd
+[48/230] Linking CXX executable testing/tests/test_flat_map
+[49/230] Generating CXX dyndep file testing/tests/CMakeFiles/test_charconv.dir/CXX.dd
+[50/229] Linking CXX executable testing/tests/test_charconv
+[51/229] Generating CXX dyndep file testing/tests/CMakeFiles/test_application_result.dir/CXX.dd
+[52/229] Building CXX object CMakeFiles/cnetmod_application.dir/src/application/application_host.cpp.o
+[53/229] Linking CXX static library libcnetmod_application.a
+[54/229] Linking CXX executable cnetmod_app
+[55/229] Generating CXX dyndep file testing/tests/CMakeFiles/test_json_template.dir/CXX.dd
+[56/229] Building CXX object testing/tests/CMakeFiles/test_application_result.dir/test_application_result.cpp.o
+[57/229] Linking CXX executable testing/tests/test_application_result
+[58/229] Generating CXX dyndep file testing/tests/CMakeFiles/test_application.dir/CXX.dd
+[59/229] Building CXX object testing/tests/CMakeFiles/test_json_template.dir/test_json_template.cpp.o
+[60/229] Linking CXX executable testing/tests/test_json_template
+[61/229] Generating CXX dyndep file testing/tests/CMakeFiles/test_application_integrations.dir/CXX.dd
+[62/229] Building CXX object testing/tests/CMakeFiles/test_application_integrations.dir/test_application_integrations.cpp.o
+[63/229] Building CXX object testing/tests/CMakeFiles/test_application.dir/test_application.cpp.o
+[64/229] Linking CXX executable testing/tests/test_application_integrations
+[65/229] Generating CXX dyndep file testing/tests/CMakeFiles/test_application_composition.dir/CXX.dd
+[66/229] Linking CXX executable testing/tests/test_application
+[67/229] Generating CXX dyndep file testing/tests/CMakeFiles/test_lazy.dir/CXX.dd
+[68/228] Linking CXX executable testing/tests/test_lazy
+[69/228] Generating CXX dyndep file testing/tests/CMakeFiles/test_configuration_properties.dir/CXX.dd
+[70/228] Building CXX object testing/tests/CMakeFiles/test_application_composition.dir/test_application_composition.cpp.o
+[71/228] Building CXX object testing/tests/CMakeFiles/test_configuration_properties.dir/test_configuration_properties.cpp.o
+[72/228] Linking CXX executable testing/tests/test_configuration_properties
+[73/228] Generating CXX dyndep file testing/tests/CMakeFiles/test_channel.dir/CXX.dd
+[74/227] Linking CXX executable testing/tests/test_channel
+[75/227] Generating CXX dyndep file testing/tests/CMakeFiles/test_mutex.dir/CXX.dd
+[76/226] Linking CXX executable testing/tests/test_application_composition
+[77/226] Generating CXX dyndep file testing/tests/CMakeFiles/test_circuit_breaker.dir/CXX.dd
+[78/225] Linking CXX executable testing/tests/test_circuit_breaker
+[79/225] Generating CXX dyndep file testing/tests/CMakeFiles/test_retry.dir/CXX.dd
+[80/225] Linking CXX executable testing/tests/test_mutex
+[81/225] Generating CXX dyndep file testing/tests/CMakeFiles/test_semaphore.dir/CXX.dd
+[82/224] Linking CXX executable testing/tests/test_semaphore
+[83/224] Generating CXX dyndep file testing/tests/CMakeFiles/test_shared_mutex.dir/CXX.dd
+[84/223] Linking CXX executable testing/tests/test_shared_mutex
+[85/223] Generating CXX dyndep file testing/tests/CMakeFiles/test_log.dir/CXX.dd
+[86/222] Linking CXX executable testing/tests/test_log
+[87/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_types.dir/CXX.dd
+[88/222] Building CXX object testing/tests/CMakeFiles/test_retry.dir/test_retry.cpp.o
+[89/222] Linking CXX executable testing/tests/test_retry
+[90/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_tracing.dir/CXX.dd
+[91/222] Building CXX object testing/tests/CMakeFiles/test_http_types.dir/test_http_types.cpp.o
+[92/222] Linking CXX executable testing/tests/test_http_types
+[93/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_observability.dir/CXX.dd
+[94/222] Building CXX object testing/tests/CMakeFiles/test_http_tracing.dir/test_http_tracing.cpp.o
+[95/222] Linking CXX executable testing/tests/test_http_tracing
+[96/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_disabled_overhead.dir/CXX.dd
+[97/222] Building CXX object testing/tests/CMakeFiles/test_http_observability.dir/test_http_observability.cpp.o
+[98/222] Linking CXX executable testing/tests/test_http_observability
+[99/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_otlp_exporter.dir/CXX.dd
+[100/222] Building CXX object testing/tests/CMakeFiles/test_http_disabled_overhead.dir/test_http_disabled_overhead.cpp.o
+/mnt/c/Users/25007/.codex/worktrees/2c3c/cnetmod/testing/tests/test_http_disabled_overhead.cpp:101:26: warning: variable 'injected_allocation_failures' set but not used [-Wunused-but-set-global]
+  101 | thread_local std::size_t injected_allocation_failures = 0;
+      |                          ^
+1 warning generated.
+[101/222] Linking CXX executable testing/tests/test_http_disabled_overhead
+[102/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_request.dir/CXX.dd
+[103/222] Building CXX object testing/tests/CMakeFiles/test_otlp_exporter.dir/test_otlp_exporter.cpp.o
+[104/222] Building CXX object testing/tests/CMakeFiles/test_http_request.dir/test_http_request.cpp.o
+[105/222] Linking CXX executable testing/tests/test_http_request
+[106/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_response.dir/CXX.dd
+[107/222] Linking CXX executable testing/tests/test_otlp_exporter
+[108/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_compress.dir/CXX.dd
+[109/222] Building CXX object testing/tests/CMakeFiles/test_http_response.dir/test_http_response.cpp.o
+[110/222] Linking CXX executable testing/tests/test_http_response
+[111/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_parser.dir/CXX.dd
+[112/222] Building CXX object testing/tests/CMakeFiles/test_http_compress.dir/test_http_compress.cpp.o
+[113/222] Linking CXX executable testing/tests/test_http_compress
+[114/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_router.dir/CXX.dd
+[115/222] Building CXX object testing/tests/CMakeFiles/test_http_parser.dir/test_http_parser.cpp.o
+[116/222] Linking CXX executable testing/tests/test_http_parser
+[117/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_sse.dir/CXX.dd
+[118/222] Building CXX object testing/tests/CMakeFiles/test_http_router.dir/test_http_router.cpp.o
+[119/222] Linking CXX executable testing/tests/test_http_router
+[120/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_swagger.dir/CXX.dd
+[121/222] Building CXX object testing/tests/CMakeFiles/test_http_sse.dir/test_http_sse.cpp.o
+[122/222] Building CXX object testing/tests/CMakeFiles/test_http_swagger.dir/test_http_swagger.cpp.o
+[123/222] Linking CXX executable testing/tests/test_http_swagger
+[124/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_utils.dir/CXX.dd
+[125/222] Linking CXX executable testing/tests/test_http_sse
+[126/222] Generating CXX dyndep file testing/tests/CMakeFiles/http_client_test.dir/CXX.dd
+[127/222] Building CXX object testing/tests/CMakeFiles/test_http_utils.dir/test_http_utils.cpp.o
+[128/222] Building CXX object testing/tests/CMakeFiles/http_client_test.dir/http_client_test.cpp.o
+[129/222] Linking CXX executable testing/tests/test_http_utils
+[130/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_ip_filter.dir/CXX.dd
+[131/222] Linking CXX executable testing/tests/http_client_test
+[132/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_jwt_auth.dir/CXX.dd
+[133/222] Building CXX object testing/tests/CMakeFiles/test_http_ip_filter.dir/test_http_ip_filter.cpp.o
+[134/222] Linking CXX executable testing/tests/test_http_ip_filter
+[135/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_rate_limiter.dir/CXX.dd
+[136/222] Building CXX object testing/tests/CMakeFiles/test_http_jwt_auth.dir/test_http_jwt_auth.cpp.o
+[137/222] Linking CXX executable testing/tests/test_http_jwt_auth
+[138/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http_authorization.dir/CXX.dd
+[139/222] Building CXX object testing/tests/CMakeFiles/test_http_rate_limiter.dir/test_http_rate_limiter.cpp.o
+[140/222] Linking CXX executable testing/tests/test_http_rate_limiter
+[141/222] Generating CXX dyndep file testing/tests/CMakeFiles/test_http2_hpack.dir/CXX.dd
+[142/221] Linking CXX executable testing/tests/test_http2_hpack
+[143/221] Generating CXX dyndep file testing/tests/CMakeFiles/test_http2_stream.dir/CXX.dd
+[144/221] Building CXX object testing/tests/CMakeFiles/test_http_authorization.dir/test_http_authorization.cpp.o
+[145/221] Linking CXX executable testing/tests/test_http_authorization
+[146/221] Generating CXX dyndep file testing/tests/CMakeFiles/test_metrics.dir/CXX.dd
+[147/221] Building CXX object testing/tests/CMakeFiles/test_http2_stream.dir/test_http2_stream.cpp.o
+[148/221] Building CXX object testing/tests/CMakeFiles/test_metrics.dir/test_metrics.cpp.o
+[149/221] Linking CXX executable testing/tests/test_metrics
+[150/221] Generating CXX dyndep file testing/tests/CMakeFiles/test_tfb_compliance.dir/CXX.dd
+[151/221] Linking CXX executable testing/tests/test_http2_stream
+[152/221] Linking CXX executable testing/tests/test_quic_varint
+[153/221] Linking CXX executable testing/tests/test_quic_packet
+[154/221] Building CXX object testing/tests/CMakeFiles/test_tfb_compliance.dir/test_tfb_compliance.cpp.o
+[155/221] Linking CXX executable testing/tests/test_tfb_compliance
+[156/221] Linking CXX executable testing/tests/test_quic_congestion
+[157/221] Linking CXX executable testing/tests/test_quic_early_data
+[158/221] Linking CXX executable testing/tests/test_http3_qpack
+[159/221] Linking CXX executable testing/tests/test_quic_stream
+[160/221] Generating CXX dyndep file testing/tests/CMakeFiles/test_security_token.dir/CXX.dd
+[161/220] Linking CXX executable testing/tests/test_http3_frame
+[162/220] Generating CXX dyndep file testing/tests/CMakeFiles/test_dns_cancellation.dir/CXX.dd
+[163/220] Linking CXX executable testing/tests/test_security_token
+[164/220] Generating CXX dyndep file testing/tests/CMakeFiles/test_ssl_shutdown.dir/CXX.dd
+[165/220] Building CXX object testing/tests/CMakeFiles/test_dns_cancellation.dir/test_dns_cancellation.cpp.o
+[166/220] Building CXX object testing/tests/CMakeFiles/test_ssl_shutdown.dir/test_ssl_shutdown.cpp.o
+[167/220] Linking CXX executable testing/tests/test_dns_cancellation
+[168/220] Generating CXX dyndep file testing/tests/CMakeFiles/http2_interop_server.dir/CXX.dd
+[169/220] Linking CXX executable testing/tests/test_ssl_shutdown
+[170/220] Generating CXX dyndep file testing/tests/CMakeFiles/http2_client_interop.dir/CXX.dd
+[171/220] Building CXX object testing/tests/CMakeFiles/http2_interop_server.dir/__/http2/h2_interop_server.cpp.o
+[172/220] Building CXX object testing/tests/CMakeFiles/http2_client_interop.dir/__/http2/h2_client_interop.cpp.o
+[173/220] Linking CXX executable testing/tests/http2_interop_server
+[174/220] Generating CXX dyndep file testing/bench/CMakeFiles/bench_coroutine.dir/CXX.dd
+[175/219] Linking CXX executable testing/bench/bench_coroutine
+[176/219] Generating CXX dyndep file testing/bench/CMakeFiles/bench_channel.dir/CXX.dd
+[177/218] Linking CXX executable testing/tests/http2_client_interop
+[178/218] Generating CXX dyndep file testing/bench/CMakeFiles/bench_sync.dir/CXX.dd
+[179/217] Linking CXX executable testing/bench/bench_channel
+[180/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_io.dir/CXX.dd
+[181/217] Linking CXX executable testing/bench/bench_sync
+[182/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_http.dir/CXX.dd
+[183/217] Building CXX object testing/bench/CMakeFiles/bench_io.dir/bench_io.cpp.o
+[184/217] Linking CXX executable testing/bench/bench_io
+[185/217] Generating CXX dyndep file testing/bench/CMakeFiles/crosslang_cnetmod_server.dir/CXX.dd
+[186/217] Building CXX object testing/bench/CMakeFiles/bench_http.dir/bench_http.cpp.o
+[187/217] Building CXX object testing/bench/CMakeFiles/crosslang_cnetmod_server.dir/crosslang_cnetmod_server.cpp.o
+[188/217] Linking CXX executable testing/bench/crosslang_cnetmod_server
+[189/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_http_observation.dir/CXX.dd
+[190/217] Linking CXX executable testing/bench/bench_http
+[191/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_http_baseline.dir/CXX.dd
+[192/217] Building CXX object testing/bench/CMakeFiles/bench_http_observation.dir/bench_http_observation.cpp.o
+[193/217] Building CXX object testing/bench/CMakeFiles/bench_http_baseline.dir/bench_http_observation.cpp.o
+[194/217] Linking CXX executable testing/bench/bench_http_observation
+[195/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_http_disabled.dir/CXX.dd
+[196/217] Linking CXX executable testing/bench/bench_http_baseline
+[197/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_http_parser.dir/CXX.dd
+[198/217] Building CXX object testing/bench/CMakeFiles/bench_http_disabled.dir/bench_http_observation.cpp.o
+[199/217] Building CXX object testing/bench/CMakeFiles/bench_http_parser.dir/bench_http_parser.cpp.o
+[200/217] Linking CXX executable testing/bench/bench_http_parser
+[201/217] Generating CXX dyndep file testing/bench/CMakeFiles/bench_uring_recv.dir/CXX.dd
+[202/217] Linking CXX executable testing/bench/bench_http_disabled
+[203/217] Generating CXX dyndep file testing/bench/CMakeFiles/h3_benchmark.dir/CXX.dd
+[204/217] Building CXX object testing/bench/CMakeFiles/bench_uring_recv.dir/bench_uring_recv.cpp.o
+[205/217] Linking CXX executable testing/bench/bench_uring_recv
+[206/217] Building CXX object testing/bench/CMakeFiles/h3_benchmark.dir/h3_performance.cpp.o
+[207/217] Linking CXX executable testing/bench/arena_h3_server
+[208/217] Linking CXX executable testing/bench/h3_benchmark
+[209/217] Linking CXX executable bin/h3_interop_server
+[210/217] Linking CXX executable bin/h3_interop_client
+[211/217] Linking CXX executable bin/quic_pmtu_deadline_server
+[212/217] Linking CXX executable bin/quic_datagram_cc_server
+[213/217] Linking CXX executable bin/quic_pmtu_cc_server
+[214/217] Linking CXX executable bin/quic_retire_stream_server
+[215/217] Linking CXX executable testing/http3/http3_e2e_server
+[216/217] Linking CXX executable testing/http3/http_client_http3_e2e
+[217/217] Linking CXX executable testing/http3/http3_migration_e2e

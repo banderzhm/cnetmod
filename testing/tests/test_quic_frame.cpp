@@ -759,4 +759,141 @@ TEST(quic_scheduler_retirement_reclaims_priority_but_preserves_retransmission)
     ASSERT_EQ(scheduler.priority_count(), 0U);
 }
 
+TEST(quic_mixed_send_frame_matches_public_stream_encoding)
+{
+    using namespace cnetmod::quic;
+    const std::array prefix{std::byte{0x00}, std::byte{0xff}};
+    for (const auto body_size : std::array<std::size_t, 7>{1U, 61U, 62U, 63U, 64U, 4096U, 65500U})
+    {
+        const auto body = std::make_shared<const std::string>(body_size + 6U, 'b');
+        const auto body_bytes = std::as_bytes(std::span{body->data(), body->size()});
+        std::vector<std::byte> payload(prefix.begin(), prefix.end());
+        payload.insert(payload.end(), body_bytes.begin() + 3U,
+            body_bytes.begin() + 3U + body_size);
+        for (const auto offset : {0U, 16384U})
+        {
+            for (const auto fin : {false, true})
+            {
+                // The public encoder supplies an independent canonical header.
+                const auto expected = encode_frame(stream_frame{64U, offset, payload, fin});
+                const auto header_size = expected.size() - payload.size();
+                auto frame = quic_send_frame::shared_stream_with_prefix(
+                    std::span{expected}.first(header_size), prefix,
+                    body, 3U, body_size, 64U);
+                ASSERT_EQ(frame.size(), expected.size());
+                ASSERT_FALSE(frame.empty());
+                ASSERT_FALSE(frame.is_connection_close());
+                ASSERT_TRUE(frame.owned_bytes().empty());
+                ASSERT_TRUE(frame.release_owned_bytes().empty());
+                std::vector<std::byte> wire;
+                frame.append_to(wire);
+                ASSERT_TRUE(wire == expected);
+                const auto decoded = decode_frame(wire);
+                ASSERT_TRUE(decoded.has_value());
+                if (!decoded || !std::holds_alternative<stream_frame>(decoded->first))
+                {
+                    ASSERT_TRUE(false);
+                    return;
+                }
+                const auto& stream = std::get<stream_frame>(decoded->first);
+                ASSERT_EQ(stream.stream_id, 64U);
+                ASSERT_EQ(stream.offset, offset);
+                ASSERT_EQ(stream.fin, fin);
+                ASSERT_TRUE(std::ranges::equal(stream.data, payload));
+            }
+        }
+    }
+}
+
+TEST(quic_mixed_send_frame_prefix_participates_in_alias_equality)
+{
+    using namespace cnetmod::quic;
+    const auto body = std::make_shared<const std::string>("body");
+    const std::array header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
+    const std::array first_prefix{std::byte{'a'}, std::byte{'b'}};
+    const std::array second_prefix{std::byte{'a'}, std::byte{'c'}};
+    const auto first = quic_send_frame::shared_stream_with_prefix(
+        header, first_prefix, body, 0U, body->size(), 0U);
+    const auto alias = first;
+    const auto different = quic_send_frame::shared_stream_with_prefix(
+        header, second_prefix, body, 0U, body->size(), 0U);
+    ASSERT_TRUE(first == alias);
+    ASSERT_FALSE(first == different);
+}
+
+TEST(quic_mixed_send_frame_copy_move_clear_retains_only_live_owners)
+{
+    using namespace cnetmod::quic;
+    auto body = std::make_shared<const std::string>("body");
+    const std::weak_ptr<const std::string> weak = body;
+    const std::array header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
+    const std::array prefix{std::byte{'a'}, std::byte{'b'}};
+    auto frame = quic_send_frame::shared_stream_with_prefix(
+        header, prefix, body, 0U, body->size(), 0U);
+    auto alias = frame;
+    auto moved = std::move(alias);
+    body.reset();
+    frame.clear();
+    ASSERT_FALSE(weak.expired());
+    std::vector<std::byte> wire;
+    moved.append_to(wire);
+    const auto decoded = decode_frame(wire);
+    ASSERT_TRUE(decoded.has_value());
+    moved.clear();
+    ASSERT_TRUE(weak.expired());
+    ASSERT_TRUE(moved.empty());
+    ASSERT_EQ(moved.size(), 0U);
+}
+
+TEST(quic_shared_strategy_never_exports_partial_owned_prefix_or_close)
+{
+    using namespace cnetmod::quic;
+    const auto body = std::make_shared<const std::string>("body");
+    // The raw-header factory accepts bytes; shared ownership must exclude CLOSE
+    // independently of any accidentally CLOSE-looking first byte.
+    const std::array header{std::byte{0x1c}};
+    const std::array prefix{std::byte{'a'}};
+    auto mixed = quic_send_frame::shared_stream_with_prefix(
+        header, prefix, body, 0U, body->size(), 0U);
+    ASSERT_FALSE(mixed.is_connection_close());
+    ASSERT_TRUE(mixed.owned_bytes().empty());
+    ASSERT_TRUE(mixed.release_owned_bytes().empty());
+    std::vector<std::byte> wire;
+    mixed.append_to(wire);
+    ASSERT_EQ(wire.size(), header.size() + prefix.size() + body->size());
+    const std::vector original{std::byte{0x1c}, std::byte{0x00}};
+    auto owned = quic_send_frame::owned(original);
+    ASSERT_TRUE(owned.is_connection_close());
+    owned.mark_early_data();
+    ASSERT_TRUE(owned.is_early_data());
+    ASSERT_TRUE(owned.owned_bytes() == original);
+    ASSERT_TRUE(owned.release_owned_bytes() == original);
+}
+
+TEST(quic_mixed_send_frame_owns_temporary_header_and_prefix)
+{
+    using namespace cnetmod::quic;
+    auto body = std::make_shared<const std::string>("body");
+    const std::weak_ptr<const std::string> owner = body;
+    quic_send_frame frame;
+    {
+        std::vector header{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06}};
+        std::vector prefix{std::byte{'D'}, std::byte{'A'}};
+        frame = quic_send_frame::shared_stream_with_prefix(
+            header, prefix, body, 0U, body->size(), 0U);
+        std::ranges::fill(header, std::byte{0x00});
+        std::ranges::fill(prefix, std::byte{0x00});
+    }
+    body.reset();
+    ASSERT_FALSE(owner.expired());
+    std::vector<std::byte> wire;
+    frame.append_to(wire);
+    const std::vector expected{std::byte{0x0b}, std::byte{0x00}, std::byte{0x06},
+        std::byte{'D'}, std::byte{'A'}, std::byte{'b'}, std::byte{'o'},
+        std::byte{'d'}, std::byte{'y'}};
+    ASSERT_TRUE(wire == expected);
+    frame.clear();
+    ASSERT_TRUE(owner.expired());
+}
+
 RUN_TESTS();

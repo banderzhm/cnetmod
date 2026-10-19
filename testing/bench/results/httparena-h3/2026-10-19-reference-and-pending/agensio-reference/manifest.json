@@ -1,0 +1,230 @@
+{
+  "agensio-h3-static-crypto-readonly-20261019.md": {
+    "sha256": "010642017294f3518ca1095e81394fd01f6832f2bfc8f36bd9dc0116758ab330",
+    "bytes": 8272
+  },
+  "agensio-reference-identity.py": {
+    "sha256": "17e8c065c2dfd1a6bd9ea87b4182a536a372d8a982a1907e15ed7fe1614e654c",
+    "bytes": 1532
+  },
+  "agensio-reference-source-bind.py": {
+    "sha256": "c3b2d285ff1bb37514632951048dfc6600593d01d3d6d45f63ec27287afde124",
+    "bytes": 1203
+  },
+  "builder-image.json": {
+    "sha256": "4f1a810288f7ca158b3a5858fd73dbcdc19b9a1d61c6db374a2644f668327c0c",
+    "bytes": 1464
+  },
+  "cnetmod-read-inputs.json": {
+    "sha256": "6caeeff61d2e129c4b6bbdab00c035b5f4989d1bbaec70ae1846153cdfc0b0ab",
+    "bytes": 1022
+  },
+  "comparison-report.md": {
+    "sha256": "4e343fdf21fa0ea50c7e23ce7ca088779799fe8d6a05f671c556a360e7f28947",
+    "bytes": 11506
+  },
+  "identity.json": {
+    "sha256": "5b8055a5ec94c6deaa94ccfe43fa71fdc534181e97e6e32130744f05ce99f007",
+    "bytes": 12805
+  },
+  "reference-inputs.json": {
+    "sha256": "616d781fd17b480daca21751dc224dc62c61458912ff0b43a54caff14abadcd2",
+    "bytes": 1183
+  },
+  "runtime-image.json": {
+    "sha256": "535b08d73607ea7e0251741a437a40df27bbf2e5dd49409feed44ea72650a421",
+    "bytes": 2195
+  },
+  "observation/image.json": {
+    "sha256": "dde3ef35afe8987e2616c3bcfea0530f36ea57c85ad3d43c1c6e757a3149b79d",
+    "bytes": 1813
+  },
+  "observation/inputs-after.json": {
+    "sha256": "76ee431f01f54c478abbd1a2ce8216cf4fea58f1d6776429c15bece8b0d8ae38",
+    "bytes": 22574
+  },
+  "observation/inputs-before.json": {
+    "sha256": "dfad66ea0331dbd8e1cbec860b6e9deec58c5361bf084f29b5383060b4b2f5e4",
+    "bytes": 21597
+  },
+  "observation/lo-address.json": {
+    "sha256": "c8179206892ab0a0500b9ec92ce95be7735a24ced53dad215018c1482f18157b",
+    "bytes": 541
+  },
+  "observation/lo-link.json": {
+    "sha256": "f9684fc248a6a175c6a7370f407cb4acf85fe5ed6558c1204260656b8860584a",
+    "bytes": 257
+  },
+  "observation/reference-identity.json": {
+    "sha256": "5b8055a5ec94c6deaa94ccfe43fa71fdc534181e97e6e32130744f05ce99f007",
+    "bytes": 12805
+  },
+  "observation/routes.json": {
+    "sha256": "1bf4fb1ef780380b11e45db619c80c01a1c4ca3da1d223364dc97d868ca7dcf0",
+    "bytes": 518
+  },
+  "observation/runner.py": {
+    "sha256": "168d58b84d569296dd2c5da964dcfc0d34868efa51f89fbde13d458d6bfabcf1",
+    "bytes": 11785
+  },
+  "observation/summary.json": {
+    "sha256": "3b44d62ded1884d794e054a8f5a3540ea00f842cc6af9f54683691d0e6891197",
+    "bytes": 50283
+  },
+  "observation/nonperf/actual-cmdline.txt": {
+    "sha256": "30afe8235f6c2e2c54c0fd6ee0c9c51106ea008dbe24ff4f6d4351b4c51a108d",
+    "bytes": 37
+  },
+  "observation/nonperf/agensio.toml": {
+    "sha256": "2a1ec1745feb12034f22e74bb7e66f9d9140352ac876c5e50dfd6c42fd49c213",
+    "bytes": 2222
+  },
+  "observation/nonperf/commands.json": {
+    "sha256": "c96901b5f2c0df49a77e78e203f327da45ca1dd68467f005289312d7896dd072",
+    "bytes": 1997
+  },
+  "observation/nonperf/container.json": {
+    "sha256": "60c4ac61a8cca23c123bc2a2343ae7f61f7f0582efc4aef1c6ae2af2c884a60e",
+    "bytes": 6198
+  },
+  "observation/nonperf/cpu-after.json": {
+    "sha256": "862a98429583b68ecf92b61bf61e905dd3aaaf19598540cdc3e2597e33c36d86",
+    "bytes": 3847
+  },
+  "observation/nonperf/cpu-before.json": {
+    "sha256": "56e60a88afff0405852306e859299b3662b707740395d61c75ffed723f7c8468",
+    "bytes": 3818
+  },
+  "observation/nonperf/h2load.stderr": {
+    "sha256": "c673607b476b6e656eb00366e930787099bf24377a7bf8f8e55f27bed55ece2e",
+    "bytes": 67
+  },
+  "observation/nonperf/h2load.stdout": {
+    "sha256": "f927dee77526431529fac58af43a94481b239f6bfae3758d50eaf0dc5507cc7f",
+    "bytes": 24083
+  },
+  "observation/nonperf/mapped-file-identities.json": {
+    "sha256": "7be6bff34fbbe84ef502be7b3e78b4745bca6e36d8822611515b9b13ceafd6f9",
+    "bytes": 1658
+  },
+  "observation/nonperf/maps.txt": {
+    "sha256": "76a4f9983966ef7271fe98e053c45dee7a15d18506b29f99de81a43e8399a675",
+    "bytes": 9389
+  },
+  "observation/nonperf/ready.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "observation/nonperf/ready.stdout": {
+    "sha256": "b2c80c4cec0323e755dab5748c490bfefca80cdc8fb7627b3c07b846fa70b562",
+    "bytes": 1696
+  },
+  "observation/nonperf/server.log": {
+    "sha256": "4140106fd3466efbcce54ce4616e33d2405c83fe0dc1125e3758bdb1db61d43d",
+    "bytes": 93
+  },
+  "observation/nonperf/start.sh": {
+    "sha256": "967975517c5ff4f6e1140641924255e950f99e317bd6814f34a77ed0371b9d87",
+    "bytes": 393
+  },
+  "observation/nonperf/status.txt": {
+    "sha256": "ea1e269f080b639ed67dd3394863ffb7f5c8331c9465c0a98ef134c37ad24a2f",
+    "bytes": 1431
+  },
+  "observation/nonperf/threads-ready.json": {
+    "sha256": "d5fd876b773316bbe8ff9e7b1aba2f83351eceefb2d2ab43f2172b4d96182d04",
+    "bytes": 52005
+  },
+  "observation/nonperf/worker-sockets.txt": {
+    "sha256": "eb9019ba4dd30d361e156034681ba55c614ef0289ca34348701c35ce63647099",
+    "bytes": 2144
+  },
+  "observation/perf/actual-cmdline.txt": {
+    "sha256": "30afe8235f6c2e2c54c0fd6ee0c9c51106ea008dbe24ff4f6d4351b4c51a108d",
+    "bytes": 37
+  },
+  "observation/perf/agensio.toml": {
+    "sha256": "2a1ec1745feb12034f22e74bb7e66f9d9140352ac876c5e50dfd6c42fd49c213",
+    "bytes": 2222
+  },
+  "observation/perf/commands.json": {
+    "sha256": "91a379784f3bf9dccb5b6c91df3a9b98484a64d36145ea98af35ba3580c103ef",
+    "bytes": 1994
+  },
+  "observation/perf/container.json": {
+    "sha256": "b8a2580265b454d8e4e5c951723c8585e761c5232b562a066c8ab461b36cbf68",
+    "bytes": 6194
+  },
+  "observation/perf/cpu-after.json": {
+    "sha256": "71ec870644906c335c3326df00a6d2ae812bae6acb2d23d9b5599ccda9f00351",
+    "bytes": 3880
+  },
+  "observation/perf/cpu-before.json": {
+    "sha256": "7cacaddaf093b20ee3b3608908e2826361fe20ee5341893e650b420f088e3706",
+    "bytes": 3855
+  },
+  "observation/perf/h2load.stderr": {
+    "sha256": "c673607b476b6e656eb00366e930787099bf24377a7bf8f8e55f27bed55ece2e",
+    "bytes": 67
+  },
+  "observation/perf/h2load.stdout": {
+    "sha256": "f27493ee5a168dc271c7e0dfe310be12ff7ab052e8c9fa920eaa4fcae6cc87f2",
+    "bytes": 24081
+  },
+  "observation/perf/mapped-file-identities.json": {
+    "sha256": "7be6bff34fbbe84ef502be7b3e78b4745bca6e36d8822611515b9b13ceafd6f9",
+    "bytes": 1658
+  },
+  "observation/perf/maps.txt": {
+    "sha256": "dbd0374f01ae0c682a642dc852809595a7a8cc8afc3ed7c2af67bc028971f4c5",
+    "bytes": 9389
+  },
+  "observation/perf/perf-buildids.txt": {
+    "sha256": "7c2d024840a2ab3c984559400a10d9af92c3278696ac646d515e57ca21d39d15",
+    "bytes": 508
+  },
+  "observation/perf/perf-command.json": {
+    "sha256": "20c1496f2ffd795d6a162032dbe0fb9f03d9e72945c60cacbaddb77033c9baf5",
+    "bytes": 217
+  },
+  "observation/perf/perf-header.txt": {
+    "sha256": "d50239a01c4fafba54ad79bc151e419addacc94f60ec429dcafd0749cf107588",
+    "bytes": 8909
+  },
+  "observation/perf/perf-record.log": {
+    "sha256": "242319e2d6cf082ec79011b650915604986fecf697c3e4bb8fe47bd45717d9fb",
+    "bytes": 199
+  },
+  "observation/perf/perf-self.txt": {
+    "sha256": "8bdfea54bfd607b7efd0d5b3979e0baf93d99c4762b600ce42fd38aecd6e4c71",
+    "bytes": 208418
+  },
+  "observation/perf/ready.stderr": {
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "observation/perf/ready.stdout": {
+    "sha256": "bea0b948df75c23bf6eff877bab80cdff3b97e9b3210f2710b8dc2bd6fbb9889",
+    "bytes": 1696
+  },
+  "observation/perf/server.log": {
+    "sha256": "3f0fd53ababece9ccfb0c5069ea888e8dab04c13db1c6015abf8853dc2b3875b",
+    "bytes": 93
+  },
+  "observation/perf/start.sh": {
+    "sha256": "967975517c5ff4f6e1140641924255e950f99e317bd6814f34a77ed0371b9d87",
+    "bytes": 393
+  },
+  "observation/perf/status.txt": {
+    "sha256": "80e1b0c8a7026af93fc343a9aec70daf5fa9a60d3286ef9793887964112d156e",
+    "bytes": 1438
+  },
+  "observation/perf/threads-ready.json": {
+    "sha256": "ed9163fad13d1d2b710d6ae3f6f711559116e98f33dbd045f13415c95dbe06ce",
+    "bytes": 52261
+  },
+  "observation/perf/worker-sockets.txt": {
+    "sha256": "7988d9245274a536366b0938d34b444b7d85b5ee2e35e8b42b78c23123de4dd4",
+    "bytes": 2176
+  }
+}
