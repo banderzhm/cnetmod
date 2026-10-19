@@ -39,6 +39,7 @@ struct fixture
     std::uint64_t timer_generation{};
     std::array<bool, 4> completed{};
     bool failed{};
+    bool local_close_requested{};
 
     void launch(cn::task<void> operation)
     {
@@ -100,6 +101,10 @@ auto observer_receive(fixture& state) -> cn::task<void>
             std::span<const std::byte>{storage.data(), *received}, peer);
         if (!processed)
         {
+            if (processed.error() == std::make_error_code(std::errc::not_connected) &&
+                state.local_close_requested && state.connection->is_closed())
+                co_return;
+
             co_await fail(state, "process: " + processed.error().message());
             co_return;
         }
@@ -197,6 +202,7 @@ auto control(fixture& state) -> cn::task<void>
             }
             if (state.arguments.scenario == "close-count-zero")
             {
+                state.local_close_requested = true;
                 (void)co_await state.connection->async_close({}, "count-zero regression close");
                 if (state.failed)
                     co_return;

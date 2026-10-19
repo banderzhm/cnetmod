@@ -161,12 +161,13 @@ async def run(binary: Path, scenario: str, directory: Path) -> None:
         stdout, stderr = stop_process(process)
         (directory / "stdout.log").write_text(stdout, encoding="utf-8")
         (directory / "stderr.log").write_text(stderr, encoding="utf-8")
-        if not succeeded:
+        if not succeeded or failure.exists():
             # Preserve evidence in CTest output even when its temporary folder
             # is removed; do not replace the original assertion/peer exception.
             report = result.read_text(errors="replace") if result.exists() else "<missing>"
-            print(f"initial-credit scenario={scenario} result={report}\nstdout:\n{stdout}\nstderr:\n{stderr}", file=sys.stderr)
-        else:
+            failed_report = failure.read_text(errors="replace") if failure.exists() else "<missing>"
+            print(f"initial-credit scenario={scenario} result={report} failure={failed_report}\nstdout:\n{stdout}\nstderr:\n{stderr}", file=sys.stderr)
+        if succeeded:
             assert not failure.exists(), failure.read_text(errors="replace")
             assert "initial-credit fixture:" not in stdout + stderr, stdout + stderr
             assert "CREDIT_RECORD preTP_pending" in stdout + stderr, stdout + stderr
