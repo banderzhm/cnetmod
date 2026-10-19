@@ -142,6 +142,7 @@ public:
     auto on_max_datagram_size_validated(std::uint64_t bytes) noexcept -> void;
     [[nodiscard]] auto can_send_datagram(std::uint64_t bytes) const noexcept -> bool;
     [[nodiscard]] auto congestion_window() const noexcept -> std::uint64_t;
+    [[nodiscard]] auto remaining_send_credit() const noexcept -> std::uint64_t;
     [[nodiscard]] auto pacing_rate() const noexcept -> std::optional<double>;
 
 private:

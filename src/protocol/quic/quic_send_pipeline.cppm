@@ -96,6 +96,19 @@ public:
     [[nodiscard]] auto empty() const noexcept -> bool;
     [[nodiscard]] auto size() const noexcept -> std::size_t;
     auto enqueue(std::uint64_t stream, quic_send_frame frame) -> void;
+    // Standard STREAM codec: count uses QUIC LEN varint; FIN does not change width.
+    using shared_stream_header_writer = std::size_t (*)(std::span<std::byte>,
+        std::uint64_t, std::uint64_t, std::size_t, bool);
+    auto enqueue_shared_write(std::uint64_t stream, std::vector<std::byte> prefix,
+        std::shared_ptr<const std::string> body, std::uint64_t first_offset,
+        bool fin, std::size_t legacy_budget, shared_stream_header_writer writer) -> void;
+    [[nodiscard]] auto has_pending_writes() const noexcept -> bool;
+    [[nodiscard]] auto pending_progress() const noexcept -> std::uint64_t;
+    auto begin_packet_selection() -> void;
+    [[nodiscard]] auto take_selected_frame(std::size_t frame_budget,
+        std::optional<std::size_t> pending_credit_budget) -> std::optional<scheduled_quic_frame>;
+    auto rollback_selected_frame(scheduled_quic_frame frame) -> void;
+    auto finish_packet_selection(bool committed) -> void;
     [[nodiscard]] auto take() -> std::optional<scheduled_quic_frame>;
     auto requeue(scheduled_quic_frame frame) -> void;
     [[nodiscard]] auto requeue_retransmission(quic_send_frame& frame) -> bool;

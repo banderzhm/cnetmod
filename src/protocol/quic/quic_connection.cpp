@@ -12,6 +12,7 @@ import std;
     #ifdef CNETMOD_ENABLE_QUIC
 
 import :connection;
+import :crypto;
 import :stream;
 import cnetmod.core.error;
 import cnetmod.coro.mutex;
@@ -22,6 +23,25 @@ import cnetmod.protocol.quic.send_pipeline;
 import :recovery;
 
 namespace cnetmod::quic {
+namespace {
+auto pending_stream_header(std::span<std::byte> output, std::uint64_t stream,
+    std::uint64_t offset, std::size_t count, bool fin) -> std::size_t
+{
+    std::size_t used{};
+    const auto append = [&](std::uint64_t value)
+    {
+        const auto encoded = encode_varint_to(value, output.subspan(used));
+        if (!encoded) return false;
+        used += *encoded;
+        return true;
+    };
+    const auto type = 0x0aU | (offset != 0U ? 0x04U : 0U) | (fin ? 0x01U : 0U);
+    if (!append(type) || !append(stream) || (offset != 0U && !append(offset)) || !append(count))
+        return 0U;
+    return used;
+}
+} // namespace
+
 
 void retired_stream_history::insert(stream_id id, final_sizes sizes)
 {
@@ -4204,15 +4224,17 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
     if (!destination_cid || path.locally_abandoned || path.peer_abandoned)
         return {};
 
-    std::vector<std::byte> local_payload;
-    auto& payload = payload_storage ? *payload_storage : local_payload;
-    payload.clear();
+    // Assemble plaintext after the reserved header and seal that same
+    // storage in place. The private scratch parameter stays for compatibility.
+    (void)payload_storage;
+    constexpr std::size_t pn_length = 4U;
+    const auto header_size = 1U + destination_cid->size() + pn_length;
     const auto application_level = level_index(encryption_level::application);
     const auto payload_budget = impl_->packet_payload_budget(path);
-    payload.reserve(payload_budget);
-    packet_storage.clear();
-    packet_storage.reserve(1U + destination_cid->size() + 4U +
-        payload_budget + keys->tag_len);
+    auto& payload = packet_storage;
+    payload.clear();
+    payload.reserve(header_size + payload_budget + keys->tag_len);
+    payload.resize(header_size);
     // PATH_ACK explicitly identifies the source packet-number space.  This
     // matters during PATH_ABANDON: the source can be in its three-PTO grace
     // period while this packet is sent on a different validated path.
@@ -4241,6 +4263,7 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
         stream_id stream{};
         std::uint8_t urgency{};
         bool default_fifo{};
+        bool selection_reserved{};
     };
 
     using scheduled_metadata_entry =
@@ -4309,78 +4332,170 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
             }
         }
     }
-    while ((!impl_->encoded_send_frames.empty() || impl_->has_prioritized_stream_frames()) &&
-        payload.size() < payload_budget)
+    const bool selection_reserved = impl_->stream_scheduler.has_pending_writes();
+    if (selection_reserved)
+        impl_->stream_scheduler.begin_packet_selection();
+    const bool credit_sized_ranges = selection_reserved && !pto_probe &&
+        !contains_path_mtu_probe && impl_->encoded_send_frames.empty() &&
+        retransmittable_frames.empty() && impl_->unreliable_send_frames.empty() &&
+        impl_->connection_state == connection_state::connected;
+    const auto range_credit = credit_sized_ranges ? path.recovery.remaining_send_credit() : 0U;
+    // Select materialization once; eager packets carry no virtual/defer state.
+    struct deferred_materialization_state
     {
-        quic_send_frame frame;
-        std::optional<scheduled_stream_frame_metadata> frame_metadata;
-        if (!impl_->encoded_send_frames.empty())
+        std::size_t virtual_payload_size;
+        std::optional<std::size_t> deferred_reliable_begin;
+    };
+    bool contains_connection_close = false;
+    bool contains_unreliable_datagram = false;
+    auto materialize = [&]<bool Defer>(auto state) -> std::size_t
+    {
+        const auto selected_size = [&]() -> std::size_t
         {
-            frame = std::move(impl_->encoded_send_frames.front());
-            impl_->encoded_send_frames.pop_front();
-        }
-        else
+            if constexpr (Defer)
+                return state.virtual_payload_size;
+            else
+                return payload.size();
+        };
+        while ((!impl_->encoded_send_frames.empty() || impl_->has_prioritized_stream_frames()) &&
+            (selected_size() - header_size) < payload_budget)
         {
-            auto scheduled = impl_->take_prioritized_stream_frame();
-            if (!scheduled)
-                break;
-            frame = std::move(scheduled->frame);
-            frame_metadata.emplace(scheduled_stream_frame_metadata{
-                scheduled->stream, scheduled->urgency, scheduled->default_fifo});
-        }
-        // The next frame must fit as a whole. Checking only the current
-        // payload length can coalesce two full STREAM fragments into an
-        // oversized UDP datagram and strand a multi-packet response.
-        if (frame.size() > payload_budget - payload.size())
-        {
-            if (frame_metadata)
+            quic_send_frame frame;
+            std::optional<scheduled_stream_frame_metadata> frame_metadata;
+            if (!impl_->encoded_send_frames.empty())
             {
-                impl_->requeue_prioritized_stream_frame(
-                    scheduled_quic_frame{
-                        frame_metadata->stream, frame_metadata->urgency,
-                        frame_metadata->default_fifo,
-                        std::move(frame)});
+                frame = std::move(impl_->encoded_send_frames.front());
+                impl_->encoded_send_frames.pop_front();
             }
             else
             {
-                impl_->encoded_send_frames.push_front(std::move(frame));
+                std::optional<std::size_t> pending_credit;
+                if (credit_sized_ranges)
+                {
+                    const auto occupied = selected_size() + keys->tag_len;
+                    pending_credit = range_credit > occupied ? range_credit - occupied : 0U;
+                }
+                auto scheduled = selection_reserved
+                    ? impl_->stream_scheduler.take_selected_frame(
+                          payload_budget - (selected_size() - header_size), pending_credit)
+                    : impl_->take_prioritized_stream_frame();
+                if (!scheduled)
+                    break;
+                frame = std::move(scheduled->frame);
+                frame_metadata.emplace(scheduled_stream_frame_metadata{
+                    scheduled->stream, scheduled->urgency, scheduled->default_fifo, selection_reserved});
             }
-            break;
+            // The next frame must fit as a whole. Checking only the current
+            // payload length can coalesce two full STREAM fragments into an
+            // oversized UDP datagram and strand a multi-packet response.
+            if (frame.size() > payload_budget - (selected_size() - header_size))
+            {
+                if (frame_metadata)
+                {
+                    auto restored = scheduled_quic_frame{
+                        frame_metadata->stream, frame_metadata->urgency,
+                        frame_metadata->default_fifo, std::move(frame)};
+                    if (frame_metadata->selection_reserved)
+                        impl_->stream_scheduler.rollback_selected_frame(std::move(restored));
+                    else
+                        impl_->requeue_prioritized_stream_frame(std::move(restored));
+                }
+                else
+                {
+                    impl_->encoded_send_frames.push_front(std::move(frame));
+                }
+                break;
+            }
+            if constexpr (Defer)
+            {
+                state.virtual_payload_size += frame.size();
+                if (!state.deferred_reliable_begin &&
+                    !path.recovery.can_send_datagram(selected_size() + keys->tag_len))
+                    state.deferred_reliable_begin = retransmittable_frames.size();
+                if (!state.deferred_reliable_begin)
+                    frame.append_to(payload);
+            }
+            else
+            {
+                frame.append_to(payload);
+            }
+            if (frame_metadata)
+                remember_scheduled_metadata(retransmittable_frames.size(), *frame_metadata);
+            retransmittable_frames.push_back(std::move(frame));
         }
-        frame.append_to(payload);
-        if (frame_metadata)
-            remember_scheduled_metadata(retransmittable_frames.size(), *frame_metadata);
-        retransmittable_frames.push_back(std::move(frame));
-    }
-    bool contains_unreliable_datagram = false;
-    while (!impl_->unreliable_send_frames.empty())
-    {
-        const auto& frame = impl_->unreliable_send_frames.front();
-        if (payload.size() + frame.size() > payload_budget)
-            break;
-        payload.insert(payload.end(), frame.begin(), frame.end());
-        impl_->unreliable_send_frames.pop_front();
-        contains_unreliable_datagram = true;
-    }
-    if (path_mtu_probe_target)
-    {
-        constexpr std::size_t fixed_packet_overhead = 1U + 4U + 16U;
-        const auto required_payload = *path_mtu_probe_target >
-                destination_cid->size() + fixed_packet_overhead
-            ? *path_mtu_probe_target - destination_cid->size() - fixed_packet_overhead
-            : payload.size();
-        if (payload.size() < required_payload)
-            payload.resize(required_payload, std::byte{0});
-    }
-    if (payload.empty())
-        return packet_storage;
-    const auto contains_connection_close = retransmittable_frames.any_of(
-        [](const auto& frame)
+        contains_connection_close = retransmittable_frames.any_of(
+            [](const auto& frame)
+            {
+                return frame.is_connection_close();
+            });
+        // Only CLOSE can exempt these reliable frames from the final CC rejection.
+        // It is fully known before DATAGRAM selection; replay only that suffix.
+        if constexpr (Defer)
         {
-            return frame.is_connection_close();
-        });
+            if (contains_connection_close && state.deferred_reliable_begin)
+            {
+                for (auto index = *state.deferred_reliable_begin;
+                     index < retransmittable_frames.size(); ++index)
+                    retransmittable_frames[index].append_to(payload);
+            }
+        }
+        while (!impl_->unreliable_send_frames.empty())
+        {
+            const auto& frame = impl_->unreliable_send_frames.front();
+            if ((selected_size() - header_size) + frame.size() > payload_budget)
+                break;
+            if constexpr (Defer)
+            {
+                state.virtual_payload_size += frame.size();
+                if (contains_connection_close ||
+                    path.recovery.can_send_datagram(selected_size() + keys->tag_len))
+                    payload.insert(payload.end(), frame.begin(), frame.end());
+            }
+            else
+            {
+                payload.insert(payload.end(), frame.begin(), frame.end());
+            }
+            impl_->unreliable_send_frames.pop_front();
+            contains_unreliable_datagram = true;
+        }
+        if (path_mtu_probe_target)
+        {
+            constexpr std::size_t fixed_packet_overhead = 1U + 4U + 16U;
+            const auto required_payload = *path_mtu_probe_target >
+                    destination_cid->size() + fixed_packet_overhead
+                ? *path_mtu_probe_target - destination_cid->size() - fixed_packet_overhead
+                : (selected_size() - header_size);
+            if ((selected_size() - header_size) < required_payload)
+            {
+                if constexpr (Defer)
+                {
+                    state.virtual_payload_size = header_size + required_payload;
+                    if (contains_connection_close ||
+                        path.recovery.can_send_datagram(selected_size() + keys->tag_len))
+                        payload.resize(selected_size(), std::byte{0});
+                }
+                else
+                {
+                    payload.resize(header_size + required_payload, std::byte{0});
+                }
+            }
+        }
+        return selected_size();
+    };
+    const auto selected_payload_size = pto_probe ||
+        path.recovery.can_send_datagram(header_size + payload_budget + keys->tag_len)
+        ? materialize.template operator()<false>(nullptr)
+        : materialize.template operator()<true>(
+            deferred_materialization_state{payload.size(), std::nullopt});
+    if (selected_payload_size == header_size)
+    {
+        if (selection_reserved)
+            impl_->stream_scheduler.finish_packet_selection(false);
+        packet_storage.clear();
+        return packet_storage;
+    }
     const auto estimated_packet_size = 1 + destination_cid->size() + 4 +
-        payload.size() + keys->tag_len;
+        (selected_payload_size - header_size) + keys->tag_len;
     if (!impl_->can_send_on_path(path, estimated_packet_size))
     {
         for (std::size_t index = retransmittable_frames.size(); index != 0U; --index)
@@ -4389,16 +4504,21 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
             const auto* metadata = scheduled_metadata_for(index - 1U);
             if (metadata)
             {
-                impl_->requeue_prioritized_stream_frame(
-                    scheduled_quic_frame{
-                        metadata->stream, metadata->urgency, metadata->default_fifo,
-                        std::move(frame)});
+                auto restored = scheduled_quic_frame{
+                    metadata->stream, metadata->urgency, metadata->default_fifo, std::move(frame)};
+                if (metadata->selection_reserved)
+                    impl_->stream_scheduler.rollback_selected_frame(std::move(restored));
+                else
+                    impl_->requeue_prioritized_stream_frame(std::move(restored));
             }
             else
             {
                 impl_->encoded_send_frames.push_front(std::move(frame));
             }
         }
+        if (selection_reserved)
+            impl_->stream_scheduler.finish_packet_selection(false);
+        packet_storage.clear();
         return packet_storage;
     }
     if (!pto_probe &&
@@ -4416,40 +4536,51 @@ auto quic_connection::pack_one_rtt_packet(bool pto_probe,
             const auto* metadata = scheduled_metadata_for(index - 1U);
             if (metadata)
             {
-                impl_->requeue_prioritized_stream_frame(
-                    scheduled_quic_frame{
-                        metadata->stream, metadata->urgency, metadata->default_fifo,
-                        std::move(frame)});
+                auto restored = scheduled_quic_frame{
+                    metadata->stream, metadata->urgency, metadata->default_fifo, std::move(frame)};
+                if (metadata->selection_reserved)
+                    impl_->stream_scheduler.rollback_selected_frame(std::move(restored));
+                else
+                    impl_->requeue_prioritized_stream_frame(std::move(restored));
             }
             else
             {
                 impl_->encoded_send_frames.push_front(std::move(frame));
             }
         }
+        if (selection_reserved)
+            impl_->stream_scheduler.finish_packet_selection(false);
+        packet_storage.clear();
         return packet_storage;
     }
-    constexpr std::size_t pn_length = 4;
     const auto packet_number = path.next_send_packet_number++;
     auto packet = std::move(packet_storage);
-    packet.reserve(estimated_packet_size);
-    packet.push_back(impl_->tls->application_write_key_phase()
-            ? std::byte{0x47}
-            : std::byte{0x43}); // short header, fixed bit, key phase, four-byte PN
-    packet.insert(packet.end(), destination_cid->data(),
-        destination_cid->data() + destination_cid->size());
-    for (int shift = 24; shift >= 0; shift -= 8)
-        packet.push_back(static_cast<std::byte>((packet_number >> shift) & 0xffU));
-    const auto pn_offset = packet.size() - pn_length;
+    packet[0] = impl_->tls->application_write_key_phase()
+        ? std::byte{0x47}
+        : std::byte{0x43};
+    std::ranges::copy(std::span{destination_cid->data(), destination_cid->size()},
+        packet.begin() + 1U);
+    const auto pn_offset = header_size - pn_length;
+    for (std::size_t index{}; index < pn_length; ++index)
+        packet[pn_offset + index] = static_cast<std::byte>(
+            (packet_number >> ((pn_length - 1U - index) * 8U)) & 0xffU);
     // A crypto failure is terminal work, not an empty/congestion-blocked
     // packet. Some crypto backends fail without pushing an error-queue entry.
-    if (const auto sealed = append_sealed_payload(*keys, payload, packet, packet_number, path.id);
+    if (const auto sealed = seal_packet_payload_in_place(*keys, packet, header_size, packet_number, path.id);
         !sealed)
+    {
+        if (selection_reserved) impl_->stream_scheduler.finish_packet_selection(true);
         return std::unexpected(sealed.error() ? sealed.error()
             : std::make_error_code(std::errc::io_error));
+    }
     if (const auto protected_header = protect_header(*keys, packet, pn_offset, false);
         !protected_header)
+    {
+        if (selection_reserved) impl_->stream_scheduler.finish_packet_selection(true);
         return std::unexpected(protected_header.error() ? protected_header.error()
             : std::make_error_code(std::errc::io_error));
+    }
+    if (selection_reserved) impl_->stream_scheduler.finish_packet_selection(true);
     impl_->account_path_send(path, packet.size());
     // ACK state is cleared only once an authenticated packet containing the
     // frame has been constructed.  The UDP submission path awaits writability
@@ -4641,6 +4772,7 @@ auto quic_connection::flush_send_queue() -> task<void>
                 impl_->tls->has_pending_handshake_data(encryption_level::application)) ||
             has_early_data())
         {
+            const auto pending_progress_before = impl_->stream_scheduler.pending_progress();
             const auto queued_before = impl_->encoded_send_frames.size() +
                 impl_->prioritized_stream_frame_count() +
                 impl_->unreliable_send_frames.size() +
@@ -4659,7 +4791,8 @@ auto quic_connection::flush_send_queue() -> task<void>
             if (impl_->encoded_send_frames.size() + impl_->prioritized_stream_frame_count() +
                     impl_->unreliable_send_frames.size() +
                     impl_->early_data_send_frames.size() >=
-                queued_before)
+                queued_before &&
+                impl_->stream_scheduler.pending_progress() == pending_progress_before)
                 break;
         }
         if (impl_->queued_protocol_error && impl_->encoded_send_frames.empty())
@@ -4689,14 +4822,14 @@ auto quic_connection::flush_send_queue() -> task<void>
     }
 }
 
-auto quic_connection::apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
+auto quic_connection::apply_stream_write(stream_id sid, std::vector<std::byte>& data,
     bool fin) -> std::expected<void, std::error_code>
 {
     return apply_stream_write(sid, data, {}, fin);
 }
 
 auto quic_connection::apply_stream_write(stream_id sid,
-    const std::vector<std::byte>& prefix,
+    std::vector<std::byte>& prefix,
     const std::shared_ptr<const std::string>& shared_data, bool fin)
     -> std::expected<void, std::error_code>
 {
@@ -4783,100 +4916,114 @@ auto quic_connection::apply_stream_write(stream_id sid,
             (keys ? keys->tag_len : 16U);
         send_packet_payload = std::min(send_packet_payload, max_udp_payload - overhead);
     }
-    for (std::size_t sent_offset = 0; sent_offset < payload_size;)
+    const bool pending_shared_write = !use_early_data && shared_data &&
+        (payload_size != 0U || fin) && impl_->connection_state == connection_state::connected &&
+        impl_->config.max_datagram_frame_size == 0U && impl_->application_paths.size() == 1U &&
+        impl_->application_paths.contains(0U) && !impl_->multipath_negotiated &&
+        send_packet_payload > 2U + static_cast<std::size_t>(varint_size(sid)) +
+            static_cast<std::size_t>(varint_size(first_offset + (payload_size != 0U ? payload_size - 1U : 0U)));
+    if (pending_shared_write)
     {
-        const auto stream_offset = first_offset + sent_offset;
-        const auto fixed_frame_size = 1U +
-            static_cast<std::size_t>(varint_size(sid)) +
-            static_cast<std::size_t>(varint_size(stream_offset));
-        if (send_packet_payload <= fixed_frame_size + 1U)
-            return std::unexpected(std::make_error_code(std::errc::message_size));
-        auto chunk = std::min(payload_size - sent_offset,
-            send_packet_payload - fixed_frame_size - 1U);
-        while (fixed_frame_size + static_cast<std::size_t>(varint_size(chunk)) +
-                chunk >
-            send_packet_payload)
-            --chunk;
-        const auto frame_fin = fin && sent_offset + chunk == payload_size;
-        if (!use_early_data && shared_data &&
-            sent_offset + chunk > prefix_payload.size())
+        impl_->stream_scheduler.enqueue_shared_write(sid, std::move(prefix), shared_data,
+            first_offset, fin, send_packet_payload, pending_stream_header);
+    }
+    else
+    {
+        for (std::size_t sent_offset = 0; sent_offset < payload_size;)
         {
-            std::array<std::byte, 32> header{};
-            std::size_t header_size{};
-            const auto append_varint = [&header, &header_size](std::uint64_t value)
+            const auto stream_offset = first_offset + sent_offset;
+            const auto fixed_frame_size = 1U +
+                static_cast<std::size_t>(varint_size(sid)) +
+                static_cast<std::size_t>(varint_size(stream_offset));
+            if (send_packet_payload <= fixed_frame_size + 1U)
+                return std::unexpected(std::make_error_code(std::errc::message_size));
+            auto chunk = std::min(payload_size - sent_offset,
+                send_packet_payload - fixed_frame_size - 1U);
+            while (fixed_frame_size + static_cast<std::size_t>(varint_size(chunk)) +
+                    chunk >
+                send_packet_payload)
+                --chunk;
+            const auto frame_fin = fin && sent_offset + chunk == payload_size;
+            if (!use_early_data && shared_data &&
+                sent_offset + chunk > prefix_payload.size())
             {
-                const auto encoded = encode_varint_to(value,
-                    std::span{header}.subspan(header_size));
-                if (!encoded)
-                    std::terminate();
-                header_size += *encoded;
-            };
-            std::uint64_t frame_type = 0x0aU;
-            if (stream_offset != 0U)
-                frame_type |= 0x04U;
-            if (frame_fin)
-                frame_type |= 0x01U;
-            append_varint(frame_type);
-            append_varint(sid);
-            if (stream_offset != 0U)
-                append_varint(stream_offset);
-            append_varint(chunk);
-            if (sent_offset >= prefix_payload.size())
+                std::array<std::byte, 32> header{};
+                std::size_t header_size{};
+                const auto append_varint = [&header, &header_size](std::uint64_t value)
+                {
+                    const auto encoded = encode_varint_to(value,
+                        std::span{header}.subspan(header_size));
+                    if (!encoded)
+                        std::terminate();
+                    header_size += *encoded;
+                };
+                std::uint64_t frame_type = 0x0aU;
+                if (stream_offset != 0U)
+                    frame_type |= 0x04U;
+                if (frame_fin)
+                    frame_type |= 0x01U;
+                append_varint(frame_type);
+                append_varint(sid);
+                if (stream_offset != 0U)
+                    append_varint(stream_offset);
+                append_varint(chunk);
+                if (sent_offset >= prefix_payload.size())
+                {
+                    impl_->enqueue_stream_frame(sid,
+                        quic_send_frame::shared_stream(
+                            std::span{header}.first(header_size), shared_data,
+                            sent_offset - prefix_payload.size(), chunk, sid));
+                }
+                else
+                {
+                    const auto prefix_count = prefix_payload.size() - sent_offset;
+                    impl_->enqueue_stream_frame(sid,
+                        quic_send_frame::shared_stream_with_prefix(
+                            std::span{header}.first(header_size),
+                            prefix_payload.subspan(sent_offset, prefix_count), shared_data,
+                            0U, chunk - prefix_count, sid));
+                }
+                sent_offset += chunk;
+                continue;
+            }
+            std::vector<std::byte> boundary_chunk;
+            std::span<const std::byte> chunk_payload;
+            if (sent_offset + chunk <= prefix_payload.size())
             {
-                impl_->enqueue_stream_frame(sid,
-                    quic_send_frame::shared_stream(
-                        std::span{header}.first(header_size), shared_data,
-                        sent_offset - prefix_payload.size(), chunk, sid));
+                chunk_payload = prefix_payload.subspan(sent_offset, chunk);
+            }
+            else if (sent_offset >= prefix_payload.size())
+            {
+                chunk_payload = shared_payload.subspan(
+                    sent_offset - prefix_payload.size(), chunk);
             }
             else
             {
                 const auto prefix_count = prefix_payload.size() - sent_offset;
-                impl_->enqueue_stream_frame(sid,
-                    quic_send_frame::shared_stream_with_prefix(
-                        std::span{header}.first(header_size),
-                        prefix_payload.subspan(sent_offset, prefix_count), shared_data,
-                        0U, chunk - prefix_count, sid));
+                boundary_chunk.reserve(chunk);
+                boundary_chunk.insert(boundary_chunk.end(),
+                    prefix_payload.begin() + sent_offset, prefix_payload.end());
+                boundary_chunk.insert(boundary_chunk.end(), shared_payload.begin(),
+                    shared_payload.begin() + (chunk - prefix_count));
+                chunk_payload = boundary_chunk;
             }
+            auto frame = encode_frame(stream_frame{
+                sid, stream_offset, chunk_payload,
+                frame_fin});
+            if (use_early_data)
+                impl_->early_data_send_frames.push_back(std::move(frame));
+            else
+                impl_->enqueue_stream_frame(sid, std::move(frame));
             sent_offset += chunk;
-            continue;
         }
-        std::vector<std::byte> boundary_chunk;
-        std::span<const std::byte> chunk_payload;
-        if (sent_offset + chunk <= prefix_payload.size())
+        if (payload_size == 0U && fin)
         {
-            chunk_payload = prefix_payload.subspan(sent_offset, chunk);
+            auto frame = encode_frame(stream_frame{sid, first_offset, {}, true});
+            if (use_early_data)
+                impl_->early_data_send_frames.push_back(std::move(frame));
+            else
+                impl_->enqueue_stream_frame(sid, std::move(frame));
         }
-        else if (sent_offset >= prefix_payload.size())
-        {
-            chunk_payload = shared_payload.subspan(
-                sent_offset - prefix_payload.size(), chunk);
-        }
-        else
-        {
-            const auto prefix_count = prefix_payload.size() - sent_offset;
-            boundary_chunk.reserve(chunk);
-            boundary_chunk.insert(boundary_chunk.end(),
-                prefix_payload.begin() + sent_offset, prefix_payload.end());
-            boundary_chunk.insert(boundary_chunk.end(), shared_payload.begin(),
-                shared_payload.begin() + (chunk - prefix_count));
-            chunk_payload = boundary_chunk;
-        }
-        auto frame = encode_frame(stream_frame{
-            sid, stream_offset, chunk_payload,
-            frame_fin});
-        if (use_early_data)
-            impl_->early_data_send_frames.push_back(std::move(frame));
-        else
-            impl_->enqueue_stream_frame(sid, std::move(frame));
-        sent_offset += chunk;
-    }
-    if (payload_size == 0U && fin)
-    {
-        auto frame = encode_frame(stream_frame{sid, first_offset, {}, true});
-        if (use_early_data)
-            impl_->early_data_send_frames.push_back(std::move(frame));
-        else
-            impl_->enqueue_stream_frame(sid, std::move(frame));
     }
     // If the driver entered recv_datagram() while the connection had no
     // in-flight packets, its receive has no PTO deadline. Cancel that wait so

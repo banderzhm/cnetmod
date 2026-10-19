@@ -206,12 +206,170 @@ public:
         std::uint8_t urgency{3U};
         bool incremental{};
     };
-
+    struct pending_write;
+    using pending_list = std::list<pending_write>;
+    struct pending_write
+    {
+        std::uint64_t stream{};
+        std::uint64_t first_offset{};
+        std::vector<std::byte> prefix;
+        std::shared_ptr<const std::string> body;
+        std::size_t cursor{};
+        std::size_t chunk_end{};
+        std::size_t legacy_budget{};
+        bool fin{};
+        bool fin_emitted{};
+        priority service;
+        quic_stream_scheduler::shared_stream_header_writer header_writer{};
+        pending_list::iterator position;
+        [[nodiscard]] auto total() const noexcept -> std::size_t
+        {
+            return prefix.size() + body->size();
+        }
+        struct emitted
+        {
+            quic_send_frame frame;
+            std::size_t cursor{};
+            std::size_t chunk_end{};
+            bool complete{};
+            bool chunk_complete{};
+        };
+        [[nodiscard]] auto prepare(std::size_t frame_budget,
+            std::optional<std::size_t> credit_budget) const -> std::optional<emitted>
+        {
+            std::array<std::byte, 32> header{};
+            auto chunk_limit = chunk_end;
+            const auto offset = first_offset + cursor;
+            // Standard STREAM callback contract: count zero has a one-byte LEN;
+            // type/sid/offset widths are independent of count and FIN value.
+            const auto zero_header = header_writer(header, stream, offset, 0U, false);
+            if (zero_header == 0U)
+                return std::nullopt;
+            const auto fixed_header = zero_header - 1U;
+            const auto maximal_count = [&](std::size_t remaining, std::size_t budget,
+                                           std::size_t extra) -> std::size_t
+            {
+                constexpr std::array<std::uint64_t, 4> minima{0U, 64U, 16384U, 1073741824U};
+                constexpr std::array<std::uint64_t, 4> maxima{63U, 16383U, 1073741823U,
+                    4611686018427387903ULL};
+                constexpr std::array<std::size_t, 4> widths{1U, 2U, 4U, 8U};
+                std::size_t best{};
+                for (std::size_t index{}; index < widths.size(); ++index)
+                {
+                    const auto overhead = fixed_header + extra + widths[index];
+                    if (overhead > budget)
+                        continue;
+                    const auto count = std::min<std::uint64_t>(
+                        std::min(remaining, budget - overhead), maxima[index]);
+                    if (count >= minima[index])
+                        best = std::max(best, static_cast<std::size_t>(count));
+                }
+                return best;
+            };
+            if (chunk_limit == cursor && cursor < total())
+            {
+                const auto count = maximal_count(total() - cursor, legacy_budget,
+                    offset == 0U ? 1U : 0U);
+                if (count == 0U)
+                    return std::nullopt;
+                chunk_limit = cursor + count;
+            }
+            const auto limit = credit_budget ? std::min(frame_budget, *credit_budget) : frame_budget;
+            const auto count = maximal_count(chunk_limit - cursor, limit, 0U);
+            const auto header_size = header_writer(header, stream, offset, count,
+                fin && cursor + count == total());
+            if (header_size == 0U || header_size > limit || count > limit - header_size)
+                return std::nullopt;
+            if (count == 0U && (cursor != total() || !fin || fin_emitted))
+                return std::nullopt;
+            quic_send_frame frame;
+            const auto prefix_left = cursor < prefix.size() ? prefix.size() - cursor : 0U;
+            const auto prefix_count = std::min(count, prefix_left);
+            if (prefix_count == count)
+            {
+                std::vector<std::byte> encoded;
+                encoded.reserve(header_size + count);
+                encoded.insert(encoded.end(), header.begin(), header.begin() + header_size);
+                if (count != 0U)
+                    encoded.insert(encoded.end(), prefix.begin() + cursor,
+                        prefix.begin() + cursor + count);
+                // Match the existing owned-prefix fragment's wire strategy.
+                frame = quic_send_frame{std::move(encoded)};
+            }
+            else if (prefix_count != 0U)
+            {
+                frame = quic_send_frame::shared_stream_with_prefix(
+                    std::span{header}.first(header_size),
+                    std::span<const std::byte>{prefix}.subspan(cursor, prefix_count),
+                    body, 0U, count - prefix_count, stream);
+            }
+            else
+            {
+                frame = quic_send_frame::shared_stream(std::span{header}.first(header_size),
+                    body, cursor - prefix.size(), count, stream);
+            }
+            frame.set_priority(service.urgency, service.incremental);
+            return emitted{std::move(frame), cursor + count, chunk_limit,
+                cursor + count == total(), cursor + count == chunk_limit};
+        }
+    };
+    struct entry
+    {
+        std::variant<quic_send_frame, pending_write*> value;
+        entry() = default;
+        entry(quic_send_frame frame) : value(std::move(frame)) {}
+        entry(pending_write* pending) : value(pending) {}
+        [[nodiscard]] auto pending() const noexcept -> pending_write*
+        {
+            const auto pointer = std::get_if<pending_write*>(&value);
+            return pointer ? *pointer : nullptr;
+        }
+        auto set_priority(std::uint8_t urgency, bool incremental) noexcept -> void
+        {
+            if (auto* write = pending())
+                write->service = priority{urgency, incremental};
+            else
+                std::get<quic_send_frame>(value).set_priority(urgency, incremental);
+        }
+        [[nodiscard]] auto is_early_data() const noexcept -> bool
+        {
+            return !pending() && std::get<quic_send_frame>(value).is_early_data();
+        }
+        auto release_frame() -> quic_send_frame
+        {
+            return std::move(std::get<quic_send_frame>(value));
+        }
+    };
+    struct scheduled_entry
+    {
+        std::uint64_t stream{};
+        std::uint8_t urgency{};
+        bool default_fifo{};
+        entry frame;
+    };
+    struct reservation
+    {
+        priority_service_budget budget_before;
+        std::uint64_t stream{};
+        std::uint8_t urgency{};
+        bool default_fifo{};
+        bool popped{};
+        bool still_ready{};
+        pending_write* pending{};
+        std::size_t cursor_before{};
+        std::size_t chunk_before{};
+        bool fin_before{};
+        bool owner_complete{};
+    };
     std::map<std::uint64_t, priority> priorities;
-    std::deque<scheduled_quic_frame> defaults;
-    std::array<std::map<std::uint64_t, std::deque<quic_send_frame>>, 8> frames;
+    std::deque<scheduled_entry> defaults;
+    std::array<std::map<std::uint64_t, std::deque<entry>>, 8> frames;
     std::array<std::deque<std::uint64_t>, 8> ready;
     priority_service_budget budget;
+    pending_list pending;
+    std::uint64_t committed_pending_progress{};
+    bool selection_active{};
+    std::vector<reservation> reservations;
 };
 
 quic_stream_scheduler::quic_stream_scheduler()
@@ -258,6 +416,13 @@ void quic_stream_scheduler::enqueue(std::uint64_t stream, quic_send_frame frame)
 
 auto quic_stream_scheduler::take() -> std::optional<scheduled_quic_frame>
 {
+    if (has_pending_writes())
+    {
+        begin_packet_selection();
+        auto result = take_selected_frame(std::numeric_limits<std::size_t>::max(), std::nullopt);
+        finish_packet_selection(true);
+        return result;
+    }
     for (;;)
     {
         std::array<bool, 8> ready{};
@@ -272,7 +437,8 @@ auto quic_stream_scheduler::take() -> std::optional<scheduled_quic_frame>
         {
             auto frame = std::move(impl_->defaults.front());
             impl_->defaults.pop_front();
-            return frame;
+            return scheduled_quic_frame{frame.stream, frame.urgency,
+                frame.default_fifo, frame.frame.release_frame()};
         }
         auto& streams = impl_->ready[urgency];
         while (!streams.empty())
@@ -282,7 +448,7 @@ auto quic_stream_scheduler::take() -> std::optional<scheduled_quic_frame>
             auto found = impl_->frames[urgency].find(stream);
             if (found == impl_->frames[urgency].end() || found->second.empty())
                 continue;
-            auto frame = std::move(found->second.front());
+            auto frame = found->second.front().release_frame();
             found->second.pop_front();
             if (!found->second.empty())
             {
@@ -301,12 +467,229 @@ auto quic_stream_scheduler::take() -> std::optional<scheduled_quic_frame>
     }
 }
 
+auto quic_stream_scheduler::pending_progress() const noexcept -> std::uint64_t
+{
+    return impl_->committed_pending_progress;
+}
+
+auto quic_stream_scheduler::has_pending_writes() const noexcept -> bool
+{
+    return !impl_->pending.empty();
+}
+
+void quic_stream_scheduler::enqueue_shared_write(std::uint64_t stream,
+    std::vector<std::byte> prefix, std::shared_ptr<const std::string> body,
+    std::uint64_t first_offset, bool fin, std::size_t legacy_budget,
+    shared_stream_header_writer writer)
+{
+    const auto found = impl_->priorities.find(stream);
+    const auto priority = found == impl_->priorities.end()
+        ? implementation::priority{} : found->second;
+    implementation::pending_write prepared;
+    prepared.stream = stream;
+    prepared.first_offset = first_offset;
+    prepared.prefix = std::move(prefix);
+    prepared.body = std::move(body);
+    prepared.fin = fin;
+    prepared.legacy_budget = legacy_budget;
+    prepared.service = priority;
+    prepared.header_writer = writer;
+    impl_->pending.emplace_back(std::move(prepared));
+    auto& pending = impl_->pending.back();
+    pending.position = std::prev(impl_->pending.end());
+    if (found == impl_->priorities.end())
+        impl_->defaults.push_back({stream, 3U, true, &pending});
+    else
+    {
+        auto& queue = impl_->frames[priority.urgency][stream];
+        if (queue.empty())
+            impl_->ready[priority.urgency].push_back(stream);
+        queue.emplace_back(&pending);
+    }
+}
+
+void quic_stream_scheduler::begin_packet_selection()
+{
+    if (impl_->selection_active)
+        std::terminate();
+    impl_->reservations.clear();
+    // Reused journal capacity belongs to the scheduler, never sent frames.
+    if (impl_->reservations.capacity() == 0U)
+        impl_->reservations.reserve(16U);
+    impl_->selection_active = true;
+}
+
+auto quic_stream_scheduler::take_selected_frame(std::size_t frame_budget,
+    std::optional<std::size_t> pending_credit_budget)
+    -> std::optional<scheduled_quic_frame>
+{
+    if (!impl_->selection_active)
+        std::terminate();
+    // Grow the reusable journal before taking credit or mutating queues.
+    if (impl_->reservations.size() == impl_->reservations.capacity())
+        impl_->reservations.reserve(std::max(std::size_t{16}, impl_->reservations.size() * 2U));
+    for (;;)
+    {
+        std::array<bool, 8> ready{};
+        for (std::size_t urgency{}; urgency < ready.size(); ++urgency)
+            ready[urgency] = !impl_->ready[urgency].empty();
+        ready[3] = ready[3] || !impl_->defaults.empty();
+        const auto budget_before = impl_->budget;
+        const auto selected = impl_->budget.take_next(ready);
+        if (!selected)
+            return std::nullopt;
+        const auto urgency = *selected;
+        const bool default_fifo = urgency == 3U && !impl_->defaults.empty();
+        std::uint64_t stream{};
+        implementation::entry* entry{};
+        if (default_fifo)
+        {
+            stream = impl_->defaults.front().stream;
+            entry = &impl_->defaults.front().frame;
+        }
+        else
+        {
+            auto& streams = impl_->ready[urgency];
+            while (!streams.empty())
+            {
+                stream = streams.front();
+                auto found = impl_->frames[urgency].find(stream);
+                if (found != impl_->frames[urgency].end() && !found->second.empty())
+                {
+                    entry = &found->second.front();
+                    break;
+                }
+                streams.pop_front();
+            }
+            if (!entry)
+            {
+                impl_->budget = budget_before;
+                continue;
+            }
+        }
+        implementation::reservation reservation;
+        reservation.budget_before = budget_before;
+        reservation.stream = stream;
+        reservation.urgency = urgency;
+        reservation.default_fifo = default_fifo;
+        reservation.pending = entry->pending();
+        quic_send_frame frame;
+        bool chunk_complete = true;
+        if (reservation.pending)
+        {
+            auto& pending = *reservation.pending;
+            auto prepared = pending.prepare(frame_budget, pending_credit_budget);
+            if (!prepared)
+            {
+                impl_->budget = budget_before;
+                return std::nullopt;
+            }
+            reservation.cursor_before = pending.cursor;
+            reservation.chunk_before = pending.chunk_end;
+            reservation.fin_before = pending.fin_emitted;
+            frame = std::move(prepared->frame);
+            pending.cursor = prepared->cursor;
+            pending.chunk_end = prepared->chunk_end;
+            pending.fin_emitted = prepared->complete && pending.fin;
+            reservation.owner_complete = prepared->complete;
+            reservation.popped = prepared->complete;
+            chunk_complete = prepared->chunk_complete;
+        }
+        else
+        {
+            frame = entry->release_frame();
+            reservation.popped = true;
+        }
+        if (default_fifo)
+        {
+            if (reservation.popped)
+                impl_->defaults.pop_front();
+        }
+        else
+        {
+            auto& streams = impl_->ready[urgency];
+            streams.pop_front();
+            auto found = impl_->frames[urgency].find(stream);
+            auto& queue = found->second;
+            if (reservation.popped)
+                queue.pop_front();
+            if (!queue.empty())
+            {
+                reservation.still_ready = true;
+                // Preserve the original same-urgency logical chunk turn.
+                // Global urgency credits were charged for this actual fragment.
+                if (frame.incremental() && chunk_complete)
+                    streams.push_back(stream);
+                else
+                    streams.push_front(stream);
+            }
+            else
+                impl_->frames[urgency].erase(found);
+        }
+        impl_->reservations.push_back(reservation);
+        return scheduled_quic_frame{stream, urgency, default_fifo, std::move(frame)};
+    }
+}
+
+void quic_stream_scheduler::rollback_selected_frame(scheduled_quic_frame frame)
+{
+    if (!impl_->selection_active || impl_->reservations.empty())
+        std::terminate();
+    const auto reservation = impl_->reservations.back();
+    impl_->reservations.pop_back();
+    if (reservation.stream != frame.stream || reservation.urgency != frame.urgency ||
+        reservation.default_fifo != frame.default_fifo)
+        std::terminate();
+    implementation::entry restored;
+    if (reservation.pending)
+    {
+        auto& pending = *reservation.pending;
+        pending.cursor = reservation.cursor_before;
+        pending.chunk_end = reservation.chunk_before;
+        pending.fin_emitted = reservation.fin_before;
+        restored = implementation::entry{&pending};
+    }
+    else
+        restored = implementation::entry{std::move(frame.frame)};
+    if (reservation.default_fifo)
+    {
+        if (reservation.popped)
+            impl_->defaults.push_front({frame.stream, frame.urgency, true, std::move(restored)});
+    }
+    else
+    {
+        auto& streams = impl_->ready[frame.urgency];
+        if (reservation.still_ready)
+            std::erase(streams, frame.stream);
+        if (reservation.popped)
+            impl_->frames[frame.urgency][frame.stream].push_front(std::move(restored));
+        streams.push_front(frame.stream);
+    }
+    impl_->budget = reservation.budget_before;
+}
+
+void quic_stream_scheduler::finish_packet_selection(bool committed)
+{
+    if (!impl_->selection_active || (!committed && !impl_->reservations.empty()))
+        std::terminate();
+    if (committed)
+        for (const auto& reservation : impl_->reservations)
+        {
+            if (reservation.pending)
+                ++impl_->committed_pending_progress;
+            if (reservation.owner_complete)
+                impl_->pending.erase(reservation.pending->position);
+        }
+    impl_->reservations.clear();
+    impl_->selection_active = false;
+}
+
 void quic_stream_scheduler::requeue(scheduled_quic_frame frame)
 {
     impl_->budget.restore(frame.urgency);
     if (frame.default_fifo)
     {
-        impl_->defaults.push_front(std::move(frame));
+        impl_->defaults.push_front({frame.stream, frame.urgency, true, std::move(frame.frame)});
         return;
     }
     auto& frames = impl_->frames[frame.urgency][frame.stream];
@@ -365,7 +748,7 @@ void quic_stream_scheduler::set_priority(std::uint64_t stream,
                 frame.set_priority(urgency, incremental);
         return;
     }
-    std::deque<quic_send_frame> moved;
+    std::deque<implementation::entry> moved;
     if (previous != impl_->priorities.end())
     {
         auto pending = impl_->frames[old.urgency].find(stream);
@@ -432,7 +815,7 @@ auto quic_stream_scheduler::take_early_data() -> std::vector<quic_send_frame>
     {
         if (!frame.is_early_data())
             return false;
-        result.push_back(std::move(frame));
+        result.push_back(frame.release_frame());
         return true;
     };
     std::erase_if(impl_->defaults, [&](auto& value) { return take(value.frame); });

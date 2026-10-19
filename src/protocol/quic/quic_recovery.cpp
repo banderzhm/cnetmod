@@ -353,6 +353,12 @@ auto quic_recovery_controller::can_send_datagram(std::uint64_t bytes) const noex
     return congestion_.can_send_datagram(bytes);
 }
 
+auto quic_recovery_controller::remaining_send_credit() const noexcept -> std::uint64_t
+{
+    const auto window = congestion_.congestion_window();
+    return window - std::min(window, congestion_.bytes_in_flight());
+}
+
 auto quic_recovery_controller::congestion_window() const noexcept -> std::uint64_t
 {
     return congestion_.congestion_window();

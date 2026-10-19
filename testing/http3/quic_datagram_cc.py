@@ -281,8 +281,18 @@ async def exercise(args, process, port, result):
         async with connect("127.0.0.1", proxy_port, configuration=configuration, create_protocol=RawPeer) as peer:
             proxy.attach(peer)
 
+            def clear_ready_report():
+                healthy()
+                try:
+                    (args.records / "ready.txt").unlink(missing_ok=True)
+                except PermissionError as error:
+                    if getattr(error, "winerror", None) in (32, 33):
+                        return False
+                    raise
+                return True
+
             async def warmup():
-                (args.records / "ready.txt").unlink(missing_ok=True)
+                await wait_until(clear_ready_report, 4, "previous warmup ready report is still open")
                 _, item = peer.request("warmup")
                 await body(item, b"c")
                 await wait_until(lambda: healthy() and (args.records / "ready.txt").exists(), 4, "real recovery did not drain")

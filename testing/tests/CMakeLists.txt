@@ -76,6 +76,7 @@ set(TEST_SOURCES
     test_quic_varint.cpp
     test_quic_frame.cpp
     test_quic_packet.cpp
+    test_quic_in_place_crypto.cpp
     test_quic_stream.cpp
     test_quic_loss_detection.cpp
     test_quic_congestion.cpp
@@ -251,6 +252,11 @@ foreach(test_src ${TEST_SOURCES})
     get_filename_component(test_name ${test_src} NAME_WE)
 
     add_executable(${test_name} ${test_src})
+    if(test_name STREQUAL "test_quic_in_place_crypto")
+        # Same-primary-module implementation unit exercises private crypto.
+        # Keep it out of TEST_SOURCES: only the main produces a test target.
+        target_sources(${test_name} PRIVATE test_quic_in_place_crypto_impl.cpp)
+    endif()
     list(APPEND CNETMOD_TEST_TARGETS ${test_name})
     if(test_name STREQUAL "test_http_disabled_overhead")
         set_property(TARGET ${test_name} PROPERTY

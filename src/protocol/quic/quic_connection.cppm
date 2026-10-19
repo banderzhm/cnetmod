@@ -507,10 +507,11 @@ private:
     /// Executed only by the connection packet-owner after a producer command
     /// has been dequeued.  It is deliberately separate from async_send(), so
     /// callers never mutate stream or flow-control state directly.
-    [[nodiscard]] auto apply_stream_write(stream_id sid, const std::vector<std::byte>& data,
+    [[nodiscard]] auto apply_stream_write(stream_id sid, std::vector<std::byte>& data,
         bool fin) -> std::expected<void, std::error_code>;
+    // Accepted pending shared writes may transfer prefix; expected errors preserve it.
     [[nodiscard]] auto apply_stream_write(stream_id sid,
-        const std::vector<std::byte>& prefix,
+        std::vector<std::byte>& prefix,
         const std::shared_ptr<const std::string>& shared_data, bool fin)
         -> std::expected<void, std::error_code>;
     [[nodiscard]] auto apply_application_datagram(std::vector<std::byte> data)

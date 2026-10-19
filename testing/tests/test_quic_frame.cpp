@@ -6,6 +6,7 @@
 
 import cnetmod.protocol.quic;
 import std;
+import cnetmod.protocol.quic.send_pipeline;
 
 TEST(quic_ping_frame_roundtrip)
 {
@@ -897,3 +898,298 @@ TEST(quic_mixed_send_frame_owns_temporary_header_and_prefix)
 }
 
 RUN_TESTS();
+
+namespace {
+auto pending_test_header(std::span<std::byte> output, std::uint64_t stream,
+    std::uint64_t offset, std::size_t count, bool fin) -> std::size_t
+{
+    std::size_t used{};
+    const auto append = [&](std::uint64_t value)
+    {
+        const auto encoded = cnetmod::quic::encode_varint_to(value, output.subspan(used));
+        if (!encoded) return false;
+        used += *encoded;
+        return true;
+    };
+    if (!append(0x0aU | (offset != 0U ? 0x04U : 0U) | (fin ? 0x01U : 0U)) ||
+        !append(stream) || (offset != 0U && !append(offset)) || !append(count))
+        return 0U;
+    return used;
+}
+auto pending_test_payload(const cnetmod::quic::quic_send_frame& frame)
+    -> std::vector<std::byte>
+{
+    std::vector<std::byte> bytes;
+    frame.append_to(bytes);
+    return bytes;
+}
+} // namespace
+
+TEST(quic_pending_range_exact_budget_prefix_body_fin_and_varint_offsets)
+{
+    for (const auto stream : {63U, 64U})
+    for (const auto offset : {0U, 63U, 64U, 16383U, 16384U})
+    {
+        cnetmod::quic::quic_stream_scheduler scheduler;
+        const std::vector<std::byte> prefix(9U, std::byte{0x70});
+        const auto body = std::make_shared<const std::string>(130U, 'b');
+        scheduler.enqueue_shared_write(stream, prefix, body, offset, true, 96U, pending_test_header);
+        std::vector<std::byte> received;
+        bool received_fin{};
+        std::size_t fragments{};
+        while (!scheduler.empty())
+        {
+            scheduler.begin_packet_selection();
+            const auto selected = scheduler.take_selected_frame(32U, 32U);
+            ASSERT_TRUE(selected.has_value());
+            const auto bytes = pending_test_payload(selected->frame);
+            ASSERT_TRUE(bytes.size() <= 32U);
+            const auto decoded = cnetmod::quic::decode_frame(bytes);
+            ASSERT_TRUE(decoded.has_value());
+            ASSERT_TRUE(std::holds_alternative<cnetmod::quic::stream_frame>(decoded->first));
+            const auto frame = std::get<cnetmod::quic::stream_frame>(decoded->first);
+            ASSERT_EQ(frame.stream_id, stream);
+            ASSERT_EQ(frame.offset, offset + received.size());
+            ASSERT_FALSE(received_fin);
+            received.insert(received.end(), frame.data.begin(), frame.data.end());
+            received_fin = frame.fin;
+            scheduler.finish_packet_selection(true);
+            ASSERT_TRUE(++fragments < 64U);
+        }
+        std::vector<std::byte> expected = prefix;
+        const auto body_bytes = std::as_bytes(std::span{body->data(), body->size()});
+        expected.insert(expected.end(), body_bytes.begin(), body_bytes.end());
+        ASSERT_TRUE(received == expected);
+        ASSERT_TRUE(received_fin);
+        ASSERT_FALSE(scheduler.has_pending_writes());
+    }
+}
+
+TEST(quic_pending_range_rollback_restores_cursor_fin_and_original_ready_turn)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    scheduler.set_priority(0U, 0U, true);
+    scheduler.set_priority(4U, 0U, true);
+    const auto body = std::make_shared<const std::string>(256U, 'a');
+    scheduler.enqueue_shared_write(0U, {}, body, 0U, false, 64U, pending_test_header);
+    scheduler.enqueue_shared_write(0U, {}, body, 256U, true, 64U, pending_test_header);
+    scheduler.enqueue_shared_write(4U, {}, body, 0U, true, 64U, pending_test_header);
+    scheduler.begin_packet_selection();
+    auto first = scheduler.take_selected_frame(16U, 16U);
+    auto second = scheduler.take_selected_frame(16U, 16U);
+    ASSERT_TRUE(first.has_value()); ASSERT_TRUE(second.has_value());
+    ASSERT_EQ(first->stream, 0U); ASSERT_EQ(second->stream, 0U);
+    const auto original = pending_test_payload(first->frame);
+    scheduler.rollback_selected_frame(std::move(*second));
+    scheduler.rollback_selected_frame(std::move(*first));
+    scheduler.finish_packet_selection(false);
+    scheduler.begin_packet_selection();
+    auto retried = scheduler.take_selected_frame(16U, 16U);
+    ASSERT_TRUE(retried.has_value()); ASSERT_EQ(retried->stream, 0U);
+    ASSERT_TRUE(original == pending_test_payload(retried->frame));
+    scheduler.finish_packet_selection(true);
+}
+
+TEST(quic_pending_range_two_incremental_streams_keep_chunk_turn_and_background_bound)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    scheduler.set_priority(0U, 0U, true);
+    scheduler.set_priority(4U, 0U, true);
+    scheduler.set_priority(8U, 7U, true);
+    const auto body = std::make_shared<const std::string>(4096U, 'x');
+    for (const auto stream : {0U, 4U, 8U})
+        scheduler.enqueue_shared_write(stream, {}, body, 0U, false, 64U, pending_test_header);
+    bool saw_second{};
+    std::size_t first_chunk_bytes{};
+    for (std::size_t service{}; service < 16U; ++service)
+    {
+        scheduler.begin_packet_selection();
+        const auto selected = scheduler.take_selected_frame(16U, 16U);
+        ASSERT_TRUE(selected.has_value()); ASSERT_EQ(selected->urgency, 0U);
+        if (selected->stream == 4U)
+        {
+            if (!saw_second)
+                ASSERT_EQ(first_chunk_bytes, 60U);
+            saw_second = true;
+        }
+        if (!saw_second)
+        {
+            const auto bytes = pending_test_payload(selected->frame);
+            const auto decoded = cnetmod::quic::decode_frame(bytes);
+            ASSERT_TRUE(decoded.has_value());
+            first_chunk_bytes += std::get<cnetmod::quic::stream_frame>(decoded->first).data.size();
+        }
+        scheduler.finish_packet_selection(true);
+    }
+    ASSERT_TRUE(saw_second);
+    scheduler.begin_packet_selection();
+    const auto background = scheduler.take_selected_frame(16U, 16U);
+    ASSERT_TRUE(background.has_value()); ASSERT_EQ(background->stream, 8U);
+    scheduler.finish_packet_selection(true);
+}
+
+TEST(quic_pending_range_priority_migrations_and_retire_keep_owner_and_offset)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    auto body = std::make_shared<const std::string>(64U, 'r');
+    std::weak_ptr<const std::string> retained = body;
+    scheduler.enqueue_shared_write(4U, {std::byte{0x70}}, body, 100U, true, 64U, pending_test_header);
+    body.reset();
+    scheduler.set_priority(4U, 0U, false);
+    scheduler.set_priority(4U, 0U, true);
+    scheduler.set_priority(4U, 7U, true);
+    scheduler.set_priority(4U, 3U, false);
+    scheduler.set_priority(4U, 0U, true);
+    scheduler.retire_stream(4U);
+    ASSERT_FALSE(retained.expired());
+    std::size_t received{};
+    while (!scheduler.empty())
+    {
+        scheduler.begin_packet_selection();
+        {
+            const auto frame = scheduler.take_selected_frame(16U, 16U);
+            ASSERT_TRUE(frame.has_value()); ASSERT_EQ(frame->urgency, 0U);
+            const auto bytes = pending_test_payload(frame->frame);
+            const auto decoded = cnetmod::quic::decode_frame(bytes);
+            ASSERT_TRUE(decoded.has_value());
+            const auto stream = std::get<cnetmod::quic::stream_frame>(decoded->first);
+            ASSERT_EQ(stream.offset, 100U + received);
+            received += stream.data.size();
+            scheduler.finish_packet_selection(true);
+        }
+    }
+    ASSERT_EQ(received, 65U);
+    ASSERT_TRUE(retained.expired());
+}
+
+TEST(quic_pending_range_zero_credit_zero_fin_and_in_place_fallback)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    scheduler.enqueue_shared_write(4U, {}, std::make_shared<const std::string>(),
+        64U, true, 64U, pending_test_header);
+    scheduler.begin_packet_selection();
+    ASSERT_FALSE(scheduler.take_selected_frame(64U, 0U).has_value());
+    scheduler.finish_packet_selection(false);
+    // Legacy take remains at the same scheduler node; no encoded FIFO diversion.
+    const auto fin = scheduler.take();
+    ASSERT_TRUE(fin.has_value());
+    const auto bytes = pending_test_payload(fin->frame);
+    const auto decoded = cnetmod::quic::decode_frame(bytes);
+    ASSERT_TRUE(decoded.has_value());
+    const auto stream = std::get<cnetmod::quic::stream_frame>(decoded->first);
+    ASSERT_TRUE(stream.fin); ASSERT_EQ(stream.offset, 64U); ASSERT_TRUE(stream.data.empty());
+    ASSERT_TRUE(scheduler.empty()); ASSERT_FALSE(scheduler.has_pending_writes());
+}
+
+TEST(quic_pending_range_committed_progress_exceeds_batch_and_blocked_stops)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    scheduler.enqueue_shared_write(0U, {}, std::make_shared<const std::string>(4096U, 'x'),
+        0U, true, 1200U, pending_test_header);
+    const auto initial = scheduler.pending_progress();
+    for (std::size_t batch{}; batch < 2U; ++batch)
+    {
+        const auto before = scheduler.pending_progress();
+        for (std::size_t packet{}; packet < 16U; ++packet)
+        {
+            scheduler.begin_packet_selection();
+            auto selected = scheduler.take_selected_frame(32U, 32U);
+            ASSERT_TRUE(selected.has_value());
+            scheduler.finish_packet_selection(true);
+        }
+        ASSERT_EQ(scheduler.size(), 1U);
+        ASSERT_EQ(scheduler.pending_progress(), before + 16U);
+    }
+    ASSERT_EQ(scheduler.pending_progress(), initial + 32U);
+    const auto before = scheduler.pending_progress();
+    scheduler.begin_packet_selection();
+    auto selected = scheduler.take_selected_frame(32U, 32U);
+    ASSERT_TRUE(selected.has_value());
+    scheduler.rollback_selected_frame(std::move(*selected));
+    scheduler.finish_packet_selection(false);
+    ASSERT_EQ(scheduler.pending_progress(), before);
+    // This is exactly the no-progress decision used by flush_send_queue:
+    // unchanged logical queue size with zero credit must break after one batch.
+    const auto queued = scheduler.size();
+    scheduler.begin_packet_selection();
+    ASSERT_FALSE(scheduler.take_selected_frame(32U, 0U).has_value());
+    scheduler.finish_packet_selection(false);
+    ASSERT_TRUE(scheduler.size() >= queued && scheduler.pending_progress() == before);
+}
+
+TEST(quic_pending_range_maximal_fit_at_length_varint_boundaries)
+{
+    for (const std::size_t target : {60U, 63U, 64U, 16383U, 16384U})
+    {
+        std::array<std::byte, 32> header{};
+        const auto wire = pending_test_header(header, 0U, 0U, target, false) + target;
+        // Legacy chunk retains the original conservative offset byte at zero.
+        cnetmod::quic::quic_stream_scheduler legacy;
+        legacy.enqueue_shared_write(0U, {}, std::make_shared<const std::string>(32768U, 'x'),
+            0U, false, wire + 1U, pending_test_header);
+        const auto whole = legacy.take();
+        ASSERT_TRUE(whole.has_value());
+        auto bytes = pending_test_payload(whole->frame);
+        auto decoded = cnetmod::quic::decode_frame(bytes);
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(std::get<cnetmod::quic::stream_frame>(decoded->first).data.size(), target);
+        cnetmod::quic::quic_stream_scheduler credit;
+        credit.enqueue_shared_write(0U, {}, std::make_shared<const std::string>(32768U, 'x'),
+            0U, false, 32768U, pending_test_header);
+        credit.begin_packet_selection();
+        const auto fragment = credit.take_selected_frame(wire, wire);
+        ASSERT_TRUE(fragment.has_value());
+        bytes = pending_test_payload(fragment->frame);
+        decoded = cnetmod::quic::decode_frame(bytes);
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_EQ(std::get<cnetmod::quic::stream_frame>(decoded->first).data.size(), target);
+        ASSERT_EQ(bytes.size(), wire);
+        credit.finish_packet_selection(true);
+    }
+}
+
+TEST(quic_pending_range_moved_prefix_survives_producer_reuse_and_rollback)
+{
+    cnetmod::quic::quic_stream_scheduler scheduler;
+    std::vector<std::byte> prefix(9U, std::byte{0x70});
+    auto body = std::make_shared<const std::string>(130U, 'b');
+    const std::weak_ptr<const std::string> owner = body;
+    scheduler.enqueue_shared_write(4U, std::move(prefix), body, 64U, true,
+        96U, pending_test_header);
+    body.reset();
+    prefix.assign(4096U, std::byte{0xff});
+    ASSERT_FALSE(owner.expired());
+    scheduler.begin_packet_selection();
+    auto rolled_back = scheduler.take_selected_frame(32U, 32U);
+    ASSERT_TRUE(rolled_back.has_value());
+    scheduler.rollback_selected_frame(std::move(*rolled_back));
+    rolled_back.reset();
+    scheduler.finish_packet_selection(false);
+    std::vector<std::byte> received;
+    bool received_fin{};
+    std::size_t fragments{};
+    while (!scheduler.empty())
+    {
+        scheduler.begin_packet_selection();
+        const auto selected = scheduler.take_selected_frame(32U, 32U);
+        ASSERT_TRUE(selected.has_value());
+        const auto bytes = pending_test_payload(selected->frame);
+        const auto decoded = cnetmod::quic::decode_frame(bytes);
+        ASSERT_TRUE(decoded.has_value());
+        ASSERT_TRUE(std::holds_alternative<cnetmod::quic::stream_frame>(decoded->first));
+        const auto frame = std::get<cnetmod::quic::stream_frame>(decoded->first);
+        ASSERT_EQ(frame.stream_id, 4U);
+        ASSERT_EQ(frame.offset, 64U + received.size());
+        ASSERT_FALSE(received_fin);
+        received.insert(received.end(), frame.data.begin(), frame.data.end());
+        received_fin = frame.fin;
+        scheduler.finish_packet_selection(true);
+        ASSERT_TRUE(++fragments < 64U);
+    }
+    std::vector<std::byte> expected(9U, std::byte{0x70});
+    expected.insert(expected.end(), 130U, std::byte{0x62});
+    ASSERT_TRUE(received == expected);
+    ASSERT_TRUE(received_fin);
+    ASSERT_FALSE(scheduler.has_pending_writes());
+    ASSERT_TRUE(owner.expired());
+}
