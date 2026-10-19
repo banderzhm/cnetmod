@@ -974,4 +974,55 @@ TEST(quic_recovery_mixed_discard_and_destruction_release_all_owners)
     ASSERT_TRUE(on_destruction.expired());
 }
 
+TEST(quic_recovery_late_probe_ack_after_loss_does_not_confirm_retry)
+{
+    auto config = make_test_config();
+    cnetmod::quic::quic_recovery_controller recovery(config);
+    const auto now = std::chrono::steady_clock::now();
+    const auto space = cnetmod::quic::pn_space::application;
+    recovery.on_packet_sent(1U, 2400U, now, true, space, {}, 2400U);
+    recovery.on_packet_sent(4U, 100U, now, true, space);
+    cnetmod::quic::ack_frame ack;
+    ack.largest_acked = 4U;
+    const auto loss = recovery.on_ack_received(ack, now + 20ms, space);
+    ASSERT_TRUE(loss.has_value());
+    ASSERT_EQ(loss->lost_path_mtu_probes.size(), 1U);
+    ASSERT_EQ(loss->lost_path_mtu_probes.front(), 2400U);
+    recovery.on_packet_sent(5U, 2400U, now + 21ms, true, space, {}, 2400U);
+    ack.largest_acked = 1U;
+    const auto late = recovery.on_ack_received(ack, now + 22ms, space);
+    ASSERT_TRUE(late.has_value());
+    ASSERT_TRUE(late->acknowledged_path_mtu_probes.empty());
+    ASSERT_TRUE(late->lost_path_mtu_probes.empty());
+    ack.largest_acked = 5U;
+    const auto actual = recovery.on_ack_received(ack, now + 23ms, space);
+    ASSERT_TRUE(actual.has_value());
+    ASSERT_EQ(actual->acknowledged_path_mtu_probes.size(), 1U);
+    ASSERT_EQ(actual->acknowledged_path_mtu_probes.front(), 2400U);
+}
+
+TEST(quic_recovery_late_probe_ack_after_pto_forget_does_not_confirm_retry)
+{
+    auto config = make_test_config();
+    cnetmod::quic::quic_recovery_controller recovery(config);
+    const auto now = std::chrono::steady_clock::now();
+    const auto space = cnetmod::quic::pn_space::application;
+    recovery.on_packet_sent(1U, 2400U, now, true, space, {}, 2400U);
+    const auto forgotten = recovery.discard_non_retransmittable(space);
+    ASSERT_EQ(forgotten.size(), 1U);
+    ASSERT_EQ(forgotten.front(), 2400U);
+    recovery.on_packet_sent(2U, 2400U, now + 1ms, true, space, {}, 2400U);
+    cnetmod::quic::ack_frame ack;
+    ack.largest_acked = 1U;
+    const auto late = recovery.on_ack_received(ack, now + 2ms, space);
+    ASSERT_TRUE(late.has_value());
+    ASSERT_TRUE(late->acknowledged_path_mtu_probes.empty());
+    ASSERT_TRUE(late->lost_path_mtu_probes.empty());
+    ack.largest_acked = 2U;
+    const auto actual = recovery.on_ack_received(ack, now + 3ms, space);
+    ASSERT_TRUE(actual.has_value());
+    ASSERT_EQ(actual->acknowledged_path_mtu_probes.size(), 1U);
+    ASSERT_EQ(actual->acknowledged_path_mtu_probes.front(), 2400U);
+}
+
 RUN_TESTS();

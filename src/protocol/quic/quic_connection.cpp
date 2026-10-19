@@ -894,6 +894,7 @@ struct quic_connection::quic_connection_impl
         // raised only by an acknowledged padded PING probe, independently for
         // each Path ID so a narrow/encapsulated route cannot regress another.
         std::size_t discovered_max_datagram_payload{min_initial_pkt_size};
+        bool path_mtu_fast_probe{true};
         std::optional<std::size_t> path_mtu_probe_target;
         std::optional<std::size_t> path_mtu_probe_in_flight;
         std::optional<time_point> next_path_mtu_probe_at;
@@ -1077,10 +1078,14 @@ struct quic_connection::quic_connection_impl
                 *path->next_path_mtu_probe_at > now ||
                 path->discovered_max_datagram_payload >= ceiling)
                 continue;
-            // 128-byte increments find the common 1280/1400/1452 boundaries
-            // without repeatedly injecting large loss bursts on one route.
-            path->path_mtu_probe_target = std::min(
-                ceiling, path->discovered_max_datagram_payload + 128U);
+            // Keep the first probe conservative. Its ACK unlocks fast growth
+            // until a live probe is lost or reaches PTO, then keep +128.
+            // confirmed < ceiling above makes subtraction/addition bounded.
+            const auto confirmed = path->discovered_max_datagram_payload;
+            const auto increment = std::min(ceiling - confirmed,
+                path->path_mtu_fast_probe && confirmed > min_initial_pkt_size
+                    ? confirmed : std::size_t{128U});
+            path->path_mtu_probe_target = confirmed + increment;
             path->next_path_mtu_probe_at.reset();
             scheduled = true;
         }
@@ -3095,6 +3100,7 @@ auto quic_connection::process_ack_frame_state(const ack_frame& frame)
             if (!application_path.path_mtu_probe_in_flight ||
                 *application_path.path_mtu_probe_in_flight != target)
                 continue;
+            application_path.path_mtu_fast_probe = false;
             application_path.path_mtu_probe_in_flight.reset();
             application_path.next_path_mtu_probe_at = now +
                 impl_->config.path_mtu_probe_interval;
@@ -3658,6 +3664,11 @@ auto quic_connection::handle_pto()
         impl_->sending_application_path_id = std::get<0>(*application_due);
     auto& application_path = impl_->sending_application_path();
     auto& recovery = path_scoped ? application_path.recovery : impl_->recovery;
+    // This selected application-space deadline is based on the latest
+    // ACK-eliciting send, at or after this still-live PMTU probe's send.
+    // Cover reliable-data PTOs too; their original probe record stays live.
+    if (path_scoped && application_path.path_mtu_probe_in_flight)
+        application_path.path_mtu_fast_probe = false;
 
     // RFC 9002 §6.2.4: PTO sends probes and retains the original packets as
     // in-flight.  Do not erase their metadata here; a later ACK may still
