@@ -123,18 +123,6 @@ auto quic_stream::close_both() -> task<void>
     co_return;
 }
 
-[[nodiscard]] static auto next_offset_from_map(const std::map<std::uint64_t, std::vector<std::byte>>& buf, std::uint64_t offset) -> std::optional<std::pair<std::uint64_t, std::size_t>>
-{
-    auto it = buf.lower_bound(offset);
-    if (it == buf.end())
-        return std::nullopt;
-
-    if (it->first != offset)
-        return std::nullopt;
-
-    return std::make_pair(it->first, it->second.size());
-}
-
 auto quic_stream::receive(mutable_buffer buf)
     -> task<std::expected<std::size_t, std::error_code>>
 {
@@ -165,40 +153,7 @@ auto quic_stream::apply_receive_state(mutable_buffer buf)
         return std::unexpected(std::make_error_code(std::errc::operation_would_block));
     }
 
-    std::size_t total_copied = 0;
-
-    // Copy all contiguous data starting from next_expected_offset_
-    while (buf.size > total_copied)
-    {
-        auto maybe_range = next_offset_from_map(impl.receive_buffer_, impl.next_expected_offset_);
-        if (!maybe_range.has_value())
-        {
-            break;
-        }
-
-        const auto& [offset, data_size] = *maybe_range;
-        const auto& data_vec = impl.receive_buffer_[offset];
-
-        const auto copy_amt = std::min(buf.size - total_copied, data_size);
-        std::memcpy(static_cast<std::byte*>(buf.data) + total_copied, data_vec.data(), copy_amt);
-        total_copied += copy_amt;
-        impl.next_expected_offset_ += copy_amt;
-
-        // Remove completely consumed entry
-        if (copy_amt >= data_size)
-        {
-            impl.receive_buffer_.erase(offset);
-        }
-        else
-        {
-            // Create new entry without copied portion
-            auto remaining = std::vector<std::byte>(
-                data_vec.begin() + copy_amt,
-                data_vec.end());
-            impl.receive_buffer_.erase(offset);
-            impl.receive_buffer_[offset + copy_amt] = std::move(remaining);
-        }
-    }
+    const auto total_copied = deliver_contiguous_data(buf);
 
     if (total_copied > 0)
     {
@@ -246,38 +201,37 @@ void quic_stream::extend_receive_limit(std::uint64_t maximum) noexcept
 
 auto quic_stream::deliver_contiguous_data(mutable_buffer buf) -> std::size_t
 {
-    // Same logic as receive but without suspension
-    std::size_t copied = 0;
-
+    std::size_t copied{};
     while (copied < buf.size)
     {
         auto it = impl_->receive_buffer_.find(impl_->next_expected_offset_);
         if (it == impl_->receive_buffer_.end())
-        {
             break;
-        }
 
         const auto available = it->second.size();
-        const auto to_copy = std::min(buf.size - copied, available);
-
-        std::memcpy(static_cast<std::byte*>(buf.data) + copied, it->second.data(), to_copy);
-        copied += to_copy;
-        impl_->next_expected_offset_ += to_copy;
-
-        if (to_copy >= available)
+        const auto count = std::min(buf.size - copied, available);
+        std::memcpy(static_cast<std::byte*>(buf.data) + copied, it->second.data(), count);
+        if (count == available)
         {
             impl_->receive_buffer_.erase(it);
         }
         else
         {
-            auto remaining = std::vector<std::byte>(
-                it->second.begin() + to_copy,
-                it->second.end());
-            impl_->receive_buffer_.erase(it);
-            impl_->receive_buffer_[impl_->next_expected_offset_] = std::move(remaining);
+            // byte move/erase cannot throw or allocate. Retain this segment's
+            // capacity until it is consumed, reset or abandoned instead of
+            // allocating a new tail after some bytes have already been read.
+            it->second.erase(it->second.begin(), it->second.begin() + count);
+            auto node = impl_->receive_buffer_.extract(it);
+            node.key() += count;
+            const auto inserted = impl_->receive_buffer_.insert(std::move(node));
+            // push_received stores non-overlapping ranges; this key remains
+            // inside the old range, strictly before every following range.
+            if (!inserted.inserted)
+                std::terminate(); // Never silently discard a rejected node.
         }
+        copied += count;
+        impl_->next_expected_offset_ += count;
     }
-
     return copied;
 }
 

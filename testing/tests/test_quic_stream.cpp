@@ -528,3 +528,71 @@ TEST(quic_stream_receive_gap_would_block_until_contiguous_data_arrives)
     if (eof) ASSERT_EQ(*eof, 0U);
     ASSERT_EQ(stream.bytes_consumed(), 4U);
 }
+
+TEST(quic_stream_receive_multiple_entries_then_partial_fin_and_overlap)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.init();
+    const std::array first{std::byte{'a'}, std::byte{'b'}};
+    const std::array last{std::byte{'c'}, std::byte{'d'}, std::byte{'e'}};
+    ASSERT_TRUE(stream.push_received(2, last, true).has_value());
+    ASSERT_TRUE(stream.push_received(0, first, false).has_value());
+    std::array<std::byte, 3> output{};
+    const auto received = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(received.has_value());
+    if (received) ASSERT_EQ(*received, 3U);
+    const std::array expected{std::byte{'a'}, std::byte{'b'}, std::byte{'c'}};
+    ASSERT_TRUE(output == expected);
+    ASSERT_EQ(stream.bytes_consumed(), 3U);
+    ASSERT_EQ(stream.bytes_received(), 5U);
+    ASSERT_TRUE(stream.is_readable());
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::open);
+
+    const std::array overlap{std::byte{'b'}, std::byte{'c'}, std::byte{'d'}, std::byte{'e'}};
+    ASSERT_TRUE(stream.push_received(1, overlap, true).has_value());
+    const std::array changed{std::byte{'d'}, std::byte{'x'}};
+    ASSERT_FALSE(stream.push_received(3, changed, false).has_value());
+    const auto tail = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(tail.has_value());
+    if (tail) ASSERT_EQ(*tail, 2U);
+    ASSERT_TRUE(output[0] == std::byte{'d'} && output[1] == std::byte{'e'});
+    ASSERT_EQ(stream.bytes_consumed(), 5U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::half_closed_remote);
+    const auto eof = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(eof.has_value());
+    if (eof) ASSERT_EQ(*eof, 0U);
+}
+
+TEST(quic_stream_receive_gap_zero_output_then_exact_fin_after_local_close)
+{
+    cnetmod::quic::quic_stream stream{0, cnetmod::quic::quic_role::server, true};
+    stream.init();
+    cnetmod::sync_wait(stream.close_local());
+    const std::array first{std::byte{'a'}, std::byte{'b'}};
+    const std::array last{std::byte{'e'}, std::byte{'f'}};
+    ASSERT_TRUE(stream.push_received(4, last, true).has_value());
+    ASSERT_TRUE(stream.push_received(0, first, false).has_value());
+    std::array<std::byte, 4> output{};
+    const auto received = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(received.has_value());
+    if (received) ASSERT_EQ(*received, 2U);
+    ASSERT_EQ(stream.bytes_consumed(), 2U);
+    ASSERT_FALSE(stream.is_readable());
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::half_closed_local);
+    const auto empty = cnetmod::sync_wait(stream.receive(cnetmod::mutable_buffer{nullptr, 0U}));
+    ASSERT_FALSE(empty.has_value());
+    if (!empty) ASSERT_EQ(empty.error(), std::make_error_code(std::errc::operation_would_block));
+    ASSERT_EQ(stream.bytes_consumed(), 2U);
+    const std::array hole{std::byte{'c'}, std::byte{'d'}};
+    ASSERT_TRUE(stream.push_received(2, hole, false).has_value());
+    const auto completed = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(completed.has_value());
+    if (completed) ASSERT_EQ(*completed, 4U);
+    const std::array expected{std::byte{'c'}, std::byte{'d'}, std::byte{'e'}, std::byte{'f'}};
+    ASSERT_TRUE(output == expected);
+    ASSERT_EQ(stream.bytes_consumed(), 6U);
+    ASSERT_TRUE(stream.state() == cnetmod::quic::stream_state::closed);
+    const auto eof = cnetmod::sync_wait(stream.receive(cnetmod::buffer(output)));
+    ASSERT_TRUE(eof.has_value());
+    if (eof) ASSERT_EQ(*eof, 0U);
+}
