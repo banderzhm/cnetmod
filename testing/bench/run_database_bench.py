@@ -35,8 +35,13 @@ def main():
                 'note': 'Pool tests exclude queries. MySQL pool skips reset explicitly; reset is a separate case. Redis batch counts batches of 64 commands.'}
 
     def command(argv, **kw):
-        return subprocess.run([str(x) for x in argv], text=True, capture_output=True,
-                              check=True, timeout=kw.pop('timeout', 60), **kw)
+        try:
+            return subprocess.run([str(x) for x in argv], text=True, capture_output=True,
+                                  check=True, timeout=kw.pop('timeout', 60), **kw)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+            (args.output / 'failure.json').write_text(json.dumps({'argv': [str(x) for x in argv],
+                'error': str(error), 'stdout': str(error.stdout), 'stderr': str(error.stderr)}, indent=2))
+            raise
 
     servers = [
         ('postgresql', 'postgres:18', 15432, '16-19',
@@ -75,6 +80,16 @@ def main():
                 if time.monotonic() > deadline:
                     raise RuntimeError(f'{database} did not become ready: {status.stderr}')
                 time.sleep(1)
+            if database == 'mysql':
+                # The existing plaintext client supports caching_sha2 fast
+                # authentication, while its full-password exchange requires
+                # TLS. Populate the server cache with the official TLS client
+                # before either binary connects; authentication is not timed.
+                bootstrap = ['docker', 'exec', container, 'mysql', '--ssl-mode=REQUIRED',
+                             '-h127.0.0.1', '-P13306', '-ubench', '-pbench', '-e', 'SELECT 1']
+                status = command(bootstrap)
+                metadata['servers'][-1]['auth_bootstrap'] = bootstrap
+                (args.output / 'mysql-auth-bootstrap.log').write_text(status.stdout + status.stderr)
         (args.output / 'environment.json').write_text(json.dumps(metadata, indent=2))
         cases = [(db, 'pool', cap) for db in ['postgresql', 'mysql', 'redis'] for cap in [1, 64]]
         cases += [('postgresql', 'query', 1), ('postgresql', 'rows', 1),
