@@ -1,7 +1,7 @@
 #include <cnetmod/config.hpp>
 #ifdef CNETMOD_PLATFORM_LINUX
 #include <sys/socket.h>
-#include <cerrno>
+#include <errno.h>
 #include <pthread.h>
 #include <sched.h>
 #if defined(CNETMOD_HAS_IO_URING) && defined(CNETMOD_HAS_IO_URING_BUFFER_RING)

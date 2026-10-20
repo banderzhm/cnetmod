@@ -17473,6 +17473,8 @@ struct ws_message {
 auto parse_frame_header(std::span<const std::byte> data)
     -> std::expected<std::pair<frame_header, std::size_t>, std::error_code>;
 auto build_frame(opcode op, std::span<const std::byte> payload, bool mask, bool fin = true) -> std::vector<std::byte>;
+void append_frame_into(std::vector<std::byte>& frames, opcode op,
+    std::span<const std::byte> payload, bool mask, bool fin = true);
 auto build_close_frame(std::uint16_t code, std::string_view reason, bool mask) -> std::vector<std::byte>;
 void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept;
 ```
