@@ -1,7 +1,13 @@
 # Official HttpArena gRPC / HTTP2 preparation
 
-Status updated 2026-10-20: execution resumed with the user's exclusive gRPC
-performance token. The official gRPC profiles are run using the same documented
+Acceptance clarification resolved (2026-10-20): the user selected the default
+framework leader WTX. A fresh complete candidate/control matrix passes all four
+published WTX RPS +10% thresholds. This is a cross-host published-number threshold
+comparison; no official ranking or same-host WTX win is claimed. The exclusive
+test token has been released again. See [the final WTX report](results/grpc-official-2026-10-20/wtx-target/README.md).
+
+Status updated 2026-10-20: execution completed and the exclusive performance
+token was released. The official gRPC profiles were run using the same documented
 small-host fallback used for the WebSocket local comparisons. This is a local
 same-machine comparison, not a reproduction of the 128-CPU leaderboard host.
 Historical custom-harness results remain exploratory and do not establish the
