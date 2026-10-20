@@ -141,6 +141,7 @@ export auto header_value(const http::header_map& headers, std::string_view name)
 export auto metadata_value(const metadata& md, std::string_view name)
     -> std::string_view;
 export auto metadata_wire_size(const metadata& md) noexcept -> std::size_t;
+export auto metadata_wire_size(std::span<const http::request_header_view> headers) -> std::size_t;
 export void append_metadata_headers(http::request& req, const metadata& md);
 export void append_metadata_headers(http::response& resp, const metadata& md);
 export void append_metadata_trailers(http::response& resp, const metadata& md);

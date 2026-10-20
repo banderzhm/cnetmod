@@ -8,16 +8,84 @@ import std;
 
 import cnetmod.protocol.http;
 import cnetmod.coro.task;
+import cnetmod.coro.cancel;
 import cnetmod.protocol.http.semantics;
+import cnetmod.protocol.http.v2.session;
+import cnetmod.protocol.http.v2.header_compression;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.codec;
 import cnetmod.protocol.grpc.governance.server_policy;
 
 namespace cnetmod::grpc {
 
+struct service_router::sync_request
+{
+    http::request_context* context{};
+    std::string_view verb;
+    std::string_view target;
+    std::string_view payload;
+    std::span<const http::request_header_view> fields;
+    mutable http::header_map materialized;
+
+    explicit sync_request(http::request_context& request) : context(&request) {}
+
+    sync_request(std::string_view method, std::string_view path,
+        std::string_view body, std::span<const http::request_header_view> headers)
+        : verb(method), target(path), payload(body), fields(headers) {}
+
+    auto method() const noexcept -> std::string_view
+    {
+        return context ? context->method() : verb;
+    }
+
+    auto path() const noexcept -> std::string_view
+    {
+        return context ? context->path() : target;
+    }
+
+    auto body() const -> std::string_view
+    {
+        return context ? context->body() : payload;
+    }
+
+    auto borrowed_header_views() const noexcept -> std::span<const http::request_header_view>
+    {
+        return context ? context->borrowed_header_views() : fields;
+    }
+
+    auto headers() const -> const http::header_map&
+    {
+        if (context)
+            return context->headers();
+        if (materialized.empty())
+            for (const auto& field : fields)
+                materialized[std::string{field.name}] = field.value;
+        return materialized;
+    }
+
+    auto get_header(std::string_view name) const -> std::string_view
+    {
+        if (context)
+            return context->get_header(name);
+        const http::case_insensitive_less less;
+        for (const auto& field : fields)
+            if (field.name.size() == name.size() && (field.name == name || (!less(field.name, name) && !less(name, field.name))))
+                return field.value;
+        return {};
+    }
+};
+
+struct service_router::sync_reply
+{
+    status result;
+    std::string body;
+    compression_algorithm encoding = compression_algorithm::identity;
+};
+
 namespace {
 
-    auto make_context(http::request_context& ctx) -> call_context
+    template <typename Request>
+    auto make_context(Request& ctx) -> call_context
     {
         call_context out;
         out.path = std::string(ctx.path());
@@ -69,16 +137,18 @@ namespace {
                                           });
     }
 
-    auto validate_request(const http::request_context& ctx, const call_context& call,
+    template <typename Request>
+    auto validate_request(const Request& ctx, const call_context& call,
         std::size_t body_size,
-        const server_options& options)
+        const server_options& options,
+        std::optional<std::size_t> metadata_bytes = std::nullopt)
         -> std::expected<void, status>
     {
         if (ctx.method() != "POST")
         {
             return std::unexpected(grpc_error(status_code::invalid_argument, "grpc requires HTTP POST"));
         }
-        if (metadata_wire_size(call.headers) > options.max_metadata_bytes)
+        if (metadata_bytes.value_or(metadata_wire_size(call.headers)) > options.max_metadata_bytes)
         {
             return std::unexpected(grpc_error(status_code::resource_exhausted, "grpc metadata exceeds receive limit"));
         }
@@ -95,7 +165,8 @@ namespace {
         return {};
     }
 
-    auto select_response_compression(const http::request_context& ctx,
+    template <typename Request>
+    auto select_response_compression(const Request& ctx,
         const server_options& options) -> compression_algorithm
     {
         auto desired = options.default_response_compression;
@@ -184,18 +255,8 @@ namespace {
         return std::span<const std::byte>{bytes + 5, static_cast<std::size_t>(n)};
     }
 
-    auto make_unary_identity_response(status st, std::span<const std::byte> payload)
-        -> http::response
+    auto make_unary_identity_body(std::span<const std::byte> payload) -> std::string
     {
-        http::response resp(http::status::ok);
-        resp.set_header("Content-Type", "application/grpc");
-        resp.set_trailer("grpc-status", std::to_string(static_cast<int>(st.code)));
-        if (!st.message.empty())
-        {
-            resp.set_trailer("grpc-message", percent_encode(st.message));
-        }
-        append_metadata_trailers(resp, st.trailers);
-
         std::string body;
         if (payload.size() <= std::numeric_limits<std::uint32_t>::max())
         {
@@ -208,7 +269,22 @@ namespace {
             body.push_back(static_cast<char>(n & 0xff));
             body.append(reinterpret_cast<const char*>(payload.data()), payload.size());
         }
-        resp.set_body(std::move(body));
+        return body;
+    }
+
+    auto make_unary_identity_response(status st, std::span<const std::byte> payload)
+        -> http::response
+    {
+        http::response resp(http::status::ok);
+        resp.set_header("Content-Type", "application/grpc");
+        resp.set_trailer("grpc-status", std::to_string(static_cast<int>(st.code)));
+        if (!st.message.empty())
+        {
+            resp.set_trailer("grpc-message", percent_encode(st.message));
+        }
+        append_metadata_trailers(resp, st.trailers);
+
+        resp.set_body(make_unary_identity_body(payload));
         return resp;
     }
 
@@ -232,6 +308,14 @@ void service_router::add_unary_sync(std::string service, std::string method, syn
     methods_[key(service, method)] = method_entry{
         .kind = call_kind::unary,
         .sync_unary = std::move(handler),
+    };
+}
+
+void service_router::add_unary_sync(std::string service, std::string method, sync_payload_handler handler)
+{
+    methods_[key(service, method)] = method_entry{
+        .kind = call_kind::unary,
+        .sync_payload = std::move(handler),
     };
 }
 
@@ -312,6 +396,13 @@ auto service_router::make_http_handler() const -> http::handler_fn
 {
     return [this](http::request_context& ctx) -> task<void>
     {
+        const auto* method = find(ctx.path());
+        if (method &&
+            (method->sync_unary || method->sync_payload) && !ctx.has_body_stream())
+        {
+            dispatch_sync(ctx, method);
+            co_return;
+        }
         auto content_type = ctx.get_header("Content-Type");
         if (!content_type.starts_with("application/grpc"))
         {
@@ -347,7 +438,6 @@ auto service_router::make_http_handler() const -> http::handler_fn
             co_return;
         }
 
-        const auto* method = find(ctx.path());
         if (!method)
         {
             ctx.resp() = make_status_response(grpc_error(
@@ -376,9 +466,9 @@ auto service_router::make_http_handler() const -> http::handler_fn
                     co_return;
                 }
 
-                auto r = method->sync_unary
-                    ? method->sync_unary(*payload, call)
-                    : co_await method->unary(*payload, call);
+                auto r = method->sync_payload ? method->sync_payload(*payload)
+                    : method->sync_unary      ? method->sync_unary(*payload, call)
+                                              : co_await method->unary(*payload, call);
                 if (!r)
                 {
                     ctx.resp() = make_status_response(status_or_deadline(r.error(), call));
@@ -430,9 +520,9 @@ auto service_router::make_http_handler() const -> http::handler_fn
                 st = grpc_error(status_code::invalid_argument, "unary grpc call requires exactly one message");
                 break;
             }
-            auto r = method->sync_unary
-                ? method->sync_unary(messages->front(), call)
-                : co_await method->unary(messages->front(), call);
+            auto r = method->sync_payload ? method->sync_payload(messages->front())
+                : method->sync_unary      ? method->sync_unary(messages->front(), call)
+                                          : co_await method->unary(messages->front(), call);
             if (!r)
             {
                 st = r.error();
@@ -515,26 +605,221 @@ auto service_router::make_http_handler() const -> http::handler_fn
     };
 }
 
+void service_router::dispatch_sync(http::request_context& ctx, const method_entry* method) const
+{
+    sync_request request{ctx};
+    ctx.resp() = format_sync_reply(invoke_sync(request, method));
+}
+
+auto service_router::format_sync_reply(sync_reply reply) -> http::response
+{
+    auto response = make_status_response(std::move(reply.result));
+    response.set_body(std::move(reply.body));
+    if (reply.encoding != compression_algorithm::identity)
+        response.set_header("grpc-encoding", std::string(compression_name(reply.encoding)));
+    return response;
+}
+
+auto service_router::invoke_sync(sync_request& ctx, const method_entry* method) const
+    -> sync_reply
+{
+    if (!ctx.get_header("content-type").starts_with("application/grpc"))
+    {
+        return sync_reply{.result = grpc_error(status_code::invalid_argument,
+                              "content-type must be application/grpc")};
+    }
+    call_context call;
+    std::optional<std::size_t> metadata_bytes;
+    if ((method && method->sync_unary) || options_.governance || !options_.interceptors.empty())
+        call = make_context(ctx);
+    else if (const auto views = ctx.borrowed_header_views(); !views.empty())
+    {
+        call.timeout = timeout_from_headers(views);
+        metadata_bytes = metadata_wire_size(views);
+    }
+    else
+    {
+        call.timeout = timeout_from_headers(ctx.headers());
+        metadata_bytes = metadata_wire_size(metadata_from_headers(ctx.headers()));
+    }
+    std::optional<governance::call_guard> guard;
+    if (options_.governance)
+    {
+        auto admitted = options_.governance->begin(call);
+        if (!admitted)
+        {
+            return sync_reply{.result = admitted.error()};
+        }
+        guard.emplace(std::move(*admitted));
+    }
+    const auto encoding = compression_from_header(ctx.get_header("grpc-encoding"));
+    if (!encoding)
+    {
+        return sync_reply{.result = grpc_error(status_code::unimplemented,
+                              "unsupported grpc compression algorithm")};
+    }
+    if (!method)
+    {
+        return sync_reply{.result = grpc_error(status_code::unimplemented,
+                              "grpc method is not registered")};
+    }
+    const auto body = ctx.body();
+    if (auto valid = validate_request(ctx, call, body.size(), options_, metadata_bytes); !valid)
+    {
+        return sync_reply{.result = valid.error()};
+    }
+    const auto response_encoding = select_response_compression(ctx, options_);
+    auto payload = *encoding == compression_algorithm::identity &&
+            response_encoding == compression_algorithm::identity
+        ? try_unary_identity_payload(body)
+        : std::nullopt;
+    const bool direct = payload.has_value();
+    std::vector<byte_buffer> messages;
+    if (!payload)
+    {
+        auto frames = body_to_frames(body);
+        if (!frames)
+        {
+            return sync_reply{.result = frames.error()};
+        }
+        auto decoded = messages_from_frames(*frames, *encoding, options_);
+        if (!decoded)
+        {
+            return sync_reply{.result = decoded.error()};
+        }
+        messages = std::move(*decoded);
+        if (messages.size() != 1)
+        {
+            return sync_reply{.result = grpc_error(status_code::invalid_argument,
+                                  "unary grpc call requires exactly one message")};
+        }
+        payload = std::span<const std::byte>{messages.front()};
+    }
+    if (call.deadline_exceeded())
+    {
+        return sync_reply{.result = grpc_error(status_code::deadline_exceeded,
+                              "grpc deadline exceeded")};
+    }
+    auto result = method->sync_payload ? method->sync_payload(*payload)
+                                       : method->sync_unary(*payload, call);
+    if (!result)
+    {
+        return sync_reply{.result = status_or_deadline(result.error(), call)};
+    }
+    if (result->size() > options_.max_send_message_bytes ||
+        result->size() > std::numeric_limits<std::uint32_t>::max())
+    {
+        return sync_reply{.result = grpc_error(status_code::resource_exhausted,
+                              "grpc response message exceeds send limit")};
+    }
+    auto st = status_or_deadline(status{}, call);
+    if (guard)
+        guard->complete(st, call.started);
+    if (direct)
+        return sync_reply{.result = std::move(st), .body = make_unary_identity_body(*result)};
+    else
+    {
+        const std::array<byte_buffer, 1> output{std::move(*result)};
+        auto encoded = encode_frames(output, response_encoding);
+        if (!encoded)
+        {
+            return sync_reply{.result = encoded.error()};
+        }
+        return sync_reply{.result = std::move(st),
+            .body = std::string(reinterpret_cast<const char*>(encoded->data()), encoded->size()),
+            .encoding = response_encoding};
+    }
+}
+
+auto service_router::make_h2_request_filter() const -> http::v2::buffered_request_filter
+{
+    return [this](std::span<const http::v2::header_field> headers)
+    {
+        if (headers.size() > 36)
+            return false;
+        for (const auto& header : headers)
+            if (header.name == ":path")
+            {
+                const auto path = std::string_view{header.value}.substr(0, header.value.find('?'));
+                const auto* method = find(path);
+                return method && (method->sync_unary || method->sync_payload);
+            }
+        return false;
+    };
+}
+
+auto service_router::make_h2_sync_handler() const -> http::v2::sync_server_handler
+{
+    return [this](http::v2::server_request& input, cancel_token&)
+               -> std::optional<http::v2::server_response>
+    {
+        if (input.body_stream)
+            return std::nullopt;
+        std::string_view verb, path;
+        std::array<http::request_header_view, 32> fields{};
+        std::size_t count{};
+        for (const auto& header : input.headers)
+        {
+            if (header.name == ":method")
+                verb = header.value;
+            else if (header.name == ":path")
+                path = header.value;
+            else if (!header.name.starts_with(':'))
+            {
+                if (count == fields.size())
+                    return std::nullopt;
+                fields[count++] = {header.name, header.value};
+            }
+        }
+        path = path.substr(0, path.find('?'));
+        const auto* method = find(path);
+        if (!method || (!method->sync_unary && !method->sync_payload))
+            return std::nullopt;
+        sync_request request{verb, path,
+            {reinterpret_cast<const char*>(input.body.data()), input.body.size()},
+            std::span<const http::request_header_view>{fields.data(), count}};
+        auto reply = invoke_sync(request, method);
+        if (!reply.result.trailers.empty())
+        {
+            // Preserve HTTP metadata merging for custom and duplicate trailers.
+            auto response = format_sync_reply(std::move(reply));
+            return http::take_h2_response(response);
+        }
+        http::v2::server_response response;
+        response.body_text = std::move(reply.body);
+        static const std::array common_headers{http::v2::header_field{"content-type", "application/grpc"}};
+        static const std::array success_trailers{http::v2::header_field{"grpc-status", "0"}};
+        response.static_headers = http::v2::static_header_fields::from<common_headers>();
+        if (reply.encoding != compression_algorithm::identity)
+        {
+            response.headers.reserve(1);
+            response.headers.push_back({"grpc-encoding", std::string(compression_name(reply.encoding))});
+        }
+        if (reply.result.ok() && reply.result.message.empty())
+            response.static_trailers = http::v2::static_header_fields::from<success_trailers>();
+        else
+        {
+            response.trailers.reserve(reply.result.message.empty() ? 1 : 2);
+            response.trailers.push_back({"grpc-status", std::to_string(static_cast<int>(reply.result.code))});
+            if (!reply.result.message.empty())
+                response.trailers.push_back({"grpc-message", percent_encode(reply.result.message)});
+        }
+        return response;
+    };
+}
+
 auto service_router::make_http_sync_handler() const -> http::sync_handler_fn
 {
-    return [this, handler = make_http_handler()](http::request_context& ctx)
+    return [this](http::request_context& ctx)
     {
         const auto* method = find(ctx.path());
-        if (ctx.has_body_stream() || (method && !method->sync_unary))
+        if (ctx.has_body_stream() || (method && !method->sync_unary && !method->sync_payload))
         {
             ctx.resp() = make_status_response(grpc_error(status_code::unimplemented,
                 "synchronous grpc routes require buffered bodies and synchronous unary handlers"));
             return;
         }
-        // Adapter pattern: execute the shared protocol pipeline inline. With
-        // an owned body and a synchronous method, every nested task completes
-        // inline, including compressed-message decoding. No duplicated codec or
-        // security path can drift from make_http_handler().
-        auto operation = handler(ctx);
-        operation.handle().resume();
-        if (!operation.handle().done())
-            throw std::logic_error("synchronous grpc pipeline suspended");
-        operation.handle().promise().result();
+        dispatch_sync(ctx, method);
     };
 }
 

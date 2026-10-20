@@ -19,28 +19,24 @@ namespace grpc = cnetmod::grpc;
 
 namespace {
 
-auto get_sum(std::span<const std::byte> payload, const grpc::call_context&)
+auto get_sum(std::span<const std::byte> payload)
     -> std::expected<grpc::byte_buffer, grpc::status>
 {
-    auto fields = grpc::proto::decode_message(payload);
-    if (!fields)
-    {
-        return std::unexpected(grpc::make_status(
-            grpc::status_code::invalid_argument, "invalid SumRequest"));
-    }
-    // Proto3 scalar defaults and last-value-wins semantics. Use the framework
-    // codec for every request, including unknown fields and negative int32s.
-    std::uint32_t a{};
-    std::uint32_t b{};
-    for (const auto& field : *fields)
-    {
-        if (field.type != grpc::proto::wire_type::varint)
-            continue;
-        if (field.number == 1)
-            a = static_cast<std::uint32_t>(field.varint_value);
-        else if (field.number == 2)
-            b = static_cast<std::uint32_t>(field.varint_value);
-    }
+    // The general framework visitor decodes every field, borrows unknown byte
+    // fields, and preserves proto3 defaults and last-value-wins semantics.
+    std::uint32_t a{}, b{};
+    auto decoded = grpc::proto::visit_message(payload, [&](const grpc::proto::field_view& field)
+        {
+            if (field.type != grpc::proto::wire_type::varint)
+                return;
+            if (field.number == 1)
+                a = static_cast<std::uint32_t>(field.varint_value);
+            else if (field.number == 2)
+                b = static_cast<std::uint32_t>(field.varint_value);
+        });
+    if (!decoded)
+        return std::unexpected(grpc::make_status(grpc::status_code::invalid_argument,
+            "invalid SumRequest"));
     const auto result = std::bit_cast<std::int32_t>(a + b);
     grpc::byte_buffer response;
     if (result != 0)
@@ -70,17 +66,21 @@ auto main(int argc, char** argv) -> int
         logger::shutdown();
         return 2;
     }
-    cn::server_context context{workers, workers};
+    const auto* affinity_value = std::getenv("CNETMOD_GRPC_PIN_WORKERS");
+    const bool pin_workers = affinity_value && std::string_view{affinity_value} == "1";
+    cn::server_context context{workers, workers,
+        {.enabled = pin_workers, .auto_assign_workers = pin_workers}};
     grpc::service_router service;
     service.add_unary_sync("benchmark.BenchmarkService", "GetSum", get_sum);
     cn::http::router router;
     router.any_sync("/benchmark.BenchmarkService/GetSum", service.make_http_sync_handler());
-    router.any_sync("/*path", service.make_http_sync_handler());
+    router.any("/*path", service.make_http_handler());
 #ifdef CNETMOD_HAS_SSL
     std::optional<cn::ssl_context> tls;
 #endif
     cn::http::server server{context};
     server.set_router(std::move(router));
+    server.set_h2_sync_adapter(service.make_h2_sync_handler(), service.make_h2_request_filter());
 #ifdef CNETMOD_HAS_SSL
     if (argc == 5)
     {
@@ -117,7 +117,7 @@ auto main(int argc, char** argv) -> int
         return 4;
     }
     cn::spawn(context.accept_io(), server.run());
-    logger::info{"READY port={} workers={} tls={}", port, workers, argc == 5};
+    logger::info{"READY port={} workers={} tls={} pin_workers={}", port, workers, argc == 5, pin_workers};
     context.run();
     logger::shutdown();
     return 0;

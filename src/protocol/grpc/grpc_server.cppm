@@ -7,6 +7,7 @@ export module cnetmod.protocol.grpc.server;
 import std;
 
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.v2.session;
 import cnetmod.coro.task;
 import cnetmod.protocol.grpc.types;
 import cnetmod.protocol.grpc.governance.server_policy;
@@ -20,6 +21,9 @@ export using unary_handler =
 export using sync_unary_handler =
     std::function<std::expected<byte_buffer, status>(
         std::span<const std::byte>, const call_context&)>;
+
+export using sync_payload_handler =
+    std::function<std::expected<byte_buffer, status>(std::span<const std::byte>)>;
 
 export using streaming_handler =
     std::function<task<std::expected<std::vector<byte_buffer>, status>>(
@@ -56,6 +60,7 @@ public:
 
     void add_unary(std::string service, std::string method, unary_handler handler);
     void add_unary_sync(std::string service, std::string method, sync_unary_handler handler);
+    void add_unary_sync(std::string service, std::string method, sync_payload_handler handler);
     void add_client_streaming(std::string service, std::string method, streaming_handler handler);
     void add_server_streaming(std::string service, std::string method, server_streaming_handler handler);
     void add_bidi_streaming(std::string service, std::string method, streaming_handler handler);
@@ -64,6 +69,8 @@ public:
     /// Adapter for buffered HTTP routes containing synchronous unary methods.
     /// The same validation, codecs, interceptors and governance remain active.
     [[nodiscard]] auto make_http_sync_handler() const -> http::sync_handler_fn;
+    [[nodiscard]] auto make_h2_sync_handler() const -> http::v2::sync_server_handler;
+    [[nodiscard]] auto make_h2_request_filter() const -> http::v2::buffered_request_filter;
 
 private:
     struct method_entry
@@ -71,11 +78,17 @@ private:
         call_kind kind = call_kind::unary;
         unary_handler unary;
         sync_unary_handler sync_unary;
+        sync_payload_handler sync_payload;
         streaming_handler streaming;
         server_streaming_handler server_streaming;
     };
 
     [[nodiscard]] auto find(std::string_view path) const -> const method_entry*;
+    struct sync_request;
+    struct sync_reply;
+    void dispatch_sync(http::request_context& ctx, const method_entry* method) const;
+    auto invoke_sync(sync_request& ctx, const method_entry* method) const -> sync_reply;
+    static auto format_sync_reply(sync_reply reply) -> http::response;
     [[nodiscard]] static auto key(std::string_view service, std::string_view method) -> std::string;
 
     std::map<std::string, method_entry, std::less<>> methods_;

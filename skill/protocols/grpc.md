@@ -82,6 +82,9 @@ void append_bytes(byte_buffer& out, std::uint32_t number, std::span<const std::b
 // proto schema 解析
 auto parse_schema(std::string_view proto_text) -> std::expected<file_def, std::error_code>;
 auto decode_message(std::span<const std::byte> data) -> std::expected<std::vector<field>, std::error_code>;
+auto visit_message(std::span<const std::byte> data,
+    const std::function<void(const field_view&)>& visitor)
+    -> std::expected<void, std::error_code>;
 ```
 
 ### gRPC 帧编解码
@@ -114,17 +117,21 @@ class message_stream_decoder {
 explicit service_router(server_options options);
 void add_unary(std::string service, std::string method, unary_handler handler);
 void add_unary_sync(std::string service, std::string method, sync_unary_handler handler);
+void add_unary_sync(std::string service, std::string method, sync_payload_handler handler);
 void add_client_streaming(std::string service, std::string method, streaming_handler handler);
 void add_server_streaming(std::string service, std::string method, server_streaming_handler handler);
 void add_bidi_streaming(std::string service, std::string method, streaming_handler handler);
 auto make_http_handler() const -> http::handler_fn;
 auto make_http_sync_handler() const -> http::sync_handler_fn;
+auto make_h2_sync_handler() const -> http::v2::sync_server_handler;
+auto make_h2_request_filter() const -> http::v2::buffered_request_filter;
 ```
 
 **handler 签名**:
 ```cpp
 using unary_handler = std::function<task<std::expected<byte_buffer, status>>(std::span<const std::byte>, const call_context&)>;
 using sync_unary_handler = std::function<std::expected<byte_buffer, status>(std::span<const std::byte>, const call_context&)>;
+using sync_payload_handler = std::function<std::expected<byte_buffer, status>(std::span<const std::byte>)>;
 using streaming_handler = std::function<task<std::expected<std::vector<byte_buffer>, status>>(std::span<const byte_buffer>, const call_context&)>;
 using server_streaming_handler = std::function<task<std::expected<std::vector<byte_buffer>, status>>(std::span<const std::byte>, const call_context&)>;
 using server_interceptor = std::function<std::expected<void, status>(const call_context&)>;
@@ -138,6 +145,8 @@ using server_interceptor = std::function<std::expected<void, status>(const call_
 `make_http_sync_handler()` 接到 HTTP router 的 `post_sync()` / `any_sync()`。
 同步适配器复用异步入口的完整协议处理，包括消息大小、压缩、metadata、拦截器、
 deadline、governance 和 trailers；每次请求仍调用业务函数，不能缓存固定响应冒充计算。
+不读取调用上下文的业务可注册单参数 `sync_payload_handler`。配置拦截器或 governance
+时仍构造完整上下文；普通调用直接检查 metadata 大小与 timeout，避免构造未使用的副本。
 
 ```cpp
 service.add_unary_sync("demo.Echo", "Say",
@@ -149,12 +158,35 @@ service.add_unary_sync("demo.Echo", "Say",
 router.post_sync("/demo.Echo/Say", service.make_http_sync_handler());
 ```
 
+HTTP/2 专用同步适配器可减少 HTTP 请求/响应对象转换。以已有 `service` 和 `server` 为例：
+
+```cpp
+cnetmod::http::router fallback;
+fallback.any("/*path", service.make_http_handler());
+server.set_router(std::move(fallback));
+server.set_h2_sync_adapter(service.make_h2_sync_handler(), service.make_h2_request_filter());
+```
+
+无 middleware、完整小请求体、已注册同步 unary 方法使用此适配器；大请求体、异步方法
+和 middleware 继续普通 HTTP 分发。两种同步入口共享校验、调用和响应组装流程。
+固定 Content-Type 和成功状态 trailer 使用静态只读字段块；动态状态、压缩和自定义
+metadata 每次按结果生成。静态块不包含业务响应体。
+
 HTTP/2 在同步、无 middleware、非 request-stream 路由上最多缓冲 16 KiB 请求体，
 可跨读取收齐后批量排队响应。超过阈值立即转回有背压的流式接收，保留先前收到的数据；
-批量输出受 64 KiB / 250 微秒上限约束，不设置等待凑批的计时器。
+批量输出以 64 KiB / 250 微秒阈值触发写入，不设置等待凑批的计时器。
+独立写泵允许下一次读取与写入重叠；编码缓冲累计 128 KiB 时等待背压。
+完整同步请求已经收到 END_STREAM，消费完成后在所属事件循环按批归还连接流控额度；
+异步请求和流式请求仍在消费时归还额度，不能提前增加窗口。
+发送窗口不足的响应由连接保存，收到 WINDOW_UPDATE 后推进；单个响应大小受应用限制。
 同步回调不得阻塞或等待 I/O；耗时计算使用 executor 与异步 `add_unary()`。
 需要异步等待、客户端流或双向流时继续使用 `make_http_handler()`。同步入口遇到异步方法
 或流式 HTTP 请求上下文返回 `unimplemented`，不会尝试运行可能挂起的回调。
+
+`proto::visit_message()` 逐字段调用 visitor，`field_view::bytes` 借用输入而不复制未知的
+length-delimited 字段；字段对象只在回调内有效，字节视图不能超过输入存储的生命周期。
+畸形后缀可能在部分字段已被访问后才报错，因此仅在返回成功后提交业务结果。
+`decode_message()` 保留拥有数据的返回类型，并使用同一解析器执行校验。
 
 ### `grpc::client` — 客户端
 

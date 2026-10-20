@@ -8,7 +8,9 @@ import cnetmod.io.io_context;
 import cnetmod.instrumentation.metric;
 import cnetmod.instrumentation.tracing;
 import cnetmod.protocol.grpc;
+import cnetmod.protocol.grpc.governance.server_policy;
 import cnetmod.protocol.http;
+import cnetmod.protocol.http.v2.session;
 import cnetmod.protocol.http.middleware.tracing;
 import cnetmod.observability.grpc;
 import cnetmod.observability.grpc_server;
@@ -290,10 +292,114 @@ TEST(grpc_borrowed_headers_preserve_metadata_and_last_duplicate_timeout)
     ASSERT_TRUE(borrowed == metadata_from_headers(owning));
     ASSERT_EQ(metadata_value(borrowed, "x-token"), std::string_view{"last"});
     ASSERT_EQ(borrowed.size(), std::size_t{2});
+    ASSERT_EQ(metadata_wire_size(std::span{views}), metadata_wire_size(borrowed));
     ASSERT_EQ(timeout_from_headers(std::span{views}), std::chrono::milliseconds{23});
     ASSERT_EQ(timeout_from_headers(std::span{views}), timeout_from_headers(owning));
     ASSERT_TRUE(header_value(owning, "missing").empty());
     ASSERT_EQ(header_value(owning, "X-TOKEN"), std::string_view{"last"});
+}
+
+TEST(grpc_payload_only_adapter_keeps_limits_interceptors_and_admission)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket socket;
+    const std::array<cnetmod::http::request_header_view, 3> headers{{{"content-type", "application/grpc"}, {"x-token", "secret"}, {"grpc-timeout", "1S"}}};
+    auto frame = encode_frame(byte_buffer{std::byte{1}, std::byte{2}, std::byte{3}});
+    ASSERT_TRUE(frame.has_value());
+    const std::string_view body{reinterpret_cast<const char*>(frame->data()), frame->size()};
+    std::size_t calls{}, intercepted{};
+    service_router router;
+    router.add_unary_sync("demo.Payload", "Echo", [&](std::span<const std::byte> payload) -> std::expected<byte_buffer, status>
+        {
+            ++calls;
+            return byte_buffer{payload.begin(), payload.end()};
+        });
+    auto handler = router.make_http_sync_handler();
+    const auto invoke = [&](std::string_view method = "POST",
+                            std::string_view path = "/demo.Payload/Echo")
+    {
+        cnetmod::http::response output;
+        cnetmod::http::request_context context{*io, socket, method, path,
+            std::span{headers}, body, output, {}};
+        handler(context);
+        return output;
+    };
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"0"});
+    ASSERT_EQ(calls, std::size_t{1});
+    router.set_options(server_options{.max_metadata_bytes = 0});
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"8"});
+    ASSERT_EQ(calls, std::size_t{1});
+    router.set_options(server_options{.max_receive_message_bytes = 2});
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"8"});
+    ASSERT_EQ(calls, std::size_t{1});
+    router.set_options(server_options{.max_send_message_bytes = 2});
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"8"});
+    ASSERT_EQ(calls, std::size_t{2});
+    router.set_options(server_options{.interceptors = {
+                                          [&](const call_context& call) -> std::expected<void, status>
+                                          {
+                                              ++intercepted;
+                                              ASSERT_EQ(call.service, std::string{"demo.Payload"});
+                                              ASSERT_EQ(call.method, std::string{"Echo"});
+                                              ASSERT_EQ(call.path, std::string{"/demo.Payload/Echo"});
+                                              ASSERT_EQ(metadata_value(call.headers, "x-token"), std::string_view{"secret"});
+                                              return {};
+                                          }}});
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"0"});
+    ASSERT_EQ(intercepted, std::size_t{1});
+    ASSERT_EQ(invoke("GET").trailers().at("grpc-status"), std::string{"3"});
+    auto policy = std::make_shared<governance::server_policy>(
+        governance::server_policy_options{.max_concurrent_calls = 0});
+    router.set_options(server_options{.governance = policy});
+    const auto before_admission = calls;
+    ASSERT_EQ(invoke().trailers().at("grpc-status"), std::string{"8"});
+    ASSERT_EQ(invoke("POST", "/demo.Payload/Missing").trailers().at("grpc-status"), std::string{"8"});
+    ASSERT_EQ(calls, before_admission);
+}
+
+TEST(grpc_h2_adapter_uses_shared_protocol_pipeline_and_falls_back)
+{
+    service_router router;
+    router.add_unary_sync("demo.H2", "Echo", [](std::span<const std::byte> payload) -> std::expected<byte_buffer, status>
+        {
+            return byte_buffer{payload.begin(), payload.end()};
+        });
+    auto filter = router.make_h2_request_filter();
+    auto handler = router.make_h2_sync_handler();
+    cnetmod::http::v2::server_request request{
+        .stream_id = 1,
+        .headers = {{":method", "POST"}, {":scheme", "http"}, {":path", "/demo.H2/Echo"},
+            {"content-type", "application/grpc"}},
+        .body = *encode_frame(byte_buffer{std::byte{42}})};
+    cnetmod::cancel_token cancellation;
+    ASSERT_TRUE(filter(request.headers));
+    auto response = handler(request, cancellation);
+    ASSERT_TRUE(response.has_value());
+    ASSERT_EQ(response->status, std::uint32_t{200});
+    ASSERT_EQ(response->static_headers.fields().size(), std::size_t{1});
+    ASSERT_EQ(response->static_trailers.fields().front().name, std::string{"grpc-status"});
+    ASSERT_EQ(response->static_trailers.fields().front().value, std::string{"0"});
+    auto frames = decode_frames(std::as_bytes(std::span{response->body_text}));
+    ASSERT_TRUE(frames.has_value());
+    ASSERT_TRUE(frames->front().payload == byte_buffer{std::byte{42}});
+    request.headers[0].value = "GET";
+    response = handler(request, cancellation);
+    const auto code = std::ranges::find_if(response->trailers,
+        [](const auto& header)
+        {
+            return header.name == "grpc-status";
+        });
+    ASSERT_TRUE(code != response->trailers.end());
+    ASSERT_EQ(code->value, std::string{"3"});
+    request.headers[0].value = "POST";
+    request.headers[2].value = "/demo.H2/Missing";
+    ASSERT_FALSE(filter(request.headers));
+    ASSERT_FALSE(handler(request, cancellation).has_value());
+    request.headers[2].value = "/demo.H2/Echo";
+    for (int index = 0; index < 34; ++index)
+        request.headers.push_back({"x-extra-" + std::to_string(index), "value"});
+    ASSERT_FALSE(filter(request.headers));
+    ASSERT_FALSE(handler(request, cancellation).has_value());
 }
 
 TEST(grpc_sync_adapter_preserves_protocol_validation_and_compression)

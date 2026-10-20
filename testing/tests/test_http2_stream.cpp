@@ -12,6 +12,8 @@ import cnetmod.protocol.http;
 import cnetmod.protocol.http.v2.frame;
 import cnetmod.protocol.http.v2.header_compression;
 import cnetmod.protocol.http.v2.session;
+import cnetmod.protocol.http.v2.flow_control;
+import cnetmod.protocol.http.v2.settings;
 
 using namespace cnetmod::http::v2;
 
@@ -36,108 +38,134 @@ auto bytes(std::string_view value) -> std::span<const std::byte>
 
 TEST(http2_server_dispatches_sync_router_handlers)
 {
-    cnetmod::net_init network;
-    auto io = cnetmod::make_io_context();
-    cnetmod::http::server http_server{*io};
-    cnetmod::http::router routes;
-    routes.get_sync("/sync", [](cnetmod::http::request_context& request)
-        {
-            request.text(cnetmod::http::status::ok, "sync");
-        });
-    http_server.set_router(std::move(routes));
-    ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
-    const auto endpoint = http_server.local_endpoint();
-    ASSERT_TRUE(endpoint.has_value());
-    auto listener = http_server.run();
-    listener.handle().resume();
-
-    auto exercise = [&]() -> cnetmod::task<void>
+    for (int mode = 0; mode != 4; ++mode)
     {
-        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
-            cnetmod::socket_type::stream);
-        ASSERT_TRUE(peer.has_value());
-        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
-                .has_value());
-
-        header_compression encoder;
-        const std::array request_headers{
-            header_field{":method", "GET"},
-            header_field{":scheme", "http"},
-            header_field{":authority", "localhost"},
-            header_field{":path", "/sync"}};
-        auto encoded = encoder.encode(request_headers);
-        ASSERT_TRUE(encoded.has_value());
-
-        std::vector<std::byte> request{
-            reinterpret_cast<const std::byte*>(preface.data()),
-            reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
-        auto settings = framed({.type = frame_type::settings}, {});
-        request.insert(request.end(), settings.begin(), settings.end());
-        std::vector<std::byte> padded_headers{
-            static_cast<std::byte>(7)};
-        padded_headers.insert(
-            padded_headers.end(), encoded->begin(), encoded->end());
-        padded_headers.insert(padded_headers.end(), 7, std::byte{});
-        auto headers = framed({.type = frame_type::headers,
-                                  .flags = 0xD,
-                                  .stream_id = 1},
-            padded_headers);
-        request.insert(request.end(), headers.begin(), headers.end());
-        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
-                         cnetmod::const_buffer{request.data(), request.size()}))
-                .has_value());
-
-        std::vector<std::byte> wire;
-        std::string body;
-        bool ended{};
-        std::array<std::byte, 4096> buffer{};
-        while (!ended)
-        {
-            auto read = co_await cnetmod::async_read(*io, *peer,
-                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
-            ASSERT_TRUE(read.has_value() && *read > 0);
-            if (!read || *read == 0)
-                break;
-            wire.insert(wire.end(), buffer.begin(), buffer.begin() + *read);
-
-            std::size_t offset{};
-            while (offset + frame_header_size <= wire.size())
+        cnetmod::net_init network;
+        auto io = cnetmod::make_io_context();
+        cnetmod::http::server http_server{*io};
+        cnetmod::http::router routes;
+        routes.get_sync("/sync", [](cnetmod::http::request_context& request)
             {
-                auto header = decode_frame_header(
-                    std::span{wire.data() + offset, frame_header_size});
-                ASSERT_TRUE(header.has_value());
-                if (!header ||
-                    offset + frame_header_size + header->length > wire.size())
-                    break;
-                if (header->type == frame_type::data &&
-                    header->stream_id == 1)
+                request.text(cnetmod::http::status::ok, "sync");
+            });
+        http_server.set_router(std::move(routes));
+        bool adapted{}, middleware_called{};
+        if (mode != 0)
+            http_server.set_h2_sync_adapter(
+                [&](server_request&, cnetmod::cancel_token&) -> std::optional<server_response>
                 {
-                    body.append(reinterpret_cast<const char*>(wire.data() +
-                                    offset + frame_header_size),
-                        header->length);
-                    ended = (header->flags & 0x1U) != 0;
-                }
-                offset += frame_header_size + header->length;
-            }
-            if (offset != 0)
-                wire.erase(wire.begin(), wire.begin() + offset);
-        }
+                    adapted = true;
+                    if (mode == 3)
+                        return std::nullopt;
+                    return server_response{.body_text = "adapter"};
+                },
+                [](std::span<const header_field>)
+                {
+                    return true;
+                });
+        if (mode == 2)
+            http_server.use([&](cnetmod::http::request_context&, cnetmod::http::next_fn next)
+                                -> cnetmod::task<void>
+                {
+                    middleware_called = true;
+                    co_await next();
+                });
+        ASSERT_TRUE(http_server.listen("127.0.0.1", 0).has_value());
+        const auto endpoint = http_server.local_endpoint();
+        ASSERT_TRUE(endpoint.has_value());
+        auto listener = http_server.run();
+        listener.handle().resume();
 
-        ASSERT_EQ(body, std::string{"sync"});
-        peer->close();
-        http_server.stop();
-        while (!listener.handle().done())
-            co_await cnetmod::post_awaitable{*io};
-        listener.handle().promise().result();
-        while (http_server.active_connections() != 0)
-            co_await cnetmod::post_awaitable{*io};
-        io->stop();
-    };
-    auto operation = exercise();
-    operation.handle().resume();
-    io->run();
-    ASSERT_TRUE(operation.handle().done());
-    operation.handle().promise().result();
+        auto exercise = [&]() -> cnetmod::task<void>
+        {
+            auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+                cnetmod::socket_type::stream);
+            ASSERT_TRUE(peer.has_value());
+            ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *endpoint))
+                    .has_value());
+
+            header_compression encoder;
+            const std::array request_headers{
+                header_field{":method", "GET"},
+                header_field{":scheme", "http"},
+                header_field{":authority", "localhost"},
+                header_field{":path", "/sync"}};
+            auto encoded = encoder.encode(request_headers);
+            ASSERT_TRUE(encoded.has_value());
+
+            std::vector<std::byte> request{
+                reinterpret_cast<const std::byte*>(preface.data()),
+                reinterpret_cast<const std::byte*>(preface.data()) + preface.size()};
+            auto settings = framed({.type = frame_type::settings}, {});
+            request.insert(request.end(), settings.begin(), settings.end());
+            std::vector<std::byte> padded_headers{
+                static_cast<std::byte>(7)};
+            padded_headers.insert(
+                padded_headers.end(), encoded->begin(), encoded->end());
+            padded_headers.insert(padded_headers.end(), 7, std::byte{});
+            auto headers = framed({.type = frame_type::headers,
+                                      .flags = 0xD,
+                                      .stream_id = 1},
+                padded_headers);
+            request.insert(request.end(), headers.begin(), headers.end());
+            ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+                             cnetmod::const_buffer{request.data(), request.size()}))
+                    .has_value());
+
+            std::vector<std::byte> wire;
+            std::string body;
+            bool ended{};
+            std::array<std::byte, 4096> buffer{};
+            while (!ended)
+            {
+                auto read = co_await cnetmod::async_read(*io, *peer,
+                    cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+                ASSERT_TRUE(read.has_value() && *read > 0);
+                if (!read || *read == 0)
+                    break;
+                wire.insert(wire.end(), buffer.begin(), buffer.begin() + *read);
+
+                std::size_t offset{};
+                while (offset + frame_header_size <= wire.size())
+                {
+                    auto header = decode_frame_header(
+                        std::span{wire.data() + offset, frame_header_size});
+                    ASSERT_TRUE(header.has_value());
+                    if (!header ||
+                        offset + frame_header_size + header->length > wire.size())
+                        break;
+                    if (header->type == frame_type::data &&
+                        header->stream_id == 1)
+                    {
+                        body.append(reinterpret_cast<const char*>(wire.data() +
+                                        offset + frame_header_size),
+                            header->length);
+                        ended = (header->flags & 0x1U) != 0;
+                    }
+                    offset += frame_header_size + header->length;
+                }
+                if (offset != 0)
+                    wire.erase(wire.begin(), wire.begin() + offset);
+            }
+
+            ASSERT_EQ(body, std::string{mode == 1 ? "adapter" : "sync"});
+            ASSERT_EQ(adapted, mode == 1 || mode == 3);
+            ASSERT_EQ(middleware_called, mode == 2);
+            peer->close();
+            http_server.stop();
+            while (!listener.handle().done())
+                co_await cnetmod::post_awaitable{*io};
+            listener.handle().promise().result();
+            while (http_server.active_connections() != 0)
+                co_await cnetmod::post_awaitable{*io};
+            io->stop();
+        };
+        auto operation = exercise();
+        operation.handle().resume();
+        io->run();
+        ASSERT_TRUE(operation.handle().done());
+        operation.handle().promise().result();
+    }
 }
 
 TEST(http2_abort_retires_parallel_request_read_and_backpressured_response_write)
@@ -173,7 +201,10 @@ TEST(http2_abort_retires_parallel_request_read_and_backpressured_response_write)
             auto frame = framed(header, payload);
             input.insert(input.end(), frame.begin(), frame.end());
         };
-        append({.type = frame_type::settings}, {});
+        const auto large_window = encode_settings(settings{.initial_window_size = 16U * 1024U * 1024U});
+        append({.type = frame_type::settings}, large_window);
+        const std::array connection_credit{std::byte{1}, std::byte{0}, std::byte{0}, std::byte{0}};
+        append({.type = frame_type::window_update}, connection_credit);
         header_compression encoder;
         const std::array headers{header_field{":method", "POST"},
             header_field{":scheme", "http"}, header_field{":path", "/duplex"}};
@@ -205,6 +236,191 @@ TEST(http2_abort_retires_parallel_request_read_and_backpressured_response_write)
     io->run();
     ASSERT_TRUE(running.handle().done());
     running.handle().promise().result();
+}
+
+TEST(http2_send_window_adjustments_allow_negative_credit_without_overflow)
+{
+    flow_window window{0};
+    ASSERT_TRUE(window.adjust(-10));
+    ASSERT_FALSE(window.consume(1));
+    ASSERT_TRUE(window.increase(5));
+    ASSERT_EQ(window.available(), -5);
+    ASSERT_FALSE(window.increase(std::numeric_limits<std::uint32_t>::max()));
+    ASSERT_FALSE(window.adjust(std::numeric_limits<std::int64_t>::max()));
+    ASSERT_FALSE(window.adjust(std::numeric_limits<std::int64_t>::min()));
+    ASSERT_TRUE(window.increase(5));
+    ASSERT_EQ(window.available(), 0);
+}
+
+TEST(http2_pending_responses_obey_stream_and_connection_send_windows)
+{
+    auto io = cnetmod::make_io_context();
+    cnetmod::socket unused;
+    header_compression encoder;
+    std::vector<std::byte> opening(bytes(preface).begin(), bytes(preface).end());
+    const auto append = [](std::vector<std::byte>& target, frame_header header,
+                            std::span<const std::byte> payload)
+    {
+        auto frame = framed(header, payload);
+        target.insert(target.end(), frame.begin(), frame.end());
+    };
+    const auto config = encode_settings(settings{.initial_window_size = 0});
+    append(opening, {.type = frame_type::settings}, config);
+    for (const auto id : {1U, 3U, 5U})
+    {
+        const std::array fields{header_field{":method", "GET"},
+            header_field{":scheme", "http"}, header_field{":path", "/flow"}};
+        const auto encoded = encoder.encode(fields);
+        ASSERT_TRUE(encoded.has_value());
+        append(opening, {.type = frame_type::headers, .flags = 5, .stream_id = id}, *encoded);
+    }
+    const std::array reset{std::byte{}, std::byte{}, std::byte{}, std::byte{8}};
+    append(opening, {.type = frame_type::rst_stream, .stream_id = 5}, reset);
+    std::size_t data_bytes{}, ended{}, stage{}, handled{};
+    const auto update = [&](std::uint32_t id, std::uint32_t credit)
+    {
+        const std::array payload{static_cast<std::byte>(credit >> 24),
+            static_cast<std::byte>(credit >> 16), static_cast<std::byte>(credit >> 8),
+            static_cast<std::byte>(credit)};
+        return framed({.type = frame_type::window_update, .stream_id = id}, payload);
+    };
+    transport_reader reader = [&](cnetmod::mutable_buffer buffer)
+        -> cnetmod::task<std::expected<std::size_t, std::error_code>>
+    {
+        // Let the structured writer complete before inspecting each boundary.
+        co_await cnetmod::post_awaitable{*io};
+        std::vector<std::byte> input;
+        if (stage == 0)
+            input = opening;
+        else if (stage == 1)
+        {
+            ASSERT_EQ(data_bytes, std::size_t{0});
+            input = update(1, 40000);
+            const auto second = update(3, 40000);
+            input.insert(input.end(), second.begin(), second.end());
+        }
+        else if (stage == 2)
+        {
+            ASSERT_EQ(data_bytes, std::size_t{65535});
+            input = update(0, 14465);
+        }
+        else if (stage == 3)
+        {
+            ASSERT_EQ(data_bytes, std::size_t{80000});
+            const std::array fields{header_field{":method", "GET"},
+                header_field{":scheme", "http"}, header_field{":path", "/flow"}};
+            const auto encoded = encoder.encode(fields);
+            ASSERT_TRUE(encoded.has_value());
+            append(input, {.type = frame_type::headers, .flags = 5, .stream_id = 7}, *encoded);
+            const auto increase = encode_settings(settings{.initial_window_size = 32768});
+            append(input, {.type = frame_type::settings}, increase);
+            const auto credit = update(0, 40000);
+            input.insert(input.end(), credit.begin(), credit.end());
+        }
+        else if (stage == 4)
+        {
+            ASSERT_EQ(data_bytes, std::size_t{112768});
+            append(input, {.type = frame_type::settings}, config);
+            const auto credit = update(7, 7232);
+            input.insert(input.end(), credit.begin(), credit.end());
+        }
+        else if (stage == 5)
+        {
+            ASSERT_EQ(data_bytes, std::size_t{112768});
+            input = update(7, 32768);
+        }
+        else
+        {
+            ASSERT_EQ(data_bytes, std::size_t{120000});
+            ASSERT_EQ(ended, std::size_t{3});
+            ASSERT_EQ(handled, std::size_t{3});
+            co_return std::size_t{0};
+        }
+        ++stage;
+        ASSERT_TRUE(input.size() <= buffer.size);
+        std::memcpy(buffer.data, input.data(), input.size());
+        co_return input.size();
+    };
+    header_compression response_decoder;
+    static const std::array fixed_headers{header_field{"content-type", "text/plain"}};
+    static const std::array fixed_trailers{header_field{"checksum", "ok"}};
+    transport_writer writer = [&](cnetmod::const_buffer buffer)
+        -> cnetmod::task<std::expected<void, std::error_code>>
+    {
+        std::size_t offset{};
+        const auto wire = std::span{static_cast<const std::byte*>(buffer.data), buffer.size};
+        while (offset + frame_header_size <= wire.size())
+        {
+            const auto header = decode_frame_header(wire.subspan(offset, frame_header_size));
+            ASSERT_TRUE(header.has_value());
+            if (!header)
+                break;
+            if (header->type == frame_type::headers)
+            {
+                const auto fields = response_decoder.decode(wire.subspan(offset + frame_header_size, header->length));
+                ASSERT_TRUE(fields.has_value());
+                if (fields)
+                {
+                    const auto value = [&](std::string_view name) -> std::string_view
+                    {
+                        const auto found = std::ranges::find_if(*fields,
+                            [&](const auto& field)
+                            {
+                                return field.name == name;
+                            });
+                        return found == fields->end() ? std::string_view{} : std::string_view{found->value};
+                    };
+                    if ((header->flags & 1U) != 0)
+                    {
+                        ASSERT_EQ(value("checksum"), std::string_view{"ok"});
+                        ASSERT_EQ(value("x-complete"), std::to_string(header->stream_id));
+                    }
+                    else
+                    {
+                        ASSERT_EQ(value("content-type"), std::string_view{"text/plain"});
+                        ASSERT_EQ(value("x-stream"), std::to_string(header->stream_id));
+                    }
+                }
+            }
+            if (header->type == frame_type::data)
+                data_bytes += header->length;
+            if ((header->type == frame_type::data || header->type == frame_type::headers) &&
+                (header->flags & 1U))
+                ++ended;
+            offset += frame_header_size + header->length;
+        }
+        ASSERT_EQ(offset, wire.size());
+        co_return std::expected<void, std::error_code>{};
+    };
+    borrowed_streaming_server_handler fallback = [](server_request&, cnetmod::cancel_token&)
+        -> cnetmod::task<server_response>
+    {
+        co_return server_response{};
+    };
+    session connection{*io, unused, std::move(fallback), {}, std::move(reader), std::move(writer),
+        [&](server_request& request, cnetmod::cancel_token&) -> std::optional<server_response>
+        {
+            ++handled;
+            return server_response{.headers = {{"x-stream", std::to_string(request.stream_id)}},
+                .trailers = {{"x-complete", std::to_string(request.stream_id)}},
+                .body_text = std::string(40000, 'f'),
+                .static_headers = static_header_fields::from<fixed_headers>(),
+                .static_trailers = static_header_fields::from<fixed_trailers>()};
+        },
+        true, [](std::span<const header_field>)
+        {
+            return true;
+        }};
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        co_await connection.run();
+        io->stop();
+    };
+    auto operation = exercise();
+    operation.handle().resume();
+    io->run();
+    ASSERT_TRUE(operation.handle().done());
+    operation.handle().promise().result();
 }
 
 TEST(http2_streams_deliver_interleaved_bodies_and_return_consumed_credit)

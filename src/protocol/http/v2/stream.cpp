@@ -11,6 +11,11 @@ stream::stream(std::uint32_t id, std::int32_t initial_window,
     : id_(id), receive_window_(initial_window), send_window_(initial_window), headers_(std::move(reusable_headers))
 {}
 
+stream::stream(std::uint32_t id, std::int32_t send_window, std::int32_t receive_window,
+    std::vector<header_field> reusable_headers) noexcept
+    : id_(id), receive_window_(receive_window), send_window_(send_window), headers_(std::move(reusable_headers))
+{}
+
 auto stream::id() const noexcept -> std::uint32_t
 {
     return id_;

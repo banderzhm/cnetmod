@@ -254,15 +254,17 @@ auto header_compression::find(std::string_view name, std::string_view value,
     const auto common = common_static_index(name, value, exact);
     if (common.index != 0)
         return common.index;
+    for (std::size_t i = 0; i < dynamic_table_.size(); ++i)
+        if (dynamic_table_[i].name == name &&
+            (!exact || dynamic_table_[i].value == value))
+            return static_cast<std::uint32_t>(std::size(static_table) + i);
+    // Repeated application fields normally live in the connection's small
+    // dynamic table. Avoid scanning all 61 static entries on every trailer.
     if (!common.known_name)
         for (std::uint32_t i = 1; i < std::size(static_table); ++i)
             if (static_table[i].name == name &&
                 (!exact || static_table[i].value == value))
                 return i;
-    for (std::size_t i = 0; i < dynamic_table_.size(); ++i)
-        if (dynamic_table_[i].name == name &&
-            (!exact || dynamic_table_[i].value == value))
-            return static_cast<std::uint32_t>(std::size(static_table) + i);
     return 0;
 }
 

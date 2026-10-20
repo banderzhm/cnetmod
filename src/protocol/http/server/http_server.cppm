@@ -71,6 +71,9 @@ export struct response_header_options
     bool emit_date = true;
 };
 
+/// Transfer an HTTP response into the HTTP/2 transport representation.
+export auto take_h2_response(response& output) -> v2::server_response;
+
 // =============================================================================
 // Date Cache
 // =============================================================================
@@ -137,6 +140,10 @@ public:
 
     /// Set router
     void set_router(router r);
+    /// Optional protocol adapter for complete buffered HTTP/2 requests.
+    /// Middleware and streaming requests retain normal HTTP dispatch.
+    void set_h2_sync_adapter(v2::sync_server_handler handler,
+        v2::buffered_request_filter filter);
 
     /**
      * @brief Registers a middleware, ignoring empty optional components.
@@ -228,6 +235,8 @@ private:
     std::vector<std::unique_ptr<cancel_token>> worker_accept_cancellations_;
     std::unique_ptr<recv_service_state> recv_services_;
     router router_;
+    v2::sync_server_handler h2_sync_adapter_;
+    v2::buffered_request_filter h2_sync_filter_;
     std::vector<middleware_fn> middlewares_;
     std::string host_;
     std::uint16_t port_ = 0;

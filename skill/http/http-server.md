@@ -59,6 +59,21 @@ HTTP/1 明文连接的首次探测缓冲在协议确定后立即释放；普通�
 #### `server::set_router`
 **签名**: `void set_router(router r)`
 
+#### `server::set_h2_sync_adapter`
+**签名**:
+```cpp
+void set_h2_sync_adapter(v2::sync_server_handler handler,
+    v2::buffered_request_filter filter);
+```
+在 `run()` 前配置完整 HTTP/2 请求的同步协议适配器。回调返回 `std::nullopt`
+时继续普通 HTTP 路由；filter 决定小请求体的缓冲资格，回调仍需检查请求是否适用。
+存在 middleware 或流式请求体时使用普通分发链。handler 和 filter 必须同时提供或同时清空。
+
+`v2::server_response` 可用 `static_headers` / `static_trailers` 复用固定协议元数据：
+`v2::static_header_fields::from<fields>()` 只接受静态存储期的 const 字段数组，
+防止把请求栈上的头部视图交给异步发送器。业务响应体和动态 metadata 仍由响应拥有。
+发送端分别扣减连接和流窗口；额度不足的响应等待 WINDOW_UPDATE，SETTINGS 缩窗可产生负额度。
+
 #### `server::use`
 **签名**: `void use(middleware_fn mw)`
 **说明**: 添加中间件，按调用顺序构成中间件管道。

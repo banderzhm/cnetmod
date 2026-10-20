@@ -24,6 +24,38 @@ struct server_request
     std::shared_ptr<cnetmod::http::request_body_stream> body_stream;
 };
 
+/// Flyweight metadata with compile-time static-storage and const qualification.
+/// Unlike a borrowed span, this factory cannot accept a request-local array.
+class static_header_fields
+{
+public:
+    constexpr static_header_fields() noexcept = default;
+
+    template <auto& Fields>
+    [[nodiscard]] static constexpr auto from() noexcept -> static_header_fields
+    {
+        static_assert(std::is_const_v<std::remove_reference_t<decltype(Fields)>>,
+            "static HTTP/2 header fields must be immutable");
+        return static_header_fields{std::span<const header_field>{Fields}};
+    }
+
+    [[nodiscard]] constexpr auto fields() const noexcept -> std::span<const header_field>
+    {
+        return fields_;
+    }
+
+    [[nodiscard]] constexpr auto empty() const noexcept -> bool
+    {
+        return fields_.empty();
+    }
+
+private:
+    constexpr explicit static_header_fields(std::span<const header_field> fields) noexcept
+        : fields_(fields) {}
+
+    std::span<const header_field> fields_;
+};
+
 struct server_response
 {
     std::uint32_t status = 200;
@@ -32,6 +64,8 @@ struct server_response
     std::vector<std::byte> body;
     std::string body_text;
     std::shared_ptr<cnetmod::http::response_body_source> body_source;
+    static_header_fields static_headers;
+    static_header_fields static_trailers;
 };
 
 using server_handler =
@@ -97,11 +131,20 @@ private:
         -> std::error_code;
     [[nodiscard]] auto dispatch_ready() -> cnetmod::task<void>;
     void start_streaming_request(std::uint32_t stream_id);
+    auto start_response_write(std::uint32_t stream_id, server_response response) -> bool;
     [[nodiscard]] auto write_response(std::uint32_t stream_id,
         server_response response, cnetmod::cancel_token& cancellation)
         -> cnetmod::task<std::expected<void, std::error_code>>;
-    void queue_response(std::uint32_t stream_id, server_response response);
+    void queue_response(std::uint32_t stream_id, server_response response,
+        bool detached = false);
+    auto queue_response_data(std::uint32_t stream_id, server_response& response,
+        std::size_t& offset, bool detached = false) -> bool;
+    void drain_pending_responses();
+    auto queue_response_trailers(std::uint32_t stream_id, const server_response& response)
+        -> std::expected<void, std::error_code>;
     [[nodiscard]] auto flush_outbound()
+        -> cnetmod::task<std::expected<void, std::error_code>>;
+    [[nodiscard]] auto flush_batched_outbound()
         -> cnetmod::task<std::expected<void, std::error_code>>;
     [[nodiscard]] auto write_outbound_locked()
         -> cnetmod::task<std::expected<void, std::error_code>>;
@@ -127,6 +170,14 @@ private:
     header_compression encoder_{};
     std::pmr::unsynchronized_pool_resource stream_pool_;
     std::pmr::unordered_map<std::uint32_t, stream> streams_;
+
+    struct pending_response
+    {
+        server_response response;
+        std::size_t offset{};
+    };
+
+    std::unordered_map<std::uint32_t, pending_response> pending_responses_;
     std::vector<ready_request> ready_requests_;
     server_handler handler_;
     streaming_server_handler streaming_handler_;
@@ -140,8 +191,10 @@ private:
     std::vector<std::byte> input_;
     std::vector<std::byte> outbound_;
     std::vector<std::byte> write_buffer_;
+    bool writer_active_ = false;
     std::vector<std::byte> header_block_;
     std::vector<header_field> response_headers_;
+    std::vector<header_field> response_trailers_;
     std::vector<std::byte> encoded_headers_;
     std::vector<std::vector<header_field>> request_header_pool_;
     std::vector<std::pair<std::uint32_t, std::size_t>> pending_flow_credit_;

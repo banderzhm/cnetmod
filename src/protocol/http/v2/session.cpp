@@ -3,10 +3,13 @@ module cnetmod.protocol.http.v2.session;
 import std;
 import cnetmod.utils.concurrent_containers.atomic_rw_latch;
 import cnetmod.core.buffer;
+import cnetmod.core.socket;
 import cnetmod.coro.task;
 import cnetmod.coro.task_group;
 import cnetmod.coro.mutex;
 import cnetmod.coro.spawn;
+import cnetmod.coro.timer;
+import cnetmod.protocol.http.v2.flow_control;
 import cnetmod.executor.async_op;
 import cnetmod.io.io_context;
 
@@ -212,58 +215,132 @@ auto session::validate_headers(std::span<const header_field> fields) const
         : std::make_error_code(std::errc::protocol_error);
 }
 
-void session::queue_response(std::uint32_t stream_id, server_response response)
+void session::queue_response(std::uint32_t stream_id, server_response response, bool detached)
 {
+    if (!detached && !streams_.contains(stream_id))
+        return;
     const auto body = response.body_text.empty()
         ? std::span<const std::byte>{response.body}
         : std::as_bytes(std::span{response.body_text});
     response_headers_.clear();
-    response_headers_.reserve(response.headers.size() + 2);
+    response_headers_.reserve(response.headers.size() + response.static_headers.fields().size() + 2);
     response_headers_.push_back({":status", std::to_string(response.status)});
     bool has_length = false;
-    for (auto& header : response.headers)
+    const auto append = [&](auto&& header)
     {
         if (header.name.starts_with(':') || header.name == "connection" ||
             header.name == "transfer-encoding" || header.name == "upgrade")
-            continue;
+            return;
         has_length |= header.name == "content-length";
-        response_headers_.push_back(std::move(header));
-    }
+        response_headers_.push_back(std::forward<decltype(header)>(header));
+    };
+    for (auto& header : response.headers)
+        append(std::move(header));
+    for (const auto& header : response.static_headers.fields())
+        append(header);
     if (!body.empty() && !has_length)
         response_headers_.push_back(
             {"content-length", std::to_string(body.size())});
     auto encoded = encoder_.encode(response_headers_, encoded_headers_);
     if (!encoded)
         return;
-    const auto has_trailers = !response.trailers.empty();
+    const auto has_trailers = !response.trailers.empty() || !response.static_trailers.empty();
     const auto end_on_headers = body.empty() && !has_trailers;
     queue_frame({.type = frame_type::headers,
                     .flags = static_cast<std::uint8_t>(
                         flag_end_headers | (end_on_headers ? flag_end_stream : 0)),
                     .stream_id = stream_id},
         encoded_headers_);
-    std::size_t offset = 0;
+    std::size_t offset{};
+    if (queue_response_data(stream_id, response, offset, detached))
+        streams_.erase(stream_id);
+    else
+    {
+        auto [found, inserted] = streams_.try_emplace(stream_id, stream_id,
+            static_cast<std::int32_t>(peer_.initial_window_size),
+            static_cast<std::int32_t>(local_.initial_window_size), std::vector<header_field>{});
+        if (inserted)
+        {
+            (void)found->second.receive_headers({}, true);
+            (void)found->second.send_window().consume(static_cast<std::uint32_t>(offset));
+        }
+        pending_responses_.emplace(stream_id, pending_response{std::move(response), offset});
+    }
+}
+
+auto session::queue_response_data(std::uint32_t stream_id, server_response& response,
+    std::size_t& offset, bool detached) -> bool
+{
+    const auto found = streams_.find(stream_id);
+    if (found == streams_.end() && !detached)
+        return true;
+    const auto body = response.body_text.empty()
+        ? std::span<const std::byte>{response.body}
+        : std::as_bytes(std::span{response.body_text});
+    const bool trailers = !response.trailers.empty() || !response.static_trailers.empty();
     while (offset < body.size())
     {
-        const auto size = std::min<std::size_t>(
-            peer_.max_frame_size, body.size() - offset);
-        const auto final = offset + size == body.size();
+        const auto stream_window = found == streams_.end()
+            ? static_cast<std::int64_t>(peer_.initial_window_size) - static_cast<std::int64_t>(offset)
+            : static_cast<std::int64_t>(found->second.send_window().available());
+        const auto available = std::min<std::int64_t>(send_window_, stream_window);
+        if (available <= 0)
+            return false;
+        const auto size = std::min({static_cast<std::size_t>(peer_.max_frame_size),
+            body.size() - offset, static_cast<std::size_t>(available)});
+        send_window_ -= static_cast<std::int32_t>(size);
+        if (found != streams_.end())
+            (void)found->second.send_window().consume(static_cast<std::uint32_t>(size));
         queue_frame({.type = frame_type::data,
-                        .flags = static_cast<std::uint8_t>(
-                            final && !has_trailers ? flag_end_stream : 0),
+                        .flags = static_cast<std::uint8_t>(offset + size == body.size() && !trailers ? flag_end_stream : 0),
                         .stream_id = stream_id},
             body.subspan(offset, size));
         offset += size;
     }
-    if (has_trailers)
+    if (trailers && !queue_response_trailers(stream_id, response))
+        queue_connection_error(error_protocol);
+    return true;
+}
+
+auto session::queue_response_trailers(std::uint32_t stream_id, const server_response& response)
+    -> std::expected<void, std::error_code>
+{
+    std::span<const header_field> fields = response.trailers;
+    if (!response.static_trailers.empty())
     {
-        auto encoded_trailers = encoder_.encode(response.trailers);
-        if (encoded_trailers)
-            queue_frame({.type = frame_type::headers,
-                            .flags = static_cast<std::uint8_t>(
-                                flag_end_headers | flag_end_stream),
-                            .stream_id = stream_id},
-                *encoded_trailers);
+        if (fields.empty())
+            fields = response.static_trailers.fields();
+        else
+        {
+            response_trailers_.clear();
+            response_trailers_.reserve(fields.size() + response.static_trailers.fields().size());
+            response_trailers_.insert(response_trailers_.end(), fields.begin(), fields.end());
+            const auto fixed = response.static_trailers.fields();
+            response_trailers_.insert(response_trailers_.end(), fixed.begin(), fixed.end());
+            fields = response_trailers_;
+        }
+    }
+    auto encoded = encoder_.encode(fields, encoded_headers_);
+    if (!encoded)
+        return std::unexpected(encoded.error());
+    queue_frame({.type = frame_type::headers,
+                    .flags = static_cast<std::uint8_t>(flag_end_headers | flag_end_stream),
+                    .stream_id = stream_id},
+        encoded_headers_);
+    return {};
+}
+
+void session::drain_pending_responses()
+{
+    for (auto it = pending_responses_.begin(); it != pending_responses_.end();)
+    {
+        if (queue_response_data(it->first, it->second.response, it->second.offset))
+        {
+            streams_.erase(it->first);
+            it = pending_responses_.erase(it);
+        }
+        else
+            ++it;
     }
 }
 
@@ -273,6 +350,52 @@ auto session::flush_outbound()
     co_await writer_mutex_.lock();
     cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
     co_return co_await write_outbound_locked();
+}
+
+auto session::flush_batched_outbound()
+    -> cnetmod::task<std::expected<void, std::error_code>>
+{
+    if (outbound_.empty())
+        co_return std::expected<void, std::error_code>{};
+    if (!writer_active_)
+    {
+        writer_active_ = true;
+        const bool started = background_->run([this](cnetmod::cancel_token& cancellation)
+                                                  -> cnetmod::task<std::expected<void, std::error_code>>
+            {
+                struct completion
+                {
+                    session& owner;
+                    bool success{};
+                    ~completion()
+                    {
+                        owner.writer_active_ = false;
+                        if (!success)
+                            owner.socket_->shutdown_both();
+                    }
+                } finished{*this};
+                while (!outbound_.empty())
+                {
+                    if (cancellation.is_cancelled())
+                        co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+                    auto written = co_await flush_outbound();
+                    if (!written)
+                        co_return written;
+                }
+                finished.success = true;
+                co_return std::expected<void, std::error_code>{};
+            });
+        if (!started)
+        {
+            writer_active_ = false;
+            co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+        }
+    }
+    // One buffer can be in the kernel while the reader builds the next batch.
+    // Apply backpressure instead of accumulating an unbounded outbound queue.
+    if (outbound_.size() + write_buffer_.size() >= response_batch_bytes * 2)
+        co_return co_await flush_outbound();
+    co_return std::expected<void, std::error_code>{};
 }
 
 auto session::write_outbound_locked()
@@ -289,28 +412,44 @@ auto session::write_outbound_locked()
     co_return result;
 }
 
+auto session::start_response_write(std::uint32_t stream_id, server_response response) -> bool
+{
+    return background_->run([this, stream_id, response = std::move(response)](
+                                cnetmod::cancel_token& token) mutable
+                                -> cnetmod::task<std::expected<void, std::error_code>>
+        {
+            co_return co_await write_response(stream_id, std::move(response), token);
+        });
+}
+
 auto session::write_response(std::uint32_t stream_id,
     server_response response, cnetmod::cancel_token& cancellation)
     -> cnetmod::task<std::expected<void, std::error_code>>
 {
     co_await cnetmod::post_awaitable{*context_};
+    if (!streams_.contains(stream_id))
+        co_return std::expected<void, std::error_code>{};
     if (response.body_source)
     {
         if (!response.body.empty() || !response.body_text.empty())
             co_return std::unexpected(
                 std::make_error_code(std::errc::invalid_argument));
         std::vector<header_field> headers;
-        headers.reserve(response.headers.size() + 2);
+        headers.reserve(response.headers.size() + response.static_headers.fields().size() + 2);
         headers.push_back({":status", std::to_string(response.status)});
         bool has_length = false;
-        for (auto& header : response.headers)
+        const auto append = [&](auto&& header)
         {
             if (header.name.starts_with(':') || header.name == "connection" ||
                 header.name == "transfer-encoding" || header.name == "upgrade")
-                continue;
+                return;
             has_length |= header.name == "content-length";
-            headers.push_back(std::move(header));
-        }
+            headers.push_back(std::forward<decltype(header)>(header));
+        };
+        for (auto& header : response.headers)
+            append(std::move(header));
+        for (const auto& header : response.static_headers.fields())
+            append(header);
         const auto expected_length = response.body_source->content_length();
         if (expected_length && !has_length)
             headers.push_back(
@@ -335,16 +474,36 @@ auto session::write_response(std::uint32_t stream_id,
             std::size_t offset = 0;
             while (offset < chunk->size())
             {
-                const auto size = std::min<std::size_t>(
-                    peer_.max_frame_size, chunk->size() - offset);
+                if (cancellation.is_cancelled() || goaway_received_)
+                    co_return std::unexpected(std::make_error_code(std::errc::operation_canceled));
+                const auto current = streams_.find(stream_id);
+                if (current == streams_.end())
+                    co_return std::expected<void, std::error_code>{};
+                if (send_window_ <= 0 || current->second.send_window().available() <= 0)
+                {
+                    auto waited = co_await cnetmod::async_timer_wait(*context_,
+                        std::chrono::milliseconds{1}, cancellation);
+                    if (!waited)
+                        co_return std::unexpected(waited.error());
+                    continue;
+                }
+                co_await writer_mutex_.lock();
+                cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
+                const auto found = streams_.find(stream_id);
+                if (found == streams_.end())
+                    co_return std::expected<void, std::error_code>{};
+                const auto available = std::min(send_window_, found->second.send_window().available());
+                if (available <= 0)
+                    continue;
+                const auto size = std::min({static_cast<std::size_t>(peer_.max_frame_size),
+                    chunk->size() - offset, static_cast<std::size_t>(available)});
                 if (expected_length &&
                     (total > *expected_length ||
                         size > *expected_length - total))
                     co_return std::unexpected(
                         std::make_error_code(std::errc::message_size));
-                co_await writer_mutex_.lock();
-                cnetmod::async_lock_guard guard{
-                    writer_mutex_, std::adopt_lock};
+                send_window_ -= static_cast<std::int32_t>(size);
+                (void)found->second.send_window().consume(static_cast<std::uint32_t>(size));
                 queue_frame({.type = frame_type::data,
                                 .stream_id = stream_id},
                     {chunk->data() + offset, size});
@@ -361,21 +520,16 @@ auto session::write_response(std::uint32_t stream_id,
         {
             co_await writer_mutex_.lock();
             cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
-            if (response.trailers.empty())
+            if (response.trailers.empty() && response.static_trailers.empty())
                 queue_frame({.type = frame_type::data,
                                 .flags = flag_end_stream,
                                 .stream_id = stream_id},
                     {});
             else
             {
-                auto trailers = encoder_.encode(response.trailers);
+                auto trailers = queue_response_trailers(stream_id, response);
                 if (!trailers)
                     co_return std::unexpected(trailers.error());
-                queue_frame({.type = frame_type::headers,
-                                .flags = static_cast<std::uint8_t>(
-                                    flag_end_headers | flag_end_stream),
-                                .stream_id = stream_id},
-                    *trailers);
             }
             auto written = co_await write_outbound_locked();
             if (!written)
@@ -387,7 +541,6 @@ auto session::write_response(std::uint32_t stream_id,
     co_await writer_mutex_.lock();
     cnetmod::async_lock_guard guard{writer_mutex_, std::adopt_lock};
     queue_response(stream_id, std::move(response));
-    streams_.erase(stream_id);
     co_return co_await write_outbound_locked();
 }
 
@@ -524,6 +677,7 @@ auto session::dispatch_ready() -> cnetmod::task<void>
     ready.swap(ready_requests_);
     auto batch_started = std::chrono::steady_clock::now();
     std::size_t batched_responses{};
+    std::uint32_t consumed_connection_credit{};
     for (auto& pending : ready)
     {
         const auto stream_id = pending.stream_id;
@@ -542,16 +696,31 @@ auto session::dispatch_ready() -> cnetmod::task<void>
             if (auto immediate = sync_handler_
                     ? sync_handler_(request, cancellation) : std::nullopt)
             {
-                schedule_flow_credit(stream_id, request.body.size());
-                queue_response(stream_id, std::move(*immediate));
+                // These complete requests have already received END_STREAM.
+                // Their synchronous consumer has finished, so no stream credit
+                // is needed. Return connection credit once on this owner loop
+                // instead of scheduling a child and locking once per RPC.
+                const auto bytes = request.body.size();
+                if (bytes > 0x7fff'ffffU - consumed_connection_credit)
+                    co_return;
+                consumed_connection_credit += static_cast<std::uint32_t>(bytes);
+                const bool source = static_cast<bool>(immediate->body_source);
+                if (source)
+                {
+                    if (!start_response_write(stream_id, std::move(*immediate)))
+                        co_return;
+                }
+                else
+                    queue_response(stream_id, std::move(*immediate));
                 release_request_headers(std::move(request.headers));
-                streams_.erase(stream_id);
+                if (source)
+                    continue;
                 ++batched_responses;
                 if (outbound_.size() >= response_batch_bytes ||
                     (batched_responses % response_batch_time_check_interval == 0 &&
                         std::chrono::steady_clock::now() - batch_started >= response_batch_max_age))
                 {
-                    if (!(co_await flush_outbound()))
+                    if (!(co_await flush_batched_outbound()))
                         co_return;
                     batch_started = std::chrono::steady_clock::now();
                     batched_responses = 0;
@@ -612,21 +781,21 @@ auto session::dispatch_ready() -> cnetmod::task<void>
         }
         if (response.body_source)
         {
-            cancel_token cancellation;
-            auto written = co_await write_response(
-                stream_id, std::move(response), cancellation);
-            if (!written)
+            if (pending.detached)
+            {
+                auto [entry, inserted] = streams_.try_emplace(stream_id, stream_id,
+                    static_cast<std::int32_t>(peer_.initial_window_size),
+                    static_cast<std::int32_t>(local_.initial_window_size), std::vector<header_field>{});
+                if (inserted)
+                    (void)entry->second.receive_headers({}, true);
+            }
+            if (!start_response_write(stream_id, std::move(response)))
                 co_return;
             batch_started = std::chrono::steady_clock::now();
             batched_responses = 0;
             continue;
         }
-        queue_response(stream_id, std::move(response));
-        // This request has already supplied END_STREAM and its complete
-        // response has been queued. Retaining it makes the per-connection
-        // stream map grow without bound for ordinary sequential RPC traffic.
-        if (!pending.detached)
-            streams_.erase(stream_id);
+        queue_response(stream_id, std::move(response), pending.detached);
         ++batched_responses;
         const bool size_limit_reached =
             outbound_.size() >= response_batch_bytes;
@@ -636,11 +805,24 @@ auto session::dispatch_ready() -> cnetmod::task<void>
                 response_batch_max_age;
         if (size_limit_reached || time_limit_reached)
         {
-            if (!(co_await flush_outbound()))
+            if (!(co_await flush_batched_outbound()))
                 co_return;
             batch_started = std::chrono::steady_clock::now();
             batched_responses = 0;
         }
+    }
+    if (consumed_connection_credit != 0)
+    {
+        if (consumed_connection_credit > static_cast<std::uint32_t>(
+                                             std::numeric_limits<std::int32_t>::max() - receive_window_))
+            co_return;
+        receive_window_ += static_cast<std::int32_t>(consumed_connection_credit);
+        const std::array<std::byte, 4> update{
+            static_cast<std::byte>(consumed_connection_credit >> 24),
+            static_cast<std::byte>(consumed_connection_credit >> 16),
+            static_cast<std::byte>(consumed_connection_credit >> 8),
+            static_cast<std::byte>(consumed_connection_credit)};
+        queue_frame({.type = frame_type::window_update}, update);
     }
     ready.clear();
     ready_requests_.swap(ready);
@@ -739,14 +921,22 @@ auto session::process_frame(frame_header header,
             return payload.empty() ? std::expected<void, std::error_code>{}
                                    : std::unexpected(std::make_error_code(
                                          std::errc::protocol_error));
+        const auto previous_initial_window = peer_.initial_window_size;
         if (auto error = decode_settings(payload, peer_); error)
             return std::unexpected(error);
+        const auto window_delta = static_cast<std::int64_t>(peer_.initial_window_size) -
+            previous_initial_window;
+        if (window_delta != 0)
+            for (auto& [id, active] : streams_)
+                if (!active.send_window().adjust(window_delta))
+                    return std::unexpected(std::make_error_code(std::errc::protocol_error));
         // Peer SETTINGS_HEADER_TABLE_SIZE constrains this endpoint's encoder;
         // decoder capacity is controlled by the table-size updates in HPACK blocks.
         encoder_.set_dynamic_table_limit(peer_.header_table_size);
         received_settings_ = true;
         queue_frame(
             {.type = frame_type::settings, .flags = flag_ack, .stream_id = 0}, {});
+        drain_pending_responses();
         return {};
     }
     if (header.type == frame_type::headers ||
@@ -823,6 +1013,7 @@ auto session::process_frame(frame_header header,
         auto [it, inserted] = streams_.try_emplace(
             header.stream_id, header.stream_id,
             static_cast<std::int32_t>(peer_.initial_window_size),
+            static_cast<std::int32_t>(local_.initial_window_size),
             std::move(reusable_headers));
         auto* decoded = inserted ? it->second.prepare_headers(end_stream) : nullptr;
         if (!decoded)
@@ -928,6 +1119,7 @@ auto session::process_frame(frame_header header,
                 return std::unexpected(
                     std::make_error_code(std::errc::protocol_error));
             send_window_ += static_cast<std::int32_t>(increment);
+            drain_pending_responses();
             return {};
         }
         // A stream-level update never changes the connection window. Updates
@@ -939,6 +1131,7 @@ auto session::process_frame(frame_header header,
             !found->second.send_window().increase(increment))
             return std::unexpected(
                 std::make_error_code(std::errc::protocol_error));
+        drain_pending_responses();
         return {};
     }
     if (header.type == frame_type::rst_stream)
@@ -950,6 +1143,11 @@ auto session::process_frame(frame_header header,
             found->second.body_stream()->fail(
                 std::make_error_code(std::errc::operation_canceled));
         streams_.erase(header.stream_id);
+        pending_responses_.erase(header.stream_id);
+        std::erase_if(ready_requests_, [&](const ready_request& ready)
+            {
+                return ready.stream_id == header.stream_id;
+            });
         return {};
     }
     if (header.type == frame_type::goaway)
@@ -973,7 +1171,7 @@ auto session::run(std::span<const std::byte> initial) -> cnetmod::task<void>
             co_return;
         }
         co_await dispatch_ready();
-        if (!(co_await flush_outbound()))
+        if (!(co_await flush_batched_outbound()))
         {
             co_await shutdown_streaming();
             co_return;
@@ -987,6 +1185,8 @@ auto session::run(std::span<const std::byte> initial) -> cnetmod::task<void>
         auto read = co_await reader_({buffer.data(), buffer.size()});
         if (!read || *read == 0)
         {
+            if (read)
+                (void)co_await flush_outbound();
             co_await shutdown_streaming();
             co_return;
         }
@@ -997,7 +1197,7 @@ auto session::run(std::span<const std::byte> initial) -> cnetmod::task<void>
             co_return;
         }
         co_await dispatch_ready();
-        if (!(co_await flush_outbound()))
+        if (!(co_await flush_batched_outbound()))
         {
             co_await shutdown_streaming();
             co_return;

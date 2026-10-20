@@ -416,7 +416,7 @@ auto request_context::get_header(std::string_view key) const
     }
     const case_insensitive_less less;
     for (const auto header : header_views_)
-        if (!less(header.name, key) && !less(key, header.name))
+        if (header.name.size() == key.size() && (header.name == key || (!less(header.name, key) && !less(key, header.name))))
             return header.value;
     return {};
 }

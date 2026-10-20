@@ -492,6 +492,11 @@ auto save_upload(upload_options opts) -> handler_fn
     };
 }
 
+auto take_h2_response(response& output) -> v2::server_response
+{
+    return detail::take_h2_response(output);
+}
+
 // =============================================================================
 // Date Cache Implementation
 // =============================================================================
@@ -781,6 +786,15 @@ auto server::local_endpoint()
 void server::set_router(router r)
 {
     router_ = std::move(r);
+}
+
+void server::set_h2_sync_adapter(v2::sync_server_handler handler,
+    v2::buffered_request_filter filter)
+{
+    if (static_cast<bool>(handler) != static_cast<bool>(filter))
+        throw std::invalid_argument("HTTP/2 synchronous adapters require a matching request filter");
+    h2_sync_adapter_ = std::move(handler);
+    h2_sync_filter_ = std::move(filter);
 }
 
 void server::use(middleware_fn mw)
@@ -1095,6 +1109,7 @@ auto server::handle_connection(socket client, io_context& io,
 
         if (ssl.get_alpn_selected() == "h2")
         {
+            (void)client.apply_options({.non_blocking = false, .no_delay = true});
             co_await handle_h2_tls(client, io, ssl, registration.cancellation,
                 registration.write_cancellation);
         }
@@ -1285,6 +1300,10 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
         if (!middlewares_.empty() || request.body_stream)
             return std::nullopt;
 
+        if (h2_sync_adapter_)
+            if (auto response = h2_sync_adapter_(request, cancellation))
+                return response;
+
         std::string_view method = "GET";
         std::string_view uri = "/";
         std::array<request_header_view, 32> headers{};
@@ -1332,16 +1351,26 @@ auto server::make_h2_sync_handler(io_context& io, socket& client)
 
 auto server::make_h2_buffered_request_filter() -> v2::buffered_request_filter
 {
-    if (!middlewares_.empty() || !std::ranges::any_of(router_.entries_,
-            [](const auto& route) { return static_cast<bool>(route.sync_handler); }))
+    const bool sync_routes = std::ranges::any_of(router_.entries_,
+        [](const auto& route)
+        {
+            return static_cast<bool>(route.sync_handler);
+        });
+    if (!middlewares_.empty() || (!sync_routes && !h2_sync_filter_))
         return {};
-    return [this](std::span<const v2::header_field> headers)
+    return [this, sync_routes](std::span<const v2::header_field> headers)
     {
+        if (h2_sync_filter_ && h2_sync_filter_(headers))
+            return true;
+        if (!sync_routes)
+            return false;
         std::string_view method = "GET", uri = "/";
         for (const auto& field : headers)
         {
-            if (field.name == ":method") method = field.value;
-            else if (field.name == ":path") uri = field.value;
+            if (field.name == ":method")
+                method = field.value;
+            else if (field.name == ":path")
+                uri = field.value;
         }
         const auto path = uri.substr(0, uri.find('?'));
         auto match = router_.match_borrowed(method, path);
