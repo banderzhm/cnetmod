@@ -5251,6 +5251,17 @@ auto main() -> int
 - 不要在 `with_params` 中混合手动与自动格式化
 - 不要在多 worker 场景使用单 `connection_pool`——应使用 `sharded_connection_pool`
 
+## 连接池与协议性能路径
+
+`async_get_connection()` 在正的池等待预算下优先尝试已有空闲连接，避免即时借用
+创建定时器；FIFO 等待者、争用和耗尽仍使用原有等待路径。默认归还仍执行 session
+reset。只有明确可复用当前 session 的调用方才使用 `return_without_reset()`；基准须
+把无 reset 的借还与默认 reset 分开报告。
+
+小于等于 4096 字节的包正文与四字节包头合并写入，每连接复用写缓冲。大包仍走原有
+分包路径，保留序列号及最大包长度恰好整倍数时的空终止包。参考：
+[MySQL packets](https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_packets.html)。
+
 ## 参考示例
 
 - `examples/database/mysql/mysql_crud.cpp` — 完整 CRUD、Prepared Statement、Pipeline
@@ -5810,6 +5821,17 @@ auto main() -> int
 - 不要忽略 `discard()` 标记——连接状态异常时用它通知池丢弃连接
 - 不要长时间持有 `pooled_connection`——及时归还以维持池吞吐量
 - 不要在多 worker 场景共享同一个 `connection_pool`——每个 worker 应持有独立池
+
+## 连接池与协议性能路径
+
+有正的借用预算且没有 FIFO 等待者时，`acquire()` 在锁内直接借出已有空闲连接，
+不为即时完成的操作创建超时定时器。没有可用连接、锁竞争、关闭或过期预算仍走原有
+可取消等待路径。普通借还按槽位增量维护 idle/checked-out 快照；扩容、重连和关闭
+仍完整刷新统计。
+
+客户端用每连接 8 KiB 的接收缓冲跨消息预读，不等待缓冲填满。长度上限和消息解析
+仍逐条执行；取消、断线和重连清空未读位置。协程不得并发操作同一客户端。
+协议参考：[PostgreSQL message formats](https://www.postgresql.org/docs/current/protocol-message-formats.html)。
 
 ## 参考示例
 
@@ -6690,6 +6712,17 @@ auto main() -> int
 及 `CNETMOD_REDIS_TEST_PORT` 后通过 CTest 运行；未启用时返回 77，由 CTest 标记 skipped。
 端口缺失或非法直接失败。测试服务须自行启动、隔离和回收；该入口不验证服务端宕机恢复，
 也不意味着 Redis/Valkey 的真实服务验收已经通过。
+
+## 连接池与协议性能路径
+
+正的池等待预算且调用方未取消时，借用优先尝试已有空闲连接，避免即时完成操作
+启动超时定时器；排队仍保留 FIFO、取消与关闭的归属逻辑。
+
+普通命令与 Pipeline 使用同一个有深度限制的 RESP 解析器消费完整聚合响应，
+分片时保留原始基址和累计偏移。整批 Pipeline 共用一个协程帧，直接向最终结果数组
+追加节点，避免每个命令及嵌套层的临时结果数组；节点保留实际 depth。此路径与独立 `resp3_parser`
+使用相同的 `max_embedded_depth` 上限。参考：
+[RESP specification](https://redis.io/docs/latest/develop/reference/protocol-spec/)。
 
 ## 参考示例
 

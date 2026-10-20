@@ -1,6 +1,7 @@
 namespace {
 
-auto read_mysql_test_packet(cnetmod::io_context& io, cnetmod::socket& peer)
+auto read_mysql_test_packet(cnetmod::io_context& io, cnetmod::socket& peer,
+    std::size_t maximum = 4096, std::uint8_t* sequence = nullptr)
     -> cnetmod::task<std::vector<std::uint8_t>>
 {
     std::array<std::uint8_t, 4> header{};
@@ -15,8 +16,10 @@ auto read_mysql_test_packet(cnetmod::io_context& io, cnetmod::socket& peer)
     }
     const std::size_t length = header[0] | (std::size_t{header[1]} << 8) |
         (std::size_t{header[2]} << 16);
-    ASSERT_TRUE(length <= 4096);
-    if (length > 4096)
+    if (sequence)
+        *sequence = header[3];
+    ASSERT_TRUE(length <= maximum);
+    if (length > maximum)
         co_return std::vector<std::uint8_t>{};
     std::vector<std::uint8_t> payload(length);
     offset = 0;

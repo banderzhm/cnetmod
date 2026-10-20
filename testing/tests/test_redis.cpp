@@ -721,6 +721,13 @@ TEST(redis_pool_never_reissues_a_closed_returned_lease)
             }
             auto* original = &lease->get();
             *lease = pooled_connection{};
+            cnetmod::cancel_token cancelled;
+            cancelled.cancel();
+            auto rejected_ready = co_await pool.async_get_connection(cancelled);
+            ASSERT_FALSE(rejected_ready.has_value());
+            if (!rejected_ready)
+                ASSERT_EQ(rejected_ready.error(), std::make_error_code(std::errc::operation_canceled));
+            ASSERT_EQ(pool.idle_count(), 1U);
             auto reused = pool.try_get_connection();
             if (!reused || &reused->get() != original || !reused->get().is_open())
             {
