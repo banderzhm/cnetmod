@@ -10851,6 +10851,15 @@ target_link_libraries(my_backend PRIVATE
 请求包中不存在的组件必须在配置阶段失败，不能等到链接阶段。消费者仍须使用与目标
 ID 一致的工具链和 ABI；系统依赖模式的 Unix SDK 还要求目标机器具有对应系统库。
 
+### 源码子目录消费
+
+需要跟随 cnetmod 源码构建的集成可在设置协议开关后使用
+`add_subdirectory(<cnetmod-source> <build-dir> EXCLUDE_FROM_ALL)`。Unix + Clang 下，
+cnetmod 会把 `-stdlib=libc++`、`-nostdinc++` 和匹配的 libc++ 头目录绑定到每个
+模块 target，并通过公开用法要求传递给消费目标。不要只在父工程全局追加这些参数：
+CMake 为导入模块生成的合成 BMI target 不保证继承父目录选项，可能把 libc++ 的
+`std.cppm` 与系统 libstdc++ 头混合，产生难以理解的标准库声明错误。
+
 ## 发布操作
 
 1. 在 `develop` 完成功能和三配置门禁。

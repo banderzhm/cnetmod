@@ -249,6 +249,18 @@ function(configure_cxx_modules)
 
     if(UNIX AND STDLIB_MODULE_DIRS AND STDLIB_INCLUDE_DIRS)
         # Linux/macOS: libc++ standard library modules
+        # Keep the standard-library selection on the module target itself.
+        # CMake may synthesize helper targets while producing module BMIs;
+        # directory-level add_compile_options() are not reliably copied to
+        # those helpers when cnetmod is consumed through add_subdirectory().
+        # Without these target options the libc++ std.cppm can accidentally
+        # include the host libstdc++ headers.
+        target_compile_options(${CFG_TARGET} PUBLIC
+            -stdlib=libc++
+            -nostdinc++
+            "SHELL:-isystem ${STDLIB_INCLUDE_DIRS}"
+            -Wno-unused-command-line-argument
+        )
         target_include_directories(${CFG_TARGET} SYSTEM PUBLIC
             "$<BUILD_INTERFACE:${STDLIB_INCLUDE_DIRS}>"
         )
