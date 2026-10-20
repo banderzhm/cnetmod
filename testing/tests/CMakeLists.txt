@@ -18,6 +18,7 @@ set(TEST_SOURCES
     test_deadline.cpp
     test_task_group.cpp
     test_task.cpp
+    test_stream_write.cpp
     test_lazy.cpp
     test_database_datetime.cpp
     test_configuration_properties.cpp

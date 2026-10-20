@@ -18,17 +18,12 @@ namespace ws = cn::ws;
 namespace {
 auto echo(ws::ws_context& ctx) -> cn::task<void>
 {
-    while (ctx.is_open())
-    {
-        auto msg = co_await ctx.recv();
-        if (!msg || msg->op == ws::opcode::close)
-            break;
-        auto result = msg->op == ws::opcode::binary
-            ? co_await ctx.send_binary(msg->payload)
-            : co_await ctx.send_text(msg->as_string());
-        if (!result)
-            break;
-    }
+    (void)co_await ctx.raw_connection().async_process_messages(
+        [](ws::opcode op, std::span<const std::byte> payload, ws::message_writer& output)
+            -> std::expected<void, std::error_code>
+        {
+            return output.send(op, payload);
+        });
 }
 
 template <typename T>
@@ -51,7 +46,7 @@ auto main(int argc, char** argv) -> int
         logger::shutdown();
         return 2;
     }
-    cn::server_context context(workers, 1);
+    cn::server_context context(workers, 1, {.enabled = true, .auto_assign_workers = true});
     ws::server server(context);
 #ifdef CNETMOD_HAS_SSL
     std::optional<cn::ssl_context> tls;

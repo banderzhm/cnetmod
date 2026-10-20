@@ -3,6 +3,9 @@ import cnetmod.core.net_init;
 import cnetmod.core.log;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
+import cnetmod.executor.pool;
+import cnetmod.coro.spawn;
+import cnetmod.coro.timer;
 import cnetmod.protocol.websocket;
 
 namespace ws = cnetmod::ws;
@@ -109,6 +112,52 @@ void check_disconnected_operations()
     };
     cnetmod::sync_wait(run());
 }
+
+void check_appended_frames()
+{
+    for (bool mask : {false, true})
+    {
+        std::vector<std::byte> frames(3, std::byte{0x55});
+        std::size_t offset = frames.size();
+        for (std::size_t size : {0U, 5U, 125U, 126U, 65535U, 65536U})
+        {
+            std::vector<std::byte> payload(size, std::byte{0xa5});
+            ws::append_frame_into(frames, ws::opcode::binary, payload, mask);
+            auto parsed = ws::parse_frame_header(std::span{frames}.subspan(offset));
+            require(parsed && parsed->first.payload_length == size, "appended frame header");
+            auto body = std::span{frames}.subspan(offset + parsed->second, size);
+            if (mask)
+                ws::apply_mask(body, parsed->first.masking_key);
+            require(std::ranges::equal(body, payload), "appended frame payload");
+            offset += parsed->second + size;
+        }
+        require(frames[0] == std::byte{0x55} && frames[2] == std::byte{0x55},
+            "appending preserves existing prefix");
+    }
+}
+
+void check_sharded_stop()
+{
+    cnetmod::server_context context(2, 1);
+    ws::server server(context);
+    require(static_cast<bool>(server.listen("127.0.0.1", 0)), "sharded listener on ephemeral port");
+    bool completed = false;
+    const auto stop_later = [&]() -> cnetmod::task<void>
+    {
+        (void)co_await cnetmod::async_sleep(context.accept_io(), std::chrono::milliseconds{10});
+        server.stop();
+    };
+    const auto work = [&]() -> cnetmod::task<void>
+    {
+        cnetmod::spawn(context.accept_io(), stop_later());
+        co_await server.run();
+        completed = true;
+        context.stop();
+    };
+    cnetmod::spawn(context.accept_io(), work());
+    context.run();
+    require(completed, "stop joins all worker accept operations");
+}
 } // namespace
 
 auto main() -> int
@@ -120,6 +169,8 @@ auto main() -> int
         check_mask();
         check_reused_frames();
         check_disconnected_operations();
+        check_appended_frames();
+        check_sharded_stop();
         logger::info{"WebSocket mask, frame reuse, boundaries and control regressions passed"};
     }
     catch (const std::exception& error)

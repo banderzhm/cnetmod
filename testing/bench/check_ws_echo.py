@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Low-volume wire checks against bench_ws_server (plain WS or WSS)."""
 import argparse
+from contextlib import nullcontext
 import base64
 import hashlib
 import os
@@ -42,11 +43,11 @@ def receive(sock):
     return first & 0xf, exact(sock, size)
 
 
-def check(sock, port):
+def upgrade(sock, port, extra_headers="", initial_frames=b""):
     key = base64.b64encode(os.urandom(16)).decode()
     request = (f"GET /ws HTTP/1.1\r\nHost: localhost:{port}\r\nUpgrade: websocket\r\n"
-               f"Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n\r\n")
-    sock.sendall(request.encode())
+               f"Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: {key}\r\n{extra_headers}\r\n")
+    sock.sendall(request.encode() + initial_frames)
     headers = b""
     while not headers.endswith(b"\r\n\r\n"):
         headers += exact(sock, 1)
@@ -56,6 +57,10 @@ def check(sock, port):
     fields = dict((name.strip().lower(), value.strip())
                   for name, value in (line.split(b":", 1) for line in headers.split(b"\r\n")[1:] if b":" in line))
     assert fields.get(b"sec-websocket-accept") == accept, headers
+
+
+def check(sock, port):
+    upgrade(sock, port)
     # Empty data and both extended-length boundaries, text and binary opcodes.
     for size in (0, 5, 125, 126, 4096, 65535, 65536):
         for opcode in (1, 2):
@@ -82,13 +87,15 @@ def main():
     parser.add_argument("--port", type=int, default=19091)
     parser.add_argument("--cert")
     parser.add_argument("--key")
+    parser.add_argument("--server-log")
     args = parser.parse_args()
     if bool(args.cert) != bool(args.key):
         parser.error("pass both --cert and --key")
     command = [args.server, str(args.port), "1"]
     if args.cert:
         command.extend([args.cert, args.key])
-    with subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as server:
+    with (open(args.server_log, "wb") if args.server_log else nullcontext(subprocess.DEVNULL)) as output, \
+            subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT) as server:
         try:
             deadline = time.monotonic() + 10
             while True:

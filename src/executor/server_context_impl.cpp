@@ -291,12 +291,33 @@ void server_context::spawn_next(task<void> t)
 
 void server_context::run()
 {
+    auto processors = affinity_.worker_processors;
+    if (affinity_.enabled && affinity_.auto_assign_workers && processors.empty())
+    {
+#ifdef CNETMOD_PLATFORM_LINUX
+        cpu_set_t eligible;
+        CPU_ZERO(&eligible);
+        if (::pthread_getaffinity_np(::pthread_self(), sizeof(eligible), &eligible) == 0)
+            for (unsigned i = 0; i < CPU_SETSIZE; ++i)
+                if (CPU_ISSET(i, &eligible))
+                    processors.push_back(i);
+#elif defined(CNETMOD_PLATFORM_WINDOWS)
+        GROUP_AFFINITY eligible{};
+        if (::GetThreadGroupAffinity(::GetCurrentThread(), &eligible))
+            for (unsigned i = 0; i < sizeof(KAFFINITY) * 8U; ++i)
+                if ((eligible.Mask & (KAFFINITY{1} << i)) != 0)
+                    processors.push_back(eligible.Group * sizeof(KAFFINITY) * 8U + i);
+#else
+        for (unsigned i = 0; i < std::thread::hardware_concurrency(); ++i)
+            processors.push_back(i);
+#endif
+    }
     threads_.reserve(workers_.size());
     for (std::size_t index{}; index < workers_.size(); ++index)
     {
         auto processor = std::optional<unsigned>{};
-        if (affinity_.enabled && !affinity_.worker_processors.empty())
-            processor = affinity_.worker_processors[index % affinity_.worker_processors.size()];
+        if (affinity_.enabled && !processors.empty())
+            processor = processors[index % processors.size()];
         threads_.emplace_back([context = workers_[index].get(), processor]
             {
                 if (processor)
