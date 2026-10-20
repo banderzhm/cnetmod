@@ -1,0 +1,49 @@
+Test project /root/cnetmod-grpc-20261020/verified-build
+      Start 12: test_task_group
+ 1/20 Test #12: test_task_group .......................................   Passed    0.00 sec
+      Start 13: test_task
+ 2/20 Test #13: test_task .............................................   Passed    0.05 sec
+      Start 17: test_channel
+ 3/20 Test #17: test_channel ..........................................   Passed    0.00 sec
+      Start 18: test_mutex
+ 4/20 Test #18: test_mutex ............................................   Passed    0.00 sec
+      Start 22: test_wait_group
+ 5/20 Test #22: test_wait_group .......................................   Passed    0.00 sec
+      Start 29: test_otlp_exporter
+ 6/20 Test #29: test_otlp_exporter ....................................   Passed    0.96 sec
+      Start 34: test_http_router
+ 7/20 Test #34: test_http_router ......................................   Passed    0.00 sec
+      Start 43: test_http2_hpack
+ 8/20 Test #43: test_http2_hpack ......................................   Passed    0.00 sec
+      Start 44: test_http2_stream
+ 9/20 Test #44: test_http2_stream .....................................   Passed    0.15 sec
+      Start 46: test_grpc
+10/20 Test #46: test_grpc .............................................   Passed    0.01 sec
+      Start 47: test_grpc_proto
+11/20 Test #47: test_grpc_proto .......................................   Passed    0.00 sec
+      Start 53: test_ssl_shutdown
+12/20 Test #53: test_ssl_shutdown .....................................   Passed    0.07 sec
+      Start 56: test_grpc_proto_python
+13/20 Test #56: test_grpc_proto_python ................................   Passed    0.02 sec
+      Start 57: test_grpc_codegen_python
+14/20 Test #57: test_grpc_codegen_python ..............................   Passed    0.03 sec
+      Start 58: test_grpc_codegen_contract_python
+15/20 Test #58: test_grpc_codegen_contract_python .....................   Passed    0.05 sec
+      Start 59: test_grpcio_cross_process_interop_python
+16/20 Test #59: test_grpcio_cross_process_interop_python ..............   Passed    0.14 sec
+      Start 60: test_grpcio_server_to_cnetmod_client_interop_python
+17/20 Test #60: test_grpcio_server_to_cnetmod_client_interop_python ...   Passed    0.13 sec
+      Start 61: test_grpc_arena_harness
+18/20 Test #61: test_grpc_arena_harness ...............................   Passed    0.05 sec
+      Start 62: test_grpc_official_analysis
+19/20 Test #62: test_grpc_official_analysis ...........................   Passed    0.04 sec
+      Start 63: test_grpc_arena_smoke
+20/20 Test #63: test_grpc_arena_smoke .................................   Passed    0.98 sec
+
+100% tests passed out of 20
+
+Label Time Summary:
+shutdown    =   0.07 sec*proc (1 test)
+tls         =   0.07 sec*proc (1 test)
+
+Total Test time (real) =   2.69 sec

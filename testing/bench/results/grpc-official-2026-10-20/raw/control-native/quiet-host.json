@@ -1,0 +1,6 @@
+{
+  "sample_interval_seconds": 0.5,
+  "scope": "Linux /proc compiler and build-tool activity; Windows and VM neighbours are not observable",
+  "valid": true,
+  "events": []
+}

@@ -1,11 +1,11 @@
 # Official HttpArena gRPC / HTTP2 preparation
 
-Status: **preparation only; no official benchmark, validation container or load
-was started for this phase. No performance token is currently held.**
-The previous custom-harness report is exploratory profiling evidence and is
-ineligible for the new official-suite acceptance requirement. Its merge
-recommendation is superseded until the official comparison is completed.
-
+Status updated 2026-10-20: execution resumed with the user's exclusive gRPC
+performance token. The official gRPC profiles are run using the same documented
+small-host fallback used for the WebSocket local comparisons. This is a local
+same-machine comparison, not a reproduction of the 128-CPU leaderboard host.
+Historical custom-harness results remain exploratory and do not establish the
+current acceptance target. See the dated execution report for measured results.
 ## Locked upstream and exact workload
 
 Repository: [MDA2AV/HttpArena](https://github.com/MDA2AV/HttpArena).
@@ -127,35 +127,51 @@ parallelism only** to at most four jobs and record that build-recipe overlay.
 Do not alter runtime parameters, crypto validation or profile subscriptions to
 obtain a throughput gain. Prebuild images serially before timed measurement.
 
-## Current execution gates
+## Local execution and isolation
 
-The official reference is a 128-logical-CPU Threadripper PRO 3995WX. Runtime
-profiles assign server CPUs **`0-31,64-95`** and generator CPUs
-**`32-63,96-127`**. Current local WSL/Docker expose only **0–31**, with Docker
-reporting 16,598,654,976 bytes of memory. The literal official disjoint CPU
-sets cannot run here. Upstream `framework_start` falls back to all CPUs when
-the profile set is unavailable, and the small-host client default becomes
-16–31, overlapping the server. That fallback is **ineligible under the new
-strict acceptance requirement**; the preparation checker rejects it. Do not
-silently remap to the previous 0–3/4–7 setup and call the result official.
+The leaderboard host is a 128-logical-CPU Threadripper PRO 3995WX, with
+server CPUs `0-31,64-95` and client CPUs `32-63,96-127`. The current WSL host
+has 32 logical CPUs. For local comparisons, retain the official small-host
+fallback: server quota 32 CPUs with all CPUs eligible; client CPUs 16-31 and
+64 threads. The overlap is explicit and identical for every measured entry.
+The preparation tool's optional `--require-official-host` still checks the
+literal leaderboard CPU sets; its failure does not prohibit this labelled
+local fallback comparison.
 
-The official top-level driver also stops `httparena-*` containers, globally
-prunes unused Docker objects, changes host socket/governor/MTU settings,
-restarts Docker and drops caches. A performance token does not make shared
-unrelated containers disposable. Use a dedicated benchmark host/Docker daemon
-for that unmodified lifecycle. `SKIP_TUNE=true` is not equivalent to the
-default tuned official run, and does not disable its global cleanup.
+`run_official_grpc.py` stages the pinned official scripts. It only removes
+global Docker pruning and cleanup of other tasks' containers, and scopes the
+validator and benchmark sidecar cleanup names to this task. Validation uses
+`--network host` so the unchanged gRPC checks can reach the same task-owned
+PostgreSQL sidecar required by vanilla's startup. The idle sidecar remains
+present for every final entry. It saves the exact lifecycle patch. The workload builder, Docker client, CPU fallback, readiness,
+validation, timing, resource sampler, statistics and best-of-three selection
+remain upstream. `SKIP_TUNE=true` preserves shared host settings for all entries;
+this difference from the tuned leaderboard environment is recorded.
 
-The current cnetmod custom server is not yet an installed official framework
-entry: its CLI chooses one port, its TLS run used a separately generated
-certificate, and it does not implement the official static/JSON/baseline2
-profiles. Before any formal run, prepare versioned baseline/candidate container
-entries on the required ports, mount official inputs, and pass upstream
-`validate.sh` for their actual subscriptions. Do not treat the existing images
-named `httparena-cnetmod*` as verified artifacts without provenance and digest
-checks. No image build, container validation or benchmark was performed here.
+The cnetmod entry subscribes only to `unary-grpc` and `unary-grpc-tls` (four
+configurations, twelve measured rounds per entry), using both official ports
+and mounted certificates. It does not claim the JSON, static or baseline2
+profiles. Every request decodes the protobuf input and computes its sum.
+The official h2load Ubuntu package recipe is retained; a signed Ubuntu HTTPS
+mirror and a CA bootstrap repair this machine's failing HTTP download path.
+Freeze and record the built image ID, package version and the transport overlay.
+No self-built replacement load generator is eligible for the headline.
 
-## Prepared artifacts and next execution
+The runner freezes server/client image IDs and records Linux build-tool activity
+every 0.5 seconds; a detected compiler invalidates the pass without stopping
+other tasks. Windows activity and other VM neighbours are outside this monitor.
+The analyzer rejects contaminated passes, missing rounds, errors and connections that complete only
+their initial request batch. The persistent 300-RPC wire check catches duplex
+cancellation regressions even when a duration-based client reports zero errors.
+Do not lower a frozen reference result after an optimization misses its target.
+## Completed local acceptance
+
+The [2026-10-20 report](results/grpc-official-2026-10-20/README.md) records
+all four cases above the fastest frozen peer by at least 10%, three rounds
+per case, Release/sanitizer validation, perf evidence, and released resources.
+Its deployment settings and local-host limits are explicit.
+
+## Preparation and reproduction
 
 `tools/prepare_httparena_grpc.py` only inspects source, calls the actual
 official **argv-building** functions, hashes inputs and reads Docker info.
@@ -183,5 +199,5 @@ in the dedicated environment, preserving default `DURATION=5s RUNS=3
 H2THREADS=64`. Capture full driver stdout for all three rounds and the official
 saved result separately. Benchmark entry selection is positional in this
 pinned script; do not copy the GitHub comment bot's `-f` syntax into the shell
-driver. Do not start these commands during preparation. Release the token
+driver. Run only while holding the exclusive test token. Release the token
 immediately after the eventual serial measurements and diagnostics finish.

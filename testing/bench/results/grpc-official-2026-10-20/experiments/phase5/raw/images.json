@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-phase5": {
+    "image": "sha256:f3f589979482e29aee864a0b14840dfc249620070e94747bd7ec6ae8204efb3d",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "051af71daa42461d292fbebce5af0eba64d0a98111c659d2cbcd065779461b52",
+    "binary_sha256": "9546ea78b8af647948c2108caf27e90a7f7351eed21e28dc6a58ff445e15cc91",
+    "runtime": "32 workers/listener; default batch8 CQ256; independent bounded writer; send flow enforced"
+  }
+}

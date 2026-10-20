@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-phase3-pinned16": {
+    "image": "sha256:f3eb950d77ab5e51347d75f60c25607ee88877ec3a91d30a41685eaf317aa55f",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "14d6a3e7d9de1c5a5a8ef92179424c359a31190078f1170916d7327f1bfbb059",
+    "binary_sha256": "3df5142a1552ca11dae29cd601e8b5f8812d17e6a40f187d2c2ed9a6e9fd1228",
+    "runtime": "16 workers per listener, taskset 0-15; Docker quota32; official client CPUs16-31 and64threads unchanged"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "cnetmod-grpc-phase11-b16": {
+    "image": "sha256:a0348afe01d5b3b4ba15d9bfbe72a96912ebcdedb547057e00b18072beccd0c7",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "1dcf6d601d35bc35a627e6a4983624efb5359dd4d546c811c016e391e893d6eb",
+    "binary_sha256": "fb6b04935f17e89756ddd6a748fd9db81b2f14779975cc18ef642100cd5de4a5",
+    "runtime": "32 workers; no affinity; native ThinLTO; submit batch 16, CQE tick 512",
+    "source_sha": "97dc944dfa3d1d40d224efeb1aa2f9c2a01a2b9d"
+  },
+  "cnetmod-grpc-phase11-b32": {
+    "image": "sha256:ad984e0847d62ca5b0859a1c3306605b0017823c89855cd18a5c8fb7c4e491a8",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "1dcf6d601d35bc35a627e6a4983624efb5359dd4d546c811c016e391e893d6eb",
+    "binary_sha256": "fb6b04935f17e89756ddd6a748fd9db81b2f14779975cc18ef642100cd5de4a5",
+    "runtime": "32 workers; no affinity; native ThinLTO; submit batch 32, CQE tick 1024",
+    "source_sha": "97dc944dfa3d1d40d224efeb1aa2f9c2a01a2b9d"
+  }
+}

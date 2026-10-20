@@ -1,0 +1,23 @@
+--- official/cardigan/Dockerfile
++++ local/cardigan/Dockerfile
+@@ -1,16 +1,17 @@
+ FROM maven:3.9-eclipse-temurin-26 AS build
++ENV JAVA_TOOL_OPTIONS="-XX:ActiveProcessorCount=4"
+ 
+ WORKDIR /src
+ COPY pom.xml ./
+-RUN mvn -q -DskipTests dependency:go-offline
++RUN mvn -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7897 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7897 -q -DskipTests dependency:go-offline
+ COPY LICENSE ./
+ COPY src ./src
+-RUN mvn -q -DskipTests package dependency:copy-dependencies \
++RUN mvn -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7897 -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7897 -q -DskipTests package dependency:copy-dependencies \
+     -DincludeScope=runtime -DoutputDirectory=/deps
+ 
+ FROM eclipse-temurin:26-jre
+ 
+-RUN apt-get update \
++RUN sed -i -E 's|http://(archive.ubuntu.com/ubuntu\|security.ubuntu.com/ubuntu)|https://mirrors.tuna.tsinghua.edu.cn/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources && apt-get update \
+     && apt-get install -y --no-install-recommends libssl3 \
+     && rm -rf /var/lib/apt/lists/*
+ 

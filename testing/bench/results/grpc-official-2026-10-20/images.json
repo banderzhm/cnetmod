@@ -1,0 +1,259 @@
+{
+  "cnetmod-grpc-accepted2": {
+    "image": "sha256:53fdd406d64f2fa0f01a6b512ceddeabd78ea148a1f3a9fd10a34d8161db274c",
+    "source_sha": "70975f8d1b1939cb21cc1a00115a0c276c298c0f",
+    "source_patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "binary_sha256": "5602f5c35c24ec03feb27d7d6021afd0b47c4c16b706da84cc2de0b6220a01de",
+    "runtime": "16 individually pinned workers; server CPUs0-15; client CPUs16-31; native ThinLTO FP; default batch8 CQ256; compile jobs4, link pool1 and backend threads4"
+  },
+  "cnetmod-grpc-cardigan-certified": {
+    "image": "sha256:72bbf56b1ab41066309118195524380de8cf95aedbb861a41e87e66e7bd8eee5",
+    "tests": [
+      "unary-grpc",
+      "unary-grpc-tls"
+    ],
+    "language": "Java",
+    "type": "engine",
+    "source_entry": "cardigan",
+    "source_meta": {
+      "display_name": "cardigan",
+      "language": "Java",
+      "type": "engine",
+      "engine": "io_uring",
+      "description": "Java HTTP engine built on io_uring, Panama FFI, virtual threads, and thread-per-core event loops.",
+      "repo": "https://github.com/phjeltman/cardigan",
+      "enabled": true,
+      "tests": [
+        "baseline",
+        "latency-1m",
+        "latency-10k",
+        "pipelined",
+        "limited-conn",
+        "8gbit",
+        "json-tls",
+        "baseline-h2",
+        "static-h2",
+        "baseline-h2c",
+        "unary-grpc",
+        "unary-grpc-tls"
+      ],
+      "maintainers": [
+        "phjeltman"
+      ]
+    }
+  },
+  "cnetmod-grpc-control-native": {
+    "image": "sha256:5041c73cf0255b81285c0764695a871b63da36150a72aade9b970cbd60b092bc",
+    "source_sha": "036f369f387272f3689bda72468ccc454b6b3e2d",
+    "binary_sha256": "a8173b1936057a14f6892f884a6994f33a10a9b942e6729107213aabc77d1a72",
+    "runtime": "16 individually pinned workers; CPUs0-15; native ThinLTO FP; default batch8 CQ256; compile jobs4, link pool1 and backend threads4"
+  },
+  "cnetmod-grpc-helidon-certified": {
+    "image": "sha256:b7e2b2eababe2f306212733395fbcf093a7a2d4ac1376c306dff9f8dc5df4974",
+    "language": "Java",
+    "type": "framework",
+    "tests": [
+      "unary-grpc",
+      "unary-grpc-tls"
+    ],
+    "source_entry": "helidon-production",
+    "source_meta": {
+      "display_name": "helidon-production",
+      "language": "Java",
+      "type": "flagship",
+      "mode": "standard",
+      "completeness": {
+        "routing": true,
+        "middleware": true,
+        "request": true,
+        "response": true
+      },
+      "engine": "níma",
+      "description": "Helidon SE 27.0.0 on Níma WebServer with Java 27, config-based static content with precompressed sidecars, HTTP/2, gRPC, and WebSocket support.",
+      "repo": "https://github.com/helidon-io/helidon",
+      "enabled": true,
+      "tests": [
+        "baseline",
+        "latency-1m",
+        "latency-10k",
+        "latency-500k-8cpu",
+        "pipelined",
+        "limited-conn",
+        "async",
+        "json-comp",
+        "json-tls",
+        "static-tls",
+        "8gbit",
+        "baseline-h2",
+        "static-h2",
+        "baseline-h2c",
+        "json-h2c",
+        "echo-ws",
+        "echo-ws-pipeline",
+        "echo-ws-limited",
+        "unary-grpc",
+        "unary-grpc-tls",
+        "async-db"
+      ],
+      "maintainers": [
+        "tomas-langer"
+      ]
+    }
+  },
+  "cnetmod-grpc-libuvcpp-certified": {
+    "image": "sha256:e7072e438709a2d9c442b67eec6f7348260085e32d00b249efb479a80a075b83",
+    "tests": [
+      "unary-grpc",
+      "unary-grpc-tls"
+    ],
+    "language": "C++",
+    "type": "emerging",
+    "source_entry": "libuvcpp",
+    "source_meta": {
+      "display_name": "libuvcpp",
+      "language": "C++",
+      "type": "emerging",
+      "mode": "standard",
+      "completeness": {
+        "routing": true,
+        "middleware": true,
+        "request": true,
+        "response": true
+      },
+      "engine": "libuv",
+      "description": "libuvcpp on the libuv event loop, one loop per available core. Routing, path and query params, static files and WebSocket through uvcpp_web_app, JSON written per request by the framework's own uvcpp_json_writer (values read out of the uvcpp_json DOM, no pre-rendered bytes), gzip through the built-in response compression, async Postgres through uvcpp_db_pool, and gRPC unary calls through the uvcpp_grpc module. One process serves HTTP/1.1 and prior-knowledge h2c on 8080, h2c on 8082, HTTP/2 over TLS on 8443, and HTTP/3 on 8443/udp, all from the same build; the gateway stacks put a stock Caddy edge in front of it.",
+      "repo": "https://github.com/Antruly/libuvcpp",
+      "enabled": true,
+      "tests": [
+        "baseline",
+        "pipelined",
+        "limited-conn",
+        "async",
+        "async-db",
+        "json-comp",
+        "json-tls",
+        "8gbit",
+        "static-tls",
+        "baseline-h2",
+        "static-h2",
+        "baseline-h2c",
+        "json-h2c",
+        "baseline-h3",
+        "static-h3",
+        "gateway-64",
+        "gateway-h3",
+        "production-stack",
+        "unary-grpc",
+        "unary-grpc-tls",
+        "echo-ws",
+        "echo-ws-pipeline",
+        "echo-ws-limited",
+        "latency-1m",
+        "latency-10k",
+        "latency-500k-8cpu"
+      ],
+      "maintainers": [
+        "Antruly"
+      ]
+    }
+  },
+  "cnetmod-grpc-trillium-recheck": {
+    "image": "sha256:5b445863b892f0911cf646d76b5eff29a581729b8acbdb1c3aea7a416979fefb",
+    "tests": [
+      "unary-grpc",
+      "unary-grpc-tls"
+    ],
+    "language": "Rust",
+    "type": "framework",
+    "source_entry": "trillium",
+    "source_meta": {
+      "display_name": "trillium",
+      "language": "Rust",
+      "type": "emerging",
+      "mode": "standard",
+      "completeness": {
+        "routing": true,
+        "middleware": true,
+        "request": true,
+        "response": true
+      },
+      "engine": "trillium-http",
+      "description": "Trillium 1.x async Rust web framework on tokio. trillium-rustls for TLS (h1 + h2 via ALPN), trillium-quinn for HTTP/3, trillium-websockets for /ws, trillium-static for /static/* served from disk per request, trillium-compression middleware for runtime gzip/brotli, trillium-api for JSON handlers, trillium-grpc for the benchmark.BenchmarkService gRPC endpoints, deadpool-postgres for async-db and crud.",
+      "repo": "https://github.com/trillium-rs/trillium",
+      "enabled": true,
+      "tests": [
+        "baseline",
+        "latency-1m",
+        "latency-10k",
+        "latency-500k-8cpu",
+        "async",
+        "pipelined",
+        "limited-conn",
+        "json-comp",
+        "json-tls",
+        "8gbit",
+        "static-tls",
+        "async-db",
+        "fortunes",
+        "baseline-h2",
+        "static-h2",
+        "baseline-h2c",
+        "json-h2c",
+        "baseline-h3",
+        "static-h3",
+        "unary-grpc",
+        "unary-grpc-tls",
+        "echo-ws",
+        "echo-ws-pipeline",
+        "echo-ws-limited",
+        "gateway-64",
+        "gateway-h3"
+      ],
+      "maintainers": [
+        "jbr"
+      ]
+    }
+  },
+  "cnetmod-grpc-vanilla-certified": {
+    "image": "sha256:cd9f30c7784909af002767867ce3f17f82e400543d8581835649560775add62b",
+    "tests": [
+      "unary-grpc"
+    ],
+    "language": "V",
+    "type": "engine",
+    "source_entry": "vanilla-epoll",
+    "source_meta": {
+      "display_name": "vanilla-epoll",
+      "language": "V",
+      "type": "engine",
+      "engine": "epoll",
+      "description": "vanilla is a minimalist, high-performance HTTP server written in V: multi-threaded, non-blocking epoll I/O, lock-free, copy-free, SO_REUSEPORT. Handlers are pure (request)->[]u8 returning raw response bytes. JSON is built in a single allocation with precomputed prefixes (no per-request reflection); json-comp gzips on Accept-Encoding; json-tls terminates TLS 1.3 (Mbed TLS 4) on :8081 with ALPN http/1.1, reusing the same allocation-free /json serializer; static-tls serves the 20 /static files on :8081 through vanilla's static_assets (br/gzip negotiation; snapshots re-checked against the disk, so a replaced file is served at once), sending bodies of 16 KiB or more with sendfile(2) over kTLS; fortunes renders the DB rows + a runtime row with HTML escaping; async-db/crud/fortunes use the native async pg_async driver with per-worker pipelined pools. Pinned V master (built from source, bootstrap pinned). async parks each /delay/{ms} on a one-shot timerfd from a per-worker free-list and answers only once it reports an expiration; 8gbit echoes the POST body on the :8081 TLS listener (Content-Length or chunked, per-worker dechunk buffer); production-stack's /api cache-aside (X-Cache MISS/HIT, 1 s items / 30 s users TTL, invalidated on write) runs in-process — no Redis required. The h2c profiles run on an h2c-only epoll listener on :8082 (an HTTP/1.1 request there gets 505): the connection preface (PRI *) parses as an ordinary request, the handler hands the connection to vanilla's http2 module (core.queue_takeover) and appends the server SETTINGS, and every later burst goes to the RFC 9113 machine, which surfaces a request only when it is complete; /json reuses the same prefixes and body writer. unary-grpc takes the same preface on :8080 and answers GetSum as HEADERS, the SumReply as DATA, then grpc-status 0 as trailers. The echo-ws profiles share the :8080 engine: GET /ws validates the RFC 6455 upgrade, appends the 101 and hands the connection over (core.queue_takeover), after which every readable burst goes to a ConnHandler that walks the frames (echo, ping/pong, close) instead of the HTTP/1.1 parser; a pipelined burst is drained in one call and coalesced into one write, and the accept key is computed on the stack, so an upgrade allocates nothing. One worker per CPU of the container's cpuset.",
+      "repo": "https://github.com/enghitalo/vanilla",
+      "enabled": true,
+      "tests": [
+        "baseline",
+        "async",
+        "latency-1m",
+        "latency-10k",
+        "latency-500k-8cpu",
+        "pipelined",
+        "limited-conn",
+        "json-comp",
+        "json-tls",
+        "static-tls",
+        "8gbit",
+        "async-db",
+        "fortunes",
+        "baseline-h2c",
+        "json-h2c",
+        "unary-grpc",
+        "echo-ws",
+        "echo-ws-pipeline",
+        "echo-ws-limited"
+      ],
+      "maintainers": [
+        "enghitalo"
+      ]
+    }
+  }
+}

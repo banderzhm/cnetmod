@@ -1,0 +1,17 @@
+{
+  "cnetmod-grpc-phase7-pin32": {
+    "image": "sha256:1f3c23f830e5daf4936bc7fc3bd54bf08045a0426372f7c8cbe5cbf51da63eb0",
+    "binary_sha256": "5ddb7c43eb702df4be8ee0feffeba087df828e6a171eaeb0177965bb7a1fea13",
+    "runtime": "32 individually pinned workers; CPUs 0-31; default batch8 CQ256"
+  },
+  "cnetmod-grpc-phase7-pin16": {
+    "image": "sha256:2496cbdd78bdae165ed36fb0a9324ee49ae7108b360bac8b63c983f7faeab417",
+    "binary_sha256": "5ddb7c43eb702df4be8ee0feffeba087df828e6a171eaeb0177965bb7a1fea13",
+    "runtime": "16 individually pinned workers; CPUs 0-15; default batch8 CQ256"
+  },
+  "cnetmod-grpc-phase7-pin8": {
+    "image": "sha256:6c2029b6771e9240cd113be66fb16ca361dd304f431e9bb905091bcd8cb23550",
+    "binary_sha256": "5ddb7c43eb702df4be8ee0feffeba087df828e6a171eaeb0177965bb7a1fea13",
+    "runtime": "8 individually pinned workers; CPUs 0-7; default batch8 CQ256"
+  }
+}

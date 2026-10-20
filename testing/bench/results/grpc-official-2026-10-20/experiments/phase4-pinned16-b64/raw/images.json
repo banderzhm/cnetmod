@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-phase4-pinned16-b64": {
+    "image": "sha256:0e17317051b6fece2750a4c4dfbaaa66d6cb6a9d56f0b50077aa9a313a592414",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "c260a3bf940182303562894bcd2e63d7c3089f608f023bbaf7815ffcfb5c77db",
+    "binary_sha256": "652fd0dfb6a000f52942e9fe4a9faff5400ea552c6264d22ec8a5dcfbd8dd71b",
+    "runtime": "16 workers/listener CPUs0-15; submit batch64 CQ tick1024; all4cases use this single configuration"
+  }
+}

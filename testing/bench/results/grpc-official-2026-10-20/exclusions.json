@@ -1,0 +1,30 @@
+[
+  {
+    "group": "certified/cnetmod-grpc-trillium-certified",
+    "reason": "Initial plain/256 first round has 1 failed and 1 errored counter; entire initial Trillium matrix excluded. Same frozen image was rerun for all 12 rounds under trillium-recheck, all valid."
+  },
+  {
+    "group": "early official/steady/final/sync calibration groups",
+    "reason": "Wrong/stale intermediate binary, mixed C compiler, repaired-control preparation, first-batch stalls, or not the final source/configuration. No headline uses these groups."
+  },
+  {
+    "group": "profiles-phase3",
+    "reason": "Only 86 samples because perf attached before workers existed. Excluded; later covered profiling and final two matched profiles retained."
+  },
+  {
+    "group": "phase15-w24-pin0",
+    "reason": "Windows process inventory consumed an additional core during its first case. This exploratory group is not eligible for the headline."
+  },
+  {
+    "group": "phase3 through phase15 and accepted",
+    "reason": "Exploratory configurations/source versions only. No peaks from these matrices are mixed into accepted2. In particular, the accepted recheck missed plain/1024 and was not declared complete."
+  },
+  {
+    "group": "phase14 initial regression run",
+    "reason": "New unit test incorrectly expected zero timeout to expire; existing API means unlimited. Corrected test passes in final Release and ASan. No benchmark was started from the failed test run."
+  },
+  {
+    "group": "stability-accepted2 and profiles-final",
+    "reason": "Supplementary 30-second stability and instrumented perf diagnostics, respectively; never substituted for official 5-second headline rounds."
+  }
+]

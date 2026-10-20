@@ -1,0 +1,11 @@
+{
+  "official_manifest": "sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+  "verified_manifest_sha256": "sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+  "official_config": "sha256:26d41993b1f2f78dbd010160b83b06b0a38e17b57a269e9bf0be7f2078073f98",
+  "verified_config_sha256": "sha256:26d41993b1f2f78dbd010160b83b06b0a38e17b57a269e9bf0be7f2078073f98",
+  "platform": "linux/amd64",
+  "mirror_image": "docker.1ms.run/library/rust@sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+  "docker_image_id": "sha256:c49256cbe5ea0188bc658a689500d70c41eb51f009a7a7be209caf60a944f3ec",
+  "rootfs_diff_ids_equal": true,
+  "note": "Docker 29 containerd image IDs identify a manifest/index, not necessarily the config blob"
+}

@@ -1,0 +1,214 @@
+[info] available CPUs: 32
+[info] load generators: docker mode
+[info] framework: cnetmod-grpc-libuvcpp-certified (cnetmod-grpc-libuvcpp-certified, C++)
+[info] subscribed tests: unary-grpc,unary-grpc-tls
+[info] building image: httparena-cnetmod-grpc-libuvcpp-certified
+[info] skipping system tuning as requested (SKIP_TUNE=true)
+
+==============================================
+=== cnetmod-grpc-libuvcpp-certified / unary-grpc / 256c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+2.
+52.
+15Main benchmark duration is started for thread #0.
+.
+Application protocol: h2c
+54.
+29.
+23.
+
+36.
+19.
+.
+33.
+49. Stopping all clients.
+18. Stopping all clients.
+35
+
+finished in 5.08s, 1768120.20 req/s, 72.57MB/s
+requests: 8840601 total, 8866201 started, 8840601 done, 8840601 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 8847701 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 362.84MB (380461690) total, 75.97MB (79664705) headers (space savings 91.74%), 59.06MB (61933907) data
+                     min         max         mean         sd        +/- sd
+time for request:      433us    172.67ms     14.44ms      9.98ms    81.02%
+time for connect:       21us      8.81ms      1.75ms      1.79ms    84.38%
+time to 1st byte:     2.13ms    167.33ms     33.34ms     26.79ms    75.78%
+req/s           :    3883.46    12367.06     6905.51     1887.00    67.97%
+[info] CPU 1989.1% | Mem 104MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+
+46.
+
+48Main benchmark duration is started for thread #63.
+.
+.
+34.
+.
+33.Warm-up phase is over for thread #43.
+
+.Warm-up phase is over for thread #37.
+
+Application protocol: h2c
+. Stopping all clients.
+44Main benchmark duration is over for thread #52. Stopping all clients.
+49
+63. Stopping all clients.
+
+
+43. Stopping all clients.
+
+finished in 5.09s, 1843482.40 req/s, 75.66MB/s
+requests: 9217412 total, 9243012 started, 9217412 done, 9217412 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 9224405 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 378.29MB (396662468) total, 79.21MB (83055102) headers (space savings 91.74%), 61.58MB (64570835) data
+                     min         max         mean         sd        +/- sd
+time for request:      220us    125.57ms     13.71ms      9.08ms    79.88%
+time for connect:       37us      9.10ms      2.15ms      1.78ms    75.78%
+time to 1st byte:     1.63ms    101.59ms     18.93ms     17.62ms    86.33%
+req/s           :    4443.13    22452.50     7198.70     2214.87    71.48%
+[info] CPU 2228.6% | Mem 118MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+62.
+.
+Application protocol: h2c
+
+.Main benchmark duration is started for thread #15.
+.
+34.
+27.
+50.
+54.
+55.
+
+30.
+
+48. Stopping all clients.
+10. Stopping all clients.
+57. Stopping all clients.
+
+finished in 5.07s, 1699594.40 req/s, 69.75MB/s
+requests: 8497972 total, 8523572 started, 8497972 done, 8497972 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 8503955 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 348.75MB (365689497) total, 73.02MB (76570889) headers (space savings 91.74%), 56.77MB (59527685) data
+                     min         max         mean         sd        +/- sd
+time for request:      448us    235.77ms     14.81ms     10.85ms    83.18%
+time for connect:       30us      8.00ms      1.82ms      1.78ms    82.03%
+time to 1st byte:     1.97ms    226.15ms     23.59ms     34.24ms    91.41%
+req/s           :    3382.25    12110.84     6638.05     1948.32    55.47%
+[info] CPU 2244.7% | Mem 122MiB
+
+=== Best: 1812260 req/s (CPU: 2228.6%, Mem: 118MiB) ===
+[info] saved results/unary-grpc/256/cnetmod-grpc-libuvcpp-certified.json
+httparena-bench-cnetmod-grpc-libuvcpp-certified
+httparena-bench-cnetmod-grpc-libuvcpp-certified
+
+==============================================
+=== cnetmod-grpc-libuvcpp-certified / unary-grpc / 1024c (tool=h2load) ===
+==============================================
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] waiting for server...
+[info] gRPC server ready
+
+[run 1/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+progress: Main benchmark duration is started for thread #15.
+12% of clients started
+30Warm-up phase is over for thread #.
+60.
+25.
+
+Application protocol: h2c
+.
+30. Stopping all clients.
+59. Stopping all clients.
+37. Stopping all clients.
+6Stopped all clients for thread #9
+23. Stopping all clients.
+32. Stopping all clients.
+48
+
+finished in 5.13s, 1750303.20 req/s, 72.13MB/s
+requests: 8751516 total, 8853916 started, 8751516 done, 8751516 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 8801116 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 360.66MB (378177580) total, 75.65MB (79324862) headers (space savings 91.73%), 58.75MB (61607812) data
+                     min         max         mean         sd        +/- sd
+time for request:      562us       2.08s     56.08ms     67.48ms    95.28%
+time for connect:       17us     30.29ms      6.92ms      7.26ms    82.13%
+time to 1st byte:     2.71ms       2.07s    241.48ms    323.63ms    86.91%
+req/s           :     600.43     3662.85     1707.88      510.22    70.51%
+[info] CPU 1787.0% | Mem 317MiB
+
+[run 2/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+2.
+34.
+39.
+40.
+29Main benchmark duration is started for thread #30.
+.
+Application protocol: h2c
+16.
+61.
+38.
+13.
+
+finished in 5.19s, 1760793.60 req/s, 72.55MB/s
+requests: 8803968 total, 8906368 started, 8803968 done, 8803968 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 8852361 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 362.77MB (380390228) total, 76.09MB (79784031) headers (space savings 91.73%), 59.10MB (61966527) data
+                     min         max         mean         sd        +/- sd
+time for request:      798us       2.16s     54.66ms     62.29ms    95.05%
+time for connect:       23us     38.27ms      4.23ms      5.08ms    85.55%
+time to 1st byte:     3.57ms       2.16s    233.91ms    319.53ms    88.77%
+req/s           :     619.94     3501.65     1720.11      503.84    71.88%
+[info] CPU 1780.8% | Mem 344MiB
+
+[run 3/3]
+-t: warning: the number of threads is greater than hardware cores.
+starting benchmark...
+7.
+Application protocol: h2c
+26.
+58.
+14. Stopping all clients.
+53. Stopping all clients.
+26. Stopping all clients.
+12. Stopping all clients.
+
+finished in 5.21s, 1672696.20 req/s, 68.94MB/s
+requests: 8363481 total, 8465881 started, 8363481 done, 8363481 succeeded, 0 failed, 0 errored, 0 timeout
+status codes: 8411263 2xx, 0 3xx, 0 4xx, 0 5xx
+traffic: 344.69MB (361435014) total, 72.31MB (75821131) headers (space savings 91.72%), 56.15MB (58878841) data
+                     min         max         mean         sd        +/- sd
+time for request:      700us       1.35s     56.38ms     57.08ms    92.88%
+time for connect:       15us     49.03ms      5.52ms      7.57ms    89.55%
+time to 1st byte:     2.26ms       1.34s    181.22ms    245.56ms    87.11%
+req/s           :     760.10     3442.58     1633.61      499.41    63.77%
+[info] CPU 2373.8% | Mem 342MiB
+
+=== Best: 1715617 req/s (CPU: 1787.0%, Mem: 317MiB) ===
+[info] saved results/unary-grpc/1024/cnetmod-grpc-libuvcpp-certified.json
+httparena-bench-cnetmod-grpc-libuvcpp-certified
+httparena-bench-cnetmod-grpc-libuvcpp-certified
+[info] rebuilding site/data/*.json
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/frameworks.json
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-candidate-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-control-certified.json - 4 new, 4 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/results/cnetmod-grpc-libuvcpp-certified.json - 2 new, 2 total
+[updated] /root/cnetmod-grpc-20261020/certified/site/data/current.json
+[info] done

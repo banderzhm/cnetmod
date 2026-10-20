@@ -1,0 +1,64 @@
+{
+  "cnetmod-grpc-phase2": {
+    "image": "sha256:ef5eff08fb339da4f813c04a15beb982f963edf938aaa35ce00c55b2296bb3a9",
+    "source_sha": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "binary_sha256": "bd7a3c58d0d3ee798900684c44e1a330b62021c78977bec0eb295feb1f342541"
+  },
+  "cnetmod-grpc-trillium-recheck": {
+    "image": "sha256:5b445863b892f0911cf646d76b5eff29a581729b8acbdb1c3aea7a416979fefb",
+    "tests": [
+      "unary-grpc",
+      "unary-grpc-tls"
+    ],
+    "language": "Rust",
+    "type": "framework",
+    "source_entry": "trillium",
+    "source_meta": {
+      "display_name": "trillium",
+      "language": "Rust",
+      "type": "emerging",
+      "mode": "standard",
+      "completeness": {
+        "routing": true,
+        "middleware": true,
+        "request": true,
+        "response": true
+      },
+      "engine": "trillium-http",
+      "description": "Trillium 1.x async Rust web framework on tokio. trillium-rustls for TLS (h1 + h2 via ALPN), trillium-quinn for HTTP/3, trillium-websockets for /ws, trillium-static for /static/* served from disk per request, trillium-compression middleware for runtime gzip/brotli, trillium-api for JSON handlers, trillium-grpc for the benchmark.BenchmarkService gRPC endpoints, deadpool-postgres for async-db and crud.",
+      "repo": "https://github.com/trillium-rs/trillium",
+      "enabled": true,
+      "tests": [
+        "baseline",
+        "latency-1m",
+        "latency-10k",
+        "latency-500k-8cpu",
+        "async",
+        "pipelined",
+        "limited-conn",
+        "json-comp",
+        "json-tls",
+        "8gbit",
+        "static-tls",
+        "async-db",
+        "fortunes",
+        "baseline-h2",
+        "static-h2",
+        "baseline-h2c",
+        "json-h2c",
+        "baseline-h3",
+        "static-h3",
+        "unary-grpc",
+        "unary-grpc-tls",
+        "echo-ws",
+        "echo-ws-pipeline",
+        "echo-ws-limited",
+        "gateway-64",
+        "gateway-h3"
+      ],
+      "maintainers": [
+        "jbr"
+      ]
+    }
+  }
+}

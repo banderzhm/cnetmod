@@ -1,0 +1,8 @@
+{
+  "stopped_container_id": "4ce079b182f0d944e273ac35b516bf82f6166e73b390eb2acf75dcfb4c5a0034",
+  "stopped_container_name": "cnetmod-grpc-postgres-20261020",
+  "heavy_work_complete": true,
+  "source_sha": "70975f8d1b1939cb21cc1a00115a0c276c298c0f",
+  "timestamp_utc": "2026-10-20T14:02:56.773269+00:00",
+  "remaining_containers": []
+}

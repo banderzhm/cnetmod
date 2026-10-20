@@ -1,0 +1,9 @@
+{
+  "cnetmod-grpc-phase6": {
+    "image": "sha256:f74e34d1544e3b37ae20f15345b6e8414c1b107d42246b133e27716a7a3778d4",
+    "source_base": "eb33c7529f4202810d7f240459322e6f3f26cf46",
+    "source_patch_sha256": "7c7b589702b5fe4d32142a72473ce609e1fd309822a5ca82a1def172bf15cf69",
+    "binary_sha256": "c56664c3a28e0de56f6e9eab0d26c3279bd44b681d59b2d868ad18f67c89cf52",
+    "runtime": "32 workers/listener; default batch8 CQ256; shared immutable metadata and borrowed protobuf visitor"
+  }
+}

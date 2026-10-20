@@ -1,0 +1,22 @@
+{
+  "libuvcpp-certified": {
+    "rounds": 12,
+    "all_valid": true
+  },
+  "cardigan-certified": {
+    "rounds": 12,
+    "all_valid": true
+  },
+  "vanilla-certified": {
+    "rounds": 6,
+    "all_valid": true
+  },
+  "helidon-certified": {
+    "rounds": 12,
+    "all_valid": true
+  },
+  "trillium-recheck": {
+    "rounds": 12,
+    "all_valid": true
+  }
+}
