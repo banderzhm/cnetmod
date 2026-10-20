@@ -1,0 +1,17 @@
+[info] framework: cnetmod-ws-duplex-v2 (cnetmod-ws-duplex-v2, C++)
+[info] subscribed tests: echo-ws,echo-ws-pipeline,echo-ws-limited
+[warn] profile cpuset 0-31,64-95 exceeds available CPUs (max 31) — using all cores
+[info] ws-only framework — skipping HTTP probe (sleep 2s for startup)
+[test] WebSocket echo validation (ws://localhost:8080/ws)
+  PASS [upgrade status 101] (HTTP/1.1 101 Switching Protocols)
+  PASS [Sec-WebSocket-Accept] (correct)
+  PASS [text echo] (echoed 35 chars)
+  PASS [binary echo] (sent 256 bytes, got 256 bytes)
+  PASS [multi-message echo (5 msgs)] (all 5 echoed correctly)
+  PASS [reject non-upgrade GET /ws] (HTTP 400)
+[test] post-validation health check
+  PASS [server alive after tests]
+
+=== WS Results: 7 passed, 0 failed ===
+httparena-bench-cnetmod-ws-duplex-v2
+httparena-bench-cnetmod-ws-duplex-v2

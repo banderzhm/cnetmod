@@ -1,0 +1,1559 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 53192567..df62e5e2 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -253,6 +253,9 @@ endif()
+ option(CNETMOD_USE_LIBKQUEUE
+     "Use the libkqueue compatibility backend on non-Apple Unix systems"
+     OFF)
++option(CNETMOD_USE_EPOLL
++    "Prefer the epoll backend on Linux even when liburing is available"
++    OFF)
+ 
+ if(WIN32)
+     set(CNETMOD_HAS_IOCP ON)
+@@ -273,7 +276,12 @@ elseif(UNIX AND CNETMOD_USE_LIBKQUEUE)
+ elseif(UNIX)
+     # Detect io_uring support
+     include(CheckIncludeFileCXX)
+-    check_include_file_cxx("liburing.h" CNETMOD_HAS_IO_URING)
++    if(CNETMOD_USE_EPOLL)
++        set(CNETMOD_HAS_IO_URING OFF)
++        set(CNETMOD_HAS_IO_URING_BUFFER_RING OFF)
++    else()
++        check_include_file_cxx("liburing.h" CNETMOD_HAS_IO_URING)
++    endif()
+     if(CNETMOD_HAS_IO_URING)
+         message(STATUS "I/O backend: io_uring (Linux)")
+         include(CheckCXXSourceCompiles)
+diff --git a/src/coro/spawn.cppm b/src/coro/spawn.cppm
+index 0f74f4c3..c2d01694 100644
+--- a/src/coro/spawn.cppm
++++ b/src/coro/spawn.cppm
+@@ -177,4 +177,28 @@ void spawn_guarded(io_context& ctx, task<void> task_to_run)
+     }(ctx, std::move(task_to_run));
+ }
+ 
++/// Start inline on the owning event loop, otherwise post to it. This is an
++/// explicit dispatch operation; spawn() continues to promise deferred posting.
++export template <auto OnError>
++requires std::invocable<decltype(OnError), std::exception_ptr>
++void dispatch_guarded(io_context& ctx, task<void> task_to_run)
++{
++    if (!ctx.running_in_this_thread())
++    {
++        spawn_guarded<OnError>(ctx, std::move(task_to_run));
++        return;
++    }
++    [](task<void> inner) -> detached_task
++    {
++        try
++        {
++            co_await std::move(inner);
++        }
++        catch (...)
++        {
++            detail::report_static_spawn_failure<OnError>();
++        }
++    }(std::move(task_to_run));
++}
++
+ } // namespace cnetmod
+diff --git a/src/executor/async_op.cpp b/src/executor/async_op.cpp
+index 24d7fd5c..98a87ea6 100644
+--- a/src/executor/async_op.cpp
++++ b/src/executor/async_op.cpp
+@@ -14,6 +14,16 @@ import cnetmod.coro.task;
+ import cnetmod.coro.cancel;
+ 
+ namespace cnetmod {
++#ifndef CNETMOD_HAS_IO_URING
++auto async_write_then_read(io_context& ctx, socket& sock,
++    const_buffer output, mutable_buffer input)
++    -> task<std::expected<std::size_t, std::error_code>>
++{
++    if (const auto sent = co_await async_write_all(ctx, sock, output); !sent)
++        co_return std::unexpected(sent.error());
++    co_return co_await async_read(ctx, sock, input);
++}
++#endif
+ namespace detail {
+ 
+     auto find_delimiter(const_buffer buf, std::string_view delimiter) noexcept
+diff --git a/src/executor/async_op.cppm b/src/executor/async_op.cppm
+index 2ecaca4d..d879173c 100644
+--- a/src/executor/async_op.cppm
++++ b/src/executor/async_op.cppm
+@@ -99,6 +99,13 @@ export auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf)
+     -> task<std::expected<void, std::error_code>>;
+ 
++/// Write the entire output before returning any newly received input. The
++/// buffers stay caller-owned until completion. Backends may link the two I/O
++/// operations; partial sends and failures retain write_all/read semantics.
++export auto async_write_then_read(io_context& ctx, socket& sock,
++    const_buffer output, mutable_buffer input)
++    -> task<std::expected<std::size_t, std::error_code>>;
++
+ /// Cancellable async write all bytes in a buffer
+ export auto async_write_all(io_context& ctx, socket& sock, const_buffer buf,
+     cancel_token& token)
+diff --git a/src/executor/platform/epoll_async_op.cpp b/src/executor/platform/epoll_async_op.cpp
+index 1c8498eb..579c1fc3 100644
+--- a/src/executor/platform/epoll_async_op.cpp
++++ b/src/executor/platform/epoll_async_op.cpp
+@@ -389,18 +389,19 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
+ {
+     auto& epoll = static_cast<epoll_context&>(ctx);
+ 
+-    // Wait for socket to be writable
+-    epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
+-    co_await aw;
+-    if (aw.sync_error)
+-        co_return std::unexpected(aw.sync_error);
+-
+-    ssize_t n = ::send(static_cast<int>(sock.native_handle()),
+-        buf.data, buf.size, MSG_NOSIGNAL);
+-    if (n < 0)
+-        co_return std::unexpected(last_error());
+-
+-    co_return static_cast<std::size_t>(n);
++    for (;;)
++    {
++        const auto n = ::send(static_cast<int>(sock.native_handle()),
++            buf.data, buf.size, MSG_DONTWAIT | MSG_NOSIGNAL);
++        if (n >= 0)
++            co_return static_cast<std::size_t>(n);
++        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
++            co_return std::unexpected(last_error());
++        epoll_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT};
++        co_await aw;
++        if (aw.sync_error)
++            co_return std::unexpected(aw.sync_error);
++    }
+ }
+ 
+ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+@@ -412,20 +413,21 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+ 
+     auto& epoll = static_cast<epoll_context&>(ctx);
+ 
+-    epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()),
+-        EPOLLOUT, token};
+-    co_await aw;
+-    if (aw.sync_error)
+-        co_return std::unexpected(aw.sync_error);
+-    if (token.is_cancelled())
+-        co_return std::unexpected(make_error_code(errc::operation_aborted));
+-
+-    ssize_t n = ::send(static_cast<int>(sock.native_handle()),
+-        buf.data, buf.size, MSG_NOSIGNAL);
+-    if (n < 0)
+-        co_return std::unexpected(last_error());
+-
+-    co_return static_cast<std::size_t>(n);
++    for (;;)
++    {
++        if (token.is_cancelled())
++            co_return std::unexpected(make_error_code(errc::operation_aborted));
++        const auto n = ::send(static_cast<int>(sock.native_handle()),
++            buf.data, buf.size, MSG_DONTWAIT | MSG_NOSIGNAL);
++        if (n >= 0)
++            co_return static_cast<std::size_t>(n);
++        if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)
++            co_return std::unexpected(last_error());
++        epoll_cancel_awaiter aw{epoll, static_cast<int>(sock.native_handle()), EPOLLOUT, token};
++        co_await aw;
++        if (aw.sync_error)
++            co_return std::unexpected(aw.sync_error);
++    }
+ }
+ 
+ auto async_wait_readable(io_context& ctx, socket& sock)
+diff --git a/src/executor/platform/io_uring_async_op.cpp b/src/executor/platform/io_uring_async_op.cpp
+index d17c6d03..ddfbc91a 100644
+--- a/src/executor/platform/io_uring_async_op.cpp
++++ b/src/executor/platform/io_uring_async_op.cpp
+@@ -488,9 +488,30 @@ auto async_read(io_context& ctx, socket& sock, mutable_buffer buf,
+     co_return static_cast<std::size_t>(ov.result);
+ }
+ 
++namespace {
++    auto try_small_send(socket& sock, const_buffer buf)
++        -> std::optional<std::expected<std::size_t, std::error_code>>
++    {
++        // A cache-line-sized control/message write favors immediate latency;
++        // larger bursts retain SQ batching across connections.
++        if (buf.size > 64)
++            return std::nullopt;
++        const auto sent = ::send(static_cast<int>(sock.native_handle()),
++            buf.data, buf.size, MSG_DONTWAIT | MSG_NOSIGNAL);
++        if (sent >= 0)
++            return static_cast<std::size_t>(sent);
++        const auto error = errno;
++        if (error == EAGAIN || error == EWOULDBLOCK || error == EINTR)
++            return std::nullopt;
++        return std::unexpected(make_error_code(from_native_error(error)));
++    }
++}
++
+ auto async_write(io_context& ctx, socket& sock, const_buffer buf)
+     -> task<std::expected<std::size_t, std::error_code>>
+ {
++    if (auto sent = try_small_send(sock, buf))
++        co_return *sent;
+     auto& uring = static_cast<io_uring_context&>(ctx);
+ 
+     uring_overlapped ov;
+@@ -521,6 +542,9 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+     if (token.is_cancelled())
+         co_return std::unexpected(make_error_code(errc::operation_aborted));
+ 
++    if (auto sent = try_small_send(sock, buf))
++        co_return *sent;
++
+     auto& uring = static_cast<io_uring_context&>(ctx);
+ 
+     uring_overlapped ov;
+@@ -546,6 +570,24 @@ auto async_write(io_context& ctx, socket& sock, const_buffer buf,
+     co_return static_cast<std::size_t>(ov.result);
+ }
+ 
++auto async_write_then_read(io_context& ctx, socket& sock,
++    const_buffer output, mutable_buffer input)
++    -> task<std::expected<std::size_t, std::error_code>>
++{
++    auto& uring = static_cast<io_uring_context&>(ctx);
++    if (::io_uring_sq_space_left(uring.native_ring()) < 2)
++        (void)uring.flush_pending();
++    if (output.size == 0 || ::io_uring_sq_space_left(uring.native_ring()) < 2 ||
++        output.size > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
++        input.size > static_cast<std::size_t>(std::numeric_limits<int>::max()))
++    {
++        if (const auto sent = co_await async_write_all(ctx, sock, output); !sent)
++            co_return std::unexpected(sent.error());
++        co_return co_await async_read(ctx, sock, input);
++    }
++    co_return co_await io_uring_exchange{uring, sock, output, input};
++}
++
+ auto async_wait_readable(io_context& ctx, socket& sock)
+     -> task<std::expected<void, std::error_code>>
+ {
+diff --git a/src/executor/pool.cppm b/src/executor/pool.cppm
+index 6ae5e18d..c5e5e043 100644
+--- a/src/executor/pool.cppm
++++ b/src/executor/pool.cppm
+@@ -172,6 +172,9 @@ export struct thread_affinity_options
+     bool enabled{false};
+     std::vector<unsigned> worker_processors;
+     std::optional<unsigned> accept_processor;
++    /// With an empty explicit list, distribute workers across the calling
++    /// thread's eligible processors. Explicit CPU lists always take priority.
++    bool auto_assign_workers{false};
+ };
+ 
+ export auto set_current_thread_affinity(unsigned processor) noexcept
+diff --git a/src/executor/server_context_impl.cpp b/src/executor/server_context_impl.cpp
+index cd7b66b3..65ff6f43 100644
+--- a/src/executor/server_context_impl.cpp
++++ b/src/executor/server_context_impl.cpp
+@@ -291,12 +291,33 @@ void server_context::spawn_next(task<void> t)
+ 
+ void server_context::run()
+ {
++    auto processors = affinity_.worker_processors;
++    if (affinity_.enabled && affinity_.auto_assign_workers && processors.empty())
++    {
++#ifdef CNETMOD_PLATFORM_LINUX
++        cpu_set_t eligible;
++        CPU_ZERO(&eligible);
++        if (::pthread_getaffinity_np(::pthread_self(), sizeof(eligible), &eligible) == 0)
++            for (unsigned i = 0; i < CPU_SETSIZE; ++i)
++                if (CPU_ISSET(i, &eligible))
++                    processors.push_back(i);
++#elif defined(CNETMOD_PLATFORM_WINDOWS)
++        GROUP_AFFINITY eligible{};
++        if (::GetThreadGroupAffinity(::GetCurrentThread(), &eligible))
++            for (unsigned i = 0; i < sizeof(KAFFINITY) * 8U; ++i)
++                if ((eligible.Mask & (KAFFINITY{1} << i)) != 0)
++                    processors.push_back(eligible.Group * sizeof(KAFFINITY) * 8U + i);
++#else
++        for (unsigned i = 0; i < std::thread::hardware_concurrency(); ++i)
++            processors.push_back(i);
++#endif
++    }
+     threads_.reserve(workers_.size());
+     for (std::size_t index{}; index < workers_.size(); ++index)
+     {
+         auto processor = std::optional<unsigned>{};
+-        if (affinity_.enabled && !affinity_.worker_processors.empty())
+-            processor = affinity_.worker_processors[index % affinity_.worker_processors.size()];
++        if (affinity_.enabled && !processors.empty())
++            processor = processors[index % processors.size()];
+         threads_.emplace_back([context = workers_[index].get(), processor]
+             {
+                 if (processor)
+diff --git a/src/io/platform/io_uring.cppm b/src/io/platform/io_uring.cppm
+index f3ab34fc..b394ec7a 100644
+--- a/src/io/platform/io_uring.cppm
++++ b/src/io/platform/io_uring.cppm
+@@ -8,6 +8,8 @@ export module cnetmod.io.platform.io_uring;
+ 
+ import std;
+ import cnetmod.core.error;
++import cnetmod.core.buffer;
++import cnetmod.core.socket;
+ import cnetmod.io.io_context;
+ import cnetmod.io.io_operation;
+ 
+@@ -75,4 +77,34 @@ private:
+     std::uint64_t instance_id_ = 0;
+ };
+ 
++/// Full-duplex exchange with caller-owned buffers and no helper coroutine.
++/// The entire output and one receive retire before the awaiting coroutine resumes.
++/// Keep the socket, buffers and this immovable operation alive until completion.
++export class io_uring_exchange
++{
++public:
++    io_uring_exchange(io_uring_context& context, socket& stream,
++        const_buffer output, mutable_buffer input) noexcept;
++    io_uring_exchange(const io_uring_exchange&) = delete;
++    io_uring_exchange(io_uring_exchange&&) = delete;
++    auto await_ready() const noexcept -> bool;
++    auto await_suspend(std::coroutine_handle<> continuation) -> bool;
++    auto await_resume() -> std::expected<std::size_t, std::error_code>;
++
++private:
++    static void complete_send(uring_overlapped&, int32_t, std::uint32_t);
++    static void complete_read(uring_overlapped&, int32_t, std::uint32_t);
++    void retire();
++    io_uring_context& context_;
++    int fd_;
++    const_buffer output_;
++    mutable_buffer input_;
++    std::size_t sent_{};
++    uring_overlapped send_;
++    uring_overlapped read_;
++    unsigned pending_ = 2;
++    std::coroutine_handle<> continuation_;
++    std::error_code error_;
++};
++
+ } // namespace cnetmod
+diff --git a/src/io/platform/io_uring_impl.cpp b/src/io/platform/io_uring_impl.cpp
+index 267133c6..64c9874b 100644
+--- a/src/io/platform/io_uring_impl.cpp
++++ b/src/io/platform/io_uring_impl.cpp
+@@ -6,6 +6,7 @@ module;
+ #include <fcntl.h>
+ #include <liburing.h>
+ #include <unistd.h>
++#include <sys/socket.h>
+ 
+ module cnetmod.io.platform.io_uring;
+ 
+@@ -22,7 +23,8 @@ io_uring_context::io_uring_context(unsigned queue_depth)
+ #ifdef IORING_SETUP_CQSIZE
+     ::io_uring_params params{};
+     params.flags = IORING_SETUP_CQSIZE;
+-    params.cq_entries = queue_depth * 2;
++    params.cq_entries = static_cast<unsigned>(std::min<std::uint64_t>(
++        static_cast<std::uint64_t>(queue_depth) * 8, 65536));
+     #ifdef IORING_SETUP_COOP_TASKRUN
+     const auto coop_taskrun =
+         env_enabled("CNETMOD_IOURING_COOP_TASKRUN", true);
+@@ -280,4 +282,106 @@ void io_uring_context::submit_wake_read()
+     }
+ }
+ 
++io_uring_exchange::io_uring_exchange(io_uring_context& context, socket& stream,
++    const_buffer output, mutable_buffer input) noexcept
++    : context_(context), fd_(static_cast<int>(stream.native_handle())),
++      output_(output), input_(input)
++{
++    send_.completion = &complete_send;
++    read_.completion = &complete_read;
++    send_.completion_context = read_.completion_context = this;
++}
++
++auto io_uring_exchange::await_ready() const noexcept -> bool { return false; }
++
++auto io_uring_exchange::await_suspend(std::coroutine_handle<> continuation) -> bool
++{
++    if (output_.size == 0 || input_.size == 0 ||
++        output_.size > static_cast<std::size_t>(std::numeric_limits<int>::max()) ||
++        input_.size > static_cast<std::size_t>(std::numeric_limits<int>::max()))
++    {
++        error_ = std::make_error_code(std::errc::invalid_argument);
++        return false;
++    }
++    if (::io_uring_sq_space_left(context_.native_ring()) < 2)
++        (void)context_.flush_pending();
++    if (::io_uring_sq_space_left(context_.native_ring()) < 2)
++    {
++        error_ = std::make_error_code(std::errc::no_buffer_space);
++        return false;
++    }
++    auto* send = context_.prepare_sqe();
++    auto* read = context_.prepare_sqe();
++    continuation_ = continuation;
++    ::io_uring_prep_send(send, fd_, output_.data, output_.size, MSG_NOSIGNAL);
++    ::io_uring_sqe_set_data(send, &send_);
++    ::io_uring_prep_recv(read, fd_, input_.data, input_.size, 0);
++    ::io_uring_sqe_set_data(read, &read_);
++    // Once published, both completions must join before releasing the buffers.
++    (void)context_.flush();
++    return true;
++}
++
++void io_uring_exchange::retire()
++{
++    if (--pending_ == 0)
++    {
++        const auto continuation = continuation_;
++        continuation.resume();
++    }
++}
++
++void io_uring_exchange::complete_read(uring_overlapped& operation, int32_t result, std::uint32_t)
++{
++    operation.result = result;
++    static_cast<io_uring_exchange*>(operation.completion_context)->retire();
++}
++
++void io_uring_exchange::complete_send(uring_overlapped& operation, int32_t result, std::uint32_t)
++{
++    auto* state = static_cast<io_uring_exchange*>(operation.completion_context);
++    if (result > 0)
++    {
++        state->sent_ += static_cast<std::size_t>(result);
++        if (state->sent_ < state->output_.size)
++        {
++            auto* next = state->context_.prepare_sqe();
++            if (!next)
++            {
++                (void)state->context_.flush_pending();
++                next = state->context_.prepare_sqe();
++            }
++            if (next)
++            {
++                ::io_uring_prep_send(next, state->fd_,
++                    static_cast<const std::byte*>(state->output_.data) + state->sent_,
++                    state->output_.size - state->sent_, MSG_NOSIGNAL);
++                ::io_uring_sqe_set_data(next, &operation);
++                (void)state->context_.flush();
++                return;
++            }
++            result = -ENOBUFS;
++        }
++    }
++    else if (result == 0)
++        result = -EIO;
++    operation.result = result;
++    if (result < 0)
++        (void)::shutdown(state->fd_, SHUT_RD);
++    state->retire();
++}
++
++auto io_uring_exchange::await_resume() -> std::expected<std::size_t, std::error_code>
++{
++    if (error_)
++        return std::unexpected(error_);
++    if (send_.result < 0)
++        return std::unexpected(std::error_code{-send_.result, std::generic_category()});
++    if (read_.result < 0)
++        return std::unexpected(std::error_code{-read_.result, std::generic_category()});
++    if (read_.result == 0)
++        return std::unexpected(make_error_code(errc::end_of_file));
++    return static_cast<std::size_t>(read_.result);
++}
++
+ } // namespace cnetmod
+diff --git a/src/io/platform/io_uring_multishot_recv.cpp b/src/io/platform/io_uring_multishot_recv.cpp
+index 1b76171e..fd99332d 100644
+--- a/src/io/platform/io_uring_multishot_recv.cpp
++++ b/src/io/platform/io_uring_multishot_recv.cpp
+@@ -120,6 +120,7 @@ void io_uring_multishot_recv::on_completion(
+ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t flags)
+ {
+     active_ = (flags & IORING_CQE_F_MORE) != 0;
++    std::coroutine_handle<> next;
+ 
+     if (result > 0 && (flags & IORING_CQE_F_BUFFER) != 0)
+     {
+@@ -129,7 +130,7 @@ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t fl
+             auto* waiter = std::exchange(next_waiter_, nullptr);
+             waiter->buffer_id = buffer_id;
+             waiter->result = result;
+-            waiter->coroutine.resume();
++            next = waiter->coroutine;
+         }
+         else
+         {
+@@ -143,7 +144,7 @@ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t fl
+         {
+             auto* waiter = std::exchange(next_waiter_, nullptr);
+             waiter->result = result;
+-            waiter->coroutine.resume();
++            next = waiter->coroutine;
+         }
+     }
+     else
+@@ -151,12 +152,19 @@ void io_uring_multishot_recv::handle_completion(int32_t result, std::uint32_t fl
+         terminal_result_ = -ENOBUFS;
+     }
+ 
++    std::coroutine_handle<> stopped;
+     if (!active_ && stop_waiter_ && stop_waiter_->coroutine)
+     {
+         auto* waiter = std::exchange(stop_waiter_, nullptr);
+         waiter->result = 0;
+-        waiter->coroutine.resume();
++        stopped = waiter->coroutine;
+     }
++    // A resumed terminal consumer may destroy this receiver. Cache every
++    // continuation before resuming, and never access members afterwards.
++    if (next)
++        next.resume();
++    if (stopped)
++        stopped.resume();
+ }
+ 
+ auto io_uring_multishot_recv::start() -> std::expected<void, std::error_code>
+diff --git a/src/protocol/http/v1/http_v1_parser.cpp b/src/protocol/http/v1/http_v1_parser.cpp
+index 223bb96b..153128da 100644
+--- a/src/protocol/http/v1/http_v1_parser.cpp
++++ b/src/protocol/http/v1/http_v1_parser.cpp
+@@ -148,8 +148,11 @@ namespace detail {
+ } // namespace detail
+ 
+ request_parser::request_parser()
++    : request_parser(4096) {}
++
++request_parser::request_parser(std::size_t initial_capacity)
+ {
+-    buf_.reserve(4096);
++    buf_.reserve(std::min(initial_capacity, max_header_size));
+     header_fields_.reserve(16);
+     header_index_.reserve(32);
+     common_headers_.fill(missing_header);
+@@ -193,6 +196,13 @@ auto request_parser::headers() const -> const header_map&
+     return headers_;
+ }
+ 
++auto request_parser::take_headers() -> header_map
++{
++    materialize_headers();
++    headers_materialized_ = false;
++    return std::exchange(headers_, header_map{});
++}
++
+ auto request_parser::body() const noexcept -> std::string_view
+ {
+     return body_;
+diff --git a/src/protocol/http/v1/http_v1_parser.cppm b/src/protocol/http/v1/http_v1_parser.cppm
+index b3e27ecf..0701aa91 100644
+--- a/src/protocol/http/v1/http_v1_parser.cppm
++++ b/src/protocol/http/v1/http_v1_parser.cppm
+@@ -14,6 +14,7 @@ export class request_parser
+ {
+ public:
+     request_parser();
++    explicit request_parser(std::size_t initial_capacity);
+     [[nodiscard]] auto consume(const char*, std::size_t)
+         -> std::expected<std::size_t, std::error_code>;
+     [[nodiscard]] auto ready() const noexcept -> bool;
+@@ -23,6 +24,9 @@ public:
+     [[nodiscard]] auto uri() const noexcept -> std::string_view;
+     [[nodiscard]] auto version() const noexcept -> http_version;
+     [[nodiscard]] auto headers() const -> const header_map&;
++    /// Transfer an owning header map; references into its cache move to the
++    /// result. Later queries rebuild the cache without changing request framing.
++    [[nodiscard]] auto take_headers() -> header_map;
+     [[nodiscard]] auto body() const noexcept -> std::string_view;
+     [[nodiscard]] auto take_body_chunk() -> std::string;
+     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;
+@@ -34,6 +38,8 @@ public:
+     [[nodiscard]] auto consume_buffered()
+         -> std::expected<void, std::error_code>;
+     [[nodiscard]] auto has_buffered_data() const noexcept -> bool;
++    /// Transfer bytes received beyond a complete message, for protocol upgrade.
++    [[nodiscard]] auto take_buffered_data() -> std::string;
+     void reset() noexcept;
+ 
+ private:
+@@ -103,6 +109,7 @@ public:
+     [[nodiscard]] auto headers() const noexcept -> const header_map&;
+     [[nodiscard]] auto body() const noexcept -> std::string_view;
+     [[nodiscard]] auto get_header(std::string_view) const -> std::string_view;
++    [[nodiscard]] auto take_buffered_data() -> std::string;
+     void reset() noexcept;
+ 
+ private:
+diff --git a/src/protocol/websocket/client/websocket_client_connection.cppm b/src/protocol/websocket/client/websocket_client_connection.cppm
+index 1ed37d38..b7fee25b 100644
+--- a/src/protocol/websocket/client/websocket_client_connection.cppm
++++ b/src/protocol/websocket/client/websocket_client_connection.cppm
+@@ -36,6 +36,28 @@ export struct connect_options
+ #endif
+ };
+ 
++/// Collects complete messages for the current receive burst. All queued frames
++/// are written before the loop waits for more input; no timer delays a reply.
++export class message_writer
++{
++public:
++    auto send(opcode op, std::span<const std::byte> payload)
++        -> std::expected<void, std::error_code>;
++private:
++    friend class connection;
++    message_writer(std::vector<std::byte>& output, bool mask, std::size_t limit);
++    std::vector<std::byte>& output_;
++    bool mask_;
++    std::size_t limit_;
++    std::error_code error_;
++};
++
++/// The payload is borrowed until the callback returns. Copy it before retaining
++/// it. A callback may emit any number of messages through the writer. Use the
++/// ordinary recv/send API when application work needs asynchronous suspension.
++export using message_handler_fn = std::function<std::expected<void, std::error_code>(
++    opcode, std::span<const std::byte>, message_writer&)>;
++
+ export class connection
+ {
+ public:
+@@ -65,11 +87,16 @@ public:
+         -> task<std::expected<void, std::error_code>>;
+ 
+     auto async_recv() -> task<std::expected<ws_message, std::error_code>>;
++    auto async_process_messages(message_handler_fn handler,
++        std::size_t max_message_size = 16 * 1024 * 1024)
++        -> task<std::expected<void, std::error_code>>;
+     auto async_close(std::uint16_t code = close_code::normal,
+         std::string_view reason = "")
+         -> task<std::expected<void, std::error_code>>;
+ 
+     void attach(socket sock, bool as_server = true) noexcept;
++    /// Adopt a transport together with bytes already read past its HTTP upgrade.
++    void attach(socket sock, bool as_server, std::span<const std::byte> received);
+     void set_cancel_token(cancel_token* token) noexcept;
+     void clear_cancel_token() noexcept;
+ 
+@@ -101,7 +128,7 @@ private:
+     bool connected_ = false;
+     bool close_sent_ = false;
+     bool close_received_ = false;
+-    dynamic_buffer recv_buf_{8192};
++    dynamic_buffer recv_buf_{1024};
+     std::vector<std::byte> send_buf_;
+     cancel_token* cancel_token_{nullptr};
+     std::string handshake_path_;
+diff --git a/src/protocol/websocket/client/websocket_client_connection_impl.cpp b/src/protocol/websocket/client/websocket_client_connection_impl.cpp
+index 09895475..0c24300b 100644
+--- a/src/protocol/websocket/client/websocket_client_connection_impl.cpp
++++ b/src/protocol/websocket/client/websocket_client_connection_impl.cpp
+@@ -1,17 +1,274 @@
++module;
++#include <cnetmod/config.hpp>
+ module cnetmod.protocol.websocket;
+ 
++import std;
+ import cnetmod.core.buffer;
+ import cnetmod.core.dns;
+ import cnetmod.coro.cancel;
+ import cnetmod.coro.task;
+ import cnetmod.executor.async_op;
+ import cnetmod.io.io_context;
++#ifdef CNETMOD_HAS_IO_URING
++import cnetmod.io.platform.io_uring;
++#endif
+ #ifdef CNETMOD_HAS_SSL
+ import cnetmod.core.ssl;
+ #endif
+ import :connection;
+ 
+ namespace cnetmod::ws {
++namespace {
++    auto valid_message_utf8(std::span<const std::byte> text) noexcept -> bool
++    {
++        for (std::size_t i = 0; i < text.size();)
++        {
++            const auto first = std::to_integer<unsigned char>(text[i++]);
++            if (first < 0x80)
++                continue;
++            unsigned count;
++            std::uint32_t value;
++            if (first >= 0xc2 && first <= 0xdf)
++                count = 1, value = first & 0x1f;
++            else if (first >= 0xe0 && first <= 0xef)
++                count = 2, value = first & 0x0f;
++            else if (first >= 0xf0 && first <= 0xf4)
++                count = 3, value = first & 0x07;
++            else
++                return false;
++            if (text.size() - i < count)
++                return false;
++            for (unsigned j = 0; j < count; ++j)
++            {
++                const auto next = std::to_integer<unsigned char>(text[i++]);
++                if ((next & 0xc0) != 0x80)
++                    return false;
++                value = (value << 6) | (next & 0x3f);
++            }
++            if ((count == 2 && value < 0x800) || (count == 3 && value < 0x10000) ||
++                (value >= 0xd800 && value <= 0xdfff) || value > 0x10ffff)
++                return false;
++        }
++        return true;
++    }
++
++    auto valid_close_payload(std::span<const std::byte> payload) noexcept -> bool
++    {
++        if (payload.empty())
++            return true;
++        if (payload.size() == 1)
++            return false;
++        const auto code = (std::to_integer<unsigned>(payload[0]) << 8) |
++            std::to_integer<unsigned>(payload[1]);
++        return ((code >= 1000 && code <= 1014 && code != 1004 &&
++                    code != 1005 && code != 1006) || (code >= 3000 && code <= 4999)) &&
++            valid_message_utf8(payload.subspan(2));
++    }
++}
++
++message_writer::message_writer(std::vector<std::byte>& output, bool mask,
++    std::size_t limit) : output_(output), mask_(mask), limit_(limit) {}
++
++auto message_writer::send(opcode op, std::span<const std::byte> payload)
++    -> std::expected<void, std::error_code>
++{
++    if (!error_ && (op != opcode::text && op != opcode::binary))
++        error_ = make_error_code(ws_errc::reserved_opcode);
++    if (!error_ && (payload.size() > limit_ - 14 ||
++        output_.size() > limit_ - 14 - payload.size()))
++        error_ = std::make_error_code(std::errc::message_size);
++    if (!error_ && op == opcode::text && !valid_message_utf8(payload))
++        error_ = make_error_code(ws_errc::invalid_utf8);
++    if (error_)
++        return std::unexpected(error_);
++    append_frame_into(output_, op, payload, mask_);
++    return {};
++}
++
++auto connection::async_process_messages(message_handler_fn handler,
++    std::size_t max_message_size) -> task<std::expected<void, std::error_code>>
++{
++    if (!connected_)
++        co_return std::unexpected(make_error_code(ws_errc::not_connected));
++    if (!handler || max_message_size == 0 ||
++        max_message_size > std::numeric_limits<std::size_t>::max() - 65536)
++        co_return std::unexpected(std::make_error_code(std::errc::invalid_argument));
++
++    std::vector<std::byte> fragments;
++    auto fragmented_op = opcode::continuation;
++    message_writer writer(send_buf_, !is_server_, max_message_size + 65536);
++    send_buf_.clear();
++    send_buf_.reserve(256);
++    std::error_code failure;
++    std::uint16_t failure_close = close_code::protocol_error;
++    bool received_close = false;
++    while (connected_)
++    {
++        unsigned processed = 0;
++        bool need_read = false;
++        std::size_t next_read = 1024;
++        while (recv_buf_.readable_bytes() && processed < 64)
++        {
++            const auto readable = recv_buf_.data();
++            auto parsed = parse_frame_header(std::span{
++                static_cast<const std::byte*>(readable.data), readable.size});
++            if (!parsed)
++            {
++                if (parsed.error() != make_error_code(ws_errc::need_more_data))
++                    failure = parsed.error();
++                else
++                    need_read = true;
++                break;
++            }
++            const auto [header, header_size] = *parsed;
++            const auto op = header.op;
++            if (header.rsv1 || header.rsv2 || header.rsv3 ||
++                (op != opcode::continuation && op != opcode::text && op != opcode::binary &&
++                    op != opcode::close && op != opcode::ping && op != opcode::pong) ||
++                header.masked != is_server_ ||
++                (!is_control(op) && ((op == opcode::continuation) !=
++                    (fragmented_op != opcode::continuation))))
++            {
++                failure = make_error_code(ws_errc::protocol_error);
++                break;
++            }
++            if (!is_control(op) && (header.payload_length > max_message_size ||
++                header.payload_length > max_message_size - fragments.size()))
++            {
++                failure = std::make_error_code(std::errc::message_size);
++                failure_close = close_code::message_too_big;
++                break;
++            }
++            const auto frame_size = header_size + static_cast<std::size_t>(header.payload_length);
++            if (readable.size < frame_size)
++            {
++                need_read = true;
++                next_read = std::clamp<std::size_t>(frame_size - readable.size, 1024, 65536);
++                break;
++            }
++            // This connection owns mutable storage. Borrowing never crosses a
++            // callback boundary or an I/O suspension that may grow the buffer.
++            auto payload = std::span{const_cast<std::byte*>(
++                static_cast<const std::byte*>(readable.data)) + header_size,
++                static_cast<std::size_t>(header.payload_length)};
++            if (header.masked)
++                apply_mask(payload, header.masking_key);
++            ++processed;
++            if (is_control(op))
++            {
++                if (op == opcode::close)
++                {
++                    if (!valid_close_payload(payload))
++                    {
++                        failure = make_error_code(ws_errc::invalid_close_payload);
++                        if (payload.size() > 2 && !valid_message_utf8(payload.subspan(2)))
++                            failure_close = close_code::invalid_payload;
++                        break;
++                    }
++                    if (!close_sent_)
++                        append_frame_into(send_buf_, opcode::close, payload, !is_server_);
++                    close_sent_ = close_received_ = received_close = true;
++                }
++                else if (op == opcode::ping)
++                    append_frame_into(send_buf_, opcode::pong, payload, !is_server_);
++            }
++            else
++            {
++                auto message_op = op;
++                std::span<const std::byte> message = payload;
++                if (!header.fin || op == opcode::continuation)
++                {
++                    if (op != opcode::continuation)
++                        fragmented_op = op;
++                    fragments.insert(fragments.end(), payload.begin(), payload.end());
++                    message_op = fragmented_op;
++                    message = fragments;
++                }
++                if (header.fin)
++                {
++                    if (message_op == opcode::text && !valid_message_utf8(message))
++                    {
++                        failure = make_error_code(ws_errc::invalid_utf8);
++                        failure_close = close_code::invalid_payload;
++                        break;
++                    }
++                    const auto handled = handler(message_op, message, writer);
++                    if (!handled || writer.error_)
++                    {
++                        failure = writer.error_ ? writer.error_ : handled.error();
++                        failure_close = close_code::internal_error;
++                        break;
++                    }
++                    fragments.clear();
++                    fragmented_op = opcode::continuation;
++                }
++            }
++            recv_buf_.consume(frame_size);
++            if (received_close || send_buf_.size() >= 65536)
++                break;
++        }
++        if (failure && !close_sent_)
++        {
++            const std::array code{static_cast<std::byte>(failure_close >> 8),
++                static_cast<std::byte>(failure_close)};
++            append_frame_into(send_buf_, opcode::close, code, !is_server_);
++            close_sent_ = true;
++        }
++        if (!send_buf_.empty() && !failure && !received_close &&
++            (need_read || recv_buf_.readable_bytes() == 0) && !cancel_token_
++#ifdef CNETMOD_HAS_SSL
++            && !secure_
++#endif
++        )
++        {
++            auto writable = recv_buf_.prepare(next_read);
++#ifdef CNETMOD_HAS_IO_URING
++            const auto read = co_await io_uring_exchange{static_cast<io_uring_context&>(ctx_), sock_,
++                const_buffer{send_buf_.data(), send_buf_.size()}, writable};
++#else
++            const auto read = co_await cnetmod::async_write_then_read(ctx_, sock_,
++                const_buffer{send_buf_.data(), send_buf_.size()}, writable);
++#endif
++            send_buf_.clear();
++            if (!read || *read == 0)
++            {
++                connected_ = false;
++                co_return std::unexpected(read ? make_error_code(errc::connection_reset) : read.error());
++            }
++            recv_buf_.commit(*read);
++            continue;
++        }
++        if (!send_buf_.empty())
++        {
++            const auto written = co_await async_write_all(
++                reinterpret_cast<const char*>(send_buf_.data()), send_buf_.size());
++            send_buf_.clear();
++            if (!written)
++            {
++                connected_ = false;
++                co_return std::unexpected(written.error());
++            }
++        }
++        if (failure || received_close)
++        {
++            connected_ = false;
++            if (failure)
++                co_return std::unexpected(failure);
++            co_return {};
++        }
++        if (!need_read && recv_buf_.readable_bytes())
++            continue;
++        auto writable = recv_buf_.prepare(next_read);
++        const auto read = co_await async_read_some(static_cast<char*>(writable.data), writable.size);
++        if (!read || *read == 0)
++        {
++            connected_ = false;
++            co_return std::unexpected(read ? make_error_code(errc::connection_reset) : read.error());
++        }
++        recv_buf_.commit(*read);
++    }
++    co_return {};
++}
+ 
+ connection::connection(io_context& ctx) noexcept
+     : ctx_(ctx) {}
+@@ -139,6 +396,13 @@ auto connection::async_connect(std::string_view url_str,
+         co_return std::unexpected(vr.error());
+     }
+ 
++    const auto pending = resp_parser.take_buffered_data();
++    if (!pending.empty())
++    {
++        auto destination = recv_buf_.prepare(pending.size());
++        std::memcpy(destination.data, pending.data(), pending.size());
++        recv_buf_.commit(pending.size());
++    }
+     is_server_ = false;
+     connected_ = true;
+     co_return {};
+@@ -193,6 +457,13 @@ auto connection::async_accept(socket client_sock)
+         co_return std::unexpected(wr.error());
+     }
+ 
++    const auto pending = req_parser.take_buffered_data();
++    if (!pending.empty())
++    {
++        auto destination = recv_buf_.prepare(pending.size());
++        std::memcpy(destination.data, pending.data(), pending.size());
++        recv_buf_.commit(pending.size());
++    }
+     is_server_ = true;
+     connected_ = true;
+     co_return {};
+@@ -259,6 +530,13 @@ auto connection::async_accept_tls(socket client_sock, ssl_context& ssl_ctx)
+         co_return std::unexpected(wr.error());
+     }
+ 
++    const auto pending = req_parser.take_buffered_data();
++    if (!pending.empty())
++    {
++        auto destination = recv_buf_.prepare(pending.size());
++        std::memcpy(destination.data, pending.data(), pending.size());
++        recv_buf_.commit(pending.size());
++    }
+     is_server_ = true;
+     connected_ = true;
+     co_return {};
+@@ -440,6 +718,8 @@ auto connection::async_close(std::uint16_t code, std::string_view reason)
+ void connection::attach(socket sock, bool as_server) noexcept
+ {
+     close_socket();
++    recv_buf_.consume(recv_buf_.readable_bytes());
++    send_buf_.clear();
+     sock_ = std::move(sock);
+     is_server_ = as_server;
+     connected_ = true;
+@@ -452,6 +732,15 @@ void connection::set_cancel_token(cancel_token* t) noexcept
+     cancel_token_ = t;
+ }
+ 
++void connection::attach(socket sock, bool as_server, std::span<const std::byte> received)
++{
++    attach(std::move(sock), as_server);
++    auto destination = recv_buf_.prepare(received.size());
++    if (!received.empty())
++        std::memcpy(destination.data, received.data(), received.size());
++    recv_buf_.commit(received.size());
++}
++
+ void connection::clear_cancel_token() noexcept
+ {
+     cancel_token_ = nullptr;
+diff --git a/src/protocol/websocket/server/websocket_server.cppm b/src/protocol/websocket/server/websocket_server.cppm
+index 9dabfb7b..71ffaeb3 100644
+--- a/src/protocol/websocket/server/websocket_server.cppm
++++ b/src/protocol/websocket/server/websocket_server.cppm
+@@ -17,6 +17,8 @@ import cnetmod.core.address;
+ import cnetmod.io.io_context;
+ import cnetmod.coro.task;
+ import cnetmod.coro.spawn;
++import cnetmod.coro.cancel;
++import cnetmod.coro.wait_group;
+ import cnetmod.executor.async_op;
+ import cnetmod.executor.pool;
+ import cnetmod.protocol.tcp;
+@@ -126,7 +128,7 @@ public:
+ #endif
+ 
+     auto listen(std::string_view host, std::uint16_t port,
+-        socket_options opts = {.reuse_address = true})
++        socket_options opts = {.reuse_address = true, .no_delay = true})
+         -> std::expected<void, std::error_code>;
+ 
+     void on(std::string_view pattern, ws_handler_fn handler);
+@@ -142,13 +144,25 @@ private:
+         ws_handler_fn handler;
+     };
+ 
++    struct accepted_connection
++    {
++        const route_entry* route = nullptr;
++        std::optional<ws_context> context;
++    };
++
+     auto handle_connection(socket client, io_context& io) -> task<void>;
++    auto run_accept_shard(std::size_t index, async_wait_group& completed) -> task<void>;
++    auto accept_connection(socket client, connection& conn, io_context& io)
++        -> task<accepted_connection>;
+ 
+     io_context& ctx_;
+     server_context* sctx_ = nullptr; // Multi-core mode when non-null
+     std::unique_ptr<tcp::acceptor> acc_;
++    std::vector<std::unique_ptr<tcp::acceptor>> worker_acceptors_;
++    std::vector<std::shared_ptr<cancel_token>> worker_cancellations_;
++    std::shared_ptr<cancel_token> accept_cancellation_ = std::make_shared<cancel_token>();
+     std::vector<route_entry> routes_;
+-    bool running_ = false;
++    std::atomic<bool> running_{false};
+ #ifdef CNETMOD_HAS_SSL
+     ssl_context* ssl_ctx_ = nullptr;
+ #endif
+diff --git a/src/protocol/websocket/server/websocket_server_impl.cpp b/src/protocol/websocket/server/websocket_server_impl.cpp
+index ffb0dce4..cfbbdb1f 100644
+--- a/src/protocol/websocket/server/websocket_server_impl.cpp
++++ b/src/protocol/websocket/server/websocket_server_impl.cpp
+@@ -1,9 +1,20 @@
++module;
++#include <cnetmod/config.hpp>
+ module cnetmod.protocol.websocket;
+ import std;
+ import :server;
+ import cnetmod.io.io_context;
++import cnetmod.core.log;
++import cnetmod.coro.cancel;
++import cnetmod.coro.wait_group;
+ 
+ namespace cnetmod::ws {
++namespace {
++    void report_connection_failure(std::exception_ptr)
++    {
++        logger::warn{"WebSocket connection task failed"};
++    }
++}
+ namespace detail {
+     auto parse_ws_pattern(std::string_view pattern) -> std::vector<seg>
+     {
+@@ -180,8 +191,35 @@ auto server::listen(std::string_view host, std::uint16_t port,
+     auto address = ip_address::from_string(host);
+     if (!address)
+         return std::unexpected(address.error());
+-    acc_ = std::make_unique<tcp::acceptor>(ctx_);
+     opts.reuse_address = true;
++#ifdef CNETMOD_PLATFORM_LINUX
++    if (sctx_ && sctx_->worker_count() > 1)
++    {
++        opts.reuse_port = true;
++        auto selected = endpoint{*address, port};
++        for (auto* worker : sctx_->worker_ios())
++        {
++            auto listener = std::make_unique<tcp::acceptor>(*worker);
++            if (const auto opened = listener->open(selected, opts); !opened)
++            {
++                worker_acceptors_.clear();
++                worker_cancellations_.clear();
++                return std::unexpected(opened.error());
++            }
++            if (worker_acceptors_.empty() && port == 0)
++            {
++                const auto local = listener->native_socket().local_endpoint();
++                if (!local)
++                    return std::unexpected(local.error());
++                selected = *local;
++            }
++            worker_acceptors_.push_back(std::move(listener));
++            worker_cancellations_.push_back(std::make_shared<cancel_token>());
++        }
++        return {};
++    }
++#endif
++    acc_ = std::make_unique<tcp::acceptor>(ctx_);
+     if (auto opened = acc_->open(endpoint{*address, port}, opts); !opened)
+         return std::unexpected(opened.error());
+     return {};
+@@ -195,18 +233,32 @@ void server::on(std::string_view pattern, ws_handler_fn handler)
+ 
+ auto server::run() -> task<void>
+ {
++    if (!worker_acceptors_.empty())
++    {
++        async_wait_group completed;
++        completed.add(static_cast<int>(worker_acceptors_.size()));
++        running_ = true;
++        for (std::size_t i = 0; i < worker_acceptors_.size(); ++i)
++            spawn_guarded<report_connection_failure>(worker_acceptors_[i]->context(),
++                run_accept_shard(i, completed));
++        co_await completed.wait();
++        co_return;
++    }
+     if (!acc_)
+         co_return;
++    accept_cancellation_->reset();
+     running_ = true;
+     while (running_)
+     {
+-        auto accepted = co_await async_accept(ctx_, acc_->native_socket());
++        auto accepted = co_await async_accept(ctx_, acc_->native_socket(), *accept_cancellation_);
+         if (!accepted)
+         {
+             if (!running_)
+                 break;
+             continue;
+         }
++        if (!running_)
++            break;
+         if (sctx_)
+         {
+             auto& worker = sctx_->next_worker_io();
+@@ -215,13 +267,63 @@ auto server::run() -> task<void>
+         else
+             spawn(ctx_, handle_connection(std::move(*accepted), ctx_));
+     }
++    acc_->close();
++}
++
++auto server::run_accept_shard(std::size_t index, async_wait_group& completed) -> task<void>
++{
++    struct completion_guard
++    {
++        async_wait_group& group;
++        ~completion_guard() { group.done(); }
++    } completion{completed};
++    auto& listener = *worker_acceptors_[index];
++    auto& io = listener.context();
++    auto cancellation = worker_cancellations_[index];
++    cancellation->reset();
++    while (running_)
++    {
++        auto accepted = co_await async_accept(io, listener.native_socket(), *cancellation);
++        if (!accepted)
++            continue;
++        if (!running_)
++            break;
++        dispatch_guarded<report_connection_failure>(io, handle_connection(std::move(*accepted), io));
++        for (unsigned count = 1; running_ && count < 64; ++count)
++        {
++            auto next = listener.try_accept();
++            if (!next || !*next)
++                break;
++            dispatch_guarded<report_connection_failure>(io, handle_connection(std::move(**next), io));
++        }
++    }
++    listener.close();
+ }
+ 
+ void server::stop()
+ {
+     running_ = false;
++    auto cancel_on_owner = [](io_context& io, std::shared_ptr<cancel_token> cancellation)
++    {
++        cancellation->request_cancel();
++        if (io.running_in_this_thread())
++            cancellation->dispatch_cancel();
++        else
++        {
++            struct pending_cancel { std::shared_ptr<cancel_token> token; };
++            auto pending = std::make_unique<pending_cancel>(std::move(cancellation));
++            io.post([](void* value)
++                {
++                    std::unique_ptr<pending_cancel> owner{static_cast<pending_cancel*>(value)};
++                    owner->token->dispatch_cancel();
++                }, pending.get(), [](void* value) { delete static_cast<pending_cancel*>(value); });
++            (void)pending.release();
++        }
++    };
++    for (std::size_t i = 0; i < worker_acceptors_.size(); ++i)
++        cancel_on_owner(worker_acceptors_[i]->context(), worker_cancellations_[i]);
+     if (acc_)
+-        acc_->close();
++        cancel_on_owner(ctx_, accept_cancellation_);
+ }
+ 
+ auto server::handle_connection(socket client, io_context& io) -> task<void>
+@@ -265,8 +367,22 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
+     }
+ #endif
+ 
+-    http::request_parser req_parser;
+-    std::array<std::byte, 4096> buf{};
++    connection conn(io);
++    auto accepted = co_await accept_connection(std::move(client), conn, io);
++    if (!accepted.route)
++        co_return;
++    co_await accepted.route->handler(*accepted.context);
++    if (conn.is_open())
++        (void)co_await conn.async_close();
++}
++
++auto server::accept_connection(socket client, connection& conn, io_context& io)
++    -> task<accepted_connection>
++{
++    // Release handshake parsing state before entering the potentially
++    // long-lived message handler, rather than retaining it per connection.
++    http::request_parser req_parser(1024);
++    std::array<std::byte, 1024> buf;
+     while (!req_parser.ready())
+     {
+         auto rd =
+@@ -274,14 +390,14 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
+         if (!rd || *rd == 0)
+         {
+             client.close();
+-            co_return;
++            co_return accepted_connection{};
+         }
+         auto consumed =
+             req_parser.consume(reinterpret_cast<const char*>(buf.data()), *rd);
+         if (!consumed)
+         {
+             client.close();
+-            co_return;
++            co_return accepted_connection{};
+         }
+     }
+ 
+@@ -317,7 +433,7 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
+         (void)co_await async_write_all(io, client,
+             const_buffer{data.data(), data.size()});
+         client.close();
+-        co_return;
++        co_return accepted_connection{};
+     }
+ 
+     auto accept_key = validate_upgrade_request(req_parser);
+@@ -329,7 +445,7 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
+         (void)co_await async_write_all(io, client,
+             const_buffer{data.data(), data.size()});
+         client.close();
+-        co_return;
++        co_return accepted_connection{};
+     }
+ 
+     auto upgrade_resp = build_upgrade_response(*accept_key);
+@@ -339,15 +455,15 @@ auto server::handle_connection(socket client, io_context& io) -> task<void>
+     if (!wr)
+     {
+         client.close();
+-        co_return;
++        co_return accepted_connection{};
+     }
+ 
+-    connection conn(io);
+-    conn.attach(std::move(client), true);
+-    ws_context wctx(conn, std::move(path), req_parser.headers(), std::move(query),
+-        std::move(rp));
+-    co_await matched->handler(wctx);
+-    if (conn.is_open())
+-        (void)co_await conn.async_close();
++    const auto pending = req_parser.take_buffered_data();
++    conn.attach(std::move(client), true, std::as_bytes(std::span{pending}));
++    accepted_connection result;
++    result.route = matched;
++    result.context.emplace(conn, std::move(path), req_parser.take_headers(),
++        std::move(query), std::move(rp));
++    co_return result;
+ }
+ } // namespace cnetmod::ws
+diff --git a/src/protocol/websocket/wire/websocket_frame.cpp b/src/protocol/websocket/wire/websocket_frame.cpp
+index 820498bd..bad91eb9 100644
+--- a/src/protocol/websocket/wire/websocket_frame.cpp
++++ b/src/protocol/websocket/wire/websocket_frame.cpp
+@@ -4,6 +4,7 @@ module;
+ 
+ module cnetmod.protocol.websocket; // implementation unit
+ 
++import std;
+ import :frame;
+ 
+ namespace cnetmod::ws {
+@@ -39,15 +40,21 @@ auto parse_frame_header(std::span<const std::byte> data)
+         hdr.payload_length =
+             (static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[2])) << 8) |
+             static_cast<std::uint16_t>(static_cast<std::uint8_t>(data[3]));
++        if (hdr.payload_length < 126)
++            return std::unexpected(make_error_code(ws_errc::invalid_frame));
+         header_size = 4;
+     }
+     else
+     {
+         if (data.size() < 10)
+             return std::unexpected(make_error_code(ws_errc::need_more_data));
++        if ((static_cast<std::uint8_t>(data[2]) & 0x80) != 0)
++            return std::unexpected(make_error_code(ws_errc::invalid_frame));
+         for (auto i = 0; i < 8; ++i)
+             hdr.payload_length =
+                 (hdr.payload_length << 8) | static_cast<std::uint8_t>(data[2 + i]);
++        if (hdr.payload_length <= 0xffff)
++            return std::unexpected(make_error_code(ws_errc::invalid_frame));
+         header_size = 10;
+     }
+     if (hdr.masked)
+@@ -66,14 +73,40 @@ auto parse_frame_header(std::span<const std::byte> data)
+ 
+ void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept
+ {
++    const auto wide_key = static_cast<std::uint64_t>(key) |
++        (static_cast<std::uint64_t>(key) << 32);
++    while (data.size() >= 8)
++    {
++        std::uint64_t value;
++        std::memcpy(&value, data.data(), sizeof(value));
++        value ^= wide_key;
++        std::memcpy(data.data(), &value, sizeof(value));
++        data = data.subspan(8);
++    }
++    if (data.size() >= 4)
++    {
++        std::uint32_t value;
++        std::memcpy(&value, data.data(), sizeof(value));
++        value ^= key;
++        std::memcpy(data.data(), &value, sizeof(value));
++        data = data.subspan(4);
++    }
+     const auto mask = reinterpret_cast<const std::byte*>(&key);
+     for (std::size_t i = 0; i < data.size(); ++i)
+         data[i] ^= mask[i & 3];
+ }
+ 
+-void build_frame_into(std::vector<std::byte>& frame, opcode op,
++void append_frame_into(std::vector<std::byte>& frames, opcode op,
+     std::span<const std::byte> payload, bool mask, bool fin)
+ {
++    if (!mask && payload.size() <= 125)
++    {
++        frames.push_back(static_cast<std::byte>(static_cast<std::uint8_t>(op) |
++            (fin ? BHB0_FIN : 0)));
++        frames.push_back(static_cast<std::byte>(payload.size()));
++        frames.insert(frames.end(), payload.begin(), payload.end());
++        return;
++    }
+     std::size_t header_size = 2;
+     std::uint8_t basic_size;
+     if (payload.size() <= 125)
+@@ -90,7 +123,9 @@ void build_frame_into(std::vector<std::byte>& frame, opcode op,
+     }
+     if (mask)
+         header_size += 4;
+-    frame.assign(header_size + payload.size(), std::byte{});
++    const auto start = frames.size();
++    frames.resize(start + header_size + payload.size());
++    auto frame = std::span{frames}.subspan(start);
+     frame[0] = static_cast<std::byte>(static_cast<std::uint8_t>(op) |
+         (fin ? BHB0_FIN : 0));
+     frame[1] = static_cast<std::byte>(basic_size | (mask ? BHB1_MASK : 0));
+@@ -113,13 +148,21 @@ void build_frame_into(std::vector<std::byte>& frame, opcode op,
+         const auto key = rng();
+         std::memcpy(frame.data() + offset, &key, 4);
+         offset += 4;
+-        std::memcpy(frame.data() + offset, payload.data(), payload.size());
++        if (!payload.empty())
++            std::memcpy(frame.data() + offset, payload.data(), payload.size());
+         apply_mask({frame.data() + offset, payload.size()}, key);
+     }
+-    else
++    else if (!payload.empty())
+         std::memcpy(frame.data() + offset, payload.data(), payload.size());
+ }
+ 
++void build_frame_into(std::vector<std::byte>& frame, opcode op,
++    std::span<const std::byte> payload, bool mask, bool fin)
++{
++    frame.clear();
++    append_frame_into(frame, op, payload, mask, fin);
++}
++
+ auto build_frame(opcode op, std::span<const std::byte> payload, bool mask,
+     bool fin) -> std::vector<std::byte>
+ {
+diff --git a/src/protocol/websocket/wire/websocket_frame.cppm b/src/protocol/websocket/wire/websocket_frame.cppm
+index a249e93e..eef4cc5c 100644
+--- a/src/protocol/websocket/wire/websocket_frame.cppm
++++ b/src/protocol/websocket/wire/websocket_frame.cppm
+@@ -15,6 +15,8 @@ export void apply_mask(std::span<std::byte> data, std::uint32_t key) noexcept;
+ export void build_frame_into(std::vector<std::byte>& frame, opcode op,
+     std::span<const std::byte> payload, bool mask,
+     bool fin = true);
++export void append_frame_into(std::vector<std::byte>& frames, opcode op,
++    std::span<const std::byte> payload, bool mask, bool fin = true);
+ export auto build_frame(opcode op, std::span<const std::byte> payload,
+     bool mask, bool fin = true) -> std::vector<std::byte>;
+ export auto build_close_frame(std::uint16_t code, std::string_view reason,
+diff --git a/testing/tests/CMakeLists.txt b/testing/tests/CMakeLists.txt
+index 37e1c18f..4126980f 100644
+--- a/testing/tests/CMakeLists.txt
++++ b/testing/tests/CMakeLists.txt
+@@ -18,6 +18,7 @@ set(TEST_SOURCES
+     test_deadline.cpp
+     test_task_group.cpp
+     test_task.cpp
++    test_stream_write.cpp
+     test_lazy.cpp
+     test_database_datetime.cpp
+     test_configuration_properties.cpp
+diff --git a/testing/tests/test_http_parser.cpp b/testing/tests/test_http_parser.cpp
+index e3b6024a..7caa4649 100644
+--- a/testing/tests/test_http_parser.cpp
++++ b/testing/tests/test_http_parser.cpp
+@@ -7,6 +7,21 @@ import cnetmod.protocol.http;
+ 
+ using namespace cnetmod::http;
+ 
++TEST(request_parser_transfers_headers_without_losing_parsed_state)
++{
++    request_parser parser(32);
++    const std::string raw = "GET /ws HTTP/1.1\r\nHost: localhost\r\nX-Value: first\r\nX-Value: second\r\n\r\n";
++    ASSERT_TRUE(parser.consume(raw.data(), raw.size()).has_value());
++    auto owned = parser.take_headers();
++    ASSERT_EQ(owned.at("X-Value"), std::string("first, second"));
++    ASSERT_EQ(parser.get_header("Host"), std::string_view("localhost"));
++    ASSERT_EQ(parser.get_header("X-Value"), std::string_view("first, second"));
++    ASSERT_EQ(parser.headers().at("Host"), std::string("localhost"));
++    ASSERT_TRUE(parser.ready());
++    parser.reset();
++    ASSERT_EQ(owned.at("Host"), std::string("localhost"));
++}
++
+ // =============================================================================
+ // request_parser — Basic GET
+ // =============================================================================
+@@ -474,4 +489,27 @@ TEST(roundtrip_response_serialize_parse)
+     ASSERT_EQ(p.body(), std::string_view("OK"));
+ }
+ 
++TEST(upgrade_parser_preserves_binary_tail)
++{
++    const std::string tail{"\x82\x03\x00\x01\xff", 5};
++    request_parser request;
++    const auto header = std::string{"GET /ws HTTP/1.1\r\nHost: localhost\r\n\r\n"};
++    ASSERT_TRUE(request.consume(header.data(), 7).has_value());
++    ASSERT_TRUE(request.take_buffered_data().empty());
++    const auto rest = header.substr(7) + tail;
++    ASSERT_TRUE(request.consume(rest.data(), rest.size()).has_value());
++    ASSERT_TRUE(request.ready());
++    ASSERT_EQ(request.take_buffered_data(), tail);
++    ASSERT_TRUE(request.take_buffered_data().empty());
++    ASSERT_EQ(request.get_header("Host"), std::string_view{"localhost"});
++
++    response_parser response;
++    const auto raw = std::string{"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\n\r\n"} + tail;
++    ASSERT_TRUE(response.consume(raw.data(), raw.size()).has_value());
++    ASSERT_TRUE(response.ready());
++    ASSERT_EQ(response.take_buffered_data(), tail);
++    ASSERT_TRUE(response.take_buffered_data().empty());
++    ASSERT_EQ(response.get_header("Upgrade"), std::string_view{"websocket"});
++}
++
+ RUN_TESTS()
+diff --git a/testing/tests/test_websocket_frame.cpp b/testing/tests/test_websocket_frame.cpp
+index 7a363019..3b7f1790 100644
+--- a/testing/tests/test_websocket_frame.cpp
++++ b/testing/tests/test_websocket_frame.cpp
+@@ -3,6 +3,9 @@ import cnetmod.core.net_init;
+ import cnetmod.core.log;
+ import cnetmod.coro.task;
+ import cnetmod.io.io_context;
++import cnetmod.executor.pool;
++import cnetmod.coro.spawn;
++import cnetmod.coro.timer;
+ import cnetmod.protocol.websocket;
+ 
+ namespace ws = cnetmod::ws;
+@@ -109,6 +112,52 @@ void check_disconnected_operations()
+     };
+     cnetmod::sync_wait(run());
+ }
++
++void check_appended_frames()
++{
++    for (bool mask : {false, true})
++    {
++        std::vector<std::byte> frames(3, std::byte{0x55});
++        std::size_t offset = frames.size();
++        for (std::size_t size : {0U, 5U, 125U, 126U, 65535U, 65536U})
++        {
++            std::vector<std::byte> payload(size, std::byte{0xa5});
++            ws::append_frame_into(frames, ws::opcode::binary, payload, mask);
++            auto parsed = ws::parse_frame_header(std::span{frames}.subspan(offset));
++            require(parsed && parsed->first.payload_length == size, "appended frame header");
++            auto body = std::span{frames}.subspan(offset + parsed->second, size);
++            if (mask)
++                ws::apply_mask(body, parsed->first.masking_key);
++            require(std::ranges::equal(body, payload), "appended frame payload");
++            offset += parsed->second + size;
++        }
++        require(frames[0] == std::byte{0x55} && frames[2] == std::byte{0x55},
++            "appending preserves existing prefix");
++    }
++}
++
++void check_sharded_stop()
++{
++    cnetmod::server_context context(2, 1);
++    ws::server server(context);
++    require(static_cast<bool>(server.listen("127.0.0.1", 0)), "sharded listener on ephemeral port");
++    bool completed = false;
++    const auto stop_later = [&]() -> cnetmod::task<void>
++    {
++        (void)co_await cnetmod::async_sleep(context.accept_io(), std::chrono::milliseconds{10});
++        server.stop();
++    };
++    const auto work = [&]() -> cnetmod::task<void>
++    {
++        cnetmod::spawn(context.accept_io(), stop_later());
++        co_await server.run();
++        completed = true;
++        context.stop();
++    };
++    cnetmod::spawn(context.accept_io(), work());
++    context.run();
++    require(completed, "stop joins all worker accept operations");
++}
+ } // namespace
+ 
+ auto main() -> int
+@@ -120,6 +169,8 @@ auto main() -> int
+         check_mask();
+         check_reused_frames();
+         check_disconnected_operations();
++        check_appended_frames();
++        check_sharded_stop();
+         logger::info{"WebSocket mask, frame reuse, boundaries and control regressions passed"};
+     }
+     catch (const std::exception& error)

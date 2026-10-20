@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/testing/bench/check_ws_protocol.py", line 100, in <module>
+    main()
+    ~~~~^^
+  File "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/testing/bench/check_ws_protocol.py", line 81, in main
+    assert receive(sock) == (2, b"coalesced upgrade tail")
+           ~~~~~~~^^^^^^
+  File "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/testing/bench/check_ws_echo.py", line 35, in receive
+    first, second = exact(sock, 2)
+                    ~~~~~^^^^^^^^^
+  File "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/testing/bench/check_ws_echo.py", line 27, in exact
+    chunk = sock.recv(count - len(data))
+TimeoutError: timed out

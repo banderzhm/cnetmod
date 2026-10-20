@@ -1,0 +1,2 @@
+[ perf record: Woken up 156 times to write data ]
+[ perf record: Captured and wrote 44.629 MB /root/cnetmod-ws-20261020/optimization/final-perf.data (157243 samples) ]

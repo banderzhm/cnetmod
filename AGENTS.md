@@ -17583,7 +17583,7 @@ auto echo(ws::ws_context& ctx) -> cn::task<void>
 ```cpp
 explicit server(io_context& ctx);         // 单线程
 explicit server(server_context& sctx);    // 多核
-auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true})
+auto listen(std::string_view host, std::uint16_t port, socket_options opts = {.reuse_address = true, .no_delay = true})
     -> std::expected<void, std::error_code>;
 void on(std::string_view pattern, ws_handler_fn handler); // 支持 /echo, /chat/:room, /api/*
 auto run() -> task<void>;
@@ -17781,7 +17781,7 @@ explicit server(io_context& ctx);
 // 多核模式：accept 在 sctx.accept_io()，连接分发至 worker io_context
 explicit server(server_context& sctx);
 auto listen(std::string_view host, std::uint16_t port,
-    socket_options opts = {.reuse_address = true})
+    socket_options opts = {.reuse_address = true, .no_delay = true})
     -> std::expected<void, std::error_code>;
 void on(std::string_view pattern, ws_handler_fn handler);
 auto run() -> task<void>;

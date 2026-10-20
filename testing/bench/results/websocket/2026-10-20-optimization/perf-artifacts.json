@@ -1,0 +1,20 @@
+[
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/batch-perf.data",
+    "local_copy": "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/build-ws-evidence/optimization-batch-perf.data",
+    "bytes": 43319675,
+    "sha256": "5ac4ea0a22d7bd76f12c49d8f6d277e23c6ebc65c4f1951d56659b31731e55ba"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/final-perf.data",
+    "local_copy": "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/build-ws-evidence/optimization-final-perf.data",
+    "bytes": 46842403,
+    "sha256": "086021be07447a85bbe7b729b6314f1a959adb605210de85518f97d65cee2cf1"
+  },
+  {
+    "source": "/root/cnetmod-ws-20261020/optimization/final-perf.kallsyms",
+    "local_copy": "/mnt/c/Users/25007/.codex/worktrees/3aad/cnetmod/build-ws-evidence/optimization-final-perf.kallsyms",
+    "bytes": 9619780,
+    "sha256": "0ccb95d71b71db4d50a92026dd4b62cab593b72b537ee1aec40c107326b2bed5"
+  }
+]
