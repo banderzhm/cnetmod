@@ -74,6 +74,10 @@ void set_h2_sync_adapter(v2::sync_server_handler handler,
 防止把请求栈上的头部视图交给异步发送器。业务响应体和动态 metadata 仍由响应拥有。
 发送端分别扣减连接和流窗口；额度不足的响应等待 WINDOW_UPDATE，SETTINGS 缩窗可产生负额度。
 
+每个 HPACK 解码方向最多复用一个不改变动态表的头块（编码不超过 512 字节、16 个字段、
+解码内容不超过 4096 字节）。插入或调整动态表即使复用失效；敏感字段、Authorization、
+Proxy-Authorization、Cookie 和 Set-Cookie 不参与复用。每次请求仍执行 HTTP/2 头部语义校验。
+
 #### `server::use`
 **签名**: `void use(middleware_fn mw)`
 **说明**: 添加中间件，按调用顺序构成中间件管道。
