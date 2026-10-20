@@ -81,9 +81,11 @@ done
     updated = updated.replace('PG_NETWORK="httparena-validate-net"',
                               'PG_NETWORK="httparena-validate-cnetmod-grpc-net"')
     if args.validation_host_network:
-        if updated.count("docker_args=(") != 1:
+        bridge = 'docker_args=(-d --name "$CONTAINER_NAME" -p "$PORT:8080"'
+        if updated.count(bridge) != 1:
             raise ValueError("Official validator container layout changed")
-        updated = updated.replace("docker_args=(", "docker_args=(--network host ", 1)
+        updated = updated.replace(bridge,
+            'docker_args=(-d --name "$CONTAINER_NAME" --network host -p "$PORT:8080"', 1)
     path.write_text(updated)
     changes.extend(difflib.unified_diff(original.splitlines(True), updated.splitlines(True),
                    fromfile="official/scripts/validate.sh", tofile="staged/scripts/validate.sh"))

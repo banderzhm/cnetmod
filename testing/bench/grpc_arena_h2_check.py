@@ -6,8 +6,9 @@ import ssl
 import time
 
 from h2.connection import H2Connection
-from h2.events import (ConnectionTerminated, DataReceived, ResponseReceived,
+from h2.events import (ConnectionTerminated, DataReceived, RemoteSettingsChanged, ResponseReceived,
                        StreamEnded, StreamReset, TrailersReceived)
+from h2.settings import SettingCodes
 
 
 def main():
@@ -32,22 +33,36 @@ def main():
         assert transport.selected_alpn_protocol() == "h2"
     connection = H2Connection()
     connection.initiate_connection()
+    connection.update_settings({SettingCodes.INITIAL_WINDOW_SIZE: 0})
     with transport:
         transport.sendall(connection.data_to_send())
+        settings_received = False
+        while not settings_received:
+            data = transport.recv(65536)
+            assert data, "EOF before server SETTINGS"
+            for event in connection.receive_data(data):
+                if isinstance(event, ConnectionTerminated):
+                    raise AssertionError(event)
+                settings_received |= isinstance(event, RemoteSettingsChanged)
+            transport.sendall(connection.data_to_send())
+        capacity = min(100, connection.remote_settings.max_concurrent_streams)
+        assert capacity > 0, "Server does not admit any RPC streams"
         for batch in range(3):
             pending = set()
             bodies, statuses, trailers = {}, {}, {}
-            for _ in range(100):
-                stream = connection.get_next_available_stream_id()
-                pending.add(stream)
-                connection.send_headers(stream, [
-                    (":method", "POST"), (":scheme", "https" if args.cert else "http"),
-                    (":authority", "localhost"),
-                    (":path", "/benchmark.BenchmarkService/GetSum"),
-                    ("content-type", "application/grpc"), ("te", "trailers")])
-                connection.send_data(stream, bytes.fromhex("000000000408011002"), end_stream=True)
-            transport.sendall(connection.data_to_send())
-            while pending:
+            sent = 0
+            while sent < 100 or pending:
+                while sent < 100 and len(pending) < capacity:
+                    stream = connection.get_next_available_stream_id()
+                    pending.add(stream)
+                    connection.send_headers(stream, [
+                        (":method", "POST"), (":scheme", "https" if args.cert else "http"),
+                        (":authority", "localhost"),
+                        (":path", "/benchmark.BenchmarkService/GetSum"),
+                        ("content-type", "application/grpc"), ("te", "trailers")])
+                    connection.send_data(stream, bytes.fromhex("000000000408011002"), end_stream=True)
+                    sent += 1
+                transport.sendall(connection.data_to_send())
                 data = transport.recv(65536)
                 assert data, f"EOF in batch {batch}: {len(pending)} unfinished streams"
                 for event in connection.receive_data(data):
@@ -55,6 +70,9 @@ def main():
                         raise AssertionError(event)
                     if isinstance(event, ResponseReceived):
                         statuses[event.stream_id] = dict(event.headers)
+                        # A response must wait for this stream credit. The H2
+                        # parser rejects DATA received against the zero window.
+                        connection.increment_flow_control_window(7, event.stream_id)
                     if isinstance(event, DataReceived):
                         bodies.setdefault(event.stream_id, bytearray()).extend(event.data)
                         connection.acknowledge_received_data(event.flow_controlled_length, event.stream_id)
@@ -70,7 +88,7 @@ def main():
                 outgoing = connection.data_to_send()
                 if outgoing:
                     transport.sendall(outgoing)
-    print("PASS: 300 RPCs, three 100-stream batches, one persistent HTTP/2 connection")
+    print(f"PASS: 300 RPCs, zero-window then per-stream credit, three 100-RPC batches, up to {capacity} streams, one persistent HTTP/2 connection")
 
 
 if __name__ == "__main__":

@@ -55,6 +55,7 @@ fi
 def quantiles(path):
     values = []
     statuses = {}
+    unfinished = 0
     digest = hashlib.sha256()
     size = 0
     with path.open("rb") as source:
@@ -69,7 +70,10 @@ def quantiles(path):
             if status == 200:
                 duration = int(columns[2])
                 if duration < 0:
-                    raise ValueError("Negative response latency")
+                    # Timed cutoff can leave a HEADERS-only 200 without END_STREAM.
+                    # Preserve its count, but it has no completed latency sample.
+                    unfinished += 1
+                    continue
                 values.append(duration)
     if not values:
         raise ValueError("No successful request-log samples")
@@ -77,7 +81,8 @@ def quantiles(path):
     result = {name: values[min(len(values) - 1, math.ceil(len(values) * p) - 1)] / 1000
               for name, p in (("p50", .50), ("p95", .95), ("p99", .99))}
     result.update(mean=statistics.fmean(values) / 1000, max=values[-1] / 1000)
-    return dict(samples=len(values), status_counts=statuses, latency_ms=result,
+    return dict(samples=len(values), status_counts=statuses,
+                unfinished_status_200=unfinished, latency_ms=result,
                 request_log_sha256=digest.hexdigest(), request_log_bytes=size)
 
 

@@ -33,6 +33,12 @@ def main() -> None:
             reply, status = call.with_call(bytes.fromhex(request), timeout=5)
             assert reply == bytes.fromhex(expected), (request, reply.hex(), expected)
             assert status.code() == grpc.StatusCode.OK
+        # Exercise the >16-KiB buffered-to-streaming transition and actual gzip decoding.
+        large = b"\x1a\x80\xc0\x01" + b"x" * 24576 + bytes.fromhex("08011002")
+        for compression in (None, grpc.Compression.Gzip):
+            reply, status = call.with_call(large, timeout=5, compression=compression)
+            assert reply == bytes.fromhex("0803")
+            assert status.code() == grpc.StatusCode.OK
         try:
             call(b"\x08\x80", timeout=5)
         except grpc.RpcError as error:
@@ -46,7 +52,7 @@ def main() -> None:
             assert error.code() == grpc.StatusCode.UNIMPLEMENTED, error
         else:
             raise AssertionError("unknown method accepted")
-    print("PASS: 7 protobuf vectors, gRPC trailers, malformed input, unknown method")
+    print("PASS: 7 protobuf vectors, 24-KiB plain/gzip bodies, gRPC trailers, malformed input, unknown method")
 
 
 if __name__ == "__main__":
