@@ -25,12 +25,13 @@ auto main(int argument_count, char** arguments) -> int
     cnetmod::net_init network;
     auto context = cnetmod::make_io_context();
     std::string response;
-    cnetmod::spawn(*context, [&]() -> cnetmod::task<void>
+    auto work = [&]() -> cnetmod::task<void>
         {
             response = co_await cnetmod::testing::database::
                 execute_postgresql_interoperability_request(*context, std::move(request));
             context->stop();
-        }());
+        };
+    cnetmod::spawn(*context, work());
     context->run();
     response.push_back('\n');
     return std::fwrite(response.data(), 1, response.size(), stdout) == response.size()
