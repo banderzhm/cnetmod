@@ -18,6 +18,8 @@ export auto validate_upgrade_response(const http::response_parser& resp,
     -> std::expected<void, std::error_code>;
 export auto validate_upgrade_request(const http::request_parser& req)
     -> std::expected<std::string, std::error_code>;
+export auto validate_upgrade_request(const http::request_context& req)
+    -> std::expected<std::string, std::error_code>;
 export auto build_upgrade_response(std::string_view accept_key,
     std::string_view subprotocol = {})
     -> http::response;

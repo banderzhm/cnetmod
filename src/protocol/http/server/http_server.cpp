@@ -1589,6 +1589,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
             route_params rp;
             handler_fn handler;
             sync_handler_fn sync_handler;
+            connection_upgrade_handler connection_upgrade;
 
             if (mr)
             {
@@ -1666,6 +1667,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     resp.get_header("X-Streamed") != "1")
                     rctx.text(status::payload_too_large,
                         "Request body exceeds the route limit");
+                connection_upgrade = rctx.take_connection_upgrade();
             }
             else
             {
@@ -1673,6 +1675,7 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                     if (!(co_await receive_more()))
                         co_return;
                 request_context rctx(io, client, parser, resp, std::move(rp));
+                rctx.enable_connection_upgrade();
                 if (middlewares_.empty() && sync_handler)
                     sync_handler(rctx);
                 else
@@ -1714,6 +1717,38 @@ auto server::handle_h1_clear(socket& client, io_context& io,
                         co_await execute_chain(rctx, *selected);
                     }
                 }
+                connection_upgrade = rctx.take_connection_upgrade();
+            }
+
+            if (connection_upgrade)
+            {
+                if (parser.version() != http_version::http_1_1 ||
+                    resp.status_code() != status::switching_protocols ||
+                    !resp.body().empty() || resp.body_source() ||
+                    resp.get_header("X-Streamed") == "1")
+                    co_return;
+#if defined(CNETMOD_HAS_IO_URING) &&             \
+    defined(CNETMOD_HAS_IO_URING_BUFFER_RING) && \
+    defined(IORING_RECV_MULTISHOT) &&            \
+    defined(IORING_CQE_F_BUFFER) && defined(IORING_CQE_F_MORE)
+                auto received = parser.take_buffered_data();
+                co_await stop_recv();
+                if (recv_stream)
+                    recv_stream->append_buffered_data(received);
+                recv_stream.reset();
+#else
+                auto received = parser.take_buffered_data();
+#endif
+                resp.append_serialized_to(pending_responses);
+                auto written = co_await async_write_all(io, client,
+                    const_buffer{pending_responses.data(),
+                        pending_responses.size()}, cancellation);
+                if (!written)
+                    co_return;
+                pending_responses.clear();
+                co_await connection_upgrade(
+                    io, std::move(client), std::move(received));
+                co_return;
             }
             const bool has_body_source = static_cast<bool>(resp.body_source());
             if (has_body_source)

@@ -109,6 +109,17 @@ private:
 
 export using ws_handler_fn = std::function<task<void>(ws_context&)>;
 
+/**
+ * @brief Accept WebSocket on a route owned by an HTTP server.
+ *
+ * This keeps HTTP/1.1, h2c/gRPC and WebSocket on one cleartext listener. The
+ * HTTP server completes the 101 response and transfers the connection without
+ * losing a frame already received with the handshake.
+ */
+export auto accept_upgrade(http::request_context& request,
+    ws_handler_fn handler, std::string_view subprotocol = {})
+    -> std::expected<void, std::error_code>;
+
 // =============================================================================
 // ws::server
 // =============================================================================

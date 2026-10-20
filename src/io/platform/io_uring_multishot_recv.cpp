@@ -245,6 +245,17 @@ auto io_uring_multishot_recv::async_stop()
     co_return std::expected<void, std::error_code>{};
 }
 
+void io_uring_multishot_recv::append_buffered_data(std::string& output)
+{
+    for (const auto& ready : ready_)
+    {
+        const auto view = buffers_->buffer(ready.buffer_id);
+        output.append(static_cast<const char*>(view.data), ready.size);
+        release_buffer(ready.buffer_id);
+    }
+    ready_.clear();
+}
+
 void io_uring_multishot_recv::release_buffer(std::uint16_t buffer_id) noexcept
 {
     buffers_->release(buffer_id);

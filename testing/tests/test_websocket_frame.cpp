@@ -1,11 +1,16 @@
 import std;
+import cnetmod.core.address;
+import cnetmod.core.buffer;
 import cnetmod.core.net_init;
 import cnetmod.core.log;
+import cnetmod.core.socket;
 import cnetmod.coro.task;
 import cnetmod.io.io_context;
 import cnetmod.executor.pool;
 import cnetmod.coro.spawn;
 import cnetmod.coro.timer;
+import cnetmod.executor.async_op;
+import cnetmod.protocol.http;
 import cnetmod.protocol.websocket;
 
 namespace ws = cnetmod::ws;
@@ -158,6 +163,97 @@ void check_sharded_stop()
     context.run();
     require(completed, "stop joins all worker accept operations");
 }
+
+void check_http_route_upgrade_preserves_first_frame()
+{
+    cnetmod::server_context context(1, 1);
+    cnetmod::http::server server(context);
+    cnetmod::http::router routes;
+    routes.get("/health", [](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+        {
+            request.text(cnetmod::http::status::ok, "ok");
+            co_return;
+        });
+    routes.get("/ws", [](cnetmod::http::request_context& request)
+        -> cnetmod::task<void>
+        {
+            auto accepted = ws::accept_upgrade(request,
+                [](ws::ws_context& connection) -> cnetmod::task<void>
+                {
+                    auto message = co_await connection.recv();
+                    require(message.has_value(), "upgraded route receives first frame");
+                    auto sent = co_await connection.send_text(
+                        std::string_view{reinterpret_cast<const char*>(
+                            message->payload.data()), message->payload.size()});
+                    require(sent.has_value(), "upgraded route echoes first frame");
+                });
+            if (!accepted)
+                request.text(cnetmod::http::status::bad_request,
+                    "Bad WebSocket handshake");
+            co_return;
+        });
+    server.set_router(std::move(routes));
+    require(static_cast<bool>(server.listen("127.0.0.1", 0)),
+        "HTTP listener for WebSocket upgrade");
+    const auto endpoint = server.local_endpoint();
+    require(endpoint.has_value(), "HTTP upgrade endpoint");
+    auto listener = server.run();
+    listener.handle().resume();
+
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        require(peer.has_value(), "WebSocket test socket");
+        require((co_await cnetmod::async_connect(
+                     context.accept_io(), *peer, *endpoint))
+                    .has_value(),
+            "connect WebSocket test socket");
+
+        const std::string payload = "hello";
+        auto frame = ws::build_frame(ws::opcode::text,
+            std::as_bytes(std::span{payload}), true);
+        std::string request =
+            "GET /ws HTTP/1.1\r\n"
+            "Host: localhost\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n"
+            "Sec-WebSocket-Version: 13\r\n\r\n";
+        request.append(reinterpret_cast<const char*>(frame.data()), frame.size());
+        require((co_await cnetmod::async_write_all(context.accept_io(), *peer,
+                     cnetmod::const_buffer{request.data(), request.size()}))
+                    .has_value(),
+            "write handshake and first frame together");
+
+        std::string wire;
+        std::array<char, 1024> buffer{};
+        while (wire.find("hello") == std::string::npos)
+        {
+            auto read = co_await cnetmod::async_read(context.accept_io(), *peer,
+                cnetmod::mutable_buffer{buffer.data(), buffer.size()});
+            require(read.has_value() && *read != 0,
+                "read upgraded response and echoed frame");
+            wire.append(buffer.data(), *read);
+        }
+        require(wire.starts_with("HTTP/1.1 101"),
+            "HTTP route emits switching-protocols response");
+        require(wire.contains("Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo="),
+            "HTTP route emits RFC 6455 accept key");
+        require(wire.contains("hello"),
+            "frame coalesced with handshake survives protocol transfer");
+        peer->close();
+        server.stop();
+        while (!listener.handle().done())
+            co_await cnetmod::async_sleep(
+                context.accept_io(), std::chrono::milliseconds{1});
+        listener.handle().promise().result();
+        context.stop();
+    };
+    cnetmod::spawn(context.accept_io(), exercise());
+    context.run();
+}
 } // namespace
 
 auto main() -> int
@@ -171,6 +267,7 @@ auto main() -> int
         check_disconnected_operations();
         check_appended_frames();
         check_sharded_stop();
+        check_http_route_upgrade_preserves_first_frame();
         logger::info{"WebSocket mask, frame reuse, boundaries and control regressions passed"};
     }
     catch (const std::exception& error)
