@@ -604,6 +604,7 @@ struct server::connection_registration
     server& owner;
     socket& client;
     cancel_token cancellation;
+    cancel_token write_cancellation;
     connection_registration* previous{};
     connection_registration* next{};
 
@@ -618,6 +619,7 @@ struct server::connection_registration
         if (owner.connections_aborted_)
         {
             cancellation.cancel();
+            write_cancellation.cancel();
             client.shutdown_both();
         }
     }
@@ -827,6 +829,7 @@ void server::abort_connections() noexcept
         // there after the terminal receive completion; this avoids destroying a
         // worker-loop registration from the control loop.
         connection->cancellation.cancel();
+        connection->write_cancellation.cancel();
         connection->client.shutdown_both();
     }
 }
@@ -1092,7 +1095,8 @@ auto server::handle_connection(socket client, io_context& io,
 
         if (ssl.get_alpn_selected() == "h2")
         {
-            co_await handle_h2_tls(client, io, ssl, registration.cancellation);
+            co_await handle_h2_tls(client, io, ssl, registration.cancellation,
+                registration.write_cancellation);
         }
         else
         {
@@ -1149,7 +1153,7 @@ auto server::handle_connection(socket client, io_context& io,
         (void)client.apply_options({.non_blocking = false, .no_delay = true});
 
         co_await handle_h2(client, io, {peek_buf->data(), peek_len},
-            registration.cancellation);
+            registration.cancellation, registration.write_cancellation);
         co_return;
     }
 
@@ -1346,12 +1350,12 @@ auto server::make_h2_buffered_request_filter() -> v2::buffered_request_filter
 }
 
 auto server::handle_h2(socket& client, io_context& io,
-    std::span<const std::byte> initial, cancel_token& cancellation) -> task<void>
+    std::span<const std::byte> initial, cancel_token& cancellation,
+    cancel_token& write_cancellation) -> task<void>
 {
     // Reads and writes overlap on multiplexed connections. A cancel_token
     // owns one pending operation; sharing it loses the reader's completion.
-    // abort_connections() also shuts down the socket, waking both directions.
-    cancel_token write_cancellation;
+    // abort_connections() cancels both tokens and shuts down the socket.
     auto reader = [&io, &client, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
     {
@@ -1803,9 +1807,8 @@ auto server::handle_h1_clear(socket& client, io_context& io,
 // =============================================================================
 
 auto server::handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
-    cancel_token& cancellation) -> task<void>
+    cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>
 {
-    cancel_token write_cancellation;
     auto reader = [&ssl, &cancellation](mutable_buffer buffer)
         -> task<std::expected<std::size_t, std::error_code>>
     {

@@ -191,7 +191,7 @@ private:
 
     auto handle_h2(socket& client, io_context& io,
         std::span<const std::byte> initial,
-        cancel_token& cancellation) -> task<void>;
+        cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>;
 
     auto make_h2_streaming_handler(io_context& io, socket& client)
         -> v2::borrowed_streaming_server_handler;
@@ -203,7 +203,7 @@ private:
     auto handle_h1_tls(socket& client, io_context& io, ssl_stream& ssl,
         cancel_token& cancellation) -> task<void>;
     auto handle_h2_tls(socket& client, io_context& io, ssl_stream& ssl,
-        cancel_token& cancellation) -> task<void>;
+        cancel_token& cancellation, cancel_token& write_cancellation) -> task<void>;
 #endif
 
     auto execute_chain(request_context& ctx, handler_fn& handler,

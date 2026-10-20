@@ -2,6 +2,7 @@
 
 import std;
 import cnetmod.core.net_init;
+import cnetmod.core.socket;
 import cnetmod.core.log;
 import cnetmod.coro.task;
 import cnetmod.coro.spawn;
@@ -107,7 +108,7 @@ auto main(int argc, char** argv) -> int
         return 3;
     }
 #endif
-    auto listening = server.listen("::", port);
+    auto listening = server.listen("::", port, {.ipv6_only = false});
     if (!listening)
     {
         logger::error{"listen failed: {}", listening.error().message()};

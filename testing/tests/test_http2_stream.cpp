@@ -140,6 +140,73 @@ TEST(http2_server_dispatches_sync_router_handlers)
     operation.handle().promise().result();
 }
 
+TEST(http2_abort_retires_parallel_request_read_and_backpressured_response_write)
+{
+    cnetmod::net_init network;
+    auto io = cnetmod::make_io_context();
+    cnetmod::http::server server{*io};
+    bool responding{};
+    cnetmod::http::router routes;
+    routes.post("/duplex", [&](cnetmod::http::request_context& context)
+        -> cnetmod::task<void>
+        {
+            (void)co_await context.read_full_body();
+            context.resp().set_body(std::string(8U * 1024U * 1024U, 'x'));
+            responding = true;
+        });
+    server.set_router(std::move(routes));
+    ASSERT_TRUE(server.listen("127.0.0.1", 0).has_value());
+    const auto address = server.local_endpoint();
+    ASSERT_TRUE(address.has_value());
+    auto accept_loop = server.run();
+    accept_loop.handle().resume();
+    auto exercise = [&]() -> cnetmod::task<void>
+    {
+        auto peer = cnetmod::socket::create(cnetmod::address_family::ipv4,
+            cnetmod::socket_type::stream);
+        ASSERT_TRUE(peer.has_value());
+        ASSERT_TRUE(peer->apply_options({.recv_buffer_size = 1024}).has_value());
+        ASSERT_TRUE((co_await cnetmod::async_connect(*io, *peer, *address)).has_value());
+        std::vector<std::byte> input(bytes(preface).begin(), bytes(preface).end());
+        const auto append = [&](frame_header header, std::span<const std::byte> payload)
+        {
+            auto frame = framed(header, payload);
+            input.insert(input.end(), frame.begin(), frame.end());
+        };
+        append({.type = frame_type::settings}, {});
+        header_compression encoder;
+        const std::array headers{header_field{":method", "POST"},
+            header_field{":scheme", "http"}, header_field{":path", "/duplex"}};
+        const auto encoded = encoder.encode(headers);
+        ASSERT_TRUE(encoded.has_value());
+        append({.type = frame_type::headers, .flags = 0x4, .stream_id = 1}, *encoded);
+        append({.type = frame_type::data, .flags = 0x1, .stream_id = 1}, bytes("x"));
+        ASSERT_TRUE((co_await cnetmod::async_write_all(*io, *peer,
+            cnetmod::const_buffer{input.data(), input.size()})).has_value());
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+        while (!responding && std::chrono::steady_clock::now() < deadline)
+            (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{1});
+        ASSERT_TRUE(responding);
+        // Do not read or close the peer: keep the response write backpressured
+        // while the connection also waits for its next request.
+        (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{10});
+        server.stop();
+        server.abort_connections();
+        server.abort_connections();
+        while ((!accept_loop.handle().done() || server.active_connections() != 0) &&
+            std::chrono::steady_clock::now() < deadline)
+            (void)co_await cnetmod::async_timer_wait(*io, std::chrono::milliseconds{1});
+        ASSERT_TRUE(accept_loop.handle().done());
+        ASSERT_EQ(server.active_connections(), 0U);
+        io->stop();
+    };
+    auto running = exercise();
+    running.handle().resume();
+    io->run();
+    ASSERT_TRUE(running.handle().done());
+    running.handle().promise().result();
+}
+
 TEST(http2_streams_deliver_interleaved_bodies_and_return_consumed_credit)
 {
     cnetmod::net_init network;
